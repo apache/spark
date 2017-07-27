@@ -96,3 +96,11 @@ pyspark.ml.fpm module
     :members:
     :undoc-members:
     :inherited-members:
+
+pyspark.ml.util module
+----------------------------
+
+.. automodule:: pyspark.ml.util
+    :members:
+    :undoc-members:
+    :inherited-members:

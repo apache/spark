@@ -25,6 +25,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
@@ -44,6 +45,7 @@ import org.apache.spark.scheduler.{FakeTask, ResultTask, TaskDescription}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.UninterruptibleThread
 
 class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar with Eventually {
 
@@ -156,6 +158,18 @@ class ExecutorSuite extends SparkFunSuite with LocalSparkContext with MockitoSug
 
     val failReason = runTaskAndGetFailReason(taskDescription)
     assert(failReason.isInstanceOf[FetchFailed])
+  }
+
+  test("Executor's worker threads should be UninterruptibleThread") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("executor thread test")
+      .set("spark.ui.enabled", "false")
+    sc = new SparkContext(conf)
+    val executorThread = sc.parallelize(Seq(1), 1).map { _ =>
+      Thread.currentThread.getClass.getName
+    }.collect().head
+    assert(executorThread === classOf[UninterruptibleThread].getName)
   }
 
   test("SPARK-19276: OOMs correctly handled with a FetchFailure") {

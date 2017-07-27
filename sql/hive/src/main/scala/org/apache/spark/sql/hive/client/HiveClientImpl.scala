@@ -22,16 +22,17 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
-import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
@@ -374,10 +375,30 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false)).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
+      val cols = h.getCols.asScala.map(fromHiveColumn)
       val partCols = h.getPartCols.asScala.map(fromHiveColumn)
-      val schema = StructType(h.getCols.asScala.map(fromHiveColumn) ++ partCols)
+      val schema = StructType(cols ++ partCols)
 
-      // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
+      val bucketSpec = if (h.getNumBuckets > 0) {
+        val sortColumnOrders = h.getSortCols.asScala
+        // Currently Spark only supports columns to be sorted in ascending order
+        // but Hive can support both ascending and descending order. If all the columns
+        // are sorted in ascending order, only then propagate the sortedness information
+        // to downstream processing / optimizations in Spark
+        // TODO: In future we can have Spark support columns sorted in descending order
+        val allAscendingSorted = sortColumnOrders.forall(_.getOrder == HIVE_COLUMN_ORDER_ASC)
+
+        val sortColumnNames = if (allAscendingSorted) {
+          sortColumnOrders.map(_.getCol)
+        } else {
+          Seq.empty
+        }
+        Option(BucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnNames))
+      } else {
+        None
+      }
+
+      // Skew spec and storage handler can't be mapped to CatalogTable (yet)
       val unsupportedFeatures = ArrayBuffer.empty[String]
 
       if (!h.getSkewedColNames.isEmpty) {
@@ -388,15 +409,54 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "storage handler"
       }
 
-      if (!h.getBucketCols.isEmpty) {
-        unsupportedFeatures += "bucketing"
-      }
-
       if (h.getTableType == HiveTableType.VIRTUAL_VIEW && partCols.nonEmpty) {
         unsupportedFeatures += "partitioned view"
       }
 
       val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
+
+      // Hive-generated Statistics are also recorded in ignoredProperties
+      val ignoredProperties = scala.collection.mutable.Map.empty[String, String]
+      for (key <- HiveStatisticsProperties; value <- properties.get(key)) {
+        ignoredProperties += key -> value
+      }
+
+      val excludedTableProperties = HiveStatisticsProperties ++ Set(
+        // The property value of "comment" is moved to the dedicated field "comment"
+        "comment",
+        // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
+        // in the function toHiveTable.
+        "EXTERNAL"
+      )
+
+      val filteredProperties = properties.filterNot {
+        case (key, _) => excludedTableProperties.contains(key)
+      }
+      val comment = properties.get("comment")
+
+      // Here we are reading statistics from Hive.
+      // Note that this statistics could be overridden by Spark's statistics if that's available.
+      val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
+      val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
+      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)
+      // TODO: check if this estimate is valid for tables after partition pruning.
+      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+      // relatively cheap if parameters for the table are populated into the metastore.
+      // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`
+      // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
+      // (see StatsSetupConst in Hive)
+      val stats =
+        // When table is external, `totalSize` is always zero, which will influence join strategy
+        // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
+        // return None. Later, we will use the other ways to estimate the statistics.
+        if (totalSize.isDefined && totalSize.get > 0L) {
+          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
+        } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
+        } else {
+          // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
+          None
+        }
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -409,9 +469,11 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
-        // We can not populate bucketing information for Hive tables as Spark SQL has a different
-        // implementation of hash function from Hive.
-        bucketSpec = None,
+        // If the table is written by Spark, we will put bucketing information in table properties,
+        // and will always overwrite the bucket spec in hive metastore by the bucketing information
+        // in table properties. This means, if we have bucket spec in both hive metastore and
+        // table properties, we will trust the one in table properties.
+        bucketSpec = bucketSpec,
         owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
@@ -433,13 +495,15 @@ private[hive] class HiveClientImpl(
         ),
         // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
         // in the function toHiveTable.
-        properties = properties.filter(kv => kv._1 != "comment" && kv._1 != "EXTERNAL"),
-        comment = properties.get("comment"),
+        properties = filteredProperties,
+        stats = stats,
+        comment = comment,
         // In older versions of Spark(before 2.2.0), we expand the view original text and store
         // that into `viewExpandedText`, and that should be used in view resolution. So we get
         // `viewExpandedText` instead of `viewOriginalText` for viewText here.
         viewText = Option(h.getViewExpandedText),
-        unsupportedFeatures = unsupportedFeatures)
+        unsupportedFeatures = unsupportedFeatures,
+        ignoredProperties = ignoredProperties.toMap)
     }
   }
 
@@ -456,7 +520,12 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
+    // getTableOption removes all the Hive-specific properties. Here, we fill them back to ensure
+    // these properties are still available to the others that share the same Hive metastore.
+    // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
+    // these user-specified values.
+    val hiveTable = toHiveTable(
+      table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
@@ -871,6 +940,23 @@ private[hive] object HiveClientImpl {
       hiveTable.setViewOriginalText(t)
       hiveTable.setViewExpandedText(t)
     }
+
+    table.bucketSpec match {
+      case Some(bucketSpec) if DDLUtils.isHiveTable(table) =>
+        hiveTable.setNumBuckets(bucketSpec.numBuckets)
+        hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
+
+        if (bucketSpec.sortColumnNames.nonEmpty) {
+          hiveTable.setSortCols(
+            bucketSpec.sortColumnNames
+              .map(col => new Order(col, HIVE_COLUMN_ORDER_ASC))
+              .toList
+              .asJava
+          )
+        }
+      case _ =>
+    }
+
     hiveTable
   }
 
@@ -921,4 +1007,14 @@ private[hive] object HiveClientImpl {
         parameters =
           if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
+
+  // Below is the key of table properties for storing Hive-generated statistics
+  private val HiveStatisticsProperties = Set(
+    StatsSetupConst.COLUMN_STATS_ACCURATE,
+    StatsSetupConst.NUM_FILES,
+    StatsSetupConst.NUM_PARTITIONS,
+    StatsSetupConst.ROW_COUNT,
+    StatsSetupConst.RAW_DATA_SIZE,
+    StatsSetupConst.TOTAL_SIZE
+  )
 }

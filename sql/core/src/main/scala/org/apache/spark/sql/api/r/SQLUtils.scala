@@ -31,6 +31,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
@@ -92,48 +93,8 @@ private[sql] object SQLUtils extends Logging {
     def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
-  def getSQLDataType(dataType: String): DataType = {
-    dataType match {
-      case "byte" => org.apache.spark.sql.types.ByteType
-      case "integer" => org.apache.spark.sql.types.IntegerType
-      case "float" => org.apache.spark.sql.types.FloatType
-      case "double" => org.apache.spark.sql.types.DoubleType
-      case "numeric" => org.apache.spark.sql.types.DoubleType
-      case "character" => org.apache.spark.sql.types.StringType
-      case "string" => org.apache.spark.sql.types.StringType
-      case "binary" => org.apache.spark.sql.types.BinaryType
-      case "raw" => org.apache.spark.sql.types.BinaryType
-      case "logical" => org.apache.spark.sql.types.BooleanType
-      case "boolean" => org.apache.spark.sql.types.BooleanType
-      case "timestamp" => org.apache.spark.sql.types.TimestampType
-      case "date" => org.apache.spark.sql.types.DateType
-      case r"\Aarray<(.+)${elemType}>\Z" =>
-        org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
-      case r"\Amap<(.+)${keyType},(.+)${valueType}>\Z" =>
-        if (keyType != "string" && keyType != "character") {
-          throw new IllegalArgumentException("Key type of a map must be string or character")
-        }
-        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
-      case r"\Astruct<(.+)${fieldsStr}>\Z" =>
-        if (fieldsStr(fieldsStr.length - 1) == ',') {
-          throw new IllegalArgumentException(s"Invalid type $dataType")
-        }
-        val fields = fieldsStr.split(",")
-        val structFields = fields.map { field =>
-          field match {
-            case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
-              createStructField(fieldName, fieldType, true)
-
-            case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-          }
-        }
-        createStructType(structFields)
-      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-    }
-  }
-
   def createStructField(name: String, dataType: String, nullable: Boolean): StructField = {
-    val dtObj = getSQLDataType(dataType)
+    val dtObj = CatalystSqlParser.parseDataType(dataType)
     StructField(name, dtObj, nullable)
   }
 
@@ -230,21 +191,6 @@ private[sql] object SQLUtils extends Logging {
       case "error" => SaveMode.ErrorIfExists
       case "ignore" => SaveMode.Ignore
     }
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).options(options).load()
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).schema(schema).options(options).load()
   }
 
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {

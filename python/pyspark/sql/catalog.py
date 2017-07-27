@@ -237,23 +237,28 @@ class Catalog(object):
         :param name: name of the UDF
         :param f: python function
         :param returnType: a :class:`pyspark.sql.types.DataType` object
+        :return: a wrapped :class:`UserDefinedFunction`
 
-        >>> spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
+        >>> strlen = spark.catalog.registerFunction("stringLengthString", len)
         >>> spark.sql("SELECT stringLengthString('test')").collect()
         [Row(stringLengthString(test)=u'4')]
 
+        >>> spark.sql("SELECT 'foo' AS text").select(strlen("text")).collect()
+        [Row(stringLengthString(text)=u'3')]
+
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> _ = spark.catalog.registerFunction("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> _ = spark.udf.register("stringLengthInt", len, IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType, name)
         self._jsparkSession.udf().registerPython(name, udf._judf)
+        return udf._wrapped()
 
     @since(2.0)
     def isCached(self, tableName):

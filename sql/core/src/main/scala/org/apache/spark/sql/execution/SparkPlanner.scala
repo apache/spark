@@ -36,7 +36,7 @@ class SparkPlanner(
     experimentalMethods.extraStrategies ++
       extraPlanningStrategies ++ (
       FileSourceStrategy ::
-      DataSourceStrategy ::
+      DataSourceStrategy(conf) ::
       SpecialLimits ::
       Aggregation ::
       JoinSelection ::

@@ -20,38 +20,43 @@ package org.apache.spark.sql.test
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
-import java.util.UUID
+import java.util.{Locale, UUID}
 
+import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.Eventually
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog.DEFAULT_DATABASE
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{UninterruptibleThread, Utils}
 
 /**
  * Helper trait that should be extended by all SQL test suites.
  *
- * This allows subclasses to plugin a custom [[SQLContext]]. It comes with test data
+ * This allows subclasses to plugin a custom `SQLContext`. It comes with test data
  * prepared in advance as well as all implicit conversions used extensively by dataframes.
- * To use implicit methods, import `testImplicits._` instead of through the [[SQLContext]].
+ * To use implicit methods, import `testImplicits._` instead of through the `SQLContext`.
  *
- * Subclasses should *not* create [[SQLContext]]s in the test suite constructor, which is
+ * Subclasses should *not* create `SQLContext`s in the test suite constructor, which is
  * prone to leaving multiple overlapping [[org.apache.spark.SparkContext]]s in the same JVM.
  */
 private[sql] trait SQLTestUtils
-  extends SparkFunSuite
+  extends SparkFunSuite with Eventually
   with BeforeAndAfterAll
-  with SQLTestData { self =>
+  with SQLTestData
+  with PlanTest { self =>
 
   protected def sparkContext = spark.sparkContext
 
@@ -65,7 +70,7 @@ private[sql] trait SQLTestUtils
    * A helper object for importing SQL implicits.
    *
    * Note that the alternative of importing `spark.implicits._` is not possible here.
-   * This is because we create the [[SQLContext]] immediately before the first test is run,
+   * This is because we create the `SQLContext` immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
@@ -73,7 +78,7 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Materialize the test data immediately after the [[SQLContext]] is set up.
+   * Materialize the test data immediately after the `SQLContext` is set up.
    * This is necessary if the data is accessed by name but not through direct reference.
    */
   protected def setupTestData(): Unit = {
@@ -87,28 +92,9 @@ private[sql] trait SQLTestUtils
     }
   }
 
-  /**
-   * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
-   * configurations.
-   *
-   * @todo Probably this method should be moved to a more general place
-   */
-  protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
-    val (keys, values) = pairs.unzip
-    val currentValues = keys.map { key =>
-      if (spark.conf.contains(key)) {
-        Some(spark.conf.get(key))
-      } else {
-        None
-      }
-    }
-    (keys, values).zipped.foreach(spark.conf.set)
-    try f finally {
-      keys.zip(currentValues).foreach {
-        case (key, Some(value)) => spark.conf.set(key, value)
-        case (key, None) => spark.conf.unset(key)
-      }
-    }
+  protected override def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
+    SparkSession.setActiveSession(spark)
+    super.withSQLConf(pairs: _*)(f)
   }
 
   /**
@@ -139,6 +125,16 @@ private[sql] trait SQLTestUtils
   }
 
   /**
+   * Waits for all tasks on all executors to be finished.
+   */
+  protected def waitForTasksToFinish(): Unit = {
+    eventually(timeout(10.seconds)) {
+      assert(spark.sparkContext.statusTracker
+        .getExecutorInfos.map(_.numRunningTasks()).sum == 0)
+    }
+  }
+
+  /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
    * returns.
    *
@@ -146,7 +142,24 @@ private[sql] trait SQLTestUtils
    */
   protected def withTempDir(f: File => Unit): Unit = {
     val dir = Utils.createTempDir().getCanonicalFile
-    try f(dir) finally Utils.deleteRecursively(dir)
+    try f(dir) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      Utils.deleteRecursively(dir)
+    }
+  }
+
+  /**
+   * Creates the specified number of temporary directories, which is then passed to `f` and will be
+   * deleted after `f` returns.
+   */
+  protected def withTempPaths(numPaths: Int)(f: Seq[File] => Unit): Unit = {
+    val files = Array.fill[File](numPaths)(Utils.createTempDir().getCanonicalFile)
+    try f(files) finally {
+      // wait for all tasks to finish before deleting files
+      waitForTasksToFinish()
+      files.foreach(Utils.deleteRecursively)
+    }
   }
 
   /**
@@ -222,9 +235,36 @@ private[sql] trait SQLTestUtils
 
     try f(dbName) finally {
       if (spark.catalog.currentDatabase == dbName) {
-        spark.sql(s"USE ${DEFAULT_DATABASE}")
+        spark.sql(s"USE $DEFAULT_DATABASE")
       }
       spark.sql(s"DROP DATABASE $dbName CASCADE")
+    }
+  }
+
+  /**
+   * Drops database `dbName` after calling `f`.
+   */
+  protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
+    try f finally {
+      dbNames.foreach { name =>
+        spark.sql(s"DROP DATABASE IF EXISTS $name")
+      }
+      spark.sql(s"USE $DEFAULT_DATABASE")
+    }
+  }
+
+  /**
+   * Enables Locale `language` before executing `f`, then switches back to the default locale of JVM
+   * after `f` returns.
+   */
+  protected def withLocale(language: String)(f: => Unit): Unit = {
+    val originalLocale = Locale.getDefault
+    try {
+      // Add Locale setting
+      Locale.setDefault(new Locale(language))
+      f
+    } finally {
+      Locale.setDefault(originalLocale)
     }
   }
 
@@ -250,8 +290,8 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier
-   * way to construct [[DataFrame]] directly out of local data without relying on implicits.
+   * Turn a logical plan into a `DataFrame`. This should be removed once we have an easier
+   * way to construct `DataFrame` directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     Dataset.ofRows(spark, plan)
@@ -271,7 +311,9 @@ private[sql] trait SQLTestUtils
     }
   }
 
-  /** Run a test on a separate [[UninterruptibleThread]]. */
+  /**
+   * Run a test on a separate `UninterruptibleThread`.
+   */
   protected def testWithUninterruptibleThread(name: String, quietly: Boolean = false)
     (body: => Unit): Unit = {
     val timeoutMillis = 10000

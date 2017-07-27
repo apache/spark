@@ -18,7 +18,7 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, OffsetInstance}
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
@@ -43,7 +43,7 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  * find M-estimator in robust regression and other optimization problems.
  *
  * @param initialModel the initial guess model.
- * @param reweightFunc the reweight function which is used to update offsets and weights
+ * @param reweightFunc the reweight function which is used to update working labels and weights
  *                     at each iteration.
  * @param fitIntercept whether to fit intercept.
  * @param regParam L2 regularization parameter used by WLS.
@@ -57,13 +57,13 @@ private[ml] class IterativelyReweightedLeastSquaresModel(
  */
 private[ml] class IterativelyReweightedLeastSquares(
     val initialModel: WeightedLeastSquaresModel,
-    val reweightFunc: (Instance, WeightedLeastSquaresModel) => (Double, Double),
+    val reweightFunc: (OffsetInstance, WeightedLeastSquaresModel) => (Double, Double),
     val fitIntercept: Boolean,
     val regParam: Double,
     val maxIter: Int,
     val tol: Double) extends Logging with Serializable {
 
-  def fit(instances: RDD[Instance]): IterativelyReweightedLeastSquaresModel = {
+  def fit(instances: RDD[OffsetInstance]): IterativelyReweightedLeastSquaresModel = {
 
     var converged = false
     var iter = 0
@@ -75,10 +75,10 @@ private[ml] class IterativelyReweightedLeastSquares(
 
       oldModel = model
 
-      // Update offsets and weights using reweightFunc
+      // Update working labels and weights using reweightFunc
       val newInstances = instances.map { instance =>
-        val (newOffset, newWeight) = reweightFunc(instance, oldModel)
-        Instance(newOffset, newWeight, instance.features)
+        val (newLabel, newWeight) = reweightFunc(instance, oldModel)
+        Instance(newLabel, newWeight, instance.features)
       }
 
       // Estimate new model

@@ -111,10 +111,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     validateBatchOptions(parameters)
-    // Each running query should use its own group id. Otherwise, the query may be only assigned
-    // partial data since Kafka will assign partitions to multiple consumers having the same group
-    // id. Hence, we should generate a unique id for each query.
-    val uniqueGroupId = s"spark-kafka-relation-${UUID.randomUUID}"
     val caseInsensitiveParams = parameters.map { case (k, v) => (k.toLowerCase(Locale.ROOT), v) }
     val specifiedKafkaParams =
       parameters
@@ -131,20 +127,14 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit)
     assert(endingRelationOffsets != EarliestOffsetRangeLimit)
 
-    val kafkaOffsetReader = new KafkaOffsetReader(
-      strategy(caseInsensitiveParams),
-      kafkaParamsForDriver(specifiedKafkaParams),
-      parameters,
-      driverGroupIdPrefix = s"$uniqueGroupId-driver")
-
     new KafkaRelation(
       sqlContext,
-      kafkaOffsetReader,
-      kafkaParamsForExecutors(specifiedKafkaParams, uniqueGroupId),
-      parameters,
-      failOnDataLoss(caseInsensitiveParams),
-      startingRelationOffsets,
-      endingRelationOffsets)
+      strategy(caseInsensitiveParams),
+      sourceOptions = parameters,
+      specifiedKafkaParams = specifiedKafkaParams,
+      failOnDataLoss = failOnDataLoss(caseInsensitiveParams),
+      startingOffsets = startingRelationOffsets,
+      endingOffsets = endingRelationOffsets)
   }
 
   override def createSink(
@@ -212,46 +202,6 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       .toMap + (ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName,
         ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG -> classOf[ByteArraySerializer].getName)
   }
-
-  private def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]) =
-    ConfigUpdater("source", specifiedKafkaParams)
-      .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
-      .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
-
-      // Set to "earliest" to avoid exceptions. However, KafkaSource will fetch the initial
-      // offsets by itself instead of counting on KafkaConsumer.
-      .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
-
-      // So that consumers in the driver does not commit offsets unnecessarily
-      .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-
-      // So that the driver does not pull too much data
-      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, new java.lang.Integer(1))
-
-      // If buffer config is not set, set it to reasonable value to work around
-      // buffer issues (see KAFKA-3135)
-      .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-      .build()
-
-  private def kafkaParamsForExecutors(
-      specifiedKafkaParams: Map[String, String], uniqueGroupId: String) =
-    ConfigUpdater("executor", specifiedKafkaParams)
-      .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
-      .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
-
-      // Make sure executors do only what the driver tells them.
-      .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
-
-      // So that consumers in executors do not mess with any existing group id
-      .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
-
-      // So that consumers in executors does not commit offsets unnecessarily
-      .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
-
-      // If buffer config is not set, set it to reasonable value to work around
-      // buffer issues (see KAFKA-3135)
-      .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
-      .build()
 
   private def strategy(caseInsensitiveParams: Map[String, String]) =
       caseInsensitiveParams.find(x => STRATEGY_OPTION_KEYS.contains(x._1)).get match {
@@ -414,30 +364,9 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       logWarning("maxOffsetsPerTrigger option ignored in batch queries")
     }
   }
-
-  /** Class to conveniently update Kafka config params, while logging the changes */
-  private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
-    private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
-
-    def set(key: String, value: Object): this.type = {
-      map.put(key, value)
-      logInfo(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
-      this
-    }
-
-    def setIfUnset(key: String, value: Object): ConfigUpdater = {
-      if (!map.containsKey(key)) {
-        map.put(key, value)
-        logInfo(s"$module: Set $key to $value")
-      }
-      this
-    }
-
-    def build(): ju.Map[String, Object] = map
-  }
 }
 
-private[kafka010] object KafkaSourceProvider {
+private[kafka010] object KafkaSourceProvider extends Logging {
   private val STRATEGY_OPTION_KEYS = Set("subscribe", "subscribepattern", "assign")
   private[kafka010] val STARTING_OFFSETS_OPTION_KEY = "startingoffsets"
   private[kafka010] val ENDING_OFFSETS_OPTION_KEY = "endingoffsets"
@@ -458,5 +387,67 @@ private[kafka010] object KafkaSourceProvider {
       case Some(json) => SpecificOffsetRangeLimit(JsonUtils.partitionOffsets(json))
       case None => defaultOffsets
     }
+  }
+
+  def kafkaParamsForDriver(specifiedKafkaParams: Map[String, String]): ju.Map[String, Object] =
+    ConfigUpdater("source", specifiedKafkaParams)
+      .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
+      .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
+
+      // Set to "earliest" to avoid exceptions. However, KafkaSource will fetch the initial
+      // offsets by itself instead of counting on KafkaConsumer.
+      .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest")
+
+      // So that consumers in the driver does not commit offsets unnecessarily
+      .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+
+      // So that the driver does not pull too much data
+      .set(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, new java.lang.Integer(1))
+
+      // If buffer config is not set, set it to reasonable value to work around
+      // buffer issues (see KAFKA-3135)
+      .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+      .build()
+
+  def kafkaParamsForExecutors(
+      specifiedKafkaParams: Map[String, String],
+      uniqueGroupId: String): ju.Map[String, Object] =
+    ConfigUpdater("executor", specifiedKafkaParams)
+      .set(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, deserClassName)
+      .set(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, deserClassName)
+
+      // Make sure executors do only what the driver tells them.
+      .set(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "none")
+
+      // So that consumers in executors do not mess with any existing group id
+      .set(ConsumerConfig.GROUP_ID_CONFIG, s"$uniqueGroupId-executor")
+
+      // So that consumers in executors does not commit offsets unnecessarily
+      .set(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false")
+
+      // If buffer config is not set, set it to reasonable value to work around
+      // buffer issues (see KAFKA-3135)
+      .setIfUnset(ConsumerConfig.RECEIVE_BUFFER_CONFIG, 65536: java.lang.Integer)
+      .build()
+
+  /** Class to conveniently update Kafka config params, while logging the changes */
+  private case class ConfigUpdater(module: String, kafkaParams: Map[String, String]) {
+    private val map = new ju.HashMap[String, Object](kafkaParams.asJava)
+
+    def set(key: String, value: Object): this.type = {
+      map.put(key, value)
+      logDebug(s"$module: Set $key to $value, earlier value: ${kafkaParams.getOrElse(key, "")}")
+      this
+    }
+
+    def setIfUnset(key: String, value: Object): ConfigUpdater = {
+      if (!map.containsKey(key)) {
+        map.put(key, value)
+        logDebug(s"$module: Set $key to $value")
+      }
+      this
+    }
+
+    def build(): ju.Map[String, Object] = map
   }
 }

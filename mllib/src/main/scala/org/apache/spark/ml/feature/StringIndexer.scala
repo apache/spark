@@ -26,7 +26,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model, Transformer}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
@@ -36,7 +36,8 @@ import org.apache.spark.util.collection.OpenHashMap
 /**
  * Base trait for [[StringIndexer]] and [[StringIndexerModel]].
  */
-private[feature] trait StringIndexerBase extends Params with HasInputCol with HasOutputCol {
+private[feature] trait StringIndexerBase extends Params with HasHandleInvalid with HasInputCol
+  with HasOutputCol {
 
   /**
    * Param for how to handle invalid data (unseen labels or NULL values).
@@ -47,17 +48,36 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
    * @group param
    */
   @Since("1.6.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
-    "invalid data (unseen labels or NULL values). " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "How to handle invalid data (unseen labels or NULL values). " +
     "Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
     "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
     ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
 
   setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
+  /**
+   * Param for how to order labels of string column. The first label after ordering is assigned
+   * an index of 0.
+   * Options are:
+   *   - 'frequencyDesc': descending order by label frequency (most frequent label assigned 0)
+   *   - 'frequencyAsc': ascending order by label frequency (least frequent label assigned 0)
+   *   - 'alphabetDesc': descending alphabetical order
+   *   - 'alphabetAsc': ascending alphabetical order
+   * Default is 'frequencyDesc'.
+   *
+   * @group param
+   */
+  @Since("2.3.0")
+  final val stringOrderType: Param[String] = new Param(this, "stringOrderType",
+    "How to order labels of string column. " +
+    "The first label after ordering is assigned an index of 0. " +
+    s"Supported options: ${StringIndexer.supportedStringOrderType.mkString(", ")}.",
+    ParamValidators.inArray(StringIndexer.supportedStringOrderType))
+
   /** @group getParam */
-  @Since("1.6.0")
-  def getHandleInvalid: String = $(handleInvalid)
+  @Since("2.3.0")
+  def getStringOrderType: String = $(stringOrderType)
 
   /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
@@ -79,8 +99,9 @@ private[feature] trait StringIndexerBase extends Params with HasInputCol with Ha
 /**
  * A label indexer that maps a string column of labels to an ML column of label indices.
  * If the input column is numeric, we cast it to string and index the string values.
- * The indices are in [0, numLabels), ordered by label frequencies.
- * So the most frequent label gets index 0.
+ * The indices are in [0, numLabels). By default, this is ordered by label frequencies
+ * so the most frequent label gets index 0. The ordering behavior is controlled by
+ * setting `stringOrderType`.
  *
  * @see `IndexToString` for the inverse transformation
  */
@@ -97,6 +118,11 @@ class StringIndexer @Since("1.4.0") (
   def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   /** @group setParam */
+  @Since("2.3.0")
+  def setStringOrderType(value: String): this.type = set(stringOrderType, value)
+  setDefault(stringOrderType, StringIndexer.frequencyDesc)
+
+  /** @group setParam */
   @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
@@ -107,11 +133,17 @@ class StringIndexer @Since("1.4.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StringIndexerModel = {
     transformSchema(dataset.schema, logging = true)
-    val counts = dataset.na.drop(Array($(inputCol))).select(col($(inputCol)).cast(StringType))
-      .rdd
-      .map(_.getString(0))
-      .countByValue()
-    val labels = counts.toSeq.sortBy(-_._2).map(_._1).toArray
+    val values = dataset.na.drop(Array($(inputCol)))
+      .select(col($(inputCol)).cast(StringType))
+      .rdd.map(_.getString(0))
+    val labels = $(stringOrderType) match {
+      case StringIndexer.frequencyDesc => values.countByValue().toSeq.sortBy(-_._2)
+        .map(_._1).toArray
+      case StringIndexer.frequencyAsc => values.countByValue().toSeq.sortBy(_._2)
+        .map(_._1).toArray
+      case StringIndexer.alphabetDesc => values.distinct.collect.sortWith(_ > _)
+      case StringIndexer.alphabetAsc => values.distinct.collect.sortWith(_ < _)
+    }
     copyValues(new StringIndexerModel(uid, labels).setParent(this))
   }
 
@@ -131,6 +163,12 @@ object StringIndexer extends DefaultParamsReadable[StringIndexer] {
   private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val supportedHandleInvalids: Array[String] =
     Array(SKIP_INVALID, ERROR_INVALID, KEEP_INVALID)
+  private[feature] val frequencyDesc: String = "frequencyDesc"
+  private[feature] val frequencyAsc: String = "frequencyAsc"
+  private[feature] val alphabetDesc: String = "alphabetDesc"
+  private[feature] val alphabetAsc: String = "alphabetAsc"
+  private[feature] val supportedStringOrderType: Array[String] =
+    Array(frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc)
 
   @Since("1.6.0")
   override def load(path: String): StringIndexer = super.load(path)

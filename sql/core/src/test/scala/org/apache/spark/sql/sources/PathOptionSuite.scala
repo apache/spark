@@ -92,12 +92,12 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
           s"""
             |CREATE TABLE src
             |USING ${classOf[TestOptionsSource].getCanonicalName}
-            |OPTIONS (PATH '$p')
+            |OPTIONS (PATH '${p.toURI}')
             |AS SELECT 1
           """.stripMargin)
         assert(
           spark.table("src").schema.head.metadata.getString("path") ==
-          p.getAbsolutePath)
+          p.toURI.toString)
       }
     }
 

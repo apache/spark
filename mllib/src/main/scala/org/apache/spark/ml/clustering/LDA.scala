@@ -36,7 +36,6 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
   EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
   LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
   OnlineLDAOptimizer => OldOnlineLDAOptimizer}
-import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -45,8 +44,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonically_increasing_id, udf}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.util.PeriodicCheckpointer
 import org.apache.spark.util.VersionUtils
-
 
 private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasMaxIter
   with HasSeed with HasCheckpointInterval {
@@ -175,8 +174,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
     " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
-    (o: String) =>
-      ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase(Locale.ROOT)))
+    (value: String) => supportedOptimizers.contains(value.toLowerCase(Locale.ROOT)))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -326,7 +324,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
           s" ${getDocConcentration.length}, but k = $getK.  docConcentration must be an array of" +
           s" length either 1 (scalar) or k (num topics).")
       }
-      getOptimizer match {
+      getOptimizer.toLowerCase(Locale.ROOT) match {
         case "online" =>
           require(getDocConcentration.forall(_ >= 0),
             "For Online LDA optimizer, docConcentration values must be >= 0.  Found values: " +
@@ -338,7 +336,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
       }
     }
     if (isSet(topicConcentration)) {
-      getOptimizer match {
+      getOptimizer.toLowerCase(Locale.ROOT) match {
         case "online" =>
           require(getTopicConcentration >= 0, s"For Online LDA optimizer, topicConcentration" +
             s" must be >= 0.  Found value: $getTopicConcentration")
@@ -351,17 +349,18 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     SchemaUtils.appendColumn(schema, $(topicDistributionCol), new VectorUDT)
   }
 
-  private[clustering] def getOldOptimizer: OldLDAOptimizer = getOptimizer match {
-    case "online" =>
-      new OldOnlineLDAOptimizer()
-        .setTau0($(learningOffset))
-        .setKappa($(learningDecay))
-        .setMiniBatchFraction($(subsamplingRate))
-        .setOptimizeDocConcentration($(optimizeDocConcentration))
-    case "em" =>
-      new OldEMLDAOptimizer()
-        .setKeepLastCheckpoint($(keepLastCheckpoint))
-  }
+  private[clustering] def getOldOptimizer: OldLDAOptimizer =
+    getOptimizer.toLowerCase(Locale.ROOT) match {
+      case "online" =>
+        new OldOnlineLDAOptimizer()
+          .setTau0($(learningOffset))
+          .setKappa($(learningDecay))
+          .setMiniBatchFraction($(subsamplingRate))
+          .setOptimizeDocConcentration($(optimizeDocConcentration))
+      case "em" =>
+        new OldEMLDAOptimizer()
+          .setKeepLastCheckpoint($(keepLastCheckpoint))
+    }
 }
 
 private object LDAParams {

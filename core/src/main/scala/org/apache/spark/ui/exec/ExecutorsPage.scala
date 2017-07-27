@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.status.api.v1.ExecutorSummary
+import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 // This isn't even used anymore -- but we need to keep it b/c of a MiMa false positive
@@ -82,7 +82,7 @@ private[ui] class ExecutorsPage(
               </ul>
             </div>
           </div> ++
-          <div id="active-executors"></div> ++
+          <div id="active-executors" class="span12 pagination"></div> ++
           <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
@@ -114,10 +114,16 @@ private[spark] object ExecutorsPage {
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
-    val onHeapMemUsed = status.onHeapMemUsed
-    val offHeapMemUsed = status.offHeapMemUsed
-    val maxOnHeapMem = status.maxOnHeapMem
-    val maxOffHeapMem = status.maxOffHeapMem
+    val memoryMetrics = for {
+      onHeapUsed <- status.onHeapMemUsed
+      offHeapUsed <- status.offHeapMemUsed
+      maxOnHeap <- status.maxOnHeapMem
+      maxOffHeap <- status.maxOffHeapMem
+    } yield {
+      new MemoryMetrics(onHeapUsed, offHeapUsed, maxOnHeap, maxOffHeap)
+    }
+
+
     val diskUsed = status.diskUsed
     val taskSummary = listener.executorToTaskSummary.getOrElse(execId, ExecutorTaskSummary(execId))
 
@@ -142,10 +148,7 @@ private[spark] object ExecutorsPage {
       taskSummary.isBlacklisted,
       maxMem,
       taskSummary.executorLogs,
-      onHeapMemUsed,
-      offHeapMemUsed,
-      maxOnHeapMem,
-      maxOffHeapMem
+      memoryMetrics
     )
   }
 }

@@ -220,18 +220,20 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       jobTag: String,
       jobs: Seq[JobUIData],
       killEnabled: Boolean): Seq[Node] = {
-    val allParameters = request.getParameterMap.asScala.toMap
+    // stripXSS is called to remove suspicious characters used in XSS attacks
+    val allParameters = request.getParameterMap.asScala.toMap.mapValues(_.map(UIUtils.stripXSS))
     val parameterOtherTable = allParameters.filterNot(_._1.startsWith(jobTag))
       .map(para => para._1 + "=" + para._2(0))
 
     val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
     val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
 
-    val parameterJobPage = request.getParameter(jobTag + ".page")
-    val parameterJobSortColumn = request.getParameter(jobTag + ".sort")
-    val parameterJobSortDesc = request.getParameter(jobTag + ".desc")
-    val parameterJobPageSize = request.getParameter(jobTag + ".pageSize")
-    val parameterJobPrevPageSize = request.getParameter(jobTag + ".prevPageSize")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val parameterJobPage = UIUtils.stripXSS(request.getParameter(jobTag + ".page"))
+    val parameterJobSortColumn = UIUtils.stripXSS(request.getParameter(jobTag + ".sort"))
+    val parameterJobSortDesc = UIUtils.stripXSS(request.getParameter(jobTag + ".desc"))
+    val parameterJobPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".pageSize"))
+    val parameterJobPrevPageSize = UIUtils.stripXSS(request.getParameter(jobTag + ".prevPageSize"))
 
     val jobPage = Option(parameterJobPage).map(_.toInt).getOrElse(1)
     val jobSortColumn = Option(parameterJobSortColumn).map { sortColumn =>
@@ -239,7 +241,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }.getOrElse(jobIdTitle)
     val jobSortDesc = Option(parameterJobSortDesc).map(_.toBoolean).getOrElse(
       // New jobs should be shown above old jobs by default.
-      if (jobSortColumn == jobIdTitle) true else false
+      jobSortColumn == jobIdTitle
     )
     val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
     val jobPrevPageSize = Option(parameterJobPrevPageSize).map(_.toInt).getOrElse(jobPageSize)
@@ -629,7 +631,8 @@ private[ui] class JobPagedTable(
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>
       <td class="progress-cell">
-        {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
+        {UIUtils.makeProgressBar(started = job.numActiveTasks,
+        completed = job.completedIndices.size,
         failed = job.numFailedTasks, skipped = job.numSkippedTasks,
         reasonToNumKilled = job.reasonToNumKilled, total = job.numTasks - job.numSkippedTasks)}
       </td>

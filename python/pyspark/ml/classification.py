@@ -25,7 +25,7 @@ from pyspark.ml.regression import DecisionTreeModel, DecisionTreeRegressionModel
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaParams
 from pyspark.ml.wrapper import JavaWrapper
-from pyspark.ml.common import inherit_doc
+from pyspark.ml.common import inherit_doc, _java2py, _py2java
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import udf, when
 from pyspark.sql.types import ArrayType, DoubleType
@@ -63,13 +63,14 @@ class JavaClassificationModel(JavaPredictionModel):
 @inherit_doc
 class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                 HasRegParam, HasTol, HasRawPredictionCol, HasFitIntercept, HasStandardization,
-                HasThreshold, HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
+                HasWeightCol, HasAggregationDepth, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
     `Linear SVM Classifier <https://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM>`_
 
     This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+    Only supports L2 regularization currently.
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
@@ -108,6 +109,12 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     .. versionadded:: 2.2.0
     """
 
+    threshold = Param(Params._dummy(), "threshold",
+                      "The threshold in binary classification applied to the linear model"
+                      " prediction.  This threshold can be any real number, where Inf will make"
+                      " all predictions 0.0 and -Inf will make all predictions 1.0.",
+                      typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, regParam=0.0, tol=1e-6, rawPredictionCol="rawPrediction",
@@ -145,6 +152,18 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
 
     def _create_model(self, java_model):
         return LinearSVCModel(java_model)
+
+    def setThreshold(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(threshold=value)
+
+    def getThreshold(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.threshold)
 
 
 class LinearSVCModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
@@ -185,36 +204,33 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
     >>> bdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
-    >>> blor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight")
+    ...     Row(label=1.0, weight=1.0, features=Vectors.dense(0.0, 5.0)),
+    ...     Row(label=0.0, weight=2.0, features=Vectors.dense(1.0, 2.0)),
+    ...     Row(label=1.0, weight=3.0, features=Vectors.dense(2.0, 1.0)),
+    ...     Row(label=0.0, weight=4.0, features=Vectors.dense(3.0, 3.0))]).toDF()
+    >>> blor = LogisticRegression(regParam=0.01, weightCol="weight")
     >>> blorModel = blor.fit(bdf)
     >>> blorModel.coefficients
-    DenseVector([5.5...])
+    DenseVector([-1.080..., -0.646...])
     >>> blorModel.intercept
-    -2.68...
-    >>> mdf = sc.parallelize([
-    ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
-    ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], [])),
-    ...     Row(label=2.0, weight=2.0, features=Vectors.dense(3.0))]).toDF()
-    >>> mlor = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight",
-    ...     family="multinomial")
+    3.112...
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> mdf = spark.read.format("libsvm").load(data_path)
+    >>> mlor = LogisticRegression(regParam=0.1, elasticNetParam=1.0, family="multinomial")
     >>> mlorModel = mlor.fit(mdf)
-    >>> print(mlorModel.coefficientMatrix)
-    DenseMatrix([[-2.3...],
-                 [ 0.2...],
-                 [ 2.1... ]])
+    >>> mlorModel.coefficientMatrix
+    SparseMatrix(3, 4, [0, 1, 2, 3], [3, 2, 1], [1.87..., -2.75..., -0.50...], 1)
     >>> mlorModel.interceptVector
-    DenseVector([2.0..., 0.8..., -2.8...])
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0))]).toDF()
+    DenseVector([0.04..., -0.42..., 0.37...])
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 1.0))]).toDF()
     >>> result = blorModel.transform(test0).head()
     >>> result.prediction
-    0.0
+    1.0
     >>> result.probability
-    DenseVector([0.99..., 0.00...])
+    DenseVector([0.02..., 0.97...])
     >>> result.rawPrediction
-    DenseVector([8.22..., -8.22...])
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]).toDF()
+    DenseVector([-3.54..., 3.54...])
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
     >>> blorModel.transform(test1).head().prediction
     1.0
     >>> blor.setParams("vector")
@@ -224,8 +240,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> lr_path = temp_path + "/lr"
     >>> blor.save(lr_path)
     >>> lr2 = LogisticRegression.load(lr_path)
-    >>> lr2.getMaxIter()
-    5
+    >>> lr2.getRegParam()
+    0.01
     >>> model_path = temp_path + "/lr_model"
     >>> blorModel.save(model_path)
     >>> model2 = LogisticRegressionModel.load(model_path)
@@ -352,13 +368,13 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     def _checkThresholdConsistency(self):
         if self.isSet(self.threshold) and self.isSet(self.thresholds):
-            ts = self.getParam(self.thresholds)
+            ts = self.getOrDefault(self.thresholds)
             if len(ts) != 2:
                 raise ValueError("Logistic Regression getThreshold only applies to" +
                                  " binary classification, but thresholds has length != 2." +
-                                 " thresholds: " + ",".join(ts))
+                                 " thresholds: {0}".format(str(ts)))
             t = 1.0/(1.0 + ts[0]/ts[1])
-            t2 = self.getParam(self.threshold)
+            t2 = self.getOrDefault(self.threshold)
             if abs(t2 - t) >= 1E-5:
                 raise ValueError("Logistic Regression getThreshold found inconsistent values for" +
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
@@ -1249,8 +1265,8 @@ class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaML
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
-                                     JavaMLReadable):
+                                     HasMaxIter, HasTol, HasSeed, HasStepSize, HasSolver,
+                                     JavaMLWritable, JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1392,20 +1408,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.stepSize)
 
     @since("2.0.0")
-    def setSolver(self, value):
-        """
-        Sets the value of :py:attr:`solver`.
-        """
-        return self._set(solver=value)
-
-    @since("2.0.0")
-    def getSolver(self):
-        """
-        Gets the value of solver or its default value.
-        """
-        return self.getOrDefault(self.solver)
-
-    @since("2.0.0")
     def setInitialWeights(self, value):
         """
         Sets the value of :py:attr:`initialWeights`.
@@ -1470,7 +1472,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
+class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1482,31 +1484,33 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sc.parallelize([
-    ...     Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
-    ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),
-    ...     Row(label=2.0, features=Vectors.dense(0.5, 0.5))]).toDF()
-    >>> lr = LogisticRegression(maxIter=5, regParam=0.01)
+    >>> data_path = "data/mllib/sample_multiclass_classification_data.txt"
+    >>> df = spark.read.format("libsvm").load(data_path)
+    >>> lr = LogisticRegression(regParam=0.01)
     >>> ovr = OneVsRest(classifier=lr)
     >>> model = ovr.fit(df)
-    >>> [x.coefficients for x in model.models]
-    [DenseVector([3.3925, 1.8785]), DenseVector([-4.3016, -6.3163]), DenseVector([-4.5855, 6.1785])]
+    >>> model.models[0].coefficients
+    DenseVector([0.5..., -1.0..., 3.4..., 4.2...])
+    >>> model.models[1].coefficients
+    DenseVector([-2.1..., 3.1..., -2.6..., -2.3...])
+    >>> model.models[2].coefficients
+    DenseVector([0.3..., -3.4..., 1.0..., -1.1...])
     >>> [x.intercept for x in model.models]
-    [-3.64747..., 2.55078..., -1.10165...]
-    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0))]).toDF()
+    [-2.7..., -2.5..., -1.3...]
+    >>> test0 = sc.parallelize([Row(features=Vectors.dense(-1.0, 0.0, 1.0, 1.0))]).toDF()
     >>> model.transform(test0).head().prediction
-    1.0
-    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(2, [0], [1.0]))]).toDF()
-    >>> model.transform(test1).head().prediction
     0.0
-    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4))]).toDF()
-    >>> model.transform(test2).head().prediction
+    >>> test1 = sc.parallelize([Row(features=Vectors.sparse(4, [0], [1.0]))]).toDF()
+    >>> model.transform(test1).head().prediction
     2.0
+    >>> test2 = sc.parallelize([Row(features=Vectors.dense(0.5, 0.4, 0.3, 0.2))]).toDF()
+    >>> model.transform(test2).head().prediction
+    0.0
     >>> model_path = temp_path + "/ovr_model"
     >>> model.save(model_path)
     >>> model2 = OneVsRestModel.load(model_path)
     >>> model2.transform(test0).head().prediction
-    1.0
+    0.0
 
     .. versionadded:: 2.0.0
     """
@@ -1585,22 +1589,6 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             newOvr.setClassifier(self.getClassifier().copy(extra))
         return newOvr
 
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
-
     @classmethod
     def _from_java(cls, java_stage):
         """
@@ -1630,8 +1618,52 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
         _java_obj.setPredictionCol(self.getPredictionCol())
         return _java_obj
 
+    def _make_java_param_pair(self, param, value):
+        """
+        Makes a Java param pair.
+        """
+        sc = SparkContext._active_spark_context
+        param = self._resolveParam(param)
+        _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
+                                             self.uid)
+        java_param = _java_obj.getParam(param.name)
+        if isinstance(value, JavaParams):
+            # used in the case of an estimator having another estimator as a parameter
+            # the reason why this is not in _py2java in common.py is that importing
+            # Estimator and Model in common.py results in a circular import with inherit_doc
+            java_value = value._to_java()
+        else:
+            java_value = _py2java(sc, value)
+        return java_param.w(java_value)
 
-class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
+    def _transfer_param_map_to_java(self, pyParamMap):
+        """
+        Transforms a Python ParamMap into a Java ParamMap.
+        """
+        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
+        for param in self.params:
+            if param in pyParamMap:
+                pair = self._make_java_param_pair(param, pyParamMap[param])
+                paramMap.put([pair])
+        return paramMap
+
+    def _transfer_param_map_from_java(self, javaParamMap):
+        """
+        Transforms a Java ParamMap into a Python ParamMap.
+        """
+        sc = SparkContext._active_spark_context
+        paramMap = dict()
+        for pair in javaParamMap.toList():
+            param = pair.param()
+            if self.hasParam(str(param.name())):
+                if param.name() == "classifier":
+                    paramMap[self.getParam(param.name())] = JavaParams._from_java(pair.value())
+                else:
+                    paramMap[self.getParam(param.name())] = _java2py(sc, pair.value())
+        return paramMap
+
+
+class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1646,6 +1678,16 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     def __init__(self, models):
         super(OneVsRestModel, self).__init__()
         self.models = models
+        java_models = [model._to_java() for model in self.models]
+        sc = SparkContext._active_spark_context
+        java_models_array = JavaWrapper._new_java_array(java_models,
+                                                        sc._gateway.jvm.org.apache.spark.ml
+                                                        .classification.ClassificationModel)
+        # TODO: need to set metadata
+        metadata = JavaParams._new_java_obj("org.apache.spark.sql.types.Metadata")
+        self._java_obj = \
+            JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRestModel",
+                                     self.uid, metadata.empty(), java_models_array)
 
     def _transform(self, dataset):
         # determine the input columns: these need to be passed through
@@ -1710,22 +1752,6 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         newModel = Params.copy(self, extra)
         newModel.models = [model.copy(extra) for model in self.models]
         return newModel
-
-    @since("2.0.0")
-    def write(self):
-        """Returns an MLWriter instance for this ML instance."""
-        return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
-    @classmethod
-    @since("2.0.0")
-    def read(cls):
-        """Returns an MLReader instance for this class."""
-        return JavaMLReader(cls)
 
     @classmethod
     def _from_java(cls, java_stage):

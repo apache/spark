@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql
 
+import scala.collection.immutable.{HashSet => HSet}
 import scala.collection.immutable.Queue
+import scala.collection.mutable.{LinkedHashMap => LHMap}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.test.SharedSQLContext
@@ -30,7 +32,16 @@ case class ListClass(l: List[Int])
 
 case class QueueClass(q: Queue[Int])
 
+case class MapClass(m: Map[Int, Int])
+
+case class LHMapClass(m: LHMap[Int, Int])
+
 case class ComplexClass(seq: SeqClass, list: ListClass, queue: QueueClass)
+
+case class ComplexMapClass(map: MapClass, lhmap: LHMapClass)
+
+case class InnerData(name: String, value: Int)
+case class NestedData(id: Int, param: Map[String, InnerData])
 
 package object packageobject {
   case class PackageClass(value: Int)
@@ -258,9 +269,128 @@ class DatasetPrimitiveSuite extends QueryTest with SharedSQLContext {
       ListClass(List(1)) -> Queue("test" -> SeqClass(Seq(2))))
   }
 
+  test("arbitrary maps") {
+    checkDataset(Seq(Map(1 -> 2)).toDS(), Map(1 -> 2))
+    checkDataset(Seq(Map(1.toLong -> 2.toLong)).toDS(), Map(1.toLong -> 2.toLong))
+    checkDataset(Seq(Map(1.toDouble -> 2.toDouble)).toDS(), Map(1.toDouble -> 2.toDouble))
+    checkDataset(Seq(Map(1.toFloat -> 2.toFloat)).toDS(), Map(1.toFloat -> 2.toFloat))
+    checkDataset(Seq(Map(1.toByte -> 2.toByte)).toDS(), Map(1.toByte -> 2.toByte))
+    checkDataset(Seq(Map(1.toShort -> 2.toShort)).toDS(), Map(1.toShort -> 2.toShort))
+    checkDataset(Seq(Map(true -> false)).toDS(), Map(true -> false))
+    checkDataset(Seq(Map("test1" -> "test2")).toDS(), Map("test1" -> "test2"))
+    checkDataset(Seq(Map(Tuple1(1) -> Tuple1(2))).toDS(), Map(Tuple1(1) -> Tuple1(2)))
+    checkDataset(Seq(Map(1 -> Tuple1(2))).toDS(), Map(1 -> Tuple1(2)))
+    checkDataset(Seq(Map("test" -> 2.toLong)).toDS(), Map("test" -> 2.toLong))
+
+    checkDataset(Seq(LHMap(1 -> 2)).toDS(), LHMap(1 -> 2))
+    checkDataset(Seq(LHMap(1.toLong -> 2.toLong)).toDS(), LHMap(1.toLong -> 2.toLong))
+    checkDataset(Seq(LHMap(1.toDouble -> 2.toDouble)).toDS(), LHMap(1.toDouble -> 2.toDouble))
+    checkDataset(Seq(LHMap(1.toFloat -> 2.toFloat)).toDS(), LHMap(1.toFloat -> 2.toFloat))
+    checkDataset(Seq(LHMap(1.toByte -> 2.toByte)).toDS(), LHMap(1.toByte -> 2.toByte))
+    checkDataset(Seq(LHMap(1.toShort -> 2.toShort)).toDS(), LHMap(1.toShort -> 2.toShort))
+    checkDataset(Seq(LHMap(true -> false)).toDS(), LHMap(true -> false))
+    checkDataset(Seq(LHMap("test1" -> "test2")).toDS(), LHMap("test1" -> "test2"))
+    checkDataset(Seq(LHMap(Tuple1(1) -> Tuple1(2))).toDS(), LHMap(Tuple1(1) -> Tuple1(2)))
+    checkDataset(Seq(LHMap(1 -> Tuple1(2))).toDS(), LHMap(1 -> Tuple1(2)))
+    checkDataset(Seq(LHMap("test" -> 2.toLong)).toDS(), LHMap("test" -> 2.toLong))
+  }
+
+  ignore("SPARK-19104: map and product combinations") {
+    // Case classes
+    checkDataset(Seq(MapClass(Map(1 -> 2))).toDS(), MapClass(Map(1 -> 2)))
+    checkDataset(Seq(Map(1 -> MapClass(Map(2 -> 3)))).toDS(), Map(1 -> MapClass(Map(2 -> 3))))
+    checkDataset(Seq(Map(MapClass(Map(1 -> 2)) -> 3)).toDS(), Map(MapClass(Map(1 -> 2)) -> 3))
+    checkDataset(Seq(Map(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4)))).toDS(),
+      Map(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4))))
+    checkDataset(Seq(LHMap(1 -> MapClass(Map(2 -> 3)))).toDS(), LHMap(1 -> MapClass(Map(2 -> 3))))
+    checkDataset(Seq(LHMap(MapClass(Map(1 -> 2)) -> 3)).toDS(), LHMap(MapClass(Map(1 -> 2)) -> 3))
+    checkDataset(Seq(LHMap(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4)))).toDS(),
+      LHMap(MapClass(Map(1 -> 2)) -> MapClass(Map(3 -> 4))))
+
+    checkDataset(Seq(LHMapClass(LHMap(1 -> 2))).toDS(), LHMapClass(LHMap(1 -> 2)))
+    checkDataset(Seq(Map(1 -> LHMapClass(LHMap(2 -> 3)))).toDS(),
+      Map(1 -> LHMapClass(LHMap(2 -> 3))))
+    checkDataset(Seq(Map(LHMapClass(LHMap(1 -> 2)) -> 3)).toDS(),
+      Map(LHMapClass(LHMap(1 -> 2)) -> 3))
+    checkDataset(Seq(Map(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4)))).toDS(),
+      Map(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4))))
+    checkDataset(Seq(LHMap(1 -> LHMapClass(LHMap(2 -> 3)))).toDS(),
+      LHMap(1 -> LHMapClass(LHMap(2 -> 3))))
+    checkDataset(Seq(LHMap(LHMapClass(LHMap(1 -> 2)) -> 3)).toDS(),
+      LHMap(LHMapClass(LHMap(1 -> 2)) -> 3))
+    checkDataset(Seq(LHMap(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4)))).toDS(),
+      LHMap(LHMapClass(LHMap(1 -> 2)) -> LHMapClass(LHMap(3 -> 4))))
+
+    val complex = ComplexMapClass(MapClass(Map(1 -> 2)), LHMapClass(LHMap(3 -> 4)))
+    checkDataset(Seq(complex).toDS(), complex)
+    checkDataset(Seq(Map(1 -> complex)).toDS(), Map(1 -> complex))
+    checkDataset(Seq(Map(complex -> 5)).toDS(), Map(complex -> 5))
+    checkDataset(Seq(Map(complex -> complex)).toDS(), Map(complex -> complex))
+    checkDataset(Seq(LHMap(1 -> complex)).toDS(), LHMap(1 -> complex))
+    checkDataset(Seq(LHMap(complex -> 5)).toDS(), LHMap(complex -> 5))
+    checkDataset(Seq(LHMap(complex -> complex)).toDS(), LHMap(complex -> complex))
+
+    // Tuples
+    checkDataset(Seq(Map(1 -> 2) -> Map(3 -> 4)).toDS(), Map(1 -> 2) -> Map(3 -> 4))
+    checkDataset(Seq(LHMap(1 -> 2) -> Map(3 -> 4)).toDS(), LHMap(1 -> 2) -> Map(3 -> 4))
+    checkDataset(Seq(Map(1 -> 2) -> LHMap(3 -> 4)).toDS(), Map(1 -> 2) -> LHMap(3 -> 4))
+    checkDataset(Seq(LHMap(1 -> 2) -> LHMap(3 -> 4)).toDS(), LHMap(1 -> 2) -> LHMap(3 -> 4))
+    checkDataset(Seq(LHMap((Map("test1" -> 1) -> 2) -> (3 -> LHMap(4 -> "test2")))).toDS(),
+      LHMap((Map("test1" -> 1) -> 2) -> (3 -> LHMap(4 -> "test2"))))
+
+    // Complex
+    checkDataset(Seq(LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4)))).toDS(),
+      LHMapClass(LHMap(1 -> 2)) -> LHMap("test" -> MapClass(Map(3 -> 4))))
+  }
+
+  test("arbitrary sets") {
+    checkDataset(Seq(Set(1, 2, 3, 4)).toDS(), Set(1, 2, 3, 4))
+    checkDataset(Seq(Set(1.toLong, 2.toLong)).toDS(), Set(1.toLong, 2.toLong))
+    checkDataset(Seq(Set(1.toDouble, 2.toDouble)).toDS(), Set(1.toDouble, 2.toDouble))
+    checkDataset(Seq(Set(1.toFloat, 2.toFloat)).toDS(), Set(1.toFloat, 2.toFloat))
+    checkDataset(Seq(Set(1.toByte, 2.toByte)).toDS(), Set(1.toByte, 2.toByte))
+    checkDataset(Seq(Set(1.toShort, 2.toShort)).toDS(), Set(1.toShort, 2.toShort))
+    checkDataset(Seq(Set(true, false)).toDS(), Set(true, false))
+    checkDataset(Seq(Set("test1", "test2")).toDS(), Set("test1", "test2"))
+    checkDataset(Seq(Set(Tuple1(1), Tuple1(2))).toDS(), Set(Tuple1(1), Tuple1(2)))
+
+    checkDataset(Seq(HSet(1, 2)).toDS(), HSet(1, 2))
+    checkDataset(Seq(HSet(1.toLong, 2.toLong)).toDS(), HSet(1.toLong, 2.toLong))
+    checkDataset(Seq(HSet(1.toDouble, 2.toDouble)).toDS(), HSet(1.toDouble, 2.toDouble))
+    checkDataset(Seq(HSet(1.toFloat, 2.toFloat)).toDS(), HSet(1.toFloat, 2.toFloat))
+    checkDataset(Seq(HSet(1.toByte, 2.toByte)).toDS(), HSet(1.toByte, 2.toByte))
+    checkDataset(Seq(HSet(1.toShort, 2.toShort)).toDS(), HSet(1.toShort, 2.toShort))
+    checkDataset(Seq(HSet(true, false)).toDS(), HSet(true, false))
+    checkDataset(Seq(HSet("test1", "test2")).toDS(), HSet("test1", "test2"))
+    checkDataset(Seq(HSet(Tuple1(1), Tuple1(2))).toDS(), HSet(Tuple1(1), Tuple1(2)))
+
+    checkDataset(Seq(Seq(Some(1), None), Seq(Some(2))).toDF("c").as[Set[Integer]],
+      Seq(Set[Integer](1, null), Set[Integer](2)): _*)
+  }
+
+  test("nested sequences") {
+    checkDataset(Seq(Seq(Seq(1))).toDS(), Seq(Seq(1)))
+    checkDataset(Seq(List(Queue(1))).toDS(), List(Queue(1)))
+  }
+
+  test("nested maps") {
+    checkDataset(Seq(Map(1 -> LHMap(2 -> 3))).toDS(), Map(1 -> LHMap(2 -> 3)))
+    checkDataset(Seq(LHMap(Map(1 -> 2) -> 3)).toDS(), LHMap(Map(1 -> 2) -> 3))
+  }
+
+  test("nested set") {
+    checkDataset(Seq(Set(HSet(1, 2), HSet(3, 4))).toDS(), Set(HSet(1, 2), HSet(3, 4)))
+    checkDataset(Seq(HSet(Set(1, 2), Set(3, 4))).toDS(), HSet(Set(1, 2), Set(3, 4)))
+  }
+
   test("package objects") {
     import packageobject._
     checkDataset(Seq(PackageClass(1)).toDS(), PackageClass(1))
   }
 
+  test("SPARK-19104: Lambda variables in ExternalMapToCatalyst should be global") {
+    val data = Seq.tabulate(10)(i => NestedData(1, Map("key" -> InnerData("name", i + 100))))
+    val ds = spark.createDataset(data)
+    checkDataset(ds, data: _*)
+  }
 }

@@ -81,4 +81,10 @@ object StaticSQLConf {
         "SQL configuration and the current database.")
       .booleanConf
       .createWithDefault(false)
+
+  val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
+    .doc("Name of the class used to configure Spark Session extensions. The class should " +
+      "implement Function1[SparkSessionExtension, Unit], and must have a no-args constructor.")
+    .stringConf
+    .createOptional
 }

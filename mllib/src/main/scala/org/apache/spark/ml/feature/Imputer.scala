@@ -102,7 +102,8 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
 @Experimental
-class Imputer @Since("2.2.0")(override val uid: String)
+@Since("2.2.0")
+class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
 
   @Since("2.2.0")
@@ -165,8 +166,8 @@ class Imputer @Since("2.2.0")(override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** strategy names that Imputer currently supports. */
-  private[ml] val mean = "mean"
-  private[ml] val median = "median"
+  private[feature] val mean = "mean"
+  private[feature] val median = "median"
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)
@@ -180,9 +181,10 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  *                    which are used to replace the missing values in the input DataFrame.
  */
 @Experimental
-class ImputerModel private[ml](
-    override val uid: String,
-    val surrogateDF: DataFrame)
+@Since("2.2.0")
+class ImputerModel private[ml] (
+    @Since("2.2.0") override val uid: String,
+    @Since("2.2.0") val surrogateDF: DataFrame)
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._

@@ -33,7 +33,7 @@ import org.apache.spark.sql.SparkSession
  * - process batch 1
  * - write batch 1 to completion log
  * - trigger batch 2
- * - obtain bactch 2 offsets and write to offset log
+ * - obtain batch 2 offsets and write to offset log
  * - process batch 2
  * - write batch 2 to completion log
  * ....

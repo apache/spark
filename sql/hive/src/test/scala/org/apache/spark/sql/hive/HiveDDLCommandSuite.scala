@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, LogicalPlan, ScriptTransformation}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
@@ -57,6 +57,11 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
     TestHive.sessionState.analyzer.execute(parser.parsePlan(sql)).collect {
       case CreateTableCommand(tableDesc, _) => tableDesc
     }.head
+  }
+
+  private def compareTransformQuery(sql: String, expected: LogicalPlan): Unit = {
+    val plan = parser.parsePlan(sql).asInstanceOf[ScriptTransformation].copy(ioschema = null)
+    comparePlans(plan, expected, checkAnalysis = false)
   }
 
   test("Test CTAS #1") {
@@ -253,22 +258,15 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   }
 
   test("transform query spec") {
-    val plan1 = parser.parsePlan("select transform(a, b) using 'func' from e where f < 10")
-      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
-    val plan2 = parser.parsePlan("map a, b using 'func' as c, d from e")
-      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
-    val plan3 = parser.parsePlan("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e")
-      .asInstanceOf[ScriptTransformation].copy(ioschema = null)
-
     val p = ScriptTransformation(
       Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
       "func", Seq.empty, plans.table("e"), null)
 
-    comparePlans(plan1,
+    compareTransformQuery("select transform(a, b) using 'func' from e where f < 10",
       p.copy(child = p.child.where('f < 10), output = Seq('key.string, 'value.string)))
-    comparePlans(plan2,
+    compareTransformQuery("map a, b using 'func' as c, d from e",
       p.copy(output = Seq('c.string, 'd.string)))
-    comparePlans(plan3,
+    compareTransformQuery("reduce a, b using 'func' as (c int, d decimal(10, 0)) from e",
       p.copy(output = Seq('c.int, 'd.decimal(10, 0))))
   }
 
@@ -367,13 +365,32 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   }
 
   test("create table - clustered by") {
-    val baseQuery = "CREATE TABLE my_table (id int, name string) CLUSTERED BY(id)"
-    val query1 = s"$baseQuery INTO 10 BUCKETS"
-    val query2 = s"$baseQuery SORTED BY(id) INTO 10 BUCKETS"
-    val e1 = intercept[ParseException] { parser.parsePlan(query1) }
-    val e2 = intercept[ParseException] { parser.parsePlan(query2) }
-    assert(e1.getMessage.contains("Operation not allowed"))
-    assert(e2.getMessage.contains("Operation not allowed"))
+    val numBuckets = 10
+    val bucketedColumn = "id"
+    val sortColumn = "id"
+    val baseQuery =
+      s"""
+         CREATE TABLE my_table (
+           $bucketedColumn int,
+           name string)
+         CLUSTERED BY($bucketedColumn)
+       """
+
+    val query1 = s"$baseQuery INTO $numBuckets BUCKETS"
+    val (desc1, _) = extractTableDesc(query1)
+    assert(desc1.bucketSpec.isDefined)
+    val bucketSpec1 = desc1.bucketSpec.get
+    assert(bucketSpec1.numBuckets == numBuckets)
+    assert(bucketSpec1.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec1.sortColumnNames.isEmpty)
+
+    val query2 = s"$baseQuery SORTED BY($sortColumn) INTO $numBuckets BUCKETS"
+    val (desc2, _) = extractTableDesc(query2)
+    assert(desc2.bucketSpec.isDefined)
+    val bucketSpec2 = desc2.bucketSpec.get
+    assert(bucketSpec2.numBuckets == numBuckets)
+    assert(bucketSpec2.bucketColumnNames.head.equals(bucketedColumn))
+    assert(bucketSpec2.sortColumnNames.head.equals(sortColumn))
   }
 
   test("create table - skewed by") {
@@ -627,7 +644,6 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils with TestHiveSingle
   }
 
   test("SPARK-15887: hive-site.xml should be loaded") {
-    val hiveClient = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
     assert(hiveClient.getConf("hive.in.test", "") == "true")
   }
 

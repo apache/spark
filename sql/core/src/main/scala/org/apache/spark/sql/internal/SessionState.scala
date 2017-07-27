@@ -109,7 +109,7 @@ private[sql] object SessionState {
 }
 
 /**
- * Concrete implementation of a [[SessionStateBuilder]].
+ * Concrete implementation of a [[BaseSessionStateBuilder]].
  */
 @Experimental
 @InterfaceStability.Unstable

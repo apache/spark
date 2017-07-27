@@ -24,7 +24,7 @@ explicitly, which are usually expensive to generate.
 After the second step, the frequent itemsets can be extracted from the FP-tree.
 In `spark.mllib`, we implemented a parallel version of FP-growth called PFP,
 as described in [Li et al., PFP: Parallel FP-growth for query recommendation](http://dx.doi.org/10.1145/1454008.1454027).
-PFP distributes the work of growing FP-trees based on the suffices of transactions,
+PFP distributes the work of growing FP-trees based on the suffixes of transactions,
 and hence more scalable than a single-machine implementation.
 We refer users to the papers for more details.
 

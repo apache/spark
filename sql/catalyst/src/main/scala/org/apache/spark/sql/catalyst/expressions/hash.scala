@@ -247,8 +247,9 @@ abstract class HashExpression[E] extends Expression {
   override def nullable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("function hash requires at least one argument")
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -524,7 +525,7 @@ abstract class InterpretedHashFunction {
   extended = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
-        -1321691492
+       -1321691492
   """)
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)

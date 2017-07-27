@@ -75,7 +75,7 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
       protected boolean stopEarly() {
         return $stopEarly;
       }
-    """)
+    """, inlineToOuterClass = true)
     val countTerm = ctx.freshName("count")
     ctx.addMutableState("int", countTerm, s"$countTerm = 0;")
     s"""

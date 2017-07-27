@@ -27,6 +27,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.execution.streaming.FileStreamSink
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -36,19 +37,27 @@ import org.apache.spark.util.SerializableConfiguration
  * A [[FileIndex]] that generates the list of files to process by recursively listing all the
  * files present in `paths`.
  *
- * @param rootPaths the list of root table paths to scan
+ * @param rootPathsSpecified the list of root table paths to scan (some of which might be
+ *                           filtered out later)
  * @param parameters as set of options to control discovery
  * @param partitionSchema an optional partition schema that will be use to provide types for the
  *                        discovered partitions
  */
 class InMemoryFileIndex(
     sparkSession: SparkSession,
-    override val rootPaths: Seq[Path],
+    rootPathsSpecified: Seq[Path],
     parameters: Map[String, String],
     partitionSchema: Option[StructType],
     fileStatusCache: FileStatusCache = NoopCache)
   extends PartitioningAwareFileIndex(
     sparkSession, parameters, partitionSchema, fileStatusCache) {
+
+  // Filter out streaming metadata dirs or files such as "/.../_spark_metadata" (the metadata dir)
+  // or "/.../_spark_metadata/0" (a file in the metadata dir). `rootPathsSpecified` might contain
+  // such streaming metadata dir or files, e.g. when after globbing "basePath/*" where "basePath"
+  // is the output of a streaming query.
+  override val rootPaths =
+    rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _

@@ -44,6 +44,3 @@ class PartitionsAlreadyExistException(db: String, table: String, specs: Seq[Tabl
 
 class FunctionAlreadyExistsException(db: String, func: String)
   extends AnalysisException(s"Function '$func' already exists in database '$db'")
-
-class TempFunctionAlreadyExistsException(func: String)
-  extends AnalysisException(s"Temporary function '$func' already exists")

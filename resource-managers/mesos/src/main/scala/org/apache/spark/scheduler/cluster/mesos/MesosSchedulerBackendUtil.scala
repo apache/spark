@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Volume}
+import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 
 import org.apache.spark.{SparkConf, SparkException}
@@ -99,6 +99,28 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
+  /**
+   * Parse a list of docker parameters, each of which
+   * takes the form key=value
+   */
+  private def parseParamsSpec(params: String): List[Parameter] = {
+    // split with limit of 2 to avoid parsing error when '='
+    // exists in the parameter value
+    params.split(",").map(_.split("=", 2)).flatMap { spec: Array[String] =>
+      val param: Parameter.Builder = Parameter.newBuilder()
+      spec match {
+        case Array(key, value) =>
+          Some(param.setKey(key).setValue(value))
+        case spec =>
+          logWarning(s"Unable to parse arbitary parameters: $params. "
+            + "Expected form: \"key=value(, ...)\"")
+          None
+      }
+    }
+    .map { _.build() }
+    .toList
+  }
+
   def containerInfo(conf: SparkConf): ContainerInfo = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
@@ -120,8 +142,14 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .map(parsePortMappingsSpec)
         .getOrElse(List.empty)
 
+      val params = conf
+        .getOption("spark.mesos.executor.docker.parameters")
+        .map(parseParamsSpec)
+        .getOrElse(List.empty)
+
       if (containerType == ContainerInfo.Type.DOCKER) {
-        containerInfo.setDocker(dockerInfo(image, forcePullImage, portMaps))
+        containerInfo
+          .setDocker(dockerInfo(image, forcePullImage, portMaps, params))
       } else {
         containerInfo.setMesos(mesosInfo(image, forcePullImage))
       }
@@ -144,11 +172,13 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   private def dockerInfo(
       image: String,
       forcePullImage: Boolean,
-      portMaps: List[ContainerInfo.DockerInfo.PortMapping]): DockerInfo = {
+      portMaps: List[ContainerInfo.DockerInfo.PortMapping],
+      params: List[Parameter]): DockerInfo = {
     val dockerBuilder = ContainerInfo.DockerInfo.newBuilder()
       .setImage(image)
       .setForcePullImage(forcePullImage)
     portMaps.foreach(dockerBuilder.addPortMappings(_))
+    params.foreach(dockerBuilder.addParameters(_))
 
     dockerBuilder.build
   }

@@ -261,10 +261,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test for DROPMALFORMED parsing mode") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val cars = spark.read
         .format("csv")
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .options(Map("header" -> "true", "mode" -> "dropmalformed"))
         .load(testFile(carsFile))
 
@@ -284,11 +284,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test for FAILFAST parsing mode") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val exception = intercept[SparkException] {
         spark.read
           .format("csv")
-          .option("wholeFile", wholeFile)
+          .option("multiLine", multiLine)
           .options(Map("header" -> "true", "mode" -> "failfast"))
           .load(testFile(carsFile)).collect()
       }
@@ -990,13 +990,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("SPARK-18699 put malformed records in a `columnNameOfCorruptRecord` field") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val schema = new StructType().add("a", IntegerType).add("b", TimestampType)
       // We use `PERMISSIVE` mode by default if invalid string is given.
       val df1 = spark
         .read
         .option("mode", "abcd")
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .schema(schema)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df1,
@@ -1011,7 +1011,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .read
         .option("mode", "Permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .schema(schemaWithCorrField1)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df2,
@@ -1028,7 +1028,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .read
         .option("mode", "permissive")
         .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .schema(schemaWithCorrField2)
         .csv(testFile(valueMalformedFile))
       checkAnswer(df3,
@@ -1041,7 +1041,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           .read
           .option("mode", "PERMISSIVE")
           .option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
-          .option("wholeFile", wholeFile)
+          .option("multiLine", multiLine)
           .schema(schema.add(columnNameOfCorruptRecord, IntegerType))
           .csv(testFile(valueMalformedFile))
           .collect
@@ -1073,7 +1073,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       val df = spark.read
         .option("header", true)
-        .option("wholeFile", true)
+        .option("multiLine", true)
         .csv(path.getAbsolutePath)
 
       // Check if headers have new lines in the names.
@@ -1096,10 +1096,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("Empty file produces empty dataframe with empty schema") {
-    Seq(false, true).foreach { wholeFile =>
+    Seq(false, true).foreach { multiLine =>
       val df = spark.read.format("csv")
         .option("header", true)
-        .option("wholeFile", wholeFile)
+        .option("multiLine", multiLine)
         .load(testFile(emptyFile))
 
       assert(df.schema === spark.emptyDataFrame.schema)
@@ -1173,5 +1173,26 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           checkAnswer(readBack, Row(expected))
         }
       }
+  }
+
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
+    val exception = intercept[SparkException] {
+      spark.read.schema("a DOUBLE")
+        .option("mode", "FAILFAST")
+        .csv(Seq("10u12").toDS())
+        .collect()
+    }
+    assert(exception.getMessage.contains("""input string: "10u12""""))
+
+    val count = spark.read.schema("a FLOAT")
+      .option("mode", "DROPMALFORMED")
+      .csv(Seq("10u12").toDS())
+      .count()
+    assert(count == 0)
+
+    val results = spark.read.schema("a FLOAT")
+      .option("mode", "PERMISSIVE")
+      .csv(Seq("10u12").toDS())
+    checkAnswer(results, Row(null))
   }
 }

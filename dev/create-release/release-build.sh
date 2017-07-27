@@ -155,17 +155,17 @@ if [[ "$1" == "package" ]]; then
 
     cd spark-$SPARK_VERSION-bin-$NAME
 
-    # TODO There should probably be a flag to make-distribution to allow 2.10 support
-    if [[ $FLAGS == *scala-2.10* ]]; then
-      ./dev/change-scala-version.sh 2.10
-    fi
+    # TODO There should probably be a flag to make-distribution to allow 2.12 support
+    #if [[ $FLAGS == *scala-2.12* ]]; then
+    #  ./dev/change-scala-version.sh 2.12
+    #fi
 
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
-    # Write out the NAME and VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
-    # to dev0 to be closer to PEP440. We use the NAME as a "local version".
-    PYSPARK_VERSION=`echo "$SPARK_VERSION+$NAME" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
+    # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
+    # to dev0 to be closer to PEP440.
+    PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
     echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
 
     # Get maven home set by MVN
@@ -305,9 +305,9 @@ if [[ "$1" == "publish-snapshot" ]]; then
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
   $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES deploy
-  ./dev/change-scala-version.sh 2.10
-  $MVN -DzincPort=$ZINC_PORT -Dscala-2.10 --settings $tmp_settings \
-    -DskipTests $PUBLISH_PROFILES clean deploy
+  #./dev/change-scala-version.sh 2.12
+  #$MVN -DzincPort=$ZINC_PORT -Pscala-2.12 --settings $tmp_settings \
+  #  -DskipTests $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
@@ -342,15 +342,12 @@ if [[ "$1" == "publish-release" ]]; then
 
   $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES clean install
 
-  ./dev/change-scala-version.sh 2.10
-
-  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.10 \
-    -DskipTests $PUBLISH_PROFILES clean install
+  #./dev/change-scala-version.sh 2.12
+  #$MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Pscala-2.12 \
+  #  -DskipTests $PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
-
-  ./dev/change-version-to-2.10.sh
 
   pushd $tmp_repo/org/apache/spark
 
