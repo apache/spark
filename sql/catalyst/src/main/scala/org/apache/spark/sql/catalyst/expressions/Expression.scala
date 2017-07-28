@@ -241,6 +241,7 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
   override def foldable: Boolean = child.foldable
   override def dataType: DataType = child.dataType
+  override lazy val canonicalized: Expression = child.canonicalized
 }
 
 

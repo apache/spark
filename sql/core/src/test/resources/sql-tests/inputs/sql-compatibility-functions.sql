@@ -23,3 +23,9 @@ SELECT float(1), double(1), decimal(1);
 SELECT date("2014-04-04"), timestamp(date("2014-04-04"));
 -- error handling: only one argument
 SELECT string(1, 2);
+
+-- SPARK-21555: RuntimeReplaceable used in group by
+CREATE TABLE test(a INT, foo STRUCT<foo1:STRING,foo2:STRING>) USING parquet;
+INSERT INTO test VALUES(1, ("value1", "value2"));
+SELECT nvl(foo.foo1, "value"), count(*) FROM test GROUP BY nvl(foo.foo1, "value");
+DROP TABLE test;
