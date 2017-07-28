@@ -181,8 +181,29 @@ class DDLCommandSuite extends PlanTest {
         |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
         |FILE '/path/to/file'
       """.stripMargin
+    val sql3 =
+      """
+        |CREATE OR REPLACE TEMPORARY FUNCTION helloworld3 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+        |JAR '/path/to/jar2'
+      """.stripMargin
+    val sql4 =
+      """
+        |CREATE OR REPLACE FUNCTION hello.world1 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
+        |FILE '/path/to/file'
+      """.stripMargin
+    val sql5 =
+      """
+        |CREATE FUNCTION IF NOT EXISTS hello.world2 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
+        |FILE '/path/to/file'
+      """.stripMargin
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql4)
+    val parsed5 = parser.parsePlan(sql5)
     val expected1 = CreateFunctionCommand(
       None,
       "helloworld",
@@ -190,7 +211,7 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true)
+      isTemp = true, ifNotExists = false, replace = false)
     val expected2 = CreateFunctionCommand(
       Some("hello"),
       "world",
@@ -198,9 +219,36 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
         FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false)
+      isTemp = false, ifNotExists = false, replace = false)
+    val expected3 = CreateFunctionCommand(
+      None,
+      "helloworld3",
+      "com.matthewrathbone.example.SimpleUDFExample",
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
+        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
+      isTemp = true, ifNotExists = false, replace = true)
+    val expected4 = CreateFunctionCommand(
+      Some("hello"),
+      "world1",
+      "com.matthewrathbone.example.SimpleUDFExample",
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
+        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
+      isTemp = false, ifNotExists = false, replace = true)
+    val expected5 = CreateFunctionCommand(
+      Some("hello"),
+      "world2",
+      "com.matthewrathbone.example.SimpleUDFExample",
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
+        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
+      isTemp = false, ifNotExists = true, replace = false)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+    comparePlans(parsed5, expected5)
   }
 
   test("drop function") {

@@ -241,7 +241,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     }.getOrElse(jobIdTitle)
     val jobSortDesc = Option(parameterJobSortDesc).map(_.toBoolean).getOrElse(
       // New jobs should be shown above old jobs by default.
-      if (jobSortColumn == jobIdTitle) true else false
+      jobSortColumn == jobIdTitle
     )
     val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
     val jobPrevPageSize = Option(parameterJobPrevPageSize).map(_.toInt).getOrElse(jobPageSize)
@@ -631,7 +631,8 @@ private[ui] class JobPagedTable(
         {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
       </td>
       <td class="progress-cell">
-        {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
+        {UIUtils.makeProgressBar(started = job.numActiveTasks,
+        completed = job.completedIndices.size,
         failed = job.numFailedTasks, skipped = job.numSkippedTasks,
         reasonToNumKilled = job.reasonToNumKilled, total = job.numTasks - job.numSkippedTasks)}
       </td>

@@ -68,7 +68,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 
   private def assertMetadataNotNull(): Unit = {
     if (metadata == null) {
-      throw new IllegalAccessError("The metadata of this accumulator has not been assigned yet.")
+      throw new IllegalStateException("The metadata of this accumulator has not been assigned yet.")
     }
   }
 
@@ -265,7 +265,7 @@ private[spark] object AccumulatorContext {
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get
       if (acc eq null) {
-        throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
+        throw new IllegalStateException(s"Attempted to access garbage collected accumulator $id")
       }
       acc
     }

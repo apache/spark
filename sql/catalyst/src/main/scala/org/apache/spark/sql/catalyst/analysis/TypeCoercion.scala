@@ -54,6 +54,7 @@ object TypeCoercion {
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
+      StackCoercion ::
       Division ::
       PropagateTypes ::
       ImplicitTypeCasts ::
@@ -356,10 +357,13 @@ object TypeCoercion {
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
+      case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
       case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
       case Average(e @ StringType()) => Average(Cast(e, DoubleType))
       case StddevPop(e @ StringType()) => StddevPop(Cast(e, DoubleType))
       case StddevSamp(e @ StringType()) => StddevSamp(Cast(e, DoubleType))
+      case UnaryMinus(e @ StringType()) => UnaryMinus(Cast(e, DoubleType))
+      case UnaryPositive(e @ StringType()) => UnaryPositive(Cast(e, DoubleType))
       case VariancePop(e @ StringType()) => VariancePop(Cast(e, DoubleType))
       case VarianceSamp(e @ StringType()) => VarianceSamp(Cast(e, DoubleType))
       case Skewness(e @ StringType()) => Skewness(Cast(e, DoubleType))
@@ -645,6 +649,22 @@ object TypeCoercion {
         If(Literal.create(null, BooleanType), left, right)
       case If(pred, left, right) if pred.dataType == NullType =>
         If(Cast(pred, BooleanType), left, right)
+    }
+  }
+
+  /**
+   * Coerces NullTypes in the Stack expression to the column types of the corresponding positions.
+   */
+  object StackCoercion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      case s @ Stack(children) if s.childrenResolved && s.hasFoldableNumRows =>
+        Stack(children.zipWithIndex.map {
+          // The first child is the number of rows for stack.
+          case (e, 0) => e
+          case (Literal(null, NullType), index: Int) =>
+            Literal.create(null, s.findDataType(index))
+          case (e, _) => e
+        })
     }
   }
 

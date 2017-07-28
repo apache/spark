@@ -56,8 +56,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
   }
 
   test("check types for unary arithmetic") {
-    assertError(UnaryMinus('stringField), "(numeric or calendarinterval) type")
-    assertError(Abs('stringField), "requires numeric type")
     assertError(BitwiseNot('stringField), "requires integral type")
   }
 
@@ -157,7 +155,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
       "input to function array should all be the same type")
     assertError(Coalesce(Seq('intField, 'booleanField)),
       "input to function coalesce should all be the same type")
-    assertError(Coalesce(Nil), "input to function coalesce cannot be empty")
+    assertError(Coalesce(Nil), "function coalesce requires at least one argument")
     assertError(new Murmur3Hash(Nil), "function hash requires at least one argument")
     assertError(Explode('intField),
       "input to function explode should be array or map type")
@@ -209,7 +207,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   test("check types for Greatest/Least") {
     for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
-      assertError(operator(Seq('booleanField)), "requires at least 2 arguments")
+      assertError(operator(Seq('booleanField)), "requires at least two arguments")
       assertError(operator(Seq('intField, 'stringField)), "should all have the same type")
       assertError(operator(Seq('mapField, 'mapField)), "does not support ordering")
     }

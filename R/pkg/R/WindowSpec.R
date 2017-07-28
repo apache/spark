@@ -203,7 +203,8 @@ setMethod("rangeBetween",
 #' @aliases over,Column,WindowSpec-method
 #' @family colum_func
 #' @export
-#' @examples \dontrun{
+#' @examples
+#' \dontrun{
 #'   df <- createDataFrame(mtcars)
 #'
 #'   # Partition by am (transmission) and order by hp (horsepower)

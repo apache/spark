@@ -231,7 +231,7 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("foo(distinct a, b)", 'foo.distinctFunction('a, 'b))
     assertEqual("grouping(distinct a, b)", 'grouping.distinctFunction('a, 'b))
     assertEqual("`select`(all a, b)", 'select.function('a, 'b))
-    assertEqual("foo(a as x, b as e)", 'foo.function('a as 'x, 'b as 'e))
+    intercept("foo(a x)", "extraneous input 'x'")
   }
 
   test("window function expressions") {
@@ -330,7 +330,9 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("a.b", UnresolvedAttribute("a.b"))
     assertEqual("`select`.b", UnresolvedAttribute("select.b"))
     assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
-    assertEqual("struct(a, b).b", 'struct.function('a, 'b).getField("b"))
+    assertEqual(
+      "struct(a, b).b",
+      namedStruct(NamePlaceholder, 'a, NamePlaceholder, 'b).getField("b"))
   }
 
   test("reference") {
@@ -463,22 +465,30 @@ class ExpressionParserSuite extends PlanTest {
         assertEqual("'pattern\\\\\\%'", "pattern\\\\\\%", parser)
 
         // Escaped characters.
-        assertEqual("'\0'", "\u0000", parser) // ASCII NUL (X'00')
+        // Unescape string literal "'\\0'" for ASCII NUL (X'00') doesn't work
+        // when ESCAPED_STRING_LITERALS is enabled.
+        // It is parsed literally.
+        assertEqual("'\\0'", "\\0", parser)
 
         // Note: Single quote follows 1.6 parsing behavior when ESCAPED_STRING_LITERALS is enabled.
         val e = intercept[ParseException](parser.parseExpression("'\''"))
         assert(e.message.contains("extraneous input '''"))
 
-        assertEqual("'\"'", "\"", parser)     // Double quote
-        assertEqual("'\b'", "\b", parser)     // Backspace
-        assertEqual("'\n'", "\n", parser)     // Newline
-        assertEqual("'\r'", "\r", parser)     // Carriage return
-        assertEqual("'\t'", "\t", parser)     // Tab character
+        // The unescape special characters (e.g., "\\t") for 2.0+ don't work
+        // when ESCAPED_STRING_LITERALS is enabled. They are parsed literally.
+        assertEqual("'\\\"'", "\\\"", parser)   // Double quote
+        assertEqual("'\\b'", "\\b", parser)     // Backspace
+        assertEqual("'\\n'", "\\n", parser)     // Newline
+        assertEqual("'\\r'", "\\r", parser)     // Carriage return
+        assertEqual("'\\t'", "\\t", parser)     // Tab character
 
-        // Octals
-        assertEqual("'\110\145\154\154\157\041'", "Hello!", parser)
-        // Unicode
-        assertEqual("'\u0057\u006F\u0072\u006C\u0064\u0020\u003A\u0029'", "World :)", parser)
+        // The unescape Octals for 2.0+ don't work when ESCAPED_STRING_LITERALS is enabled.
+        // They are parsed literally.
+        assertEqual("'\\110\\145\\154\\154\\157\\041'", "\\110\\145\\154\\154\\157\\041", parser)
+        // The unescape Unicode for 2.0+ doesn't work when ESCAPED_STRING_LITERALS is enabled.
+        // They are parsed literally.
+        assertEqual("'\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029'",
+          "\\u0057\\u006F\\u0072\\u006C\\u0064\\u0020\\u003A\\u0029", parser)
       } else {
         // Default behavior
 

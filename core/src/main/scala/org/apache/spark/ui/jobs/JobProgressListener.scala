@@ -423,6 +423,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
           case Success =>
+            jobData.completedIndices.add((taskEnd.stageId, info.index))
             jobData.numCompletedTasks += 1
           case kill: TaskKilled =>
             jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(

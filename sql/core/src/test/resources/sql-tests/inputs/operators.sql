@@ -53,3 +53,42 @@ explain select 2 * 4  + 3 || 'b';
 explain select 3 + 1 || 'a' || 4 / 2;
 explain select 1 == 1 OR 'a' || 'b' ==  'ab';
 explain select 'a' || 'c' == 'ac' AND 2 == 3;
+
+-- math functions
+select cot(1);
+select cot(null);
+select cot(0);
+select cot(-1);
+
+-- ceil and ceiling
+select ceiling(0);
+select ceiling(1);
+select ceil(1234567890123456);
+select ceiling(1234567890123456);
+select ceil(0.01);
+select ceiling(-0.10);
+
+-- floor
+select floor(0);
+select floor(1);
+select floor(1234567890123456);
+select floor(0.01);
+select floor(-0.10);
+
+-- comparison operator
+select 1 > 0.00001;
+
+-- mod
+select mod(7, 2), mod(7, 0), mod(0, 2), mod(7, null), mod(null, 2), mod(null, null);
+
+-- length
+select BIT_LENGTH('abc');
+select CHAR_LENGTH('abc');
+select CHARACTER_LENGTH('abc');
+select OCTET_LENGTH('abc');
+
+-- abs
+select abs(-3.13), abs('-2.19');
+
+-- positive/negative
+select positive('-1.11'), positive(-1.11), negative('-1.11'), negative(-1.11);

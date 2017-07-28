@@ -22,7 +22,8 @@ import java.math.{MathContext, RoundingMode}
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -46,13 +47,13 @@ import org.apache.spark.util.Utils
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
  * @param attributeStats Statistics for Attributes.
- * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
+ * @param hints Query hints.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
     attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
-    isBroadcastable: Boolean = false) {
+    hints: HintInfo = HintInfo()) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 
@@ -65,7 +66,7 @@ case class Statistics(
       } else {
         ""
       },
-      s"isBroadcastable=$isBroadcastable"
+      s"hints=$hints"
     ).filter(_.nonEmpty).mkString(", ")
   }
 }
@@ -243,9 +244,9 @@ object ColumnStat extends Logging {
     }
 
     col.dataType match {
-      case _: IntegralType => fixedLenTypeStruct(LongType)
+      case dt: IntegralType => fixedLenTypeStruct(dt)
       case _: DecimalType => fixedLenTypeStruct(col.dataType)
-      case DoubleType | FloatType => fixedLenTypeStruct(DoubleType)
+      case dt @ (DoubleType | FloatType) => fixedLenTypeStruct(dt)
       case BooleanType => fixedLenTypeStruct(col.dataType)
       case DateType => fixedLenTypeStruct(col.dataType)
       case TimestampType => fixedLenTypeStruct(col.dataType)
@@ -264,14 +265,12 @@ object ColumnStat extends Logging {
   }
 
   /** Convert a struct for column stats (defined in statExprs) into [[ColumnStat]]. */
-  def rowToColumnStat(row: Row, attr: Attribute): ColumnStat = {
+  def rowToColumnStat(row: InternalRow, attr: Attribute): ColumnStat = {
     ColumnStat(
       distinctCount = BigInt(row.getLong(0)),
       // for string/binary min/max, get should return null
-      min = Option(row.get(1))
-        .map(v => fromExternalString(v.toString, attr.name, attr.dataType)).flatMap(Option.apply),
-      max = Option(row.get(2))
-        .map(v => fromExternalString(v.toString, attr.name, attr.dataType)).flatMap(Option.apply),
+      min = Option(row.get(1, attr.dataType)),
+      max = Option(row.get(2, attr.dataType)),
       nullCount = BigInt(row.getLong(3)),
       avgLen = row.getLong(4),
       maxLen = row.getLong(5)

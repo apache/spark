@@ -907,3 +907,15 @@ basenameSansExtFromUrl <- function(url) {
 isAtomicLengthOne <- function(x) {
   is.atomic(x) && length(x) == 1
 }
+
+is_windows <- function() {
+  .Platform$OS.type == "windows"
+}
+
+hadoop_home_set <- function() {
+  !identical(Sys.getenv("HADOOP_HOME"), "")
+}
+
+windows_with_hadoop <- function() {
+  !is_windows() || hadoop_home_set()
+}

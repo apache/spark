@@ -7,6 +7,35 @@ description: MLlib migration guides from before Spark SPARK_VERSION_SHORT
 
 The migration guide for the current Spark version is kept on the [MLlib Guide main page](ml-guide.html#migration-guide).
 
+## From 2.0 to 2.1
+
+### Breaking changes
+ 
+**Deprecated methods removed**
+
+* `setLabelCol` in `feature.ChiSqSelectorModel`
+* `numTrees` in `classification.RandomForestClassificationModel` (This now refers to the Param called `numTrees`)
+* `numTrees` in `regression.RandomForestRegressionModel` (This now refers to the Param called `numTrees`)
+* `model` in `regression.LinearRegressionSummary`
+* `validateParams` in `PipelineStage`
+* `validateParams` in `Evaluator`
+
+### Deprecations and changes of behavior
+
+**Deprecations**
+
+* [SPARK-18592](https://issues.apache.org/jira/browse/SPARK-18592):
+  Deprecate all Param setter methods except for input/output column Params for `DecisionTreeClassificationModel`, `GBTClassificationModel`, `RandomForestClassificationModel`, `DecisionTreeRegressionModel`, `GBTRegressionModel` and `RandomForestRegressionModel`
+
+**Changes of behavior**
+
+* [SPARK-17870](https://issues.apache.org/jira/browse/SPARK-17870):
+ Fix a bug of `ChiSqSelector` which will likely change its result. Now `ChiSquareSelector` use pValue rather than raw statistic to select a fixed number of top features.
+* [SPARK-3261](https://issues.apache.org/jira/browse/SPARK-3261):
+ `KMeans` returns potentially fewer than k cluster centers in cases where k distinct centroids aren't available or aren't selected.
+* [SPARK-17389](https://issues.apache.org/jira/browse/SPARK-17389):
+ `KMeans` reduces the default number of steps from 5 to 2 for the k-means|| initialization mode.
+
 ## From 1.6 to 2.0
 
 ### Breaking changes

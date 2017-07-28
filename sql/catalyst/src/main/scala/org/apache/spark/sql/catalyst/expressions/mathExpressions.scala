@@ -232,18 +232,20 @@ case class Ceil(child: Expression) extends UnaryMathExpression(math.ceil, "CEIL"
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].ceil
+    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].ceil
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(precision, scale) =>
+      case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.ceil()")
+      case LongType => defineCodeGen(ctx, ev, c => s"$c")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
@@ -281,7 +283,7 @@ case class Cosh(child: Expression) extends UnaryMathExpression(math.cosh, "COSH"
       > SELECT _FUNC_('100', 2, 10);
        4
       > SELECT _FUNC_(-10, 16, -10);
-       16
+       -16
   """)
 case class Conv(numExpr: Expression, fromBaseExpr: Expression, toBaseExpr: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -347,18 +349,20 @@ case class Floor(child: Expression) extends UnaryMathExpression(math.floor, "FLO
   }
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(DoubleType, DecimalType))
+    Seq(TypeCollection(DoubleType, DecimalType, LongType))
 
   protected override def nullSafeEval(input: Any): Any = child.dataType match {
+    case LongType => input.asInstanceOf[Long]
     case DoubleType => f(input.asInstanceOf[Double]).toLong
-    case DecimalType.Fixed(precision, scale) => input.asInstanceOf[Decimal].floor
+    case DecimalType.Fixed(_, _) => input.asInstanceOf[Decimal].floor
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     child.dataType match {
       case DecimalType.Fixed(_, 0) => defineCodeGen(ctx, ev, c => s"$c")
-      case DecimalType.Fixed(precision, scale) =>
+      case DecimalType.Fixed(_, _) =>
         defineCodeGen(ctx, ev, c => s"$c.floor()")
+      case LongType => defineCodeGen(ctx, ev, c => s"$c")
       case _ => defineCodeGen(ctx, ev, c => s"(long)(java.lang.Math.${funcName}($c))")
     }
   }
@@ -542,6 +546,20 @@ case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT"
        0.0
   """)
 case class Tan(child: Expression) extends UnaryMathExpression(math.tan, "TAN")
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the cotangent of `expr`.",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(1);
+       0.6420926159343306
+  """)
+case class Cot(child: Expression)
+  extends UnaryMathExpression((x: Double) => 1 / math.tan(x), "COT") {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    defineCodeGen(ctx, ev, c => s"${ev.value} = 1 / java.lang.Math.tan($c);")
+  }
+}
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the hyperbolic tangent of `expr`.",
@@ -966,7 +984,7 @@ case class Logarithm(left: Expression, right: Expression)
  *
  * @param child expr to be round, all [[NumericType]] is allowed as Input
  * @param scale new scale to be round to, this should be a constant int at runtime
- * @param mode rounding mode (e.g. HALF_UP, HALF_UP)
+ * @param mode rounding mode (e.g. HALF_UP, HALF_EVEN)
  * @param modeStr rounding mode string name (e.g. "ROUND_HALF_UP", "ROUND_HALF_EVEN")
  */
 abstract class RoundBase(child: Expression, scale: Expression,

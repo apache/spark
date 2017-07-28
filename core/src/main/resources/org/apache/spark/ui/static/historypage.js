@@ -177,10 +177,22 @@ $(document).ready(function() {
           }
         }
 
-        var durationCells = document.getElementsByClassName("durationClass");
-        for (i = 0; i < durationCells.length; i++) {
-          var timeInMilliseconds = parseInt(durationCells[i].title);
-          durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
+        if (requestedIncomplete) {
+          var completedCells = document.getElementsByClassName("completedColumn");
+          for (i = 0; i < completedCells.length; i++) {
+            completedCells[i].style.display='none';
+          }
+
+          var durationCells = document.getElementsByClassName("durationColumn");
+          for (i = 0; i < durationCells.length; i++) {
+            durationCells[i].style.display='none';
+          }
+        } else {
+          var durationCells = document.getElementsByClassName("durationClass");
+          for (i = 0; i < durationCells.length; i++) {
+            var timeInMilliseconds = parseInt(durationCells[i].title);
+            durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
+          }
         }
 
         if ($(selector.concat(" tr")).length < 20) {
@@ -188,7 +200,7 @@ $(document).ready(function() {
         }
 
         $(selector).DataTable(conf);
-        $('#hisotry-summary [data-toggle="tooltip"]').tooltip();
+        $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
     });
 });

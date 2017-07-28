@@ -278,7 +278,7 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
-        s"Failed to parse a value for data type $dataType (current token: $token).")
+        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
   }
 
   /**

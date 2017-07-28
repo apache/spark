@@ -49,7 +49,8 @@ from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
-from pyspark.ml.evaluation import BinaryClassificationEvaluator, RegressionEvaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator, \
+    MulticlassClassificationEvaluator, RegressionEvaluator
 from pyspark.ml.feature import *
 from pyspark.ml.fpm import FPGrowth, FPGrowthModel
 from pyspark.ml.linalg import DenseMatrix, DenseMatrix, DenseVector, Matrices, MatrixUDT, \
@@ -404,6 +405,18 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(tp._paramMap, copied_no_extra)
         self.assertEqual(tp._defaultParamMap, tp_copy._defaultParamMap)
 
+    def test_logistic_regression_check_thresholds(self):
+        self.assertIsInstance(
+            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
+            LogisticRegression
+        )
+
+        self.assertRaisesRegexp(
+            ValueError,
+            "Logistic Regression getThreshold found inconsistent.*$",
+            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
+        )
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
@@ -526,6 +539,40 @@ class FeatureTests(SparkSessionTestCase):
         transformedDF2 = model2.transform(df)
         self.assertEqual(transformedDF2.head().label, 0.0)
 
+    def test_rformula_string_indexer_order_type(self):
+        df = self.spark.createDataFrame([
+            (1.0, 1.0, "a"),
+            (0.0, 2.0, "b"),
+            (1.0, 0.0, "a")], ["y", "x", "s"])
+        rf = RFormula(formula="y ~ x + s", stringIndexerOrderType="alphabetDesc")
+        self.assertEqual(rf.getStringIndexerOrderType(), 'alphabetDesc')
+        transformedDF = rf.fit(df).transform(df)
+        observed = transformedDF.select("features").collect()
+        expected = [[1.0, 0.0], [2.0, 1.0], [0.0, 0.0]]
+        for i in range(0, len(expected)):
+            self.assertTrue(all(observed[i]["features"].toArray() == expected[i]))
+
+    def test_string_indexer_handle_invalid(self):
+        df = self.spark.createDataFrame([
+            (0, "a"),
+            (1, "d"),
+            (2, None)], ["id", "label"])
+
+        si1 = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="keep",
+                            stringOrderType="alphabetAsc")
+        model1 = si1.fit(df)
+        td1 = model1.transform(df)
+        actual1 = td1.select("id", "indexed").collect()
+        expected1 = [Row(id=0, indexed=0.0), Row(id=1, indexed=1.0), Row(id=2, indexed=2.0)]
+        self.assertEqual(actual1, expected1)
+
+        si2 = si1.setHandleInvalid("skip")
+        model2 = si2.fit(df)
+        td2 = model2.transform(df)
+        actual2 = td2.select("id", "indexed").collect()
+        expected2 = [Row(id=0, indexed=0.0), Row(id=1, indexed=1.0)]
+        self.assertEqual(actual2, expected2)
+
 
 class HasInducedError(Params):
 
@@ -632,7 +679,7 @@ class CrossValidatorTests(SparkSessionTestCase):
                          "Best model should have zero induced error")
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
 
-    def test_save_load(self):
+    def test_save_load_trained_model(self):
         # This tests saving and loading the trained model only.
         # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -655,6 +702,76 @@ class CrossValidatorTests(SparkSessionTestCase):
         loadedLrModel = LogisticRegressionModel.load(cvModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+    def test_save_load_simple_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        cvPath = temp_path + "/cv"
+        cv.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
+        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
+        self.assertEqual(loadedCV.getEstimatorParamMaps(), cv.getEstimatorParamMaps())
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
+
+    def test_save_load_nested_estimator(self):
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(100)
+        lr2 = LogisticRegression().setMaxIter(150)
+        grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
+        evaluator = MulticlassClassificationEvaluator()
+
+        # test save/load of CrossValidator
+        cv = CrossValidator(estimator=ova, estimatorParamMaps=grid, evaluator=evaluator)
+        cvModel = cv.fit(dataset)
+        cvPath = temp_path + "/cv"
+        cv.save(cvPath)
+        loadedCV = CrossValidator.load(cvPath)
+        self.assertEqual(loadedCV.getEstimator().uid, cv.getEstimator().uid)
+        self.assertEqual(loadedCV.getEvaluator().uid, cv.getEvaluator().uid)
+
+        originalParamMap = cv.getEstimatorParamMaps()
+        loadedParamMap = loadedCV.getEstimatorParamMaps()
+        for i, param in enumerate(loadedParamMap):
+            for p in param:
+                if p.name == "classifier":
+                    self.assertEqual(param[p].uid, originalParamMap[i][p].uid)
+                else:
+                    self.assertEqual(param[p], originalParamMap[i][p])
+
+        # test save/load of CrossValidatorModel
+        cvModelPath = temp_path + "/cvModel"
+        cvModel.save(cvModelPath)
+        loadedModel = CrossValidatorModel.load(cvModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, cvModel.bestModel.uid)
 
 
 class TrainValidationSplitTests(SparkSessionTestCase):
@@ -713,7 +830,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
                          "validationMetrics has the same size of grid parameter")
         self.assertEqual(1.0, max(validationMetrics))
 
-    def test_save_load(self):
+    def test_save_load_trained_model(self):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
@@ -736,6 +853,74 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         loadedLrModel = LogisticRegressionModel.load(tvsModelPath)
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
+
+    def test_save_load_simple_estimator(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        lr = LogisticRegression()
+        grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+        evaluator = BinaryClassificationEvaluator()
+        tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+
+        tvsPath = temp_path + "/tvs"
+        tvs.save(tvsPath)
+        loadedTvs = TrainValidationSplit.load(tvsPath)
+        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
+        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
+        self.assertEqual(loadedTvs.getEstimatorParamMaps(), tvs.getEstimatorParamMaps())
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
+
+    def test_save_load_nested_estimator(self):
+        # This tests saving and loading the trained model only.
+        # Save/load for TrainValidationSplit will be added later: SPARK-13786
+        temp_path = tempfile.mkdtemp()
+        dataset = self.spark.createDataFrame(
+            [(Vectors.dense([0.0]), 0.0),
+             (Vectors.dense([0.4]), 1.0),
+             (Vectors.dense([0.5]), 0.0),
+             (Vectors.dense([0.6]), 1.0),
+             (Vectors.dense([1.0]), 1.0)] * 10,
+            ["features", "label"])
+        ova = OneVsRest(classifier=LogisticRegression())
+        lr1 = LogisticRegression().setMaxIter(100)
+        lr2 = LogisticRegression().setMaxIter(150)
+        grid = ParamGridBuilder().addGrid(ova.classifier, [lr1, lr2]).build()
+        evaluator = MulticlassClassificationEvaluator()
+
+        tvs = TrainValidationSplit(estimator=ova, estimatorParamMaps=grid, evaluator=evaluator)
+        tvsModel = tvs.fit(dataset)
+        tvsPath = temp_path + "/tvs"
+        tvs.save(tvsPath)
+        loadedTvs = TrainValidationSplit.load(tvsPath)
+        self.assertEqual(loadedTvs.getEstimator().uid, tvs.getEstimator().uid)
+        self.assertEqual(loadedTvs.getEvaluator().uid, tvs.getEvaluator().uid)
+
+        originalParamMap = tvs.getEstimatorParamMaps()
+        loadedParamMap = loadedTvs.getEstimatorParamMaps()
+        for i, param in enumerate(loadedParamMap):
+            for p in param:
+                if p.name == "classifier":
+                    self.assertEqual(param[p].uid, originalParamMap[i][p].uid)
+                else:
+                    self.assertEqual(param[p], originalParamMap[i][p])
+
+        tvsModelPath = temp_path + "/tvsModel"
+        tvsModel.save(tvsModelPath)
+        loadedModel = TrainValidationSplitModel.load(tvsModelPath)
+        self.assertEqual(loadedModel.bestModel.uid, tvsModel.bestModel.uid)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([
@@ -806,18 +991,6 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
-
-    def logistic_regression_check_thresholds(self):
-        self.assertIsInstance(
-            LogisticRegression(threshold=0.5, thresholds=[0.5, 0.5]),
-            LogisticRegressionModel
-        )
-
-        self.assertRaisesRegexp(
-            ValueError,
-            "Logistic Regression getThreshold found inconsistent.*$",
-            LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
-        )
 
     def _compare_params(self, m1, m2, param):
         """
@@ -1066,6 +1239,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertAlmostEqual(s.r2, 1.0, 2)
         self.assertTrue(isinstance(s.residuals, DataFrame))
         self.assertEqual(s.numInstances, 2)
+        self.assertEqual(s.degreesOfFreedom, 1)
         devResiduals = s.devianceResiduals
         self.assertTrue(isinstance(devResiduals, list) and isinstance(devResiduals[0], float))
         coefStdErr = s.coefficientStandardErrors
@@ -1075,7 +1249,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         pValues = s.pValues
         self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
         # test evaluation (with training dataset) produces a summary with same values
-        # one check is enough to verify a summary is returned, Scala version runs full test
+        # one check is enough to verify a summary is returned
+        # The child class LinearRegressionTrainingSummary runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
@@ -1093,6 +1268,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.numIterations, 1)  # this should default to a single iteration of WLS
         self.assertTrue(isinstance(s.predictions, DataFrame))
         self.assertEqual(s.predictionCol, "prediction")
+        self.assertEqual(s.numInstances, 2)
         self.assertTrue(isinstance(s.residuals(), DataFrame))
         self.assertTrue(isinstance(s.residuals("pearson"), DataFrame))
         coefStdErr = s.coefficientStandardErrors
@@ -1111,7 +1287,8 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.nullDeviance, float))
         self.assertTrue(isinstance(s.dispersion, float))
         # test evaluation (with training dataset) produces a summary with same values
-        # one check is enough to verify a summary is returned, Scala version runs full test
+        # one check is enough to verify a summary is returned
+        # The child class GeneralizedLinearRegressionTrainingSummary runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 
@@ -1252,6 +1429,20 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         model2 = glr.setLinkPower(-1.0).fit(df)
         self.assertTrue(np.allclose(model2.coefficients.toArray(), [-0.6667, 0.5], atol=1E-4))
         self.assertTrue(np.isclose(model2.intercept, 0.6667, atol=1E-4))
+
+    def test_offset(self):
+
+        df = self.spark.createDataFrame(
+            [(0.2, 1.0, 2.0, Vectors.dense(0.0, 5.0)),
+             (0.5, 2.1, 0.5, Vectors.dense(1.0, 2.0)),
+             (0.9, 0.4, 1.0, Vectors.dense(2.0, 1.0)),
+             (0.7, 0.7, 0.0, Vectors.dense(3.0, 3.0))], ["label", "weight", "offset", "features"])
+
+        glr = GeneralizedLinearRegression(family="poisson", weightCol="weight", offsetCol="offset")
+        model = glr.fit(df)
+        self.assertTrue(np.allclose(model.coefficients.toArray(), [0.664647, -0.3192581],
+                                    atol=1E-4))
+        self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
 
 
 class FPGrowthTests(SparkSessionTestCase):

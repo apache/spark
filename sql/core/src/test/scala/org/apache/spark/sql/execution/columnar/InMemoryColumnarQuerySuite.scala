@@ -126,7 +126,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       .toDF().createOrReplaceTempView("sizeTst")
     spark.catalog.cacheTable("sizeTst")
     assert(
-      spark.table("sizeTst").queryExecution.analyzed.stats(sqlConf).sizeInBytes >
+      spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
         spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
   }
 

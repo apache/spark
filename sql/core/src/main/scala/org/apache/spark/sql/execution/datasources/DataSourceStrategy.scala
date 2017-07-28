@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.Callable
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -142,8 +140,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         parts, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
-    case InsertIntoTable(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, false) =>
+    case i @ InsertIntoTable(
+        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, _) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -195,6 +193,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       InsertIntoHadoopFsRelationCommand(
         outputPath,
         staticPartitions,
+        i.ifPartitionNotExists,
         partitionSchema,
         t.bucketSpec,
         t.fileFormat,
@@ -214,9 +213,9 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   private def readDataSourceTable(r: CatalogRelation): LogicalPlan = {
     val table = r.tableMeta
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
-    val cache = sparkSession.sessionState.catalog.tableRelationCache
+    val catalogProxy = sparkSession.sessionState.catalog
 
-    val plan = cache.get(qualifiedTableName, new Callable[LogicalPlan]() {
+    val plan = catalogProxy.getCachedPlan(qualifiedTableName, new Callable[LogicalPlan]() {
       override def call(): LogicalPlan = {
         val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
         val dataSource =
@@ -287,10 +286,11 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
       RowDataSourceScanExec(
         l.output,
+        l.output.indices,
+        Set.empty,
+        Set.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
-        UnknownPartitioning(0),
-        Map.empty,
         None) :: Nil
 
     case _ => Nil
@@ -353,35 +353,9 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     val (unhandledPredicates, pushedFilters, handledFilters) =
       selectFilters(relation.relation, candidatePredicates)
 
-    // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
-    // them from requested columns.
-    val handledSet = {
-      val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
-      val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
-      AttributeSet(handledPredicates.flatMap(_.references)) --
-        (projectSet ++ unhandledSet).map(relation.attributeMap)
-    }
-
     // Combines all Catalyst filter `Expression`s that are either not convertible to data source
     // `Filter`s or cannot be handled by `relation`.
     val filterCondition = unhandledPredicates.reduceLeftOption(expressions.And)
-
-    // These metadata values make scan plans uniquely identifiable for equality checking.
-    // TODO(SPARK-17701) using strings for equality checking is brittle
-    val metadata: Map[String, String] = {
-      val pairs = ArrayBuffer.empty[(String, String)]
-
-      // Mark filters which are handled by the underlying DataSource with an Astrisk
-      if (pushedFilters.nonEmpty) {
-        val markedFilters = for (filter <- pushedFilters) yield {
-            if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
-        }
-        pairs += ("PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
-      }
-      pairs += ("ReadSchema" ->
-        StructType.fromAttributes(projects.map(_.toAttribute)).catalogString)
-      pairs.toMap
-    }
 
     if (projects.map(_.toAttribute) == projects &&
         projectSet.size == projects.size &&
@@ -394,24 +368,36 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         .asInstanceOf[Seq[Attribute]]
         // Match original case of attributes.
         .map(relation.attributeMap)
-        // Don't request columns that are only referenced by pushed filters.
-        .filterNot(handledSet.contains)
 
       val scan = RowDataSourceScanExec(
-        projects.map(_.toAttribute),
+        relation.output,
+        requestedColumns.map(relation.output.indexOf),
+        pushedFilters.toSet,
+        handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, UnknownPartitioning(0), metadata,
+        relation.relation,
         relation.catalogTable.map(_.identifier))
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
+      // A set of column attributes that are only referenced by pushed down filters.  We can
+      // eliminate them from requested columns.
+      val handledSet = {
+        val handledPredicates = filterPredicates.filterNot(unhandledPredicates.contains)
+        val unhandledSet = AttributeSet(unhandledPredicates.flatMap(_.references))
+        AttributeSet(handledPredicates.flatMap(_.references)) --
+          (projectSet ++ unhandledSet).map(relation.attributeMap)
+      }
       // Don't request columns that are only referenced by pushed filters.
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
       val scan = RowDataSourceScanExec(
-        requestedColumns,
+        relation.output,
+        requestedColumns.map(relation.output.indexOf),
+        pushedFilters.toSet,
+        handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, UnknownPartitioning(0), metadata,
+        relation.relation,
         relation.catalogTable.map(_.identifier))
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))

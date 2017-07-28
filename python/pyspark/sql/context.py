@@ -220,17 +220,34 @@ class SQLContext(object):
         >>> sqlContext.registerJavaFunction("javaStringLength",
         ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
-        [Row(UDF(test)=4)]
+        [Row(UDF:javaStringLength(test)=4)]
         >>> sqlContext.registerJavaFunction("javaStringLength2",
         ...   "test.org.apache.spark.sql.JavaStringLength")
         >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
-        [Row(UDF(test)=4)]
+        [Row(UDF:javaStringLength2(test)=4)]
 
         """
         jdt = None
         if returnType is not None:
             jdt = self.sparkSession._jsparkSession.parseDataType(returnType.json())
         self.sparkSession._jsparkSession.udf().registerJava(name, javaClassName, jdt)
+
+    @ignore_unicode_prefix
+    @since(2.3)
+    def registerJavaUDAF(self, name, javaClassName):
+        """Register a java UDAF so it can be used in SQL statements.
+
+        :param name:  name of the UDAF
+        :param javaClassName: fully qualified name of java class
+
+        >>> sqlContext.registerJavaUDAF("javaUDAF",
+        ...   "test.org.apache.spark.sql.MyDoubleAvg")
+        >>> df = sqlContext.createDataFrame([(1, "a"),(2, "b"), (3, "a")],["id", "name"])
+        >>> df.registerTempTable("df")
+        >>> sqlContext.sql("SELECT name, javaUDAF(id) as avg from df group by name").collect()
+        [Row(name=u'b', avg=102.0), Row(name=u'a', avg=102.0)]
+        """
+        self.sparkSession._jsparkSession.udf().registerJavaUDAF(name, javaClassName)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
@@ -474,7 +491,7 @@ class SQLContext(object):
         Returns a :class:`DataStreamReader` that can be used to read data streams
         as a streaming :class:`DataFrame`.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
 
         :return: :class:`DataStreamReader`
 
@@ -490,7 +507,7 @@ class SQLContext(object):
         """Returns a :class:`StreamingQueryManager` that allows managing all the
         :class:`StreamingQuery` StreamingQueries active on `this` context.
 
-        .. note:: Experimental.
+        .. note:: Evolving.
         """
         from pyspark.sql.streaming import StreamingQueryManager
         return StreamingQueryManager(self._ssql_ctx.streams())
@@ -550,6 +567,12 @@ class UDFRegistration(object):
 
     def register(self, name, f, returnType=StringType()):
         return self.sqlContext.registerFunction(name, f, returnType)
+
+    def registerJavaFunction(self, name, javaClassName, returnType=None):
+        self.sqlContext.registerJavaFunction(name, javaClassName, returnType)
+
+    def registerJavaUDAF(self, name, javaClassName):
+        self.sqlContext.registerJavaUDAF(name, javaClassName)
 
     register.__doc__ = SQLContext.registerFunction.__doc__
 

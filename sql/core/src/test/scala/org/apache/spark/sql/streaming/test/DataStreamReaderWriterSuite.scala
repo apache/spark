@@ -378,14 +378,14 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       any(),
-      meq(s"$checkpointLocationURI/sources/0"),
+      meq(s"${makeQualifiedPath(checkpointLocationURI.toString)}/sources/0"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
       any(),
-      meq(s"$checkpointLocationURI/sources/1"),
+      meq(s"${makeQualifiedPath(checkpointLocationURI.toString)}/sources/1"),
       meq(None),
       meq("org.apache.spark.sql.streaming.test"),
       meq(Map.empty))
@@ -641,8 +641,9 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("temp checkpoint dir should be deleted if a query is stopped without errors") {
     import testImplicits._
     val query = MemoryStream[Int].toDS.writeStream.format("console").start()
+    query.processAllAvailable()
     val checkpointDir = new Path(
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
     assert(fs.exists(checkpointDir))
     query.stop()
@@ -654,7 +655,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val input = MemoryStream[Int]
     val query = input.toDS.map(_ / 0).writeStream.format("console").start()
     val checkpointDir = new Path(
-      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.checkpointRoot)
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot)
     val fs = checkpointDir.getFileSystem(spark.sessionState.newHadoopConf())
     assert(fs.exists(checkpointDir))
     input.addData(1)
@@ -662,5 +663,17 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       query.awaitTermination()
     }
     assert(fs.exists(checkpointDir))
+  }
+
+  test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
+    spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .schema("aa INT")
+      .load()
+
+    assert(LastOptions.schema.isDefined)
+    assert(LastOptions.schema.get === StructType(StructField("aa", IntegerType) :: Nil))
+
+    LastOptions.clear()
   }
 }

@@ -98,6 +98,8 @@ class DataFrameReader(OptionUtils):
 
         :param schema: a :class:`pyspark.sql.types.StructType` object or a DDL-formatted string
                        (For example ``col0 INT, col1 DOUBLE``).
+
+        >>> s = spark.read.schema("col0 INT, col1 DOUBLE")
         """
         from pyspark.sql import SparkSession
         spark = SparkSession.builder.getOrCreate()
@@ -174,12 +176,12 @@ class DataFrameReader(OptionUtils):
              allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
              allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
              mode=None, columnNameOfCorruptRecord=None, dateFormat=None, timestampFormat=None,
-             wholeFile=None):
+             multiLine=None):
         """
         Loads JSON files and returns the results as a :class:`DataFrame`.
 
         `JSON Lines <http://jsonlines.org/>`_ (newline-delimited JSON) is supported by default.
-        For JSON (one record per file), set the ``wholeFile`` parameter to ``true``.
+        For JSON (one record per file), set the ``multiLine`` parameter to ``true``.
 
         If the ``schema`` parameter is not specified, this function goes
         through the input once to determine the input schema.
@@ -230,7 +232,7 @@ class DataFrameReader(OptionUtils):
                                 formats follow the formats at ``java.text.SimpleDateFormat``.
                                 This applies to timestamp type. If None is set, it uses the
                                 default value, ``yyyy-MM-dd'T'HH:mm:ss.SSSXXX``.
-        :param wholeFile: parse one record, which may span multiple lines, per file. If None is
+        :param multiLine: parse one record, which may span multiple lines, per file. If None is
                           set, it uses the default value, ``false``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
@@ -248,7 +250,7 @@ class DataFrameReader(OptionUtils):
             allowSingleQuotes=allowSingleQuotes, allowNumericLeadingZero=allowNumericLeadingZero,
             allowBackslashEscapingAnyCharacter=allowBackslashEscapingAnyCharacter,
             mode=mode, columnNameOfCorruptRecord=columnNameOfCorruptRecord, dateFormat=dateFormat,
-            timestampFormat=timestampFormat, wholeFile=wholeFile)
+            timestampFormat=timestampFormat, multiLine=multiLine)
         if isinstance(path, basestring):
             path = [path]
         if type(path) == list:
@@ -322,7 +324,7 @@ class DataFrameReader(OptionUtils):
             ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
             negativeInf=None, dateFormat=None, timestampFormat=None, maxColumns=None,
             maxCharsPerColumn=None, maxMalformedLogPerPartition=None, mode=None,
-            columnNameOfCorruptRecord=None, wholeFile=None):
+            columnNameOfCorruptRecord=None, multiLine=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function will go through the input once to determine the input schema if
@@ -396,7 +398,7 @@ class DataFrameReader(OptionUtils):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the value specified in
                                           ``spark.sql.columnNameOfCorruptRecord``.
-        :param wholeFile: parse records, which may span multiple lines. If None is
+        :param multiLine: parse records, which may span multiple lines. If None is
                           set, it uses the default value, ``false``.
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
@@ -411,7 +413,7 @@ class DataFrameReader(OptionUtils):
             dateFormat=dateFormat, timestampFormat=timestampFormat, maxColumns=maxColumns,
             maxCharsPerColumn=maxCharsPerColumn,
             maxMalformedLogPerPartition=maxMalformedLogPerPartition, mode=mode,
-            columnNameOfCorruptRecord=columnNameOfCorruptRecord, wholeFile=wholeFile)
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine)
         if isinstance(path, basestring):
             path = [path]
         return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))

@@ -20,20 +20,21 @@ package org.apache.spark.ml.regression
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS, OWLQN => BreezeOWLQN}
 import breeze.stats.distributions.StudentsT
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
 import org.apache.spark.ml.PredictorParams
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
+import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
@@ -52,7 +53,23 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth
+    with HasAggregationDepth {
+
+  import LinearRegression._
+
+  /**
+   * The solver algorithm for optimization.
+   * Supported options: "l-bfgs", "normal" and "auto".
+   * Default: "auto"
+   *
+   * @group param
+   */
+  @Since("1.6.0")
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver algorithm for optimization. Supported options: " +
+      s"${supportedSolvers.mkString(", ")}. (Default auto)",
+    ParamValidators.inArray[String](supportedSolvers))
+}
 
 /**
  * Linear regression.
@@ -76,6 +93,8 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
   extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams with DefaultParamsWritable with Logging {
+
+  import LinearRegression._
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("linReg"))
@@ -174,12 +193,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * @group setParam
    */
   @Since("1.6.0")
-  def setSolver(value: String): this.type = {
-    require(Set("auto", "l-bfgs", "normal").contains(value),
-      s"Solver $value was not supported. Supported options: auto, l-bfgs, normal")
-    set(solver, value)
-  }
-  setDefault(solver -> "auto")
+  def setSolver(value: String): this.type = set(solver, value)
+  setDefault(solver -> Auto)
 
   /**
    * Suggested depth for treeAggregate (greater than or equal to 2).
@@ -209,8 +224,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       elasticNetParam, fitIntercept, maxIter, regParam, standardization, aggregationDepth)
     instr.logNumFeatures(numFeatures)
 
-    if (($(solver) == "auto" &&
-      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == "normal") {
+    if (($(solver) == Auto &&
+      numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
 
@@ -271,7 +286,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             s"training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
-        val coefficients = Vectors.sparse(numFeatures, Seq())
+        val coefficients = Vectors.sparse(numFeatures, Seq.empty)
         val intercept = yMean
 
         val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
@@ -319,8 +334,18 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
     val effectiveL2RegParam = (1.0 - $(elasticNetParam)) * effectiveRegParam
 
-    val costFun = new LeastSquaresCostFun(instances, yStd, yMean, $(fitIntercept),
-      $(standardization), bcFeaturesStd, bcFeaturesMean, effectiveL2RegParam, $(aggregationDepth))
+    val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
+      bcFeaturesStd, bcFeaturesMean)(_)
+    val getFeaturesStd = (j: Int) => if (j >= 0 && j < numFeatures) featuresStd(j) else 0.0
+    val regularization = if (effectiveL2RegParam != 0.0) {
+      val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
+      Some(new L2Regularization(effectiveL2RegParam, shouldApply,
+        if ($(standardization)) None else Some(getFeaturesStd)))
+    } else {
+      None
+    }
+    val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
+      $(aggregationDepth))
 
     val optimizer = if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
       new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
@@ -434,6 +459,18 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
    */
   @Since("2.1.0")
   val MAX_FEATURES_FOR_NORMAL_SOLVER: Int = WeightedLeastSquares.MAX_NUM_FEATURES
+
+  /** String name for "auto". */
+  private[regression] val Auto = "auto"
+
+  /** String name for "normal". */
+  private[regression] val Normal = "normal"
+
+  /** String name for "l-bfgs". */
+  private[regression] val LBFGS = "l-bfgs"
+
+  /** Set of solvers that LinearRegression supports. */
+  private[regression] val supportedSolvers = Array(Auto, Normal, LBFGS)
 }
 
 /**
@@ -793,312 +830,3 @@ class LinearRegressionSummary private[regression] (
 
 }
 
-/**
- * LeastSquaresAggregator computes the gradient and loss for a Least-squared loss function,
- * as used in linear regression for samples in sparse or dense vector in an online fashion.
- *
- * Two LeastSquaresAggregator can be merged together to have a summary of loss and gradient of
- * the corresponding joint dataset.
- *
- * For improving the convergence rate during the optimization process, and also preventing against
- * features with very large variances exerting an overly large influence during model training,
- * package like R's GLMNET performs the scaling to unit variance and removing the mean to reduce
- * the condition number, and then trains the model in scaled space but returns the coefficients in
- * the original scale. See page 9 in http://cran.r-project.org/web/packages/glmnet/glmnet.pdf
- *
- * However, we don't want to apply the `StandardScaler` on the training dataset, and then cache
- * the standardized dataset since it will create a lot of overhead. As a result, we perform the
- * scaling implicitly when we compute the objective function. The following is the mathematical
- * derivation.
- *
- * Note that we don't deal with intercept by adding bias here, because the intercept
- * can be computed using closed form after the coefficients are converged.
- * See this discussion for detail.
- * http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
- *
- * When training with intercept enabled,
- * The objective function in the scaled space is given by
- *
- * <blockquote>
- *    $$
- *    L = 1/2n ||\sum_i w_i(x_i - \bar{x_i}) / \hat{x_i} - (y - \bar{y}) / \hat{y}||^2,
- *    $$
- * </blockquote>
- *
- * where $\bar{x_i}$ is the mean of $x_i$, $\hat{x_i}$ is the standard deviation of $x_i$,
- * $\bar{y}$ is the mean of label, and $\hat{y}$ is the standard deviation of label.
- *
- * If we fitting the intercept disabled (that is forced through 0.0),
- * we can use the same equation except we set $\bar{y}$ and $\bar{x_i}$ to 0 instead
- * of the respective means.
- *
- * This can be rewritten as
- *
- * <blockquote>
- *    $$
- *    \begin{align}
- *     L &= 1/2n ||\sum_i (w_i/\hat{x_i})x_i - \sum_i (w_i/\hat{x_i})\bar{x_i} - y / \hat{y}
- *          + \bar{y} / \hat{y}||^2 \\
- *       &= 1/2n ||\sum_i w_i^\prime x_i - y / \hat{y} + offset||^2 = 1/2n diff^2
- *    \end{align}
- *    $$
- * </blockquote>
- *
- * where $w_i^\prime$ is the effective coefficients defined by $w_i/\hat{x_i}$, offset is
- *
- * <blockquote>
- *    $$
- *    - \sum_i (w_i/\hat{x_i})\bar{x_i} + \bar{y} / \hat{y}.
- *    $$
- * </blockquote>
- *
- * and diff is
- *
- * <blockquote>
- *    $$
- *    \sum_i w_i^\prime x_i - y / \hat{y} + offset
- *    $$
- * </blockquote>
- *
- * Note that the effective coefficients and offset don't depend on training dataset,
- * so they can be precomputed.
- *
- * Now, the first derivative of the objective function in scaled space is
- *
- * <blockquote>
- *    $$
- *    \frac{\partial L}{\partial w_i} = diff/N (x_i - \bar{x_i}) / \hat{x_i}
- *    $$
- * </blockquote>
- *
- * However, $(x_i - \bar{x_i})$ will densify the computation, so it's not
- * an ideal formula when the training dataset is sparse format.
- *
- * This can be addressed by adding the dense $\bar{x_i} / \hat{x_i}$ terms
- * in the end by keeping the sum of diff. The first derivative of total
- * objective function from all the samples is
- *
- *
- * <blockquote>
- *    $$
- *    \begin{align}
- *       \frac{\partial L}{\partial w_i} &=
- *           1/N \sum_j diff_j (x_{ij} - \bar{x_i}) / \hat{x_i} \\
- *         &= 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) - diffSum \bar{x_i} / \hat{x_i}) \\
- *         &= 1/N ((\sum_j diff_j x_{ij} / \hat{x_i}) + correction_i)
- *    \end{align}
- *    $$
- * </blockquote>
- *
- * where $correction_i = - diffSum \bar{x_i} / \hat{x_i}$
- *
- * A simple math can show that diffSum is actually zero, so we don't even
- * need to add the correction terms in the end. From the definition of diff,
- *
- * <blockquote>
- *    $$
- *    \begin{align}
- *       diffSum &= \sum_j (\sum_i w_i(x_{ij} - \bar{x_i})
- *                    / \hat{x_i} - (y_j - \bar{y}) / \hat{y}) \\
- *         &= N * (\sum_i w_i(\bar{x_i} - \bar{x_i}) / \hat{x_i} - (\bar{y} - \bar{y}) / \hat{y}) \\
- *         &= 0
- *    \end{align}
- *    $$
- * </blockquote>
- *
- * As a result, the first derivative of the total objective function only depends on
- * the training dataset, which can be easily computed in distributed fashion, and is
- * sparse format friendly.
- *
- * <blockquote>
- *    $$
- *    \frac{\partial L}{\partial w_i} = 1/N ((\sum_j diff_j x_{ij} / \hat{x_i})
- *    $$
- * </blockquote>
- *
- * @param bcCoefficients The broadcast coefficients corresponding to the features.
- * @param labelStd The standard deviation value of the label.
- * @param labelMean The mean value of the label.
- * @param fitIntercept Whether to fit an intercept term.
- * @param bcFeaturesStd The broadcast standard deviation values of the features.
- * @param bcFeaturesMean The broadcast mean values of the features.
- */
-private class LeastSquaresAggregator(
-    bcCoefficients: Broadcast[Vector],
-    labelStd: Double,
-    labelMean: Double,
-    fitIntercept: Boolean,
-    bcFeaturesStd: Broadcast[Array[Double]],
-    bcFeaturesMean: Broadcast[Array[Double]]) extends Serializable {
-
-  private var totalCnt: Long = 0L
-  private var weightSum: Double = 0.0
-  private var lossSum = 0.0
-
-  private val dim = bcCoefficients.value.size
-  // make transient so we do not serialize between aggregation stages
-  @transient private lazy val featuresStd = bcFeaturesStd.value
-  @transient private lazy val effectiveCoefAndOffset = {
-    val coefficientsArray = bcCoefficients.value.toArray.clone()
-    val featuresMean = bcFeaturesMean.value
-    var sum = 0.0
-    var i = 0
-    val len = coefficientsArray.length
-    while (i < len) {
-      if (featuresStd(i) != 0.0) {
-        coefficientsArray(i) /=  featuresStd(i)
-        sum += coefficientsArray(i) * featuresMean(i)
-      } else {
-        coefficientsArray(i) = 0.0
-      }
-      i += 1
-    }
-    val offset = if (fitIntercept) labelMean / labelStd - sum else 0.0
-    (Vectors.dense(coefficientsArray), offset)
-  }
-  // do not use tuple assignment above because it will circumvent the @transient tag
-  @transient private lazy val effectiveCoefficientsVector = effectiveCoefAndOffset._1
-  @transient private lazy val offset = effectiveCoefAndOffset._2
-
-  private lazy val gradientSumArray = Array.ofDim[Double](dim)
-
-  /**
-   * Add a new training instance to this LeastSquaresAggregator, and update the loss and gradient
-   * of the objective function.
-   *
-   * @param instance The instance of data point to be added.
-   * @return This LeastSquaresAggregator object.
-   */
-  def add(instance: Instance): this.type = {
-    instance match { case Instance(label, weight, features) =>
-
-      if (weight == 0.0) return this
-
-      val diff = dot(features, effectiveCoefficientsVector) - label / labelStd + offset
-
-      if (diff != 0) {
-        val localGradientSumArray = gradientSumArray
-        val localFeaturesStd = featuresStd
-        features.foreachActive { (index, value) =>
-          if (localFeaturesStd(index) != 0.0 && value != 0.0) {
-            localGradientSumArray(index) += weight * diff * value / localFeaturesStd(index)
-          }
-        }
-        lossSum += weight * diff * diff / 2.0
-      }
-
-      totalCnt += 1
-      weightSum += weight
-      this
-    }
-  }
-
-  /**
-   * Merge another LeastSquaresAggregator, and update the loss and gradient
-   * of the objective function.
-   * (Note that it's in place merging; as a result, `this` object will be modified.)
-   *
-   * @param other The other LeastSquaresAggregator to be merged.
-   * @return This LeastSquaresAggregator object.
-   */
-  def merge(other: LeastSquaresAggregator): this.type = {
-
-    if (other.weightSum != 0) {
-      totalCnt += other.totalCnt
-      weightSum += other.weightSum
-      lossSum += other.lossSum
-
-      var i = 0
-      val localThisGradientSumArray = this.gradientSumArray
-      val localOtherGradientSumArray = other.gradientSumArray
-      while (i < dim) {
-        localThisGradientSumArray(i) += localOtherGradientSumArray(i)
-        i += 1
-      }
-    }
-    this
-  }
-
-  def count: Long = totalCnt
-
-  def loss: Double = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
-      s"greater than 0.0, but $weightSum.")
-    lossSum / weightSum
-  }
-
-  def gradient: Vector = {
-    require(weightSum > 0.0, s"The effective number of instances should be " +
-      s"greater than 0.0, but $weightSum.")
-    val result = Vectors.dense(gradientSumArray.clone())
-    scal(1.0 / weightSum, result)
-    result
-  }
-}
-
-/**
- * LeastSquaresCostFun implements Breeze's DiffFunction[T] for Least Squares cost.
- * It returns the loss and gradient with L2 regularization at a particular point (coefficients).
- * It's used in Breeze's convex optimization routines.
- */
-private class LeastSquaresCostFun(
-    instances: RDD[Instance],
-    labelStd: Double,
-    labelMean: Double,
-    fitIntercept: Boolean,
-    standardization: Boolean,
-    bcFeaturesStd: Broadcast[Array[Double]],
-    bcFeaturesMean: Broadcast[Array[Double]],
-    effectiveL2regParam: Double,
-    aggregationDepth: Int) extends DiffFunction[BDV[Double]] {
-
-  override def calculate(coefficients: BDV[Double]): (Double, BDV[Double]) = {
-    val coeffs = Vectors.fromBreeze(coefficients)
-    val bcCoeffs = instances.context.broadcast(coeffs)
-    val localFeaturesStd = bcFeaturesStd.value
-
-    val leastSquaresAggregator = {
-      val seqOp = (c: LeastSquaresAggregator, instance: Instance) => c.add(instance)
-      val combOp = (c1: LeastSquaresAggregator, c2: LeastSquaresAggregator) => c1.merge(c2)
-
-      instances.treeAggregate(
-        new LeastSquaresAggregator(bcCoeffs, labelStd, labelMean, fitIntercept, bcFeaturesStd,
-          bcFeaturesMean))(seqOp, combOp, aggregationDepth)
-    }
-
-    val totalGradientArray = leastSquaresAggregator.gradient.toArray
-    bcCoeffs.destroy(blocking = false)
-
-    val regVal = if (effectiveL2regParam == 0.0) {
-      0.0
-    } else {
-      var sum = 0.0
-      coeffs.foreachActive { (index, value) =>
-        // The following code will compute the loss of the regularization; also
-        // the gradient of the regularization, and add back to totalGradientArray.
-        sum += {
-          if (standardization) {
-            totalGradientArray(index) += effectiveL2regParam * value
-            value * value
-          } else {
-            if (localFeaturesStd(index) != 0.0) {
-              // If `standardization` is false, we still standardize the data
-              // to improve the rate of convergence; as a result, we have to
-              // perform this reverse standardization by penalizing each component
-              // differently to get effectively the same objective function when
-              // the training dataset is not standardized.
-              val temp = value / (localFeaturesStd(index) * localFeaturesStd(index))
-              totalGradientArray(index) += effectiveL2regParam * temp
-              value * temp
-            } else {
-              0.0
-            }
-          }
-        }
-      }
-      0.5 * effectiveL2regParam * sum
-    }
-
-    (leastSquaresAggregator.loss + regVal, new BDV(totalGradientArray))
-  }
-}
