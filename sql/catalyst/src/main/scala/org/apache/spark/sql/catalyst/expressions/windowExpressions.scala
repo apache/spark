@@ -178,10 +178,8 @@ case object CurrentRow extends SpecialFrameBoundary {
   override def sql: String = "CURRENT ROW"
 
   override def notFollows(other: Expression): Boolean = other match {
-    case UnboundedPreceding => false
-    case CurrentRow => false
-    case e: Expression if e.foldable => GreaterThan(e, Literal(0)).eval().asInstanceOf[Boolean]
-    case _ => true
+    case UnboundedFollowing => true
+    case _ => false
   }
 }
 
