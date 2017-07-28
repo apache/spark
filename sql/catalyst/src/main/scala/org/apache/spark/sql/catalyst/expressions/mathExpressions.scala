@@ -1219,44 +1219,91 @@ case class WidthBucket(
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
 
+  private val isFoldable = minValue.foldable && maxValue.foldable && numBucket.foldable
+
+  private lazy val _minValue: Any = minValue.eval(EmptyRow)
+  private lazy val minValueV = _minValue.asInstanceOf[Double]
+
+  private lazy val _maxValue: Any = maxValue.eval(EmptyRow)
+  private lazy val maxValueV = _maxValue.asInstanceOf[Double]
+
+  private lazy val _numBucket: Any = numBucket.eval(EmptyRow)
+  private lazy val numBucketV = _numBucket.asInstanceOf[Long]
+
   private val errMsg = "The argument [%d] of WIDTH_BUCKET function is NULL or invalid."
 
   override def eval(input: InternalRow): Any = {
 
-    children.map(_.eval(input)).zipWithIndex.foreach { case (e, i) =>
-      if ((i > 0 && null == e) || (i == 3 && e.asInstanceOf[Long] < 0)) {
-        throw new RuntimeException(errMsg.format(i + 1))
+    if (isFoldable) {
+      if (_minValue == null) {
+        throw new RuntimeException(errMsg.format(2))
+      } else if (_maxValue == null) {
+        throw new RuntimeException(errMsg.format(3))
+      } else if (_numBucket == null || numBucketV <= 0) {
+        throw new RuntimeException(errMsg.format(4))
+      } else {
+        val exprV = expr.eval(input)
+        if (exprV == null) {
+          null
+        } else {
+          MathUtils.widthBucket(exprV.asInstanceOf[Double], minValueV, maxValueV, numBucketV)
+        }
       }
-    }
-
-    if (null == expr.eval(input)) {
-      null
     } else {
-      MathUtils.widthBucket(
-        expr.eval(input).asInstanceOf[Double],
-        minValue.eval(input).asInstanceOf[Double],
-        maxValue.eval(input).asInstanceOf[Double],
-        numBucket.eval(input).asInstanceOf[Long])
+      val evals = children.map(_.eval(input))
+      val invalid = evals.zipWithIndex.filter { case (e, i) =>
+        (i > 0 && e == null) || (i == 3 && e.asInstanceOf[Long] <= 0)
+      }
+      if (invalid.nonEmpty) {
+        invalid.foreach(l => throw new RuntimeException(errMsg.format(l._2 + 1)))
+      } else if (evals(0) == null) {
+        null
+      } else {
+        MathUtils.widthBucket(
+          evals(0).asInstanceOf[Double],
+          evals(1).asInstanceOf[Double],
+          evals(2).asInstanceOf[Double],
+          evals(3).asInstanceOf[Long])
+      }
     }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mathUtils = MathUtils.getClass.getName.stripSuffix("$")
-    val evals = children.map(_.genCode(ctx))
-    val inputs = evals.zipWithIndex.map { case (e, i) =>
-      s"""
-        if (($i > 0 && ${e.isNull}) || ($i == 3 && ${e.value} < 0)) {
-          throw new RuntimeException(String.format("$errMsg", $i + 1));
+    if (isFoldable) {
+      val exprV = expr.genCode(ctx)
+      ev.copy(code = s"""
+        if (${_minValue == null}) {
+          throw new RuntimeException(String.format("$errMsg", 2));
+        } else if (${_maxValue == null}) {
+          throw new RuntimeException(String.format("$errMsg", 3));
+        } else if (${_numBucket == null || numBucketV <= 0}) {
+          throw new RuntimeException(String.format("$errMsg", 4));
         }
-      """
+        ${exprV.code}
+        boolean ${ev.isNull} = ${exprV.isNull};
+        long ${ev.value} = ${ctx.defaultValue(dataType)};
+        if (!${ev.isNull}) {
+          ${ev.value} = $mathUtils.widthBucket(${exprV.value}, $minValueV, $maxValueV, $numBucketV);
+        }""")
+    } else {
+      val evals = children.map(_.genCode(ctx))
+      val invalid = evals.zipWithIndex.map { case (e, i) =>
+        s"""
+          if (($i > 0 && ${e.isNull}) || ($i == 3 && ${e.value} < 0)) {
+            throw new RuntimeException(String.format("$errMsg", $i + 1));
+          }
+        """}
+
+      ev.copy(invalid.map(_.stripMargin).mkString("\n") +
+        s"""
+          boolean ${ev.isNull} = ${evals(0).isNull};
+          long ${ev.value} = ${ctx.defaultValue(dataType)};
+          if (!${evals(0).isNull}) {
+            ${ev.value} = $mathUtils.widthBucket(
+            ${evals(0).value}, ${evals(1).value}, ${evals(2).value}, ${evals(3).value});
+          }
+        """)
     }
-    ev.copy(inputs.map(_.stripMargin).mkString("\n") + s"""
-      boolean ${ev.isNull} = ${evals(0).isNull};
-      long ${ev.value} = ${ctx.defaultValue(dataType)};
-      if (!${evals(0).isNull}) {
-        ${ev.value} = $mathUtils.widthBucket(
-          ${evals(0).value}, ${evals(1).value}, ${evals(2).value}, ${evals(3).value});
-      }
-    """)
   }
 }

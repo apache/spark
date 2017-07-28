@@ -505,9 +505,10 @@ struct<widthbucket(CAST(5.35 AS DOUBLE), CAST(0.024 AS DOUBLE), CAST(10.06 AS DO
 -- !query 61
 select width_bucket(5.35, 0.024, 10.06, 0.5)
 -- !query 61 schema
-struct<widthbucket(CAST(5.35 AS DOUBLE), CAST(0.024 AS DOUBLE), CAST(10.06 AS DOUBLE), CAST(0.5 AS BIGINT)):bigint>
+struct<>
 -- !query 61 output
-1
+java.lang.RuntimeException
+The argument [4] of WIDTH_BUCKET function is NULL or invalid.
 
 
 -- !query 62
