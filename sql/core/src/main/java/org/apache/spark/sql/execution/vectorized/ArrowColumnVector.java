@@ -322,7 +322,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     anyNullsSet = numNulls > 0;
   }
 
-  private static abstract class ArrowVectorAccessor {
+  private abstract static class ArrowVectorAccessor {
 
     private final ValueVector vector;
     private final ValueVector.Accessor nulls;
