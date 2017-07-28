@@ -172,7 +172,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
   }
 
-  test("range between should accept literal values as boundary") {
+  test("range between should accept integer/long values as boundary") {
     val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
       (3L, "2"), (2L, "1"), (2147483650L, "2"))
       .toDF("key", "value")
