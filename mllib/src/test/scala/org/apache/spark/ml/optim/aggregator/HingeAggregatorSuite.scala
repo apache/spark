@@ -67,7 +67,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val interceptArray = Array(2.0)
     val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ interceptArray),
       fitIntercept = true)
-    withClue("LogisticAggregator does not support negative instance weights") {
+    withClue("HingeAggregator does not support negative instance weights") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, -1.0, Vectors.dense(2.0, 1.0)))
       }
@@ -131,6 +131,20 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(loss ~== agg.loss relTol 0.01)
     assert(gradient ~== agg.gradient relTol 0.01)
+  }
+
+  test("check with zero standard deviation") {
+    val instancesConstantFeature = Array(
+      Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
+      Instance(1.0, 0.3, Vectors.dense(1.0, 0.5)))
+    val binaryCoefArray = Array(1.0, 2.0)
+    val intercept = 1.0
+    val aggConstantFeatureBinary = getNewAggregator(instancesConstantFeature,
+      Vectors.dense(binaryCoefArray ++ Array(intercept)), fitIntercept = true)
+    instances.foreach(aggConstantFeatureBinary.add)
+    // constant features should not affect gradient
+    assert(aggConstantFeatureBinary.gradient(0) === 0.0)
   }
 
 }

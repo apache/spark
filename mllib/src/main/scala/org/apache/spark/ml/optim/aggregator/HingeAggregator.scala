@@ -22,11 +22,11 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 
 /**
- * LinearSVCAggregator computes the gradient and loss for loss function ("hinge" or
+ * HingeAggregator computes the gradient and loss for loss function ("hinge" or
  * "squared_hinge", as used in binary classification for instances in sparse or dense
  * vector in an online fashion.
  *
- * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
+ * Two HingeAggregators can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
  * This class standardizes feature values during computation using bcFeaturesStd.
@@ -50,11 +50,11 @@ private[ml] class HingeAggregator(
   protected override val dim: Int = numFeaturesPlusIntercept
 
   /**
-   * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
+   * Add a new training instance to this HingeAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
-   * @return This LinearSVCAggregator object.
+   * @return This HingeAggregator object.
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
