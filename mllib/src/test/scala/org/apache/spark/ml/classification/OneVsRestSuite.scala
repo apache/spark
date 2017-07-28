@@ -158,7 +158,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("SPARK-21306: OneVsRest should support setWeightCol") {
-    val dataset2 = dataset.withColumn("weight", lit(1))
+    val dataset2 = dataset.withColumn("weight", lit(1.0))
     // classifier inherits hasWeightCol
     val ova = new OneVsRest().setWeightCol("weight").setClassifier(new LogisticRegression())
     assert(ova.fit(dataset2) !== null)
