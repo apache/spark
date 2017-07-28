@@ -587,6 +587,9 @@ private[yarn] class YarnAllocator(
             // merely to do resource sharing, and tasks that fail due to preempted executors could
             // just as easily finish on any other executor. See SPARK-8167.
             (false, s"Container ${containerId}${onHostStr} was preempted.")
+          // Should not count executor initialize failed towards task failures
+          case INIT_FAILED_EXIT_CODE =>
+            (false, s"Container exit due to executor initialize failed.")
           // Should probably still count memory exceeded exit codes towards task failures
           case VMEM_EXCEEDED_EXIT_CODE =>
             (true, memLimitExceededLogMessage(
@@ -731,6 +734,7 @@ private object YarnAllocator {
     Pattern.compile(s"$MEM_REGEX of $MEM_REGEX virtual memory used")
   val VMEM_EXCEEDED_EXIT_CODE = -103
   val PMEM_EXCEEDED_EXIT_CODE = -104
+  val INIT_FAILED_EXIT_CODE = 1
 
   def memLimitExceededLogMessage(diagnostics: String, pattern: Pattern): String = {
     val matcher = pattern.matcher(diagnostics)
