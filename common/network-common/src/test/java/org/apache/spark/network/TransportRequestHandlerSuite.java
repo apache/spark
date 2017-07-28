@@ -105,7 +105,7 @@ public class TransportRequestHandlerSuite {
     private List<GenericFutureListener> listeners = new ArrayList<>();
     private boolean success;
 
-    public ExtendedChannelPromise(Channel channel) {
+    ExtendedChannelPromise(Channel channel) {
       super(channel);
       success = false;
     }
@@ -127,7 +127,9 @@ public class TransportRequestHandlerSuite {
       listeners.forEach(listener -> {
         try {
           listener.operationComplete(this);
-        } catch (Exception e) { }
+        } catch (Exception e) {
+          // do nothing
+        }
       });
     }
   }
