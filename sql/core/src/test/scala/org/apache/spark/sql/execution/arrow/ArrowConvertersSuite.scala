@@ -20,7 +20,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
-import java.util.{Locale, TimeZone}
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
@@ -31,7 +31,8 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -841,7 +842,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   test("timestamp type conversion") {
-    DateTimeTestUtils.withDefaultTimeZone(TimeZone.getTimeZone("America/Los_Angeles")) {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
       val json =
         s"""
            |{
@@ -851,7 +852,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
            |      "type" : {
            |        "name" : "timestamp",
            |        "unit" : "MICROSECOND",
-           |        "timezone" : "${DateTimeUtils.defaultTimeZone().getID}"
+           |        "timezone" : "America/Los_Angeles"
            |      },
            |      "nullable" : true,
            |      "children" : [ ],
@@ -887,7 +888,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
       val df = data.toDF("timestamp")
 
-      collectAndValidate(df, json, "timestampData.json")
+      collectAndValidate(df, json, "timestampData.json", Option("America/Los_Angeles"))
     }
   }
 
@@ -1720,22 +1721,24 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
-  private def collectAndValidate(df: DataFrame, json: String, file: String): Unit = {
+  private def collectAndValidate(
+      df: DataFrame, json: String, file: String, timeZoneId: Option[String] = None): Unit = {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val arrowPayload = df.coalesce(1).toArrowPayload.collect().head
     val tempFile = new File(tempDataPath, file)
     Files.write(json, tempFile, StandardCharsets.UTF_8)
-    validateConversion(df.schema, arrowPayload, tempFile)
+    validateConversion(df.schema, arrowPayload, tempFile, timeZoneId)
   }
 
   private def validateConversion(
       sparkSchema: StructType,
       arrowPayload: ArrowPayload,
-      jsonFile: File): Unit = {
+      jsonFile: File,
+      timeZoneId: Option[String] = None): Unit = {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 
-    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema)
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, timeZoneId)
     val jsonSchema = jsonReader.start()
     Validator.compareSchemas(arrowSchema, jsonSchema)
 

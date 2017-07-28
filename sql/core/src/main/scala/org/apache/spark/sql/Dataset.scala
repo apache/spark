@@ -3090,9 +3090,11 @@ class Dataset[T] private[sql](
   private[sql] def toArrowPayload: RDD[ArrowPayload] = {
     val schemaCaptured = this.schema
     val maxRecordsPerBatch = sparkSession.sessionState.conf.arrowMaxRecordsPerBatch
+    val timeZoneId = Option(sparkSession.sessionState.conf.sessionLocalTimeZone)
     queryExecution.toRdd.mapPartitionsInternal { iter =>
       val context = TaskContext.get()
-      ArrowConverters.toPayloadIterator(iter, schemaCaptured, maxRecordsPerBatch, context)
+      ArrowConverters.toPayloadIterator(
+        iter, schemaCaptured, maxRecordsPerBatch, timeZoneId, context)
     }
   }
 }

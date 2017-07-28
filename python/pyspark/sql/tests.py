@@ -3005,10 +3005,9 @@ class ArrowTests(ReusedPySparkTestCase):
         tz = "America/Los_Angeles"
         os.environ["TZ"] = tz
         time.tzset()
-        cls.old_tz = cls.sc._jvm.org.apache.spark.sql.catalyst.util.DateTimeTestUtils\
-            .setDefaultTimeZone(tz)
 
         cls.spark = SparkSession(cls.sc)
+        cls.spark.conf.set("spark.sql.session.timeZone", tz)
         cls.spark.conf.set("spark.sql.execution.arrow.enable", "true")
         cls.schema = StructType([
             StructField("1_str_t", StringType(), True),
@@ -3026,8 +3025,8 @@ class ArrowTests(ReusedPySparkTestCase):
     def tearDownClass(cls):
         del os.environ["TZ"]
         time.tzset()
-        cls.sc._jvm.org.apache.spark.sql.catalyst.util.DateTimeTestUtils\
-            .setDefaultTimeZone(cls.old_tz)
+
+        cls.spark.stop()
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +

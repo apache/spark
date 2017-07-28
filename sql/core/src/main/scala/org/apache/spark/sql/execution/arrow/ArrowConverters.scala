@@ -60,9 +60,10 @@ private[sql] object ArrowConverters {
       rowIter: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Int,
+      timeZoneId: Option[String],
       context: TaskContext): Iterator[ArrowPayload] = {
 
-    val arrowSchema = ArrowUtils.toArrowSchema(schema)
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val allocator =
       ArrowUtils.rootAllocator.newChildAllocator("toPayloadIterator", 0, Long.MaxValue)
 

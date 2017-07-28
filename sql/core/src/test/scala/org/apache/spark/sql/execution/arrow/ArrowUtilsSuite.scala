@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution.arrow
 
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
+
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 
 class ArrowUtilsSuite extends SparkFunSuite {
@@ -42,6 +45,25 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(StringType)
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
+    roundtrip(DateType)
+  }
+
+  test("timestamp") {
+    val schema = new StructType().add("value", TimestampType)
+    val arrowSchema = ArrowUtils.toArrowSchema(schema)
+    val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
+    assert(fieldType.getTimezone() === DateTimeUtils.defaultTimeZone().getID)
+    assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+
+    def roundtripWithTz(timeZoneId: String): Unit = {
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, Option(timeZoneId))
+      val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
+      assert(fieldType.getTimezone() === timeZoneId)
+      assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
+    }
+    roundtripWithTz("Asia/Tokyo")
+    roundtripWithTz("UTC")
+    roundtripWithTz("America/Los_Angeles")
   }
 
   test("array") {
