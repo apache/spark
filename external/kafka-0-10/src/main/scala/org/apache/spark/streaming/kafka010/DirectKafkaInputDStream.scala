@@ -73,7 +73,6 @@ private[spark] class DirectKafkaInputDStream[K, V](
     }
     kc
   }
-  val useConsumerCache = _ssc.conf.getBoolean("spark.streaming.kafka.consumer.cache.enable", true)
 
   override def persist(newLevel: StorageLevel): DStream[ConsumerRecord[K, V]] = {
     logError("Kafka ConsumerRecord is not serializable. " +
