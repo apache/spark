@@ -514,7 +514,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     outStream.println(
       s"""
         |Options:
-        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
+        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local
+        |                              (Default: local[*]).
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
         |                              on one of the worker machines inside the cluster ("cluster")
         |                              (Default: client).
