@@ -34,7 +34,6 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-import org.apache.spark.ml.param.shared.HasWeightCol
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -54,8 +53,7 @@ private[ml] trait ClassifierTypeTrait {
 /**
  * Params for [[OneVsRest]].
  */
-private[ml] trait OneVsRestParams extends PredictorParams
-  with ClassifierTypeTrait with HasWeightCol {
+private[ml] trait OneVsRestParams extends PredictorParams with ClassifierTypeTrait {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
@@ -292,18 +290,6 @@ final class OneVsRest @Since("1.4.0") (
   @Since("1.5.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  /**
-   * Sets the value of param [[weightCol]].
-   *
-   * This is ignored if weight is not supported by [[classifier]].
-   * If this is not set or empty, we treat all instance weights as 1.0.
-   * Default is not set, so all instances have weight one.
-   *
-   * @group setParam
-   */
-  @Since("2.3.0")
-  def setWeightCol(value: String): this.type = set(weightCol, value)
-
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
     validateAndTransformSchema(schema, fitting = true, getClassifier.featuresDataType)
@@ -322,20 +308,7 @@ final class OneVsRest @Since("1.4.0") (
     }
     val numClasses = MetadataUtils.getNumClasses(labelSchema).fold(computeNumClasses())(identity)
 
-    val weightColIsUsed = isDefined(weightCol) && $(weightCol).nonEmpty && {
-      getClassifier match {
-        case _: HasWeightCol => true
-        case c =>
-          logWarning(s"weightCol is ignored, as it is not supported by $c now.")
-          false
-      }
-    }
-
-    val multiclassLabeled = if (weightColIsUsed) {
-      dataset.select($(labelCol), $(featuresCol), $(weightCol))
-    } else {
-      dataset.select($(labelCol), $(featuresCol))
-    }
+    val multiclassLabeled = dataset.select($(labelCol), $(featuresCol))
 
     // persist if underlying dataset is not persistent.
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
@@ -355,13 +328,7 @@ final class OneVsRest @Since("1.4.0") (
       paramMap.put(classifier.labelCol -> labelColName)
       paramMap.put(classifier.featuresCol -> getFeaturesCol)
       paramMap.put(classifier.predictionCol -> getPredictionCol)
-      if (weightColIsUsed) {
-        val classifier_ = classifier.asInstanceOf[ClassifierType with HasWeightCol]
-        paramMap.put(classifier_.weightCol -> getWeightCol)
-        classifier_.fit(trainingDataset, paramMap)
-      } else {
-        classifier.fit(trainingDataset, paramMap)
-      }
+      classifier.fit(trainingDataset, paramMap)
     }.toArray[ClassificationModel[_, _]]
 
     if (handlePersistence) {
