@@ -2974,14 +2974,18 @@ setMethod("describe",
           })
 
 #' @param object a SparkDataFrame to be summarized.
+#' @param ... (optional) statistics to be computed for all columns.
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
 #' @note summary(SparkDataFrame) since 1.5.0
+#' @note the statistics provided by this method were change in 2.3.0 use describe for previous defaults.
 setMethod("summary",
-          signature(object = "SparkDataFrame"),
+          signature(object = "SparkDataFrame", ... = "character"),
           function(object, ...) {
-            describe(object)
+            statisticsList <- list(...)
+            sdf <- callJMethod(object@sdf, "summary", statisticsList)
+            dataFrame(sdf)
           })
 
 
