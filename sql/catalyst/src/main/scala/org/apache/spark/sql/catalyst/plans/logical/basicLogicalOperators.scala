@@ -346,7 +346,8 @@ case class InsertIntoTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean)
+    ifPartitionNotExists: Boolean,
+    specfiedColumns: Option[Seq[NamedExpression]] = None)
   extends LogicalPlan {
   // IF NOT EXISTS is only valid in INSERT OVERWRITE
   assert(overwrite || !ifPartitionNotExists)

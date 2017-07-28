@@ -147,7 +147,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case InsertIntoTable(r: CatalogRelation, partSpec, query, overwrite, ifPartitionNotExists)
+    case InsertIntoTable(r: CatalogRelation, partSpec, query, overwrite, ifPartitionNotExists, _)
         if DDLUtils.isHiveTable(r.tableMeta) =>
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite, ifPartitionNotExists)
 
@@ -194,7 +194,7 @@ case class RelationConversions(
   override def apply(plan: LogicalPlan): LogicalPlan = {
     plan transformUp {
       // Write path
-      case InsertIntoTable(r: CatalogRelation, partition, query, overwrite, ifPartitionNotExists)
+      case InsertIntoTable(r: CatalogRelation, partition, query, overwrite, ifPartitionNotExists, _)
         // Inserting into partitioned table is not supported in Parquet/Orc data source (yet).
           if query.resolved && DDLUtils.isHiveTable(r.tableMeta) &&
             !r.isPartitioned && isConvertible(r) =>
