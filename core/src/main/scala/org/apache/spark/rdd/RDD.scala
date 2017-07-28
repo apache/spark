@@ -55,7 +55,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, Poi
  * Doubles; and
  * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
  * can be saved as SequenceFiles.
- * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
+ * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)])
  * through implicit.
  *
  * Internally, each RDD is characterized by five main properties:
