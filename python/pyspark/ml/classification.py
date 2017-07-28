@@ -458,6 +458,20 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         return self.getOrDefault(self.lowerBoundsOnIntercepts)
 
+    @since("2.3.0")
+    def setUpperBoundsOnIntercepts(self, value):
+        """
+        Sets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self._set(upperBoundsOnIntercepts=value)
+
+    @since("2.3.0")
+    def getUpperBoundsOnIntercepts(self):
+        """
+        Gets the value of :py:attr:`upperBoundsOnIntercepts`
+        """
+        return self.getOrDefault(self.upperBoundsOnIntercepts)
+
 
 class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
     """
