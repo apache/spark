@@ -1221,6 +1221,20 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
 
+    def test_support_for_weightCol(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8), 1.0),
+                                         (1.0, Vectors.sparse(2, [], []), 1.0),
+                                         (2.0, Vectors.dense(0.5, 0.5), 1.0)],
+                                        ["label", "features", "weight"])
+        # classifier inherits hasWeightCol
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr, weightCol="weight")
+        self.assertIsNotNone(ovr.fit(df))
+        # classifier doesn't inherit hasWeightCol
+        dt = DecisionTreeClassifier()
+        ovr2 = OneVsRest(classifier=dt, weightCol="weight")
+        self.assertIsNotNone(ovr2.fit(df))
+
 
 class HashingTFTest(SparkSessionTestCase):
 
