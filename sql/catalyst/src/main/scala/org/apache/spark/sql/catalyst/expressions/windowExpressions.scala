@@ -73,9 +73,6 @@ case class WindowSpecDefinition(
           s"The data type '${orderSpec.head.dataType}' used in the order specification does " +
             s"not match the data type '${f.valueBoundary.head.dataType}' which is used in the " +
             "range frame.")
-      case f: SpecifiedWindowFrame if !isValidFrameBoundary(f.lower, f.upper) =>
-        TypeCheckFailure(s"The upper bound of the window frame is '${f.upper.sql}', which is " +
-          s"smaller than the lower bound '${f.lower.sql}'.")
       case _ => TypeCheckSuccess
     }
   }
@@ -93,15 +90,6 @@ case class WindowSpecDefinition(
   }
 
   private def isValidFrameType(ft: DataType): Boolean = orderSpec.head.dataType == ft
-
-  private def isValidFrameBoundary(lower: Expression, upper: Expression): Boolean = {
-    (lower, upper) match {
-      case (UnboundedFollowing, _) => false
-      case (_, UnboundedPreceding) => false
-      case (l: Expression, u: SpecialFrameBoundary) => !u.notFollows(l)
-      case _ => true
-    }
-  }
 }
 
 /**
@@ -226,6 +214,9 @@ case class SpecifiedWindowFrame(
 
     // Check combination (of expressions).
     (lower, upper) match {
+      case (l: Expression, u: Expression) if !isValidFrameBoundary(l, u) =>
+        TypeCheckFailure(s"Window frame upper bound '$upper' does not followes the lower bound " +
+          s"'$lower'.")
       case (l: SpecialFrameBoundary, _) => TypeCheckSuccess
       case (_, u: SpecialFrameBoundary) => TypeCheckSuccess
       case (l: Expression, u: Expression) if l.dataType != u.dataType =>
@@ -275,6 +266,15 @@ case class SpecifiedWindowFrame(
           s"the expected data type '${frameType.inputType}'.")
     case _ =>
       TypeCheckSuccess
+  }
+
+  private def isValidFrameBoundary(l: Expression, u: Expression): Boolean = {
+    (l, u) match {
+      case (UnboundedFollowing, _) => false
+      case (_, UnboundedPreceding) => false
+      case (l: Expression, u: SpecialFrameBoundary) => !u.notFollows(l)
+      case _ => true
+    }
   }
 }
 

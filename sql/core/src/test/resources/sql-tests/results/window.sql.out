@@ -132,7 +132,7 @@ ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, v
 struct<>
 -- !query 8 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(PARTITION BY testdata.`cate` ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING)' due to data type mismatch: The upper bound of the window frame is '1', which is smaller than the lower bound 'UNBOUNDED FOLLOWING'.; line 1 pos 33
+cannot resolve 'ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING' due to data type mismatch: Window frame upper bound '1' does not followes the lower bound 'unboundedfollowing$()'.; line 1 pos 33
 
 
 -- !query 9
