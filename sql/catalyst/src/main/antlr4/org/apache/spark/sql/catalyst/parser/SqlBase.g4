@@ -238,8 +238,8 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
-    | INSERT INTO TABLE? tableIdentifier partitionSpec?
+    : INSERT OVERWRITE TABLE tableIdentifier ('(' namedExpressionSeq ')')? (partitionSpec (IF NOT EXISTS)?)?
+    | INSERT INTO TABLE? tableIdentifier ('(' namedExpressionSeq ')')? partitionSpec?
     ;
 
 partitionSpecLocation

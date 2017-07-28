@@ -137,11 +137,11 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _),
-        parts, query, overwrite, false) if parts.isEmpty =>
+        parts, query, overwrite, false, _) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case i @ InsertIntoTable(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, _) =>
+        l @ LogicalRelation(t: HadoopFsRelation, _, table), parts, query, overwrite, _, _) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -244,7 +244,7 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(r: CatalogRelation, _, _, _, _)
+    case i @ InsertIntoTable(r: CatalogRelation, _, _, _, _, _)
         if DDLUtils.isDatasourceTable(r.tableMeta) =>
       i.copy(table = readDataSourceTable(r))
 
