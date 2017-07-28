@@ -269,7 +269,7 @@ class ExpressionParserSuite extends PlanTest {
     val boundaries = Seq(
       ("10 preceding", -Literal(10), CurrentRow),
       ("2147483648 preceding", -Literal(2147483648L), CurrentRow),
-      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow), // Will fail during analysis
+      ("3 + 1 following", Add(Literal(3), Literal(1)), CurrentRow),
       ("unbounded preceding", UnboundedPreceding, CurrentRow),
       ("unbounded following", UnboundedFollowing, CurrentRow), // Will fail during analysis
       ("between unbounded preceding and current row", UnboundedPreceding, CurrentRow),

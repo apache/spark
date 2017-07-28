@@ -137,45 +137,31 @@ case object RangeFrame extends FrameType {
  * The trait used to represent special boundaries used in a window frame.
  */
 sealed trait SpecialFrameBoundary extends Expression with Unevaluable {
-  override lazy val children: Seq[Expression] = Nil
+  override def children: Seq[Expression] = Nil
   override def dataType: DataType = NullType
   override def foldable: Boolean = false
   override def nullable: Boolean = false
-
-  def notFollows(other: Expression): Boolean
 }
 
 /** UNBOUNDED boundary. */
 case object UnboundedPreceding extends SpecialFrameBoundary {
   override def sql: String = "UNBOUNDED PRECEDING"
-
-  override def notFollows(other: Expression): Boolean = true
 }
 
 case object UnboundedFollowing extends SpecialFrameBoundary {
   override def sql: String = "UNBOUNDED FOLLOWING"
-
-  override def notFollows(other: Expression): Boolean = other match {
-    case UnboundedFollowing => true
-    case _ => false
-  }
 }
 
 /** CURRENT ROW boundary. */
 case object CurrentRow extends SpecialFrameBoundary {
   override def sql: String = "CURRENT ROW"
-
-  override def notFollows(other: Expression): Boolean = other match {
-    case UnboundedFollowing => true
-    case _ => false
-  }
 }
 
 /**
  * Represents a window frame.
  */
 sealed trait WindowFrame extends Expression with Unevaluable {
-  override lazy val children: Seq[Expression] = Nil
+  override def children: Seq[Expression] = Nil
   override def dataType: DataType = throw new UnsupportedOperationException("dataType")
   override def foldable: Boolean = false
   override def nullable: Boolean = false
@@ -194,7 +180,7 @@ case class SpecifiedWindowFrame(
     upper: Expression)
   extends WindowFrame {
 
-  override lazy val children: Seq[Expression] = lower :: upper :: Nil
+  override def children: Seq[Expression] = lower :: upper :: Nil
 
   lazy val valueBoundary: Seq[Expression] =
     children.filterNot(_.isInstanceOf[SpecialFrameBoundary])
@@ -256,23 +242,20 @@ case class SpecifiedWindowFrame(
   }
 
   private def checkBoundary(b: Expression, location: String): TypeCheckResult = b match {
-    case e: Expression if !e.foldable && !e.isInstanceOf[SpecialFrameBoundary] =>
-      TypeCheckFailure(
-        s"Window frame $location bound '$e' is not a literal.")
-    case e: Expression if !frameType.inputType.acceptsType(e.dataType) &&
-      !e.isInstanceOf[SpecialFrameBoundary] =>
+    case _: SpecialFrameBoundary => TypeCheckSuccess
+    case e: Expression if !e.foldable =>
+      TypeCheckFailure(s"Window frame $location bound '$e' is not a literal.")
+    case e: Expression if !frameType.inputType.acceptsType(e.dataType) =>
       TypeCheckFailure(
         s"The data type of the $location bound '${e.dataType} does not match " +
           s"the expected data type '${frameType.inputType}'.")
-    case _ =>
-      TypeCheckSuccess
+    case _ => TypeCheckSuccess
   }
 
   private def isValidFrameBoundary(l: Expression, u: Expression): Boolean = {
     (l, u) match {
       case (UnboundedFollowing, _) => false
       case (_, UnboundedPreceding) => false
-      case (l: Expression, u: SpecialFrameBoundary) => !u.notFollows(l)
       case _ => true
     }
   }
