@@ -22,4 +22,4 @@ FROM spark-base
 # command should be invoked from the top level directory of the Spark distribution. E.g.:
 # docker build -t spark-resource-staging-server:latest -f dockerfiles/resource-staging-server/Dockerfile .
 
-ENTRYPOINT [ "/sbin/tini", "--", "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.ResourceStagingServer" ]
+ENTRYPOINT [ "/opt/entrypoint.sh", "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.ResourceStagingServer" ]
