@@ -2180,7 +2180,9 @@ object EliminateUnions extends Rule[LogicalPlan] {
 /**
  * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
  * expression in Project(project list) or Aggregate(aggregate expressions) or
- * Window(window expressions).
+ * Window(window expressions). Notice that if an expression has other expression parameters which
+ * are not in its `children`, e.g. `RuntimeReplaceable`, the transformation for Aliases in this
+ * rule can't work for those parameters.
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
