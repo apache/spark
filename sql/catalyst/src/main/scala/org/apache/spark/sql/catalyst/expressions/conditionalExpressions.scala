@@ -264,7 +264,6 @@ case class CaseWhenCodegen(
 
     val isNull = ctx.freshName("caseWhenIsNull")
     val value = ctx.freshName("caseWhenValue")
-    // Split these expressions only if they are created from a row object
 
     val cases = branches.map { case (condExpr, valueExpr) =>
       val (condFunc, condIsNull, condValue) = genCodeForExpression(ctx, condExpr)
@@ -286,7 +285,9 @@ case class CaseWhenCodegen(
       generatedCode += ifthen + "\nelse {\n"
       numIfthen += 1
 
-      if (generatedCode.length > 1024 && (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
+      if (generatedCode.length > 1024 &&
+        // Split these expressions only if they are created from a row object
+        (ctx.INPUT_ROW != null && ctx.currentVars == null)) {
         val flag = "flag"
         generatedCode += s" $flag = false;\n" + "}\n" * numIfthen
         val funcName = ctx.freshName("caseWhenNestedIf")
