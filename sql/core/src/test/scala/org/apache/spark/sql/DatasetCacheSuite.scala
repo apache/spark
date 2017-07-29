@@ -43,6 +43,10 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     // joined Dataset should not be persisted
     val joined = ds1.joinWith(ds2, $"a.value" === $"b.value")
     assert(joined.storageLevel == StorageLevel.NONE)
+    // cleanup
+    ds1.unpersist()
+    assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
+
   }
 
   test("persist and unpersist") {
@@ -58,7 +62,7 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
       2, 3, 4)
     // Drop the cache.
     cached.unpersist()
-    assert(cached.storageLevel == StorageLevel.NONE, "The Dataset should not be cached.")
+    assert(cached.storageLevel == StorageLevel.NONE, "The Dataset cached should not be cached.")
   }
 
   test("persist and then rebind right encoder when join 2 datasets") {
@@ -76,6 +80,24 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
 
     ds1.unpersist()
     assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
+    ds2.unpersist()
+    assert(ds2.storageLevel == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
+  }
+
+  test("SPARK-21478: persist parent and child Dataset and unpersist parent Dataset") {
+    val ds1 = Seq(1).toDF()
+    ds1.persist()
+    ds1.count()
+    assert(ds1.storageLevel.useMemory)
+
+    val ds2 = ds1.select($"value" * 2)
+    ds2.persist()
+    ds2.count()
+    assert(ds2.storageLevel.useMemory)
+
+    ds1.unpersist()
+    assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
+    assert(ds2.storageLevel.useMemory, "The Dataset ds2 should be cached.")
     ds2.unpersist()
     assert(ds2.storageLevel == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
   }

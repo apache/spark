@@ -114,13 +114,13 @@ class CacheManager extends Logging {
   }
 
   /**
-   * Un-cache all the cache entries that refer to the given plan.
+   * Un-cache the cache entry that refers to the given plan.
    */
   def uncacheQuery(spark: SparkSession, plan: LogicalPlan, blocking: Boolean): Unit = writeLock {
     val it = cachedData.iterator()
     while (it.hasNext) {
       val cd = it.next()
-      if (cd.plan.find(_.sameResult(plan)).isDefined) {
+      if (plan.sameResult(cd.plan)) {
         cd.cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
         it.remove()
       }
