@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
 import org.apache.spark.util.Utils
@@ -66,6 +66,8 @@ private[sql] class HiveSessionCatalog(
    * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
    */
   private def makeFunctionBuilder(name: String, clazz: Class[_]): FunctionBuilder = {
+    validateHiveUserDefinedFunction(clazz)
+
     // When we instantiate hive UDF wrapper class, we may throw exception if the input
     // expressions don't satisfy the hive UDF, such as type mismatch, input number
     // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
