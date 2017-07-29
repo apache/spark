@@ -80,6 +80,22 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assert(ds2.storageLevel == StorageLevel.NONE, "The Dataset ds2 should not be cached.")
   }
 
+  test("SPARK-21478: persist parent and child Dataset and unpersist parent Dataset") {
+    val ds1 = Seq(1).toDF()
+    ds1.persist()
+    ds1.count()
+    assert(ds1.storageLevel.useMemory)
+
+    val ds2 = ds1.select($"value" * 2)
+    ds2.persist()
+    ds2.count()
+    assert(ds2.storageLevel.useMemory)
+
+    ds1.unpersist()
+    assert(ds1.storageLevel == StorageLevel.NONE, "The Dataset ds1 should not be cached.")
+    assert(ds2.storageLevel.useMemory, "The Dataset ds2 should be cached.")
+  }
+
   test("persist and then groupBy columns asKey, map") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
     val grouped = ds.groupByKey(_._1)
