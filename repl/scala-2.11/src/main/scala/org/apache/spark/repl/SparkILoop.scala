@@ -84,6 +84,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo(welcomeMsg)
     echo("Type in expressions to have them evaluated.")
     echo("Type :help for more information.")
+    echo("Type ctrl + c to exit.")
   }
 
   /** Available commands */
