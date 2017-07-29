@@ -688,8 +688,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case id: FunctionIdentifier => true
     case spec: BucketSpec => true
     case catalog: CatalogTable => true
-    case boundary: FrameBoundary => true
-    case frame: WindowFrame => true
     case partition: Partitioning => true
     case resource: FunctionResource => true
     case broadcast: BroadcastMode => true
