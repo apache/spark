@@ -141,6 +141,7 @@ class Analyzer(
       ResolveFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
+      ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -1320,6 +1321,30 @@ class Analyzer(
       // Only a few unary nodes (Project/Filter/Aggregate) can contain subqueries.
       case q: UnaryNode if q.childrenResolved =>
         resolveSubQueries(q, q.children)
+    }
+  }
+
+  /**
+   * Replaces unresolved column aliases for a subquery with projections.
+   */
+  object ResolveSubqueryColumnAliases extends Rule[LogicalPlan] {
+
+     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case u @ UnresolvedSubqueryColumnAliases(columnNames, child) if child.resolved =>
+        // Resolves output attributes if a query has alias names in its subquery:
+        // e.g., SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
+        val outputAttrs = child.output
+        // Checks if the number of the aliases equals to the number of output columns
+        // in the subquery.
+        if (columnNames.size != outputAttrs.size) {
+          u.failAnalysis("Number of column aliases does not match number of columns. " +
+            s"Number of column aliases: ${columnNames.size}; " +
+            s"number of columns: ${outputAttrs.size}.")
+        }
+        val aliases = outputAttrs.zip(columnNames).map { case (attr, aliasName) =>
+          Alias(attr, aliasName)()
+        }
+        Project(aliases, child)
     }
   }
 
