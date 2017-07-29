@@ -813,7 +813,7 @@ object TypeCoercion {
   object WindowFrameCoercion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
-        if order.resolved =>
+          if order.resolved =>
         s.copy(frameSpecification = SpecifiedWindowFrame(
           RangeFrame,
           createBoundaryCast(lower, order.dataType),
@@ -822,9 +822,8 @@ object TypeCoercion {
 
     private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
       boundary match {
-        case e: Expression if e.dataType != dt && Cast.canCast(e.dataType, dt) &&
-          !e.isInstanceOf[SpecialFrameBoundary] =>
-          Cast(e, dt)
+        case e: SpecialFrameBoundary => e
+        case e: Expression if e.dataType != dt && Cast.canCast(e.dataType, dt) => Cast(e, dt)
         case _ => boundary
       }
     }

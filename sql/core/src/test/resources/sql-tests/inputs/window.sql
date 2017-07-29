@@ -29,6 +29,15 @@ SELECT val, cate, count(val) OVER(PARTITION BY cate
 ROWS BETWEEN UNBOUNDED FOLLOWING AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
 SELECT val, cate, count(val) OVER(PARTITION BY cate
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
+SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val, cate
+RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
+SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY current_date
+RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
+SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val
+RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val;
+SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val
+RANGE BETWEEN CURRENT ROW AND current_date PRECEDING) FROM testData ORDER BY cate, val;
+
 
 -- Window functions
 SELECT val, cate,

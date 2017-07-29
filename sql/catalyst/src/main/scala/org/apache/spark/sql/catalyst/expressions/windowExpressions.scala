@@ -59,16 +59,16 @@ case class WindowSpecDefinition(
           "Cannot use an UnspecifiedFrame. This should have been converted during analysis. " +
             "Please file a bug report.")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && !f.isUnbounded &&
-        orderSpec.isEmpty =>
+          orderSpec.isEmpty =>
         TypeCheckFailure(
           "A range window frame cannot be used in an unordered window specification.")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
-        orderSpec.size > 1 =>
+          orderSpec.size > 1 =>
         TypeCheckFailure(
           s"A range window frame with value boundaries cannot be used in a window specification " +
             s"with multiple order by expressions: ${orderSpec.mkString(",")}")
       case f: SpecifiedWindowFrame if f.frameType == RangeFrame && f.isValueBound &&
-        !isValidFrameType(f.valueBoundary.head.dataType) =>
+          !isValidFrameType(f.valueBoundary.head.dataType) =>
         TypeCheckFailure(
           s"The data type '${orderSpec.head.dataType}' used in the order specification does " +
             s"not match the data type '${f.valueBoundary.head.dataType}' which is used in the " +
@@ -129,7 +129,7 @@ case object RowFrame extends FrameType {
  * of the current row.
  */
 case object RangeFrame extends FrameType {
-  override def inputType: AbstractDataType = TypeCollection.NumericAndInterval
+  override def inputType: AbstractDataType = NumericType
   override def sql: String = "RANGE"
 }
 
@@ -211,7 +211,7 @@ case class SpecifiedWindowFrame(
             s"'${l.dataType.catalogString}' <> '${u.dataType.catalogString}'")
       case (l: Expression, u: Expression) if isGreaterThan(l, u) =>
         TypeCheckFailure(
-          "The lower bound of a window frame must less than or equal to the upper bound")
+          "The lower bound of a window frame must be less than or equal to the upper bound")
       case _ => TypeCheckSuccess
     }
   }
