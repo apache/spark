@@ -1175,6 +1175,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.listFunctions(db, pattern)
   }
 
+  override def setConf(key: String, value: String): Unit = withClient {
+    client.setConf(key, value)
+  }
 }
 
 object HiveExternalCatalog {

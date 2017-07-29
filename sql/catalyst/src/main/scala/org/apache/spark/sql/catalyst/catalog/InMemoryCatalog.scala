@@ -609,5 +609,6 @@ class InMemoryCatalog(
     requireDbExists(db)
     StringUtils.filterPattern(catalog(db).functions.keysIterator.toSeq, pattern)
   }
-
+  override def setConf(key: String, value: String): Unit =
+    throw new UnsupportedOperationException("in-memory catalog does not support setConf.")
 }

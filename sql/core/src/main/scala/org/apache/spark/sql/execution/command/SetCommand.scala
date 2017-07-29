@@ -88,6 +88,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.conf.set(key, value)
+        sparkSession.sharedState.externalCatalog.setConf(key, value)
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
