@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -493,6 +493,17 @@ class PlanParserSuite extends AnalysisTest {
       "SELECT * FROM testData AS t(col1, col2)",
       SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData"), Seq("col1", "col2")))
         .select(star()))
+  }
+
+  test("SPARK-20962 Support subquery column aliases in FROM clause") {
+    assertEqual(
+      "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      UnresolvedSubqueryColumnAliases(
+        Seq("col1", "col2"),
+        SubqueryAlias(
+          "t",
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      ).select(star()))
   }
 
   test("inline table") {
