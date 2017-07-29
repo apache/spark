@@ -580,7 +580,7 @@ object FunctionRegistry {
           df.note(),
           df.since())
       } else {
-        // This exists for backward compatibility for old `ExpressionDescription` defining
+        // This exists for the backward compatibility with old `ExpressionDescription`s defining
         // the extended description in `extended()`.
         new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
       }
