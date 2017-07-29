@@ -19,17 +19,26 @@ package org.apache.spark.network.yarn;
 
 import com.codahale.metrics.*;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.MetricsInfo;
 import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Modeled off of YARN's NodeManagerMetrics.
  */
 public class YarnShuffleServiceMetrics implements MetricsSource {
+
+  // Converting from the dropwizard-metrics default of nanoseconds into milliseconds to match how
+  // MetricsServlet serializes times (to milliseconds) configured via the MetricsModule passed into
+  // its Jackson ObjectMapper. Without this rate factor applied, the Timer metrics from
+  // ExternalShuffleBlockManager#ShuffleMetrics with "Millis" suffixes are misleading, as they
+  // would otherwise contain values in nanoseconds units
+  private static final double rateFactor = (double) TimeUnit.MILLISECONDS.toNanos(1L);
 
   private final MetricSet metricSet;
 
@@ -52,6 +61,42 @@ public class YarnShuffleServiceMetrics implements MetricsSource {
     }
   }
 
+  private static void addSnapshotToMetricRecordBuilder(Snapshot snapshot,
+                                                       MetricsRecordBuilder builder,
+                                                       String name,
+                                                       String metricType) {
+
+    ImmutableMap<String, Double> doubleValues = ImmutableMap.<String, Double>builder()
+      .put("median", snapshot.getMedian())
+      .put("mean", snapshot.getMean())
+      .put("75th", snapshot.get75thPercentile())
+      .put("95th", snapshot.get95thPercentile())
+      .put("98th", snapshot.get98thPercentile())
+      .put("99th", snapshot.get99thPercentile())
+      .put("999th", snapshot.get999thPercentile())
+      .build();
+
+    ImmutableMap<String, Long> longValues = ImmutableMap.<String, Long>builder()
+      .put("min", snapshot.getMin())
+      .put("max", snapshot.getMax())
+      .build();
+
+    for (Map.Entry<String, Double> entry : doubleValues.entrySet()) {
+      builder.addGauge(
+        new ShuffleServiceMetricsInfo(name + "_" + entry.getKey(),
+          entry.getKey() + " of " + metricType + " " + name),
+        entry.getValue() / rateFactor);
+    }
+
+    for (Map.Entry<String, Long> entry : longValues.entrySet()) {
+      builder.addGauge(
+        new ShuffleServiceMetricsInfo(name + "_" + entry.getKey(),
+          entry.getKey() + " of " + metricType + " " + name),
+        entry.getValue() / rateFactor);
+    }
+
+  }
+
   @VisibleForTesting
   public static void collectMetric(
           MetricsRecordBuilder metricsRecordBuilder, String name, Metric metric) {
@@ -59,6 +104,7 @@ public class YarnShuffleServiceMetrics implements MetricsSource {
     // The metric types used in ExternalShuffleBlockHandler.ShuffleMetrics
     if (metric instanceof Timer) {
       Timer t = (Timer) metric;
+      Snapshot snapshot = t.getSnapshot();
       metricsRecordBuilder
         .addCounter(new ShuffleServiceMetricsInfo(name + "_count", "Count of timer " + name),
           t.getCount())
@@ -73,6 +119,7 @@ public class YarnShuffleServiceMetrics implements MetricsSource {
           t.getOneMinuteRate())
         .addGauge(new ShuffleServiceMetricsInfo(name + "_rateMean", "Mean rate of timer " + name),
           t.getMeanRate());
+      addSnapshotToMetricRecordBuilder(snapshot, metricsRecordBuilder, name, "timer");
     } else if (metric instanceof Meter) {
       Meter m = (Meter) metric;
       metricsRecordBuilder

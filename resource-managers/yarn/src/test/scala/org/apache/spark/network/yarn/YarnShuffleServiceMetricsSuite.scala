@@ -16,7 +16,11 @@
  */
 package org.apache.spark.network.yarn
 
-import org.apache.hadoop.metrics2.MetricsRecordBuilder
+import java.util.concurrent.TimeUnit
+
+import com.codahale.metrics.Timer
+import org.apache.hadoop.metrics2.{MetricsInfo, MetricsRecordBuilder}
+import org.mockito.ArgumentCaptor
 import org.mockito.Matchers._
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.Matchers
@@ -44,8 +48,7 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
   // these three metrics have the same effect on the collector
   for (testname <- Seq("openBlockRequestLatencyMillis",
-      "registerExecutorRequestLatencyMillis",
-      "blockTransferRateBytes")) {
+      "registerExecutorRequestLatencyMillis")) {
     test(s"$testname - collector receives correct types") {
       val builder = mock(classOf[MetricsRecordBuilder])
       when(builder.addCounter(any(), anyLong())).thenReturn(builder)
@@ -55,8 +58,20 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
         metrics.getMetrics.get(testname))
 
       verify(builder).addCounter(anyObject(), anyLong())
-      verify(builder, times(4)).addGauge(anyObject(), anyDouble())
+      verify(builder, times(13)).addGauge(anyObject(), anyDouble())
     }
+  }
+
+  test(s"blockTransferRateBytes - collector receives correct types") {
+    val builder = mock(classOf[MetricsRecordBuilder])
+    when(builder.addCounter(any(), anyLong())).thenReturn(builder)
+    when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+
+    YarnShuffleServiceMetrics.collectMetric(builder, "blockTransferRateBytes",
+      metrics.getMetrics.get("blockTransferRateBytes"))
+
+    verify(builder).addCounter(anyObject(), anyLong())
+    verify(builder, times(4)).addGauge(anyObject(), anyDouble())
   }
 
   // this metric writes only one gauge to the collector
@@ -70,5 +85,29 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
 
     // only one
     verify(builder).addGauge(anyObject(), anyInt())
+  }
+
+  test("openBlockRequestLatencyMillis has correct units") {
+    val builder = mock(classOf[MetricsRecordBuilder])
+    when(builder.addCounter(any(), anyLong())).thenReturn(builder)
+    when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+
+    metrics.getMetrics.get("openBlockRequestLatencyMillis").asInstanceOf[Timer]
+      .update(1, TimeUnit.MILLISECONDS)
+
+    YarnShuffleServiceMetrics.collectMetric(builder, "openBlockRequestLatencyMillis",
+      metrics.getMetrics.get("openBlockRequestLatencyMillis"))
+
+    val descriptorCaptor = ArgumentCaptor.forClass(classOf[MetricsInfo])
+    val doubleCaptor = ArgumentCaptor.forClass(classOf[java.lang.Double])
+    verify(builder, times(13)).addGauge(descriptorCaptor.capture(), doubleCaptor.capture())
+
+    descriptorCaptor.getAllValues.asScala.zip(doubleCaptor.getAllValues.asScala).foreach {
+      case (arg: MetricsInfo, double: java.lang.Double) =>
+        arg.name() match {
+          case s if !s.contains("rate") => double shouldEqual 1.0 // still in milliseconds
+          case _ => None
+        }
+    }
   }
 }
