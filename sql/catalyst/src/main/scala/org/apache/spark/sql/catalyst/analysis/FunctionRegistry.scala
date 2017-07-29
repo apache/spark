@@ -569,15 +569,21 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(
-        clazz.getCanonicalName,
-        null,
-        name,
-        df.usage(),
-        df.arguments(),
-        df.examples(),
-        df.note(),
-        df.since())
+      if (df.extended().isEmpty) {
+        new ExpressionInfo(
+          clazz.getCanonicalName,
+          null,
+          name,
+          df.usage(),
+          df.arguments(),
+          df.examples(),
+          df.note(),
+          df.since())
+      } else {
+        // This exists for backward compatibility for old `ExpressionDescription` defining
+        // the extended description in `extended()`.
+        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      }
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }

@@ -113,4 +113,11 @@ public class ExpressionInfo {
     public ExpressionInfo(String className, String db, String name) {
         this(className, db, name, null, "", "", "", "");
     }
+
+    // This is to keep the original constructor just in case.
+    public ExpressionInfo(String className, String db, String name, String usage, String extended) {
+        // `arguments` and `examples` are concatenated for the extended description. So, here
+        // simply pass the `extended` as `arguments` and an empty string for `examples`.
+        this(className, db, name, usage, extended, "", "", "");
+    }
 }

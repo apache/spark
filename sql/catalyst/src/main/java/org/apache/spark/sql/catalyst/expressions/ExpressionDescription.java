@@ -24,7 +24,7 @@ import java.lang.annotation.RetentionPolicy;
 
 /**
  * ::DeveloperApi::
-
+ *
  * A function description type which can be recognized by FunctionRegistry, and will be used to
  * show the usage of the function in human language.
  *
@@ -56,11 +56,16 @@ import java.lang.annotation.RetentionPolicy;
  *
  *  We can refer the function name by `_FUNC_`, in `usage`, `arguments` and `examples`, as it's
  *  registered in `FunctionRegistry`.
+ *
+ *  Note that, if `extended()` is defined, `arguments()`, `examples()`, `note()` and `since()` will
+ *  be ignored and `extended()` will be used for the extended description for backward
+ *  compatibility.
  */
 @DeveloperApi
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ExpressionDescription {
     String usage() default "";
+    String extended() default "";
     String arguments() default "";
     String examples() default "";
     String note() default "";
