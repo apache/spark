@@ -25,7 +25,5 @@ SELECT date("2014-04-04"), timestamp(date("2014-04-04"));
 SELECT string(1, 2);
 
 -- SPARK-21555: RuntimeReplaceable used in group by
-CREATE TABLE test(a INT, foo STRUCT<foo1:STRING,foo2:STRING>) USING parquet;
-INSERT INTO test VALUES(1, ("value1", "value2"));
-SELECT nvl(foo.foo1, "value"), count(*) FROM test GROUP BY nvl(foo.foo1, "value");
-DROP TABLE test;
+CREATE TEMPORARY VIEW tempView1 AS VALUES (1, NAMED_STRUCT('col1', 'gamma', 'col2', 'delta')) AS T(id, st);
+SELECT nvl(st.col1, "value"), count(*) FROM from tempView1 GROUP BY nvl(st.col1, "value");
