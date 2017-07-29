@@ -109,6 +109,36 @@ object TestingUDT {
   }
 }
 
+trait ScroogeLikeExample extends Product1[Int] with java.io.Serializable {
+  import ScroogeLikeExample._
+
+  def _1: Int
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[ScroogeLikeExample]
+
+  private def _equals(x: ScroogeLikeExample, y: ScroogeLikeExample): Boolean =
+      x.productArity == y.productArity &&
+      x.productIterator.sameElements(y.productIterator)
+
+  override def equals(other: Any): Boolean =
+    canEqual(other) &&
+      _equals(this, other.asInstanceOf[ScroogeLikeExample])
+
+  override def hashCode: Int = {
+    var hash = _root_.scala.runtime.ScalaRunTime._hashCode(this)
+    hash
+  }
+  override def toString: String = s"ScroogeLikeExample(${_1})"
+}
+
+
+object ScroogeLikeExample {
+  def apply(x: Int): ScroogeLikeExample = new Immutable(x)
+
+  class Immutable(x: Int) extends ScroogeLikeExample {
+    def _1: Int = x
+  }
+}
 
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
@@ -361,5 +391,12 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(numberOfCheckedArguments(deserializerFor[(Double, Double)]) == 2)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Double, Int)]) == 1)
     assert(numberOfCheckedArguments(deserializerFor[(java.lang.Integer, java.lang.Integer)]) == 0)
+  }
+
+  test("SPARK-8288") {
+    val schema = schemaFor[ScroogeLikeExample]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("x", IntegerType, nullable = false))), nullable = true))
   }
 }

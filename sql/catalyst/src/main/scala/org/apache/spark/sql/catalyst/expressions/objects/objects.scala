@@ -453,7 +453,7 @@ case class NewInstance(
   @transient private lazy val constructor: (Seq[AnyRef]) => Any = {
     val paramTypes = ScalaReflection.expressionJavaClasses(arguments)
     val getConstructor = (paramClazz: Seq[Class[_]]) => {
-      ScalaReflection.findConstructor(cls, paramClazz).getOrElse {
+      ScalaReflection.findConstructor(cls, paramClazz).getOrElse{
         sys.error(s"Couldn't find a valid constructor on $cls")
       }
     }
@@ -462,12 +462,12 @@ case class NewInstance(
       val d = outerObj.getClass +: paramTypes
       val c = getConstructor(outerObj.getClass +: paramTypes)
       (args: Seq[AnyRef]) => {
-        c.newInstance(outerObj +: args: _*)
+        c(Seq(outerObj +: args: _*))
       }
     }.getOrElse {
       val c = getConstructor(paramTypes)
       (args: Seq[AnyRef]) => {
-        c.newInstance(args: _*)
+        c(Seq(args: _*))
       }
     }
   }
@@ -486,10 +486,16 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
-    val constructorCall = outer.map { gen =>
-      s"${gen.value}.new ${cls.getSimpleName}($argString)"
-    }.getOrElse {
-      s"new $className($argString)"
+    val constructorCall = cls.getConstructors.size match {
+      // If there are no constructors, the `new` method will fail. In
+      // this case we can try to call the apply method constructor
+      // that might be defined on the companion object.
+      case 0 => s"$className$$.MODULE$$.apply($argString)"
+      case _ => outer.map { gen =>
+        s"${gen.value}.new ${cls.getSimpleName}($argString)"
+      }.getOrElse {
+        s"new $className($argString)"
+      }
     }
 
     val code = code"""
@@ -498,6 +504,7 @@ case class NewInstance(
       final $javaType ${ev.value} = ${ev.isNull} ?
         ${CodeGenerator.defaultValue(dataType)} : $constructorCall;
     """
+
     ev.copy(code = code)
   }
 

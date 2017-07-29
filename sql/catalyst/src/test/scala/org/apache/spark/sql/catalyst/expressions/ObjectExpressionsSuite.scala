@@ -410,6 +410,16 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       dataType = ObjectType(classOf[outerObj.Inner]),
       outerPointer = Some(() => outerObj))
     checkObjectExprEvaluation(newInst2, new outerObj.Inner(1))
+
+    // SPARK-8288 Test
+    import org.apache.spark.sql.catalyst.ScroogeLikeExample
+    val newInst3 = NewInstance(
+      cls = classOf[ScroogeLikeExample],
+      arguments = Literal(1) :: Nil,
+      propagateNull = false,
+      dataType = ObjectType(classOf[ScroogeLikeExample]),
+      outerPointer = Some(() => outerObj))
+    checkObjectExprEvaluation(newInst3, ScroogeLikeExample(1))
   }
 
   test("LambdaVariable should support interpreted execution") {
