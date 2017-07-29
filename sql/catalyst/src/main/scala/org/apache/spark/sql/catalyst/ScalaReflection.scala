@@ -864,7 +864,11 @@ trait ScalaReflection {
   }
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {
-    val constructorSymbol = tpe.member(termNames.CONSTRUCTOR)
+    val constructorSymbol = tpe.member(termNames.CONSTRUCTOR) match {
+      case NoSymbol =>
+        tpe.typeSymbol.asClass.companion.asTerm.typeSignature.member(universe.TermName("apply"))
+      case sym => sym
+    }
     val params = if (constructorSymbol.isMethod) {
       constructorSymbol.asMethod.paramLists
     } else {
