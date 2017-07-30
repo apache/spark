@@ -152,8 +152,9 @@ $(document).ready(function() {
       }
 
       $.get("static/historypage-template.html", function(template) {
+        var sibling = historySummary.prev();
+        historySummary.detach();
         var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
-        var selector = "#history-summary-table";
         var attemptIdColumnName = 'attemptId';
         var startedColumnName = 'started';
         var defaultSortColumn = completedColumnName = 'completed';
@@ -192,7 +193,8 @@ $(document).ready(function() {
           {"searchable": false, "targets": [getColumnIndex(conf.columns, durationColumnName)]}
         ];
         historySummary.append(apps);
-        $(selector).DataTable(conf);
+        apps.DataTable(conf);
+        sibling.after(historySummary);
         $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
     });
