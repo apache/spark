@@ -48,6 +48,18 @@ function getParameterByName(name, searchString) {
   return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
 }
 
+function removeColumnByName(columns, columnName) {
+  return columns.filter(function(col) {return col.name != columnName})
+}
+
+function getColumnIndex(columns, columnName) {
+  for(var i = 0; i < columns.length; i++) {
+    if (columns[i].name == columnName)
+      return i;
+  }
+  return -1;
+}
+
 jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     "title-numeric-pre": function ( a ) {
         var x = a.match(/title="*(-?[0-9\.]+)/)[1];
@@ -134,51 +146,38 @@ $(document).ready(function() {
 
       var data = {
         "uiroot": uiRoot,
-        "applications": array
-        }
+        "applications": array,
+        "hasMultipleAttempts": hasMultipleAttempts,
+      }
 
       $.get("static/historypage-template.html", function(template) {
         var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
+        var attemptIdColumnName = 'attemptId';
+        var defaultSortColumn = completedColumnName = 'completed';
+        var durationColumnName = 'duration';
         var conf = {
-                    "columns": [
-                        {name: 'first', type: "appid-numeric"},
-                        {name: 'second'},
-                        {name: 'third'},
-                        {name: 'fourth'},
-                        {name: 'fifth'},
-                        {name: 'sixth', type: "title-numeric"},
-                        {name: 'seventh'},
-                        {name: 'eighth'},
-                        {name: 'ninth'},
-                    ],
-                    "columnDefs": [
-                        {"searchable": false, "targets": [5]}
-                    ],
-                    "autoWidth": false,
-                    "order": [[ 4, "desc" ]]
-        };
-
-        var rowGroupConf = {
-                           "rowsGroup": [
-                               'first:name',
-                               'second:name'
-                           ],
+          "columns": [
+            {name: 'appId', type: "appid-numeric"},
+            {name: 'appName'},
+            {name: attemptIdColumnName},
+            {name: 'started'},
+            {name: completedColumnName},
+            {name: durationColumnName, type: "title-numeric"},
+            {name: 'user'},
+            {name: 'lastUpdated'},
+            {name: 'eventLog'},
+          ],
+          "autoWidth": false,
         };
 
         if (hasMultipleAttempts) {
-          jQuery.extend(conf, rowGroupConf);
-          var rowGroupCells = apps.find(".rowGroupColumn");
-          for (i = 0; i < rowGroupCells.length; i++) {
-            rowGroupCells[i].style='background-color: #ffffff';
-          }
-        }
-
-        if (!hasMultipleAttempts) {
-          var attemptIDCells = apps.find(".attemptIDSpan");
-          for (i = 0; i < attemptIDCells.length; i++) {
-            attemptIDCells[i].style.display='none';
-          }
+          conf.rowsGroup = [
+            'appId:name',
+            'appName:name'
+          ];
+        } else {
+          conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
         }
 
         if (requestedIncomplete) {
@@ -187,6 +186,10 @@ $(document).ready(function() {
             completedCells[i].style.display='none';
           }
         }
+        conf.order = [[ getColumnIndex(conf.columns, defaultSortColumn), "desc" ]];
+        conf.columnDefs = [
+          {"searchable": false, "targets": [getColumnIndex(conf.columns, durationColumnName)]}
+        ];
         historySummary.append(apps);
         $(selector).DataTable(conf);
         $('#history-summary [data-toggle="tooltip"]').tooltip();
