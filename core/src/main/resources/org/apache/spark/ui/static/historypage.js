@@ -148,12 +148,14 @@ $(document).ready(function() {
         "uiroot": uiRoot,
         "applications": array,
         "hasMultipleAttempts": hasMultipleAttempts,
+        "showCompletedColumns": !requestedIncomplete,
       }
 
       $.get("static/historypage-template.html", function(template) {
         var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
         var selector = "#history-summary-table";
         var attemptIdColumnName = 'attemptId';
+        var startedColumnName = 'started';
         var defaultSortColumn = completedColumnName = 'completed';
         var durationColumnName = 'duration';
         var conf = {
@@ -161,7 +163,7 @@ $(document).ready(function() {
             {name: 'appId', type: "appid-numeric"},
             {name: 'appName'},
             {name: attemptIdColumnName},
-            {name: 'started'},
+            {name: startedColumnName},
             {name: completedColumnName},
             {name: durationColumnName, type: "title-numeric"},
             {name: 'user'},
@@ -180,16 +182,11 @@ $(document).ready(function() {
           conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
         }
 
+        var defaultSortColumn = completedColumnName;
         if (requestedIncomplete) {
-          var completedCells = apps.find(".completedColumn");
-          for (i = 0; i < completedCells.length; i++) {
-            completedCells[i].style.display='none';
-          }
-
-          var durationCells = apps.find(".durationColumn");
-          for (i = 0; i < durationCells.length; i++) {
-            durationCells[i].style.display='none';
-          }
+          defaultSortColumn = startedColumnName;
+          conf.columns = removeColumnByName(conf.columns, completedColumnName);
+          conf.columns = removeColumnByName(conf.columns, durationColumnName);
         }
         conf.order = [[ getColumnIndex(conf.columns, defaultSortColumn), "desc" ]];
         conf.columnDefs = [
