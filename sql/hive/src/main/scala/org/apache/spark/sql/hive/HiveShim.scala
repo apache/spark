@@ -24,6 +24,7 @@ import java.rmi.server.UID
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
+import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
 import org.apache.avro.Schema
@@ -120,8 +121,12 @@ private[hive] object HiveShim extends Logging {
   private def hasInheritanceOf[UDFType: ClassTag](funcName: String, clazz: Class[_]): Boolean = {
     val clsTag = classTag[UDFType].runtimeClass
     if (isSubClassOf(clazz, clsTag)) {
-      val funcClass = clazz.getMethod(funcName, classOf[MapredContext])
-      funcClass.getDeclaringClass != clsTag
+      try {
+        val funcClass = clazz.getMethod(funcName, classOf[MapredContext])
+        funcClass.getDeclaringClass != clsTag
+      } catch {
+        case NonFatal(_) => false
+      }
     } else {
       false
     }
