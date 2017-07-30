@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive
 
 import java.io.{InputStream, OutputStream}
-import java.lang.reflect.Type
 import java.rmi.server.UID
 
 import scala.collection.JavaConverters._
@@ -113,17 +112,14 @@ private[hive] object HiveShim extends Logging {
     }
   }
 
-  private def isSubClassOf(t: Type, parent: Class[_]): Boolean = t match {
-    case cls: Class[_] => parent.isAssignableFrom(cls)
-    case _ => false
-  }
-
-  private def hasInheritanceOf[UDFType: ClassTag](funcName: String, clazz: Class[_]): Boolean = {
-    val clsTag = classTag[UDFType].runtimeClass
-    if (isSubClassOf(clazz, clsTag)) {
+  private def hasInheritanceOf[UDFType: ClassTag](func: String, clazz: Class[_]): Boolean = {
+    val parentClazz = classTag[UDFType].runtimeClass
+    if (parentClazz.isAssignableFrom(clazz)) {
       try {
-        val funcClass = clazz.getMethod(funcName, classOf[MapredContext])
-        funcClass.getDeclaringClass != clsTag
+        val funcClass = clazz.getMethod(func, classOf[MapredContext])
+        // If a given `func` not overridden, `Method.getDeclaringClass` returns
+        // a parent Class object.
+        funcClass.getDeclaringClass != parentClazz
       } catch {
         case NonFatal(_) => false
       }
