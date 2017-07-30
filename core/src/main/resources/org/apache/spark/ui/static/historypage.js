@@ -128,6 +128,9 @@ $(document).ready(function() {
           array.push(app_clone);
         }
       }
+      if(array.length < 20) {
+        $.fn.dataTable.defaults.paging = false;
+      }
 
       var data = {
         "uiroot": uiRoot,
@@ -185,11 +188,6 @@ $(document).ready(function() {
           }
         }
         historySummary.append(apps);
-
-        if ($(selector.concat(" tr")).length < 20) {
-          $.extend(conf, {paging: false});
-        }
-
         $(selector).DataTable(conf);
         $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
