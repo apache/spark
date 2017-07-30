@@ -21,6 +21,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -88,7 +89,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
         sparkSession.conf.set(key, value)
-        sparkSession.sharedState.externalCatalog.setConf(key, value)
+        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive")) {
+          sparkSession.sharedState.externalCatalog.setConf(key, value)
+        }
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
