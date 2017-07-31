@@ -395,18 +395,6 @@ private[spark] class TaskSchedulerImpl(
       try {
         taskIdToTaskSetManager.get(tid) match {
           case Some(taskSet) =>
-            if (state == TaskState.LOST) {
-              // TaskState.LOST is only used by the deprecated Mesos fine-grained scheduling mode,
-              // where each executor corresponds to a single task, so mark the executor as failed.
-              val execId = taskIdToExecutorId.getOrElse(tid, throw new IllegalStateException(
-                "taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)"))
-              if (executorIdToRunningTaskIds.contains(execId)) {
-                reason = Some(
-                  SlaveLost(s"Task $tid was lost, so marking the executor as lost as well."))
-                removeExecutor(execId, reason.get)
-                failedExecutor = Some(execId)
-              }
-            }
             if (TaskState.isFinished(state)) {
               cleanupTaskState(tid)
               taskSet.removeRunningTask(tid)

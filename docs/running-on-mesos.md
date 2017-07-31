@@ -180,10 +180,7 @@ Note that jars or python files that are passed to spark-submit should be URIs re
 
 # Mesos Run Modes
 
-Spark can run over Mesos in two modes: "coarse-grained" (default) and
-"fine-grained" (deprecated).
-
-## Coarse-Grained
+Spark runs over Mesos in "coarse-grained" mode.
 
 In "coarse-grained" mode, each Spark executor runs as a single Mesos
 task.  Spark executors are sized according to the following
@@ -219,36 +216,9 @@ isolation shall be supported.
 
 The benefit of coarse-grained mode is much lower startup overhead, but
 at the cost of reserving Mesos resources for the complete duration of
-the application.  To configure your job to dynamically adjust to its
+the application. To configure your job to dynamically adjust to its
 resource requirements, look into
 [Dynamic Allocation](#dynamic-resource-allocation-with-mesos).
-
-## Fine-Grained (deprecated)
-
-**NOTE:** Fine-grained mode is deprecated as of Spark 2.0.0.  Consider
- using [Dynamic Allocation](#dynamic-resource-allocation-with-mesos)
- for some of the benefits.  For a full explanation see
- [SPARK-11857](https://issues.apache.org/jira/browse/SPARK-11857)
-
-In "fine-grained" mode, each Spark task inside the Spark executor runs
-as a separate Mesos task. This allows multiple instances of Spark (and
-other frameworks) to share cores at a very fine granularity, where
-each application gets more or fewer cores as it ramps up and down, but
-it comes with an additional overhead in launching each task. This mode
-may be inappropriate for low-latency requirements like interactive
-queries or serving web requests.
-
-Note that while Spark tasks in fine-grained will relinquish cores as
-they terminate, they will not relinquish memory, as the JVM does not
-give memory back to the Operating System.  Neither will executors
-terminate when they're idle.
-
-To run in fine-grained mode, set the `spark.mesos.coarse` property to false in your
-[SparkConf](configuration.html#spark-properties):
-
-{% highlight scala %}
-conf.set("spark.mesos.coarse", "false")
-{% endhighlight %}
 
 You may also make use of `spark.mesos.constraints` to set
 attribute-based constraints on Mesos resource offers. By default, all
@@ -309,15 +279,6 @@ See the [configuration page](configuration.html) for information on Spark config
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.mesos.coarse</code></td>
-  <td>true</td>
-  <td>
-    If set to <code>true</code>, runs over Mesos clusters in "coarse-grained" sharing mode, where Spark acquires one long-lived Mesos task on each machine.
-    If set to <code>false</code>, runs over Mesos cluster in "fine-grained" sharing mode, where one Mesos task is created per Spark task.
-    Detailed information in <a href="running-on-mesos.html#mesos-run-modes">'Mesos Run Modes'</a>.
-  </td>
-</tr>
-<tr>
   <td><code>spark.mesos.extra.cores</code></td>
   <td><code>0</code></td>
   <td>
@@ -326,16 +287,6 @@ See the [configuration page](configuration.html) for information on Spark config
     executor will "pretend" it has more cores, so that the driver will
     send it more tasks.  Use this to increase parallelism.  This
     setting is only used for Mesos coarse-grained mode.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.mesos.mesosExecutor.cores</code></td>
-  <td><code>1.0</code></td>
-  <td>
-    (Fine-grained mode only) Number of cores to give each Mesos executor. This does not
-    include the cores used to run the Spark tasks. In other words, even if no Spark task
-    is being run, each Mesos executor will occupy the number of cores configured here.
-    The value can be a floating point number.
   </td>
 </tr>
 <tr>
@@ -411,8 +362,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     A comma-separated list of URIs to be downloaded to the sandbox
-    when driver or executor is launched by Mesos.  This applies to
-    both coarse-grained and fine-grained mode.
+    when driver or executor is launched by Mesos.
   </td>
 </tr>
 <tr>

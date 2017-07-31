@@ -24,8 +24,8 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 
 /**
- * A collection of utility functions which can be used by both the
- * MesosSchedulerBackend and the [[MesosFineGrainedSchedulerBackend]].
+ * A collection of utility functions which can be used by
+ * MesosSchedulerBackend.
  */
 private[mesos] object MesosSchedulerBackendUtil extends Logging {
   /**

@@ -1128,7 +1128,6 @@ Apart from these, the following properties are also available, and may be useful
     with no parent RDDs, it depends on the cluster manager:
     <ul>
       <li>Local mode: number of cores on the local machine</li>
-      <li>Mesos fine grained mode: 8</li>
       <li>Others: total number of cores on all executor nodes or 2, whichever is larger</li>
     </ul>
   </td>

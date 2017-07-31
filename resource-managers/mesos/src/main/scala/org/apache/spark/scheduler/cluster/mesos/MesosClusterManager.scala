@@ -42,19 +42,12 @@ private[spark] class MesosClusterManager extends ExternalClusterManager {
       "I/O encryption is currently not supported in Mesos.")
 
     val mesosUrl = MESOS_REGEX.findFirstMatchIn(masterURL).get.group(1)
-    val coarse = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
-    if (coarse) {
+
       new MesosCoarseGrainedSchedulerBackend(
         scheduler.asInstanceOf[TaskSchedulerImpl],
         sc,
         mesosUrl,
         sc.env.securityManager)
-    } else {
-      new MesosFineGrainedSchedulerBackend(
-        scheduler.asInstanceOf[TaskSchedulerImpl],
-        sc,
-        mesosUrl)
-    }
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

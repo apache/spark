@@ -21,8 +21,8 @@ import org.apache.spark._
 import org.apache.spark.internal.config._
 
 class MesosClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
-    def testURL(masterURL: String, expectedClass: Class[_], coarse: Boolean) {
-      val conf = new SparkConf().set("spark.mesos.coarse", coarse.toString)
+    def testURL(masterURL: String, expectedClass: Class[_]) {
+      val conf = new SparkConf()
       sc = new SparkContext("local", "test", conf)
       val clusterManager = new MesosClusterManager()
 
@@ -32,18 +32,13 @@ class MesosClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
       assert(sched.getClass === expectedClass)
     }
 
-    test("mesos fine-grained") {
-      testURL("mesos://localhost:1234", classOf[MesosFineGrainedSchedulerBackend], coarse = false)
-    }
-
     test("mesos coarse-grained") {
-      testURL("mesos://localhost:1234", classOf[MesosCoarseGrainedSchedulerBackend], coarse = true)
+      testURL("mesos://localhost:1234", classOf[MesosCoarseGrainedSchedulerBackend])
     }
 
     test("mesos with zookeeper") {
       testURL("mesos://zk://localhost:1234,localhost:2345",
-          classOf[MesosFineGrainedSchedulerBackend],
-          coarse = false)
+          classOf[MesosCoarseGrainedSchedulerBackend])
     }
 
     test("mesos with i/o encryption throws error") {

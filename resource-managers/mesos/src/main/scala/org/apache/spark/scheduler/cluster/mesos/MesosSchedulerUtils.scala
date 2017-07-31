@@ -497,18 +497,6 @@ trait MesosSchedulerUtils extends Logging {
     resources.partition { r => !(r.getType == Value.Type.RANGES && r.getName == "ports") }
   }
 
-  /**
-   * spark.mesos.driver.frameworkId is set by the cluster dispatcher to correlate driver
-   * submissions with frameworkIDs.  However, this causes issues when a driver process launches
-   * more than one framework (more than one SparkContext(, because they all try to register with
-   * the same frameworkID.  To enforce that only the first driver registers with the configured
-   * framework ID, the driver calls this method after the first registration.
-   */
-  def unsetFrameworkID(sc: SparkContext) {
-    sc.conf.remove("spark.mesos.driver.frameworkId")
-    System.clearProperty("spark.mesos.driver.frameworkId")
-  }
-
   def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {
     case MesosTaskState.TASK_STAGING | MesosTaskState.TASK_STARTING => TaskState.LAUNCHING
     case MesosTaskState.TASK_RUNNING | MesosTaskState.TASK_KILLING => TaskState.RUNNING

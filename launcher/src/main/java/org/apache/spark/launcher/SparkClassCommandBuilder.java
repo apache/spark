@@ -70,11 +70,6 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
         memKey = "SPARK_EXECUTOR_MEMORY";
         extraClassPath = getenv("SPARK_EXECUTOR_CLASSPATH");
         break;
-      case "org.apache.spark.executor.MesosExecutorBackend":
-        javaOptsKeys.add("SPARK_EXECUTOR_OPTS");
-        memKey = "SPARK_EXECUTOR_MEMORY";
-        extraClassPath = getenv("SPARK_EXECUTOR_CLASSPATH");
-        break;
       case "org.apache.spark.deploy.mesos.MesosClusterDispatcher":
         javaOptsKeys.add("SPARK_DAEMON_JAVA_OPTS");
         break;
