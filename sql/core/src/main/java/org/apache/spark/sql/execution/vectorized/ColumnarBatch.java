@@ -66,17 +66,17 @@ public final class ColumnarBatch {
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
     ColumnVector[] columns = allocateVectors(schema, DEFAULT_BATCH_SIZE, memMode);
-    return create(schema, columns);
+    return create(schema, columns, DEFAULT_BATCH_SIZE);
   }
 
   public static ColumnarBatch allocate(StructType type) {
     ColumnVector[] columns = allocateVectors(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
-    return create(type, columns);
+    return create(type, columns, DEFAULT_BATCH_SIZE);
   }
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
     ColumnVector[] columns = allocateVectors(schema, maxRows, memMode);
-    return create(schema, columns);
+    return create(schema, columns, maxRows);
   }
 
   private static ColumnVector[] allocateVectors(StructType schema, int maxRows, MemoryMode memMode) {
@@ -95,14 +95,14 @@ public final class ColumnarBatch {
     for (ReadOnlyColumnVector c: columns) {
       assert(c.capacity >= numRows);
     }
-    ColumnarBatch batch = create(schema, columns);
+    ColumnarBatch batch = create(schema, columns, numRows);
     batch.setNumRows(numRows);
     return batch;
   }
 
-  private static ColumnarBatch create(StructType schema, ColumnVector[] columns) {
+  private static ColumnarBatch create(StructType schema, ColumnVector[] columns, int capacity) {
     assert(columns.length > 0);
-    return new ColumnarBatch(schema, columns);
+    return new ColumnarBatch(schema, columns, capacity);
   }
 
   /**
@@ -534,10 +534,10 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
-  private ColumnarBatch(StructType schema, ColumnVector[] columns) {
+  private ColumnarBatch(StructType schema, ColumnVector[] columns, int capacity) {
     this.schema = schema;
     this.columns = columns;
-    this.capacity = columns[0].capacity;
+    this.capacity = capacity;
     this.nullFilteredColumns = new HashSet<>();
     this.filteredRows = new boolean[this.capacity];
     this.row = new Row(this);
