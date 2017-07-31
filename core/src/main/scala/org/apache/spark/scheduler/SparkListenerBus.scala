@@ -71,7 +71,6 @@ private[spark] trait SparkListenerBus
         listener.onNodeUnblacklisted(nodeUnblacklisted)
       case blockUpdated: SparkListenerBlockUpdated =>
         listener.onBlockUpdated(blockUpdated)
-      case logStart: SparkListenerLogStart => // ignore event log metadata
       case _ => listener.onOtherEvent(event)
     }
   }

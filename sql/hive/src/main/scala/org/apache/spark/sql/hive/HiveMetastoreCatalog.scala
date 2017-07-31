@@ -41,7 +41,7 @@ import org.apache.spark.sql.types._
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
   // these are def_s and not val/lazy val since the latter would introduce circular references
   private def sessionState = sparkSession.sessionState
-  private def tableRelationCache = sparkSession.sessionState.catalog.tableRelationCache
+  private def catalogProxy = sparkSession.sessionState.catalog
   import HiveMetastoreCatalog._
 
   /** These locks guard against multiple attempts to instantiate a table, which wastes memory. */
@@ -61,7 +61,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val key = QualifiedTableName(
       table.database.getOrElse(sessionState.catalog.getCurrentDatabase).toLowerCase,
       table.table.toLowerCase)
-    tableRelationCache.getIfPresent(key)
+    catalogProxy.getCachedTable(key)
   }
 
   private def getCached(
@@ -71,7 +71,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       expectedFileFormat: Class[_ <: FileFormat],
       partitionSchema: Option[StructType]): Option[LogicalRelation] = {
 
-    tableRelationCache.getIfPresent(tableIdentifier) match {
+    catalogProxy.getCachedTable(tableIdentifier) match {
       case null => None // Cache miss
       case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
         val cachedRelationFileFormatClass = relation.fileFormat.getClass
@@ -92,21 +92,21 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               Some(logical)
             } else {
               // If the cached relation is not updated, we invalidate it right away.
-              tableRelationCache.invalidate(tableIdentifier)
+              catalogProxy.invalidateCachedTable(tableIdentifier)
               None
             }
           case _ =>
             logWarning(s"Table $tableIdentifier should be stored as $expectedFileFormat. " +
               s"However, we are getting a ${relation.fileFormat} from the metastore cache. " +
               "This cached entry will be invalidated.")
-            tableRelationCache.invalidate(tableIdentifier)
+            catalogProxy.invalidateCachedTable(tableIdentifier)
             None
         }
       case other =>
         logWarning(s"Table $tableIdentifier should be stored as $expectedFileFormat. " +
           s"However, we are getting a $other from the metastore cache. " +
           "This cached entry will be invalidated.")
-        tableRelationCache.invalidate(tableIdentifier)
+        catalogProxy.invalidateCachedTable(tableIdentifier)
         None
     }
   }
@@ -154,7 +154,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           Some(partitionSchema))
 
         val logicalRelation = cached.getOrElse {
-          val sizeInBytes = relation.stats(sparkSession.sessionState.conf).sizeInBytes.toLong
+          val sizeInBytes = relation.stats.sizeInBytes.toLong
           val fileIndex = {
             val index = new CatalogFileIndex(sparkSession, relation.tableMeta, sizeInBytes)
             if (lazyPruningEnabled) {
@@ -171,12 +171,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = dataSchema,
-            // We don't support hive bucketed tables, only ones we write out.
             bucketSpec = None,
             fileFormat = fileFormat,
             options = options)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
-          tableRelationCache.put(tableIdentifier, created)
+          catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
 
@@ -199,13 +198,12 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(dataSchema),
-                // We don't support hive bucketed tables, only ones we write out.
                 bucketSpec = None,
                 options = options,
                 className = fileType).resolveRelation(),
               table = updatedTable)
 
-          tableRelationCache.put(tableIdentifier, created)
+          catalogProxy.cacheTable(tableIdentifier, created)
           created
         }
 

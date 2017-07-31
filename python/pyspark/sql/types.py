@@ -24,6 +24,7 @@ import json
 import re
 import base64
 from array import array
+import ctypes
 
 if sys.version >= "3":
     long = int
@@ -32,6 +33,7 @@ if sys.version >= "3":
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
 
+from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
@@ -444,8 +446,11 @@ class StructType(DataType):
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
     A contained :class:`StructField` can be accessed by name or position.
+
+    .. note:: `names` attribute is deprecated in 2.3. Use `fieldNames` method instead
+        to get a list of field names.
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
@@ -560,6 +565,16 @@ class StructType(DataType):
     @classmethod
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
+
+    def fieldNames(self):
+        """
+        Returns all field names in a list.
+
+        >>> struct = StructType([StructField("f1", StringType(), True)])
+        >>> struct.fieldNames()
+        ['f1']
+        """
+        return list(self.names)
 
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
@@ -727,18 +742,6 @@ _FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
 _BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
-def _parse_basic_datatype_string(s):
-    if s in _all_atomic_types.keys():
-        return _all_atomic_types[s]()
-    elif s == "int":
-        return IntegerType()
-    elif _FIXED_DECIMAL.match(s):
-        m = _FIXED_DECIMAL.match(s)
-        return DecimalType(int(m.group(1)), int(m.group(2)))
-    else:
-        raise ValueError("Could not parse datatype: %s" % s)
-
-
 def _ignore_brackets_split(s, separator):
     """
     Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
@@ -771,32 +774,23 @@ def _ignore_brackets_split(s, separator):
     return parts
 
 
-def _parse_struct_fields_string(s):
-    parts = _ignore_brackets_split(s, ",")
-    fields = []
-    for part in parts:
-        name_and_type = _ignore_brackets_split(part, ":")
-        if len(name_and_type) != 2:
-            raise ValueError("The strcut field string format is: 'field_name:field_type', " +
-                             "but got: %s" % part)
-        field_name = name_and_type[0].strip()
-        field_type = _parse_datatype_string(name_and_type[1])
-        fields.append(StructField(field_name, field_type))
-    return StructType(fields)
-
-
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
     to :class:`DataType.simpleString`, except that top level struct type can omit
     the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
     of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
-    for :class:`IntegerType`.
+    for :class:`IntegerType`. Since Spark 2.3, this also supports a schema in a DDL-formatted
+    string and case-insensitive strings.
 
     >>> _parse_datatype_string("int ")
     IntegerType
+    >>> _parse_datatype_string("INT ")
+    IntegerType
     >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
     StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    >>> _parse_datatype_string("a DOUBLE, b STRING")
+    StructType(List(StructField(a,DoubleType,true),StructField(b,StringType,true)))
     >>> _parse_datatype_string("a: array< short>")
     StructType(List(StructField(a,ArrayType(ShortType,true),true)))
     >>> _parse_datatype_string(" map<string , string > ")
@@ -806,43 +800,43 @@ def _parse_datatype_string(s):
     >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     """
-    s = s.strip()
-    if s.startswith("array<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        return ArrayType(_parse_datatype_string(s[6:-1]))
-    elif s.startswith("map<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        parts = _ignore_brackets_split(s[4:-1], ",")
-        if len(parts) != 2:
-            raise ValueError("The map type string format is: 'map<key_type,value_type>', " +
-                             "but got: %s" % s)
-        kt = _parse_datatype_string(parts[0])
-        vt = _parse_datatype_string(parts[1])
-        return MapType(kt, vt)
-    elif s.startswith("struct<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        return _parse_struct_fields_string(s[7:-1])
-    elif ":" in s:
-        return _parse_struct_fields_string(s)
-    else:
-        return _parse_basic_datatype_string(s)
+    sc = SparkContext._active_spark_context
+
+    def from_ddl_schema(type_str):
+        return _parse_datatype_json_string(
+            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json())
+
+    def from_ddl_datatype(type_str):
+        return _parse_datatype_json_string(
+            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json())
+
+    try:
+        # DDL format, "fieldname datatype, fieldname datatype".
+        return from_ddl_schema(s)
+    except Exception as e:
+        try:
+            # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+            return from_ddl_datatype(s)
+        except:
+            try:
+                # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+                return from_ddl_datatype("struct<%s>" % s.strip())
+            except:
+                raise e
 
 
 def _parse_datatype_json_string(json_string):
@@ -935,6 +929,93 @@ if sys.version < "3":
         long: LongType,
     })
 
+# Mapping Python array types to Spark SQL DataType
+# We should be careful here. The size of these types in python depends on C
+# implementation. We need to make sure that this conversion does not lose any
+# precision. Also, JVM only support signed types, when converting unsigned types,
+# keep in mind that it required 1 more bit when stored as singed types.
+#
+# Reference for C integer size, see:
+# ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
+# Reference for python array typecode, see:
+# https://docs.python.org/2/library/array.html
+# https://docs.python.org/3.6/library/array.html
+# Reference for JVM's supported integral types:
+# http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.3.1
+
+_array_signed_int_typecode_ctype_mappings = {
+    'b': ctypes.c_byte,
+    'h': ctypes.c_short,
+    'i': ctypes.c_int,
+    'l': ctypes.c_long,
+}
+
+_array_unsigned_int_typecode_ctype_mappings = {
+    'B': ctypes.c_ubyte,
+    'H': ctypes.c_ushort,
+    'I': ctypes.c_uint,
+    'L': ctypes.c_ulong
+}
+
+
+def _int_size_to_type(size):
+    """
+    Return the Catalyst datatype from the size of integers.
+    """
+    if size <= 8:
+        return ByteType
+    if size <= 16:
+        return ShortType
+    if size <= 32:
+        return IntegerType
+    if size <= 64:
+        return LongType
+
+# The list of all supported array typecodes is stored here
+_array_type_mappings = {
+    # Warning: Actual properties for float and double in C is not specified in C.
+    # On almost every system supported by both python and JVM, they are IEEE 754
+    # single-precision binary floating-point format and IEEE 754 double-precision
+    # binary floating-point format. And we do assume the same thing here for now.
+    'f': FloatType,
+    'd': DoubleType
+}
+
+# compute array typecode mappings for signed integer types
+for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
+    size = ctypes.sizeof(_array_signed_int_typecode_ctype_mappings[_typecode]) * 8
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# compute array typecode mappings for unsigned integer types
+for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
+    # JVM does not have unsigned types, so use signed types that is at least 1
+    # bit larger to store
+    size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# Type code 'u' in Python's array is deprecated since version 3.3, and will be
+# removed in version 4.0. See: https://docs.python.org/3/library/array.html
+if sys.version_info[0] < 4:
+    _array_type_mappings['u'] = StringType
+
+# Type code 'c' are only available at python 2
+if sys.version_info[0] < 3:
+    _array_type_mappings['c'] = StringType
+
+# SPARK-21465:
+# In python2, array of 'L' happened to be mistakenly partially supported. To
+# avoid breaking user's code, we should keep this partial support. Below is a
+# dirty hacking to keep this partial support and make the unit test passes
+import platform
+if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
+    if 'L' not in _array_type_mappings.keys():
+        _array_type_mappings['L'] = LongType
+        _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
+
 
 def _infer_type(obj):
     """Infer the DataType from obj
@@ -958,12 +1039,17 @@ def _infer_type(obj):
                 return MapType(_infer_type(key), _infer_type(value), True)
         else:
             return MapType(NullType(), NullType(), True)
-    elif isinstance(obj, (list, array)):
+    elif isinstance(obj, list):
         for v in obj:
             if v is not None:
                 return ArrayType(_infer_type(obj[0]), True)
         else:
             return ArrayType(NullType(), True)
+    elif isinstance(obj, array):
+        if obj.typecode in _array_type_mappings:
+            return ArrayType(_array_type_mappings[obj.typecode](), False)
+        else:
+            raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
             return _infer_schema(obj)
@@ -1249,121 +1335,196 @@ _acceptable_types = {
 }
 
 
-def _verify_type(obj, dataType, nullable=True):
+def _make_type_verifier(dataType, nullable=True, name=None):
     """
-    Verify the type of obj against dataType, raise a TypeError if they do not match.
+    Make a verifier that checks the type of obj against dataType and raises a TypeError if they do
+    not match.
 
-    Also verify the value of obj against datatype, raise a ValueError if it's not within the allowed
-    range, e.g. using 128 as ByteType will overflow. Note that, Python float is not checked, so it
-    will become infinity when cast to Java float if it overflows.
+    This verifier also checks the value of obj against datatype and raises a ValueError if it's not
+    within the allowed range, e.g. using 128 as ByteType will overflow. Note that, Python float is
+    not checked, so it will become infinity when cast to Java float if it overflows.
 
-    >>> _verify_type(None, StructType([]))
-    >>> _verify_type("", StringType())
-    >>> _verify_type(0, LongType())
-    >>> _verify_type(list(range(3)), ArrayType(ShortType()))
-    >>> _verify_type(set(), ArrayType(StringType())) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(StructType([]))(None)
+    >>> _make_type_verifier(StringType())("")
+    >>> _make_type_verifier(LongType())(0)
+    >>> _make_type_verifier(ArrayType(ShortType()))(list(range(3)))
+    >>> _make_type_verifier(ArrayType(StringType()))(set()) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     TypeError:...
-    >>> _verify_type({}, MapType(StringType(), IntegerType()))
-    >>> _verify_type((), StructType([]))
-    >>> _verify_type([], StructType([]))
-    >>> _verify_type([1], StructType([])) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(MapType(StringType(), IntegerType()))({})
+    >>> _make_type_verifier(StructType([]))(())
+    >>> _make_type_verifier(StructType([]))([])
+    >>> _make_type_verifier(StructType([]))([1]) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
     >>> # Check if numeric values are within the allowed range.
-    >>> _verify_type(12, ByteType())
-    >>> _verify_type(1234, ByteType()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(ByteType())(12)
+    >>> _make_type_verifier(ByteType())(1234) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type(None, ByteType(), False) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(ByteType(), False)(None) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type([1, None], ArrayType(ShortType(), False)) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(
+    ...     ArrayType(ShortType(), False))([1, None]) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
-    >>> _verify_type({None: 1}, MapType(StringType(), IntegerType()))
+    >>> _make_type_verifier(MapType(StringType(), IntegerType()))({None: 1})
     Traceback (most recent call last):
         ...
     ValueError:...
     >>> schema = StructType().add("a", IntegerType()).add("b", StringType(), False)
-    >>> _verify_type((1, None), schema) # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> _make_type_verifier(schema)((1, None)) # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
     ValueError:...
     """
-    if obj is None:
-        if nullable:
-            return
+
+    if name is None:
+        new_msg = lambda msg: msg
+        new_name = lambda n: "field %s" % n
+    else:
+        new_msg = lambda msg: "%s: %s" % (name, msg)
+        new_name = lambda n: "field %s in %s" % (n, name)
+
+    def verify_nullability(obj):
+        if obj is None:
+            if nullable:
+                return True
+            else:
+                raise ValueError(new_msg("This field is not nullable, but got None"))
         else:
-            raise ValueError("This field is not nullable, but got None")
-
-    # StringType can work with any types
-    if isinstance(dataType, StringType):
-        return
-
-    if isinstance(dataType, UserDefinedType):
-        if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
-            raise ValueError("%r is not an instance of type %r" % (obj, dataType))
-        _verify_type(dataType.toInternal(obj), dataType.sqlType())
-        return
+            return False
 
     _type = type(dataType)
-    assert _type in _acceptable_types, "unknown datatype: %s for object %r" % (dataType, obj)
 
-    if _type is StructType:
-        # check the type and fields later
-        pass
-    else:
+    def assert_acceptable_types(obj):
+        assert _type in _acceptable_types, \
+            new_msg("unknown datatype: %s for object %r" % (dataType, obj))
+
+    def verify_acceptable_types(obj):
         # subclass of them can not be fromInternal in JVM
         if type(obj) not in _acceptable_types[_type]:
-            raise TypeError("%s can not accept object %r in type %s" % (dataType, obj, type(obj)))
+            raise TypeError(new_msg("%s can not accept object %r in type %s"
+                                    % (dataType, obj, type(obj))))
 
-    if isinstance(dataType, ByteType):
-        if obj < -128 or obj > 127:
-            raise ValueError("object of ByteType out of range, got: %s" % obj)
+    if isinstance(dataType, StringType):
+        # StringType can work with any types
+        verify_value = lambda _: _
+
+    elif isinstance(dataType, UserDefinedType):
+        verifier = _make_type_verifier(dataType.sqlType(), name=name)
+
+        def verify_udf(obj):
+            if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
+                raise ValueError(new_msg("%r is not an instance of type %r" % (obj, dataType)))
+            verifier(dataType.toInternal(obj))
+
+        verify_value = verify_udf
+
+    elif isinstance(dataType, ByteType):
+        def verify_byte(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -128 or obj > 127:
+                raise ValueError(new_msg("object of ByteType out of range, got: %s" % obj))
+
+        verify_value = verify_byte
 
     elif isinstance(dataType, ShortType):
-        if obj < -32768 or obj > 32767:
-            raise ValueError("object of ShortType out of range, got: %s" % obj)
+        def verify_short(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -32768 or obj > 32767:
+                raise ValueError(new_msg("object of ShortType out of range, got: %s" % obj))
+
+        verify_value = verify_short
 
     elif isinstance(dataType, IntegerType):
-        if obj < -2147483648 or obj > 2147483647:
-            raise ValueError("object of IntegerType out of range, got: %s" % obj)
+        def verify_integer(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            if obj < -2147483648 or obj > 2147483647:
+                raise ValueError(
+                    new_msg("object of IntegerType out of range, got: %s" % obj))
+
+        verify_value = verify_integer
 
     elif isinstance(dataType, ArrayType):
-        for i in obj:
-            _verify_type(i, dataType.elementType, dataType.containsNull)
+        element_verifier = _make_type_verifier(
+            dataType.elementType, dataType.containsNull, name="element in array %s" % name)
+
+        def verify_array(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            for i in obj:
+                element_verifier(i)
+
+        verify_value = verify_array
 
     elif isinstance(dataType, MapType):
-        for k, v in obj.items():
-            _verify_type(k, dataType.keyType, False)
-            _verify_type(v, dataType.valueType, dataType.valueContainsNull)
+        key_verifier = _make_type_verifier(dataType.keyType, False, name="key of map %s" % name)
+        value_verifier = _make_type_verifier(
+            dataType.valueType, dataType.valueContainsNull, name="value of map %s" % name)
+
+        def verify_map(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+            for k, v in obj.items():
+                key_verifier(k)
+                value_verifier(v)
+
+        verify_value = verify_map
 
     elif isinstance(dataType, StructType):
-        if isinstance(obj, dict):
-            for f in dataType.fields:
-                _verify_type(obj.get(f.name), f.dataType, f.nullable)
-        elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
-            # the order in obj could be different than dataType.fields
-            for f in dataType.fields:
-                _verify_type(obj[f.name], f.dataType, f.nullable)
-        elif isinstance(obj, (tuple, list)):
-            if len(obj) != len(dataType.fields):
-                raise ValueError("Length of object (%d) does not match with "
-                                 "length of fields (%d)" % (len(obj), len(dataType.fields)))
-            for v, f in zip(obj, dataType.fields):
-                _verify_type(v, f.dataType, f.nullable)
-        elif hasattr(obj, "__dict__"):
-            d = obj.__dict__
-            for f in dataType.fields:
-                _verify_type(d.get(f.name), f.dataType, f.nullable)
-        else:
-            raise TypeError("StructType can not accept object %r in type %s" % (obj, type(obj)))
+        verifiers = []
+        for f in dataType.fields:
+            verifier = _make_type_verifier(f.dataType, f.nullable, name=new_name(f.name))
+            verifiers.append((f.name, verifier))
+
+        def verify_struct(obj):
+            assert_acceptable_types(obj)
+
+            if isinstance(obj, dict):
+                for f, verifier in verifiers:
+                    verifier(obj.get(f))
+            elif isinstance(obj, Row) and getattr(obj, "__from_dict__", False):
+                # the order in obj could be different than dataType.fields
+                for f, verifier in verifiers:
+                    verifier(obj[f])
+            elif isinstance(obj, (tuple, list)):
+                if len(obj) != len(verifiers):
+                    raise ValueError(
+                        new_msg("Length of object (%d) does not match with "
+                                "length of fields (%d)" % (len(obj), len(verifiers))))
+                for v, (_, verifier) in zip(obj, verifiers):
+                    verifier(v)
+            elif hasattr(obj, "__dict__"):
+                d = obj.__dict__
+                for f, verifier in verifiers:
+                    verifier(d.get(f))
+            else:
+                raise TypeError(new_msg("StructType can not accept object %r in type %s"
+                                        % (obj, type(obj))))
+        verify_value = verify_struct
+
+    else:
+        def verify_default(obj):
+            assert_acceptable_types(obj)
+            verify_acceptable_types(obj)
+
+        verify_value = verify_default
+
+    def verify(obj):
+        if not verify_nullability(obj):
+            verify_value(obj)
+
+    return verify
 
 
 # This is used to unpickle a Row from JVM

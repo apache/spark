@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{FileNotFoundException, IOException, OutputStream}
 import java.util.UUID
-import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
+import java.util.concurrent.{ConcurrentHashMap, Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable
@@ -122,7 +122,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   @volatile private var applications: mutable.LinkedHashMap[String, FsApplicationHistoryInfo]
     = new mutable.LinkedHashMap()
 
-  val fileToAppInfo = new mutable.HashMap[Path, FsApplicationAttemptInfo]()
+  val fileToAppInfo = new ConcurrentHashMap[Path, FsApplicationAttemptInfo]()
 
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
@@ -248,7 +248,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             val conf = this.conf.clone()
             val appSecManager = new SecurityManager(conf)
             SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
-              HistoryServer.getAttemptURI(appId, attempt.attemptId), attempt.startTime)
+              HistoryServer.getAttemptURI(appId, attempt.attemptId),
+              attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
 
@@ -257,6 +258,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
 
           if (appListener.appId.isDefined) {
+            ui.appSparkVersion = appListener.appSparkVersion.getOrElse("")
             ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
             // make sure to set admin acls before view acls so they are properly picked up
             val adminAcls = HISTORY_UI_ADMIN_ACLS + "," + appListener.adminAcls.getOrElse("")
@@ -315,11 +317,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val newLastScanTime = getNewLastScanTime()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
-        .getOrElse(Seq[FileStatus]())
+        .getOrElse(Seq.empty[FileStatus])
       // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
-          val prevFileSize = fileToAppInfo.get(entry.getPath()).map{_.fileSize}.getOrElse(0L)
+          val fileInfo = fileToAppInfo.get(entry.getPath())
+          val prevFileSize = if (fileInfo != null) fileInfo.fileSize else 0L
           !entry.isDirectory() &&
             // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
             // reading a garbage file is safe, but we would log an error which can be scary to
@@ -443,7 +446,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val newAttempts = try {
       val eventsFilter: ReplayEventsFilter = { eventString =>
         eventString.startsWith(APPL_START_EVENT_PREFIX) ||
-          eventString.startsWith(APPL_END_EVENT_PREFIX)
+          eventString.startsWith(APPL_END_EVENT_PREFIX) ||
+          eventString.startsWith(LOG_START_EVENT_PREFIX)
       }
 
       val logPath = fileStatus.getPath()
@@ -469,9 +473,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           lastUpdated,
           appListener.sparkUser.getOrElse(NOT_STARTED),
           appCompleted,
-          fileStatus.getLen()
+          fileStatus.getLen(),
+          appListener.appSparkVersion.getOrElse("")
         )
-        fileToAppInfo(logPath) = attemptInfo
+        fileToAppInfo.put(logPath, attemptInfo)
         logDebug(s"Application log ${attemptInfo.logPath} loaded successfully: $attemptInfo")
         Some(attemptInfo)
       } else {
@@ -735,6 +740,8 @@ private[history] object FsHistoryProvider {
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
 
   private val APPL_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationEnd\""
+
+  private val LOG_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerLogStart\""
 }
 
 /**
@@ -762,9 +769,10 @@ private class FsApplicationAttemptInfo(
     lastUpdated: Long,
     sparkUser: String,
     completed: Boolean,
-    val fileSize: Long)
+    val fileSize: Long,
+    appSparkVersion: String)
   extends ApplicationAttemptInfo(
-      attemptId, startTime, endTime, lastUpdated, sparkUser, completed) {
+      attemptId, startTime, endTime, lastUpdated, sparkUser, completed, appSparkVersion) {
 
   /** extend the superclass string value with the extra attributes of this class */
   override def toString: String = {

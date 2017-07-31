@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
+import KinesisReadConfigurations._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
@@ -60,12 +61,13 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
       val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
       logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
+
       new KinesisBackedBlockRDD(
         context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
         isBlockIdValid = isBlockIdValid,
-        retryTimeoutMs = ssc.graph.batchDuration.milliseconds.toInt,
         messageHandler = messageHandler,
-        kinesisCreds = kinesisCreds)
+        kinesisCreds = kinesisCreds,
+        kinesisReadConfigs = KinesisReadConfigurations(ssc))
     } else {
       logWarning("Kinesis sequence number information was not present with some block metadata," +
         " it may not be possible to recover from failures")

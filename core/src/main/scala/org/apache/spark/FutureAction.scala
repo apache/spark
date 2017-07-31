@@ -261,7 +261,7 @@ class JavaFutureActionWrapper[S, T](futureAction: FutureAction[S], converter: S 
 
   private def getImpl(timeout: Duration): T = {
     // This will throw TimeoutException on timeout:
-    Await.ready(futureAction, timeout)
+    ThreadUtils.awaitReady(futureAction, timeout)
     futureAction.value.get match {
       case scala.util.Success(value) => converter(value)
       case scala.util.Failure(exception) =>

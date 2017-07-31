@@ -23,11 +23,11 @@ import org.apache.spark.sql.types._
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
  *
- * It generates the code for all the expressions, compute the total length for all the columns
- * (can be accessed via variables), and then copy the data into a scratch buffer space in the
+ * It generates the code for all the expressions, computes the total length for all the columns
+ * (can be accessed via variables), and then copies the data into a scratch buffer space in the
  * form of UnsafeRow (the scratch buffer will grow as needed).
  *
- * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
+ * @note The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
@@ -50,10 +50,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       fieldTypes: Seq[DataType],
       bufferHolder: String): String = {
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
-      val fieldName = ctx.freshName("fieldName")
-      val code = s"final ${ctx.javaType(dt)} $fieldName = ${ctx.getValue(input, dt, i.toString)};"
-      val isNull = s"$input.isNullAt($i)"
-      ExprCode(code, isNull, fieldName)
+      val javaType = ctx.javaType(dt)
+      val isNullVar = ctx.freshName("isNull")
+      val valueVar = ctx.freshName("value")
+      val defaultValue = ctx.defaultValue(dt)
+      val readValue = ctx.getValue(input, dt, i.toString)
+      val code =
+        s"""
+          boolean $isNullVar = $input.isNullAt($i);
+          $javaType $valueVar = $isNullVar ? $defaultValue : $readValue;
+        """
+      ExprCode(code, isNullVar, valueVar)
     }
 
     s"""
@@ -75,7 +82,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
     ctx.addMutableState(rowWriterClass, rowWriter,
-      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+      s"$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
 
     val resetWriter = if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
@@ -175,7 +182,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
     val arrayWriter = ctx.freshName("arrayWriter")
     ctx.addMutableState(arrayWriterClass, arrayWriter,
-      s"this.$arrayWriter = new $arrayWriterClass();")
+      s"$arrayWriter = new $arrayWriterClass();")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
     val element = ctx.freshName("element")
@@ -314,7 +321,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val holder = ctx.freshName("holder")
     val holderClass = classOf[BufferHolder].getName
     ctx.addMutableState(holderClass, holder,
-      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
+      s"$holder = new $holderClass($result, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""
@@ -384,8 +391,6 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         // Scala.Function1 need this
         public java.lang.Object apply(java.lang.Object row) {
           return apply((InternalRow) row);
@@ -395,6 +400,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           ${eval.code.trim}
           return ${eval.value};
         }
+
+        ${ctx.declareAddedFunctions()}
       }
       """
 

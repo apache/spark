@@ -47,7 +47,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
    * fetching shuffle files written by other executors in this application.
    */
   public void registerApp(String appId, String shuffleSecret) {
-    if (!shuffleSecretMap.contains(appId)) {
+    if (!shuffleSecretMap.containsKey(appId)) {
       shuffleSecretMap.put(appId, shuffleSecret);
       logger.info("Registered shuffle secret for application {}", appId);
     } else {
@@ -67,7 +67,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
    * This is called when the application terminates.
    */
   public void unregisterApp(String appId) {
-    if (shuffleSecretMap.contains(appId)) {
+    if (shuffleSecretMap.containsKey(appId)) {
       shuffleSecretMap.remove(appId);
       logger.info("Unregistered shuffle secret for application {}", appId);
     } else {

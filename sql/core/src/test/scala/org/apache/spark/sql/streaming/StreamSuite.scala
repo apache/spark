@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.control.ControlThrowable
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
@@ -31,6 +32,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProvider}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
@@ -69,6 +71,27 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two")),
       AddData(inputData, 4),
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
+  }
+
+  test("SPARK-20432: union one stream with itself") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
+    val unioned = df.union(df)
+    withTempDir { outputDir =>
+      withTempDir { checkpointDir =>
+        val query =
+          unioned
+            .writeStream.format("parquet")
+            .option("checkpointLocation", checkpointDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
+        try {
+          query.processAllAvailable()
+          val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
+          checkDatasetUnorderly[Long](outputDf, (0L to 10L).union((0L to 10L)).toArray: _*)
+        } finally {
+          query.stop()
+        }
+      }
+    }
   }
 
   test("union two streams") {
@@ -120,6 +143,33 @@ class StreamSuite extends StreamTest {
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
     assertDF(df)
     assertDF(df)
+  }
+
+  test("Within the same streaming query, one StreamingRelation should only be transformed to one " +
+    "StreamingExecutionRelation") {
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
+    var query: StreamExecution = null
+    try {
+      query =
+        df.union(df)
+          .writeStream
+          .format("memory")
+          .queryName("memory")
+          .start()
+          .asInstanceOf[StreamingQueryWrapper]
+          .streamingQuery
+      query.awaitInitialization(streamingTimeout.toMillis)
+      val executionRelations =
+        query
+          .logicalPlan
+          .collect { case ser: StreamingExecutionRelation => ser }
+      assert(executionRelations.size === 2)
+      assert(executionRelations.distinct.size === 1)
+    } finally {
+      if (query != null) {
+        query.stop()
+      }
+    }
   }
 
   test("unsupported queries") {
@@ -566,6 +616,80 @@ class StreamSuite extends StreamTest {
     assertDescContainsQueryNameAnd(batch = 2)
     query.stop()
   }
+
+  test("should resolve the checkpoint path") {
+    withTempDir { dir =>
+      val checkpointLocation = dir.getCanonicalPath
+      assert(!checkpointLocation.startsWith("file:/"))
+      val query = MemoryStream[Int].toDF
+        .writeStream
+        .option("checkpointLocation", checkpointLocation)
+        .format("console")
+        .start()
+      try {
+        val resolvedCheckpointDir =
+          query.asInstanceOf[StreamingQueryWrapper].streamingQuery.resolvedCheckpointRoot
+        assert(resolvedCheckpointDir.startsWith("file:/"))
+      } finally {
+        query.stop()
+      }
+    }
+  }
+
+  testQuietly("specify custom state store provider") {
+    val providerClassName = classOf[TestStateStoreProvider].getCanonicalName
+    withSQLConf("spark.sql.streaming.stateStore.providerClass" -> providerClassName) {
+      val input = MemoryStream[Int]
+      val df = input.toDS().groupBy().count()
+      val query = df.writeStream.outputMode("complete").format("memory").queryName("name").start()
+      input.addData(1, 2, 3)
+      val e = intercept[Exception] {
+        query.awaitTermination()
+      }
+
+      assert(e.getMessage.contains(providerClassName))
+      assert(e.getMessage.contains("instantiated"))
+    }
+  }
+
+  testQuietly("custom state store provider read from offset log") {
+    val input = MemoryStream[Int]
+    val df = input.toDS().groupBy().count()
+    val providerConf1 = "spark.sql.streaming.stateStore.providerClass" ->
+      "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider"
+    val providerConf2 = "spark.sql.streaming.stateStore.providerClass" ->
+      classOf[TestStateStoreProvider].getCanonicalName
+
+    def runQuery(queryName: String, checkpointLoc: String): Unit = {
+      val query = df.writeStream
+        .outputMode("complete")
+        .format("memory")
+        .queryName(queryName)
+        .option("checkpointLocation", checkpointLoc)
+        .start()
+      input.addData(1, 2, 3)
+      query.processAllAvailable()
+      query.stop()
+    }
+
+    withTempDir { dir =>
+      val checkpointLoc1 = new File(dir, "1").getCanonicalPath
+      withSQLConf(providerConf1) {
+        runQuery("query1", checkpointLoc1)  // generate checkpoints
+      }
+
+      val checkpointLoc2 = new File(dir, "2").getCanonicalPath
+      withSQLConf(providerConf2) {
+        // Verify new query will use new provider that throw error on loading
+        intercept[Exception] {
+          runQuery("query2", checkpointLoc2)
+        }
+
+        // Verify old query from checkpoint will still use old provider
+        runQuery("query1", checkpointLoc1)
+      }
+    }
+  }
 }
 
 abstract class FakeSource extends StreamSourceProvider {
@@ -670,4 +794,23 @@ object ThrowingInterruptedIOException {
    * called.
    */
   @volatile var createSourceLatch: CountDownLatch = null
+}
+
+class TestStateStoreProvider extends StateStoreProvider {
+
+  override def init(
+      stateStoreId: StateStoreId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      indexOrdinal: Option[Int],
+      storeConfs: StateStoreConf,
+      hadoopConf: Configuration): Unit = {
+    throw new Exception("Successfully instantiated")
+  }
+
+  override def stateStoreId: StateStoreId = null
+
+  override def close(): Unit = { }
+
+  override def getStore(version: Long): StateStore = null
 }

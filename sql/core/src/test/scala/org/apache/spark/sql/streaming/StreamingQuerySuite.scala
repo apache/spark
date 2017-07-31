@@ -466,7 +466,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(6, 3, 6, 3, 1, 1),
 
         AssertOnQuery("metadata log should contain only two files") { q =>
-          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
           val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 2 && toTest.head == "1")
@@ -492,7 +492,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6, 7, 8),
 
         AssertOnQuery("metadata log should contain three files") { q =>
-          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
           val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 3 && toTest.head == "2")
@@ -610,6 +610,33 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       )
 
       assert(calledStop, "Did not call stop on source for stopped stream")
+    }
+  }
+
+  test("get the query id in source") {
+    @volatile var queryId: String = null
+    val source = new Source {
+      override def stop(): Unit = {}
+      override def getOffset: Option[Offset] = {
+        queryId = spark.sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+        None
+      }
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = spark.emptyDataFrame
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+
+    MockSourceProvider.withMockSources(source) {
+      val df = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+      testStream(df)(
+        AssertOnQuery { sq =>
+          sq.processAllAvailable()
+          assert(sq.id.toString === queryId)
+          assert(sq.runId.toString !== queryId)
+          true
+        }
+      )
     }
   }
 

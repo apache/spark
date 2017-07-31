@@ -143,4 +143,7 @@ private[kafka010] class KafkaRelation(
         validateTopicPartitions(partitions, partitionOffsets)
     }
   }
+
+  override def toString: String =
+    s"KafkaRelation(strategy=$strategy, start=$startingOffsets, end=$endingOffsets)"
 }

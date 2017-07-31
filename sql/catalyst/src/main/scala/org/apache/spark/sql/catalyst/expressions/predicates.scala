@@ -17,23 +17,26 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.collection.immutable.TreeSet
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateSafeProjection, GenerateUnsafeProjection, Predicate => BasePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
 object InterpretedPredicate {
-  def create(expression: Expression, inputSchema: Seq[Attribute]): (InternalRow => Boolean) =
+  def create(expression: Expression, inputSchema: Seq[Attribute]): InterpretedPredicate =
     create(BindReferences.bindReference(expression, inputSchema))
 
-  def create(expression: Expression): (InternalRow => Boolean) = {
-    (r: InternalRow) => expression.eval(r).asInstanceOf[Boolean]
-  }
+  def create(expression: Expression): InterpretedPredicate = new InterpretedPredicate(expression)
 }
 
+case class InterpretedPredicate(expression: Expression) extends BasePredicate {
+  override def eval(r: InternalRow): Boolean = expression.eval(r).asInstanceOf[Boolean]
+}
 
 /**
  * An [[Expression]] that returns a boolean value.
@@ -142,39 +145,54 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
         }
-
-        val mismatchedColumns = valExprs.zip(sub.output).flatMap {
-          case (l, r) if l.dataType != r.dataType =>
-            s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-          case _ => None
-        }
-
-        if (mismatchedColumns.nonEmpty) {
+        if (valExprs.length != sub.output.length) {
           TypeCheckResult.TypeCheckFailure(
             s"""
-               |The data type of one or more elements in the left hand side of an IN subquery
-               |is not compatible with the data type of the output of the subquery
-               |Mismatched columns:
-               |[${mismatchedColumns.mkString(", ")}]
-               |Left side:
-               |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
-               |Right side:
-               |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               |The number of columns in the left hand side of an IN subquery does not match the
+               |number of columns in the output of subquery.
+               |#columns in left hand side: ${valExprs.length}.
+               |#columns in right hand side: ${sub.output.length}.
+               |Left side columns:
+               |[${valExprs.map(_.sql).mkString(", ")}].
+               |Right side columns:
+               |[${sub.output.map(_.sql).mkString(", ")}].
              """.stripMargin)
         } else {
-          TypeCheckResult.TypeCheckSuccess
+          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+            case (l, r) if l.dataType != r.dataType =>
+              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+            case _ => None
+          }
+          if (mismatchedColumns.nonEmpty) {
+            TypeCheckResult.TypeCheckFailure(
+              s"""
+                 |The data type of one or more elements in the left hand side of an IN subquery
+                 |is not compatible with the data type of the output of the subquery
+                 |Mismatched columns:
+                 |[${mismatchedColumns.mkString(", ")}]
+                 |Left side:
+                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+                 |Right side:
+                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+               """.stripMargin)
+          } else {
+            TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
+          }
         }
       case _ =>
-        if (list.exists(l => l.dataType != value.dataType)) {
-          TypeCheckResult.TypeCheckFailure("Arguments must be same type")
+        val mismatchOpt = list.find(l => l.dataType != value.dataType)
+        if (mismatchOpt.isDefined) {
+          TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+            s"${value.dataType} != ${mismatchOpt.get.dataType}")
         } else {
-          TypeCheckResult.TypeCheckSuccess
+          TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
         }
     }
   }
 
   override def children: Seq[Expression] = value +: list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
+  private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -189,10 +207,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
       var hasNull = false
       list.foreach { e =>
         val v = e.eval(input)
-        if (v == evaluatedValue) {
-          return true
-        } else if (v == null) {
+        if (v == null) {
           hasNull = true
+        } else if (ordering.equiv(v, evaluatedValue)) {
+          return true
         }
       }
       if (hasNull) {
@@ -251,7 +269,7 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
   override def nullable: Boolean = child.nullable || hasNull
 
   protected override def nullSafeEval(value: Any): Any = {
-    if (hset.contains(value)) {
+    if (set.contains(value)) {
       true
     } else if (hasNull) {
       null
@@ -260,27 +278,40 @@ case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with
     }
   }
 
-  def getHSet(): Set[Any] = hset
+  @transient private[this] lazy val set = child.dataType match {
+    case _: AtomicType => hset
+    case _: NullType => hset
+    case _ =>
+      // for structs use interpreted ordering to be able to compare UnsafeRows with non-UnsafeRows
+      TreeSet.empty(TypeUtils.getInterpretedOrdering(child.dataType)) ++ hset
+  }
+
+  def getSet(): Set[Any] = set
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val setName = classOf[Set[Any]].getName
     val InSetName = classOf[InSet].getName
     val childGen = child.genCode(ctx)
     ctx.references += this
-    val hsetTerm = ctx.freshName("hset")
-    val hasNullTerm = ctx.freshName("hasNull")
-    ctx.addMutableState(setName, hsetTerm,
-      s"$hsetTerm = (($InSetName)references[${ctx.references.size - 1}]).getHSet();")
-    ctx.addMutableState("boolean", hasNullTerm, s"$hasNullTerm = $hsetTerm.contains(null);")
+    val setTerm = ctx.freshName("set")
+    val setNull = if (hasNull) {
+      s"""
+         |if (!${ev.value}) {
+         |  ${ev.isNull} = true;
+         |}
+       """.stripMargin
+    } else {
+      ""
+    }
+    ctx.addMutableState(setName, setTerm,
+      s"$setTerm = (($InSetName)references[${ctx.references.size - 1}]).getSet();")
     ev.copy(code = s"""
       ${childGen.code}
       boolean ${ev.isNull} = ${childGen.isNull};
       boolean ${ev.value} = false;
       if (!${ev.isNull}) {
-        ${ev.value} = $hsetTerm.contains(${childGen.value});
-        if (!${ev.value} && $hasNullTerm) {
-          ${ev.isNull} = true;
-        }
+        ${ev.value} = $setTerm.contains(${childGen.value});
+        $setNull
       }
      """)
   }

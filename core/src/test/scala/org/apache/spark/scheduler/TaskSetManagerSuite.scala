@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Matchers.{any, anyInt, anyString}
-import org.mockito.Mockito.{mock, never, spy, verify, when}
+import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
@@ -1070,11 +1070,12 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched.dagScheduler = mockDAGScheduler
     val taskSet = FakeTask.createTaskSet(numTasks = 1, stageId = 0, stageAttemptId = 0)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = new ManualClock(1))
-    when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).then(new Answer[Unit] {
-      override def answer(invocationOnMock: InvocationOnMock): Unit = {
-        assert(manager.isZombie === true)
-      }
-    })
+    when(mockDAGScheduler.taskEnded(any(), any(), any(), any(), any())).thenAnswer(
+      new Answer[Unit] {
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          assert(manager.isZombie)
+        }
+      })
     val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
     // this would fail, inside our mock dag scheduler, if it calls dagScheduler.taskEnded() too soon
@@ -1137,6 +1138,80 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // the fault of the executor where the task was running.
     verify(blacklist, never())
       .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+  }
+
+  test("update application blacklist for shuffle-fetch") {
+    // Setup a taskset, and fail some one task for fetch failure.
+    val conf = new SparkConf()
+      .set(config.BLACKLIST_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.BLACKLIST_FETCH_FAILURE_ENABLED, true)
+    sc = new SparkContext("local", "test", conf)
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    val blacklistTracker = new BlacklistTracker(sc, None)
+    val tsm = new TaskSetManager(sched, taskSet, 4, Some(blacklistTracker))
+
+    // make some offers to our taskset, to get tasks we will fail
+    val taskDescs = Seq(
+      "exec1" -> "host1",
+      "exec2" -> "host2"
+    ).flatMap { case (exec, host) =>
+      // offer each executor twice (simulating 2 cores per executor)
+      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
+    }
+    assert(taskDescs.size === 4)
+
+    assert(!blacklistTracker.isExecutorBlacklisted(taskDescs(0).executorId))
+    assert(!blacklistTracker.isNodeBlacklisted("host1"))
+
+    // Fail the task with fetch failure
+    tsm.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
+      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
+
+    assert(blacklistTracker.isNodeBlacklisted("host1"))
+  }
+
+  test("update blacklist before adding pending task to avoid race condition") {
+    // When a task fails, it should apply the blacklist policy prior to
+    // retrying the task otherwise there's a race condition where run on
+    // the same executor that it was intended to be black listed from.
+    val conf = new SparkConf().
+      set(config.BLACKLIST_ENABLED, true)
+
+    // Create a task with two executors.
+    sc = new SparkContext("local", "test", conf)
+    val exec = "executor1"
+    val host = "host1"
+    val exec2 = "executor2"
+    val host2 = "host2"
+    sched = new FakeTaskScheduler(sc, (exec, host), (exec2, host2))
+    val taskSet = FakeTask.createTaskSet(1)
+
+    val clock = new ManualClock
+    val mockListenerBus = mock(classOf[LiveListenerBus])
+    val blacklistTracker = new BlacklistTracker(mockListenerBus, conf, None, clock)
+    val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(blacklistTracker))
+    val taskSetManagerSpy = spy(taskSetManager)
+
+    val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
+
+    // Assert the task has been black listed on the executor it was last executed on.
+    when(taskSetManagerSpy.addPendingTask(anyInt())).thenAnswer(
+      new Answer[Unit] {
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          val task = invocationOnMock.getArgumentAt(0, classOf[Int])
+          assert(taskSetManager.taskSetBlacklistHelperOpt.get.
+            isExecutorBlacklistedForTask(exec, task))
+        }
+      }
+    )
+
+    // Simulate a fake exception
+    val e = new ExceptionFailure("a", "b", Array(), "c", None)
+    taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
+
+    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt())
   }
 
   private def createTaskResult(

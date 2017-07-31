@@ -21,6 +21,7 @@ import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
 import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.security.PrivilegedExceptionAction
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -49,7 +50,7 @@ import org.apache.hadoop.yarn.util.Records
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.ConfigurableCredentialManager
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
@@ -121,7 +122,10 @@ private[spark] class Client(
   private val appStagingBaseDir = sparkConf.get(STAGING_DIR).map { new Path(_) }
     .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
 
-  private val credentialManager = new ConfigurableCredentialManager(sparkConf, hadoopConf)
+  private val credentialManager = new YARNHadoopDelegationTokenManager(
+    sparkConf,
+    hadoopConf,
+    conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
 
   def reportLauncherState(state: SparkAppHandle.State): Unit = {
     launcherBackend.setState(state)
@@ -189,16 +193,32 @@ private[spark] class Client(
    * Cleanup application staging directory.
    */
   private def cleanupStagingDir(appId: ApplicationId): Unit = {
-    val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
-    try {
-      val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
-      val fs = stagingDirPath.getFileSystem(hadoopConf)
-      if (!preserveFiles && fs.delete(stagingDirPath, true)) {
-        logInfo(s"Deleted staging directory $stagingDirPath")
+    if (sparkConf.get(PRESERVE_STAGING_FILES)) {
+      return
+    }
+
+    def cleanupStagingDirInternal(): Unit = {
+      val stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
+      try {
+        val fs = stagingDirPath.getFileSystem(hadoopConf)
+        if (fs.delete(stagingDirPath, true)) {
+          logInfo(s"Deleted staging directory $stagingDirPath")
+        }
+      } catch {
+        case ioe: IOException =>
+          logWarning("Failed to cleanup staging dir " + stagingDirPath, ioe)
       }
-    } catch {
-      case ioe: IOException =>
-        logWarning("Failed to cleanup staging dir " + stagingDirPath, ioe)
+    }
+
+    if (isClusterMode && principal != null && keytab != null) {
+      val newUgi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab)
+      newUgi.doAs(new PrivilegedExceptionAction[Unit] {
+        override def run(): Unit = {
+          cleanupStagingDirInternal()
+        }
+      })
+    } else {
+      cleanupStagingDirInternal()
     }
   }
 
@@ -368,7 +388,7 @@ private[spark] class Client(
     val fs = destDir.getFileSystem(hadoopConf)
 
     // Merge credentials obtained from registered providers
-    val nearestTimeOfNextRenewal = credentialManager.obtainCredentials(hadoopConf, credentials)
+    val nearestTimeOfNextRenewal = credentialManager.obtainDelegationTokens(hadoopConf, credentials)
 
     if (credentials != null) {
       // Add credentials to current user's UGI, so that following operations don't need to use the
@@ -545,6 +565,7 @@ private[spark] class Client(
           distribute(jarsArchive.toURI.getPath,
             resType = LocalResourceType.ARCHIVE,
             destName = Some(LOCALIZED_LIB_DIR))
+          jarsArchive.delete()
       }
     }
 
@@ -662,21 +683,6 @@ private[spark] class Client(
   private def createConfArchive(): File = {
     val hadoopConfFiles = new HashMap[String, File]()
 
-    // Uploading $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
-    // the executors will use the latest configurations instead of the default values. This is
-    // required when user changes log4j.properties directly to set the log configurations. If
-    // configuration file is provided through --files then executors will be taking configurations
-    // from --files instead of $SPARK_CONF_DIR/log4j.properties.
-
-    // Also uploading metrics.properties to distributed cache if exists in classpath.
-    // If user specify this file using --files then executors will use the one
-    // from --files instead.
-    for { prop <- Seq("log4j.properties", "metrics.properties")
-          url <- Option(Utils.getContextOrSparkClassLoader.getResource(prop))
-          if url.getProtocol == "file" } {
-      hadoopConfFiles(prop) = new File(url.getPath)
-    }
-
     Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
       sys.env.get(envKey).foreach { path =>
         val dir = new File(path)
@@ -701,13 +707,42 @@ private[spark] class Client(
 
     try {
       confStream.setLevel(0)
+
+      // Upload $SPARK_CONF_DIR/log4j.properties file to the distributed cache to make sure that
+      // the executors will use the latest configurations instead of the default values. This is
+      // required when user changes log4j.properties directly to set the log configurations. If
+      // configuration file is provided through --files then executors will be taking configurations
+      // from --files instead of $SPARK_CONF_DIR/log4j.properties.
+
+      // Also upload metrics.properties to distributed cache if exists in classpath.
+      // If user specify this file using --files then executors will use the one
+      // from --files instead.
+      for { prop <- Seq("log4j.properties", "metrics.properties")
+            url <- Option(Utils.getContextOrSparkClassLoader.getResource(prop))
+            if url.getProtocol == "file" } {
+        val file = new File(url.getPath())
+        confStream.putNextEntry(new ZipEntry(file.getName()))
+        Files.copy(file, confStream)
+        confStream.closeEntry()
+      }
+
+      // Save the Hadoop config files under a separate directory in the archive. This directory
+      // is appended to the classpath so that the cluster-provided configuration takes precedence.
+      confStream.putNextEntry(new ZipEntry(s"$LOCALIZED_HADOOP_CONF_DIR/"))
+      confStream.closeEntry()
       hadoopConfFiles.foreach { case (name, file) =>
         if (file.canRead()) {
-          confStream.putNextEntry(new ZipEntry(name))
+          confStream.putNextEntry(new ZipEntry(s"$LOCALIZED_HADOOP_CONF_DIR/$name"))
           Files.copy(file, confStream)
           confStream.closeEntry()
         }
       }
+
+      // Save the YARN configuration into a separate file that will be overlayed on top of the
+      // cluster's Hadoop conf.
+      confStream.putNextEntry(new ZipEntry(SPARK_HADOOP_CONF_FILE))
+      yarnConf.writeXml(confStream)
+      confStream.closeEntry()
 
       // Save Spark configuration to a file in the archive.
       val props = new Properties()
@@ -982,13 +1017,15 @@ private[spark] class Client(
    * @param appId ID of the application to monitor.
    * @param returnOnRunning Whether to also return the application state when it is RUNNING.
    * @param logApplicationReport Whether to log details of the application report every iteration.
+   * @param interval How often to poll the YARN RM for application status (in ms).
    * @return A pair of the yarn application state and the final application state.
    */
   def monitorApplication(
       appId: ApplicationId,
       returnOnRunning: Boolean = false,
-      logApplicationReport: Boolean = true): (YarnApplicationState, FinalApplicationStatus) = {
-    val interval = sparkConf.get(REPORT_INTERVAL)
+      logApplicationReport: Boolean = true,
+      interval: Long = sparkConf.get(REPORT_INTERVAL)):
+      (YarnApplicationState, FinalApplicationStatus) = {
     var lastState: YarnApplicationState = null
     while (true) {
       Thread.sleep(interval)
@@ -1120,7 +1157,7 @@ private[spark] class Client(
         val pyArchivesFile = new File(pyLibPath, "pyspark.zip")
         require(pyArchivesFile.exists(),
           s"$pyArchivesFile not found; cannot run pyspark application in YARN mode.")
-        val py4jFile = new File(pyLibPath, "py4j-0.10.4-src.zip")
+        val py4jFile = new File(pyLibPath, "py4j-0.10.6-src.zip")
         require(py4jFile.exists(),
           s"$py4jFile not found; cannot run pyspark application in YARN mode.")
         Seq(pyArchivesFile.getAbsolutePath(), py4jFile.getAbsolutePath())
@@ -1173,11 +1210,18 @@ private object Client extends Logging {
   // Subdirectory where the user's Spark and Hadoop config files will be placed.
   val LOCALIZED_CONF_DIR = "__spark_conf__"
 
+  // Subdirectory in the conf directory containing Hadoop config files.
+  val LOCALIZED_HADOOP_CONF_DIR = "__hadoop_conf__"
+
   // File containing the conf archive in the AM. See prepareLocalResources().
   val LOCALIZED_CONF_ARCHIVE = LOCALIZED_CONF_DIR + ".zip"
 
   // Name of the file in the conf archive containing Spark configuration.
   val SPARK_CONF_FILE = "__spark_conf__.properties"
+
+  // Name of the file containing the gateway's Hadoop configuration, to be overlayed on top of the
+  // cluster's Hadoop config.
+  val SPARK_HADOOP_CONF_FILE = "__spark_hadoop_conf__.xml"
 
   // Subdirectory where the user's python files (not archives) will be placed.
   val LOCALIZED_PYTHON_DIR = "__pyfiles__"
@@ -1274,7 +1318,8 @@ private object Client extends Logging {
     if (sparkConf.get(SPARK_ARCHIVE).isEmpty) {
       sparkConf.get(SPARK_JARS).foreach { jars =>
         jars.filter(isLocalUri).foreach { jar =>
-          addClasspathEntry(getClusterPath(sparkConf, jar), env)
+          val uri = new URI(jar)
+          addClasspathEntry(getClusterPath(sparkConf, uri.getPath()), env)
         }
       }
     }
@@ -1283,6 +1328,12 @@ private object Client extends Logging {
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
+
+    // Add the localized Hadoop config at the end of the classpath, in case it contains other
+    // files (such as configuration files for different services) that are not part of the
+    // YARN cluster's config.
+    addClasspathEntry(
+      buildPath(Environment.PWD.$$(), LOCALIZED_CONF_DIR, LOCALIZED_HADOOP_CONF_DIR), env)
   }
 
   /**

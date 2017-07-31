@@ -20,11 +20,10 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import scala.collection.mutable
-import scala.concurrent.duration._
+import scala.language.reflectiveCalls
 
 import org.scalactic.TolerantNumerics
 import org.scalatest.concurrent.AsyncAssertions.Waiter
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._

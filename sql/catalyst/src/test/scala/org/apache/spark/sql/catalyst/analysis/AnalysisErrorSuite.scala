@@ -24,7 +24,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
-import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -110,8 +111,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "scalar subquery with 2 columns",
      testRelation.select(
        (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
-       "The number of columns in the subquery (2)" ::
-       "does not match the required number of columns (1)":: Nil)
+       "Scalar subquery must return only one column, but got 2" :: Nil)
 
   errorTest(
     "scalar subquery with no column",
@@ -152,7 +152,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "not supported within a window function" :: Nil)
 
   errorTest(
-    "distinct window function",
+    "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
         AggregateExpression(Count(UnresolvedAttribute("b")), Complete, isDistinct = true),
@@ -161,6 +161,16 @@ class AnalysisErrorSuite extends AnalysisTest {
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
           UnspecifiedFrame)).as('window)),
     "Distinct window functions are not supported" :: Nil)
+
+  errorTest(
+    "distinct function",
+    CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
+    "hex does not support the modifier DISTINCT" :: Nil)
+
+  errorTest(
+    "distinct window function",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
+    "percent_rank does not support the modifier DISTINCT" :: Nil)
 
   errorTest(
     "nested aggregate functions",
@@ -180,7 +190,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          SpecifiedWindowFrame(RangeFrame, ValueFollowing(1), ValueFollowing(2)))).as('window)),
+          SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as('window)),
     "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(
@@ -563,7 +573,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan5 = Filter(
       Exists(
         Sample(0.0, 0.5, false, 1L,
-          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))().select('b)
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select('b)
       ),
       LocalRelation(a))
     assertAnalysisError(plan5,

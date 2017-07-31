@@ -20,8 +20,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.parquet.column.Dictionary;
-import org.apache.parquet.io.api.Binary;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -101,6 +99,27 @@ public abstract class ColumnVector implements AutoCloseable {
     public ArrayData copy() {
       throw new UnsupportedOperationException();
     }
+
+    @Override
+    public boolean[] toBooleanArray() { return data.getBooleans(offset, length); }
+
+    @Override
+    public byte[] toByteArray() { return data.getBytes(offset, length); }
+
+    @Override
+    public short[] toShortArray() { return data.getShorts(offset, length); }
+
+    @Override
+    public int[] toIntArray() { return data.getInts(offset, length); }
+
+    @Override
+    public long[] toLongArray() { return data.getLongs(offset, length); }
+
+    @Override
+    public float[] toFloatArray() { return data.getFloats(offset, length); }
+
+    @Override
+    public double[] toDoubleArray() { return data.getDoubles(offset, length); }
 
     // TODO: this is extremely expensive.
     @Override
@@ -313,8 +332,8 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
   /**
-   * Ensures that there is enough storage to store capcity elements. That is, the put() APIs
-   * must work for all rowIds < capcity.
+   * Ensures that there is enough storage to store capacity elements. That is, the put() APIs
+   * must work for all rowIds < capacity.
    */
   protected abstract void reserveInternal(int capacity);
 
@@ -369,6 +388,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract boolean getBoolean(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract boolean[] getBooleans(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putByte(int rowId, byte value);
@@ -389,6 +413,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract byte getByte(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract byte[] getBytes(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putShort(int rowId, short value);
@@ -407,6 +436,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract short getShort(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract short[] getShorts(int rowId, int count);
 
   /**
    * Sets the value at rowId to `value`.
@@ -433,6 +467,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract int getInt(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract int[] getInts(int rowId, int count);
 
   /**
    * Returns the dictionary Id for rowId.
@@ -468,6 +507,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract long getLong(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract long[] getLongs(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putFloat(int rowId, float value);
@@ -479,7 +523,6 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
-   * src should contain `count` doubles written as ieee format.
    */
   public abstract void putFloats(int rowId, int count, float[] src, int srcIndex);
 
@@ -495,6 +538,11 @@ public abstract class ColumnVector implements AutoCloseable {
   public abstract float getFloat(int rowId);
 
   /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract float[] getFloats(int rowId, int count);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putDouble(int rowId, double value);
@@ -506,7 +554,6 @@ public abstract class ColumnVector implements AutoCloseable {
 
   /**
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
-   * src should contain `count` doubles written as ieee format.
    */
   public abstract void putDoubles(int rowId, int count, double[] src, int srcIndex);
 
@@ -520,6 +567,11 @@ public abstract class ColumnVector implements AutoCloseable {
    * Returns the value for rowId.
    */
   public abstract double getDouble(int rowId);
+
+  /**
+   * Gets values from [rowId, rowId + count)
+   */
+  public abstract double[] getDoubles(int rowId, int count);
 
   /**
    * Puts a byte array that already exists in this column.
@@ -594,7 +646,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the decimal for rowId.
    */
-  public final Decimal getDecimal(int rowId, int precision, int scale) {
+  public Decimal getDecimal(int rowId, int precision, int scale) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       return Decimal.createUnsafe(getInt(rowId), precision, scale);
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -609,7 +661,7 @@ public abstract class ColumnVector implements AutoCloseable {
   }
 
 
-  public final void putDecimal(int rowId, Decimal value, int precision) {
+  public void putDecimal(int rowId, Decimal value, int precision) {
     if (precision <= Decimal.MAX_INT_DIGITS()) {
       putInt(rowId, (int) value.toUnscaledLong());
     } else if (precision <= Decimal.MAX_LONG_DIGITS()) {
@@ -623,28 +675,27 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the UTF8String for rowId.
    */
-  public final UTF8String getUTF8String(int rowId) {
+  public UTF8String getUTF8String(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array a = getByteArray(rowId);
       return UTF8String.fromBytes(a.byteArray, a.byteArrayOffset, a.length);
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
-      return UTF8String.fromBytes(v.getBytes());
+      byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
+      return UTF8String.fromBytes(bytes);
     }
   }
 
   /**
    * Returns the byte array for rowId.
    */
-  public final byte[] getBinary(int rowId) {
+  public byte[] getBinary(int rowId) {
     if (dictionary == null) {
       ColumnVector.Array array = getByteArray(rowId);
       byte[] bytes = new byte[array.length];
       System.arraycopy(array.byteArray, array.byteArrayOffset, bytes, 0, bytes.length);
       return bytes;
     } else {
-      Binary v = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
-      return v.getBytes();
+      return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
   }
 
@@ -801,6 +852,14 @@ public abstract class ColumnVector implements AutoCloseable {
     return result;
   }
 
+  public final int appendFloats(int length, float[] src, int offset) {
+    reserve(elementsAppended + length);
+    int result = elementsAppended;
+    putFloats(elementsAppended, length, src, offset);
+    elementsAppended += length;
+    return result;
+  }
+
   public final int appendDouble(double v) {
     reserve(elementsAppended + 1);
     putDouble(elementsAppended, v);
@@ -897,7 +956,7 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Data type for this column.
    */
-  protected final DataType type;
+  protected DataType type;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
@@ -929,17 +988,17 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * If this is a nested type (array or struct), the column for the child data.
    */
-  protected final ColumnVector[] childColumns;
+  protected ColumnVector[] childColumns;
 
   /**
    * Reusable Array holder for getArray().
    */
-  protected final Array resultArray;
+  protected Array resultArray;
 
   /**
    * Reusable Struct holder for getStruct().
    */
-  protected final ColumnarBatch.Row resultStruct;
+  protected ColumnarBatch.Row resultStruct;
 
   /**
    * The Dictionary for this column.

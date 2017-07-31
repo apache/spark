@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -94,7 +95,7 @@ object PartitioningUtils {
       typeInference: Boolean,
       basePaths: Set[Path],
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, TimeZone.getTimeZone(timeZoneId))
+    parsePartitions(paths, typeInference, basePaths, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
@@ -301,13 +302,8 @@ object PartitioningUtils {
       normalizedKey -> value
     }
 
-    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
-      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Found duplicated columns in partition specification: " +
-        duplicateColumns.mkString(", "))
-    }
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
   }

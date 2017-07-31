@@ -34,6 +34,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.apache.spark.streaming.kinesis.KinesisReadConfigurations._
 import org.apache.spark.streaming.kinesis.KinesisTestUtils._
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
@@ -136,7 +137,7 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
     val kinesisRDD = nonEmptyRDD.asInstanceOf[KinesisBackedBlockRDD[_]]
     assert(kinesisRDD.regionName === dummyRegionName)
     assert(kinesisRDD.endpointUrl === dummyEndpointUrl)
-    assert(kinesisRDD.retryTimeoutMs === batchDuration.milliseconds)
+    assert(kinesisRDD.kinesisReadConfigs.retryTimeoutMs === batchDuration.milliseconds)
     assert(kinesisRDD.kinesisCreds === BasicCredentials(
       awsAccessKeyId = dummyAWSAccessKey,
       awsSecretKey = dummyAWSSecretKey))
@@ -232,6 +233,52 @@ abstract class KinesisStreamTests(aggregateTestData: Boolean) extends KinesisFun
         "\nData received does not match data sent")
     }
     ssc.stop(stopSparkContext = false)
+  }
+
+  test("Kinesis read with custom configurations") {
+    try {
+      ssc.sc.conf.set(RETRY_WAIT_TIME_KEY, "2000ms")
+      ssc.sc.conf.set(RETRY_MAX_ATTEMPTS_KEY, "5")
+
+      val kinesisStream = KinesisInputDStream.builder.streamingContext(ssc)
+      .checkpointAppName(appName)
+      .streamName("dummyStream")
+      .endpointUrl(dummyEndpointUrl)
+      .regionName(dummyRegionName)
+      .initialPositionInStream(InitialPositionInStream.LATEST)
+      .checkpointInterval(Seconds(10))
+      .storageLevel(StorageLevel.MEMORY_ONLY)
+      .build()
+      .asInstanceOf[KinesisInputDStream[Array[Byte]]]
+
+      val time = Time(1000)
+      // Generate block info data for testing
+      val seqNumRanges1 = SequenceNumberRanges(
+        SequenceNumberRange("fakeStream", "fakeShardId", "xxx", "yyy", 67))
+      val blockId1 = StreamBlockId(kinesisStream.id, 123)
+      val blockInfo1 = ReceivedBlockInfo(
+        0, None, Some(seqNumRanges1), new BlockManagerBasedStoreResult(blockId1, None))
+
+      val seqNumRanges2 = SequenceNumberRanges(
+        SequenceNumberRange("fakeStream", "fakeShardId", "aaa", "bbb", 89))
+      val blockId2 = StreamBlockId(kinesisStream.id, 345)
+      val blockInfo2 = ReceivedBlockInfo(
+        0, None, Some(seqNumRanges2), new BlockManagerBasedStoreResult(blockId2, None))
+
+      // Verify that the generated KinesisBackedBlockRDD has the all the right information
+      val blockInfos = Seq(blockInfo1, blockInfo2)
+
+      val kinesisRDD =
+        kinesisStream.createBlockRDD(time, blockInfos).asInstanceOf[KinesisBackedBlockRDD[_]]
+
+      assert(kinesisRDD.kinesisReadConfigs.retryWaitTimeMs === 2000)
+      assert(kinesisRDD.kinesisReadConfigs.maxRetries === 5)
+      assert(kinesisRDD.kinesisReadConfigs.retryTimeoutMs === batchDuration.milliseconds)
+    } finally {
+      ssc.sc.conf.remove(RETRY_WAIT_TIME_KEY)
+      ssc.sc.conf.remove(RETRY_MAX_ATTEMPTS_KEY)
+      ssc.stop(stopSparkContext = false)
+    }
   }
 
   testIfEnabled("split and merge shards in a stream") {

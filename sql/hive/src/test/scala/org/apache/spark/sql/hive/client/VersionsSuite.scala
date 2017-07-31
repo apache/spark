@@ -47,11 +47,11 @@ import org.apache.spark.util.{MutableURLClassLoader, Utils}
  * sure that reflective calls are not throwing NoSuchMethod error, but the actually functionality
  * is not fully tested.
  */
+// TODO: Refactor this to `HiveClientSuite` and make it a subclass of `HiveVersionSuite`
 @ExtendedHiveTest
 class VersionsSuite extends SparkFunSuite with Logging {
 
-  private val clientBuilder = new HiveClientBuilder
-  import clientBuilder.buildClient
+  import HiveClientBuilder.buildClient
 
   /**
    * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
@@ -576,7 +576,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         versionSpark.sql("CREATE TABLE tbl AS SELECT 1 AS a")
         assert(versionSpark.table("tbl").collect().toSeq == Seq(Row(1)))
         val tableMeta = versionSpark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl"))
-        val totalSize = tableMeta.properties.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+        val totalSize = tableMeta.stats.map(_.sizeInBytes)
         // Except 0.12, all the following versions will fill the Hive-generated statistics
         if (version == "0.12") {
           assert(totalSize.isEmpty)

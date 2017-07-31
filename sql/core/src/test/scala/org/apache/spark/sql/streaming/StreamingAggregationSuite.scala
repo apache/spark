@@ -69,6 +69,22 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
     )
   }
 
+  test("count distinct") {
+    val inputData = MemoryStream[(Int, Seq[Int])]
+
+    val aggregated =
+      inputData.toDF()
+        .select($"*", explode($"_2") as 'value)
+        .groupBy($"_1")
+        .agg(size(collect_set($"value")))
+        .as[(Int, Int)]
+
+    testStream(aggregated, Update)(
+      AddData(inputData, (1, Seq(1, 2))),
+      CheckLastBatch((1, 2))
+    )
+  }
+
   test("simple count, complete mode") {
     val inputData = MemoryStream[Int]
 
@@ -251,7 +267,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
         .where('value >= current_timestamp().cast("long") - 10L)
 
     testStream(aggregated, Complete)(
-      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
 
       // advance clock to 10 seconds, all keys retained
       AddData(inputData, 0L, 5L, 5L, 10L),
@@ -278,7 +294,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
         clock.advance(60 * 1000L)
         true
       },
-      StartStream(ProcessingTime("10 seconds"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
       // The commit log blown, causing the last batch to re-run
       CheckLastBatch((20L, 1), (85L, 1)),
       AssertOnQuery { q =>
@@ -306,7 +322,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
         .where($"value".cast("date") >= date_sub(current_date(), 10))
         .select(($"value".cast("long") / DateTimeUtils.SECONDS_PER_DAY).cast("long"), $"count(1)")
     testStream(aggregated, Complete)(
-      StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
       // advance clock to 10 days, should retain all keys
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
@@ -330,7 +346,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
         clock.advance(DateTimeUtils.MILLIS_PER_DAY * 60)
         true
       },
-      StartStream(ProcessingTime("10 day"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("10 day"), triggerClock = clock),
       // Commit log blown, causing a re-run of the last batch
       CheckLastBatch((20L, 1), (85L, 1)),
 

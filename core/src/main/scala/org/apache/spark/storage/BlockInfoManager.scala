@@ -281,22 +281,27 @@ private[storage] class BlockInfoManager extends Logging {
 
   /**
    * Release a lock on the given block.
+   * In case a TaskContext is not propagated properly to all child threads for the task, we fail to
+   * get the TID from TaskContext, so we have to explicitly pass the TID value to release the lock.
+   *
+   * See SPARK-18406 for more discussion of this issue.
    */
-  def unlock(blockId: BlockId): Unit = synchronized {
-    logTrace(s"Task $currentTaskAttemptId releasing lock for $blockId")
+  def unlock(blockId: BlockId, taskAttemptId: Option[TaskAttemptId] = None): Unit = synchronized {
+    val taskId = taskAttemptId.getOrElse(currentTaskAttemptId)
+    logTrace(s"Task $taskId releasing lock for $blockId")
     val info = get(blockId).getOrElse {
       throw new IllegalStateException(s"Block $blockId not found")
     }
     if (info.writerTask != BlockInfo.NO_WRITER) {
       info.writerTask = BlockInfo.NO_WRITER
-      writeLocksByTask.removeBinding(currentTaskAttemptId, blockId)
+      writeLocksByTask.removeBinding(taskId, blockId)
     } else {
       assert(info.readerCount > 0, s"Block $blockId is not locked for reading")
       info.readerCount -= 1
-      val countsForTask = readLocksByTask(currentTaskAttemptId)
+      val countsForTask = readLocksByTask(taskId)
       val newPinCountForTask: Int = countsForTask.remove(blockId, 1) - 1
       assert(newPinCountForTask >= 0,
-        s"Task $currentTaskAttemptId release lock on block $blockId more times than it acquired it")
+        s"Task $taskId release lock on block $blockId more times than it acquired it")
     }
     notifyAll()
   }
@@ -336,15 +341,11 @@ private[storage] class BlockInfoManager extends Logging {
    *
    * @return the ids of blocks whose pins were released
    */
-  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = {
+  def releaseAllLocksForTask(taskAttemptId: TaskAttemptId): Seq[BlockId] = synchronized {
     val blocksWithReleasedLocks = mutable.ArrayBuffer[BlockId]()
 
-    val readLocks = synchronized {
-      readLocksByTask.remove(taskAttemptId).getOrElse(ImmutableMultiset.of[BlockId]())
-    }
-    val writeLocks = synchronized {
-      writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
-    }
+    val readLocks = readLocksByTask.remove(taskAttemptId).getOrElse(ImmutableMultiset.of[BlockId]())
+    val writeLocks = writeLocksByTask.remove(taskAttemptId).getOrElse(Seq.empty)
 
     for (blockId <- writeLocks) {
       infos.get(blockId).foreach { info =>
@@ -353,21 +354,19 @@ private[storage] class BlockInfoManager extends Logging {
       }
       blocksWithReleasedLocks += blockId
     }
+
     readLocks.entrySet().iterator().asScala.foreach { entry =>
       val blockId = entry.getElement
       val lockCount = entry.getCount
       blocksWithReleasedLocks += blockId
-      synchronized {
-        get(blockId).foreach { info =>
-          info.readerCount -= lockCount
-          assert(info.readerCount >= 0)
-        }
+      get(blockId).foreach { info =>
+        info.readerCount -= lockCount
+        assert(info.readerCount >= 0)
       }
     }
 
-    synchronized {
-      notifyAll()
-    }
+    notifyAll()
+
     blocksWithReleasedLocks
   }
 

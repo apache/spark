@@ -86,13 +86,20 @@ abstract class StringRegexExpression extends BinaryExpression
         escape character, the following character is matched literally. It is invalid to escape
         any other character.
 
+        Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+        to match "\abc", the pattern should be "\\abc".
+
+        When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+        to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+        enabled, the pattern to match "\abc" should be "\abc".
+
     Examples:
       > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
       true
 
     See also:
       Use RLIKE to match with standard regular expressions.
-""")
+  """)
 case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
@@ -144,7 +151,31 @@ case class Like(left: Expression, right: Expression) extends StringRegexExpressi
 }
 
 @ExpressionDescription(
-  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.")
+  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
+  extended = """
+    Arguments:
+      str - a string expression
+      regexp - a string expression. The pattern string should be a Java regular expression.
+
+        Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL parser.
+        For example, to match "\abc", a regular expression for `regexp` can be "^\\abc$".
+
+        There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to fallback
+        to the Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+        enabled, the `regexp` that can match "\abc" is "^\abc$".
+
+    Examples:
+      When spark.sql.parser.escapedStringLiterals is disabled (default).
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      true
+
+      When spark.sql.parser.escapedStringLiterals is enabled.
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      true
+
+    See also:
+      Use LIKE to match with simple string pattern.
+  """)
 case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v

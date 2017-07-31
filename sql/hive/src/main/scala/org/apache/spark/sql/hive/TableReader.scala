@@ -162,8 +162,8 @@ class HadoopTableReader(
       if (!sparkSession.sessionState.conf.verifyPartitionPath) {
         partitionToDeserializer
       } else {
-        var existPathSet = collection.mutable.Set[String]()
-        var pathPatternSet = collection.mutable.Set[String]()
+        val existPathSet = collection.mutable.Set[String]()
+        val pathPatternSet = collection.mutable.Set[String]()
         partitionToDeserializer.filter {
           case (partition, partDeserializer) =>
             def updateExistPathSetByPathPattern(pathPatternStr: String) {
@@ -181,8 +181,8 @@ class HadoopTableReader(
             }
 
             val partPath = partition.getDataLocation
-            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size();
-            var pathPatternStr = getPathPatternByPath(partNum, partPath)
+            val partNum = Utilities.getPartitionDesc(partition).getPartSpec.size()
+            val pathPatternStr = getPathPatternByPath(partNum, partPath)
             if (!pathPatternSet.contains(pathPatternStr)) {
               pathPatternSet += pathPatternStr
               updateExistPathSetByPathPattern(pathPatternStr)

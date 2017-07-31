@@ -196,6 +196,30 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
   def fill(value: String, cols: Seq[String]): DataFrame = fillValue(value, cols)
 
   /**
+   * Returns a new `DataFrame` that replaces null values in boolean columns with `value`.
+   *
+   * @since 2.3.0
+   */
+  def fill(value: Boolean): DataFrame = fill(value, df.columns)
+
+  /**
+   * (Scala-specific) Returns a new `DataFrame` that replaces null values in specified
+   * boolean columns. If a specified column is not a boolean column, it is ignored.
+   *
+   * @since 2.3.0
+   */
+  def fill(value: Boolean, cols: Seq[String]): DataFrame = fillValue(value, cols)
+
+  /**
+   * Returns a new `DataFrame` that replaces null values in specified boolean columns.
+   * If a specified column is not a boolean column, it is ignored.
+   *
+   * @since 2.3.0
+   */
+  def fill(value: Boolean, cols: Array[String]): DataFrame = fill(value, cols.toSeq)
+
+
+  /**
    * Returns a new `DataFrame` that replaces null values.
    *
    * The key of the map is the column name, and the value of the map is the replacement value.
@@ -244,13 +268,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   import com.google.common.collect.ImmutableMap;
    *
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
-   *   df.replace("height", ImmutableMap.of(1.0, 2.0));
+   *   df.na.replace("height", ImmutableMap.of(1.0, 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
-   *   df.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace("name", ImmutableMap.of("UNKNOWN", "unnamed"));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in all string columns.
-   *   df.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
    * @param col name of the column to apply the value replacement
@@ -271,10 +295,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   import com.google.common.collect.ImmutableMap;
    *
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
-   *   df.replace(new String[] {"height", "weight"}, ImmutableMap.of(1.0, 2.0));
+   *   df.na.replace(new String[] {"height", "weight"}, ImmutableMap.of(1.0, 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
-   *   df.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
+   *   df.na.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
    * @param cols list of columns to apply the value replacement
@@ -295,13 +319,13 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
-   *   df.replace("height", Map(1.0 -> 2.0))
+   *   df.na.replace("height", Map(1.0 -> 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "name".
-   *   df.replace("name", Map("UNKNOWN" -> "unnamed")
+   *   df.na.replace("name", Map("UNKNOWN" -> "unnamed"));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in all string columns.
-   *   df.replace("*", Map("UNKNOWN" -> "unnamed")
+   *   df.na.replace("*", Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
    * @param col name of the column to apply the value replacement
@@ -324,10 +348,10 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
-   *   df.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
+   *   df.na.replace("height" :: "weight" :: Nil, Map(1.0 -> 2.0));
    *
    *   // Replaces all occurrences of "UNKNOWN" with "unnamed" in column "firstname" and "lastname".
-   *   df.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed");
+   *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
    * @param cols list of columns to apply the value replacement
@@ -440,8 +464,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Returns a new `DataFrame` that replaces null or NaN values in specified
-   * numeric, string columns. If a specified column is not a numeric, string column,
-   * it is ignored.
+   * numeric, string columns. If a specified column is not a numeric, string
+   * or boolean column it is ignored.
    */
   private def fillValue[T](value: T, cols: Seq[String]): DataFrame = {
     // the fill[T] which T is  Long/Double,
@@ -452,6 +476,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     val targetType = value match {
       case _: Double | _: Long => NumericType
       case _: String => StringType
+      case _: Boolean => BooleanType
       case _ => throw new IllegalArgumentException(
         s"Unsupported value type ${value.getClass.getName} ($value).")
     }
@@ -461,6 +486,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       val typeMatches = (targetType, f.dataType) match {
         case (NumericType, dt) => dt.isInstanceOf[NumericType]
         case (StringType, dt) => dt == StringType
+        case (BooleanType, dt) => dt == BooleanType
       }
       // Only fill if the column is part of the cols list.
       if (typeMatches && cols.exists(col => columnEquals(f.name, col))) {

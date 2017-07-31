@@ -212,7 +212,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
   @throws[IllegalArgumentException]("when updating with null")
   def update(newState: S): Unit
 
-  /** Remove this state. Note that this resets any timeout configuration as well. */
+  /** Remove this state. */
   def remove(): Unit
 
   /**

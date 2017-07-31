@@ -38,7 +38,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.deploy.yarn.config._
-import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, ConfigurableCredentialManager}
+import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, YARNHadoopDelegationTokenManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc._
@@ -89,6 +89,26 @@ private[spark] class ApplicationMaster(
 
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
+
+  // A flag to check whether user has initialized spark context
+  @volatile private var registered = false
+
+  private val userClassLoader = {
+    val classpath = Client.getUserClasspath(sparkConf)
+    val urls = classpath.map { entry =>
+      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
+    }
+
+    if (isClusterMode) {
+      if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
+        new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      } else {
+        new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+      }
+    } else {
+      new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
+    }
+  }
 
   // Lock for controlling the allocator (heartbeat) thread.
   private val allocatorLock = new Object()
@@ -209,8 +229,6 @@ private[spark] class ApplicationMaster(
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
-      val fs = FileSystem.get(yarnConf)
-
       // This shutdown hook should run *after* the SparkContext is shut down.
       val priority = ShutdownHookManager.SPARK_CONTEXT_SHUTDOWN_PRIORITY - 1
       ShutdownHookManager.addShutdownHook(priority) { () =>
@@ -232,7 +250,7 @@ private[spark] class ApplicationMaster(
           // we only want to unregister if we don't want the RM to retry
           if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
             unregister(finalStatus, finalMsg)
-            cleanupStagingDir(fs)
+            cleanupStagingDir()
           }
         }
       }
@@ -244,12 +262,27 @@ private[spark] class ApplicationMaster(
 
       // If the credentials file config is present, we must periodically renew tokens. So create
       // a new AMDelegationTokenRenewer
-      if (sparkConf.contains(CREDENTIALS_FILE_PATH.key)) {
-        // If a principal and keytab have been set, use that to create new credentials for executors
-        // periodically
-        credentialRenewer =
-          new ConfigurableCredentialManager(sparkConf, yarnConf).credentialRenewer()
-        credentialRenewer.scheduleLoginFromKeytab()
+      if (sparkConf.contains(CREDENTIALS_FILE_PATH)) {
+        // Start a short-lived thread for AMCredentialRenewer, the only purpose is to set the
+        // classloader so that main jar and secondary jars could be used by AMCredentialRenewer.
+        val credentialRenewerThread = new Thread {
+          setName("AMCredentialRenewerStarter")
+          setContextClassLoader(userClassLoader)
+
+          override def run(): Unit = {
+            val credentialManager = new YARNHadoopDelegationTokenManager(
+              sparkConf,
+              yarnConf,
+              conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
+
+            val credentialRenewer =
+              new AMCredentialRenewer(sparkConf, yarnConf, credentialManager)
+            credentialRenewer.scheduleLoginFromKeytab()
+          }
+        }
+
+        credentialRenewerThread.start()
+        credentialRenewerThread.join()
       }
 
       if (isClusterMode) {
@@ -289,7 +322,7 @@ private[spark] class ApplicationMaster(
    */
   final def unregister(status: FinalApplicationStatus, diagnostics: String = null): Unit = {
     synchronized {
-      if (!unregistered) {
+      if (registered && !unregistered) {
         logInfo(s"Unregistering ApplicationMaster with $status" +
           Option(diagnostics).map(msg => s" (diag message: $msg)").getOrElse(""))
         unregistered = true
@@ -302,10 +335,15 @@ private[spark] class ApplicationMaster(
     synchronized {
       if (!finished) {
         val inShutdown = ShutdownHookManager.inShutdown()
-        logInfo(s"Final app status: $status, exitCode: $code" +
+        if (registered) {
+          exitCode = code
+          finalStatus = status
+        } else {
+          finalStatus = FinalApplicationStatus.FAILED
+          exitCode = ApplicationMaster.EXIT_SC_NOT_INITED
+        }
+        logInfo(s"Final app status: $finalStatus, exitCode: $exitCode" +
           Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
-        exitCode = code
-        finalStatus = status
         finalMsg = msg
         finished = true
         if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
@@ -409,12 +447,11 @@ private[spark] class ApplicationMaster(
           sc.getConf.get("spark.driver.port"),
           isClusterMode = true)
         registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl), securityMgr)
+        registered = true
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
-        if (!finished) {
-          throw new IllegalStateException("SparkContext is null but app is still running!")
-        }
+        throw new IllegalStateException("User did not initialize spark context!")
       }
       userClassThread.join()
     } catch {
@@ -429,9 +466,10 @@ private[spark] class ApplicationMaster(
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    val port = sparkConf.get(AM_PORT)
-    rpcEnv = RpcEnv.create("sparkYarnAM", Utils.localHostName, port, sparkConf, securityMgr,
-      clientMode = true)
+    val hostname = Utils.localHostName
+    val amCores = sparkConf.get(AM_CORES)
+    rpcEnv = RpcEnv.create("sparkYarnAM", hostname, hostname, -1, sparkConf, securityMgr,
+      amCores, true)
     val driverRef = waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"),
@@ -530,7 +568,7 @@ private[spark] class ApplicationMaster(
   /**
    * Clean up the staging directory.
    */
-  private def cleanupStagingDir(fs: FileSystem) {
+  private def cleanupStagingDir(): Unit = {
     var stagingDirPath: Path = null
     try {
       val preserveFiles = sparkConf.get(PRESERVE_STAGING_FILES)
@@ -541,6 +579,7 @@ private[spark] class ApplicationMaster(
           return
         }
         logInfo("Deleting staging directory " + stagingDirPath)
+        val fs = stagingDirPath.getFileSystem(yarnConf)
         fs.delete(stagingDirPath, true)
       }
     } catch {
@@ -606,17 +645,6 @@ private[spark] class ApplicationMaster(
    */
   private def startUserApplication(): Thread = {
     logInfo("Starting the user application in a separate Thread")
-
-    val classpath = Client.getUserClasspath(sparkConf)
-    val urls = classpath.map { entry =>
-      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
-    }
-    val userClassLoader =
-      if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
-        new ChildFirstURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
-      } else {
-        new MutableURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
-      }
 
     var userArgs = args.userArgs
     if (args.primaryPyFile != null && args.primaryPyFile.endsWith(".py")) {

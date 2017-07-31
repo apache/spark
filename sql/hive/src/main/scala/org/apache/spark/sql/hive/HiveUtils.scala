@@ -86,8 +86,8 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
-    .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
-      "the built in support.")
+    .doc("When set to true, the built-in Parquet reader and writer are used to process " +
+      "parquet tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(true)
 
@@ -101,8 +101,8 @@ private[spark] object HiveUtils extends Logging {
 
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .internal()
-    .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
-      "the built in support.")
+    .doc("When set to true, the built-in ORC reader and writer are used to process " +
+      "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(false)
 
@@ -245,7 +245,7 @@ private[spark] object HiveUtils extends Logging {
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = conf,
-      execJars = Seq(),
+      execJars = Seq.empty,
       hadoopConf = hadoopConf,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
@@ -414,7 +414,7 @@ private[spark] object HiveUtils extends Logging {
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -437,7 +437,7 @@ private[spark] object HiveUtils extends Logging {
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")

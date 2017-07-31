@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{Attribute, NominalAttribute}
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -290,5 +290,28 @@ class StringIndexerSuite
     val attrs =
       NominalAttribute.decodeStructField(transformed.schema("labelIndex"), preserveName = true)
     assert(attrs.name.nonEmpty && attrs.name.get === "labelIndex")
+  }
+
+  test("StringIndexer order types") {
+    val data = Seq((0, "b"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "b"))
+    val df = data.toDF("id", "label")
+    val indexer = new StringIndexer()
+      .setInputCol("label")
+      .setOutputCol("labelIndex")
+
+    val expected = Seq(Set((0, 0.0), (1, 0.0), (2, 2.0), (3, 1.0), (4, 1.0), (5, 0.0)),
+      Set((0, 2.0), (1, 2.0), (2, 0.0), (3, 1.0), (4, 1.0), (5, 2.0)),
+      Set((0, 1.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 1.0)),
+      Set((0, 1.0), (1, 1.0), (2, 2.0), (3, 0.0), (4, 0.0), (5, 1.0)))
+
+    var idx = 0
+    for (orderType <- StringIndexer.supportedStringOrderType) {
+      val transformed = indexer.setStringOrderType(orderType).fit(df).transform(df)
+      val output = transformed.select("id", "labelIndex").rdd.map { r =>
+        (r.getInt(0), r.getDouble(1))
+      }.collect().toSet
+      assert(output === expected(idx))
+      idx += 1
+    }
   }
 }

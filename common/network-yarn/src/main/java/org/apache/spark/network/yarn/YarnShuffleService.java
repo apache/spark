@@ -243,7 +243,6 @@ public class YarnShuffleService extends AuxiliaryService {
     String appId = context.getApplicationId().toString();
     try {
       ByteBuffer shuffleSecret = context.getApplicationDataForService();
-      logger.info("Initializing application {}", appId);
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
         if (db != null) {
@@ -262,7 +261,6 @@ public class YarnShuffleService extends AuxiliaryService {
   public void stopApplication(ApplicationTerminationContext context) {
     String appId = context.getApplicationId().toString();
     try {
-      logger.info("Stopping application {}", appId);
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
         if (db != null) {
@@ -363,9 +361,9 @@ public class YarnShuffleService extends AuxiliaryService {
           // If another DB was initialized first just make sure all the DBs are in the same
           // location.
           Path newLoc = new Path(_recoveryPath, dbName);
-          Path copyFrom = new Path(f.toURI()); 
+          Path copyFrom = new Path(f.toURI());
           if (!newLoc.equals(copyFrom)) {
-            logger.info("Moving " + copyFrom + " to: " + newLoc); 
+            logger.info("Moving " + copyFrom + " to: " + newLoc);
             try {
               // The move here needs to handle moving non-empty directories across NFS mounts
               FileSystem fs = FileSystem.getLocal(_conf);

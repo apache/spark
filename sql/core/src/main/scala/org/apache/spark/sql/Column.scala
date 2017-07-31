@@ -464,7 +464,15 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def <=> (other: Any): Column = withExpr { EqualNullSafe(expr, lit(other).expr) }
+  def <=> (other: Any): Column = withExpr {
+    val right = lit(other).expr
+    if (this.expr == right) {
+      logWarning(
+        s"Constructing trivially true equals predicate, '${this.expr} <=> $right'. " +
+          "Perhaps you need to use aliases.")
+    }
+    EqualNullSafe(expr, right)
+  }
 
   /**
    * Equality test that is safe for null values.
@@ -497,7 +505,7 @@ class Column(val expr: Expression) extends Logging {
    */
   def when(condition: Column, value: Any): Column = this.expr match {
     case CaseWhen(branches, None) =>
-      withExpr { CaseWhen(branches :+ (condition.expr, lit(value).expr)) }
+      withExpr { CaseWhen(branches :+ ((condition.expr, lit(value).expr))) }
     case CaseWhen(branches, Some(_)) =>
       throw new IllegalArgumentException(
         "when() cannot be applied once otherwise() is applied")
@@ -1152,7 +1160,7 @@ class Column(val expr: Expression) extends Logging {
   def bitwiseXOR(other: Any): Column = withExpr { BitwiseXor(expr, lit(other).expr) }
 
   /**
-   * Define a windowing column.
+   * Defines a windowing column.
    *
    * {{{
    *   val w = Window.partitionBy("name").orderBy("id")
@@ -1168,7 +1176,7 @@ class Column(val expr: Expression) extends Logging {
   def over(window: expressions.WindowSpec): Column = window.withAggregate(this)
 
   /**
-   * Define a empty analytic clause. In this case the analytic function is applied
+   * Defines an empty analytic clause. In this case the analytic function is applied
    * and presented for all rows in the result set.
    *
    * {{{

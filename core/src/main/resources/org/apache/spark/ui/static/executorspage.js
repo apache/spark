@@ -26,7 +26,6 @@ function getThreadDumpEnabled() {
 }
 
 function formatStatus(status, type) {
-    if (type !== 'display') return status;
     if (status) {
         return "Active"
     } else {
@@ -417,7 +416,6 @@ $(document).ready(function () {
                         },
                         {data: 'hostPort'},
                         {data: 'isActive', render: function (data, type, row) {
-                            if (type !== 'display') return data;
                             if (row.isBlacklisted) return "Blacklisted";
                             else return formatStatus (data, type);
                             }
@@ -492,24 +490,20 @@ $(document).ready(function () {
                         {data: 'totalInputBytes', render: formatBytes},
                         {data: 'totalShuffleRead', render: formatBytes},
                         {data: 'totalShuffleWrite', render: formatBytes},
-                        {data: 'executorLogs', render: formatLogsCells},
+                        {name: 'executorLogsCol', data: 'executorLogs', render: formatLogsCells},
                         {
+                            name: 'threadDumpCol',
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
-                        }
-                    ],
-                    "columnDefs": [
-                        {
-                            "targets": [ 16 ],
-                            "visible": getThreadDumpEnabled()
                         }
                     ],
                     "order": [[0, "asc"]]
                 };
     
                 var dt = $(selector).DataTable(conf);
-                dt.column(15).visible(logsExist(response));
+                dt.column('executorLogsCol:name').visible(logsExist(response));
+                dt.column('threadDumpCol:name').visible(getThreadDumpEnabled());
                 $('#active-executors [data-toggle="tooltip"]').tooltip();
     
                 var sumSelector = "#summary-execs-table";
