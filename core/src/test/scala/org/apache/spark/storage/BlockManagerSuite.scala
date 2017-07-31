@@ -768,7 +768,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.get("list1").get.data.size === 2)
     assert(store.getAndReleaseLock("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.data.size === 2)
-    assert(store.getAndReleaseLock("list3") === None, "list1 was in store")
+    assert(store.getAndReleaseLock("list3") === None, "list3 was in store")
   }
 
   encryptionTest("LRU with mixed storage levels and streams") { _conf =>
