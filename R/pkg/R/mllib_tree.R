@@ -165,7 +165,7 @@ print.summary.decisionTree <- function(x) {
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
 #' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type.
+#'                      column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
 #'                                         "error" (throw an error), "keep" (put invalid data in a special additional
 #'                                         bucket, at index numLabels). Default is "error".
@@ -383,7 +383,7 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
 #' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type.
+#'                      column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
 #'                                         "error" (throw an error), "keep" (put invalid data in a special additional
 #'                                         bucket, at index numLabels). Default is "error".
@@ -593,7 +593,7 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
 #' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
-#'                      column of string type.
+#'                      column of string type in classification model.
 #'                      Supported options: "skip" (filter out rows with invalid data),
 #'                                         "error" (throw an error), "keep" (put invalid data in a special additional
 #'                                         bucket, at index numLabels). Default is "error".
