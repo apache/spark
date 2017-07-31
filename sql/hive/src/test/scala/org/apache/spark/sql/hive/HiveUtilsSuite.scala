@@ -38,7 +38,7 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
     sys.props.put("spark.hadoop.foo", "bar")
     Seq(true, false) foreach { useInMemoryDerby =>
       val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
-      intercept[NoSuchElementException](hiveConf("spark.hadoop.foo") === "bar")
+      assert(!hiveConf.contains("spark.hadoop.foo"))
       assert(hiveConf("foo") === "bar")
     }
   }
