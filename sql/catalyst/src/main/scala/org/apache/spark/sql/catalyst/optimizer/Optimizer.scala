@@ -872,6 +872,17 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
+
+    case filter @ Filter(condition, watermark: EventTimeWatermark) =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(_.deterministic)
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduce(And)
+        val newWatermark = watermark.copy(child = Filter(pushDownPredicate, watermark.child))
+        if (stayUp.isEmpty) newWatermark else Filter(stayUp.reduce(And), newWatermark)
+      } else {
+        filter
+      }
   }
 
   private def canPushThrough(p: UnaryNode): Boolean = p match {

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class FilterPushdownSuite extends PlanTest {
 
@@ -1128,6 +1129,23 @@ class FilterPushdownSuite extends PlanTest {
       "x.a".attr === Rand(10) && "y.b".attr === 5))
     val correctAnswer = x.where("x.a".attr === 5).join(y.where("y.a".attr === 5),
         condition = Some("x.a".attr === Rand(10) && "y.b".attr === 5))
+
+    // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
+    // TODO support nondeterministic expressions in join condition.
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze,
+      checkAnalysis = false)
+  }
+
+  test("watermark pushdown: deterministic and non-deterministic") {
+    val interval = new CalendarInterval(2, 2000L)
+
+    // Verify that all conditions preceding the first non-deterministic condition are pushed down
+    // by the optimizer and others are not.
+    val originalQuery = EventTimeWatermark('c, interval, testRelation)
+      .where('a === 5 && 'b === Rand(10) && 'c === 5)
+    val correctAnswer = EventTimeWatermark(
+      'c, interval, testRelation.where('a === 5))
+      .where('b === Rand(10) && 'c === 5)
 
     // CheckAnalysis will ensure nondeterministic expressions not appear in join condition.
     // TODO support nondeterministic expressions in join condition.
