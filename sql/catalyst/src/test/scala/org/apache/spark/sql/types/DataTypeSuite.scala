@@ -184,17 +184,16 @@ class DataTypeSuite extends SparkFunSuite {
   test("merge where right contains type conflict") {
     val left = StructType(
       StructField("a", LongType) ::
-      StructField("conflictColumn", FloatType) :: Nil)
+      StructField("b", FloatType) :: Nil)
 
     val right = StructType(
-      StructField("conflictColumn", LongType) :: Nil)
+      StructField("b", LongType) :: Nil)
 
     val message = intercept[SparkException] {
       left.merge(right)
     }.getMessage
-    assert(message.contains("conflictColumn"))
-    assert(message.contains(FloatType.toString))
-    assert(message.contains(LongType.toString))
+    assert(message.equals("Failed to merge fields 'b' and 'b'. " +
+      "Failed to merge incompatible data types FloatType and LongType"))
   }
 
   test("existsRecursively") {
