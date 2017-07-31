@@ -20,4 +20,8 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-exec python -u ./dev/run-tests.py "$@"
+PYTHON_EXECUTABLE=python
+if hash python2.7 2>/dev/null; then
+  PYTHON_EXECUTABLE=python2.7
+fi
+exec $PYTHON_EXECUTABLE -u ./dev/run-tests.py "$@"
