@@ -50,6 +50,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
   private val prompt = "spark-sql"
   private val continuedPrompt = "".padTo(prompt.length, ' ')
   private var transport: TSocket = _
+  private final val SPARK_HADOOP_PROP_PREFIX = "spark.hadoop."
 
   installSignalHandler()
 
@@ -134,6 +135,14 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // Hive 1.2 + not supported in CLI
       throw new RuntimeException("Remote operations not supported")
     }
+    // Respect the configurations set by --hiveconf from the command line
+    // (based on Hive's CliDriver).
+    val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
+    hiveConfFromCmd.foreach { kv =>
+      // If the same property is configured by spark.hadoop.xxx, we ignore it and
+      // obey settings from spark properties
+      sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + kv.getKey, kv.getValue)
+    }
 
     val cli = new SparkSQLCLIDriver
     cli.setHiveVariables(oproc.getHiveVariables)
@@ -159,9 +168,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
-    val it = sessionState.getOverriddenConfigurations.entrySet().iterator()
-    while (it.hasNext) {
-      val kv = it.next()
+    hiveConfFromCmd.foreach{ kv =>
       SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
     }
 
