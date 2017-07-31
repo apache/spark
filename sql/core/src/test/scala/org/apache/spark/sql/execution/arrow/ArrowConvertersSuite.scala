@@ -22,15 +22,18 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+import scala.collection.JavaConverters._
+
 import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
+import org.apache.arrow.vector.{NullableIntVector, VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ReadOnlyColumnVector}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -1626,6 +1629,40 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     // Different values
     intercept[IllegalArgumentException] {
       collectAndValidate(df.sort($"a_i".desc), json, "validator_diff_values.json")
+    }
+  }
+
+  test("roundtrip payloads") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
+    val vector = ArrowUtils.toArrowField("int", IntegerType, nullable = true)
+      .createVector(allocator).asInstanceOf[NullableIntVector]
+    vector.allocateNew()
+    val mutator = vector.getMutator()
+
+    (0 until 10).foreach { i =>
+      mutator.setSafe(i, i)
+    }
+    mutator.setNull(10)
+    mutator.setValueCount(11)
+
+    val schema = StructType(Seq(StructField("int", IntegerType)))
+
+    val columnarBatch = ColumnarBatch.createReadOnly(
+      schema, Array[ReadOnlyColumnVector](new ArrowColumnVector(vector)), 11)
+
+    val context = TaskContext.empty()
+
+    val payloadIter = ArrowConverters.toPayloadIterator(
+      columnarBatch.rowIterator().asScala, schema, 0, context)
+
+    val rowIter = ArrowConverters.fromPayloadIterator(payloadIter, schema, context)
+
+    rowIter.zipWithIndex.foreach { case (row, i) =>
+      if (i == 10) {
+        assert(row.isNullAt(0))
+      } else {
+        assert(row.getInt(0) == i)
+      }
     }
   }
 

@@ -25,10 +25,13 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
 
+import org.apache.arrow.vector.NullableIntVector
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -1247,5 +1250,56 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(ex.getMessage.contains(s"Cannot reserve additional contiguous bytes in the " +
         s"vectorized reader"))
     }
+  }
+
+  test("create read-only batch") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
+    val vector1 = ArrowUtils.toArrowField("int1", IntegerType, nullable = true)
+      .createVector(allocator).asInstanceOf[NullableIntVector]
+    vector1.allocateNew()
+    val mutator1 = vector1.getMutator()
+    val vector2 = ArrowUtils.toArrowField("int2", IntegerType, nullable = true)
+      .createVector(allocator).asInstanceOf[NullableIntVector]
+    vector2.allocateNew()
+    val mutator2 = vector2.getMutator()
+
+    (0 until 10).foreach { i =>
+      mutator1.setSafe(i, i)
+      mutator2.setSafe(i + 1, i)
+    }
+    mutator1.setNull(10)
+    mutator1.setValueCount(11)
+    mutator2.setNull(0)
+    mutator2.setValueCount(11)
+
+    val columnVectors = Seq(new ArrowColumnVector(vector1), new ArrowColumnVector(vector2))
+
+    val schema = StructType(Seq(StructField("int1", IntegerType), StructField("int2", IntegerType)))
+    val batch = ColumnarBatch.createReadOnly(
+      schema, columnVectors.toArray[ReadOnlyColumnVector], 11)
+
+    assert(batch.numCols() == 2)
+    assert(batch.numRows() == 11)
+
+    val rowIter = batch.rowIterator().asScala
+    rowIter.zipWithIndex.foreach { case (row, i) =>
+      if (i == 10) {
+        assert(row.isNullAt(0))
+      } else {
+        assert(row.getInt(0) == i)
+      }
+      if (i == 0) {
+        assert(row.isNullAt(1))
+      } else {
+        assert(row.getInt(1) == i - 1)
+      }
+    }
+
+    intercept[java.lang.AssertionError] {
+      batch.getRow(100)
+    }
+
+    columnVectors.foreach(_.close())
+    allocator.close()
   }
 }
