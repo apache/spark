@@ -47,6 +47,8 @@ case class AnalyzeTableCommand(
         Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
       }
 
+    // Update the metastore if the above statistics of the table are different from those
+    // recorded in the metastore.
     val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
     if (newStats.isDefined) {
       sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)

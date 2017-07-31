@@ -1098,12 +1098,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     restorePartitionMetadata(part, getTable(db, table))
   }
 
+  /**
+   * Restores partition metadata from the partition properties.
+   *
+   * Reads partition-level statistics from partition properties, puts these
+   * into [[CatalogTablePartition#stats]] and removes these special entries
+   * from the partition properties.
+   */
   private def restorePartitionMetadata(
       partition: CatalogTablePartition,
       table: CatalogTable): CatalogTablePartition = {
     val restoredSpec = restorePartitionSpec(partition.spec, table.partitionColumnNames)
 
-    // construct Spark's statistics from information in Hive metastore
+    // Restore Spark's statistics from information in Metastore.
     val restoredStats =
       statsFromProperties(partition.parameters, table.identifier.table, table.schema)
     if (restoredStats.isDefined) {

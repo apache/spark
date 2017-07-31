@@ -50,7 +50,7 @@ case class AnalyzePartitionCommand(
     if (invalidColumnNames.nonEmpty) {
       val tableId = table.identifier
       throw new AnalysisException(s"Partition specification for table '${tableId.table}' " +
-        s"in database '${tableId.database}' refers to unknown partition column(s): " +
+        s"in database '${tableId.database.get}' refers to unknown partition column(s): " +
         invalidColumnNames.mkString(","))
     }
 
@@ -95,17 +95,13 @@ case class AnalyzePartitionCommand(
 
     // Update the metastore if newly computed statistics are different from those
     // recorded in the metastore.
-    val partitionStats = partitions.map { p =>
-      val newTotalSize = CommandUtils.calculateLocationSize(sessionState,
-        tableMeta.identifier, p.storage.locationUri)
+    val newPartitions = partitions.flatMap { p =>
+      val newTotalSize = CommandUtils.calculateLocationSize(
+        sessionState, tableMeta.identifier, p.storage.locationUri)
       val newRowCount = rowCounts.get(p.spec)
       val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
-      (p, newStats)
+      newStats.map(_ => p.copy(stats = newStats))
     }
-
-    val newPartitions = partitionStats.filter(_._2.isDefined).map { case (p, newStats) =>
-      p.copy(stats = newStats)
-    }.toList
 
     if (newPartitions.nonEmpty) {
       sessionState.catalog.alterPartitions(tableMeta.identifier, newPartitions)
@@ -122,27 +118,20 @@ case class AnalyzePartitionCommand(
       val filters = partitionValueSpec.get.map {
         case (columnName, value) => EqualTo(UnresolvedAttribute(columnName), Literal(value))
       }
-      Some(filters.reduce(And))
+      filters.reduce(And)
     } else {
-      None
+      Literal.TrueLiteral
     }
 
     val tableDf = sparkSession.table(tableMeta.identifier)
     val partitionColumns = tableMeta.partitionColumnNames.map(Column(_))
 
-    val df = if (filter.isDefined) {
-      tableDf.filter(Column(filter.get)).groupBy(partitionColumns: _*).count()
-    } else {
-      tableDf.groupBy(partitionColumns: _*).count()
-    }
-
-    val numPartitionColumns = partitionColumns.size
+    val df = tableDf.filter(Column(filter)).groupBy(partitionColumns: _*).count()
 
     df.collect().map { r =>
       val partitionColumnValues = partitionColumns.indices.map(r.get(_).toString)
-      val spec: TablePartitionSpec =
-        tableMeta.partitionColumnNames.zip(partitionColumnValues).toMap
-      val count = BigInt(r.getLong(numPartitionColumns))
+      val spec = tableMeta.partitionColumnNames.zip(partitionColumnValues).toMap
+      val count = BigInt(r.getLong(partitionColumns.size))
       (spec, count)
     }.toMap
   }

@@ -116,10 +116,10 @@ object CommandUtils extends Logging {
       oldStats: Option[CatalogStatistics],
       newTotalSize: BigInt,
       newRowCount: Option[BigInt]): Option[CatalogStatistics] = {
-    val oldTotalSize = oldStats.map(_.sizeInBytes.toLong).getOrElse(0L)
+    val oldTotalSize = oldStats.map(_.sizeInBytes.toLong).getOrElse(-1L)
     val oldRowCount = oldStats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
     var newStats: Option[CatalogStatistics] = None
-    if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+    if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
       newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
     }
     // We only set rowCount when noscan is false, because otherwise:
