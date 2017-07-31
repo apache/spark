@@ -71,17 +71,17 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     base.createOrReplaceTempView("base")
 
     val dist1 = spark.sql("""
-    SELECT parent level1
-    FROM base INNER JOIN hier h1 ON base.id = h1.son
-    GROUP BY parent""")
+      SELECT parent level1
+      FROM base INNER JOIN hier h1 ON base.id = h1.son
+      GROUP BY parent""")
 
     dist1.createOrReplaceTempView("dist1")
     // dist1.count() // or put a count here
 
     val dist2 = spark.sql("""
-    SELECT parent level2
-    FROM dist1 INNER JOIN hier h2 ON dist1.level1 = h2.son
-    GROUP BY parent""")
+      SELECT parent level2
+      FROM dist1 INNER JOIN hier h2 ON dist1.level1 = h2.son
+      GROUP BY parent""")
 
     val plan = dist2.queryExecution.executedPlan
     // For debug print tree string with partitioning suffix
