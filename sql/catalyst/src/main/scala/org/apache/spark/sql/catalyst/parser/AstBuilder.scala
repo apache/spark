@@ -750,20 +750,28 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   /**
    * Create an alias (SubqueryAlias) for a sub-query. This is practically the same as
    * visitAliasedRelation and visitNamedExpression, ANTLR4 however requires us to use 3 different
-   * hooks.
+   * hooks. We could add alias names for output columns, for example:
+   * {{{
+   *   SELECT col1, col2 FROM testData AS t(col1, col2)
+   * }}}
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    val alias = if (ctx.strictIdentifier == null) {
+    val alias = if (ctx.tableAlias.strictIdentifier == null) {
       // For un-aliased subqueries, use a default alias name that is not likely to conflict with
       // normal subquery names, so that parent operators can only access the columns in subquery by
       // unqualified names. Users can still use this special qualifier to access columns if they
       // know it, but that's not recommended.
       "__auto_generated_subquery_name"
     } else {
-      ctx.strictIdentifier.getText
+      ctx.tableAlias.strictIdentifier.getText
     }
-
-    SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
+    val subquery = SubqueryAlias(alias, plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample))
+    if (ctx.tableAlias.identifierList != null) {
+      val columnAliases = visitIdentifierList(ctx.tableAlias.identifierList)
+      UnresolvedSubqueryColumnAliases(columnAliases, subquery)
+    } else {
+      subquery
+    }
   }
 
   /**
@@ -1179,32 +1187,26 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Create or resolve a [[FrameBoundary]]. Simple math expressions are allowed for Value
-   * Preceding/Following boundaries. These expressions must be constant (foldable) and return an
-   * integer value.
+   * Create or resolve a frame boundary expressions.
    */
-  override def visitFrameBound(ctx: FrameBoundContext): FrameBoundary = withOrigin(ctx) {
-    // We currently only allow foldable integers.
-    def value: Int = {
+  override def visitFrameBound(ctx: FrameBoundContext): Expression = withOrigin(ctx) {
+    def value: Expression = {
       val e = expression(ctx.expression)
-      validate(e.resolved && e.foldable && e.dataType == IntegerType,
-        "Frame bound value must be a constant integer.",
-        ctx)
-      e.eval().asInstanceOf[Int]
+      validate(e.resolved && e.foldable, "Frame bound value must be a literal.", ctx)
+      e
     }
 
-    // Create the FrameBoundary
     ctx.boundType.getType match {
       case SqlBaseParser.PRECEDING if ctx.UNBOUNDED != null =>
         UnboundedPreceding
       case SqlBaseParser.PRECEDING =>
-        ValuePreceding(value)
+        UnaryMinus(value)
       case SqlBaseParser.CURRENT =>
         CurrentRow
       case SqlBaseParser.FOLLOWING if ctx.UNBOUNDED != null =>
         UnboundedFollowing
       case SqlBaseParser.FOLLOWING =>
-        ValueFollowing(value)
+        value
     }
   }
 
