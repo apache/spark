@@ -104,6 +104,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     "; users with admin permissions: " + HISTORY_UI_ADMIN_ACLS.toString +
     "; groups with admin permissions" + HISTORY_UI_ADMIN_ACLS_GROUPS.toString)
 
+  private val AGGRESSIVE_CLEANUP = conf.getBoolean("spark.history.fs.cleaner.aggressive", false)
+
   private val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
   private val fs = new Path(logDir).getFileSystem(hadoopConf)
 
@@ -126,6 +128,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // List of application logs to be deleted by event log cleaner.
   private var attemptsToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
+
+  // List of untracked history files that are potentially never cleaned up unless aggressive
+  // clean up configured.
+  val untrackedHistoryFiles = new mutable.HashSet[FileStatus]()
 
   private val pendingReplayTasksCount = new java.util.concurrent.atomic.AtomicInteger(0)
 
@@ -322,7 +328,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
           val fileInfo = fileToAppInfo.get(entry.getPath())
-          val prevFileSize = if (fileInfo != null) fileInfo.fileSize else 0L
+          val prevFileSize = if (fileInfo != null) fileInfo.fileSize else -1L
           !entry.isDirectory() &&
             // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
             // reading a garbage file is safe, but we would log an error which can be scary to
@@ -381,7 +387,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
-  private def getNewLastScanTime(): Long = {
+  protected def getNewLastScanTime(): Long = {
     val fileName = "." + UUID.randomUUID().toString
     val path = new Path(logDir, fileName)
     val fos = fs.create(path)
@@ -494,6 +500,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
 
     if (newAttempts.isEmpty) {
+      if (AGGRESSIVE_CLEANUP) {
+        untrackedHistoryFiles.add(fileStatus)
+      }
       return
     }
 
@@ -555,14 +564,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val now = clock.getTimeMillis()
       val appsToRetain = new mutable.LinkedHashMap[String, FsApplicationHistoryInfo]()
 
-      def shouldClean(attempt: FsApplicationAttemptInfo): Boolean = {
-        now - attempt.lastUpdated > maxAge
+      def shouldClean(lastUpdated: Long): Boolean = {
+        now - lastUpdated > maxAge
       }
 
       // Scan all logs from the log directory.
       // Only completed applications older than the specified max age will be deleted.
       applications.values.foreach { app =>
-        val (toClean, toRetain) = app.attempts.partition(shouldClean)
+        val (toClean, toRetain) = app.attempts.partition(
+          attempt => shouldClean(attempt.lastUpdated))
         attemptsToClean ++= toClean
 
         if (toClean.isEmpty) {
@@ -576,22 +586,42 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       applications = appsToRetain
 
       val leftToClean = new mutable.ListBuffer[FsApplicationAttemptInfo]
+
       attemptsToClean.foreach { attempt =>
-        try {
-          fs.delete(new Path(logDir, attempt.logPath), true)
-        } catch {
-          case e: AccessControlException =>
-            logInfo(s"No permission to delete ${attempt.logPath}, ignoring.")
-          case t: IOException =>
-            logError(s"IOException in cleaning ${attempt.logPath}", t)
-            leftToClean += attempt
+        if (!removeLogFile(attempt.logPath)) {
+          leftToClean += attempt
         }
       }
 
       attemptsToClean = leftToClean
+
+      val removedFiles = new mutable.ListBuffer[FileStatus]
+      untrackedHistoryFiles.filter(fs => shouldClean(fs.getModificationTime))
+        .map(fs =>
+          if (removeLogFile(fs.getPath.getName)) {
+              removedFiles += fs
+            }
+        )
+      if (removedFiles.size > 0) {
+        log.info(s"Aggressively cleaned up ${removedFiles.size} untracked history files.")
+        removedFiles.foreach(fs => untrackedHistoryFiles.remove(fs))
+      }
     } catch {
       case t: Exception => logError("Exception in cleaning logs", t)
     }
+  }
+
+  private def removeLogFile(logPath: String): Boolean = {
+    try {
+      fs.delete(new Path(logDir, logPath), true)
+    } catch {
+      case e: AccessControlException =>
+        logInfo(s"No permission to delete ${logPath}, ignoring.")
+      case t: IOException =>
+        logError(s"IOException in cleaning ${logPath}", t)
+        return false
+    }
+    true
   }
 
   /**
