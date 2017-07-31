@@ -864,9 +864,11 @@ class RDDTests(ReusedPySparkTestCase):
         b1 = self.sc.broadcast(list(range(3)))
         b2 = self.sc.broadcast(list(range(3)))
 
-        def f1(): return b1.value
+        def f1():
+            return b1.value
 
-        def f2(): return b2.value
+        def f2():
+            return b2.value
 
         funcs_num_pickled = {f1: None, f2: None}
 
