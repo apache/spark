@@ -476,7 +476,8 @@ object StructType extends AbstractDataType {
                     nullable = leftNullable || rightNullable)
                 } catch {
                   case NonFatal(e) =>
-                    throw new SparkException(s"Failed to merge fields '$leftName' and '$rightName'. " + e.getMessage)
+                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
+                      s"'$rightName'. " + e.getMessage)
                 }
               }
               .orElse {
