@@ -3014,7 +3014,7 @@ setMethod("describe",
 #' @note The statistics provided by \code{summary} were change in 2.3.0 use \code{\link{describe}} for previous defaults.
 #' @seealso \code{\link{describe}}
 setMethod("summary",
-          signature(object = "SparkDataFrame"), #, ... = "character"),
+          signature(object = "SparkDataFrame"),
           function(object, ...) {
             statisticsList <- list(...)
             sdf <- callJMethod(object@sdf, "summary", statisticsList)
