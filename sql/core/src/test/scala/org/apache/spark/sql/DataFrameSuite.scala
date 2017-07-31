@@ -2023,4 +2023,10 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
     }
   }
+
+  test("order-by ordinal.") {
+    checkAnswer(
+      testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
+      Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
+  }
 }
