@@ -28,17 +28,18 @@ import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.bus.BusQueue.SparkListenerEventProcessor
 import org.apache.spark.util.Utils
 
 
 // One producer one consumer asynchronous queue.
-private[spark] abstract class ListenerBusQueue (
-  busName: String,
+private[spark] class BusQueue (
+  val processor: SparkListenerEventProcessor,
   bufferSize: Int,
   withEventProcessingTime: Boolean,
   private val eventFilter: SparkListenerEvent => Boolean) extends Logging {
 
-  import ListenerBusQueue._
+  import BusQueue._
 
   private var sparkContext: SparkContext = _
 
@@ -51,9 +52,9 @@ private[spark] abstract class ListenerBusQueue (
   private val stopped = new AtomicBoolean(false)
 
   private[scheduler] val metrics =
-    new QueueMetrics(busName, numberOfEvents, withEventProcessingTime)
+    new QueueMetrics(processor.name, numberOfEvents, withEventProcessingTime)
 
-  private val consumerThread = new Thread(s"$busName bus consumer") {
+  private val consumerThread = new Thread(s"${processor.name} bus consumer") {
     setDaemon(true)
     override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
       LiveListenerBus.withinListenerThread.withValue(true) {
@@ -69,7 +70,7 @@ private[spark] abstract class ListenerBusQueue (
               consumeEvent(newElem)
             } catch {
               case NonFatal(e) =>
-                logError(s"Listener bus $busName threw an exception", e)
+                logError(s"Listener bus ${processor.name} threw an exception", e)
             }
             numberOfEvents.decrementAndGet()
             timerContext.foreach(_.stop())
@@ -92,7 +93,7 @@ private[spark] abstract class ListenerBusQueue (
   // should be called only once
   private[scheduler] def waitForStop(): Unit = {
     if (!stopped.get()) {
-      throw new IllegalStateException(s"$busName was not asked for stop !")
+      throw new IllegalStateException(s"${processor.name} was not asked for stop !")
     }
     circularBuffer.put(LAST_PROCESSED_MESSAGE)
     consumerThread.join()
@@ -121,7 +122,7 @@ private[spark] abstract class ListenerBusQueue (
 
   private def onDropEvent(): Unit = {
     if (hasDropped.compareAndSet(false, true)) {
-      logError(s"Dropping SparkListenerEvent from the bus $busName because no remaining " +
+      logError(s"Dropping SparkListenerEvent from the bus ${processor.name} because no remaining " +
         "room in event queue. " +
         "This likely means one of the SparkListeners is too slow and cannot keep up with " +
         "the rate at which tasks are being started by the scheduler.")
@@ -130,32 +131,130 @@ private[spark] abstract class ListenerBusQueue (
     metrics.numDroppedEvents.inc()
     if (numberOfDrop.get() >= DROP_MESSAGE_LOG_FREQUENCY) {
       logWarning(s"$DROP_MESSAGE_LOG_FREQUENCY SparkListenerEvents have been dropped " +
-        s"from the bus $busName")
+        s"from the bus ${processor.name}")
       numberOfDrop.set(0L)
     }
   }
 
-  protected def consumeEvent(ev: SparkListenerEvent): Unit
+  private def consumeEvent(ev: SparkListenerEvent): Unit = processor.consumeEvent(ev)
 
-  private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag]: Seq[T]
+  private[spark] def listeners: Seq[SparkListenerInterface] =
+    processor.oListener
+      .map {
+        case group: GroupOfListener => group.listeners.map(_._1)
+        case l => Seq(l)
+      }
+    .getOrElse(Seq.empty)
 
-  private[spark] def listeners: Seq[SparkListenerInterface]
+  protected def initAdditionalMetrics(queueMetrics: QueueMetrics): Unit =
+    processor.oListener
+      .foreach { case group: GroupOfListener => group.initTimers(queueMetrics) }
 
-  protected def initAdditionalMetrics(queueMetrics: QueueMetrics): Unit = {}
+  private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag] = {
+    val c = implicitly[ClassTag[T]].runtimeClass
+    listeners.filter(_.getClass == c).map(_.asInstanceOf[T])
+  }
+
 }
 
-private[spark] object ListenerBusQueue {
+private[spark] object BusQueue {
 
   private val DROP_MESSAGE_LOG_FREQUENCY = 50
-  private[scheduler] val ALL_MESSAGES: SparkListenerEvent => Boolean = _ => true
 
   private object LAST_PROCESSED_MESSAGE extends SparkListenerEvent
 
-  private[bus] abstract class GroupSparkListener() extends SparkListenerInterface with Logging {
+  def apply(busName: String,
+            bufferSize: Int,
+            process: SparkListenerEvent => Unit,
+            eventFilter: SparkListenerEvent => Boolean): BusQueue =
+    new BusQueue(GenericProcessor(process, busName), bufferSize, true, eventFilter)
 
-    private[bus] def listeners: Seq[(SparkListenerInterface, Option[Timer])]
+  def apply(bufferSize: Int,
+            listener: SparkListenerInterface,
+            eventFilter: SparkListenerEvent => Boolean): BusQueue =
+    new BusQueue(
+      ListenerProcessor(listener),
+      bufferSize,
+      listener match {
+        case _: GroupOfListener => false
+        case _ => true
+      },
+      eventFilter
+    )
 
-    private[bus] def busName: String
+  private[scheduler] trait SparkListenerEventProcessor {
+    def consumeEvent(ev: SparkListenerEvent): Unit
+
+    val oListener: Option[SparkListenerInterface]
+
+    val name: String
+  }
+
+  private case class ListenerProcessor(listener: SparkListenerInterface)
+    extends SparkListenerEventProcessor{
+    override def consumeEvent(ev: SparkListenerEvent): Unit =
+      SparkListenerEventDispatcher.dispatch(listener, ev)
+
+    override val oListener: Option[SparkListenerInterface] = Some(listener)
+    override val name: String = listener match {
+      case group: GroupOfListener => group.busName
+      case simpleListener => simpleListener.getClass.getSimpleName
+    }
+  }
+
+  private[scheduler] case class GenericProcessor(process: SparkListenerEvent => Unit, label: String)
+    extends SparkListenerEventProcessor{
+    override def consumeEvent(ev: SparkListenerEvent): Unit = process(ev)
+
+    override val oListener: Option[SparkListenerInterface] = None
+    override val name: String = label
+  }
+
+  private[scheduler] val ALL_MESSAGES: SparkListenerEvent => Boolean = _ => true
+
+  private[spark] object GroupOfListener {
+
+    def apply(listenerSeq: Seq[SparkListenerInterface], busName: String): GroupOfListener = {
+      val group = GroupOfListener(busName)
+      listenerSeq.foreach( l => group.addListener(l))
+      group
+    }
+
+    def apply(busName: String): GroupOfListener = {
+      GroupOfListener(busName)
+    }
+  }
+
+  private[bus] class GroupOfListener(val busName: String)
+    extends SparkListenerInterface with Logging {
+
+    private var queueMetrics: Option[QueueMetrics] = None
+
+    private val group: AtomicReference[Seq[(SparkListenerInterface, Option[Timer])]] =
+      new AtomicReference[Seq[(SparkListenerInterface, Option[Timer])]](Seq.empty)
+
+    private[scheduler] def listeners = group.get()
+
+    private[bus] def initTimers(metrics: QueueMetrics): Unit = {
+      queueMetrics = Some(metrics)
+      val current = listeners
+      group.set(
+        current.map(l => (l._1,
+          Some(metrics.getTimerForIndividualListener(l._1.getClass.getSimpleName)))))
+    }
+
+    private[scheduler] def addListener(l: SparkListenerInterface): Unit = {
+      val current = listeners
+      val newVal = current :+ (l,
+        queueMetrics.map(_.getTimerForIndividualListener(l.getClass.getSimpleName)))
+      group.set(newVal)
+    }
+
+    private[scheduler] def removeListener(l: SparkListenerInterface): Unit = {
+      val current = listeners
+      val newVal = current.filter(t => !(t._1 == l))
+      group.set(newVal)
+    }
 
     override def onStageCompleted(
       stageCompleted: SparkListenerStageCompleted): Unit =
@@ -255,55 +354,6 @@ private[spark] object ListenerBusQueue {
         i = i + 1
       }
     }
-  }
-
-  private[spark] class FixGroupOfListener(
-    listenerSeq: Seq[SparkListenerInterface],
-    override val busName: String)
-    extends GroupSparkListener {
-
-    private var listenerWithTimer: Seq[(SparkListenerInterface, Option[Timer])] =
-      listenerSeq.map(l => (l, None))
-
-    override private[bus] def listeners = listenerWithTimer
-
-    private[bus] def initTimers(metrics: QueueMetrics): Unit = {
-      listenerWithTimer = listenerSeq.map(l =>
-        (l, Some(metrics.getTimerForIndividualListener(l.getClass.getSimpleName))))
-    }
-  }
-
-  private[bus] class ModifiableGroupOfListener(override val busName: String)
-    extends GroupSparkListener {
-
-    private var queueMetrics: Option[QueueMetrics] = None
-
-    private val group: AtomicReference[Seq[(SparkListenerInterface, Option[Timer])]] =
-      new AtomicReference[Seq[(SparkListenerInterface, Option[Timer])]](Seq.empty)
-
-    override private[bus] def listeners = group.get()
-
-    private[bus] def initTimers(metrics: QueueMetrics): Unit = {
-      queueMetrics = Some(metrics)
-      val current = listeners
-      group.set(
-        current.map(l => (l._1,
-          Some(metrics.getTimerForIndividualListener(l._1.getClass.getSimpleName)))))
-    }
-
-    private[scheduler] def addListener(l: SparkListenerInterface): Unit = {
-      val current = listeners
-      val newVal = current :+ (l,
-        queueMetrics.map(_.getTimerForIndividualListener(l.getClass.getSimpleName)))
-      group.set(newVal)
-    }
-
-    private[scheduler] def removeListener(l: SparkListenerInterface): Unit = {
-      val current = listeners
-      val newVal = current.filter(t => !(t._1 == l))
-      group.set(newVal)
-    }
-
   }
 
 }

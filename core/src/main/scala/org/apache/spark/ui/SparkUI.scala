@@ -24,7 +24,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.bus.ListenerBusQueue.FixGroupOfListener
+import org.apache.spark.scheduler.bus.BusQueue.GroupOfListener
 import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationAttemptInfo, ApplicationInfo, UIRoot}
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
@@ -219,7 +219,7 @@ private[spark] object SparkUI {
     val operationGraphListener = new RDDOperationGraphListener(conf)
 
     listenerBus.addIsolatedListener(
-      new FixGroupOfListener(
+      GroupOfListener(
       Seq(environmentListener, storageStatusListener, executorsListener,
         storageListener, operationGraphListener),
       "ui"), None)

@@ -23,13 +23,14 @@ import java.util.concurrent.locks.ReentrantLock
 
 import com.codahale.metrics.Timer
 import scala.reflect.ClassTag
-import scala.util.DynamicVariable
+import scala.util.{DynamicVariable, Try}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.bus._
+import org.apache.spark.scheduler.bus.BusQueue.{GenericProcessor, GroupOfListener}
 import org.apache.spark.util.WithMultipleListenerBus
 
 /**
@@ -47,10 +48,13 @@ private[spark] class LiveListenerBus(conf: SparkConf)
   private var sparkContext: SparkContext = _
   private var metricsSystem: MetricsSystem = _
 
-  private val defaultListenerQueue =
-    new GroupOfListenersBusQueue("default", conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+  private val defaultListenerPool = GroupOfListener("default")
+  private val defaultListenerQueue = BusQueue(
+    conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
+    defaultListenerPool,
+    BusQueue.ALL_MESSAGES)
 
-  @volatile private var otherListenerQueues = Seq.empty[ListenerBusQueue]
+  @volatile private var otherListenerQueues = Seq.empty[BusQueue]
 
   // start, stop and add/remove listener should be mutually exclusive
   private val startStopAddRemoveLock = new ReentrantLock()
@@ -64,7 +68,7 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     */
   final override def addListener(listener: SparkListenerInterface): Unit = {
     startStopAddRemoveLock.lock()
-    defaultListenerQueue.groupOfListener.addListener(listener)
+    Try(defaultListenerPool.addListener(listener))
     startStopAddRemoveLock.unlock()
   }
 
@@ -74,10 +78,10 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     */
   final override def addIsolatedListener(listener: SparkListenerInterface,
                           eventFilter: Option[SparkListenerEvent => Boolean]): Unit = {
-    addQueue(new SingleListenerBusQueue(
+    addQueue(BusQueue(
       conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
       listener,
-      eventFilter.getOrElse(ListenerBusQueue.ALL_MESSAGES)))
+      eventFilter.getOrElse(BusQueue.ALL_MESSAGES)))
   }
 
    /**
@@ -86,34 +90,37 @@ private[spark] class LiveListenerBus(conf: SparkConf)
   def addProcessor(processor: SparkListenerEvent => Unit,
                    busName: String,
                    eventFilter: Option[SparkListenerEvent => Boolean] = None): Unit = {
-    addQueue(new ProcessorListenerBusQueue(
+    addQueue(BusQueue(
       busName,
       conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
       processor,
-      eventFilter.getOrElse(ListenerBusQueue.ALL_MESSAGES))
+      eventFilter.getOrElse(BusQueue.ALL_MESSAGES))
     )
   }
 
   def removeProcessor(processorBusName: String): Unit = {
     startStopAddRemoveLock.lock()
+    Try {
     val queue = otherListenerQueues
-      .filter(q => q.isInstanceOf[ProcessorListenerBusQueue])
-      .map(_.asInstanceOf[ProcessorListenerBusQueue])
-      .find(_.busName == processorBusName)
+      .filter(q => q.processor.isInstanceOf[GenericProcessor])
+      .find(_.processor.asInstanceOf[GenericProcessor].name == processorBusName)
     queue.foreach { q =>
       otherListenerQueues = otherListenerQueues.filter(_ != q)
       q.askStop()
       q.waitForStop()
     }
+  }
     startStopAddRemoveLock.unlock()
   }
 
-  private def addQueue(queue : ListenerBusQueue): Unit = {
+  private def addQueue(queue : BusQueue): Unit = {
     startStopAddRemoveLock.lock()
-    if (started) {
-      queue.start(sparkContext, metricsSystem)
+    Try {
+      if (started) {
+        queue.start(sparkContext, metricsSystem)
+      }
+      otherListenerQueues = otherListenerQueues :+ queue
     }
-    otherListenerQueues = otherListenerQueues :+ queue
     startStopAddRemoveLock.unlock()
   }
 
@@ -123,20 +130,22 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     */
   final override def removeListener(listener: SparkListenerInterface): Unit = {
     startStopAddRemoveLock.lock()
-    // First we try to delete it from the default queue
-    defaultListenerQueue.groupOfListener.removeListener(listener)
-    // Then from the other queue.
-    val holder = otherListenerQueues.find(q => q.listeners.contains(listener))
-    holder.foreach{q =>
-      val listeners = q.listeners
-      if (listeners.size > 1) {
-        throw new IllegalArgumentException("Cannot remove a listener from a fixed group")
-      } else {
-        // First we remove the queue from the list (no more message will be posted)
-        otherListenerQueues = otherListenerQueues.filter(_ != q)
-        // Then stop it
-        q.askStop()
-        q.waitForStop()
+    Try {
+      // First we try to delete it from the default queue
+      defaultListenerPool.removeListener(listener)
+      // Then from the other queue.
+      val holder = otherListenerQueues.find(q => q.listeners.contains(listener))
+      holder.foreach{q =>
+        val listeners = q.listeners
+        if (listeners.size > 1) {
+          throw new IllegalArgumentException("Cannot remove a listener from a fixed group")
+        } else {
+          // First we remove the queue from the list (no more message will be posted)
+          otherListenerQueues = otherListenerQueues.filter(_ != q)
+          // Then stop it
+          q.askStop()
+          q.waitForStop()
+        }
       }
     }
     startStopAddRemoveLock.unlock()
@@ -152,8 +161,9 @@ private[spark] class LiveListenerBus(conf: SparkConf)
     otherListenerQueues.foreach(q => q.post(event))
   }
 
-
-
+  /**
+    * For testing only
+    */
   override private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag] =
     defaultListenerQueue.findListenersByClass ++ otherListenerQueues.flatMap(_.findListenersByClass)
 
@@ -171,15 +181,18 @@ private[spark] class LiveListenerBus(conf: SparkConf)
   def start(sc: SparkContext, ms: MetricsSystem): Unit = {
     startStopAddRemoveLock.lock()
     if (!started) {
-      sparkContext = sc
-      metricsSystem = ms
-      defaultListenerQueue.start(sc, ms)
-      otherListenerQueues.foreach(_.start(sc, ms))
-      started = true
+      Try {
+        sparkContext = sc
+        metricsSystem = ms
+        defaultListenerQueue.start(sc, ms)
+        otherListenerQueues.foreach(_.start(sc, ms))
+        started = true
+      }
+      startStopAddRemoveLock.unlock()
     } else {
+      startStopAddRemoveLock.unlock()
       throw new IllegalStateException("LiveListener bus already started!")
     }
-    startStopAddRemoveLock.unlock()
   }
 
    /**
@@ -189,17 +202,20 @@ private[spark] class LiveListenerBus(conf: SparkConf)
   def stop(): Unit = {
     startStopAddRemoveLock.lock()
     if (!started) {
+      startStopAddRemoveLock.unlock()
       throw new IllegalStateException("Attempted to stop the LiveListener " +
         "bus that has not yet started!")
     }
-    if (!stopped.get) {
-      stopped.set(true)
-      defaultListenerQueue.askStop()
-      otherListenerQueues.foreach(_.askStop())
-      defaultListenerQueue.waitForStop()
-      otherListenerQueues.foreach(_.waitForStop())
-    } else {
-      // Keep quiet
+    Try {
+      if (!stopped.get) {
+        stopped.set(true)
+        defaultListenerQueue.askStop()
+        otherListenerQueues.foreach(_.askStop())
+        defaultListenerQueue.waitForStop()
+        otherListenerQueues.foreach(_.waitForStop())
+      } else {
+        // Keep quiet
+      }
     }
     startStopAddRemoveLock.unlock()
   }
@@ -237,7 +253,7 @@ private[spark] class LiveListenerBus(conf: SparkConf)
   private[scheduler] def metricsFromMainQueue:
   (QueueMetrics, Map[SparkListenerInterface, Option[Timer]]) = (
     defaultListenerQueue.metrics,
-    defaultListenerQueue.listenerWithCounter
+    defaultListenerPool.listeners.toMap
   )
 
   /**

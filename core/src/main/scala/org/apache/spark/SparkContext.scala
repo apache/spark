@@ -52,7 +52,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.bus.ListenerBusQueue.FixGroupOfListener
+import org.apache.spark.scheduler.bus.BusQueue.GroupOfListener
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage._
@@ -2353,7 +2353,7 @@ class SparkContext(config: SparkConf) extends Logging {
     try {
       val listenerClassNames: Seq[String] =
         conf.get("spark.extraListeners", "").split(',').map(_.trim).filter(_ != "")
-      val extraListeners = listenerClassNames.map{ className =>
+      val extraListeners = listenerClassNames.map { className =>
         val constructors = {
           val listenerClass = Utils.classForName(className)
           listenerClass
@@ -2385,7 +2385,7 @@ class SparkContext(config: SparkConf) extends Logging {
         listener
       }
       if (extraListeners.nonEmpty) {
-        val group = new FixGroupOfListener(extraListeners, "extraListeners")
+        val group = GroupOfListener(extraListeners, "extraListeners")
         listenerBus.addIsolatedListener(group, None)
         logInfo("extra-listeners registered")
       }

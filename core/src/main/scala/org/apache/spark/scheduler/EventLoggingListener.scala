@@ -163,7 +163,7 @@ private[spark] class EventLoggingListener(
       }
       logEvent(toLog)
       nbMessageProcessed = nbMessageProcessed + 1
-      if (nbMessageProcessed == FLUSH_FREQUENCY) {
+      if (nbMessageProcessed >= FLUSH_FREQUENCY) {
         flush()
         nbMessageProcessed = 0
       }
@@ -175,7 +175,6 @@ private[spark] class EventLoggingListener(
    * ".inprogress" suffix.
    */
   def stop(): Unit = {
-    flush()
     writer.foreach(_.close())
 
     val target = new Path(logPath)
