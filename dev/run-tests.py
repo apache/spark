@@ -120,8 +120,8 @@ def determine_modules_to_test(changed_modules):
     # If we need to run all of the tests, then we should short-circuit and return 'root'
     if modules.root in modules_to_test:
         return [modules.root]
-    return toposort_flatten(dict(
-        (m, set(m.dependencies).intersection(modules_to_test)) for m in modules_to_test), sort=True)
+    return toposort_flatten(
+        {m: set(m.dependencies).intersection(modules_to_test) for m in modules_to_test}, sort=True)
 
 
 def determine_tags_to_exclude(changed_modules):
