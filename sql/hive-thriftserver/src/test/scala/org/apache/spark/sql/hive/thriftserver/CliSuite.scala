@@ -294,8 +294,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       1.minute,
       Seq(s"--conf", s"spark.hadoop.${ConfVars.METASTOREWAREHOUSE}=$tmpDir"))(
       "set spark.sql.warehouse.dir;" -> tmpDir.getAbsolutePath)
-    
     tmpDir.delete()
   }
-
 }
