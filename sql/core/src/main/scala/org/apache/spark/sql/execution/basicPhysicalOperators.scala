@@ -104,11 +104,11 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val outputBuffer = mockFPGA(originBuffer)
 
       // Convert ByteBuffer => InternalRows
-      val resIter = toInternalRow(outputBuffer)
+      val resIter = toInternalRow(outputBuffer).toArray
 
       mockReturnByteBuffer(originBuffer)
 
-      resIter
+      resIter.toIterator
 
     }
   }
