@@ -65,13 +65,11 @@ public final class ColumnarBatch {
   final Row row;
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
-    ColumnVector[] columns = allocateVectors(schema, DEFAULT_BATCH_SIZE, memMode);
-    return create(schema, columns, DEFAULT_BATCH_SIZE);
+    return allocate(schema, memMode, DEFAULT_BATCH_SIZE);
   }
 
   public static ColumnarBatch allocate(StructType type) {
-    ColumnVector[] columns = allocateVectors(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
-    return create(type, columns, DEFAULT_BATCH_SIZE);
+    return allocate(type, DEFAULT_MEMORY_MODE, DEFAULT_BATCH_SIZE);
   }
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
@@ -101,7 +99,7 @@ public final class ColumnarBatch {
   }
 
   private static ColumnarBatch create(StructType schema, ColumnVector[] columns, int capacity) {
-    assert(columns.length > 0);
+    assert(schema.length() == columns.length);
     return new ColumnarBatch(schema, columns, capacity);
   }
 
