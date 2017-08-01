@@ -142,9 +142,11 @@ class DataTypeSuite extends SparkFunSuite {
     val right = StructType(
       StructField("b", LongType) :: Nil)
 
-    intercept[SparkException] {
+    val message = intercept[SparkException] {
       left.merge(right)
-    }
+    }.getMessage
+    assert(message.equals("Failed to merge fields 'b' and 'b'. " +
+      "Failed to merge incompatible data types FloatType and LongType"))
   }
 
   test("existsRecursively") {
