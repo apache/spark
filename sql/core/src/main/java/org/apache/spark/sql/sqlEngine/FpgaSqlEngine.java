@@ -49,7 +49,6 @@ public static ByteBuffer getBuf(int size) {
   init();
 
   logger.warn("WQF: invoking getBuf");
-  lock.lock();
 
   logger.warn("WQF: grabbed FPGA lock\n");
   return sqlEngineGetBuf(size);
@@ -61,7 +60,6 @@ public static void putBuf(ByteBuffer buf) {
 
   sqlEnginePutBuf(buf);
 
-  lock.unlock();
 
   logger.warn("WQF: released FPGA lock\n");
 }
@@ -69,11 +67,12 @@ public static void putBuf(ByteBuffer buf) {
 public static ByteBuffer project(ByteBuffer buf, int rowCount) {
   logger.warn("WQF: invoking project");
   init();
+  lock.lock();
 
   buf.limit(rowCount*768);
-  return sqlEngineRun(buf, rowCount);
-  
+  ByteBuffer buffer = sqlEngineRun(buf, rowCount);
+  lock.unlock();
+
+  return buffer;
 }
-
-
 }
