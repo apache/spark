@@ -169,7 +169,11 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    */
   private def compact(batchId: Long, logs: Array[T]): Boolean = {
     val validBatches = getValidBatchesBeforeCompactionBatch(batchId, compactInterval)
-    val allLogs = validBatches.flatMap(batchId => super.get(batchId)).flatten ++ logs
+    val allLogs = validBatches.map { batchId =>
+      super.get(batchId).getOrElse {
+        throw new IllegalStateException(s"batch $batchId doesn't exist")
+      }
+    }.flatten ++ logs
     // Return false as there is another writer.
     super.add(batchId, compactLogs(allLogs).toArray)
   }
@@ -186,7 +190,11 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       if (latestId >= 0) {
         try {
           val logs =
-            getAllValidBatches(latestId, compactInterval).flatMap(id => super.get(id)).flatten
+            getAllValidBatches(latestId, compactInterval).map { id =>
+              super.get(id).getOrElse {
+                throw new IllegalStateException(s"batch $id doesn't exist")
+              }
+            }.flatten
           return compactLogs(logs).toArray
         } catch {
           case e: IOException =>
