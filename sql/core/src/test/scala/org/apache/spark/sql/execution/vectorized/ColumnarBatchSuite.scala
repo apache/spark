@@ -1267,10 +1267,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getBoolean(i) == (i % 2 == 0))
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getBoolean(i) == (i % 2 == 0))
+      }
     }
     column.close
   }
@@ -1290,10 +1294,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getByte(i) == i)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getByte(i) == i)
+      }
     }
     column.close
   }
@@ -1313,10 +1321,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getShort(i) == i)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getShort(i) == i)
+      }
     }
     column.close
   }
@@ -1336,10 +1348,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getInt(i) == i)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getInt(i) == i)
+      }
     }
     column.close
   }
@@ -1359,10 +1375,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getLong(i) == i.toLong)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getLong(i) == i.toLong)
+      }
     }
     column.close
   }
@@ -1382,10 +1402,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getFloat(i) == i.toFloat)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getFloat(i) == i.toFloat)
+      }
     }
     column.close
   }
@@ -1405,10 +1429,14 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      assert(column.getDouble(i) == i.toDouble)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getDouble(i) == i.toDouble)
+      }
     }
     column.close
   }
@@ -1428,11 +1456,13 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val column = new CachedBatchColumnVector(
       JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
 
-    assert(column.isNullAt(0) == true)
-    for (i <- 1 until 16) {
-      assert(column.isNullAt(i) == false)
-      dataType match {
-        case _ : StringType => assert(column.getUTF8String(i).toString == (i % 4).toString)
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getUTF8String(i).toString == (i % 4).toString)
       }
     }
     column.close

@@ -32,6 +32,9 @@ import org.apache.spark.unsafe.types.UTF8String;
  */
 public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
 
+  // buffer for a column
+  private byte[] buffer;
+
   // accessor for a column
   private ColumnAccessor columnAccessor;
 
@@ -50,7 +53,9 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
 
   public CachedBatchColumnVector(byte[] buffer, int numRows, DataType type) {
     super(numRows, type, MemoryMode.ON_HEAP);
-    initialize(buffer, type);
+    this.buffer = buffer;
+    initialize();
+    initializeRowAccessor(type);
   }
 
   @Override
@@ -79,7 +84,7 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
       }
     } else {
       throw new UnsupportedOperationException("Row access order must be equal or ascending." +
-        " Row " + rowId + "is accessed after row "+ previousRowId + " was accessed.");
+        " Row " + rowId + " is accessed after row "+ previousRowId + " was accessed.");
     }
   }
 
@@ -231,10 +236,13 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
     return unsafeRow.getUTF8String(ORDINAL);
   }
 
-  private void initialize(byte[] buffer, DataType type) {
+  void initialize() {
     ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
     columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
+    previousRowId = -1;
+  }
 
+  private void initializeRowAccessor(DataType type) {
     unsafeRow = new UnsafeRow(1);
     bufferHolder = new BufferHolder(unsafeRow);
     rowWriter = new UnsafeRowWriter(bufferHolder, 1);
