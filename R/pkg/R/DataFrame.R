@@ -2976,20 +2976,17 @@ setMethod("describe",
 
 #' summary
 #'
-#' Computes specified statistics for numeric and string columns.
-#'
-#' Available statistics are:
-#'
-#' - count
-#' - mean
-#' - stddev
-#' - min
-#' - max
-#' - arbitrary approximate percentiles specified as a percentage (eg, 75%)
-#'
+#' Computes specified statistics for numeric and string columns. Available statistics are:
+#' \itemize{
+#' \item count
+#' \item mean
+#' \item stddev
+#' \item min
+#' \item max
+#' \item arbitrary approximate percentiles specified as a percentage (eg, "75%")
+#' }
 #' If no statistics are given, this function computes count, mean, stddev, min,
 #' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
-#'
 #' This function is meant for exploratory data analysis, as we make no guarantee about the
 #' backward compatibility of the schema of the resulting Dataset. If you want to
 #' programmatically compute summary statistics, use the `agg` function instead.
