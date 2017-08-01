@@ -128,31 +128,23 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         val tmpBuffer = new Array[Byte](CMCCInputCharLength(stringIndex))
         val bytesOfStr = row.getBinary(index)
         System.arraycopy(
-          bytesOfStr, 0, tmpBuffer, 0, math.min(bytesOfStr.length, CMCCInputCharLength(stringIndex)));
+          bytesOfStr, 0, tmpBuffer, 0, math.min(
+            bytesOfStr.length, CMCCInputCharLength(stringIndex)));
         buffer.put(tmpBuffer)
         stringIndex += 1
 
-        // Previous logic
-//        val string = row.getUTF8String(index)
-//        if (string != null) {
-//          val bytesOfStr = string.getBytes
-//          System.arraycopy(
-//            bytesOfStr, 0, tmpBuffer, 0, math.min(bytesOfStr.length, CMCCInputCharLength(stringIndex)));
-//        }
-//        buffer.put(tmpBuffer)
-//        stringIndex += 1
       }
     }
   }
 
-  def loadBytesToBuffer(byteNum: Int, buffer: ByteBuffer): Unit = {
-    val tmpBuffer = new Array[Byte](byteNum)
-    buffer.put(tmpBuffer)
+  val tmpBuffer16 = new Array[Byte](16)
+
+  def load16BytesToBuffer(buffer: ByteBuffer): Unit = {
+    buffer.put(tmpBuffer16)
   }
 
   def readBytesFromBuffer(byteNum: Int, buffer: ByteBuffer): Unit = {
-    val tmpBuffer = new Array[Byte](byteNum)
-    buffer.get(tmpBuffer)
+    buffer.position(buffer.position() + byteNum)
   }
 
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
@@ -160,7 +152,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     while(iter.hasNext) {
       loadRowToBuffer(iter.next, originBuffer)
       // FPGA needs this 16 whatever bytes
-      loadBytesToBuffer(16, originBuffer)
+//      load16BytesToBuffer(originBuffer)
+      originBuffer.put(tmpBuffer16)
       FPGARowNumber += 1
       // Test convert speed
 //      if (FPGARowNumber % 10000 == 0)
@@ -181,6 +174,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val row: UnsafeRow = new UnsafeRow(numFields)
       val holder: BufferHolder = new BufferHolder(row, 0)
       val rowWriter = new UnsafeRowWriter(holder, numFields)
+      val tmpBuffer = new Array[Byte](30)
+
 
       override def next(): InternalRow = {
 
@@ -194,23 +189,18 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
           } else if (colType == 2) {
             rowWriter.write(index, buffer.getLong)
           } else {
-            val tmpBuffer = new Array[Byte](CMCCOutputCharLength(stringIndex))
-            buffer.get(tmpBuffer, 0, tmpBuffer.length)
-            val res = tmpBuffer.zipWithIndex.filter(_._1 == 0).headOption
-            if (res == None) {             // Regular String
-              val string = UTF8String.fromBytes(tmpBuffer)
-              rowWriter.write(index, string)
-            } else if (res.get._2 == 0) { // 0 at start -> All zero -> null
-              rowWriter.setNullAt(index)
-            } else { // 0 at some place -> Cut it
-              val string = UTF8String.fromBytes(tmpBuffer, 0, res.get._2)
-              rowWriter.write(index, string)
-            }
+//            val byteArray = buffer.array()
+//            rowWriter.write(index, byteArray, buffer.position(), CMCCOutputCharLength(stringIndex))
+//            buffer.position(buffer.position() + CMCCOutputCharLength(stringIndex))
+//            stringIndex += 1
+            buffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex))
+            rowWriter.write(index, tmpBuffer)
             stringIndex += 1
           }
         }
         // For FPGA aligning issue
-        readBytesFromBuffer(32, buffer)
+//        readBytesFromBuffer(32, buffer)
+        buffer.position(buffer.position() + 32)
         rowCount -= 1
         row.setTotalSize(holder.totalSize())
         row
@@ -228,7 +218,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     FpgaSqlEngine.project(input, FPGARowNumber)
   }
 
-  def mockReturnByteBuffer(buffer: ByteBuffer) = {
+  def mockReturnByteBuffer(buffer: ByteBuffer): Unit = {
     FpgaSqlEngine.putBuf(buffer)
   }
 
