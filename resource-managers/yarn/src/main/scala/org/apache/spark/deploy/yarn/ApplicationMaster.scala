@@ -474,6 +474,7 @@ private[spark] class ApplicationMaster(
     addAmIpFilter()
     registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"),
       securityMgr)
+    registered = true
 
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
