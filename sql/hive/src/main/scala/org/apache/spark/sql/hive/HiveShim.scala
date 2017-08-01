@@ -22,15 +22,16 @@ import java.rmi.server.UID
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
+import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
 import org.apache.avro.Schema
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
+import org.apache.hadoop.hive.ql.exec.{MapredContext, UDF, Utilities}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDFMacro
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDF, GenericUDFMacro, GenericUDTF}
 import org.apache.hadoop.hive.serde2.ColumnProjectionUtils
 import org.apache.hadoop.hive.serde2.avro.{AvroGenericRecordWritable, AvroSerdeUtils}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.HiveDecimalObjectInspector
@@ -42,7 +43,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.types.Decimal
 import org.apache.spark.util.Utils
 
-private[hive] object HiveShim {
+private[hive] object HiveShim extends Logging {
   // Precision and scale to pass for unlimited decimals; these are the same as the precision and
   // scale Hive 0.13 infers for BigDecimals from sources that don't specify them (e.g. UDFs)
   val UNLIMITED_DECIMAL_PRECISION = 38
@@ -108,6 +109,32 @@ private[hive] object HiveShim {
         hdoi.precision(), hdoi.scale())
     } else {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
+    }
+  }
+
+  private def hasInheritanceOf[UDFType: ClassTag](func: String, clazz: Class[_]): Boolean = {
+    val parentClazz = classTag[UDFType].runtimeClass
+    if (parentClazz.isAssignableFrom(clazz)) {
+      try {
+        val funcClass = clazz.getMethod(func, classOf[MapredContext])
+        // If a given `func` not overridden, `Method.getDeclaringClass` returns
+        // a parent Class object.
+        funcClass.getDeclaringClass != parentClazz
+      } catch {
+        case NonFatal(_) => false
+      }
+    } else {
+      false
+    }
+  }
+
+  def validateHiveUserDefinedFunction(udfClass: Class[_]): Unit = {
+    if (hasInheritanceOf[GenericUDF]("configure", udfClass) ||
+        hasInheritanceOf[GenericUDTF]("configure", udfClass)) {
+      logWarning(s"Found an overridden method `configure` in ${udfClass.getSimpleName}, but " +
+        "Spark does not call the method during initialization because Spark does not use " +
+        "MapredContext inside (See SPARK-21533). So, you might reconsider the implementation of " +
+        s"${udfClass.getSimpleName}.")
     }
   }
 
