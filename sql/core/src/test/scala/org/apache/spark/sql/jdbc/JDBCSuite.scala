@@ -389,7 +389,6 @@ class JDBCSuite extends SparkFunSuite
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
     assert(df.collect().length == 3)
-
   }
 
   test("Register JDBC query with renamed fields") {
