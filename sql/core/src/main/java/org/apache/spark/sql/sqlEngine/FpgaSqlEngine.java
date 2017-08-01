@@ -31,28 +31,16 @@ private static final Logger logger = LoggerFactory.getLogger(FpgaSqlEngine.class
 private static Lock lock;
 private static int initFlag = 0;
 
-//static private native int sqlEngineInit(Logger logger);
 
 static private native ByteBuffer sqlEngineGetBuf(int size);
 static private native void sqlEnginePutBuf(ByteBuffer buf);
 
 static private native ByteBuffer sqlEngineRun(ByteBuffer buf, int rowCount);
 
-/*
-public static int init() {
-  logger.warn("### loading sql engine library ...");
-  logger.warn(System.getProperty("java.library.path"));
-
-  System.loadLibrary("sqlengine");
-
-  return sqlEngineInit(logger);
-}
-*/
-
 static void init() {
     if(1 != initFlag) {
         initFlag = 1;
-        lock = new ReentrantLock();
+        lock = new ReentrantLock(true);
         logger.warn("WQF: initalizing FPGA lock\n");
     }
 }
@@ -82,7 +70,6 @@ public static ByteBuffer project(ByteBuffer buf, int rowCount) {
   logger.warn("WQF: invoking project");
   init();
 
-//  return buf;
   buf.limit(rowCount*768);
   return sqlEngineRun(buf, rowCount);
   
