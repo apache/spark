@@ -25,11 +25,9 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ListBuffer
-
 import com.google.common.io.{ByteStreams, Closeables, Files}
-import io.netty.channel.FileRegion
+import io.netty.channel.{DefaultFileRegion, FileRegion}
 import io.netty.util.AbstractReferenceCounted
-
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -108,25 +106,7 @@ private[spark] class DiskStore(
         new EncryptedBlockData(file, blockSize, conf, key)
 
       case _ =>
-        val channel = new FileInputStream(file).getChannel()
-        if (blockSize < minMemoryMapBytes) {
-          // For small files, directly read rather than memory map.
-          Utils.tryWithSafeFinally {
-            val buf = ByteBuffer.allocate(blockSize.toInt)
-            JavaUtils.readFully(channel, buf)
-            buf.flip()
-            new ByteBufferBlockData(new ChunkedByteBuffer(buf), true)
-          } {
-            channel.close()
-          }
-        } else {
-          Utils.tryWithSafeFinally {
-            new ByteBufferBlockData(
-              new ChunkedByteBuffer(channel.map(MapMode.READ_ONLY, 0, file.length)), true)
-          } {
-            channel.close()
-          }
-        }
+        new DiskBlockData(conf, file, blockSize)
     }
   }
 
@@ -163,6 +143,60 @@ private[spark] class DiskStore(
     }
   }
 
+}
+
+private class DiskBlockData(
+    conf: SparkConf,
+    file: File,
+    blockSize: Long) extends BlockData {
+
+  private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+
+  override def toInputStream(): InputStream = new FileInputStream(file)
+
+  /**
+    * Returns a Netty-friendly wrapper for the block's data.
+    *
+    * Please see `ManagedBuffer.convertToNetty()` for more details.
+    */
+  override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
+
+  override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
+    Utils.tryWithResource(open()){ channel =>
+      var remaining = blockSize
+      val chunks = new ListBuffer[ByteBuffer]()
+      while (remaining > 0) {
+        val chunkSize = math.min(remaining, Int.MaxValue)
+        val chunk = allocator(chunkSize.toInt)
+        remaining -= chunkSize
+        JavaUtils.readFully(channel, chunk)
+        chunk.flip()
+        chunks += chunk
+      }
+      new ChunkedByteBuffer(chunks.toArray)
+    }
+  }
+
+  override def toByteBuffer(): ByteBuffer = {
+    require( size < Int.MaxValue, s"can't create a byte buffer of size $blockSize since it exceeds Int.MaxValue ${Int.MaxValue}.")
+    Utils.tryWithResource(open()) { channel =>
+      if (blockSize < minMemoryMapBytes) {
+        // For small files, directly read rather than memory map.
+        val buf = ByteBuffer.allocate(blockSize.toInt)
+        JavaUtils.readFully(channel, buf)
+        buf.flip()
+        buf
+      } else {
+        channel.map(MapMode.READ_ONLY, 0, file.length)
+      }
+    }
+  }
+
+  override def size: Long = blockSize
+
+  override def dispose(): Unit = {}
+
+    private def open() = new FileInputStream(file).getChannel
 }
 
 private class EncryptedBlockData(
