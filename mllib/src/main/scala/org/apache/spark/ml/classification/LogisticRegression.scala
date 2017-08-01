@@ -366,6 +366,7 @@ class LogisticRegression @Since("1.2.0") (
 
   @Since("1.5.0")
   override def setThreshold(value: Double): this.type = super.setThreshold(value)
+  setDefault(threshold -> 0.5)
 
   @Since("1.5.0")
   override def getThreshold: Double = super.getThreshold
