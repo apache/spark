@@ -878,7 +878,7 @@ class RDDTests(ReusedPySparkTestCase):
             ser.dumps(command)
 
         def process_vars(sc):
-            broadcast_vars = [x for x in sc._pickled_broadcast_vars]
+            broadcast_vars = list(sc._pickled_broadcast_vars)
             num_pickled = len(broadcast_vars)
             sc._pickled_broadcast_vars.clear()
             return num_pickled
@@ -900,6 +900,7 @@ class RDDTests(ReusedPySparkTestCase):
 
         self.assertEqual(funcs_num_pickled[f1], 1)
         self.assertEqual(funcs_num_pickled[f2], 1)
+        self.assertEqual(len(list(self.sc._pickled_broadcast_vars)), 0)
 
     def test_large_closure(self):
         N = 200000
