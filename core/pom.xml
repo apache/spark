@@ -287,7 +287,7 @@
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>htmlunit-driver</artifactId>
+      <artifactId>selenium-htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Added for selenium: -->

@@ -179,7 +179,7 @@
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
     <paranamer.version>2.6</paranamer.version>
-    <selenium.htmlunitdriver.version>2.27</selenium.htmlunitdriver.version>    <maven-antrun.version>1.8</maven-antrun.version>
+    <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
     <arrow.version>0.4.0</arrow.version>
 
@@ -478,8 +478,8 @@
       </dependency>
       <dependency>
         <groupId>org.seleniumhq.selenium</groupId>
-        <artifactId>htmlunit-driver</artifactId>
-        <version>${selenium.htmlunitdriver.version}</version>
+        <artifactId>selenium-htmlunit-driver</artifactId>
+        <version>${selenium.version}</version>
         <scope>test</scope>
       </dependency>
       <!-- Added for selenium only, and should match its dependent version: -->
