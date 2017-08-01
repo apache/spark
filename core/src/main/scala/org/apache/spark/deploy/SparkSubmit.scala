@@ -653,7 +653,9 @@ object SparkSubmit extends CommandLineUtils {
       if (args.isPython) {
         childArgs ++= Array("--primary-py-file", args.primaryResource)
         childArgs ++= Array("--main-class", "org.apache.spark.deploy.PythonRunner")
-        childArgs ++= Array("--other-py-files", args.pyFiles)
+        if (args.pyFiles != null) {
+          childArgs ++= Array("--other-py-files", args.pyFiles)
+        }
       } else {
         childArgs ++= Array("--primary-java-resource", args.primaryResource)
         childArgs ++= Array("--main-class", args.mainClass)
