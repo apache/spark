@@ -1212,29 +1212,28 @@ case class WidthBucket(
   expr: Expression,
   minValue: Expression,
   maxValue: Expression,
-  numBucket: Expression) extends QuaternaryExpression with ImplicitCastInputTypes {
+  numBucket: Expression) extends Expression with ImplicitCastInputTypes {
 
   override def children: Seq[Expression] = Seq(expr, minValue, maxValue, numBucket)
+  override def foldable: Boolean = children.drop(1).forall(_.foldable)
   override def inputTypes: Seq[AbstractDataType] = Seq(DoubleType, DoubleType, DoubleType, LongType)
   override def dataType: DataType = LongType
   override def nullable: Boolean = true
 
-  private val isFoldable = minValue.foldable && maxValue.foldable && numBucket.foldable
-
-  private lazy val _minValue: Any = minValue.eval(EmptyRow)
+  private lazy val _minValue: Any = minValue.eval()
   private lazy val minValueV = _minValue.asInstanceOf[Double]
 
-  private lazy val _maxValue: Any = maxValue.eval(EmptyRow)
+  private lazy val _maxValue: Any = maxValue.eval()
   private lazy val maxValueV = _maxValue.asInstanceOf[Double]
 
-  private lazy val _numBucket: Any = numBucket.eval(EmptyRow)
+  private lazy val _numBucket: Any = numBucket.eval()
   private lazy val numBucketV = _numBucket.asInstanceOf[Long]
 
   private val errMsg = "The argument [%d] of WIDTH_BUCKET function is NULL or invalid."
 
   override def eval(input: InternalRow): Any = {
 
-    if (isFoldable) {
+    if (foldable) {
       if (_minValue == null) {
         throw new RuntimeException(errMsg.format(2))
       } else if (_maxValue == null) {
@@ -1270,7 +1269,7 @@ case class WidthBucket(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mathUtils = MathUtils.getClass.getName.stripSuffix("$")
-    if (isFoldable) {
+    if (foldable) {
       val exprV = expr.genCode(ctx)
       ev.copy(code = s"""
         if (${_minValue == null}) {
