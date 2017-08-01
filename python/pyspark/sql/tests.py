@@ -3025,7 +3025,7 @@ class ArrowTests(ReusedPySparkTestCase):
     def tearDownClass(cls):
         del os.environ["TZ"]
         time.tzset()
-
+        ReusedPySparkTestCase.tearDownClass()
         cls.spark.stop()
 
     def assertFramesEqual(self, df_with_arrow, df_without):
