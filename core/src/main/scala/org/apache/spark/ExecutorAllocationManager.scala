@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.ControlThrowable
+import scala.util.control.{ControlThrowable, NonFatal}
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
@@ -245,14 +245,15 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Reset the allocation manager to the initial state. Currently this will only be called in
-   * yarn-client mode when AM re-registers after a failure.
+   * Reset the allocation manager when the cluster manager loses track of the driver's state.
+   * This is currently only done in YARN client mode, when the AM is restarted.
+   *
+   * This method forgets about any state about existing executors, and forces the scheduler to
+   * re-evaluate the number of needed executors the next time it's run.
    */
   def reset(): Unit = synchronized {
-    initializing = true
+    addTime = 0L
     numExecutorsTarget = initialNumExecutors
-    numExecutorsToAdd = 1
-
     executorsPendingToRemove.clear()
     removeTimes.clear()
   }
@@ -376,8 +377,17 @@ private[spark] class ExecutorAllocationManager(
       return 0
     }
 
-    val addRequestAcknowledged = testing ||
-      client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
+    val addRequestAcknowledged = try {
+      testing ||
+        client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
+    } catch {
+      case NonFatal(e) =>
+        // Use INFO level so the error it doesn't show up by default in shells. Errors here are more
+        // commonly caused by YARN AM restarts, which is a recoverable issue, and generate a lot of
+        // noisy output.
+        logInfo("Error reaching cluster manager.", e)
+        false
+    }
     if (addRequestAcknowledged) {
       val executorsString = "executor" + { if (delta > 1) "s" else "" }
       logInfo(s"Requesting $delta new $executorsString because tasks are backlogged" +
