@@ -297,12 +297,13 @@ We'll create a very simple Spark application, `SimpleApp.java`:
 {% highlight java %}
 /* SimpleApp.java */
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.Dataset;
 
 public class SimpleApp {
   public static void main(String[] args) {
     String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
     SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
-    Dataset<String> logData = spark.read.textFile(logFile).cache();
+    Dataset<String> logData = spark.read().textFile(logFile).cache();
 
     long numAs = logData.filter(s -> s.contains("a")).count();
     long numBs = logData.filter(s -> s.contains("b")).count();
@@ -330,6 +331,10 @@ Note that Spark artifacts are tagged with a Scala version.
   <name>Simple Project</name>
   <packaging>jar</packaging>
   <version>1.0</version>
+  <properties>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+  </properties>
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.apache.spark</groupId>
