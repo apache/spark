@@ -1903,6 +1903,25 @@ releases of Spark SQL.
   Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
   metadata. Spark SQL does not support that.
 
+**Hive UDF/UDTF/UDAF**
+
+Spark SQL implements the basic functionality of the Hive UDF/UDTF/UDAF, but does not support all the APIs for users.
+Some of them are meaningless in Spark and the others are rarely used by users.
+Below is a list of major APIs we don't support in Spark SQL:
+
+* `getRequiredJars` and `getRequiredFiles` (`UDF` and `GenericUDF`) are functions to to automatically
+  include additional resources required by this UDF.
+* `initialize(StructObjectInspector)` in `GenericUDTF` is not supported yet. Spark SQL currently uses
+  a deprecated interface `initialize(ObjectInspector[])` only.
+* `configure` (`GenericUDF`, `GenericUDTF`, and `GenericUDAFEvaluator`) is a function to initialize
+  functions with `MapredContext`. But, Spark SQL does not use `MapredContext` internally.
+* `close` (`GenericUDF` and `GenericUDAFEvaluator`) is a function to release associated resources.
+  Spark SQL does not call this function when tasks finished.
+* `reset` (`GenericUDAFEvaluator`) is a function to re-initialize aggregation for reusing the same aggregation.
+  Spark SQL currently does not support the reuse of aggregation.
+* `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
+  an aggregate over a fixed window. Spark SQL does not support this optimization yet.
+
 # Reference
 
 ## Data Types
