@@ -78,7 +78,6 @@ public class ExpressionInfo {
             String since) {
         assert name != null;
         assert arguments != null;
-        assert arguments.isEmpty() || arguments.startsWith("\n    Arguments:");
         assert examples != null;
         assert examples.isEmpty() || examples.startsWith("\n    Examples:");
         assert note != null;
