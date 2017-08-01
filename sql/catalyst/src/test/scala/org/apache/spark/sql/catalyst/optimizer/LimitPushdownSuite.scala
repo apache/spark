@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Add
 import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 class LimitPushdownSuite extends PlanTest {
 
@@ -142,6 +143,14 @@ class LimitPushdownSuite extends PlanTest {
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer = Limit(1, Limit(2, x).join(Limit(2, y), FullOuter)).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("watermark") {
+    val interval = new CalendarInterval(2, 2000L)
+    val originalQuery = EventTimeWatermark('a, interval, testRelation).limit(2)
+    val correctAnswer = Limit(2, EventTimeWatermark(
+      'a, interval, LocalLimit(2, testRelation))).analyze
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer, checkAnalysis = false)
   }
 }
 
