@@ -453,6 +453,14 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
 
+  override def inputType: AbstractDataType = AnyDataType
+
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckResult.TypeCheckSuccess =>
+      TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
+    case failure => failure
+  }
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     if (ctx.isPrimitiveType(left.dataType)
         && left.dataType != BooleanType // java boolean doesn't support > or < operator
@@ -465,7 +473,7 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
     }
   }
 
-  protected lazy val ordering = TypeUtils.getInterpretedOrdering(left.dataType)
+  protected lazy val ordering: Ordering[Any] = TypeUtils.getInterpretedOrdering(left.dataType)
 }
 
 
@@ -483,27 +491,12 @@ object Equality {
   }
 }
 
+// TODO: although map type is not orderable, technically map type should be able to be used
+// in equality comparison
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.")
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = AnyDataType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        // TODO: although map type is not orderable, technically map type should be able to be used
-        // in equality comparison, remove this type check once we support it.
-        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
-          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualTo, but the actual " +
-            s"input type is ${left.dataType.catalogString}.")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case failure => failure
-    }
-  }
 
   override def symbol: String = "="
 
@@ -514,29 +507,14 @@ case class EqualTo(left: Expression, right: Expression)
   }
 }
 
+// TODO: although map type is not orderable, technically map type should be able to be used
+// in equality comparison
 @ExpressionDescription(
   usage = """
     expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
       but returns true if both are null, false if one of the them is null.
   """)
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
-
-  override def inputType: AbstractDataType = AnyDataType
-
-  override def checkInputDataTypes(): TypeCheckResult = {
-    super.checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        // TODO: although map type is not orderable, technically map type should be able to be used
-        // in equality comparison, remove this type check once we support it.
-        if (left.dataType.existsRecursively(_.isInstanceOf[MapType])) {
-          TypeCheckResult.TypeCheckFailure("Cannot use map type in EqualNullSafe, but the actual " +
-            s"input type is ${left.dataType.catalogString}.")
-        } else {
-          TypeCheckResult.TypeCheckSuccess
-        }
-      case failure => failure
-    }
-  }
 
   override def symbol: String = "<=>"
 
@@ -569,8 +547,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def inputType: AbstractDataType = TypeCollection.Ordered
-
   override def symbol: String = "<"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
@@ -580,8 +556,6 @@ case class LessThan(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.")
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = "<="
 
@@ -593,8 +567,6 @@ case class LessThanOrEqual(left: Expression, right: Expression)
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
-  override def inputType: AbstractDataType = TypeCollection.Ordered
-
   override def symbol: String = ">"
 
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
@@ -604,8 +576,6 @@ case class GreaterThan(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.")
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
-
-  override def inputType: AbstractDataType = TypeCollection.Ordered
 
   override def symbol: String = ">="
 
