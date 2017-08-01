@@ -38,9 +38,6 @@ private[hive] trait HiveClient {
   /** Returns the configuration for the given key in the current session. */
   def getConf(key: String, defaultValue: String): String
 
-  /** Set the given configuration property. */
-  def setConf(key: String, value: String): Unit
-
   /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
    * result in one string.

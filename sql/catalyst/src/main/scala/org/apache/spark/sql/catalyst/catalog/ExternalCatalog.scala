@@ -355,8 +355,6 @@ abstract class ExternalCatalog
 
   def listFunctions(db: String, pattern: String): Seq[String]
 
-  def setConf(key: String, value: String): Unit
-
   override protected def doPostEvent(
       listener: ExternalCatalogEventListener,
       event: ExternalCatalogEvent): Unit = {

@@ -459,19 +459,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       }
   }
 
-  test("set hive.exec.max.dynamic.partitions lose effect") {
-    val cnt = 1001
-    val sourceTable = "sourceTable"
-    val targetTable = "targetTable"
-    (0 until cnt).map(i => (i, i)).toDF("c1", "c2").createOrReplaceTempView(sourceTable)
-    sql(s"create table $targetTable(c1 int) PARTITIONED BY(c2 int)")
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql(s"set hive.exec.max.dynamic.partitions=$cnt")
-    sql(s"insert overwrite table $targetTable partition(c2) select * from $sourceTable")
-
-    checkAnswer(sql(s"SELECT count(*) FROM $targetTable"), Row(cnt))
-  }
-
   testPartitionedTable("insertInto() should reject missing columns") {
     tableName =>
       sql("CREATE TABLE t (a INT, b INT)")

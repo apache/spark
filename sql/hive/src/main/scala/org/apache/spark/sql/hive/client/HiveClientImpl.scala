@@ -215,11 +215,6 @@ private[hive] class HiveClientImpl(
     conf.get(key, defaultValue)
   }
 
-  override def setConf(key: String, value: String): Unit = {
-    clientLoader.cachedHive = null
-    conf.set(key, value)
-  }
-
   // We use hive's conf for compatibility.
   private val retryLimit = conf.getIntVar(HiveConf.ConfVars.METASTORETHRIFTFAILURERETRIES)
   private val retryDelayMillis = shim.getMetastoreClientConnectRetryDelayMillis(conf)

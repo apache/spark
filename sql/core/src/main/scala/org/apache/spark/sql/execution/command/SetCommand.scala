@@ -88,10 +88,12 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.set(key, value)
-        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive")) {
-          sparkSession.sharedState.externalCatalog.setConf(key, value)
+        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive")
+          && key.startsWith("hive.")) {
+          logWarning(s"Please set hive config through " +
+            s"--conf spark.hadoop.${key}=${value} before SparkSession is initialized.")
         }
+        sparkSession.conf.set(key, value)
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
