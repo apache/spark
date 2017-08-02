@@ -118,6 +118,12 @@ class SparkSession private(
   }
 
   /**
+   * Initial options for session. This options are applied once when sessionState is created.
+   */
+  @transient
+  private[sql] val initialSessionOptions = new scala.collection.mutable.HashMap[String, String]
+
+  /**
    * State isolated across sessions, including SQL configurations, temporary tables, registered
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
    * If `parentSessionState` is not null, the `SessionState` will be a copy of the parent.
@@ -132,9 +138,11 @@ class SparkSession private(
     parentSessionState
       .map(_.clone(this))
       .getOrElse {
-        SparkSession.instantiateSessionState(
+        val state = SparkSession.instantiateSessionState(
           SparkSession.sessionStateClassName(sparkContext.conf),
           self)
+        initialSessionOptions.foreach { case (k, v) => state.conf.setConfString(k, v) }
+        state
       }
   }
 
@@ -859,7 +867,7 @@ object SparkSession {
      *
      * @since 2.2.0
      */
-    def withExtensions(f: SparkSessionExtensions => Unit): Builder = {
+    def withExtensions(f: SparkSessionExtensions => Unit): Builder = synchronized {
       f(extensions)
       this
     }
@@ -904,21 +912,16 @@ object SparkSession {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
-          // set app name if not given
-          val randomAppName = java.util.UUID.randomUUID().toString
           val sparkConf = new SparkConf()
           options.foreach { case (k, v) => sparkConf.set(k, v) }
+
+          // set a random app name if not given.
           if (!sparkConf.contains("spark.app.name")) {
-            sparkConf.setAppName(randomAppName)
+            sparkConf.setAppName(java.util.UUID.randomUUID().toString)
           }
-          val sc = SparkContext.getOrCreate(sparkConf)
-          // maybe this is an existing SparkContext, update its SparkConf which maybe used
-          // by SparkSession
-          options.foreach { case (k, v) => sc.conf.set(k, v) }
-          if (!sc.conf.contains("spark.app.name")) {
-            sc.conf.setAppName(randomAppName)
-          }
-          sc
+
+          SparkContext.getOrCreate(sparkConf)
+          // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
         // Initialize extensions if the user has defined a configurator class.
@@ -940,7 +943,7 @@ object SparkSession {
         }
 
         session = new SparkSession(sparkContext, None, None, extensions)
-        options.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
+        options.foreach { case (k, v) => session.initialSessionOptions.put(k, v) }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the

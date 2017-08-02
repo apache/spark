@@ -223,4 +223,49 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(1).equals("class java.sql.Timestamp"))
   }
+
+  test("SPARK-18004: Make sure date or timestamp related predicate is pushed down correctly") {
+    val props = new Properties()
+    props.put("oracle.jdbc.mapDateToTimestamp", "false")
+
+    val schema = StructType(Seq(
+      StructField("date_type", DateType, true),
+      StructField("timestamp_type", TimestampType, true)
+    ))
+
+    val tableName = "test_date_timestamp_pushdown"
+    val dateVal = Date.valueOf("2017-06-22")
+    val timestampVal = Timestamp.valueOf("2017-06-22 21:30:07")
+
+    val data = spark.sparkContext.parallelize(Seq(
+      Row(dateVal, timestampVal)
+    ))
+
+    val dfWrite = spark.createDataFrame(data, schema)
+    dfWrite.write.jdbc(jdbcUrl, tableName, props)
+
+    val dfRead = spark.read.jdbc(jdbcUrl, tableName, props)
+
+    val millis = System.currentTimeMillis()
+    val dt = new java.sql.Date(millis)
+    val ts = new java.sql.Timestamp(millis)
+
+    // Query Oracle table with date and timestamp predicates
+    // which should be pushed down to Oracle.
+    val df = dfRead.filter(dfRead.col("date_type").lt(dt))
+      .filter(dfRead.col("timestamp_type").lt(ts))
+
+    val metadata = df.queryExecution.sparkPlan.metadata
+    // The "PushedFilters" part should be exist in Datafrome's
+    // physical plan and the existence of right literals in
+    // "PushedFilters" is used to prove that the predicates
+    // pushing down have been effective.
+    assert(metadata.get("PushedFilters").ne(None))
+    assert(metadata("PushedFilters").contains(dt.toString))
+    assert(metadata("PushedFilters").contains(ts.toString))
+
+    val row = df.collect()(0)
+    assert(row.getDate(0).equals(dateVal))
+    assert(row.getTimestamp(1).equals(timestampVal))
+  }
 }

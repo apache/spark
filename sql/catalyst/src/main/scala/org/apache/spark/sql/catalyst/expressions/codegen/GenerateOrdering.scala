@@ -173,15 +173,12 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
           ${ctx.initMutableStates()}
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public int compare(InternalRow a, InternalRow b) {
           $comparisons
           return 0;
         }
 
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
+        ${ctx.declareAddedFunctions()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(

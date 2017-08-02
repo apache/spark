@@ -172,4 +172,40 @@ class GeneratedProjectionSuite extends SparkFunSuite {
     assert(unsafe1 === unsafe3)
     assert(unsafe1.getStruct(1, 7) === unsafe3.getStruct(1, 7))
   }
+
+  test("MutableProjection should not cache content from the input row") {
+    val mutableProj = GenerateMutableProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", StringType), true)))
+    val row = new GenericInternalRow(1)
+    mutableProj.target(row)
+
+    val unsafeProj = GenerateUnsafeProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", StringType), true)))
+    val unsafeRow = unsafeProj.apply(InternalRow(InternalRow(UTF8String.fromString("a"))))
+
+    mutableProj.apply(unsafeRow)
+    assert(row.getStruct(0, 1).getString(0) == "a")
+
+    // Even if the input row of the mutable projection has been changed, the target mutable row
+    // should keep same.
+    unsafeProj.apply(InternalRow(InternalRow(UTF8String.fromString("b"))))
+    assert(row.getStruct(0, 1).getString(0).toString == "a")
+  }
+
+  test("SafeProjection should not cache content from the input row") {
+    val safeProj = GenerateSafeProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", StringType), true)))
+
+    val unsafeProj = GenerateUnsafeProjection.generate(
+      Seq(BoundReference(0, new StructType().add("i", StringType), true)))
+    val unsafeRow = unsafeProj.apply(InternalRow(InternalRow(UTF8String.fromString("a"))))
+
+    val row = safeProj.apply(unsafeRow)
+    assert(row.getStruct(0, 1).getString(0) == "a")
+
+    // Even if the input row of the mutable projection has been changed, the target mutable row
+    // should keep same.
+    unsafeProj.apply(InternalRow(InternalRow(UTF8String.fromString("b"))))
+    assert(row.getStruct(0, 1).getString(0).toString == "a")
+  }
 }
