@@ -375,7 +375,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
             kill.reason, execSummary.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
         case TaskCommitDenied(jobID, partitionID, attemptNumber) =>
-          execSummary.killedTasks += 1
+          val error_msg = TaskCommitDenied(jobID, partitionID, attemptNumber).toErrorString
+          execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+            error_msg, execSummary.reasonToNumKilled.getOrElse(error_msg, 0) + 1)
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -393,8 +395,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
               kill.reason, stageData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
             Some(kill.toErrorString)
           case TaskCommitDenied(jobID, partitionID, attemptNumber) =>
-            stageData.numKilledTasks += 1 // In speculation, TaskCommitDenied is marked as killed
-            Some(TaskCommitDenied(jobID, partitionID, attemptNumber).toErrorString)
+            val error_msg = TaskCommitDenied(jobID, partitionID, attemptNumber).toErrorString
+            execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+              error_msg, execSummary.reasonToNumKilled.getOrElse(error_msg, 0) + 1)
+            Some(error_msg)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
@@ -434,7 +438,9 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
               kill.reason, jobData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
           case TaskCommitDenied(jobID, partitionID, attemptNumber) =>
-            jobData.numKilledTasks += 1
+            val error_msg = TaskCommitDenied(jobID, partitionID, attemptNumber).toErrorString
+            execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+              error_msg, execSummary.reasonToNumKilled.getOrElse(error_msg, 0) + 1)
           case _ =>
             jobData.numFailedTasks += 1
         }
