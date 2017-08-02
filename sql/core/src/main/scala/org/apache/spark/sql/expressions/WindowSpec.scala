@@ -127,16 +127,12 @@ class WindowSpec private[sql](
       case Window.currentRow => CurrentRow
       case Window.unboundedPreceding => UnboundedPreceding
       case e => e
-      // case e: Expression if e.foldable && e.eval().isInstanceOf[Int] => e
-      // case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
     }
 
     val boundaryEnd = end.expr match {
       case Window.currentRow => CurrentRow
       case Window.unboundedFollowing => UnboundedFollowing
       case e => e
-      // case e: Expression if e.foldable && e.eval().isInstanceOf[Int] => e
-      // case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
     }
 
     new WindowSpec(

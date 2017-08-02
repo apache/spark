@@ -158,12 +158,12 @@ object Window {
     spec.rowsBetween(start, end)
   }
 
-  def rowsBetween(start: Long, end: Long): WindowSpec = {
-    rowsBetween(Literal(start), Literal(end))
+  def rowsBetween(start: Any, end: Any): WindowSpec = {
+    spec.rowsBetween(start, end)
   }
 
   def rowsBetween(start: Expression, end: Expression): WindowSpec = {
-    rowsBetween(Column(start), Column(end))
+    spec.rowsBetween(start, end)
   }
 
   /**
@@ -218,12 +218,12 @@ object Window {
     spec.rangeBetween(start, end)
   }
 
-  def rangeBetween(start: Long, end: Long): WindowSpec = {
-    rangeBetween(Literal(start), Literal(end))
+  def rangeBetween(start: Any, end: Any): WindowSpec = {
+    spec.rangeBetween(start, end)
   }
 
   def rangeBetween(start: Expression, end: Expression): WindowSpec = {
-    rangeBetween(Column(start), Column(end))
+    spec.rangeBetween(start, end)
   }
 
   private[sql] def spec: WindowSpec = {
