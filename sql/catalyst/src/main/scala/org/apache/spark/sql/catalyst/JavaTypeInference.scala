@@ -129,7 +129,8 @@ object JavaTypeInference {
         // TODO: we should only collect properties that have getter and setter. However, some tests
         // pass in scala case class as java bean class which doesn't have getter and setter.
         if (typeToken.getRawType.isEnum) {
-          (StructType(Seq(new StructField("value", IntegerType, false))), true)
+          (StructType(Seq(new StructField(typeToken.getRawType.getSimpleName,
+            StringType, false))), true)
         } else {
           val properties = getJavaBeanReadableProperties(other)
           val fields = properties.map { property =>
@@ -309,8 +310,9 @@ object JavaTypeInference {
           keyData :: valueData :: Nil)
 
       case other if other.isEnum =>
-        StaticInvoke(JavaTypeInference.getClass, ObjectType(classOf[Object]), "deserializeEnumName",
-          expressions.Literal.create(other.getName, StringType) :: getPath :: Nil)
+        StaticInvoke(JavaTypeInference.getClass, ObjectType(other), "deserializeEnumName",
+          expressions.Literal.create(other.getEnumConstants.apply(0), ObjectType(other))
+            :: getPath :: Nil)
 
       case other =>
         val properties = getJavaBeanReadableAndWritableProperties(other)
@@ -353,25 +355,27 @@ object JavaTypeInference {
   }
 
   /** Returns a mapping from enum value to int for given enum type */
-  def enumSerializer[T](enum: Class[T]): T => Int = {
+  def enumSerializer[T <: Enum[T]](enum: Class[T]): T => UTF8String = {
     assert(enum.isEnum)
-    enum.getEnumConstants.toList.zipWithIndex.toMap
+    inputObject: T =>
+      UTF8String.fromString(inputObject.name())
   }
 
   /** Returns value index for given enum type and value */
-  def serializeEnumName[T](enum: UTF8String, inputObject: T): Int = {
+  def serializeEnumName[T <: Enum[T]](enum: UTF8String, inputObject: T): UTF8String = {
     enumSerializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
   }
 
   /** Returns a mapping from int to enum value for given enum type */
-  def enumDeserializer[T](enum: Class[T]): Int => T = {
+  def enumDeserializer[T <: Enum[T]](enum: Class[T]): InternalRow => T = {
     assert(enum.isEnum)
-    enum.getEnumConstants.toList.zipWithIndex.toMap.map(_.swap)
+    value: InternalRow =>
+      Enum.valueOf(enum, UTF8String.fromBytes(value.asInstanceOf[UnsafeRow].getBytes).toString)
   }
 
   /** Returns enum value for given enum type and value index */
-  def deserializeEnumName[T](enum: UTF8String, inputObject: Int): Any = {
-    enumDeserializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
+  def deserializeEnumName[T <: Enum[T]](typeDummy: T, inputObject: InternalRow): T = {
+    enumDeserializer(typeDummy.getClass.asInstanceOf[Class[T]])(inputObject)
   }
 
   private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
@@ -454,7 +458,7 @@ object JavaTypeInference {
           )
 
         case other if other.isEnum =>
-          StaticInvoke(JavaTypeInference.getClass, IntegerType, "serializeEnumName",
+          StaticInvoke(JavaTypeInference.getClass, StringType, "serializeEnumName",
           expressions.Literal.create(other.getName, StringType) :: inputObject :: Nil)
 
         case other =>
