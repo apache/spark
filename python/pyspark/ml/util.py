@@ -30,6 +30,7 @@ from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
 from pyspark.sql import SparkSession
 
+
 def _jvm():
     """
     Returns the JVM view associated with SparkContext. Must be called
@@ -65,6 +66,12 @@ class Identifiable(object):
 
 @inherit_doc
 class BaseReadWrite(object):
+    """
+    Base class for MLWriter and MLReader. Stores information about the SparkContext
+    and SparkSession.
+
+    .. versionadded:: 2.3.0
+    """
 
     def __init__(self):
         self.sparkSession = None
@@ -106,15 +113,6 @@ class MLWriter(BaseReadWrite):
     def __init__(self):
         super(MLWriter, self).__init__()
         self.shouldOverwrite = False
-
-    @staticmethod
-    def _handleOverwrite(path):
-        from pyspark.ml.wrapper import JavaWrapper
-
-        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.ReadWrite.FileSystemOverwrite")
-        # _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.classification.LogisticRegression")
-        wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java("handleOverwrite", path, True)
 
     def save(self, path):
         """Save the ML instance to the input path."""
@@ -354,8 +352,15 @@ class JavaPredictionModel():
 
 @inherit_doc
 class DefaultParamsWritable(MLWritable):
+    """
+    Class for making simple Params types writable. Assumes that all parameters
+    are JSON-serializable.
+
+    .. versionadded:: 2.3.0
+    """
 
     def write(self):
+        """Returns a DefaultParamsWriter instance for this class."""
         if isinstance(self, Params):
             return DefaultParamsWriter(self)
         else:
@@ -365,12 +370,16 @@ class DefaultParamsWritable(MLWritable):
 
 @inherit_doc
 class DefaultParamsWriter(MLWriter):
+    """
+    Class for writing Estimators and Transformers whose parameters are JSON-serializable.
+
+    .. versionadded:: 2.3.0
+    """
 
     def __init__(self, instance):
         super(DefaultParamsWriter, self).__init__()
         self.instance = instance
 
-    # if a model extends DefaultParamsWriteable this save() function is called
     def saveImpl(self, path):
         DefaultParamsWriter.save_metadata(self.instance, path, self.sc)
 
@@ -400,19 +409,31 @@ class DefaultParamsWriter(MLWriter):
                          "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
         if extraMetadata is not None:
             basicMetadata.update(extraMetadata)
-        return json.dumps(basicMetadata, separators=[',',':'])
+        return json.dumps(basicMetadata, separators=[',',  ':'])
 
 
 @inherit_doc
 class DefaultParamsReadable(MLReadable):
+    """
+    Class for making simple Params types readable. Assumes that all parameters
+    are JSON-serializable.
+
+    .. versionadded:: 2.3.0
+    """
 
     @classmethod
     def read(cls):
+        """Returns a DefaultParamsReader instance for this class."""
         return DefaultParamsReader(cls)
 
 
 @inherit_doc
 class DefaultParamsReader(MLReader):
+    """
+    Class for reading Estimators and Transformers whose parameters are JSON-serializable.
+
+    .. versionadded:: 2.3.0
+    """
 
     def __init__(self, cls):
         super(DefaultParamsReader, self).__init__()
@@ -467,6 +488,3 @@ class DefaultParamsReader(MLReader):
         py_type = DefaultParamsReader.__get_class(metadata['class'])
         instance = py_type()
         return instance
-
-
-
