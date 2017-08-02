@@ -370,6 +370,12 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
+    val existLongFunction = ctx.existTooLongFunction
+    if (existLongFunction){
+      logWarning(s"Function is too long, Whole-stage codegen disabled for this plan:\n "
+        + s"$treeString")
+      return child.execute()
+    }
     // try to compile and fallback if it failed
     try {
       CodeGenerator.compile(cleanedSource)

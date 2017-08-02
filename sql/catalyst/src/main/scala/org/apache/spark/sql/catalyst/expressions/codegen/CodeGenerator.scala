@@ -356,6 +356,16 @@ class CodegenContext {
   private val placeHolderToComments = new mutable.HashMap[String, String]
 
   /**
+   * Returns the length of codegen function  is too long or not
+   */
+  def existTooLongFunction(): Boolean = {
+    classFunctions.exists { case (className,functions) =>
+      functions.exists{ case (name, code) =>
+        CodeFormatter.stripExtraNewLines(code).count(_ == '\n') > SQLConf.get.maxFunctionLength
+      }
+    }
+  }
+  /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
   def freshName(name: String): String = synchronized {

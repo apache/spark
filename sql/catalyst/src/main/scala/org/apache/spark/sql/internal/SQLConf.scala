@@ -572,6 +572,13 @@ object SQLConf {
       "disable logging or -1 to apply no limit.")
     .createWithDefault(1000)
 
+  val WHOLESTAGE_MAX_FUNCTION_LEN = buildConf("spark.sql.codegen.MaxFunctionLength")
+    .internal()
+    .doc("The maximum number of function length that will be supported before" +
+    " deactivating whole-stage codegen.")
+    .intConf
+    .createWithDefault(1500)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -1013,6 +1020,8 @@ class SQLConf extends Serializable with Logging {
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
+
+  def maxFunctionLength: Int = getConf(WHOLESTAGE_MAX_FUNCTION_LEN)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
