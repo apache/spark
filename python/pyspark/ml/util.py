@@ -25,6 +25,7 @@ import warnings
 if sys.version > '3':
     basestring = str
     unicode = str
+    long = int
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
