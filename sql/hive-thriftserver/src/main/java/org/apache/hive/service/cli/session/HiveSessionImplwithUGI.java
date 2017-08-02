@@ -20,8 +20,6 @@ package org.apache.hive.service.cli.session;
 
 import java.io.IOException;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.metadata.Hive;
@@ -44,7 +42,6 @@ public class HiveSessionImplwithUGI extends HiveSessionImpl {
   private String delegationTokenStr = null;
   private Hive sessionHive = null;
   private HiveSession proxySession = null;
-  static final Log LOG = LogFactory.getLog(HiveSessionImplwithUGI.class);
 
   public HiveSessionImplwithUGI(TProtocolVersion protocol, String username, String password,
       HiveConf hiveConf, String ipAddress, String delegationToken) throws HiveSQLException {
