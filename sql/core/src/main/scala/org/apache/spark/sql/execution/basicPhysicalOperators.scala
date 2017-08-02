@@ -118,8 +118,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     var stringIndex = 0
     // Another way to implement index: use a var index, and increase every time, which is more
     // efficient?
-    CMCCInputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
-      val (colType, index) = colTypeWithIndex
+    var index = 0
+    CMCCInputSchema.foreach { colType =>
       if (colType == 1) {
         buffer.putInt(row.getInt(index))
       } else if (colType == 2) {
@@ -134,6 +134,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         stringIndex += 1
 
       }
+      index = index + 1
     }
   }
 
@@ -182,8 +183,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         holder.reset()
 
         var stringIndex = 0
-        testOutputSchema.zipWithIndex.foreach { colTypeWithIndex: (Int, Int) =>
-          val (colType, index) = colTypeWithIndex
+        var index = 0
+        testOutputSchema.foreach { colType =>
           if (colType == 1) {
             rowWriter.write(index, buffer.getInt)
           } else if (colType == 2) {
@@ -197,6 +198,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
             rowWriter.write(index, tmpBuffer)
             stringIndex += 1
           }
+          index = index + 1
         }
         // For FPGA aligning issue
 //        readBytesFromBuffer(32, buffer)
