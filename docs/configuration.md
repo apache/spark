@@ -2335,5 +2335,59 @@ The location of these configuration files varies across Hadoop versions, but
 a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/conf/spark-env.sh`
 to a location containing the configuration files.
+
+# Custom Hadoop/Hive Configuration
+
+If your Spark Application interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
+configuration files in Spark's ClassPath.
+
+In most cases, you may have more than one applications running and rely on some different Hadoop/Hive
+client side configurations. You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`,
+`hive-site.xml` in Spark's ClassPath for each application, but it is not very convenient and these
+files are best to be shared with common properties to avoid hard-coding certain configurations.
+
+The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
+
+In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
+instance. Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+
+{% highlight scala %}
+val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
+val sc = new SparkContext(conf)
+{% endhighlight %}
+
+Also, you can modify or add configurations at runtime:
+{% highlight bash %}
+./bin/spark-submit \ 
+  --name "My app" \ 
+  --master local[4] \  
+  --conf spark.eventLog.enabled=false \ 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
+  --conf spark.hadoop.abc.def=xyz
+  myApp.jar
+{% endhighlight %}
+
+## Typical Hadoop/Hive Configurations
+
+<table>
+<tr>
+  <td><code>spark.hadoop.<br />mapreduce.fileoutputcommitter.algorithm.version</code></td>
+  <td>1</td>
+  <td>
+    The file output committer algorithm version, valid algorithm version number: 1 or 2.
+    Version 2 may have better performance, but version 1 may handle failures better in certain situations,
+    as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
+  </td>
+</tr>
+
+<tr>
+  <td><code>spark.hadoop.<br />fs.hdfs.impl.disable.cache</code></td>
+  <td>false</td>
+  <td>
+    Don't cache 'hdfs' filesystem instances. Set true if HDFS Token Expiry in long-running spark applicaitons.<a href="https://issues.apache.org/jira/browse/HDFS-9276">HDFS-9276</a>.
+  </td>
+</tr>
+</table>
