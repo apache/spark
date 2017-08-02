@@ -3056,6 +3056,34 @@ setMethod("array_contains",
           })
 
 #' @details
+#' \code{map_keys}: Returns an unordered array containing the keys of the map.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_keys map_keys,Column-method
+#' @export
+#' @note map_keys since 2.3.0
+setMethod("map_keys",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_keys", x@jc)
+            column(jc)
+         })
+
+#' @details
+#' \code{map_values}: Returns an unordered array containing the values of the map.
+#'
+#' @rdname column_collection_functions
+#' @aliases map_values map_values,Column-method
+#' @export
+#' @note map_values since 2.3.0
+setMethod("map_values",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "map_values", x@jc)
+            column(jc)
+          })
+
+#' @details
 #' \code{explode}: Creates a new row for each element in the given array or map column.
 #'
 #' @rdname column_collection_functions
