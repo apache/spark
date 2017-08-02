@@ -90,8 +90,10 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       val runFunc = (sparkSession: SparkSession) => {
         if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive")
           && key.startsWith("hive.")) {
-          logWarning(s"Please set hive config through " +
-            s"--conf spark.hadoop.${key}=${value} before SparkSession is initialized.")
+          logWarning(s"SET $key=$value doesn't work, " +
+            s"because Spark doesn't support set hive config dynamically. " +
+            s"Please set hive config through " +
+            s"--conf spark.hadoop.$key=$value before SparkSession is initialized.")
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
