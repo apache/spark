@@ -359,7 +359,7 @@ class CodegenContext {
    * Returns the length of codegen function  is too long or not
    */
   def existTooLongFunction(): Boolean = {
-    classFunctions.exists { case (className,functions) =>
+    classFunctions.exists { case (className, functions) =>
       functions.exists{ case (name, code) =>
         CodeFormatter.stripExtraNewLines(code).count(_ == '\n') > SQLConf.get.maxFunctionLength
       }
