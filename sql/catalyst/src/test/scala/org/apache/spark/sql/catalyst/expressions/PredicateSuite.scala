@@ -215,7 +215,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  case class MyStruct(a: Long, b: String)
+  private case class MyStruct(a: Long, b: String)
 
   private val smallValues =
     Seq(1, Decimal(1), Array(1.toByte), "a", 0f, 0d, false, Array(1L, 2L))
