@@ -24,7 +24,7 @@ from pyspark.ml.param import Params
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
 from pyspark.sql.functions import udf
-from pyspark.sql.types import StructField, StructType
+from pyspark.sql.types import StructField, StructType, DoubleType
 
 
 @inherit_doc
@@ -125,6 +125,12 @@ class Model(Transformer):
 
 @inherit_doc
 class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
+    """
+    Abstract class for transformers that tae one input column, apply a transoformation to it,
+    and output the result as a new column.
+
+    .. versionadded:: 2.3.0
+    """
 
     @abstractmethod
     def createTransformFunc(self):
@@ -159,6 +165,9 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
         return StructType(outputFields)
 
     def _transform(self, dataset):
-        transformSchema(dataset.schema())
+        self.transformSchema(dataset.schema)
+        transformFunc = self.createTransformFunc()
         transformUDF = udf(self.createTransformFunc(), self.outputDataType())
-        dataset.withColumn(self.getOutputCol(), transformUDF(self.getInputCol()))
+        transformedDataset = dataset.withColumn(self.getOutputCol(),
+                                                transformUDF(dataset[self.getInputCol()]))
+        return transformedDataset

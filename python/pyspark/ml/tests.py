@@ -45,7 +45,7 @@ from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
 
 from pyspark import keyword_only, SparkContext
-from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
+from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, UnaryTransformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
@@ -66,7 +66,7 @@ from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
-from pyspark.sql.types import FloatType
+from pyspark.sql.types import DoubleType
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -121,33 +121,34 @@ class MockTransformer(Transformer, HasFake):
         dataset.index += 1
         return dataset
 
+
 class MockUnaryTransformer(UnaryTransformer):
 
     shift = Param(Params._dummy(), "shift", "The amount by which to shift " +
-                      "data in a DataFrame",
-                      typeConverter=TypeConverters.toFloat)
+                  "data in a DataFrame",
+                  typeConverter=TypeConverters.toFloat)
 
-    def __init__(self, shift=1):
+    def __init__(self, shiftVal=1):
         super(MockUnaryTransformer, self).__init__()
         self._setDefault(shift=1)
-        kwargs = self._input_kwargs
-        self.setParams(**kwargs)
+        self._set(shift=shiftVal)
 
     def getShift(self):
-        selt.getOrDefault(self.shift)
+        return self.getOrDefault(self.shift)
 
     def setShift(self, shift):
         self._set(shift=shift)
 
     def createTransformFunc(self):
-        return lambda x: x + self.getShift()
+        shiftVal = self.getShift()
+        return lambda x: x + shiftVal
 
     def outputDataType(self):
-        return FloatType()
+        return DoubleType()
 
-    def validateInputType(inputType):
-        assert inputType == FloatType(), "Bad input type: {}. " + \
-                            "Requires Float.".format(inputType)
+    def validateInputType(self, inputType):
+        assert inputType == DoubleType(), "Bad input type: {}. ".format(inputType) + \
+            "Requires Integer."
 
 
 class MockEstimator(Estimator, HasFake):
@@ -1989,8 +1990,20 @@ class ChiSquareTestTests(SparkSessionTestCase):
 class UnaryTransformerTests(SparkSessionTestCase):
 
     def test_unary_transformer_transform(self):
-        transformer = MockUnaryTransformer(shift=2)
-        # TODO: write this and check correctness of transformer definition
+        shiftVal = 3
+        transformer = MockUnaryTransformer(shiftVal=shiftVal)\
+            .setInputCol("input").setOutputCol("output")
+
+        df = self.spark.range(0, 10).toDF('input')
+        df = df.withColumn("input", df.input.cast(dataType="double"))
+
+        transformed_df = transformer.transform(df)
+        output = transformed_df.select("output").collect()
+
+        original = range(10)
+        for i, out in enumerate(output):
+            self.assertEqual(out.output, original[i] + shiftVal)
+
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *
