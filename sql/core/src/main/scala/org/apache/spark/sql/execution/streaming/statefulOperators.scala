@@ -102,8 +102,13 @@ trait WatermarkSupport extends UnaryExecNode {
   }
 
   /** Predicate based on keys that matches data older than the watermark */
-  lazy val watermarkPredicateForKeys: Option[Predicate] =
-    watermarkExpression.map(newPredicate(_, keyExpressions))
+  lazy val watermarkPredicateForKeys: Option[Predicate] = watermarkExpression.flatMap { e =>
+    if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+      Some(newPredicate(e, keyExpressions))
+    } else {
+      None
+    }
+  }
 
   /** Predicate based on the child output that matches data older than the watermark. */
   lazy val watermarkPredicateForData: Option[Predicate] =
