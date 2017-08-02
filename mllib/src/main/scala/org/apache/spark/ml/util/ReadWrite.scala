@@ -472,9 +472,9 @@ private[ml] object MetaAlgorithmReadWrite {
   }
 }
 
-class FileSystemOverwrite(val uid: String) extends BaseReadWrite with Logging {
+class FileSystemOverwrite extends BaseReadWrite with Logging {
 
-  def this() = this(Identifiable.randomUID("logreg"))
+  // def this() = this(Identifiable.randomUID("logreg"))
 
   def handleOverwrite(path: String, shouldOverwrite: Boolean): Unit = {
     val hadoopConf = sc.hadoopConfiguration

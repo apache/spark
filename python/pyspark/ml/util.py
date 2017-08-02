@@ -111,8 +111,8 @@ class MLWriter(BaseReadWrite):
     def _handleOverwrite(path):
         from pyspark.ml.wrapper import JavaWrapper
 
-        # _java_obj = JavaWrapper._new_java_obj("org.apache.ml.ReadWrite.FileSystemOverwrite")
-        _java_obj = JavaWrapper._new_java_obj("org.apache.ml.classification.LogisticRegression", "2")
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.ReadWrite.FileSystemOverwrite")
+        # _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.classification.LogisticRegression")
         wrapper = JavaWrapper(_java_obj)
         wrapper._call_java("handleOverwrite", path, True)
 
