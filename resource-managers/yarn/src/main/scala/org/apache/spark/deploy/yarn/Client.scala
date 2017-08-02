@@ -47,7 +47,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
 import org.apache.hadoop.yarn.util.Records
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{SecurityManager, SparkApp, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
@@ -148,7 +148,7 @@ private[spark] class Client(
   def submitApplication(): ApplicationId = {
     var appId: ApplicationId = null
     try {
-      launcherBackend.connect()
+      YarnCommandBuilderUtils.launcherBackendConnect(launcherBackend, sparkConf)
       // Setup the credentials before doing anything else,
       // so we have don't have issues at any point.
       setupCredentials()
@@ -655,10 +655,11 @@ private[spark] class Client(
       remoteFs, hadoopConf, remoteConfArchivePath, localResources, LocalResourceType.ARCHIVE,
       LOCALIZED_CONF_DIR, statCache, appMasterOnly = false)
 
-    // Clear the cache-related entries from the configuration to avoid them polluting the
-    // UI's environment page. This works for client mode; for cluster mode, this is handled
-    // by the AM.
+    // Clear the cache-related and spark-launcher entries from the configuration to avoid them
+    // polluting the UI's environment page. This works for client mode; for cluster mode, this
+    // is handled by the AM.
     CACHE_CONFIGS.foreach(sparkConf.remove)
+    YarnCommandBuilderUtils.LAUNCHER_CONFIGS.foreach(sparkConf.remove)
 
     localResources
   }
@@ -1166,9 +1167,11 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private object Client extends SparkApp with Logging {
 
-  def main(argStrings: Array[String]) {
+  override def sparkMain(
+    args: Array[String],
+    conf: scala.collection.immutable.Map[String, String]): Unit = {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       logWarning("WARNING: This client is deprecated and will be removed in a " +
         "future version of Spark. Use ./bin/spark-submit with \"--master yarn\"")
@@ -1177,13 +1180,18 @@ private object Client extends Logging {
     // Set an env variable indicating we are running in YARN mode.
     // Note that any env variable with the SPARK_ prefix gets propagated to all (remote) processes
     System.setProperty("SPARK_YARN_MODE", "true")
+
     val sparkConf = new SparkConf
+    for ((key, value) <- conf if key.startsWith("spark.")) {
+      sparkConf.set(key, value, true)
+    }
+
     // SparkSubmit would use yarn cache to distribute files & jars in yarn mode,
     // so remove them from sparkConf here for yarn mode.
     sparkConf.remove("spark.jars")
     sparkConf.remove("spark.files")
-    val args = new ClientArguments(argStrings)
-    new Client(args, sparkConf).run()
+    val argsForClient = new ClientArguments(args)
+    new Client(argsForClient, sparkConf).run()
   }
 
   // Alias for the user jar
@@ -1487,5 +1495,4 @@ private object Client extends Logging {
   def isLocalUri(uri: String): Boolean = {
     uri.startsWith(s"$LOCAL_SCHEME:")
   }
-
 }

@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -73,6 +74,12 @@ public class SparkLauncher {
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 
+  static final String LAUNCHER_INTERNAL_PORT = "spark.launcher.internal.port";
+
+  static final String LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET = "spark.launcher.internal.secret";
+
+  static final String LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN = "spark.launcher.internal.stop.on.shutdown";
+
   /**
    * A special value for the resource that tells Spark to not try to process the app resource as a
    * file. This is useful when the class being executed is added to the application using other
@@ -94,6 +101,11 @@ public class SparkLauncher {
 
   static final Map<String, String> launcherConfig = new HashMap<>();
 
+  private boolean autoShutdown = false;
+
+  /** Flag to decide on launching spark-submit as a child process or a thread **/
+  private boolean launchAsThread = false;
+
   /**
    * Set a configuration value for the launcher library. These config values do not affect the
    * launched application, but rather the behavior of the launcher library itself when managing
@@ -105,6 +117,34 @@ public class SparkLauncher {
    */
   public static void setConfig(String name, String value) {
     launcherConfig.put(name, value);
+  }
+
+
+
+  /**
+   * Specifies that Spark Application be stopped if current process goes away.
+   * It tries stop/kill Spark Application if launching process goes away.
+   *
+   * @since 2.3.0
+   * @param autoShutdown Whether to shut down the Spark application if the launcher process goes away.
+   * @return This launcher.
+   */
+  public SparkLauncher autoShutdown(boolean autoShutdown) {
+    this.autoShutdown = autoShutdown;
+    return this;
+  }
+
+  /**
+   * Specifies that Spark Submit be launched as a daemon thread.
+   *
+   * @since 2.3.0
+   * @param launchAsThread Whether to launch the Spark application in a new thread in
+   *                       the same process.
+   * @return This launcher.
+   */
+  public SparkLauncher launchAsThread(boolean launchAsThread) {
+    this.launchAsThread = launchAsThread;
+    return this;
   }
 
   // Visible for testing.
@@ -459,12 +499,36 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
+    checkArgument(!launchAsThread,
+        "Use startApplication method to launch application in a thread");
     Process childProc = createBuilder().start();
     if (redirectToLog) {
       String loggerName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
       new OutputRedirector(childProc.getInputStream(), loggerName, REDIRECTOR_FACTORY);
     }
     return childProc;
+  }
+
+  private String getAppName() throws IOException {
+    String appName = launchAsThread ? null
+        : builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
+    if (appName == null) {
+      if (builder.appName != null) {
+        appName = builder.appName;
+      } else if (builder.mainClass != null) {
+        int dot = builder.mainClass.lastIndexOf(".");
+        if (dot >= 0 && dot < builder.mainClass.length() - 1) {
+          appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
+        } else {
+          appName = builder.mainClass;
+        }
+      } else if (builder.appResource != null) {
+        appName = new File(builder.appResource).getName();
+      } else {
+        appName = String.valueOf(COUNTER.incrementAndGet());
+      }
+    }
+    return appName;
   }
 
   /**
@@ -479,7 +543,7 @@ public class SparkLauncher {
    * that happens after that cannot be monitored. If the underlying application is launched as
    * a child process, {@link SparkAppHandle#kill()} can still be used to kill the child process.
    * <p>
-   * Currently, all applications are launched as child processes. The child's stdout and stderr
+   * If the application is launched as child process, the child's stdout and stderr
    * are merged and written to a logger (see <code>java.util.logging</code>) only if redirection
    * has not otherwise been configured on this <code>SparkLauncher</code>. The logger's name can be
    * defined by setting {@link #CHILD_PROCESS_LOGGER_NAME} in the app's configuration. If that
@@ -488,11 +552,24 @@ public class SparkLauncher {
    * In all cases, the logger name will start with "org.apache.spark.launcher.app", to fit more
    * easily into the configuration of commonly-used logging systems.
    *
+   * If the application is launched as a thread, the log redirection methods are not supported,
+   * and the parent process's output and log configuration will be used.
+   *
    * @since 1.6.0
    * @param listeners Listeners to add to the handle before the app is launched.
    * @return A handle for the launched application.
    */
   public SparkAppHandle startApplication(SparkAppHandle.Listener... listeners) throws IOException {
+    if (launchAsThread) {
+      checkArgument(builder.childEnv.isEmpty(),
+        "Custom environment variables are not supported while launching in a thread");
+      return startApplicationAsThread(listeners);
+    }
+    return startApplicationAsChildProc(listeners);
+  }
+
+  private SparkAppHandle startApplicationAsChildProc(SparkAppHandle.Listener[] listeners)
+      throws IOException {
     ChildProcAppHandle handle = LauncherServer.newAppHandle();
     for (SparkAppHandle.Listener l : listeners) {
       handle.addListener(l);
@@ -503,23 +580,7 @@ public class SparkLauncher {
     // Only setup stderr + stdout to logger redirection if user has not otherwise configured output
     // redirection.
     if (loggerName == null) {
-      String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
-      if (appName == null) {
-        if (builder.appName != null) {
-          appName = builder.appName;
-        } else if (builder.mainClass != null) {
-          int dot = builder.mainClass.lastIndexOf(".");
-          if (dot >= 0 && dot < builder.mainClass.length() - 1) {
-            appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
-          } else {
-            appName = builder.mainClass;
-          }
-        } else if (builder.appResource != null) {
-          appName = new File(builder.appResource).getName();
-        } else {
-          appName = String.valueOf(COUNTER.incrementAndGet());
-        }
-      }
+      String appName = getAppName();
       String loggerPrefix = getClass().getPackage().getName();
       loggerName = String.format("%s.app.%s", loggerPrefix, appName);
       pb.redirectErrorStream(true);
@@ -528,13 +589,46 @@ public class SparkLauncher {
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_PORT,
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
+    pb.environment().put(LauncherProtocol.ENV_LAUNCHER_STOP_IF_SHUTDOWN,
+        String.valueOf(autoShutdown));
+    setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(autoShutdown));
     try {
       handle.setChildProc(pb.start(), loggerName);
     } catch (IOException ioe) {
       handle.kill();
       throw ioe;
     }
+    return handle;
+  }
 
+  private SparkAppHandle startApplicationAsThread(SparkAppHandle.Listener... listeners)
+      throws IOException {
+    ChildThreadAppHandle handle = LauncherServer.newAppThreadHandle();
+    for (SparkAppHandle.Listener l : listeners) {
+      handle.addListener(l);
+    }
+
+    String appName = getAppName();
+    setConf(LAUNCHER_INTERNAL_PORT, String.valueOf(LauncherServer.getServerInstance().getPort()));
+    setConf(LAUNCHER_INTERNAL_CHILD_PROCESS_SECRET, handle.getSecret());
+    setConf(LAUNCHER_INTERNAL_STOP_ON_SHUTDOWN, String.valueOf(autoShutdown));
+    try {
+      // It is important that SparkSubmit class is available in the classpath.
+      // Trying to see if method is available in the classpath else throws Exception.
+      Method main = SparkSubmitRunner.getSparkSubmitMain();
+      Thread submitJobThread = new Thread(new SparkSubmitRunner(main,
+          builder.buildSparkSubmitArgs()));
+      submitJobThread.setName(appName);
+      submitJobThread.setDaemon(true);
+      handle.setChildThread(submitJobThread);
+      submitJobThread.start();
+    } catch (ClassNotFoundException cnfe) {
+      throw new IOException("Please make sure the spark jar " +
+          "containing SparkSubmit is in the classpath.", cnfe);
+    } catch (NoSuchMethodException nsme) {
+      throw new IOException("Please make sure the version of the Spark jar containing " +
+          "SparkSubmit is correct.", nsme);
+    }
     return handle;
   }
 

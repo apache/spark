@@ -89,11 +89,31 @@ class LauncherServer implements Closeable {
   private static volatile LauncherServer serverInstance;
 
   /**
+   * Creates a handle for an app to be launched using ChildProc.
+   * This method will start a server if one hasn't been started yet.
+   * The server is shared for multiple handles, and once all handles
+   * are disposed of, the server is shut down.
+   */
+  static synchronized ChildProcAppHandle newAppHandle() throws IOException {
+    return (ChildProcAppHandle) LauncherServer.newAppHandle(false);
+  }
+
+  /**
+   * Creates a handle for an app to be launched from a Thread within the current JVM.
+   * This method will start a server if one hasn't been
+   * started yet. The server is shared for multiple handles, and once all handles are disposed of,
+   * the server is shut down.
+   */
+  static synchronized ChildThreadAppHandle newAppThreadHandle() throws IOException {
+    return (ChildThreadAppHandle) LauncherServer.newAppHandle(true);
+  }
+
+  /**
    * Creates a handle for an app to be launched. This method will start a server if one hasn't been
    * started yet. The server is shared for multiple handles, and once all handles are disposed of,
    * the server is shut down.
    */
-  static synchronized ChildProcAppHandle newAppHandle() throws IOException {
+  static synchronized AbstractSparkAppHandle newAppHandle(boolean isThreadHandle) throws IOException {
     LauncherServer server = serverInstance != null ? serverInstance : new LauncherServer();
     server.ref();
     serverInstance = server;
@@ -102,8 +122,7 @@ class LauncherServer implements Closeable {
     while (server.pending.containsKey(secret)) {
       secret = server.createSecret();
     }
-
-    return server.newAppHandle(secret);
+    return server.newAppHandle(secret, isThreadHandle);
   }
 
   static LauncherServer getServerInstance() {
@@ -112,7 +131,7 @@ class LauncherServer implements Closeable {
 
   private final AtomicLong refCount;
   private final AtomicLong threadIds;
-  private final ConcurrentMap<String, ChildProcAppHandle> pending;
+  private final ConcurrentMap<String, AbstractSparkAppHandle> pending;
   private final List<ServerConnection> clients;
   private final ServerSocket server;
   private final Thread serverThread;
@@ -152,9 +171,14 @@ class LauncherServer implements Closeable {
    * Creates a new app handle. The handle will wait for an incoming connection for a configurable
    * amount of time, and if one doesn't arrive, it will transition to an error state.
    */
-  ChildProcAppHandle newAppHandle(String secret) {
-    ChildProcAppHandle handle = new ChildProcAppHandle(secret, this);
-    ChildProcAppHandle existing = pending.putIfAbsent(secret, handle);
+  AbstractSparkAppHandle newAppHandle(String secret, boolean isThreadHandle) {
+    AbstractSparkAppHandle handle;
+    if (isThreadHandle) {
+      handle = new ChildThreadAppHandle(secret, this);
+    } else {
+      handle = new ChildProcAppHandle(secret, this);
+    }
+    AbstractSparkAppHandle existing = pending.putIfAbsent(secret, handle);
     CommandBuilderUtils.checkState(existing == null, "Multiple handles with the same secret.");
     return handle;
   }
@@ -175,6 +199,7 @@ class LauncherServer implements Closeable {
         }
       }
     }
+
     if (serverThread != null) {
       try {
         serverThread.join();
@@ -210,7 +235,7 @@ class LauncherServer implements Closeable {
    * Removes the client handle from the pending list (in case it's still there), and unrefs
    * the server.
    */
-  void unregister(ChildProcAppHandle handle) {
+  void unregister(AbstractSparkAppHandle handle) {
     pending.remove(handle.getSecret());
     unref();
   }
@@ -277,7 +302,7 @@ class LauncherServer implements Closeable {
   private class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    private ChildProcAppHandle handle;
+    private AbstractSparkAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
@@ -291,7 +316,7 @@ class LauncherServer implements Closeable {
           timeout.cancel();
           timeout = null;
           Hello hello = (Hello) msg;
-          ChildProcAppHandle handle = pending.remove(hello.secret);
+          AbstractSparkAppHandle handle = pending.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
             handle.setState(SparkAppHandle.State.CONNECTED);

@@ -26,6 +26,8 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
+
+import static java.lang.Thread.sleep;
 import static org.junit.Assert.*;
 import static org.junit.Assume.*;
 
@@ -183,12 +185,38 @@ public class SparkLauncherSuite {
     assertEquals(0, app.waitFor());
   }
 
+  @Test
+  public void testThreadLauncher() throws Exception {
+    // This test is failed on Windows due to the failure of initiating executors
+    // by the path length limitation. See SPARK-18718.
+    assumeTrue(!Utils.isWindows());
+
+    launcher = new SparkLauncher();
+    launcher
+      .setMaster("local")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
+        "-Dfoo=bar -Dtest.appender=childproc")
+      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
+      .setMainClass(SparkLauncherTestApp.class.getName())
+      .launchAsThread(true)
+      .addAppArgs("thread");
+    final SparkAppHandle app = launcher.startApplication();
+    sleep(3000);
+    AbstractSparkAppHandle handle = (AbstractSparkAppHandle)app;
+    handle.waitFor();
+  }
+
   public static class SparkLauncherTestApp {
 
     public static void main(String[] args) throws Exception {
       assertEquals(1, args.length);
-      assertEquals("proc", args[0]);
-      assertEquals("bar", System.getProperty("foo"));
+      if ("proc".equalsIgnoreCase(args[0])) {
+        assertEquals("proc", args[0]);
+        assertEquals("bar", System.getProperty("foo"));
+      } else {
+        assertEquals(null, System.getProperty("foo"));
+      }
       assertEquals("local", System.getProperty(SparkLauncher.SPARK_MASTER));
     }
 

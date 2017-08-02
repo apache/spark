@@ -28,7 +28,10 @@ import scala.io.Source
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.hadoop.yarn.api.records.{FinalApplicationStatus, YarnApplicationState}
+import org.apache.hadoop.yarn.client.api.YarnClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
@@ -36,7 +39,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
-import org.apache.spark.launcher._
+import org.apache.spark.launcher.{SparkAppHandle, _}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationStart,
   SparkListenerExecutorAdded}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -79,6 +82,13 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     |def func():
     |    return 42
     """.stripMargin
+
+  private def getYarnClient = {
+    var yarnClient = YarnClient.createYarnClient()
+    yarnClient.init(yarnCluster.getConfig)
+    yarnClient.start()
+    yarnClient
+  }
 
   test("run Spark in yarn-client mode") {
     testBasicYarnApp(true)
@@ -169,29 +179,9 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
   }
 
   test("monitor app using launcher library") {
-    val env = new JHashMap[String, String]()
-    env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
-
-    val propsFile = createConfFile()
-    val handle = new SparkLauncher(env)
-      .setSparkHome(sys.props("spark.test.home"))
-      .setConf("spark.ui.enabled", "false")
-      .setPropertiesFile(propsFile)
-      .setMaster("yarn")
-      .setDeployMode("client")
-      .setAppResource(SparkLauncher.NO_RESOURCE)
-      .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
-      .startApplication()
-
+    val handle = launchSparkAppWithConf(false, false, "client")
     try {
-      eventually(timeout(30 seconds), interval(100 millis)) {
-        handle.getState() should be (SparkAppHandle.State.RUNNING)
-      }
-
-      handle.getAppId() should not be (null)
-      handle.getAppId() should startWith ("application_")
       handle.stop()
-
       eventually(timeout(30 seconds), interval(100 millis)) {
         handle.getState() should be (SparkAppHandle.State.KILLED)
       }
@@ -206,6 +196,66 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       appArgs = Seq((timeout * 4).toString),
       extraConf = Map(AM_MAX_WAIT_TIME.key -> timeout.toString))
     finalState should be (SparkAppHandle.State.FAILED)
+  }
+
+  test("monitor app running in thread using launcher library") {
+    val handle = launchSparkAppWithConf(true, false, "cluster")
+    try {
+      handle.stop()
+      eventually(timeout(30 seconds), interval(100 millis)) {
+        handle.getState() should be (SparkAppHandle.State.KILLED)
+      }
+    } finally {
+      handle.kill()
+    }
+  }
+
+  test("monitor app using launcher library for proc with auto shutdown") {
+    val handle = launchSparkAppWithConf(false, true, "cluster")
+    try {
+      handle.disconnect()
+      val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
+      val yarnClient: YarnClient = getYarnClient
+      eventually(timeout(30 seconds), interval(100 millis)) {
+        handle.getState() should be (SparkAppHandle.State.LOST)
+        var status = yarnClient.getApplicationReport(applicationId).getFinalApplicationStatus()
+        status should be (FinalApplicationStatus.KILLED)
+      }
+    } finally {
+      handle.kill()
+    }
+  }
+
+  test("monitor app using launcher library for thread with auto shutdown") {
+    val handle = launchSparkAppWithConf(true, true, "cluster")
+    try {
+      handle.disconnect()
+      val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
+      val yarnClient: YarnClient = getYarnClient
+      eventually(timeout(30 seconds), interval(100 millis)) {
+        handle.getState() should be (SparkAppHandle.State.LOST)
+        var status = yarnClient.getApplicationReport(applicationId).getFinalApplicationStatus
+        status should be (FinalApplicationStatus.KILLED)
+      }
+    } finally {
+      handle.kill()
+    }
+  }
+
+  test("monitor app using launcher library for thread without auto shutdown") {
+    val handle = launchSparkAppWithConf(true, false, "cluster")
+    try {
+      handle.disconnect()
+      val applicationId = ConverterUtils.toApplicationId(handle.getAppId)
+      val yarnClient: YarnClient = getYarnClient
+      eventually(timeout(30 seconds), interval(100 millis)) {
+        handle.getState() should be (SparkAppHandle.State.LOST)
+        var status = yarnClient.getApplicationReport(applicationId).getYarnApplicationState
+        status should not be (YarnApplicationState.KILLED)
+      }
+    } finally {
+      handle.kill()
+    }
   }
 
   private def testBasicYarnApp(clientMode: Boolean, conf: Map[String, String] = Map()): Unit = {
@@ -295,6 +345,36 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
         "spark.executor.userClassPathFirst" -> "true"))
     checkResult(finalState, driverResult, "OVERRIDDEN")
     checkResult(finalState, executorResult, "OVERRIDDEN")
+  }
+
+  private def launchSparkAppWithConf(
+      launchAsThread: Boolean,
+      autoShutdown: Boolean,
+      deployMode: String): SparkAppHandle = {
+    val env = new JHashMap[String, String]()
+    env.put("YARN_CONF_DIR", hadoopConfDir.getAbsolutePath())
+
+    val propsFile = createConfFile()
+    val launcher = if (launchAsThread == true) new SparkLauncher() else new SparkLauncher(env)
+      .setSparkHome(sys.props("spark.test.home"))
+
+    val handle = launcher.setConf("spark.ui.enabled", "false")
+      .setPropertiesFile(propsFile)
+      .setMaster("yarn")
+      .setDeployMode(deployMode)
+      .launchAsThread(launchAsThread)
+      .autoShutdown(autoShutdown)
+      .setAppResource(SparkLauncher.NO_RESOURCE)
+      .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
+      .startApplication()
+
+    eventually(timeout(30 seconds), interval(100 millis)) {
+      handle.getState() should be(SparkAppHandle.State.RUNNING)
+    }
+
+    handle.getAppId() should not be (null)
+    handle.getAppId() should startWith("application_")
+    handle
   }
 
 }

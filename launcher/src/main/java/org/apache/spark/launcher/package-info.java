@@ -25,8 +25,8 @@
  *
  * <p>
  * The {@link org.apache.spark.launcher.SparkLauncher#startApplication(
- * org.apache.spark.launcher.SparkAppHandle.Listener...)} can be used to start Spark and provide
- * a handle to monitor and control the running application:
+ * org.apache.spark.launcher.SparkAppHandle.Listener...)} can be used to start Spark application
+ * as a process and provide a handle to monitor and control the running application:
  * </p>
  *
  * <pre>
@@ -40,6 +40,35 @@
  *         .setAppResource("/my/app.jar")
  *         .setMainClass("my.spark.app.Main")
  *         .setMaster("local")
+ *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
+ *         .startApplication();
+ *       // Use handle API to monitor / control application.
+ *     }
+ *   }
+ * }
+ * </pre>
+ *
+ * <p>
+ * Here is example of launching application in thread mode for YARN cluster mode
+ * with the auto shutdown option enabled. Showing use case of both
+ * {@link org.apache.spark.launcher.SparkLauncher#autoShutdown(boolean)} and
+ * {@link org.apache.spark.launcher.SparkLauncher#launchAsThread(boolean)} methods
+ * </p>
+ *
+ * <pre>
+ * {@code
+ *   import org.apache.spark.launcher.SparkAppHandle;
+ *   import org.apache.spark.launcher.SparkLauncher;
+ *
+ *   public class MyLauncher {
+ *     public static void main(String[] args) throws Exception {
+ *       SparkAppHandle handle = new SparkLauncher()
+ *         .setAppResource("/my/app.jar")
+ *         .setMainClass("my.spark.app.Main")
+ *         .setMaster("yarn")
+ *         .setDeployMode("cluster")
+ *         .autoShutdown(true)
+ *         .launchAsThread(true)
  *         .setConf(SparkLauncher.DRIVER_MEMORY, "2g")
  *         .startApplication();
  *       // Use handle API to monitor / control application.

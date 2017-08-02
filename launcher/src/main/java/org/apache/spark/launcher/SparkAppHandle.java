@@ -95,7 +95,9 @@ public interface SparkAppHandle {
   void kill();
 
   /**
-   * Disconnects the handle from the application, without stopping it. After this method is called,
+   * Disconnects the handle from the application.
+   * If using {@link SparkLauncher#autoShutdown(boolean)}} option, this method will
+   * also stop the child Spark application. After this method is called,
    * the handle will not be able to communicate with the application anymore.
    */
   void disconnect();

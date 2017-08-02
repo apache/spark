@@ -717,10 +717,6 @@ object SparkSubmit extends CommandLineUtils {
       addJarToClasspath(jar, loader)
     }
 
-    for ((key, value) <- sysProps) {
-      System.setProperty(key, value)
-    }
-
     var mainClass: Class[_] = null
 
     try {
@@ -751,9 +747,15 @@ object SparkSubmit extends CommandLineUtils {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
-    if (!Modifier.isStatic(mainMethod.getModifiers)) {
-      throw new IllegalStateException("The main method in the given main class must be static")
+    val sparkAppMainMethod = mainClass.getMethods().find(_.getName == "sparkMain")
+    val childSparkConf = sysProps.filter { p => p._1.startsWith("spark.") }.toMap
+
+    // If running a SparkApp we can explicitly pass in the confs separately.
+    // If we aren't running a SparkApp they get passed via the system properties.
+    if (sparkAppMainMethod.isEmpty) {
+      sysProps.foreach { case (key, value) =>
+        System.setProperty(key, value)
+      }
     }
 
     @tailrec
@@ -767,7 +769,17 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     try {
-      mainMethod.invoke(null, childArgs.toArray)
+      if (sparkAppMainMethod.isDefined) {
+        sparkAppMainMethod.get.invoke(null, childArgs.toArray, childSparkConf)
+      } else {
+        val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
+
+        if (!Modifier.isStatic(mainMethod.getModifiers)) {
+          throw new IllegalStateException("The main method in the given main class must be static")
+        }
+
+        mainMethod.invoke(null, childArgs.toArray)
+      }
     } catch {
       case t: Throwable =>
         findCause(t) match {
