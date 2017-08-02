@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Date
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.types._
@@ -74,23 +74,57 @@ class MiscExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("trunc date") {
-    def test(input: Date, fmt: String, expected: Date): Unit = {
+    def testDate(input: Date, fmt: String, expected: Date): Unit = {
       checkEvaluation(Trunc(Literal.create(input, DateType), Literal.create(fmt, StringType)),
         expected)
       checkEvaluation(
         Trunc(Literal.create(input, DateType), NonFoldableLiteral.create(fmt, StringType)),
         expected)
     }
-    val date = Date.valueOf("2015-07-22")
+
+    def testString(input: String, fmt: String, expected: Date): Unit = {
+      checkEvaluation(Trunc(Literal.create(input, StringType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        Trunc(Literal.create(input, StringType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+
+    def testTimestamp(input: Timestamp, fmt: String, expected: Date): Unit = {
+      checkEvaluation(Trunc(Literal.create(input, TimestampType), Literal.create(fmt, StringType)),
+        expected)
+      checkEvaluation(
+        Trunc(Literal.create(input, TimestampType), NonFoldableLiteral.create(fmt, StringType)),
+        expected)
+    }
+
+    val dateStr = "2015-07-22"
+    val date = Date.valueOf(dateStr)
+    val ts = new Timestamp(date.getTime)
+
     Seq("yyyy", "YYYY", "year", "YEAR", "yy", "YY").foreach { fmt =>
-      test(date, fmt, Date.valueOf("2015-01-01"))
+      testDate(date, fmt, Date.valueOf("2015-01-01"))
+      testString(dateStr, fmt, Date.valueOf("2015-01-01"))
+      testTimestamp(ts, fmt, Date.valueOf("2015-01-01"))
     }
     Seq("month", "MONTH", "mon", "MON", "mm", "MM").foreach { fmt =>
-      test(date, fmt, Date.valueOf("2015-07-01"))
+      testDate(date, fmt, Date.valueOf("2015-07-01"))
+      testString(dateStr, fmt, Date.valueOf("2015-07-01"))
+      testTimestamp(ts, fmt, Date.valueOf("2015-07-01"))
     }
-    test(date, "DD", null)
-    test(date, null, null)
-    test(null, "MON", null)
-    test(null, null, null)
+    testDate(date, "DD", null)
+    testDate(date, null, null)
+    testDate(null, "MON", null)
+    testDate(null, null, null)
+
+    testString(dateStr, "DD", null)
+    testString(dateStr, null, null)
+    testString(null, "MON", null)
+    testString(null, null, null)
+
+    testTimestamp(ts, "DD", null)
+    testTimestamp(ts, null, null)
+    testTimestamp(null, "MON", null)
+    testTimestamp(null, null, null)
   }
 }
