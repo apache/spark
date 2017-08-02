@@ -66,6 +66,7 @@ from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
+from pyspark.sql.types import FloatType
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -119,6 +120,34 @@ class MockTransformer(Transformer, HasFake):
         self.dataset_index = dataset.index
         dataset.index += 1
         return dataset
+
+class MockUnaryTransformer(UnaryTransformer):
+
+    shift = Param(Params._dummy(), "shift", "The amount by which to shift " +
+                      "data in a DataFrame",
+                      typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, shift=1):
+        super(MockUnaryTransformer, self).__init__()
+        self._setDefault(shift=1)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    def getShift(self):
+        selt.getOrDefault(self.shift)
+
+    def setShift(self, shift):
+        self._set(shift=shift)
+
+    def createTransformFunc(self):
+        return lambda x: x + self.getShift()
+
+    def outputDataType(self):
+        return FloatType()
+
+    def validateInputType(inputType):
+        assert inputType == FloatType(), "Bad input type: {}. " + \
+                            "Requires Float.".format(inputType)
 
 
 class MockEstimator(Estimator, HasFake):
@@ -1956,6 +1985,12 @@ class ChiSquareTestTests(SparkSessionTestCase):
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
 
+
+class UnaryTransformerTests(SparkSessionTestCase):
+
+    def test_unary_transformer_transform(self):
+        transformer = MockUnaryTransformer(shift=2)
+        # TODO: write this and check correctness of transformer definition
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *

@@ -158,7 +158,7 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
                                         nullable=False))
         return StructType(outputFields)
 
-    def transform(self, dataset, paramMap=None):
+    def _transform(self, dataset):
         transformSchema(dataset.schema())
         transformUDF = udf(self.createTransformFunc(), self.outputDataType())
         dataset.withColumn(self.getOutputCol(), transformUDF(self.getInputCol()))
