@@ -58,8 +58,10 @@ class JavaWrapper(object):
         sc = SparkContext._active_spark_context
         java_obj = _jvm()
         for name in java_class.split("."):
+            print "name used:",name
             java_obj = getattr(java_obj, name)
         java_args = [_py2java(sc, arg) for arg in args]
+        print "java obj:",java_obj
         return java_obj(*java_args)
 
     @staticmethod

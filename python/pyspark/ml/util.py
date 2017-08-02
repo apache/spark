@@ -28,7 +28,7 @@ if sys.version > '3':
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
-
+from pyspark.sql import SparkSession
 
 def _jvm():
     """
@@ -64,23 +64,10 @@ class Identifiable(object):
 
 
 @inherit_doc
-class MLWriter(object):
-    """
-    Utility class that can save ML instances.
-
-    .. versionadded:: 2.0.0
-    """
+class BaseReadWrite(object):
 
     def __init__(self):
-        self.shouldOverwrite = False
-
-    def save(self, path):
-        """Save the ML instance to the input path."""
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
-
-    def overwrite(self):
-        """Overwrites if the output path already exists."""
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        self.sparkSession = None
 
     def context(self, sqlContext):
         """
@@ -88,11 +75,74 @@ class MLWriter(object):
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        # raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        self.sparkSession = sqlContext.sparkSession
+        return self
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
+        # raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        self.sparkSession = sparkSession
+        return self
+
+    def getOrCreateSparkSession(self):
+        if self.sparkSession is None:
+            self.sparkSession = SparkSession.builder.getOrCreate()
+        return self.sparkSession
+
+    @property
+    def sc(self):
+        return self.getOrCreateSparkSession().sparkContext
+
+
+@inherit_doc
+class MLWriter(BaseReadWrite):
+    """
+    Utility class that can save ML instances.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self):
+        super(MLWriter, self).__init__()
+        self.shouldOverwrite = False
+
+    @staticmethod
+    def _handleOverwrite(path):
+        from pyspark.ml.wrapper import JavaWrapper
+
+        # _java_obj = JavaWrapper._new_java_obj("org.apache.ml.ReadWrite.FileSystemOverwrite")
+        _java_obj = JavaWrapper._new_java_obj("org.apache.ml.classification.LogisticRegression", "2")
+        wrapper = JavaWrapper(_java_obj)
+        wrapper._call_java("handleOverwrite", path, True)
+
+    def save(self, path):
+        """Save the ML instance to the input path."""
+        if isinstance(self, JavaMLWriter):
+            self.saveImpl(path)
+        else:
+            if self.shouldOverwrite:
+                os.remove(path)
+            self.saveImpl(path)
+
+    def saveImpl(self, path):
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+
+    def overwrite(self):
+        """Overwrites if the output path already exists."""
+        self.shouldOverwrite = True
+
+    def context(self, sqlContext):
+        """
+        Sets the SQL context to use for saving.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        super(MLWriter, self).context(sqlContext)
+
+    def session(self, sparkSession):
+        """Sets the Spark Session to use for saving."""
+        super(MLWriter, self).session(sparkSession)
 
 
 @inherit_doc
@@ -106,7 +156,7 @@ class JavaMLWriter(MLWriter):
         _java_obj = instance._to_java()
         self._jwrite = _java_obj.write()
 
-    def save(self, path):
+    def saveImpl(self, path):
         """Save the ML instance to the input path."""
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
@@ -162,12 +212,15 @@ class JavaMLWritable(MLWritable):
 
 
 @inherit_doc
-class MLReader(object):
+class MLReader(BaseReadWrite):
     """
     Utility class that can load ML instances.
 
     .. versionadded:: 2.0.0
     """
+
+    def __init__(self):
+        super(MLReader, self).__init__()
 
     def load(self, path):
         """Load the ML instance from the input path."""
@@ -179,11 +232,11 @@ class MLReader(object):
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+        super(MLReader, self).context(sqlContext)
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for loading."""
-        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
+        super(MLReader, self).session(sparkSession)
 
 
 @inherit_doc
@@ -193,6 +246,7 @@ class JavaMLReader(MLReader):
     """
 
     def __init__(self, clazz):
+        super(JavaMLReader, self).__init__()
         self._clazz = clazz
         self._jread = self._load_java_obj(clazz).read()
 
@@ -238,6 +292,13 @@ class JavaMLReader(MLReader):
     def _load_java_obj(cls, clazz):
         """Load the peer Java object of the ML instance."""
         java_class = cls._java_loader_class(clazz)
+        java_obj = _jvm()
+        for name in java_class.split("."):
+            java_obj = getattr(java_obj, name)
+        return java_obj
+
+    @classmethod
+    def _load_given_name(cls, java_class):
         java_obj = _jvm()
         for name in java_class.split("."):
             java_obj = getattr(java_obj, name)
@@ -294,13 +355,12 @@ class JavaPredictionModel():
 @inherit_doc
 class DefaultParamsWritable(MLWritable):
 
-    # overrides the write() function in MLWriteable
-    # users call .save() in MLWriteable which calls this write() function and then calls
-    # the .save() in DefaultParamsWriter
-    # this can be overridden to return a different Writer (ex. OneVsRestWriter as seen in Scala)
     def write(self):
-        # instance of check for params?
-        return DefaultParamsWriter(self)
+        if isinstance(self, Params):
+            return DefaultParamsWriter(self)
+        else:
+            raise TypeError("Cannot use DefautParamsWritable with type %s because it does not " +
+                            " extend Params.", type(self))
 
 
 @inherit_doc
@@ -309,18 +369,10 @@ class DefaultParamsWriter(MLWriter):
     def __init__(self, instance):
         super(DefaultParamsWriter, self).__init__()
         self.instance = instance
-        self.sc = SparkContext._active_spark_context
 
     # if a model extends DefaultParamsWriteable this save() function is called
-    def save(self, path):
-        if self.shouldOverwrite:
-            # This command removes a file. Is this enough?
-            os.remove(path)
+    def saveImpl(self, path):
         DefaultParamsWriter.save_metadata(self.instance, path, self.sc)
-
-    def overwrite(self):
-        self.shouldOverwrite = True
-        return self
 
     @staticmethod
     def save_metadata(instance, path, sc, extraMetadata=None, paramMap=None):
@@ -344,45 +396,43 @@ class DefaultParamsWriter(MLWriter):
         else:
             for p in params:
                 jsonParams[p.name] = params[p]
-        basicMetadata = {"class": cls, "timestamp": int(round(time.time() * 1000)),
+        basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
                          "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
         if extraMetadata is not None:
             basicMetadata.update(extraMetadata)
-        return json.dumps(basicMetadata)
+        return json.dumps(basicMetadata, separators=[',',':'])
 
 
 @inherit_doc
 class DefaultParamsReadable(MLReadable):
 
-    # overrides the read() functino in MLReadable
-    # users call .load() in MLReadable which calls this read() function
-    # and reads using the DefaultParamsReader load() function
-    def read(self):
-        return DefaultParamsReader()
+    @classmethod
+    def read(cls):
+        return DefaultParamsReader(cls)
 
 
 @inherit_doc
 class DefaultParamsReader(MLReader):
 
-    def __init__(self):
+    def __init__(self, cls):
         super(DefaultParamsReader, self).__init__()
-        self.sc = SparkContext._active_spark_context
+        self.cls = cls
+
+    @staticmethod
+    def __get_class(clazz):
+        """
+        Loads Python class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
 
     def load(self, path):
-
-        def __get_class(clazz):
-            """
-            Loads Python class from its name.
-            """
-            parts = clazz.split('.')
-            module = ".".join(parts[:-1])
-            m = __import__(module)
-            for comp in parts[1:]:
-                m = getattr(m, comp)
-            return m
-
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
-        py_type = __get_class(metadata['class'])
+        py_type = DefaultParamsReader.__get_class(metadata['class'])
         instance = py_type()
         instance._resetUid(metadata['uid'])
         DefaultParamsReader.getAndSetParams(instance, metadata)
@@ -410,3 +460,13 @@ class DefaultParamsReader(MLReader):
             param = instance.getParam(paramName)
             paramValue = metadata['paramMap'][paramName]
             instance.set(param, paramValue)
+
+    @staticmethod
+    def loadParamsInstance(path, sc):
+        metadata = DefaultParamsReader.loadMetadata(path, sc)
+        py_type = DefaultParamsReader.__get_class(metadata['class'])
+        instance = py_type()
+        return instance
+
+
+

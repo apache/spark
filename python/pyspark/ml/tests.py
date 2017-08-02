@@ -1971,7 +1971,7 @@ class DefaultReadWriteTests(SparkSessionTestCase):
 
         writer.save(tempFile.name)
 
-        reader = DefaultParamsReader()
+        reader = DefaultParamsReadable.read()
         lr2 = reader.load(tempFile.name)
 
         self.assertEqual(lr.uid, lr2.uid)
