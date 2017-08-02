@@ -536,7 +536,7 @@ class StructType(DataType):
 
     def __getitem__(self, key):
         """Access fields by name or slice."""
-        if isinstance(key, str):
+        if isinstance(key, basestring):
             for field in self:
                 if field.name == key:
                     return field
