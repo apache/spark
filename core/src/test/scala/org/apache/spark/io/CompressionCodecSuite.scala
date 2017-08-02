@@ -105,20 +105,20 @@ class CompressionCodecSuite extends SparkFunSuite {
   }
 
   test("zstd compression codec") {
-    val codec = CompressionCodec.createCodec(conf, classOf[ZStandardCompressionCodec].getName)
-    assert(codec.getClass === classOf[ZStandardCompressionCodec])
+    val codec = CompressionCodec.createCodec(conf, classOf[ZStdCompressionCodec].getName)
+    assert(codec.getClass === classOf[ZStdCompressionCodec])
     testCodec(codec)
   }
 
   test("zstd compression codec short form") {
     val codec = CompressionCodec.createCodec(conf, "zstd")
-    assert(codec.getClass === classOf[ZStandardCompressionCodec])
+    assert(codec.getClass === classOf[ZStdCompressionCodec])
     testCodec(codec)
   }
 
   test("zstd supports concatenation of serialized zstd") {
-    val codec = CompressionCodec.createCodec(conf, classOf[ZStandardCompressionCodec].getName)
-    assert(codec.getClass === classOf[ZStandardCompressionCodec])
+    val codec = CompressionCodec.createCodec(conf, classOf[ZStdCompressionCodec].getName)
+    assert(codec.getClass === classOf[ZStdCompressionCodec])
     testConcatenationOfSerializedStreams(codec)
   }
 
