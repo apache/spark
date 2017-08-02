@@ -215,14 +215,21 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  private val smallValues = Seq(1, Decimal(1), Array(1.toByte), "a", 0f, 0d, false).map(Literal(_))
+  case class MyStruct(a: Long, b: String)
+
+  private val smallValues =
+    Seq(1, Decimal(1), Array(1.toByte), "a", 0f, 0d, false, Array(1L, 2L))
+      .map(Literal(_)) :+ Literal.create(MyStruct(1L, "b"))
   private val largeValues =
-    Seq(2, Decimal(2), Array(2.toByte), "b", Float.NaN, Double.NaN, true).map(Literal(_))
+    Seq(2, Decimal(2), Array(2.toByte), "b", Float.NaN, Double.NaN, true, Array(2L, 1L))
+      .map(Literal(_)) :+ Literal.create(MyStruct(2L, "a"))
 
   private val equalValues1 =
-    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true).map(Literal(_))
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true, Array(1L, 2L))
+      .map(Literal(_)) :+ Literal.create(MyStruct(1L, "a"))
   private val equalValues2 =
-    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true).map(Literal(_))
+    Seq(1, Decimal(1), Array(1.toByte), "a", Float.NaN, Double.NaN, true, Array(1L, 2L))
+      .map(Literal(_)) :+ Literal.create(MyStruct(1L, "a"))
 
   test("BinaryComparison consistency check") {
     DataTypeTestUtils.ordered.foreach { dt =>
