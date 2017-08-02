@@ -1853,8 +1853,13 @@ class SQLTests(ReusedPySparkTestCase):
 
         # replace with None
         row = self.spark.createDataFrame(
-            [(u'Alice', 10, 80.0)], schema).replace((10, 80), None).first()
-        self.assertTupleEqual(row, (u'Alice', None, None))
+            [(u'Alice', 10, 80.0)], schema).replace(u'Alice', None).first()
+        self.assertTupleEqual(row, (None, 10, 80.0))
+
+        # replace with numerics and None
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace([10, 80], [20, None]).first()
+        self.assertTupleEqual(row, (u'Alice', 20, None))
 
         # should fail if subset is not list, tuple or None
         with self.assertRaises(ValueError):

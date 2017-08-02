@@ -238,6 +238,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Replaces values matching keys in `replacement` map with the corresponding values.
    * Key and value of `replacement` map must have the same type, and
    * can only be doubles, strings or booleans.
+   * `replacement` map value can have null.
    * If `col` is "*", then the replacement is applied on all string columns or numeric columns.
    *
    * {{{
@@ -266,6 +267,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * Replaces values matching keys in `replacement` map with the corresponding values.
    * Key and value of `replacement` map must have the same type, and
    * can only be doubles, strings or booleans.
+   * `replacement` map value can have null.
    *
    * {{{
    *   import com.google.common.collect.ImmutableMap;
@@ -290,6 +292,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    * (Scala-specific) Replaces values matching keys in `replacement` map.
    * Key and value of `replacement` map must have the same type, and
    * can only be doubles, strings or booleans.
+   * `replacement` map value can have null.
    * If `col` is "*",
    * then the replacement is applied on all string columns , numeric columns or boolean columns.
    *
@@ -319,10 +322,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
-   * Key and value of `replacement` map must satisfy one of:
-   *    1. keys are String, values are mix of String and null
-   *    2. keys are Boolean, values are mix of Boolean and null
-   *    3. keys are Double, values are either all Double or all null
+   * Key and value of `replacement` map must have the same type, and
+   * can only be doubles, strings or booleans.
+   * `replacement` map value can have null.
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
@@ -345,12 +347,14 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
     }
 
     // replacementMap is either Map[String, String], Map[Double, Double], Map[Boolean,Boolean]
-    // or value being null
-    val replacementMap: Map[_, _] = replacement.head._2 match {
-      case null => replacement
-      case v: String => replacement
-      case v: Boolean => replacement
-      case _ => replacement.map { case (k, v) => (convertToDouble(k), convertToDouble(v)) }
+    // while value can have null
+    val replacementMap: Map[_, _] = replacement.map {
+      case (k, v: String) => (k, v)
+      case (k, v: Boolean) => (k, v)
+      case (k: String, null) => (k, null)
+      case (k: Boolean, null) => (k, null)
+      case (k, null) => (convertToDouble(k), null)
+      case _ @(k, v) => (convertToDouble(k), convertToDouble(v))
     }
 
     // targetColumnType is either DoubleType or StringType or BooleanType

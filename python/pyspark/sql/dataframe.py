@@ -1325,8 +1325,8 @@ class DataFrame(object):
         """Returns a new :class:`DataFrame` replacing a value with another value.
         :func:`DataFrame.replace` and :func:`DataFrameNaFunctions.replace` are
         aliases of each other.
-        Values to_replace and value should contain either all numerics, all booleans,
-        or all strings. When replacing, the new value will be cast
+        Values to_replace and value must have the same type and can only be numerics, booleans,
+        or strings. Value can have None. When replacing, the new value will be cast
         to the type of the existing column.
         For numeric replacements all values to be replaced should have unique
         floating point representation. In case of conflicts (for example with `{42: -1, 42.0: 1}`)
@@ -1390,9 +1390,10 @@ class DataFrame(object):
                 return all(isinstance(x, types) for x in xs)
             return all_of_
 
-        all_of_bool = all_of(bool)
-        all_of_str = all_of(basestring)
-        all_of_numeric = all_of((float, int, long))
+        # Replacement key and value must have the same type while value can have None
+        all_of_bool = (all_of(bool), all_of((bool, type(None))))
+        all_of_str = (all_of(basestring), all_of((basestring, type(None))))
+        all_of_numeric = (all_of((float, int, long)), all_of((float, int, long, type(None))))
 
         # Validate input types
         valid_types = (bool, float, int, long, basestring, list, tuple)
@@ -1401,8 +1402,7 @@ class DataFrame(object):
                 "to_replace should be a float, int, long, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
-        if not isinstance(value, valid_types) and value is not None \
-                and not isinstance(to_replace, dict):
+        if not isinstance(value, valid_types + (type(None), )) and not isinstance(to_replace, dict):
             raise ValueError("If to_replace is not a dict, value should be "
                              "a float, int, long, string, list, tuple or None. "
                              "Got {0}".format(type(value)))
@@ -1420,7 +1420,7 @@ class DataFrame(object):
         if isinstance(to_replace, (float, int, long, basestring)):
             to_replace = [to_replace]
 
-        if isinstance(value, (float, int, long, basestring)) or value is None:
+        if isinstance(value, (float, int, long, basestring, type(None))):
             value = [value for _ in range(len(to_replace))]
 
         if isinstance(to_replace, dict):
@@ -1434,10 +1434,9 @@ class DataFrame(object):
             subset = [subset]
 
         # Verify we were not passed in mixed type generics."
-        if not any(all_of_type(rep_dict.keys())
-                   and (all_of_type(rep_dict.values())
-                        or list(rep_dict.values()).count(None) == len(rep_dict))
-                   for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
+        if not any(key_all_of_type(rep_dict.keys()) and value_all_of_type(rep_dict.values())
+                   for (key_all_of_type, value_all_of_type)
+                   in [all_of_bool, all_of_str, all_of_numeric]):
             raise ValueError("Mixed type replacements are not supported")
 
         if subset is None:
