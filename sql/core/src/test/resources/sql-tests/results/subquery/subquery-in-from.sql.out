@@ -37,26 +37,14 @@ struct<key:int,value:string>
 -- !query 4
 SELECT * FROM (SELECT * FROM testData) WHERE key = 1
 -- !query 4 schema
-struct<>
+struct<key:int,value:string>
 -- !query 4 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-The unaliased subqueries in the FROM clause are not supported.(line 1, pos 14)
-
-== SQL ==
-SELECT * FROM (SELECT * FROM testData) WHERE key = 1
---------------^^^
+1	1
 
 
 -- !query 5
 FROM (SELECT * FROM testData WHERE key = 1) SELECT *
 -- !query 5 schema
-struct<>
+struct<key:int,value:string>
 -- !query 5 output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-The unaliased subqueries in the FROM clause are not supported.(line 1, pos 5)
-
-== SQL ==
-FROM (SELECT * FROM testData WHERE key = 1) SELECT *
------^^^
+1	1

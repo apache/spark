@@ -5,7 +5,7 @@ CREATE OR REPLACE TEMPORARY VIEW t2 AS VALUES (1.0, 1), (2.0, 4) tbl(c1, c2);
 SELECT *
 FROM   (SELECT * FROM t1
         UNION ALL
-        SELECT * FROM t1) T;
+        SELECT * FROM t1);
 
 -- Type Coerced Union
 SELECT *
@@ -13,7 +13,7 @@ FROM   (SELECT * FROM t1
         UNION ALL
         SELECT * FROM t2
         UNION ALL
-        SELECT * FROM t2) T;
+        SELECT * FROM t2);
 
 -- Regression test for SPARK-18622
 SELECT a

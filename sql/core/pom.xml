@@ -104,6 +104,10 @@
       <version>${fasterxml.jackson.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-vector</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.apache.xbean</groupId>
       <artifactId>xbean-asm5-shaded</artifactId>
     </dependency>

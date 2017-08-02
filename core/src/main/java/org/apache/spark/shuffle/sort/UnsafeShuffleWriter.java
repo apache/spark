@@ -20,6 +20,7 @@ package org.apache.spark.shuffle.sort;
 import javax.annotation.Nullable;
 import java.io.*;
 import java.nio.channels.FileChannel;
+import static java.nio.file.StandardOpenOption.*;
 import java.util.Iterator;
 
 import scala.Option;
@@ -55,6 +56,7 @@ import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
+import org.apache.spark.internal.config.package$;
 
 @Private
 public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
@@ -65,6 +67,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
 
   @VisibleForTesting
   static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
+  static final int DEFAULT_INITIAL_SER_BUFFER_SIZE = 1024 * 1024;
 
   private final BlockManager blockManager;
   private final IndexShuffleBlockResolver shuffleBlockResolver;
@@ -78,6 +81,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private final SparkConf sparkConf;
   private final boolean transferToEnabled;
   private final int initialSortBufferSize;
+  private final int inputBufferSizeInBytes;
+  private final int outputBufferSizeInBytes;
 
   @Nullable private MapStatus mapStatus;
   @Nullable private ShuffleExternalSorter sorter;
@@ -140,6 +145,10 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.transferToEnabled = sparkConf.getBoolean("spark.file.transferTo", true);
     this.initialSortBufferSize = sparkConf.getInt("spark.shuffle.sort.initialBufferSize",
                                                   DEFAULT_INITIAL_SORT_BUFFER_SIZE);
+    this.inputBufferSizeInBytes =
+      (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
+    this.outputBufferSizeInBytes =
+      (int) (long) sparkConf.get(package$.MODULE$.SHUFFLE_UNSAFE_FILE_OUTPUT_BUFFER_SIZE()) * 1024;
     open();
   }
 
@@ -209,7 +218,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       partitioner.numPartitions(),
       sparkConf,
       writeMetrics);
-    serBuffer = new MyByteArrayOutputStream(1024 * 1024);
+    serBuffer = new MyByteArrayOutputStream(DEFAULT_INITIAL_SER_BUFFER_SIZE);
     serOutputStream = serializer.serializeStream(serBuffer);
   }
 
@@ -282,7 +291,7 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final boolean encryptionEnabled = blockManager.serializerManager().encryptionEnabled();
     try {
       if (spills.length == 0) {
-        new FileOutputStream(outputFile).close(); // Create an empty file
+        java.nio.file.Files.newOutputStream(outputFile.toPath()).close(); // Create an empty file
         return new long[partitioner.numPartitions()];
       } else if (spills.length == 1) {
         // Here, we don't need to perform any metrics updates because the bytes written to this
@@ -359,13 +368,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     final InputStream[] spillInputStreams = new InputStream[spills.length];
 
     final OutputStream bos = new BufferedOutputStream(
-            new FileOutputStream(outputFile),
-            (int) sparkConf.getSizeAsKb("spark.shuffle.unsafe.file.output.buffer", "32k") * 1024);
+            java.nio.file.Files.newOutputStream(outputFile.toPath()),
+            outputBufferSizeInBytes);
     // Use a counting output stream to avoid having to close the underlying file and ask
     // the file system for its size after each partition is written.
     final CountingOutputStream mergedFileOutputStream = new CountingOutputStream(bos);
-    final int inputBufferSizeInBytes =
-      (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
 
     boolean threwException = true;
     try {
@@ -436,11 +443,11 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     boolean threwException = true;
     try {
       for (int i = 0; i < spills.length; i++) {
-        spillInputChannels[i] = new FileInputStream(spills[i].file).getChannel();
+        spillInputChannels[i] = FileChannel.open(spills[i].file.toPath(), READ);
       }
       // This file needs to opened in append mode in order to work around a Linux kernel bug that
       // affects transferTo; see SPARK-3948 for more details.
-      mergedFileOutputChannel = new FileOutputStream(outputFile, true).getChannel();
+      mergedFileOutputChannel = FileChannel.open(outputFile.toPath(), WRITE, CREATE, APPEND);
 
       long bytesWrittenToMergedFile = 0;
       for (int partition = 0; partition < numPartitions; partition++) {

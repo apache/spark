@@ -186,18 +186,10 @@ trait ProgressReporter extends Logging {
     if (lastExecution == null) return Nil
     // lastExecution could belong to one of the previous triggers if `!hasNewData`.
     // Walking the plan again should be inexpensive.
-    val stateNodes = lastExecution.executedPlan.collect {
-      case p if p.isInstanceOf[StateStoreWriter] => p
-    }
-    stateNodes.map { node =>
-      val numRowsUpdated = if (hasNewData) {
-        node.metrics.get("numUpdatedStateRows").map(_.value).getOrElse(0L)
-      } else {
-        0L
-      }
-      new StateOperatorProgress(
-        numRowsTotal = node.metrics.get("numTotalStateRows").map(_.value).getOrElse(0L),
-        numRowsUpdated = numRowsUpdated)
+    lastExecution.executedPlan.collect {
+      case p if p.isInstanceOf[StateStoreWriter] =>
+        val progress = p.asInstanceOf[StateStoreWriter].getProgress()
+        if (hasNewData) progress else progress.copy(newNumRowsUpdated = 0)
     }
   }
 

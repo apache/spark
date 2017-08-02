@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
@@ -500,5 +500,52 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       assert(expected.resolvedFormula.terms === actual.resolvedFormula.terms)
       assert(expected.resolvedFormula.hasIntercept === actual.resolvedFormula.hasIntercept)
     }
+  }
+
+  test("handle unseen features or labels") {
+    val df1 = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zz")).toDF("id", "a", "b")
+    val df2 = Seq((1, "foo", "zq"), (2, "bar", "zq"), (3, "bar", "zy")).toDF("id", "a", "b")
+
+    // Handle unseen features.
+    val formula1 = new RFormula().setFormula("id ~ a + b")
+    intercept[SparkException] {
+      formula1.fit(df1).transform(df2).collect()
+    }
+    val result1 = formula1.setHandleInvalid("skip").fit(df1).transform(df2)
+    val result2 = formula1.setHandleInvalid("keep").fit(df1).transform(df2)
+
+    val expected1 = Seq(
+      (1, "foo", "zq", Vectors.dense(0.0, 1.0), 1.0),
+      (2, "bar", "zq", Vectors.dense(1.0, 1.0), 2.0)
+    ).toDF("id", "a", "b", "features", "label")
+    val expected2 = Seq(
+      (1, "foo", "zq", Vectors.dense(0.0, 1.0, 1.0, 0.0), 1.0),
+      (2, "bar", "zq", Vectors.dense(1.0, 0.0, 1.0, 0.0), 2.0),
+      (3, "bar", "zy", Vectors.dense(1.0, 0.0, 0.0, 0.0), 3.0)
+    ).toDF("id", "a", "b", "features", "label")
+
+    assert(result1.collect() === expected1.collect())
+    assert(result2.collect() === expected2.collect())
+
+    // Handle unseen labels.
+    val formula2 = new RFormula().setFormula("b ~ a + id")
+    intercept[SparkException] {
+      formula2.fit(df1).transform(df2).collect()
+    }
+    val result3 = formula2.setHandleInvalid("skip").fit(df1).transform(df2)
+    val result4 = formula2.setHandleInvalid("keep").fit(df1).transform(df2)
+
+    val expected3 = Seq(
+      (1, "foo", "zq", Vectors.dense(0.0, 1.0), 0.0),
+      (2, "bar", "zq", Vectors.dense(1.0, 2.0), 0.0)
+    ).toDF("id", "a", "b", "features", "label")
+    val expected4 = Seq(
+      (1, "foo", "zq", Vectors.dense(0.0, 1.0, 1.0), 0.0),
+      (2, "bar", "zq", Vectors.dense(1.0, 0.0, 2.0), 0.0),
+      (3, "bar", "zy", Vectors.dense(1.0, 0.0, 3.0), 2.0)
+    ).toDF("id", "a", "b", "features", "label")
+
+    assert(result3.collect() === expected3.collect())
+    assert(result4.collect() === expected4.collect())
   }
 }

@@ -141,6 +141,7 @@ class Analyzer(
       ResolveFunctions ::
       ResolveAliases ::
       ResolveSubquery ::
+      ResolveSubqueryColumnAliases ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
@@ -1324,6 +1325,30 @@ class Analyzer(
   }
 
   /**
+   * Replaces unresolved column aliases for a subquery with projections.
+   */
+  object ResolveSubqueryColumnAliases extends Rule[LogicalPlan] {
+
+     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
+      case u @ UnresolvedSubqueryColumnAliases(columnNames, child) if child.resolved =>
+        // Resolves output attributes if a query has alias names in its subquery:
+        // e.g., SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2)
+        val outputAttrs = child.output
+        // Checks if the number of the aliases equals to the number of output columns
+        // in the subquery.
+        if (columnNames.size != outputAttrs.size) {
+          u.failAnalysis("Number of column aliases does not match number of columns. " +
+            s"Number of column aliases: ${columnNames.size}; " +
+            s"number of columns: ${outputAttrs.size}.")
+        }
+        val aliases = outputAttrs.zip(columnNames).map { case (attr, aliasName) =>
+          Alias(attr, aliasName)()
+        }
+        Project(aliases, child)
+    }
+  }
+
+  /**
    * Turns projections that contain aggregate expressions into aggregations.
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
@@ -1518,9 +1543,9 @@ class Analyzer(
        */
       def unapply(e: Expression): Option[(Generator, Seq[String], Boolean)] = e match {
         case Alias(GeneratorOuter(g: Generator), name) if g.resolved => Some((g, name :: Nil, true))
-        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some(g, names, true)
+        case MultiAlias(GeneratorOuter(g: Generator), names) if g.resolved => Some((g, names, true))
         case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil, false))
-        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names, false)
+        case MultiAlias(g: Generator, names) if g.resolved => Some((g, names, false))
         case _ => None
       }
     }
@@ -1950,7 +1975,7 @@ class Analyzer(
 
       case p => p transformExpressionsUp {
 
-        case udf @ ScalaUDF(func, _, inputs, _, _, _) =>
+        case udf @ ScalaUDF(func, _, inputs, _, _, _, _) =>
           val parameterTypes = ScalaReflection.getParameterTypes(func)
           assert(parameterTypes.length == inputs.length)
 
@@ -2234,7 +2259,9 @@ object EliminateUnions extends Rule[LogicalPlan] {
 /**
  * Cleans up unnecessary Aliases inside the plan. Basically we only need Alias as a top level
  * expression in Project(project list) or Aggregate(aggregate expressions) or
- * Window(window expressions).
+ * Window(window expressions). Notice that if an expression has other expression parameters which
+ * are not in its `children`, e.g. `RuntimeReplaceable`, the transformation for Aliases in this
+ * rule can't work for those parameters.
  */
 object CleanupAliases extends Rule[LogicalPlan] {
   private def trimAliases(e: Expression): Expression = {
@@ -2334,8 +2361,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
       val windowExpressions =
         p.expressions.flatMap(_.collect { case t: TimeWindow => t }).toSet
 
+      val numWindowExpr = windowExpressions.size
       // Only support a single window expression for now
-      if (windowExpressions.size == 1 &&
+      if (numWindowExpr == 1 &&
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
 
@@ -2402,7 +2430,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           renamedPlan.withNewChildren(substitutedPlan :: Nil)
         }
-      } else if (windowExpressions.size > 1) {
+      } else if (numWindowExpr > 1) {
         p.failAnalysis("Multiple time window expressions would result in a cartesian product " +
           "of rows, therefore they are currently not supported.")
       } else {

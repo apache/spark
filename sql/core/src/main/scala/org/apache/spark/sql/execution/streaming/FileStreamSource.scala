@@ -195,7 +195,7 @@ class FileStreamSource(
   private def allFilesUsingMetadataLogFileIndex() = {
     // Note if `sourceHasMetadata` holds, then `qualifiedBasePath` is guaranteed to be a
     // non-glob path
-    new MetadataLogFileIndex(sparkSession, qualifiedBasePath).allFiles()
+    new MetadataLogFileIndex(sparkSession, qualifiedBasePath, None).allFiles()
   }
 
   /**

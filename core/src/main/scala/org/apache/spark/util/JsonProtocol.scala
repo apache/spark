@@ -696,7 +696,7 @@ private[spark] object JsonProtocol {
     val accumulatedValues = {
       Utils.jsonOption(json \ "Accumulables").map(_.extract[List[JValue]]) match {
         case Some(values) => values.map(accumulableInfoFromJson)
-        case None => Seq[AccumulableInfo]()
+        case None => Seq.empty[AccumulableInfo]
       }
     }
 
@@ -726,7 +726,7 @@ private[spark] object JsonProtocol {
     val killed = Utils.jsonOption(json \ "Killed").exists(_.extract[Boolean])
     val accumulables = Utils.jsonOption(json \ "Accumulables").map(_.extract[Seq[JValue]]) match {
       case Some(values) => values.map(accumulableInfoFromJson)
-      case None => Seq[AccumulableInfo]()
+      case None => Seq.empty[AccumulableInfo]
     }
 
     val taskInfo =

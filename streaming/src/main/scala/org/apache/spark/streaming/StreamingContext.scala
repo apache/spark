@@ -458,7 +458,7 @@ class StreamingContext private[streaming] (
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
     ): InputDStream[T] = {
-    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
+    queueStream(queue, oneAtATime, sc.makeRDD(Seq.empty[T], 1))
   }
 
   /**
