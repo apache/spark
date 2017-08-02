@@ -71,4 +71,8 @@ class OutputRedirector {
     active = false;
   }
 
+  boolean isAlive() {
+    return thread.isAlive();
+  }
+
 }

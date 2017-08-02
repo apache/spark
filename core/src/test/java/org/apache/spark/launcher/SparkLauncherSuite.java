@@ -45,12 +45,7 @@ public class SparkLauncherSuite {
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
-  private SparkLauncher launcher;
-
-  @Before
-  public void configureLauncher() {
-    launcher = new SparkLauncher().setSparkHome(System.getProperty("spark.test.home"));
-  }
+  private final SparkLauncher launcher = new SparkLauncher();
 
   @Test
   public void testSparkArgumentHandling() throws Exception {
@@ -99,60 +94,6 @@ public class SparkLauncherSuite {
     assertEquals("python3.4", launcher.builder.conf.get(
       package$.MODULE$.PYSPARK_DRIVER_PYTHON().key()));
     assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
-  }
-
-  @Test(expected=IllegalStateException.class)
-  public void testRedirectTwiceFails() throws Exception {
-    launcher.setAppResource("fake-resource.jar")
-      .setMainClass("my.fake.class.Fake")
-      .redirectError()
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .launch();
-  }
-
-  @Test(expected=IllegalStateException.class)
-  public void testRedirectToLogWithOthersFails() throws Exception {
-    launcher.setAppResource("fake-resource.jar")
-      .setMainClass("my.fake.class.Fake")
-      .redirectToLog("fakeLog")
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .launch();
-  }
-
-  @Test
-  public void testRedirectErrorToOutput() throws Exception {
-    launcher.redirectError();
-    assertTrue(launcher.redirectErrorStream);
-  }
-
-  @Test
-  public void testRedirectsSimple() throws Exception {
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE);
-    assertNotNull(launcher.errorStream);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.PIPE);
-
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE);
-    assertNotNull(launcher.outputStream);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.PIPE);
-  }
-
-  @Test
-  public void testRedirectLastWins() throws Exception {
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE)
-      .redirectError(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
-
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
-      .redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
-  }
-
-  @Test
-  public void testRedirectToLog() throws Exception {
-    launcher.redirectToLog("fakeLogger");
-    assertTrue(launcher.redirectToLog);
-    assertTrue(launcher.builder.getEffectiveConfig()
-      .containsKey(SparkLauncher.CHILD_PROCESS_LOGGER_NAME));
   }
 
   @Test

@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -113,10 +114,12 @@ class ChildProcAppHandle implements SparkAppHandle {
     return secret;
   }
 
-  void setChildProc(Process childProc, String loggerName) {
+  void setChildProc(Process childProc, String loggerName, InputStream logStream) {
     this.childProc = childProc;
-    this.redirector = new OutputRedirector(childProc.getInputStream(), loggerName,
-      SparkLauncher.REDIRECTOR_FACTORY);
+    if (logStream != null) {
+      this.redirector = new OutputRedirector(logStream, loggerName,
+        SparkLauncher.REDIRECTOR_FACTORY);
+    }
   }
 
   void setConnection(LauncherConnection connection) {
@@ -144,6 +147,11 @@ class ChildProcAppHandle implements SparkAppHandle {
   void setAppId(String appId) {
     this.appId = appId;
     fireEvent(true);
+  }
+
+  // Visible for testing.
+  boolean isRunning() {
+    return childProc == null || childProc.isAlive() || (redirector != null && redirector.isAlive());
   }
 
   private synchronized void fireEvent(boolean isInfoChanged) {
