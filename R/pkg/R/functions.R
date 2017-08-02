@@ -195,7 +195,10 @@ NULL
 #' head(tmp2)
 #' head(select(tmp, posexplode(tmp$v1)))
 #' head(select(tmp, sort_array(tmp$v1)))
-#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))}
+#' head(select(tmp, sort_array(tmp$v1, asc = FALSE)))
+#' tmp3 <- mutate(df, v3 = create_map(df$model, df$cyl))
+#' head(select(tmp3, map_keys(tmp3$v3)))
+#' head(select(tmp3, map_values(tmp3$v3)))}
 NULL
 
 #' Window functions for Column operations
