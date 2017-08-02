@@ -137,6 +137,20 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("Analyze hive serde tables when schema is not same as schema in table properties") {
+    val table = "hive_serde_tab_cols_uppercase"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (C1 INT, C2 STRING, C3 DOUBLE)")
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS C1")
+      val fetchedStats1 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
+      assert(fetchedStats1.colStats == Map(
+        "C1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
+          avgLen = 4, maxLen = 4)))
+    }
+  }
+
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
     val tableName = "analyzeTable_part"
     withTable(tableName) {
