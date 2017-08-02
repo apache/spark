@@ -1,8 +1,15 @@
 -- Test data.
 CREATE OR REPLACE TEMPORARY VIEW testData AS SELECT * FROM VALUES
-(null, 1L, "a"), (1, 1L, "a"), (1, 2L, "a"), (2, 2147483650L, "a"), (1, null, "b"), (2, 3L, "b"),
-(3, 2147483650L, "b"), (null, null, null), (3, 1L, null)
-AS testData(val, val_long, cate);
+(null, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), "a"),
+(1, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), "a"),
+(1, 2L, 2.5D, date("2017-08-02"), timestamp(1502000000), "a"),
+(2, 2147483650L, 100.001D, date("2020-12-31"), timestamp(1609372800), "a"),
+(1, null, 1.0D, date("2017-08-01"), timestamp(1501545600), "b"),
+(2, 3L, 3.3D, date("2017-08-03"), timestamp(1503000000), "b"),
+(3, 2147483650L, 100.001D, date("2020-12-31"), timestamp(1609372800), "b"),
+(null, null, null, null, null, null),
+(3, 1L, 1.0D, date("2017-08-01"), timestamp(1501545600), null)
+AS testData(val, val_long, val_double, val_date, val_timestamp, cate);
 
 -- RowsBetween
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val ROWS CURRENT ROW) FROM testData
@@ -19,6 +26,13 @@ SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
 SELECT val_long, cate, sum(val_long) OVER(PARTITION BY cate ORDER BY val_long
 RANGE BETWEEN CURRENT ROW AND 2147483648 FOLLOWING) FROM testData ORDER BY cate, val_long;
+SELECT val_double, cate, sum(val_double) OVER(PARTITION BY cate ORDER BY val_double
+RANGE BETWEEN CURRENT ROW AND 2.5 FOLLOWING) FROM testData ORDER BY cate, val_double;
+SELECT val_date, cate, max(val_date) OVER(PARTITION BY cate ORDER BY val_date
+RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY cate, val_date;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
+RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
+ORDER BY cate, val_timestamp;
 
 -- RangeBetween with reverse OrderBy
 SELECT val, cate, sum(val) OVER(PARTITION BY cate ORDER BY val DESC
@@ -31,7 +45,7 @@ SELECT val, cate, count(val) OVER(PARTITION BY cate
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val, cate
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
-SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY current_date
+SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY current_timestamp
 RANGE BETWEEN CURRENT ROW AND 1 FOLLOWING) FROM testData ORDER BY cate, val;
 SELECT val, cate, count(val) OVER(PARTITION BY cate ORDER BY val
 RANGE BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM testData ORDER BY cate, val;

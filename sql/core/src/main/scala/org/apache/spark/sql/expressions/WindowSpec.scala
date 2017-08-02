@@ -122,19 +122,21 @@ class WindowSpec private[sql](
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
-  def rowsBetween(start: Long, end: Long): WindowSpec = {
-    val boundaryStart = start match {
-      case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
-      case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
+  def rowsBetween(start: Column, end: Column): WindowSpec = {
+    val boundaryStart = start.expr match {
+      case Window.currentRow => CurrentRow
+      case Window.unboundedPreceding => UnboundedPreceding
+      case e => e
+      // case e: Expression if e.foldable && e.eval().isInstanceOf[Int] => e
+      // case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
     }
 
-    val boundaryEnd = end match {
-      case 0 => CurrentRow
-      case Long.MaxValue => UnboundedFollowing
-      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
-      case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
+    val boundaryEnd = end.expr match {
+      case Window.currentRow => CurrentRow
+      case Window.unboundedFollowing => UnboundedFollowing
+      case e => e
+      // case e: Expression if e.foldable && e.eval().isInstanceOf[Int] => e
+      // case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
     }
 
     new WindowSpec(
@@ -143,15 +145,34 @@ class WindowSpec private[sql](
       SpecifiedWindowFrame(RowFrame, boundaryStart, boundaryEnd))
   }
 
+  // This method provides backward compatibility for calls from legacy code.
+  def rowsBetween(start: Any, end: Any): WindowSpec = {
+    val boundaryStart = start match {
+      case e: Expression => e
+      case x => Literal(x)
+    }
+
+    val boundaryEnd = end match {
+      case e: Expression => e
+      case x => Literal(x)
+    }
+
+    rowsBetween(boundaryStart, boundaryEnd)
+  }
+
+  def rowsBetween(start: Expression, end: Expression): WindowSpec = {
+    rowsBetween(Column(start), Column(end))
+  }
+
   /**
    * Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
    *
-   * Both `start` and `end` are relative from the current row. For example, "0" means "current row",
-   * while "-1" means one off before the current row, and "5" means the five off after the
-   * current row.
+   * Both `start` and `end` are relative from the current row. For example, "0" means
+   * "current row", while "-1" means one off before the current row, and "5" means the five off
+   * after the current row.
    *
    * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `Window.currentRow` to specify special boundary values, rather than using integral
+   * and `Window.currentRow` to specify special boundary values, rather than using literal
    * values directly.
    *
    * A range-based boundary is based on the actual value of the ORDER BY
@@ -159,9 +180,9 @@ class WindowSpec private[sql](
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a numerical data type. An exception can be made when the offset is 0,
-   * because no value modification is needed, in this case multiple and non-numeric ORDER BY
-   * expression are allowed.
+   * expression must have a numerical data type. An exception can be made when the offset is
+   * unbounded, because no value modification is needed, in this case multiple and non-literal
+   * ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
@@ -190,23 +211,42 @@ class WindowSpec private[sql](
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.
-  def rangeBetween(start: Long, end: Long): WindowSpec = {
-    val boundaryStart = start match {
-      case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case x => Literal(x)
+  def rangeBetween(start: Column, end: Column): WindowSpec = {
+    val boundaryStart = start.expr match {
+      case Window.currentRow => CurrentRow
+      case Window.unboundedPreceding => UnboundedPreceding
+      case e => e
     }
 
-    val boundaryEnd = end match {
-      case 0 => CurrentRow
-      case Long.MaxValue => UnboundedFollowing
-      case x => Literal(x)
+    val boundaryEnd = end.expr match {
+      case Window.currentRow => CurrentRow
+      case Window.unboundedFollowing => UnboundedFollowing
+      case e => e
     }
 
     new WindowSpec(
       partitionSpec,
       orderSpec,
       SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
+  }
+
+  // This method provides backward compatibility for calls from legacy code.
+  def rangeBetween(start: Any, end: Any): WindowSpec = {
+    val boundaryStart = start match {
+      case e: Expression => e
+      case x => Literal(x)
+    }
+
+    val boundaryEnd = end match {
+      case e: Expression => e
+      case x => Literal(x)
+    }
+
+    rangeBetween(boundaryStart, boundaryEnd)
+  }
+
+  def rangeBetween(start: Expression, end: Expression): WindowSpec = {
+    rangeBetween(Column(start), Column(end))
   }
 
   /**

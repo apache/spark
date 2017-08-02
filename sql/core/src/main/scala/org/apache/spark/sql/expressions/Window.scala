@@ -84,7 +84,7 @@ object Window {
    *
    * @since 2.1.0
    */
-  def unboundedPreceding: Long = Long.MinValue
+  val unboundedPreceding: Literal = Literal(Long.MinValue)
 
   /**
    * Value representing the last row in the partition, equivalent to "UNBOUNDED FOLLOWING" in SQL.
@@ -96,7 +96,7 @@ object Window {
    *
    * @since 2.1.0
    */
-  def unboundedFollowing: Long = Long.MaxValue
+  val unboundedFollowing: Literal = Literal(Long.MaxValue)
 
   /**
    * Value representing the current row. This can be used to specify the frame boundaries:
@@ -107,7 +107,7 @@ object Window {
    *
    * @since 2.1.0
    */
-  def currentRow: Long = 0
+  val currentRow: Literal = Literal(0L)
 
   /**
    * Creates a [[WindowSpec]] with the frame boundaries defined,
@@ -154,8 +154,16 @@ object Window {
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
-  def rowsBetween(start: Long, end: Long): WindowSpec = {
+  def rowsBetween(start: Column, end: Column): WindowSpec = {
     spec.rowsBetween(start, end)
+  }
+
+  def rowsBetween(start: Long, end: Long): WindowSpec = {
+    rowsBetween(Literal(start), Literal(end))
+  }
+
+  def rowsBetween(start: Expression, end: Expression): WindowSpec = {
+    rowsBetween(Column(start), Column(end))
   }
 
   /**
@@ -167,7 +175,7 @@ object Window {
    * current row.
    *
    * We recommend users use `Window.unboundedPreceding`, `Window.unboundedFollowing`,
-   * and `Window.currentRow` to specify special boundary values, rather than using integral
+   * and `Window.currentRow` to specify special boundary values, rather than using literal
    * values directly.
    *
    * A range-based boundary is based on the actual value of the ORDER BY
@@ -175,9 +183,9 @@ object Window {
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a numerical data type. An exception can be made when the offset is 0,
-   * because no value modification is needed, in this case multiple and non-numeric ORDER BY
-   * expression are allowed.
+   * expression must have a literal data type. An exception can be made when the offset is
+   * unbounded, because no value modification is needed, in this case multiple and non-literal
+   * ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
@@ -206,8 +214,16 @@ object Window {
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.
-  def rangeBetween(start: Long, end: Long): WindowSpec = {
+  def rangeBetween(start: Column, end: Column): WindowSpec = {
     spec.rangeBetween(start, end)
+  }
+
+  def rangeBetween(start: Long, end: Long): WindowSpec = {
+    rangeBetween(Literal(start), Literal(end))
+  }
+
+  def rangeBetween(start: Expression, end: Expression): WindowSpec = {
+    rangeBetween(Column(start), Column(end))
   }
 
   private[sql] def spec: WindowSpec = {
