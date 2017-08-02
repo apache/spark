@@ -331,10 +331,6 @@ Note that Spark artifacts are tagged with a Scala version.
   <name>Simple Project</name>
   <packaging>jar</packaging>
   <version>1.0</version>
-  <properties>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <maven.compiler.target>1.8</maven.compiler.target>
-  </properties>
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.apache.spark</groupId>
