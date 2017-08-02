@@ -616,15 +616,24 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedTable = withNewSchema.copy(
       properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
+
+    // If it's a data source table, make sure the original schema is left unchanged; the
+    // actual schema is recorded as a table property.
+    val tableToStore = if (DDLUtils.isDatasourceTable(updatedTable)) {
+      updatedTable.copy(schema = rawTable.schema)
+    } else {
+      updatedTable
+    }
+
     try {
-      client.alterTable(updatedTable)
+      client.alterTable(tableToStore)
     } catch {
       case NonFatal(e) =>
         val warningMessage =
           s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
             "compatible way. Updating Hive metastore in Spark SQL specific format."
         logWarning(warningMessage, e)
-        client.alterTable(updatedTable.copy(schema = updatedTable.partitionSchema))
+        client.alterTable(updatedTable.copy(schema = tableToStore.partitionSchema))
     }
   }
 
