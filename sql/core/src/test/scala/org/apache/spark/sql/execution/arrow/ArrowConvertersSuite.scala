@@ -830,11 +830,10 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
          |}
        """.stripMargin
 
-    val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS z", Locale.US)
     val d1 = DateTimeUtils.toJavaDate(-1)  // "1969-12-31"
     val d2 = DateTimeUtils.toJavaDate(0)  // "1970-01-01"
-    val d3 = new Date(sdf.parse("2015-04-08 13:10:15.000 UTC").getTime)
-    val d4 = new Date(sdf.parse("3017-07-18 14:55:00.000 UTC").getTime)
+    val d3 = Date.valueOf("2015-04-08")
+    val d4 = Date.valueOf("3017-07-18")
 
     val df = Seq(d1, d2, d3, d4).toDF("date")
 
