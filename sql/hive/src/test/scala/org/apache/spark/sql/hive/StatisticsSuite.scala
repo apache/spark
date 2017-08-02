@@ -126,8 +126,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           |USING parquet
           |OPTIONS (skipHiveMetadata true)
         """.stripMargin)
-      sql(s"insert into $table values (1, 1)")
-      sql(s"insert into $table values (2, 1)")
+      sql(s"INSERT INTO $table VALUES (1, 1)")
+      sql(s"INSERT INTO $table VALUES (2, 1)")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS a, b")
       val fetchedStats0 =
         checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))

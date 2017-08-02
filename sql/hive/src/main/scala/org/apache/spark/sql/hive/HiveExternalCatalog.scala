@@ -643,11 +643,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         statsProperties += STATISTICS_NUM_ROWS -> stats.get.rowCount.get.toString()
       }
 
-      // For datasource tables the data schema is stored in the table properties.
-      val schema = rawTable.properties.get(DATASOURCE_PROVIDER) match {
-        case Some(provider) => getSchemaFromTableProperties(rawTable)
-        case _ => rawTable.schema
-      }
+      // For datasource tables and hive serde tables created by spark 2.1 or higher,
+      // the data schema is stored in the table properties.
+      val schema = restoreTableMetadata(rawTable).schema
 
       val colNameTypeMap: Map[String, DataType] =
         schema.fields.map(f => (f.name, f.dataType)).toMap
