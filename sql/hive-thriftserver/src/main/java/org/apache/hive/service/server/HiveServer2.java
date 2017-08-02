@@ -18,14 +18,7 @@
 
 package org.apache.hive.service.server;
 
-import java.util.Properties;
-
-import org.apache.commons.cli.GnuParser;
-import org.apache.commons.cli.HelpFormatter;
-import org.apache.commons.cli.Option;
-import org.apache.commons.cli.OptionBuilder;
-import org.apache.commons.cli.Options;
-import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.common.LogUtils;
@@ -38,6 +31,8 @@ import org.apache.hive.service.cli.CLIService;
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService;
 import org.apache.hive.service.cli.thrift.ThriftCLIService;
 import org.apache.hive.service.cli.thrift.ThriftHttpCLIService;
+
+import java.util.Properties;
 
 /**
  * HiveServer2.
@@ -58,16 +53,22 @@ public class HiveServer2 extends CompositeService {
   public synchronized void init(HiveConf hiveConf) {
     cliService = new CLIService(this);
     addService(cliService);
+    final HiveServer2 hiveServer2 = this;
+    Runnable oomHook = new Runnable() {
+      @Override
+      public void run() {
+        hiveServer2.stop();
+      }
+    };
     if (isHTTPTransportMode(hiveConf)) {
-      thriftCLIService = new ThriftHttpCLIService(cliService);
+      thriftCLIService = new ThriftHttpCLIService(cliService, oomHook);
     } else {
-      thriftCLIService = new ThriftBinaryCLIService(cliService);
+      thriftCLIService = new ThriftBinaryCLIService(cliService, oomHook);
     }
     addService(thriftCLIService);
     super.init(hiveConf);
 
     // Add a shutdown hook for catching SIGTERM & SIGINT
-    final HiveServer2 hiveServer2 = this;
     Runtime.getRuntime().addShutdownHook(new Thread() {
       @Override
       public void run() {
