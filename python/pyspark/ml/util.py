@@ -75,32 +75,34 @@ class BaseReadWrite(object):
     """
 
     def __init__(self):
-        self.sparkSession = None
+        self._sparkSession = None
 
     def context(self, sqlContext):
         """
-        Sets the SQL context to use for saving.
+        Sets the Spark SQLContext to use for saving/loading.
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        # raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
-        self.sparkSession = sqlContext.sparkSession
-        return self
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        # self._sparkSession = sqlContext.sparkSession
+        # return self
 
     def session(self, sparkSession):
-        """Sets the Spark Session to use for saving."""
+        """
+        Sets the Spark Session to use for saving/loading.
+        """
         # raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
-        self.sparkSession = sparkSession
+        self._sparkSession = sparkSession
         return self
 
-    def getOrCreateSparkSession(self):
-        if self.sparkSession is None:
-            self.sparkSession = SparkSession.builder.getOrCreate()
-        return self.sparkSession
+    def sparkSession(self):
+        if self._sparkSession is None:
+            self._sparkSession = SparkSession.builder.getOrCreate()
+        return self._sparkSession
 
     @property
     def sc(self):
-        return self.getOrCreateSparkSession().sparkContext
+        return self.sparkSession().sparkContext
 
 
 @inherit_doc
@@ -115,7 +117,7 @@ class MLWriter(BaseReadWrite):
         super(MLWriter, self).__init__()
         self.shouldOverwrite = False
 
-    def save(self, path):
+    def _save(self, path):
         """Save the ML instance to the input path."""
         if isinstance(self, JavaMLWriter):
             self.saveImpl(path)
@@ -130,6 +132,7 @@ class MLWriter(BaseReadWrite):
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self.shouldOverwrite = True
+        return self
 
     def context(self, sqlContext):
         """
@@ -137,7 +140,7 @@ class MLWriter(BaseReadWrite):
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        super(MLWriter, self).context(sqlContext)
+        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
@@ -196,7 +199,7 @@ class MLWritable(object):
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
+        self.write()._save(path)
 
 
 @inherit_doc

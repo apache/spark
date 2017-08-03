@@ -1969,7 +1969,7 @@ class DefaultReadWriteTests(SparkSessionTestCase):
         tempFile = tempfile.NamedTemporaryFile(delete=True)
         tempFile.close()
 
-        writer.save(tempFile.name)
+        writer._save(tempFile.name)
 
         reader = DefaultParamsReadable.read()
         lr2 = reader.load(tempFile.name)
