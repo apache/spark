@@ -377,14 +377,13 @@ class Params(Identifiable):
 
     def set(self, param, value):
         """
-            Sets the value for a parameter in the parameter map.
+        Sets a parameter in the embedded param map.
         """
-        if not self.hasParam(param.name):
-            raise TypeError('Invalid param %s given for instance %r. %s' % (p.name, self, e))
+        self._shouldOwn(param)
         try:
             value = param.typeConverter(value)
-        except TypeError as e:
-            raise TypeError('Invalid param value given for param "%s". %s' % (p.name, e))
+        except ValueError as e:
+            raise ValueError('Invalid param value given for param "%s". %s' % (param.name, e))
         self._paramMap[param] = value
 
     def _shouldOwn(self, param):

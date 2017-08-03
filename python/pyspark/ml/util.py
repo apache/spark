@@ -114,22 +114,18 @@ class MLWriter(BaseReadWrite):
         super(MLWriter, self).__init__()
         self.shouldOverwrite = False
 
-    def _handleOverwrite(path):
+    def _handleOverwrite(self, path):
         from pyspark.ml.wrapper import JavaWrapper
 
         _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
         wrapper = JavaWrapper(_java_obj)
-        wrapper._call_java("handleOverwrite", path, True)
+        wrapper._call_java("handleOverwrite", path, True, self.sc._jsc.sc())
 
-    def _save(self, path):
+    def save(self, path):
         """Save the ML instance to the input path."""
-        # this check is done because JavaMLWriter has it's own way of handing overwrites
-        if isinstance(self, JavaMLWriter):
-            self.saveImpl(path)
-        else:
-            if self.shouldOverwrite:
-                self._handleOverwrite(path)
-            self.saveImpl(path)
+        if self.shouldOverwrite:
+            self._handleOverwrite(path)
+        self.saveImpl(path)
 
     def saveImpl(self, path):
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
@@ -163,7 +159,7 @@ class JavaMLWriter(MLWriter):
         _java_obj = instance._to_java()
         self._jwrite = _java_obj.write()
 
-    def saveImpl(self, path):
+    def save(self, path):
         """Save the ML instance to the input path."""
         if not isinstance(path, basestring):
             raise TypeError("path should be a basestring, got type %s" % type(path))
@@ -204,7 +200,7 @@ class MLWritable(object):
 
     def save(self, path):
         """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write()._save(path)
+        self.write().save(path)
 
 
 @inherit_doc

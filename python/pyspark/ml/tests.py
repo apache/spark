@@ -347,6 +347,12 @@ class ParamTests(PySparkTestCase):
         with self.assertRaises(KeyError):
             testParams.getInputCol()
 
+        otherParam = Param(Params._dummy(), "otherParam", "Parameter used to test that " +
+                           "set raises an error for a non-member parameter.",
+                           typeConverter=TypeConverters.toString)
+        with self.assertRaises(ValueError):
+            testParams.set(otherParam, "value")
+
         # Since the default is normally random, set it to a known number for debug str
         testParams._setDefault(seed=41)
         testParams.setSeed(43)
@@ -1961,18 +1967,38 @@ class ChiSquareTestTests(SparkSessionTestCase):
 class DefaultReadWriteTests(SparkSessionTestCase):
 
     def test_default_read_write(self):
+        temp_path = tempfile.mkdtemp()
+
         lr = LogisticRegression()
         lr.setMaxIter(50)
         lr.setThreshold(.75)
         writer = DefaultParamsWriter(lr)
 
-        tempFile = tempfile.NamedTemporaryFile(delete=True)
-        tempFile.close()
-
-        writer.saveImpl(tempFile.name)
+        savePath = temp_path + "/lr"
+        writer.saveImpl(savePath)
 
         reader = DefaultParamsReadable.read()
-        lr2 = reader.load(tempFile.name)
+        lr2 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
+
+    def test_default_read_write_with_overwrite(self):
+        temp_path = tempfile.mkdtemp()
+
+        lr = LogisticRegression()
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+        writer = DefaultParamsWriter(lr)
+
+        savePath = temp_path + "/lr"
+        writer.saveImpl(savePath)
+
+        lr.setThreshold(.8)
+        writer.overwrite().save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr2 = reader.load(savePath)
 
         self.assertEqual(lr.uid, lr2.uid)
         self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
