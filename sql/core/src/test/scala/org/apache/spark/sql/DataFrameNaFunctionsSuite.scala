@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 
 class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
@@ -206,10 +207,10 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("replace") {
-    val input = createDF()
+    val input1 = createDF()
 
     // Replace two numeric columns: age and height
-    val out = input.na.replace(Seq("age", "height"), Map(
+    val out = input1.na.replace(Seq("age", "height"), Map(
       16 -> 61,
       60 -> 6,
       164.3 -> 461.3  // Alice is really tall
@@ -222,8 +223,8 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out(4) === Row("Amy", null, null))
     assert(out(5) === Row(null, null, null))
 
-    // Replace only the age column
-    val out1 = input.na.replace("age", Map[Any, Any](
+    // Replace only the age column and with null
+    val out1 = input1.na.replace("age", Map[Any, Any](
       16 -> 61,
       60 -> null,
       164.3 -> 461.3  // Alice is really tall
@@ -235,5 +236,19 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out1(3).get(2).asInstanceOf[Double].isNaN)
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))
+
+    // Replace with null on a column that is not nullable
+    val rows = spark.sparkContext.parallelize(Seq(
+      Row("Bravo", 28, 183.5),
+      Row("Jessie", 18, 165.8)))
+    val schema = StructType(Seq(
+      StructField("name", StringType, nullable = false),
+      StructField("age", IntegerType, nullable = true),
+      StructField("height", DoubleType, nullable = true)))
+    val input2 = spark.createDataFrame(rows, schema)
+    val message = intercept[IllegalArgumentException] {
+      input2.na.replace("name", Map("Bravo" -> null))
+    }.getMessage
+    assert(message === "Column 'name' is not nullable and can not be replaced to null.")
   }
 }
