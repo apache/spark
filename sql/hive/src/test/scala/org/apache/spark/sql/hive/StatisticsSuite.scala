@@ -19,9 +19,10 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 
-import org.apache.hadoop.hive.common.StatsSetupConst
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
+
+import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -34,6 +35,7 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.HiveExternalCatalog._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
@@ -138,9 +140,27 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("Analyze hive serde tables when schema is not same as schema in table properties") {
-    val table = "hive_serde_tab_cols_uppercase"
+    def dropMetadata(schema: StructType): StructType = {
+      val newFields = schema.fields.map { f =>
+        StructField(f.name, f.dataType, f.nullable, Metadata.empty)
+      }
+      StructType(newFields)
+    }
+    val table = "hive_serde"
     withTable(table) {
       sql(s"CREATE TABLE $table (C1 INT, C2 STRING, C3 DOUBLE)")
+      val rawSchema = dropMetadata(hiveClient.getTable("default", table).schema)
+      val expectedRawSchema = new StructType()
+        .add("c1", "int")
+        .add("c2", "string")
+        .add("c3", "double")
+      assert(rawSchema == expectedRawSchema)
+      val actualSchema = spark.sharedState.externalCatalog.getTable("default", table).schema
+      val expectedActualSchema = new StructType()
+        .add("C1", "int")
+        .add("C2", "string")
+        .add("C3", "double")
+      assert(actualSchema == expectedActualSchema)
       sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS C1")
       val fetchedStats1 =
