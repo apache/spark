@@ -1046,6 +1046,9 @@ class LDATest(SparkSessionTestCase):
         localModel.save(local_model_path)
         localModel2 = LocalLDAModel.load(local_model_path)
         self._compare(localModel, localModel2)
+        # Test setting initialModel
+        lda3 = LDA(k=2, seed=1, optimizer="online", initialModel=local_model_path)
+        self.assertEqual(lda3.getInitialModel, local_model_path)
         # Clean up
         try:
             rmtree(path)
