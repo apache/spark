@@ -149,18 +149,23 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     val table = "hive_serde"
     withTable(table) {
       sql(s"CREATE TABLE $table (C1 INT, C2 STRING, C3 DOUBLE)")
+
+      // First verify that the table schema stored in hive catalog is
+      // different than the schema stored in table properties.
       val rawSchema = dropMetadata(hiveClient.getTable("default", table).schema)
       val expectedRawSchema = new StructType()
         .add("c1", "int")
         .add("c2", "string")
         .add("c3", "double")
       assert(rawSchema == expectedRawSchema)
+
       val actualSchema = spark.sharedState.externalCatalog.getTable("default", table).schema
       val expectedActualSchema = new StructType()
         .add("C1", "int")
         .add("C2", "string")
         .add("C3", "double")
       assert(actualSchema == expectedActualSchema)
+      
       sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS C1")
       val fetchedStats1 =
