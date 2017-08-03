@@ -44,7 +44,7 @@ case class LogicalRelation(
   }
 
   // Only care about relation when canonicalizing.
-  override lazy val canonicalized: LogicalPlan = copy(
+  override def doCanonicalize(): LogicalPlan = copy(
     output = output.map(QueryPlan.normalizeExprId(_, output)),
     catalogTable = None)
 

@@ -181,6 +181,15 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   override def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**
+   * A private mutable variable to indicate whether this plan is the result of canonicalization.
+   * This is used solely for making sure we wouldn't execute a canonicalized plan.
+   * See [[canonicalized]] on how this is set.
+   */
+  private var _isCanonicalizedPlan: Boolean = false
+
+  protected def isCanonicalizedPlan: Boolean = _isCanonicalizedPlan
+
+  /**
    * Returns a plan where a best effort attempt has been made to transform `this` in a way
    * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
    * commutative operations, expression id, etc.)
@@ -188,10 +197,21 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
    * result.
    *
-   * Some nodes should overwrite this to provide proper canonicalize logic, but they should remove
-   * expressions cosmetic variations themselves.
+   * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
+   * They should remove expressions cosmetic variations themselves.
    */
-  lazy val canonicalized: PlanType = {
+  final lazy val canonicalized: PlanType = {
+    val plan = doCanonicalize()
+    // Change only the root node, since it is unlikely some code would go into the subtree (not
+    // the root) and try execute that part.
+    plan._isCanonicalizedPlan = true
+    plan
+  }
+
+  /**
+   * Defines how the canonicalization should work for the current plan.
+   */
+  protected def doCanonicalize(): PlanType = {
     val canonicalizedChildren = children.map(_.canonicalized)
     var id = -1
     mapExpressions {
@@ -212,7 +232,6 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
       case other => QueryPlan.normalizeExprId(other, allAttributes)
     }.withNewChildren(canonicalizedChildren)
   }
-
 
   /**
    * Returns true when the given query plan will return the same results as this query plan.

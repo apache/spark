@@ -426,7 +426,7 @@ case class CatalogRelation(
     Objects.hashCode(tableMeta.identifier, output)
   }
 
-  override lazy val canonicalized: LogicalPlan = copy(
+  override def doCanonicalize(): LogicalPlan = copy(
     tableMeta = tableMeta.copy(
       storage = CatalogStorageFormat.empty,
       createTime = -1

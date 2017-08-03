@@ -343,7 +343,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
-  override lazy val canonicalized: SparkPlan = {
+  override def doCanonicalize(): SparkPlan = {
     RangeExec(range.canonicalized.asInstanceOf[org.apache.spark.sql.catalyst.plans.logical.Range])
   }
 
