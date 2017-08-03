@@ -2326,7 +2326,7 @@ from this directory.
 # Inheriting Hadoop Cluster Configuration
 
 If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
-should be included on Spark's classpath:
+should be included on Spark's class path:
 
 * `hdfs-site.xml`, which provides default behaviors for the HDFS client.
 * `core-site.xml`, which sets the default filesystem name.
@@ -2340,19 +2340,19 @@ to a location containing the configuration files.
 
 # Custom Hadoop/Hive Configuration
 
-If your Spark Application interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
-configuration files in Spark's ClassPath.
+If your Spark applications interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
+configuration files in Spark's class path.
 
-In most cases, you may have more than one applications running and rely on some different Hadoop/Hive
-client side configurations. You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`,
-`hive-site.xml` in Spark's ClassPath for each application, but it is not very convenient and these
+Multiple running applications might require different Hadoop/Hive client side configurations.
+You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive-site.xml` in
+Spark's class path for each application, but it is not very convenient and these
 files are best to be shared with common properties to avoid hard-coding certain configurations.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
 They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
 
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
-instance. Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
 
 {% highlight scala %}
 val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
@@ -2366,7 +2366,7 @@ Also, you can modify or add configurations at runtime:
   --master local[4] \  
   --conf spark.eventLog.enabled=false \ 
   --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
-  --conf spark.hadoop.abc.def=xyz
+  --conf spark.hadoop.abc.def=xyz \ 
   myApp.jar
 {% endhighlight %}
 
@@ -2387,7 +2387,9 @@ Also, you can modify or add configurations at runtime:
   <td><code>spark.hadoop.<br />fs.hdfs.impl.disable.cache</code></td>
   <td>false</td>
   <td>
-    Don't cache 'hdfs' filesystem instances. Set true if HDFS Token Expiry in long-running spark applicaitons.<a href="https://issues.apache.org/jira/browse/HDFS-9276">HDFS-9276</a>.
+    When true, return a fresh HDFS filesystem instance, bypassing the HDFS cache mechanism.
+    This is to prevent the DFSClient from using an old cached token to connect to the NameNode,
+    which might fails long-running Spark applications. see <a href="https://issues.apache.org/jira/browse/HDFS-9276">HDFS-9276</a>.
   </td>
 </tr>
 </table>
