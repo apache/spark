@@ -46,7 +46,7 @@ class HiveSchemaInferenceSuite
 
   override def afterEach(): Unit = {
     super.afterEach()
-    spark.sessionState.catalog.tableRelationCache.invalidateAll()
+    spark.sessionState.catalog.invalidateAllCachedTables()
     FileStatusCache.resetForTesting()
   }
 

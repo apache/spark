@@ -21,15 +21,14 @@ import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan, Statistics}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, _}
 
 
 object EstimationUtils {
 
   /** Check if each plan has rowCount in its statistics. */
-  def rowCountsExist(conf: SQLConf, plans: LogicalPlan*): Boolean =
-    plans.forall(_.stats(conf).rowCount.isDefined)
+  def rowCountsExist(plans: LogicalPlan*): Boolean =
+    plans.forall(_.stats.rowCount.isDefined)
 
   /** Check if each attribute has column stat in the corresponding statistics. */
   def columnStatsExist(statsAndAttr: (Statistics, Attribute)*): Boolean = {

@@ -86,7 +86,9 @@ private[spark] class SparkUI private (
   initialize()
 
   def getSparkUser: String = {
-    environmentListener.systemProperties.toMap.getOrElse("user.name", "<unknown>")
+    environmentListener.sparkUser
+      .orElse(environmentListener.systemProperties.toMap.get("user.name"))
+      .getOrElse("<unknown>")
   }
 
   def getAppName: String = appName

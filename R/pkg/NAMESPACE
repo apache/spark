@@ -75,7 +75,8 @@ exportMethods("glm",
 # Job group lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
-       "cancelJobGroup")
+       "cancelJobGroup",
+       "setJobDescription")
 
 # Export Utility methods
 export("setLogLevel")
@@ -285,6 +286,8 @@ exportMethods("%<=>%",
               "lower",
               "lpad",
               "ltrim",
+              "map_keys",
+              "map_values",
               "max",
               "md5",
               "mean",
@@ -357,6 +360,7 @@ exportMethods("%<=>%",
               "to_utc_timestamp",
               "translate",
               "trim",
+              "trunc",
               "unbase64",
               "unhex",
               "unix_timestamp",
@@ -427,6 +431,7 @@ export("structField",
        "structField.character",
        "print.structField",
        "structType",
+       "structType.character",
        "structType.jobj",
        "structType.structField",
        "print.structType")
@@ -463,5 +468,6 @@ S3method(print, summary.GBTRegressionModel)
 S3method(print, summary.GBTClassificationModel)
 S3method(structField, character)
 S3method(structField, jobj)
+S3method(structType, character)
 S3method(structType, jobj)
 S3method(structType, structField)

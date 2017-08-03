@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.NextIterator
 
@@ -266,10 +267,14 @@ object JdbcUtils extends Logging {
   /**
    * Takes a [[ResultSet]] and returns its Catalyst schema.
    *
+   * @param alwaysNullable If true, all the columns are nullable.
    * @return A [[StructType]] giving the Catalyst schema.
    * @throws SQLException if the schema contains an unsupported type.
    */
-  def getSchema(resultSet: ResultSet, dialect: JdbcDialect): StructType = {
+  def getSchema(
+      resultSet: ResultSet,
+      dialect: JdbcDialect,
+      alwaysNullable: Boolean = false): StructType = {
     val rsmd = resultSet.getMetaData
     val ncols = rsmd.getColumnCount
     val fields = new Array[StructField](ncols)
@@ -290,7 +295,11 @@ object JdbcUtils extends Logging {
             rsmd.getClass.getName == "org.apache.hive.jdbc.HiveResultSetMetaData" => true
         }
       }
-      val nullable = rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      val nullable = if (alwaysNullable) {
+        true
+      } else {
+        rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
+      }
       val metadata = new MetadataBuilder()
         .putString("name", columnName)
         .putLong("scale", fieldScale)
@@ -741,14 +750,8 @@ object JdbcUtils extends Logging {
     val nameEquality = df.sparkSession.sessionState.conf.resolver
 
     // checks duplicate columns in the user specified column types.
-    userSchema.fieldNames.foreach { col =>
-      val duplicatesCols = userSchema.fieldNames.filter(nameEquality(_, col))
-      if (duplicatesCols.size >= 2) {
-        throw new AnalysisException(
-          "Found duplicate column(s) in createTableColumnTypes option value: " +
-            duplicatesCols.mkString(", "))
-      }
-    }
+    SchemaUtils.checkColumnNameDuplication(
+      userSchema.map(_.name), "in the createTableColumnTypes option value", nameEquality)
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>

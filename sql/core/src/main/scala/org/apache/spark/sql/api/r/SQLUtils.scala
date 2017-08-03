@@ -193,21 +193,6 @@ private[sql] object SQLUtils extends Logging {
     }
   }
 
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).options(options).load()
-  }
-
-  def loadDF(
-      sparkSession: SparkSession,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    sparkSession.read.format(source).schema(schema).options(options).load()
-  }
-
   def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
     dataType match {
       case 's' =>

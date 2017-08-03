@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
@@ -64,6 +65,30 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
         val optimized = Optimize.execute(query)
         assert(optimized.missingInput.isEmpty)
       }
+    }
+  }
+
+  test("SPARK-20986 Reset table's statistics after PruneFileSourcePartitions rule") {
+    withTable("tbl") {
+      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+      sql(s"ANALYZE TABLE tbl COMPUTE STATISTICS")
+      val tableStats = spark.sessionState.catalog.getTableMetadata(TableIdentifier("tbl")).stats
+      assert(tableStats.isDefined && tableStats.get.sizeInBytes > 0, "tableStats is lost")
+
+      val df = sql("SELECT * FROM tbl WHERE p = 1")
+      val sizes1 = df.queryExecution.analyzed.collect {
+        case relation: LogicalRelation => relation.catalogTable.get.stats.get.sizeInBytes
+      }
+      assert(sizes1.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+      assert(sizes1(0) == tableStats.get.sizeInBytes)
+
+      val relations = df.queryExecution.optimizedPlan.collect {
+        case relation: LogicalRelation => relation
+      }
+      assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
+      val size2 = relations(0).stats.sizeInBytes
+      assert(size2 == relations(0).catalogTable.get.stats.get.sizeInBytes)
+      assert(size2 < tableStats.get.sizeInBytes)
     }
   }
 }

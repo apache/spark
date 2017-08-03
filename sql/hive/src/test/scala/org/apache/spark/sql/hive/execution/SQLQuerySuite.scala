@@ -222,7 +222,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
+    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().map(_.unquotedString)
     val allFunctions = sql("SHOW functions").collect().map(r => r(0))
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))

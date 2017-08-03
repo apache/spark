@@ -175,6 +175,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(classOf[ArrayBuffer[Any]])
 
     kryo.setClassLoader(classLoader)

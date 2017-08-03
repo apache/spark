@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedTableValuedFunction}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAttribute, UnresolvedFunction, UnresolvedGenerator, UnresolvedInlineTable, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -29,13 +29,13 @@ import org.apache.spark.sql.types.IntegerType
  *
  * There is also SparkSqlParserSuite in sql/core module for parser rules defined in sql/core module.
  */
-class PlanParserSuite extends PlanTest {
+class PlanParserSuite extends AnalysisTest {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sqlCommand), plan)
+    comparePlans(parsePlan(sqlCommand), plan, checkAnalysis = false)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit = {
@@ -223,6 +223,12 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql grouping sets((a, b), (a), ())",
       GroupingSets(Seq(Seq('a, 'b), Seq('a), Seq()), Seq('a, 'b), table("d"),
         Seq('a, 'b, 'sum.function('c).as("c"))))
+
+    val m = intercept[ParseException] {
+      parsePlan("SELECT a, b, count(distinct a, distinct b) as c FROM d GROUP BY a, b")
+    }.getMessage
+    assert(m.contains("extraneous input 'b'"))
+
   }
 
   test("limit") {
@@ -237,7 +243,7 @@ class PlanParserSuite extends PlanTest {
     val sql = "select * from t"
     val plan = table("t").select(star())
     val spec = WindowSpecDefinition(Seq('a, 'b), Seq('c.asc),
-      SpecifiedWindowFrame(RowFrame, ValuePreceding(1), ValueFollowing(1)))
+      SpecifiedWindowFrame(RowFrame, -Literal(1), Literal(1)))
 
     // Test window resolution.
     val ws1 = Map("w1" -> spec, "w2" -> spec, "w3" -> spec)
@@ -411,9 +417,9 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql tablesample(100 rows)",
       table("t").limit(100).select(star()))
     assertEqual(s"$sql tablesample(43 percent) as x",
-      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
+      Sample(0, .43d, withReplacement = false, 10L, table("t").as("x")).select(star()))
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
-      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
+      Sample(0, .4d, withReplacement = false, 10L, table("t").as("x")).select(star()))
     intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
       "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported")
     intercept(s"$sql tablesample(bucket 11 out of 10) as x",
@@ -444,19 +450,6 @@ class PlanParserSuite extends PlanTest {
         |      (select id from t0)) as u_1
       """.stripMargin,
       plan.union(plan).union(plan).as("u_1").select('id))
-
-  }
-
-  test("aliased subquery") {
-    val errMsg = "The unaliased subqueries in the FROM clause are not supported"
-
-    assertEqual("select a from (select id as a from t0) tt",
-      table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("select a from (select id as a from t0)", errMsg)
-
-    assertEqual("from (select id as a from t0) tt select a",
-      table("t0").select('id.as("a")).as("tt").select('a))
-    intercept("from (select id as a from t0) select a", errMsg)
   }
 
   test("scalar sub-query") {
@@ -500,6 +493,17 @@ class PlanParserSuite extends PlanTest {
       "SELECT * FROM testData AS t(col1, col2)",
       SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData"), Seq("col1", "col2")))
         .select(star()))
+  }
+
+  test("SPARK-20962 Support subquery column aliases in FROM clause") {
+    assertEqual(
+      "SELECT * FROM (SELECT a AS x, b AS y FROM t) t(col1, col2)",
+      UnresolvedSubqueryColumnAliases(
+        Seq("col1", "col2"),
+        SubqueryAlias(
+          "t",
+          UnresolvedRelation(TableIdentifier("t")).select('a.as("x"), 'b.as("y")))
+      ).select(star()))
   }
 
   test("inline table") {
@@ -567,14 +571,6 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("SPARK-20854: select hint syntax with expressions") {
-    comparePlans(
-      parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
-      UnresolvedHint("HINT1", Seq($"a",
-        UnresolvedFunction("array", Literal(1) :: Literal(2) :: Literal(3) :: Nil, false)),
-        table("t").select(star())
-      )
-    )
-
     comparePlans(
       parsePlan("SELECT /*+ HINT1(a, array(1, 2, 3)) */ * from t"),
       UnresolvedHint("HINT1", Seq($"a",

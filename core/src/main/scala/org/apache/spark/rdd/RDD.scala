@@ -55,7 +55,7 @@ import org.apache.spark.util.random.{BernoulliCellSampler, BernoulliSampler, Poi
  * Doubles; and
  * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
  * can be saved as SequenceFiles.
- * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
+ * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)])
  * through implicit.
  *
  * Internally, each RDD is characterized by five main properties:
@@ -1118,9 +1118,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Aggregates the elements of this RDD in a multi-level tree pattern.
+   * This method is semantically identical to [[org.apache.spark.rdd.RDD#aggregate]].
    *
    * @param depth suggested depth of the tree (default: 2)
-   * @see [[org.apache.spark.rdd.RDD#aggregate]]
    */
   def treeAggregate[U: ClassTag](zeroValue: U)(
       seqOp: (U, T) => U,
@@ -1134,7 +1134,7 @@ abstract class RDD[T: ClassTag](
       val cleanCombOp = context.clean(combOp)
       val aggregatePartition =
         (it: Iterator[T]) => it.aggregate(zeroValue)(cleanSeqOp, cleanCombOp)
-      var partiallyAggregated = mapPartitions(it => Iterator(aggregatePartition(it)))
+      var partiallyAggregated: RDD[U] = mapPartitions(it => Iterator(aggregatePartition(it)))
       var numPartitions = partiallyAggregated.partitions.length
       val scale = math.max(math.ceil(math.pow(numPartitions, 1.0 / depth)).toInt, 2)
       // If creating an extra level doesn't help reduce
@@ -1146,9 +1146,10 @@ abstract class RDD[T: ClassTag](
         val curNumPartitions = numPartitions
         partiallyAggregated = partiallyAggregated.mapPartitionsWithIndex {
           (i, iter) => iter.map((i % curNumPartitions, _))
-        }.reduceByKey(new HashPartitioner(curNumPartitions), cleanCombOp).values
+        }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
-      partiallyAggregated.reduce(cleanCombOp)
+      val copiedZeroValue = Utils.clone(zeroValue, sc.env.closureSerializer.newInstance())
+      partiallyAggregated.fold(copiedZeroValue)(cleanCombOp)
     }
   }
 

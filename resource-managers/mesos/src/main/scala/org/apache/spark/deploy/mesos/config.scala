@@ -83,4 +83,11 @@ package object config {
         "protobuf for more information.")
       .stringConf
       .createOptional
+
+  private [spark] val DRIVER_FAILOVER_TIMEOUT =
+    ConfigBuilder("spark.mesos.driver.failoverTimeout")
+      .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
+          "during a temporary disconnection, before tearing down all the executors.")
+      .doubleConf
+      .createWithDefault(0.0)
 }

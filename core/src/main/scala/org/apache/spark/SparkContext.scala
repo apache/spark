@@ -145,9 +145,8 @@ class SparkContext(config: SparkConf) extends Logging {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
   }
 
-  // NOTE: The below constructors could be consolidated using default arguments. Due to
-  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
-  // Until we have a good workaround for that bug the constructors remain broken out.
+  // The following constructors are required when Java code accesses SparkContext directly.
+  // Please see SI-4278
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -183,8 +182,6 @@ class SparkContext(config: SparkConf) extends Logging {
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
 
-  warnDeprecatedVersions()
-
   /* ------------------------------------------------------------------------------------- *
    | Private variables. These variables keep the internal state of the context, and are    |
    | not accessible by the outside world. They're mutable since we want to initialize all  |
@@ -195,6 +192,7 @@ class SparkContext(config: SparkConf) extends Logging {
   private var _conf: SparkConf = _
   private var _eventLogDir: Option[URI] = None
   private var _eventLogCodec: Option[String] = None
+  private var _listenerBus: LiveListenerBus = _
   private var _env: SparkEnv = _
   private var _jobProgressListener: JobProgressListener = _
   private var _statusTracker: SparkStatusTracker = _
@@ -247,7 +245,7 @@ class SparkContext(config: SparkConf) extends Logging {
   def isStopped: Boolean = stopped.get()
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus(this)
+  private[spark] def listenerBus: LiveListenerBus = _listenerBus
 
   // This function allows components created by SparkEnv to be mocked in unit tests:
   private[spark] def createSparkEnv(
@@ -348,13 +346,6 @@ class SparkContext(config: SparkConf) extends Logging {
     value
   }
 
-  private def warnDeprecatedVersions(): Unit = {
-    val javaVersion = System.getProperty("java.version").split("[+.\\-]+", 3)
-    if (scala.util.Properties.releaseVersion.exists(_.startsWith("2.10"))) {
-      logWarning("Support for Scala 2.10 is deprecated as of Spark 2.1.0")
-    }
-  }
-
   /** Control our logLevel. This overrides any user-defined log settings.
    * @param logLevel The desired log level as a string.
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
@@ -422,6 +413,8 @@ class SparkContext(config: SparkConf) extends Logging {
     }
 
     if (master == "yarn" && deployMode == "client") System.setProperty("SPARK_YARN_MODE", "true")
+
+    _listenerBus = new LiveListenerBus(_conf)
 
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
@@ -1393,6 +1386,8 @@ class SparkContext(config: SparkConf) extends Logging {
   @deprecated("use AccumulatorV2", "2.0.0")
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
+    // TODO the context bound (<%) above should be replaced with simple type bound and implicit
+    // conversion but is a breaking change. This should be fixed in Spark 3.x.
     val param = new GrowableAccumulableParam[R, T]
     val acc = new Accumulable(initialValue, param)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
@@ -2388,7 +2383,7 @@ class SparkContext(config: SparkConf) extends Logging {
         }
     }
 
-    listenerBus.start()
+    listenerBus.start(this, _env.metricsSystem)
     _listenerBusStarted = true
   }
 
@@ -2602,9 +2597,9 @@ object SparkContext extends Logging {
    */
   private[spark] val LEGACY_DRIVER_IDENTIFIER = "<driver>"
 
-  private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
+  private implicit def arrayToArrayWritable[T <: Writable : ClassTag](arr: Traversable[T])
     : ArrayWritable = {
-    def anyToWritable[U <% Writable](u: U): Writable = u
+    def anyToWritable[U <: Writable](u: U): Writable = u
 
     new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
         arr.map(x => anyToWritable(x)).toArray)

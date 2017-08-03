@@ -155,7 +155,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -173,7 +173,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     a match {
       case (struct: Row, StructType(fields)) =>
         struct.toSeq.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ, _)) =>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -221,7 +221,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def stringWithStats: String = {
     // trigger to compute stats for logical plans
-    optimizedPlan.stats(sparkSession.sessionState.conf)
+    optimizedPlan.stats
 
     // only show optimized logical plan and physical plan
     s"""== Optimized Logical Plan ==
@@ -244,6 +244,15 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
       // scalastyle:off println
       println(org.apache.spark.sql.execution.debug.codegenString(executedPlan))
       // scalastyle:on println
+    }
+
+    /**
+     * Get WholeStageCodegenExec subtrees and the codegen in a query plan
+     *
+     * @return Sequence of WholeStageCodegen subtrees and corresponding codegen
+     */
+    def codegenToSeq(): Seq[(String, String)] = {
+      org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
   }
 }

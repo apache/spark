@@ -23,7 +23,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
-import scala.concurrent.duration.Duration
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.internal.Logging
@@ -219,6 +218,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeExecutor(executorId, reason)
         context.reply(true)
 
+      case RemoveWorker(workerId, host, message) =>
+        removeWorker(workerId, host, message)
+        context.reply(true)
+
       case RetrieveSparkAppConfig =>
         val reply = SparkAppConfig(sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey())
@@ -231,8 +234,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       val taskDescs = CoarseGrainedSchedulerBackend.this.synchronized {
         // Filter out executors under killing
         val activeExecutors = executorDataMap.filterKeys(executorIsAlive)
-        val workOffers = activeExecutors.map { case (id, executorData) =>
-          new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
+        val workOffers = activeExecutors.map {
+          case (id, executorData) =>
+            new WorkerOffer(id, executorData.executorHost, executorData.freeCores)
         }.toIndexedSeq
         scheduler.resourceOffers(workOffers)
       }
@@ -331,6 +335,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
+    // Remove a lost worker from the cluster
+    private def removeWorker(workerId: String, host: String, message: String): Unit = {
+      logDebug(s"Asked to remove worker $workerId with reason $message")
+      scheduler.workerRemoved(workerId, host, message)
+    }
+
     /**
      * Stop making resource offers for the given executor. The executor is marked as lost with
      * the loss reason still pending.
@@ -416,11 +426,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * be called in the yarn-client mode when AM re-registers after a failure.
    * */
   protected def reset(): Unit = {
-    val executors = synchronized {
+    val executors: Set[String] = synchronized {
       requestedTotalExecutors = 0
       numPendingExecutors = 0
       executorsPendingToRemove.clear()
-      Set() ++ executorDataMap.keys
+      executorDataMap.keys.toSet
     }
 
     // Remove all the lingering executors that should be removed but not yet. The reason might be
@@ -449,8 +459,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    */
   protected def removeExecutor(executorId: String, reason: ExecutorLossReason): Unit = {
     // Only log the failure since we don't care about the result.
-    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).onFailure { case t =>
-      logError(t.getMessage, t)
+    driverEndpoint.ask[Boolean](RemoveExecutor(executorId, reason)).onFailure {
+      case t => logError(t.getMessage, t)
+    }(ThreadUtils.sameThread)
+  }
+
+  protected def removeWorker(workerId: String, host: String, message: String): Unit = {
+    driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).onFailure {
+      case t => logError(t.getMessage, t)
     }(ThreadUtils.sameThread)
   }
 

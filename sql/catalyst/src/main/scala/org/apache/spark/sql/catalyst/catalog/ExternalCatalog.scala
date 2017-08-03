@@ -160,6 +160,9 @@ abstract class ExternalCatalog
    */
   def alterTableSchema(db: String, table: String, schema: StructType): Unit
 
+  /** Alter the statistics of a table. If `stats` is None, then remove all existing statistics. */
+  def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
+
   def getTable(db: String, table: String): CatalogTable
 
   def getTableOption(db: String, table: String): Option[CatalogTable]
@@ -328,6 +331,15 @@ abstract class ExternalCatalog
   }
 
   protected def doDropFunction(db: String, funcName: String): Unit
+
+  final def alterFunction(db: String, funcDefinition: CatalogFunction): Unit = {
+    val name = funcDefinition.identifier.funcName
+    postToAll(AlterFunctionPreEvent(db, name))
+    doAlterFunction(db, funcDefinition)
+    postToAll(AlterFunctionEvent(db, name))
+  }
+
+  protected def doAlterFunction(db: String, funcDefinition: CatalogFunction): Unit
 
   final def renameFunction(db: String, oldName: String, newName: String): Unit = {
     postToAll(RenameFunctionPreEvent(db, oldName, newName))

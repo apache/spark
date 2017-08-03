@@ -34,10 +34,9 @@ To run the SparkR unit tests on Windows, the following steps are required —ass
 
 4. Set the environment variable `HADOOP_HOME` to the full path to the newly created `hadoop` directory.
 
-5. Run unit tests for SparkR by running the command below. You need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first:
+5. Run unit tests for SparkR by running the command below. You need to install the needed packages following the instructions under [Running R Tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests) first:
 
     ```
-    R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
     .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defaultFS="file:///" R\pkg\tests\run-all.R
     ```
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
 import scala.util.Try
 
 import org.json4s.JsonDSL._
@@ -467,10 +468,16 @@ object StructType extends AbstractDataType {
         leftFields.foreach {
           case leftField @ StructField(leftName, leftType, leftNullable, _) =>
             rightMapped.get(leftName)
-              .map { case rightField @ StructField(_, rightType, rightNullable, _) =>
-                leftField.copy(
-                  dataType = merge(leftType, rightType),
-                  nullable = leftNullable || rightNullable)
+              .map { case rightField @ StructField(rightName, rightType, rightNullable, _) =>
+                try {
+                  leftField.copy(
+                    dataType = merge(leftType, rightType),
+                    nullable = leftNullable || rightNullable)
+                } catch {
+                  case NonFatal(e) =>
+                    throw new SparkException(s"Failed to merge fields '$leftName' and " +
+                      s"'$rightName'. " + e.getMessage)
+                }
               }
               .orElse {
                 Some(leftField)

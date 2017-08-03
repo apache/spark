@@ -66,11 +66,7 @@ To run one of them, use `./bin/spark-submit <filename> <args>`. For example:
 ```bash
 ./bin/spark-submit examples/src/main/r/dataframe.R
 ```
-You can also run the unit tests for SparkR by running. You need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first:
-```bash
-R -e 'install.packages("testthat", repos="http://cran.us.r-project.org")'
-./R/run-tests.sh
-```
+You can run R unit tests by following the instructions under [Running R Tests](http://spark.apache.org/docs/latest/building-spark.html#running-r-tests).
 
 ### Running on YARN
 
