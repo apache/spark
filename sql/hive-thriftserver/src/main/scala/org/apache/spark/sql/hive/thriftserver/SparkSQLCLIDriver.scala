@@ -272,7 +272,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
 private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   private val sessionState = SessionState.get().asInstanceOf[CliSessionState]
 
-  private val LOG = LogFactory.getLog("SparkSQLCLIDriver")
+  private val LOG = LogFactory.getLog(classOf[SparkSQLCLIDriver])
 
   private val console = new SessionState.LogHelper(LOG)
 
