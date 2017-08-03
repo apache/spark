@@ -22,22 +22,25 @@ import java.net.URI
 
 import scala.language.existentials
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.scalatest.BeforeAndAfterEach
+import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.launcher.SparkLauncher
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedHiveTest
 import org.apache.spark.util.Utils
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
@@ -1997,4 +2000,62 @@ class HiveDDLSuite
       sq.stop()
     }
   }
+}
+
+/**
+ * A separate set of DDL tests that uses Hive 2.1 libraries, which behave a little differently
+ * from the built-in ones.
+ */
+@ExtendedHiveTest
+class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with BeforeAndAfterEach
+  with BeforeAndAfterAll {
+
+  // Create a custom HiveExternalCatalog instance with the desired configuration. We cannot
+  // use SparkSession here since there's already an active on managed by the TestHive object.
+  private var catalog = {
+    val warehouse = Utils.createTempDir()
+    val metastore = Utils.createTempDir()
+    metastore.delete()
+    val sparkConf = new SparkConf()
+      .set(SparkLauncher.SPARK_MASTER, "local")
+      .set(WAREHOUSE_PATH.key, warehouse.toURI().toString())
+      .set(CATALOG_IMPLEMENTATION.key, "hive")
+      .set(HiveUtils.HIVE_METASTORE_VERSION.key, "2.1")
+      .set(HiveUtils.HIVE_METASTORE_JARS.key, "maven")
+
+    val hadoopConf = new Configuration()
+    hadoopConf.set("hive.metastore.warehouse.dir", warehouse.toURI().toString())
+    hadoopConf.set("javax.jdo.option.ConnectionURL",
+      s"jdbc:derby:;databaseName=${metastore.getAbsolutePath()};create=true")
+    // These options are needed since the defaults in Hive 2.1 cause exceptions with an
+    // empty metastore db.
+    hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
+    hadoopConf.set("hive.metastore.schema.verification", "false")
+
+    new HiveExternalCatalog(sparkConf, hadoopConf)
+  }
+
+  override def afterEach: Unit = {
+    catalog.listTables("default").foreach { t =>
+      catalog.dropTable("default", t, true, false)
+    }
+    spark.sessionState.catalog.reset()
+  }
+
+  override def afterAll(): Unit = {
+    catalog = null
+  }
+
+  test("SPARK-21617: ALTER TABLE..ADD COLUMNS for DataSource tables") {
+    spark.sql("CREATE TABLE t1 (c1 int) USING json")
+    val oldTable = spark.sessionState.catalog.externalCatalog.getTable("default", "t1")
+    catalog.createTable(oldTable, true)
+
+    val newSchema = StructType(oldTable.schema.fields ++ Array(StructField("c2", IntegerType)))
+    catalog.alterTableSchema("default", "t1", newSchema)
+
+    val updatedTable = catalog.getTable("default", "t1")
+    assert(updatedTable.schema.fieldNames === Array("c1", "c2"))
+  }
+
 }
