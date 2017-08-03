@@ -185,6 +185,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * This is used solely for making sure we wouldn't execute a canonicalized plan.
    * See [[canonicalized]] on how this is set.
    */
+  @transient
   private var _isCanonicalizedPlan: Boolean = false
 
   protected def isCanonicalizedPlan: Boolean = _isCanonicalizedPlan
