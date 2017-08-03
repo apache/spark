@@ -104,7 +104,7 @@ class HiveSchemaInferenceSuite
         identifier = TableIdentifier(table = TEST_TABLE_NAME, database = Option(DATABASE)),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat(
-          locationUri = Option(new java.net.URI(dir.getAbsolutePath)),
+          locationUri = Option(dir.toURI),
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,

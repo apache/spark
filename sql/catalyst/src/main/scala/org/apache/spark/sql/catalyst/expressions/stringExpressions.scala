@@ -340,6 +340,48 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
   }
 }
 
+/**
+ * Replace all occurrences with string.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, search[, replace]) - Replaces all occurrences of `search` with `replace`.",
+  extended = """
+    Arguments:
+      str - a string expression
+      search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
+      replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
+                the string that is removed from `str`.
+
+    Examples:
+      > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
+       ABCDEF
+  """)
+// scalastyle:on line.size.limit
+case class StringReplace(srcExpr: Expression, searchExpr: Expression, replaceExpr: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  def this(srcExpr: Expression, searchExpr: Expression) = {
+    this(srcExpr, searchExpr, Literal(""))
+  }
+
+  override def nullSafeEval(srcEval: Any, searchEval: Any, replaceEval: Any): Any = {
+    srcEval.asInstanceOf[UTF8String].replace(
+      searchEval.asInstanceOf[UTF8String], replaceEval.asInstanceOf[UTF8String])
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, (src, search, replace) => {
+      s"""${ev.value} = $src.replace($search, $replace);"""
+    })
+  }
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(StringType, StringType, StringType)
+  override def children: Seq[Expression] = srcExpr :: searchExpr :: replaceExpr :: Nil
+  override def prettyName: String = "replace"
+}
+
 object StringTranslate {
 
   def buildDict(matchingString: UTF8String, replaceString: UTF8String)
@@ -728,10 +770,10 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
   """,
   extended = """
     Examples:
-     > SELECT _FUNC_('hi', 5, '??');
-      hi???
-     > SELECT _FUNC_('hi', 1, '??');
-      h
+      > SELECT _FUNC_('hi', 5, '??');
+       hi???
+      > SELECT _FUNC_('hi', 1, '??');
+       h
   """)
 case class StringRPad(str: Expression, len: Expression, pad: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
@@ -1005,7 +1047,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
   """,
   extended = """
     Examples:
-      > SELECT initcap('sPark sql');
+      > SELECT _FUNC_('sPark sql');
        Spark Sql
   """)
 case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
@@ -1264,6 +1306,51 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
           ${ev.value} = 0;
         }
        """})
+  }
+}
+
+/**
+ * Returns the ASCII character having the binary equivalent to n.
+ * If n is larger than 256 the result is equivalent to chr(n % 256)
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the ASCII character having the binary equivalent to `expr`. If n is larger than 256 the result is equivalent to chr(n % 256)",
+  extended = """
+    Examples:
+      > SELECT _FUNC_(65);
+       A
+  """)
+// scalastyle:on line.size.limit
+case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
+
+  override def dataType: DataType = StringType
+  override def inputTypes: Seq[DataType] = Seq(LongType)
+
+  protected override def nullSafeEval(lon: Any): Any = {
+    val longVal = lon.asInstanceOf[Long]
+    if (longVal < 0) {
+      UTF8String.EMPTY_UTF8
+    } else if ((longVal & 0xFF) == 0) {
+      UTF8String.fromString(Character.MIN_VALUE.toString)
+    } else {
+      UTF8String.fromString((longVal & 0xFF).toChar.toString)
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, lon => {
+      s"""
+        if ($lon < 0) {
+          ${ev.value} = UTF8String.EMPTY_UTF8;
+        } else if (($lon & 0xFF) == 0) {
+          ${ev.value} = UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
+        } else {
+          char c = (char)($lon & 0xFF);
+          ${ev.value} = UTF8String.fromString(String.valueOf(c));
+        }
+      """
+    })
   }
 }
 

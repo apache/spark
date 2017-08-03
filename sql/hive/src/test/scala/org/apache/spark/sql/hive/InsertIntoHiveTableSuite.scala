@@ -166,72 +166,54 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     sql("DROP TABLE tmp_table")
   }
 
-  test("INSERT OVERWRITE - partition IF NOT EXISTS") {
-    withTempDir { tmpDir =>
-      val table = "table_with_partition"
-      withTable(table) {
-        val selQuery = s"select c1, p1, p2 from $table"
-        sql(
-          s"""
-             |CREATE TABLE $table(c1 string)
-             |PARTITIONED by (p1 string,p2 string)
-             |location '${tmpDir.toURI.toString}'
-           """.stripMargin)
-        sql(
-          s"""
-             |INSERT OVERWRITE TABLE $table
-             |partition (p1='a',p2='b')
-             |SELECT 'blarr'
-           """.stripMargin)
-        checkAnswer(
-          sql(selQuery),
-          Row("blarr", "a", "b"))
+  testPartitionedTable("INSERT OVERWRITE - partition IF NOT EXISTS") { tableName =>
+    val selQuery = s"select a, b, c, d from $tableName"
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE $tableName
+         |partition (b=2, c=3)
+         |SELECT 1, 4
+        """.stripMargin)
+    checkAnswer(sql(selQuery), Row(1, 2, 3, 4))
 
-        sql(
-          s"""
-             |INSERT OVERWRITE TABLE $table
-             |partition (p1='a',p2='b')
-             |SELECT 'blarr2'
-           """.stripMargin)
-        checkAnswer(
-          sql(selQuery),
-          Row("blarr2", "a", "b"))
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE $tableName
+         |partition (b=2, c=3)
+         |SELECT 5, 6
+        """.stripMargin)
+    checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
 
-        var e = intercept[AnalysisException] {
-          sql(
-            s"""
-               |INSERT OVERWRITE TABLE $table
-               |partition (p1='a',p2) IF NOT EXISTS
-               |SELECT 'blarr3', 'newPartition'
-             """.stripMargin)
-        }
-        assert(e.getMessage.contains(
-          "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
-
-        e = intercept[AnalysisException] {
-          sql(
-            s"""
-               |INSERT OVERWRITE TABLE $table
-               |partition (p1='a',p2) IF NOT EXISTS
-               |SELECT 'blarr3', 'b'
-             """.stripMargin)
-        }
-        assert(e.getMessage.contains(
-          "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
-
-        // If the partition already exists, the insert will overwrite the data
-        // unless users specify IF NOT EXISTS
-        sql(
-          s"""
-             |INSERT OVERWRITE TABLE $table
-             |partition (p1='a',p2='b') IF NOT EXISTS
-             |SELECT 'blarr3'
-           """.stripMargin)
-        checkAnswer(
-          sql(selQuery),
-          Row("blarr2", "a", "b"))
-      }
+    val e = intercept[AnalysisException] {
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $tableName
+           |partition (b=2, c) IF NOT EXISTS
+           |SELECT 7, 8, 3
+          """.stripMargin)
     }
+    assert(e.getMessage.contains(
+      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [c]"))
+
+    // If the partition already exists, the insert will overwrite the data
+    // unless users specify IF NOT EXISTS
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE $tableName
+         |partition (b=2, c=3) IF NOT EXISTS
+         |SELECT 9, 10
+        """.stripMargin)
+    checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
+
+    // ADD PARTITION has the same effect, even if no actual data is inserted.
+    sql(s"ALTER TABLE $tableName ADD PARTITION (b=21, c=31)")
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE $tableName
+         |partition (b=21, c=31) IF NOT EXISTS
+         |SELECT 20, 24
+        """.stripMargin)
+    checkAnswer(sql(selQuery), Row(5, 2, 3, 6))
   }
 
   test("Insert ArrayType.containsNull == false") {

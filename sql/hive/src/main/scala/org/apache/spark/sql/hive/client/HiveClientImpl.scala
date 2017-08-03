@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
@@ -414,6 +415,49 @@ private[hive] class HiveClientImpl(
 
       val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
 
+      // Hive-generated Statistics are also recorded in ignoredProperties
+      val ignoredProperties = scala.collection.mutable.Map.empty[String, String]
+      for (key <- HiveStatisticsProperties; value <- properties.get(key)) {
+        ignoredProperties += key -> value
+      }
+
+      val excludedTableProperties = HiveStatisticsProperties ++ Set(
+        // The property value of "comment" is moved to the dedicated field "comment"
+        "comment",
+        // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
+        // in the function toHiveTable.
+        "EXTERNAL"
+      )
+
+      val filteredProperties = properties.filterNot {
+        case (key, _) => excludedTableProperties.contains(key)
+      }
+      val comment = properties.get("comment")
+
+      // Here we are reading statistics from Hive.
+      // Note that this statistics could be overridden by Spark's statistics if that's available.
+      val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
+      val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
+      val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)
+      // TODO: check if this estimate is valid for tables after partition pruning.
+      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
+      // relatively cheap if parameters for the table are populated into the metastore.
+      // Currently, only totalSize, rawDataSize, and rowCount are used to build the field `stats`
+      // TODO: stats should include all the other two fields (`numFiles` and `numPartitions`).
+      // (see StatsSetupConst in Hive)
+      val stats =
+        // When table is external, `totalSize` is always zero, which will influence join strategy
+        // so when `totalSize` is zero, use `rawDataSize` instead. When `rawDataSize` is also zero,
+        // return None. Later, we will use the other ways to estimate the statistics.
+        if (totalSize.isDefined && totalSize.get > 0L) {
+          Some(CatalogStatistics(sizeInBytes = totalSize.get, rowCount = rowCount))
+        } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+          Some(CatalogStatistics(sizeInBytes = rawDataSize.get, rowCount = rowCount))
+        } else {
+          // TODO: still fill the rowCount even if sizeInBytes is empty. Might break anything?
+          None
+        }
+
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -451,13 +495,15 @@ private[hive] class HiveClientImpl(
         ),
         // For EXTERNAL_TABLE, the table properties has a particular field "EXTERNAL". This is added
         // in the function toHiveTable.
-        properties = properties.filter(kv => kv._1 != "comment" && kv._1 != "EXTERNAL"),
-        comment = properties.get("comment"),
+        properties = filteredProperties,
+        stats = stats,
+        comment = comment,
         // In older versions of Spark(before 2.2.0), we expand the view original text and store
         // that into `viewExpandedText`, and that should be used in view resolution. So we get
         // `viewExpandedText` instead of `viewOriginalText` for viewText here.
         viewText = Option(h.getViewExpandedText),
-        unsupportedFeatures = unsupportedFeatures)
+        unsupportedFeatures = unsupportedFeatures,
+        ignoredProperties = ignoredProperties.toMap)
     }
   }
 
@@ -474,7 +520,12 @@ private[hive] class HiveClientImpl(
   }
 
   override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
-    val hiveTable = toHiveTable(table, Some(userName))
+    // getTableOption removes all the Hive-specific properties. Here, we fill them back to ensure
+    // these properties are still available to the others that share the same Hive metastore.
+    // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
+    // these user-specified values.
+    val hiveTable = toHiveTable(
+      table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
@@ -956,4 +1007,14 @@ private[hive] object HiveClientImpl {
         parameters =
           if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
+
+  // Below is the key of table properties for storing Hive-generated statistics
+  private val HiveStatisticsProperties = Set(
+    StatsSetupConst.COLUMN_STATS_ACCURATE,
+    StatsSetupConst.NUM_FILES,
+    StatsSetupConst.NUM_PARTITIONS,
+    StatsSetupConst.ROW_COUNT,
+    StatsSetupConst.RAW_DATA_SIZE,
+    StatsSetupConst.TOTAL_SIZE
+  )
 }

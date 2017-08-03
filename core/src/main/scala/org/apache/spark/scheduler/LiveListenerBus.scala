@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
 import scala.util.DynamicVariable
 
-import org.apache.spark.{SparkContext, SparkException}
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.config._
 import org.apache.spark.util.Utils
 
@@ -34,23 +34,14 @@ import org.apache.spark.util.Utils
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
 private[spark] class LiveListenerBus(val sparkContext: SparkContext) extends SparkListenerBus {
-
   self =>
 
   import LiveListenerBus._
 
   // Cap the capacity of the event queue so we get an explicit error (rather than
   // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
-  private lazy val EVENT_QUEUE_CAPACITY = validateAndGetQueueSize()
-  private lazy val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
-
-  private def validateAndGetQueueSize(): Int = {
-    val queueSize = sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_SIZE)
-    if (queueSize <= 0) {
-      throw new SparkException("spark.scheduler.listenerbus.eventqueue.size must be > 0!")
-    }
-    queueSize
-  }
+  private lazy val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](
+    sparkContext.conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
 
   // Indicate if `start()` is called
   private val started = new AtomicBoolean(false)

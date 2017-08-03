@@ -34,6 +34,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.functions.max
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
@@ -587,6 +588,25 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
           Seq(Row(Seq(1, 2, 3))))
         assert(sql("show functions").count() == numFunc + 1)
         assert(spark.catalog.listFunctions().count() == numFunc + 1)
+      }
+    }
+  }
+
+  test("Call the function registered in the not-current database") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        withDatabase("dAtABaSe1") {
+          sql("CREATE DATABASE dAtABaSe1")
+          withUserDefinedFunction("dAtABaSe1.test_avg" -> false) {
+            sql(s"CREATE FUNCTION dAtABaSe1.test_avg AS '${classOf[GenericUDAFAverage].getName}'")
+            checkAnswer(sql("SELECT dAtABaSe1.test_avg(1)"), Row(1.0))
+          }
+          val message = intercept[AnalysisException] {
+            sql("SELECT dAtABaSe1.unknownFunc(1)")
+          }.getMessage
+          assert(message.contains("Undefined function: 'unknownFunc'") &&
+            message.contains("nor a permanent function registered in the database 'dAtABaSe1'"))
+        }
       }
     }
   }

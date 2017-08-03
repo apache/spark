@@ -64,7 +64,7 @@ case class InMemoryRelation(
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
   extends logical.LeafNode with MultiInstanceRelation {
 
-  override protected def innerChildren: Seq[SparkPlan] = Seq(child)
+  override def innerChildren: Seq[SparkPlan] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -123,8 +123,8 @@ case class InMemoryRelation(
 
           batchStats.add(totalSize)
 
-          val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
-            .flatMap(_.values))
+          val stats = InternalRow.fromSeq(
+            columnBuilders.flatMap(_.columnStats.collectedStatistics))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)

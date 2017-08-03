@@ -466,7 +466,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(6, 3, 6, 3, 1, 1),
 
         AssertOnQuery("metadata log should contain only two files") { q =>
-          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
           val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 2 && toTest.head == "1")
@@ -492,7 +492,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
         CheckAnswer(1, 2, 1, 2, 3, 4, 5, 6, 7, 8),
 
         AssertOnQuery("metadata log should contain three files") { q =>
-          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toString)
+          val metadataLogDir = new java.io.File(q.offsetLog.metadataPath.toUri)
           val logFileNames = metadataLogDir.listFiles().toSeq.map(_.getName())
           val toTest = logFileNames.filter(!_.endsWith(".crc")).sorted // Workaround for SPARK-17475
           assert(toTest.size == 3 && toTest.head == "2")

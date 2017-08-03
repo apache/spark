@@ -513,6 +513,26 @@ class MatricesSuite extends SparkFunSuite {
     Matrices.fromBreeze(sum)
   }
 
+  test("Test FromBreeze when Breeze.CSCMatrix.rowIndices has trailing zeros. - SPARK-20687") {
+    // (2, 0, 0)
+    // (2, 0, 0)
+    val mat1Brz = Matrices.sparse(2, 3, Array(0, 2, 2, 2), Array(0, 1), Array(2, 2)).asBreeze
+    // (2, 1E-15, 1E-15)
+    // (2, 1E-15, 1E-15)
+    val mat2Brz = Matrices.sparse(2, 3,
+      Array(0, 2, 4, 6),
+      Array(0, 0, 0, 1, 1, 1),
+      Array(2, 1E-15, 1E-15, 2, 1E-15, 1E-15)).asBreeze
+    val t1Brz = mat1Brz - mat2Brz
+    val t2Brz = mat2Brz - mat1Brz
+    // The following operations raise exceptions on un-patch Matrices.fromBreeze
+    val t1 = Matrices.fromBreeze(t1Brz)
+    val t2 = Matrices.fromBreeze(t2Brz)
+    // t1 == t1Brz && t2 == t2Brz
+    assert((t1.asBreeze - t1Brz).iterator.map((x) => math.abs(x._2)).sum < 1E-15)
+    assert((t2.asBreeze - t2Brz).iterator.map((x) => math.abs(x._2)).sum < 1E-15)
+  }
+
   test("row/col iterator") {
     val dm = new DenseMatrix(3, 2, Array(0, 1, 2, 3, 4, 0))
     val sm = dm.toSparse

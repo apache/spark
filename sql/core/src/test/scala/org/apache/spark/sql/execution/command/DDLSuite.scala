@@ -702,7 +702,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       withView("testview") {
         sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1 String, c2 String)  USING " +
           "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
-          s"OPTIONS (PATH '$tmpFile')")
+          s"OPTIONS (PATH '${tmpFile.toURI}')")
 
         checkAnswer(
           sql("select c1, c2 from testview order by c1 limit 1"),
@@ -714,7 +714,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             s"""
                |CREATE TEMPORARY VIEW testview
                |USING org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-               |OPTIONS (PATH '$tmpFile')
+               |OPTIONS (PATH '${tmpFile.toURI}')
              """.stripMargin)
         }
       }
@@ -1835,7 +1835,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a string, b int)
              |USING parquet
-             |OPTIONS(path "$dir")
+             |OPTIONS(path "${dir.toURI}")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1853,12 +1853,12 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         checkAnswer(spark.table("t"), Row("c", 1) :: Nil)
 
         val newDirFile = new File(dir, "x")
-        val newDir = newDirFile.getAbsolutePath
+        val newDir = newDirFile.toURI
         spark.sql(s"ALTER TABLE t SET LOCATION '$newDir'")
         spark.sessionState.catalog.refreshTable(TableIdentifier("t"))
 
         val table1 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(table1.location == new URI(newDir))
+        assert(table1.location == newDir)
         assert(!newDirFile.exists)
 
         spark.sql("INSERT INTO TABLE t SELECT 'c', 1")
@@ -1876,7 +1876,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
              |PARTITIONED BY(a, b)
-             |LOCATION "$dir"
+             |LOCATION "${dir.toURI}"
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1902,7 +1902,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           s"""
              |CREATE TABLE t(a string, b int)
              |USING parquet
-             |OPTIONS(path "$dir")
+             |OPTIONS(path "${dir.toURI}")
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
 
@@ -1931,7 +1931,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
              |CREATE TABLE t(a int, b int, c int, d int)
              |USING parquet
              |PARTITIONED BY(a, b)
-             |LOCATION "$dir"
+             |LOCATION "${dir.toURI}"
            """.stripMargin)
         spark.sql("INSERT INTO TABLE t PARTITION(a=1, b=2) SELECT 3, 4")
         checkAnswer(spark.table("t"), Row(3, 4, 1, 2) :: Nil)
@@ -1948,7 +1948,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("create datasource table with a non-existing location") {
     withTable("t", "t1") {
       withTempPath { dir =>
-        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '$dir'")
+        spark.sql(s"CREATE TABLE t(a int, b int) USING parquet LOCATION '${dir.toURI}'")
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1960,7 +1960,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       }
       // partition table
       withTempPath { dir =>
-        spark.sql(s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '$dir'")
+        spark.sql(
+          s"CREATE TABLE t1(a int, b int) USING parquet PARTITIONED BY(a) LOCATION '${dir.toURI}'")
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1985,7 +1986,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             s"""
                |CREATE TABLE t
                |USING parquet
-               |LOCATION '$dir'
+               |LOCATION '${dir.toURI}'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
              """.stripMargin)
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -2001,7 +2002,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                |CREATE TABLE t1
                |USING parquet
                |PARTITIONED BY(a, b)
-               |LOCATION '$dir'
+               |LOCATION '${dir.toURI}'
                |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
              """.stripMargin)
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -2018,6 +2019,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b", "a,b").foreach { specialChars =>
     test(s"data source table:partition column name containing $specialChars") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withTable("t") {
         withTempDir { dir =>
           spark.sql(
@@ -2025,14 +2030,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
                |CREATE TABLE t(a string, `$specialChars` string)
                |USING parquet
                |PARTITIONED BY(`$specialChars`)
-               |LOCATION '$dir'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           assert(dir.listFiles().isEmpty)
           spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
           val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
           val partFile = new File(dir, partEscaped)
-          assert(partFile.listFiles().length >= 1)
+          assert(partFile.listFiles().nonEmpty)
           checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
         }
       }
@@ -2041,15 +2046,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"location uri contains $specialChars for datasource table") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withTable("t", "t1") {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t(a string)
                |USING parquet
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -2058,19 +2070,22 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t SELECT 1")
-          assert(loc.listFiles().length >= 1)
+          assert(loc.listFiles().nonEmpty)
           checkAnswer(spark.table("t"), Row("1") :: Nil)
         }
 
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t1(a string, b string)
                |USING parquet
                |PARTITIONED BY(b)
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -2080,15 +2095,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
           assert(loc.listFiles().isEmpty)
           spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
           val partFile = new File(loc, "b=2")
-          assert(partFile.listFiles().length >= 1)
+          assert(partFile.listFiles().nonEmpty)
           checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
 
           spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
           val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
           assert(!partFile1.exists())
-          val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
-          assert(partFile2.listFiles().length >= 1)
-          checkAnswer(spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+
+          if (!Utils.isWindows) {
+            // Actual path becomes "b=2017-03-03%2012%3A13%253A14" on Windows.
+            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+            assert(partFile2.listFiles().nonEmpty)
+            checkAnswer(
+              spark.table("t1"), Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+          }
         }
       }
     }
@@ -2096,11 +2116,18 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"location uri contains $specialChars for database") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withDatabase ("tmpdb") {
         withTable("t") {
           withTempDir { dir =>
             val loc = new File(dir, specialChars)
-            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$loc'")
+            // The parser does not recognize the backslashes on Windows as they are.
+            // These currently should be escaped.
+            val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
+            spark.sql(s"CREATE DATABASE tmpdb LOCATION '$escapedLoc'")
             spark.sql("USE tmpdb")
 
             import testImplicits._
@@ -2119,11 +2146,14 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     withTable("t", "t1") {
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
+        // The parser does not recognize the backslashes on Windows as they are.
+        // These currently should be escaped.
+        val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
         spark.sql(
           s"""
              |CREATE TABLE t(a string)
              |USING parquet
-             |LOCATION '$dir'
+             |LOCATION '$escapedDir'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location.toString.startsWith("file:/"))
@@ -2131,12 +2161,15 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       withTempDir { dir =>
         assert(!dir.getAbsolutePath.startsWith("file:/"))
+        // The parser does not recognize the backslashes on Windows as they are.
+        // These currently should be escaped.
+        val escapedDir = dir.getAbsolutePath.replace("\\", "\\\\")
         spark.sql(
           s"""
              |CREATE TABLE t1(a string, b string)
              |USING parquet
              |PARTITIONED BY(b)
-             |LOCATION '$dir'
+             |LOCATION '$escapedDir'
            """.stripMargin)
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
         assert(table.location.toString.startsWith("file:/"))

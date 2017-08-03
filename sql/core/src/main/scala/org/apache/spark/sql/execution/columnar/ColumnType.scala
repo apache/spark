@@ -684,7 +684,7 @@ private[columnar] object ColumnType {
       case struct: StructType => STRUCT(struct)
       case udt: UserDefinedType[_] => apply(udt.sqlType)
       case other =>
-        throw new Exception(s"Unsupported type: $other")
+        throw new Exception(s"Unsupported type: ${other.simpleString}")
     }
   }
 }

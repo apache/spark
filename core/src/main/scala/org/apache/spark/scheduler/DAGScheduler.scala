@@ -983,6 +983,13 @@ class DAGScheduler(
     }
 
     stage.makeNewStageAttempt(partitionsToCompute.size, taskIdToLocations.values.toSeq)
+
+    // If there are tasks to execute, record the submission time of the stage. Otherwise,
+    // post the even without the submission time, which indicates that this stage was
+    // skipped.
+    if (partitionsToCompute.nonEmpty) {
+      stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
+    }
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
@@ -1054,7 +1061,6 @@ class DAGScheduler(
         s"tasks are for partitions ${tasks.take(15).map(_.partitionId)})")
       taskScheduler.submitTasks(new TaskSet(
         tasks.toArray, stage.id, stage.latestInfo.attemptId, jobId, properties))
-      stage.latestInfo.submissionTime = Some(clock.getTimeMillis())
     } else {
       // Because we posted SparkListenerStageSubmitted earlier, we should mark
       // the stage as completed here in case there are no tasks to run

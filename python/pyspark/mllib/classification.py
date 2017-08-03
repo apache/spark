@@ -171,7 +171,7 @@ class LogisticRegressionModel(LinearClassificationModel):
             self._dataWithBiasSize = None
             self._weightsMatrix = None
         else:
-            self._dataWithBiasSize = self._coeff.size / (self._numClasses - 1)
+            self._dataWithBiasSize = self._coeff.size // (self._numClasses - 1)
             self._weightsMatrix = self._coeff.toArray().reshape(self._numClasses - 1,
                                                                 self._dataWithBiasSize)
 

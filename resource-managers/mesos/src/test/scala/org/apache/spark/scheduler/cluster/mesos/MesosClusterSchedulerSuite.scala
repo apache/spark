@@ -248,6 +248,33 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(networkInfos.get(0).getName == "test-network-name")
   }
 
+  test("supports spark.mesos.driver.labels") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test",
+          "spark.mesos.driver.labels" -> "key:value"),
+        "s1",
+        new Date()))
+
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val labels = launchedTasks.head.getLabels
+    assert(labels.getLabelsCount == 1)
+    assert(labels.getLabels(0).getKey == "key")
+    assert(labels.getLabels(0).getValue == "value")
+  }
+
   test("can kill supervised drivers") {
     val conf = new SparkConf()
     conf.setMaster("mesos://localhost:5050")

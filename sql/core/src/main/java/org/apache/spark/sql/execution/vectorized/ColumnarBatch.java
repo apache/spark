@@ -198,21 +198,25 @@ public final class ColumnarBatch {
 
     @Override
     public Decimal getDecimal(int ordinal, int precision, int scale) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getDecimal(rowId, precision, scale);
     }
 
     @Override
     public UTF8String getUTF8String(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getUTF8String(rowId);
     }
 
     @Override
     public byte[] getBinary(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getBinary(rowId);
     }
 
     @Override
     public CalendarInterval getInterval(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       final int months = columns[ordinal].getChildColumn(0).getInt(rowId);
       final long microseconds = columns[ordinal].getChildColumn(1).getLong(rowId);
       return new CalendarInterval(months, microseconds);
@@ -220,11 +224,13 @@ public final class ColumnarBatch {
 
     @Override
     public InternalRow getStruct(int ordinal, int numFields) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getStruct(rowId);
     }
 
     @Override
     public ArrayData getArray(int ordinal) {
+      if (columns[ordinal].isNullAt(rowId)) return null;
       return columns[ordinal].getArray(rowId);
     }
 

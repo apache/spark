@@ -324,6 +324,14 @@ class LinearRegressionSummary(JavaWrapper):
         return self._call_java("numInstances")
 
     @property
+    @since("2.2.0")
+    def degreesOfFreedom(self):
+        """
+        Degrees of freedom.
+        """
+        return self._call_java("degreesOfFreedom")
+
+    @property
     @since("2.0.0")
     def devianceResiduals(self):
         """
@@ -1564,6 +1572,14 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         This is set to a new column name if the original model's `predictionCol` is not set.
         """
         return self._call_java("predictionCol")
+
+    @property
+    @since("2.2.0")
+    def numInstances(self):
+        """
+        Number of instances in DataFrame predictions.
+        """
+        return self._call_java("numInstances")
 
     @property
     @since("2.0.0")

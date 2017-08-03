@@ -85,8 +85,7 @@ object AnalysisContext {
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
- * [[UnresolvedRelation]]s into fully typed objects using information in a
- * [[SessionCatalog]] and a [[FunctionRegistry]].
+ * [[UnresolvedRelation]]s into fully typed objects using information in a [[SessionCatalog]].
  */
 class Analyzer(
     catalog: SessionCatalog,
@@ -592,7 +591,25 @@ class Analyzer(
     def resolveRelation(plan: LogicalPlan): LogicalPlan = plan match {
       case u: UnresolvedRelation if !isRunningDirectlyOnFiles(u.tableIdentifier) =>
         val defaultDatabase = AnalysisContext.get.defaultDatabase
-        val relation = lookupTableFromCatalog(u, defaultDatabase)
+        val foundRelation = lookupTableFromCatalog(u, defaultDatabase)
+
+        // Add `Project` to rename output column names if a query has alias names:
+        // e.g., SELECT col1, col2 FROM testData AS t(col1, col2)
+        val relation = if (u.outputColumnNames.nonEmpty) {
+          val outputAttrs = foundRelation.output
+          // Checks if the number of the aliases equals to the number of columns in the table.
+          if (u.outputColumnNames.size != outputAttrs.size) {
+            u.failAnalysis(s"Number of column aliases does not match number of columns. " +
+              s"Table name: ${u.tableName}; number of column aliases: " +
+              s"${u.outputColumnNames.size}; number of columns: ${outputAttrs.size}.")
+          }
+          val aliases = outputAttrs.zip(u.outputColumnNames).map {
+            case (attr, name) => Alias(attr, name)()
+          }
+          Project(aliases, foundRelation)
+        } else {
+          foundRelation
+        }
         resolveRelation(relation)
       // The view's child should be a logical plan parsed from the `desc.viewText`, the variable
       // `viewText` should be defined, or else we throw an error on the generation of the View
@@ -1336,7 +1353,7 @@ class Analyzer(
 
         // Category 1:
         // BroadcastHint, Distinct, LeafNode, Repartition, and SubqueryAlias
-        case _: BroadcastHint | _: Distinct | _: LeafNode | _: Repartition | _: SubqueryAlias =>
+        case _: ResolvedHint | _: Distinct | _: LeafNode | _: Repartition | _: SubqueryAlias =>
 
         // Category 2:
         // These operators can be anywhere in a correlated subquery.
@@ -1882,7 +1899,7 @@ class Analyzer(
      * `[Sum(_w0) OVER (PARTITION BY _w1 ORDER BY _w2)]` and the second returned value will be
      * [col1, col2 + col3 as _w0, col4 as _w1, col5 as _w2].
      *
-     * @return (seq of expressions containing at lease one window expressions,
+     * @return (seq of expressions containing at least one window expression,
      *          seq of non-window expressions)
      */
     private def extract(

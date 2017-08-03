@@ -23,11 +23,11 @@ import org.apache.spark.sql.types._
 /**
  * Generates a [[Projection]] that returns an [[UnsafeRow]].
  *
- * It generates the code for all the expressions, compute the total length for all the columns
- * (can be accessed via variables), and then copy the data into a scratch buffer space in the
+ * It generates the code for all the expressions, computes the total length for all the columns
+ * (can be accessed via variables), and then copies the data into a scratch buffer space in the
  * form of UnsafeRow (the scratch buffer will grow as needed).
  *
- * Note: The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
+ * @note The returned UnsafeRow will be pointed to a scratch buffer inside the projection.
  */
 object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafeProjection] {
 
@@ -50,10 +50,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       fieldTypes: Seq[DataType],
       bufferHolder: String): String = {
     val fieldEvals = fieldTypes.zipWithIndex.map { case (dt, i) =>
-      val fieldName = ctx.freshName("fieldName")
-      val code = s"final ${ctx.javaType(dt)} $fieldName = ${ctx.getValue(input, dt, i.toString)};"
-      val isNull = s"$input.isNullAt($i)"
-      ExprCode(code, isNull, fieldName)
+      val javaType = ctx.javaType(dt)
+      val isNullVar = ctx.freshName("isNull")
+      val valueVar = ctx.freshName("value")
+      val defaultValue = ctx.defaultValue(dt)
+      val readValue = ctx.getValue(input, dt, i.toString)
+      val code =
+        s"""
+          boolean $isNullVar = $input.isNullAt($i);
+          $javaType $valueVar = $isNullVar ? $defaultValue : $readValue;
+        """
+      ExprCode(code, isNullVar, valueVar)
     }
 
     s"""

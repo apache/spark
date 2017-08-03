@@ -36,6 +36,7 @@ import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionRes
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
+
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.
  *
@@ -550,7 +551,9 @@ private[spark] class MesosClusterScheduler(
     offer.remainingResources = finalResources.asJava
 
     val appName = desc.conf.get("spark.app.name")
-    val taskInfo = TaskInfo.newBuilder()
+
+
+    TaskInfo.newBuilder()
       .setTaskId(taskId)
       .setName(s"Driver for ${appName}")
       .setSlaveId(offer.offer.getSlaveId)
@@ -558,7 +561,8 @@ private[spark] class MesosClusterScheduler(
       .setContainer(getContainerInfo(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-    taskInfo.build
+      .setLabels(MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS).getOrElse("")))
+      .build
   }
 
   private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
