@@ -138,10 +138,12 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Respect the configurations set by --hiveconf from the command line
     // (based on Hive's CliDriver).
     val hiveConfFromCmd = sessionState.getOverriddenConfigurations.entrySet().asScala
-    hiveConfFromCmd.foreach { kv =>
+    val newHiveConf = hiveConfFromCmd.map { kv =>
       // If the same property is configured by spark.hadoop.xxx, we ignore it and
       // obey settings from spark properties
-      sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + kv.getKey, kv.getValue)
+      val k = kv.getKey
+      val v = sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + kv.getKey, kv.getValue)
+      (k, v)
     }
 
     val cli = new SparkSQLCLIDriver
@@ -166,10 +168,8 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    // Respect the configurations set by --hiveconf from the command line
-    // (based on Hive's CliDriver).
-    hiveConfFromCmd.foreach{ kv =>
-      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
+    newHiveConf.foreach{ kv =>
+      SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
     }
 
     if (sessionState.execString != null) {
