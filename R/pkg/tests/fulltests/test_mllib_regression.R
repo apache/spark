@@ -173,6 +173,13 @@ test_that("spark.glm summary", {
   expect_equal(stats$df.residual, rStats$df.residual)
   expect_equal(stats$aic, rStats$aic)
 
+  # Test spark.glm works with offset
+  stats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
+                             family = poisson(), offsetCol = "Pedal_Length"))
+  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species,
+                        data = iris, family = poisson(), offset = Pedal_Length))
+  expect_true(all(abs(rStats$coefficients - stats$coefficients) < 1e-3))
+
   # Test summary works on base GLM models
   baseModel <- stats::glm(Sepal.Width ~ Sepal.Length + Species, data = iris)
   baseSummary <- summary(baseModel)

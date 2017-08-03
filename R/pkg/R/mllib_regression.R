@@ -65,6 +65,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
+#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @param regParam regularization parameter for L2 regularization.
 #' @param var.power the power in the variance function of the Tweedie distribution which provides
 #'                      the relationship between the variance and mean of the distribution. Only
@@ -125,7 +127,7 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
-                   regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
+                   offsetCol = NULL, regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
                                               "alphabetDesc", "alphabetAsc")) {
 
@@ -159,10 +161,16 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- as.character(weightCol)
             }
 
+            if (!is.null(offsetCol) && offsetCol == "") {
+              offsetCol <- NULL
+            } else if (!is.null(offsetCol)) {
+              offsetCol <- as.character(offsetCol)
+            }
+
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
-                                tol, as.integer(maxIter), weightCol, regParam,
+                                tol, as.integer(maxIter), weightCol, offsetCol, regParam,
                                 as.double(var.power), as.double(link.power),
                                 stringIndexerOrderType)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
@@ -182,6 +190,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               \code{poisson}, \code{Gamma}, and \code{tweedie}.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
+#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
 #' @param var.power the index of the power variance function in the Tweedie family.
@@ -207,11 +217,11 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
-                   var.power = 0.0, link.power = 1.0 - var.power,
+                   offsetCol = NULL, var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
                                               "alphabetDesc", "alphabetAsc")) {
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
-                      var.power = var.power, link.power = link.power,
+                      offsetCol = offsetCol, var.power = var.power, link.power = link.power,
                       stringIndexerOrderType = stringIndexerOrderType)
           })
 

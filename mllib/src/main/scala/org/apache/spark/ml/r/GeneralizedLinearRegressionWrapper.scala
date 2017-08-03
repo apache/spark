@@ -74,6 +74,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       tol: Double,
       maxIter: Int,
       weightCol: String,
+      offsetCol: String,
       regParam: Double,
       variancePower: Double,
       linkPower: Double,
@@ -99,6 +100,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       glr.setLink(link)
     }
     if (weightCol != null) glr.setWeightCol(weightCol)
+    if (offsetCol != null) glr.setOffsetCol(offsetCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))
