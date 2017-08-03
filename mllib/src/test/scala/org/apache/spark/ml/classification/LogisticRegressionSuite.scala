@@ -2594,6 +2594,12 @@ class LogisticRegressionSuite
       assert(model.getFamily === family)
     }
   }
+
+  test("toString") {
+    val model = new LogisticRegressionModel("logReg", Vectors.dense(0.1, 0.2, 0.3), 0.0)
+    val expected = "logReg, numClasses = 2, numFeatures = 3"
+    assert(model.toString === expected)
+  }
 }
 
 object LogisticRegressionSuite {
