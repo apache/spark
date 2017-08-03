@@ -84,14 +84,11 @@ class BaseReadWrite(object):
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
-        # self._sparkSession = sqlContext.sparkSession
-        # return self
 
     def session(self, sparkSession):
         """
         Sets the Spark Session to use for saving/loading.
         """
-        # raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
         self._sparkSession = sparkSession
         return self
 
@@ -117,13 +114,21 @@ class MLWriter(BaseReadWrite):
         super(MLWriter, self).__init__()
         self.shouldOverwrite = False
 
+    def _handleOverwrite(path):
+        from pyspark.ml.wrapper import JavaWrapper
+
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
+        wrapper = JavaWrapper(_java_obj)
+        wrapper._call_java("handleOverwrite", path, True)
+
     def _save(self, path):
         """Save the ML instance to the input path."""
+        # this check is done because JavaMLWriter has it's own way of handing overwrites
         if isinstance(self, JavaMLWriter):
             self.saveImpl(path)
         else:
             if self.shouldOverwrite:
-                os.remove(path)
+                self._handleOverwrite(path)
             self.saveImpl(path)
 
     def saveImpl(self, path):
