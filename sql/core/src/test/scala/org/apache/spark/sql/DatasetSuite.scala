@@ -21,6 +21,7 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
@@ -359,7 +360,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("reduce") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
+    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == (("sum", 6)))
   }
 
   test("joinWith, flat schema") {
@@ -398,6 +399,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
+  }
+
+  test("joinWith join types") {
+    val ds1 = Seq(1, 2, 3).toDS().as("a")
+    val ds2 = Seq(1, 2).toDS().as("b")
+
+    val e1 = intercept[AnalysisException] {
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
+    }.getMessage
+    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+
+    val e2 = intercept[AnalysisException] {
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
+    }.getMessage
+    assert(e2.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
 
   test("groupBy function, keys") {
@@ -784,7 +800,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-14000: case class with tuple type field") {
     checkDataset(
       Seq(TupleClass((1, "a"))).toDS(),
-      TupleClass(1, "a")
+      TupleClass((1, "a"))
     )
   }
 
@@ -1287,6 +1303,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       checkAnswer(rlike1, rlike2)
       assert(rlike3.count() == 0)
     }
+  }
+
+  test("SPARK-21538: Attribute resolution inconsistency in Dataset API") {
+    val df = spark.range(3).withColumnRenamed("id", "x")
+    val expected = Row(0) :: Row(1) :: Row (2) :: Nil
+    checkAnswer(df.sort("id"), expected)
+    checkAnswer(df.sort(col("id")), expected)
+    checkAnswer(df.sort($"id"), expected)
+    checkAnswer(df.sort('id), expected)
+    checkAnswer(df.orderBy("id"), expected)
+    checkAnswer(df.orderBy(col("id")), expected)
+    checkAnswer(df.orderBy($"id"), expected)
+    checkAnswer(df.orderBy('id), expected)
   }
 }
 

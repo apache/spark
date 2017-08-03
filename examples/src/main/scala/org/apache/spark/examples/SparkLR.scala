@@ -72,7 +72,7 @@ object SparkLR {
     val points = spark.sparkContext.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {

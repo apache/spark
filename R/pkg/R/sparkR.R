@@ -113,7 +113,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                  c("com.databricks:spark-avro_2.11:2.0.1"))
 #'}
 #' @note sparkR.init since 1.4.0
 sparkR.init <- function(
@@ -357,7 +357,7 @@ sparkRHive.init <- function(jsc = NULL) {
 #' sparkR.session("yarn-client", "SparkR", "/home/spark",
 #'                list(spark.executor.memory="4g"),
 #'                c("one.jar", "two.jar", "three.jar"),
-#'                c("com.databricks:spark-avro_2.10:2.0.1"))
+#'                c("com.databricks:spark-avro_2.11:2.0.1"))
 #' sparkR.session(spark.master = "yarn-client", spark.executor.memory = "4g")
 #'}
 #' @note sparkR.session since 2.0.0

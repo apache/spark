@@ -190,7 +190,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          SpecifiedWindowFrame(RangeFrame, ValueFollowing(1), ValueFollowing(2)))).as('window)),
+          SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as('window)),
     "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(

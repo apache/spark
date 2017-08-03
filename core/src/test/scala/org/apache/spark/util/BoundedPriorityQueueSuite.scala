@@ -15,16 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.util
 
-/**
- * Shim to allow us to implement [[scala.Iterator]] in Java. Scala 2.11+ has an AbstractIterator
- * class for this, but that class is `private[scala]` in 2.10. We need to explicitly fix this to
- * `Row` in order to work around a spurious IntelliJ compiler error. This cannot be an abstract
- * class because that leads to compilation errors under Scala 2.11.
- */
-class AbstractScalaRowIterator[T] extends Iterator[T] {
-  override def hasNext: Boolean = throw new NotImplementedError
+import org.apache.spark.SparkFunSuite
 
-  override def next(): T = throw new NotImplementedError
+class BoundedPriorityQueueSuite extends SparkFunSuite {
+  test("BoundedPriorityQueue poll test") {
+    val pq = new BoundedPriorityQueue[Double](4)
+
+    pq += 0.1
+    pq += 1.5
+    pq += 1.0
+    pq += 0.3
+    pq += 0.01
+
+    assert(pq.isEmpty == false)
+    assert(pq.poll() == 0.1)
+    assert(pq.poll() == 0.3)
+    assert(pq.poll() == 1.0)
+    assert(pq.poll() == 1.5)
+    assert(pq.isEmpty == true)
+
+    val pq2 = new BoundedPriorityQueue[(Int, Double)](4)(Ordering.by(_._2))
+    pq2 += 1 -> 0.5
+    pq2 += 5 -> 0.1
+    pq2 += 3 -> 0.3
+    pq2 += 4 -> 0.2
+    pq2 += 1 -> 0.4
+
+    assert(pq2.poll()._2 == 0.2)
+    assert(pq2.poll()._2 == 0.3)
+    assert(pq2.poll()._2 == 0.4)
+    assert(pq2.poll()._2 == 0.5)
+  }
 }

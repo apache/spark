@@ -150,7 +150,7 @@ object JoinReorderDP extends PredicateHelper with Logging {
     // Create the initial plans: each plan is a single item with zero cost.
     val itemIndex = items.zipWithIndex
     val foundPlans = mutable.Buffer[JoinPlanMap](itemIndex.map {
-      case (item, id) => Set(id) -> JoinPlan(Set(id), item, Set(), Cost(0, 0))
+      case (item, id) => Set(id) -> JoinPlan(Set(id), item, Set.empty, Cost(0, 0))
     }.toMap)
 
     // Build filters from the join graph to be used by the search algorithm.

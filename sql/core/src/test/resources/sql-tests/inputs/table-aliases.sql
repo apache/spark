@@ -15,3 +15,6 @@ SELECT * FROM testData AS t(col1);
 
 -- Check alias duplication
 SELECT a AS col1, b AS col2 FROM testData AS t(c, d);
+
+-- Subquery aliases in FROM clause
+SELECT * FROM (SELECT 1 AS a, 1 AS b) t(col1, col2);

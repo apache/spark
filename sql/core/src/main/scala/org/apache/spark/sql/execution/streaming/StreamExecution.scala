@@ -263,6 +263,7 @@ class StreamExecution(
     try {
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
+      sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -608,7 +609,7 @@ class StreamExecution(
     }
 
     // A list of attributes that will need to be updated.
-    var replacements = new ArrayBuffer[(Attribute, Attribute)]
+    val replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
@@ -842,6 +843,9 @@ class StreamExecution(
   }
 }
 
+object StreamExecution {
+  val QUERY_ID_KEY = "sql.streaming.queryId"
+}
 
 /**
  * A special thread to run the stream query. Some codes require to run in the StreamExecutionThread
