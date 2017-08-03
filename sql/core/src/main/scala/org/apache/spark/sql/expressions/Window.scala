@@ -75,7 +75,7 @@ object Window {
   }
 
   /**
-   * Value representing the last row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
+   * Value representing the first row in the partition, equivalent to "UNBOUNDED PRECEDING" in SQL.
    * This can be used to specify the frame boundaries:
    *
    * {{{
@@ -84,7 +84,7 @@ object Window {
    *
    * @since 2.1.0
    */
-  val unboundedPreceding: Literal = Literal(Long.MinValue)
+  def unboundedPreceding: Long = Long.MinValue
 
   /**
    * Value representing the last row in the partition, equivalent to "UNBOUNDED FOLLOWING" in SQL.
@@ -96,7 +96,7 @@ object Window {
    *
    * @since 2.1.0
    */
-  val unboundedFollowing: Literal = Literal(Long.MaxValue)
+  def unboundedFollowing: Long = Long.MaxValue
 
   /**
    * Value representing the current row. This can be used to specify the frame boundaries:
@@ -107,7 +107,7 @@ object Window {
    *
    * @since 2.1.0
    */
-  val currentRow: Literal = Literal(0L)
+  def currentRow: Long = 0
 
   /**
    * Creates a [[WindowSpec]] with the frame boundaries defined,
@@ -154,15 +154,18 @@ object Window {
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rowsBetween.
+  def rowsBetween(start: Long, end: Long): WindowSpec = {
+    spec.rowsBetween(start, end)
+  }
+
+  /**
+   * @param start boundary start, inclusive. The frame is unbounded if this evals to
+   *              the minimum long value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
+   *            maximum long value (`Window.unboundedFollowing`).
+   * @since 2.3.0
+   */
   def rowsBetween(start: Column, end: Column): WindowSpec = {
-    spec.rowsBetween(start, end)
-  }
-
-  def rowsBetween(start: Any, end: Any): WindowSpec = {
-    spec.rowsBetween(start, end)
-  }
-
-  def rowsBetween(start: Expression, end: Expression): WindowSpec = {
     spec.rowsBetween(start, end)
   }
 
@@ -214,15 +217,18 @@ object Window {
    * @since 2.1.0
    */
   // Note: when updating the doc for this method, also update WindowSpec.rangeBetween.
+  def rangeBetween(start: Long, end: Long): WindowSpec = {
+    spec.rangeBetween(start, end)
+  }
+
+  /**
+   * @param start boundary start, inclusive. The frame is unbounded if this evals to
+   *              the minimum long value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
+   *            maximum long value (`Window.unboundedFollowing`).
+   * @since 2.3.0
+   */
   def rangeBetween(start: Column, end: Column): WindowSpec = {
-    spec.rangeBetween(start, end)
-  }
-
-  def rangeBetween(start: Any, end: Any): WindowSpec = {
-    spec.rangeBetween(start, end)
-  }
-
-  def rangeBetween(start: Expression, end: Expression): WindowSpec = {
     spec.rangeBetween(start, end)
   }
 

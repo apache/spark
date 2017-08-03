@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -173,9 +172,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         $"key",
         count("key").over(
           Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
-    assert(e.message.contains(
-      "The data type of the upper bound 'LongType does not match the expected data type " +
-        "'IntegerType'"))
+    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
   }
 
   test("range between should accept int/long values as boundary") {
@@ -207,7 +204,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
       df2.select(
         $"key",
         count("key").over(
-          Window.partitionBy($"value").orderBy($"key").rangeBetween(0, 2))),
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(lit(0), lit(2)))),
       Seq(Row(dt("2017-08-01"), 3), Row(dt("2017-08-01"), 3), Row(dt("2020-12-31"), 1),
         Row(dt("2017-08-03"), 1), Row(dt("2017-08-02"), 1), Row(dt("2020-12-31"), 1))
     )
@@ -223,7 +220,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         $"key",
         count("key").over(
           Window.partitionBy($"value").orderBy($"key")
-            .rangeBetween(Window.currentRow, Literal(2.5D)))),
+            .rangeBetween(currentRow, lit(2.5D)))),
       Seq(Row(1.0, 3), Row(1.0, 3), Row(100.001, 1), Row(3.3, 1), Row(2.02, 1), Row(100.001, 1))
     )
   }
@@ -240,8 +237,8 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         $"key",
         count("key").over(
           Window.partitionBy($"value").orderBy($"key")
-            .rangeBetween(Window.currentRow,
-              Literal(CalendarInterval.fromString("interval 23 days 4 hours"))))),
+            .rangeBetween(currentRow,
+              lit(CalendarInterval.fromString("interval 23 days 4 hours"))))),
       Seq(Row(ts(1501545600), 3), Row(ts(1501545600), 3), Row(ts(1609372800), 1),
         Row(ts(1503000000), 1), Row(ts(1502000000), 1), Row(ts(1609372800), 1))
     )

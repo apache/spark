@@ -122,17 +122,19 @@ class WindowSpec private[sql](
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rowsBetween.
-  def rowsBetween(start: Column, end: Column): WindowSpec = {
-    val boundaryStart = start.expr match {
-      case Window.currentRow => CurrentRow
-      case Window.unboundedPreceding => UnboundedPreceding
-      case e => e
+  def rowsBetween(start: Long, end: Long): WindowSpec = {
+    val boundaryStart = start match {
+      case 0 => CurrentRow
+      case Long.MinValue => UnboundedPreceding
+      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
+      case x => throw new AnalysisException(s"Boundary start is not a valid integer: $x")
     }
 
-    val boundaryEnd = end.expr match {
-      case Window.currentRow => CurrentRow
-      case Window.unboundedFollowing => UnboundedFollowing
-      case e => e
+    val boundaryEnd = end match {
+      case 0 => CurrentRow
+      case Long.MaxValue => UnboundedFollowing
+      case x if Int.MinValue <= x && x <= Int.MaxValue => Literal(x.toInt)
+      case x => throw new AnalysisException(s"Boundary end is not a valid integer: $x")
     }
 
     new WindowSpec(
@@ -141,23 +143,22 @@ class WindowSpec private[sql](
       SpecifiedWindowFrame(RowFrame, boundaryStart, boundaryEnd))
   }
 
-  // This method provides backward compatibility for calls from legacy code.
-  def rowsBetween(start: Any, end: Any): WindowSpec = {
-    val boundaryStart = start match {
-      case e: Expression => e
-      case x => Literal(x)
-    }
+  /**
+   * @param start boundary start, inclusive. The frame is unbounded if this evals to
+   *              the minimum long value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
+   *            maximum long value (`Window.unboundedFollowing`).
+   * @since 2.3.0
+   */
+  def rowsBetween(start: Column, end: Column): WindowSpec = {
+    val boundaryStart = extractBoundary(start.expr)
 
-    val boundaryEnd = end match {
-      case e: Expression => e
-      case x => Literal(x)
-    }
+    val boundaryEnd = extractBoundary(end.expr)
 
-    rowsBetween(boundaryStart, boundaryEnd)
-  }
-
-  def rowsBetween(start: Expression, end: Expression): WindowSpec = {
-    rowsBetween(Column(start), Column(end))
+    new WindowSpec(
+      partitionSpec,
+      orderSpec,
+      SpecifiedWindowFrame(RowFrame, boundaryStart, boundaryEnd))
   }
 
   /**
@@ -207,17 +208,17 @@ class WindowSpec private[sql](
    * @since 1.4.0
    */
   // Note: when updating the doc for this method, also update Window.rangeBetween.
-  def rangeBetween(start: Column, end: Column): WindowSpec = {
-    val boundaryStart = start.expr match {
-      case Window.currentRow => CurrentRow
-      case Window.unboundedPreceding => UnboundedPreceding
-      case e => e
+  def rangeBetween(start: Long, end: Long): WindowSpec = {
+    val boundaryStart = start match {
+      case 0 => CurrentRow
+      case Long.MinValue => UnboundedPreceding
+      case x => Literal(x)
     }
 
-    val boundaryEnd = end.expr match {
-      case Window.currentRow => CurrentRow
-      case Window.unboundedFollowing => UnboundedFollowing
-      case e => e
+    val boundaryEnd = end match {
+      case 0 => CurrentRow
+      case Long.MaxValue => UnboundedFollowing
+      case x => Literal(x)
     }
 
     new WindowSpec(
@@ -226,23 +227,32 @@ class WindowSpec private[sql](
       SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
   }
 
-  // This method provides backward compatibility for calls from legacy code.
-  def rangeBetween(start: Any, end: Any): WindowSpec = {
-    val boundaryStart = start match {
-      case e: Expression => e
-      case x => Literal(x)
-    }
+  /**
+   * @param start boundary start, inclusive. The frame is unbounded if this evals to
+   *              the minimum long value (`Window.unboundedPreceding`).
+   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
+   *            maximum long value (`Window.unboundedFollowing`).
+   * @since 2.3.0
+   */
+  def rangeBetween(start: Column, end: Column): WindowSpec = {
+    val boundaryStart = extractBoundary(start.expr)
 
-    val boundaryEnd = end match {
-      case e: Expression => e
-      case x => Literal(x)
-    }
+    val boundaryEnd = extractBoundary(end.expr)
 
-    rangeBetween(boundaryStart, boundaryEnd)
+    new WindowSpec(
+      partitionSpec,
+      orderSpec,
+      SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
   }
 
-  def rangeBetween(start: Expression, end: Expression): WindowSpec = {
-    rangeBetween(Column(start), Column(end))
+  private def extractBoundary(expr: Expression): Expression = expr match {
+    case e if !e.foldable => e
+    case _ => expr.eval() match {
+      case 0 => CurrentRow
+      case Long.MinValue => UnboundedPreceding
+      case Long.MaxValue => UnboundedFollowing
+      case _ => expr
+    }
   }
 
   /**
