@@ -1390,10 +1390,9 @@ class DataFrame(object):
                 return all(isinstance(x, types) for x in xs)
             return all_of_
 
-        # Replacement key and value must have the same type while value can have None
-        all_of_bool = (all_of(bool), all_of((bool, type(None))))
-        all_of_str = (all_of(basestring), all_of((basestring, type(None))))
-        all_of_numeric = (all_of((float, int, long)), all_of((float, int, long, type(None))))
+        all_of_bool = all_of(bool)
+        all_of_str = all_of(basestring)
+        all_of_numeric = all_of((float, int, long))
 
         # Validate input types
         valid_types = (bool, float, int, long, basestring, list, tuple)
@@ -1434,9 +1433,9 @@ class DataFrame(object):
             subset = [subset]
 
         # Verify we were not passed in mixed type generics."
-        if not any(key_all_of_type(rep_dict.keys()) and value_all_of_type(rep_dict.values())
-                   for (key_all_of_type, value_all_of_type)
-                   in [all_of_bool, all_of_str, all_of_numeric]):
+        if not any(all_of_type(rep_dict.keys())
+                   and all_of_type(x for x in rep_dict.values() if x is not None)
+                   for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
             raise ValueError("Mixed type replacements are not supported")
 
         if subset is None:
