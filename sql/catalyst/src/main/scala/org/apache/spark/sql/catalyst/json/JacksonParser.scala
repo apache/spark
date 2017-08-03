@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, InputStream}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -347,22 +347,100 @@ class JacksonParser(
       Utils.tryWithResource(createParser(factory, record)) { parser =>
         // a null first token is equivalent to testing for input.trim.isEmpty
         // but it works on any token stream and not just strings
-        var endLoop = false
-        val allRows = scala.collection.mutable.ArrayBuffer.empty[InternalRow]
-        while (!endLoop) {
-          Option(parser.nextToken()) match {
-            case Some(_) => rootConverter.apply(parser) match {
-              case null => throw new RuntimeException("Root converter returned null")
-              case rows => allRows ++= rows
-            }
-            case None => endLoop = true
+        parser.nextToken() match {
+          case null => Nil
+          case _ => rootConverter.apply(parser) match {
+            case null => throw new RuntimeException("Root converter returned null")
+            case rows => rows
           }
         }
-        allRows
       }
     } catch {
       case e @ (_: RuntimeException | _: JsonProcessingException) =>
         throw BadRecordException(() => recordLiteral(record), () => None, e)
+    }
+  }
+
+}
+
+object JacksonParser {
+  private[spark] def splitDocuments(input: InputStream) = new Iterator[String] {
+
+    implicit class JsonCharacter(char: Char) {
+      def isJsonObjectFinished(endToken: Option[Char]): Boolean = {
+        endToken match {
+          case None => char == '}' || char == ']'
+          case Some(x) => char == x
+        }
+      }
+    }
+    var currentChar: Char = input.read().toChar
+    private var endToken: Option[Char] = None
+    private var previousToken: Option[Char] = None
+    private var nextRecord = readNext
+
+
+    override def hasNext: Boolean = nextRecord.isDefined
+
+    override def next(): String = {
+      if (!hasNext) {
+        throw new NoSuchElementException("End of stream")
+      }
+      val curRecord = nextRecord.get
+      nextRecord = readNext
+      curRecord
+    }
+
+    private def moveToNextChar() = {
+      if (!currentChar.isWhitespace) {
+        previousToken = Some(currentChar)
+      }
+
+      currentChar = input.read().toChar
+    }
+
+    private def readJsonObject: Option[String] = {
+      endToken = currentChar match {
+        case '{' => Some('}')
+        case '[' => Some(']')
+        case _ => None
+      }
+
+      val sb = new StringBuilder()
+      sb.append(currentChar)
+      while (!currentChar.isJsonObjectFinished(endToken)
+        && input.available() > 0) {
+        moveToNextChar()
+        currentChar match {
+          case '{' | '[' =>
+            if (previousToken.isDefined
+              && previousToken.forall(_.isJsonObjectFinished(None))) {
+              return Some(sb.toString)
+            }
+            readJsonObject.foreach(sb.append)
+          case _ => sb.append(currentChar)
+        }
+      }
+      if (input.available() > 0) {
+        moveToNextChar()
+      }
+      Some(sb.toString())
+    }
+
+    private def readNext: Option[String] = {
+      if (input.available() <= 0) {
+        return None
+      }
+
+      while (currentChar.isWhitespace
+        && input.available() > 0) {
+        moveToNextChar()
+      }
+      if (input.available() <= 0) {
+        return None
+      }
+
+      readJsonObject
     }
   }
 }
