@@ -17,16 +17,12 @@
 
 package org.apache.spark.kvstore;
 
-import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
@@ -36,11 +32,14 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Implementation of KVStore that keeps data deserialized in memory. This store does not index
  * data; instead, whenever iterating over an indexed field, the stored data is copied and sorted
  * according to the index. This saves memory but makes iteration more expensive.
  */
+@Private
 public class InMemoryStore implements KVStore {
 
   private Object metadata;

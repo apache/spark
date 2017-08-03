@@ -20,10 +20,9 @@ package org.apache.spark.kvstore;
 import java.util.Arrays;
 
 import com.google.common.base.Preconditions;
-import com.google.common.base.Objects;
 
 /**
- * A factory for array wrappers so that arrays can be used as a key in a map, sorted or not.
+ * A factory for array wrappers so that arrays can be used as keys in a map, sorted or not.
  *
  * The comparator implementation makes two assumptions:
  * - All elements are instances of Comparable
