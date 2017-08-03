@@ -74,11 +74,11 @@ private[r] object GeneralizedLinearRegressionWrapper
       tol: Double,
       maxIter: Int,
       weightCol: String,
-      offsetCol: String,
       regParam: Double,
       variancePower: Double,
       linkPower: Double,
-      stringIndexerOrderType: String): GeneralizedLinearRegressionWrapper = {
+      stringIndexerOrderType: String,
+      offsetCol: String): GeneralizedLinearRegressionWrapper = {
   // scalastyle:on
     val rFormula = new RFormula().setFormula(formula)
       .setStringIndexerOrderType(stringIndexerOrderType)

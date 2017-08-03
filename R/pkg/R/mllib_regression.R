@@ -65,8 +65,6 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @param maxIter integer giving the maximal number of IRLS iterations.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
-#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
-#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @param regParam regularization parameter for L2 regularization.
 #' @param var.power the power in the variance function of the Tweedie distribution which provides
 #'                      the relationship between the variance and mean of the distribution. Only
@@ -78,6 +76,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
+#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
@@ -127,9 +127,10 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #' @seealso \link{glm}, \link{read.ml}
 setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
-                   offsetCol = NULL, regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
+                   regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
-                                              "alphabetDesc", "alphabetAsc")) {
+                                              "alphabetDesc", "alphabetAsc"),
+                   offsetCol = NULL) {
 
             stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             if (is.character(family)) {
@@ -161,18 +162,19 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- as.character(weightCol)
             }
 
-            if (!is.null(offsetCol) && offsetCol == "") {
-              offsetCol <- NULL
-            } else if (!is.null(offsetCol)) {
+            if (!is.null(offsetCol)) {
               offsetCol <- as.character(offsetCol)
+              if (nchar(offsetCol) == 0) {
+                offsetCol <- NULL
+              }
             }
 
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
-                                tol, as.integer(maxIter), weightCol, offsetCol, regParam,
+                                tol, as.integer(maxIter), weightCol, regParam,
                                 as.double(var.power), as.double(link.power),
-                                stringIndexerOrderType)
+                                stringIndexerOrderType, offsetCol)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -190,8 +192,6 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'               \code{poisson}, \code{Gamma}, and \code{tweedie}.
 #' @param weightCol the weight column name. If this is not set or \code{NULL}, we treat all instance
 #'                  weights as 1.0.
-#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
-#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @param epsilon positive convergence tolerance of iterations.
 #' @param maxit integer giving the maximal number of IRLS iterations.
 #' @param var.power the index of the power variance function in the Tweedie family.
@@ -202,6 +202,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
+#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -217,12 +219,14 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #' @seealso \link{spark.glm}
 setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDataFrame"),
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
-                   offsetCol = NULL, var.power = 0.0, link.power = 1.0 - var.power,
+                   var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
-                                              "alphabetDesc", "alphabetAsc")) {
+                                              "alphabetDesc", "alphabetAsc"),
+                   offsetCol = NULL) {
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
-                      offsetCol = offsetCol, var.power = var.power, link.power = link.power,
-                      stringIndexerOrderType = stringIndexerOrderType)
+                      var.power = var.power, link.power = link.power,
+                      stringIndexerOrderType = stringIndexerOrderType,
+                      offsetCol = offsetCol)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().

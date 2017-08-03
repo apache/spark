@@ -175,9 +175,9 @@ test_that("spark.glm summary", {
 
   # Test spark.glm works with offset
   stats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
-                             family = poisson(), offsetCol = "Pedal_Length"))
-  rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species,
-                        data = iris, family = poisson(), offset = Pedal_Length))
+                             family = poisson(), offsetCol = "Petal_Length"))
+  rStats <- suppressWarnings(summary(glm(Sepal.Width ~ Sepal.Length + Species,
+                        data = iris, family = poisson(), offset = iris$Petal.Length)))
   expect_true(all(abs(rStats$coefficients - stats$coefficients) < 1e-3))
 
   # Test summary works on base GLM models
