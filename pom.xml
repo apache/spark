@@ -2022,6 +2022,8 @@
           <configuration>
             <skipMain>true</skipMain> <!-- skip compile -->
             <skip>true</skip> <!-- skip testCompile -->
+            <source>1.8</source>
+            <target>1.8</target>
           </configuration>
         </plugin>
         <plugin>
