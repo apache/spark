@@ -182,7 +182,7 @@ Spark uses the following URL scheme to allow different strategies for disseminat
 
 - **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
   every executor pulls the file from the driver HTTP server.
-- **hdfs:**, **http:**, **https:**, **ftp:** - these pull down files and JARs from the URI as expected
+- **hdfs:**, **http:**, **ftp:** - these pull down files and JARs from the URI as expected
 - **local:** - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
   means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
   or shared via NFS, GlusterFS, etc.
