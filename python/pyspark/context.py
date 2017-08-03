@@ -30,7 +30,7 @@ from py4j.protocol import Py4JError
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
+from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
@@ -200,7 +200,7 @@ class SparkContext(object):
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
         # send.
-        self._pickled_broadcast_vars = set()
+        self._pickled_broadcast_vars = BroadcastPickleRegistry()
 
         SparkFiles._sc = self
         root_dir = SparkFiles.getRootDirectory()
