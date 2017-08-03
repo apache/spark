@@ -199,6 +199,14 @@ class ClusteringEvaluatorSuite
     testDefaultReadWrite(evaluator)
   }
 
+  /*
+  Use the following python code to load the data and evaluate it using scikit-learn package.
+
+  from sklearn import datasets
+  from sklearn.metrics import silhouette_score
+  iris = datasets.load_iris()
+  round(silhouette_score(iris.data, iris.target, metric='sqeuclidean'), 10)
+  */
   test("squared euclidean Silhouette") {
     val result = BigDecimal(0.6564679231)
     val dsRDD = spark.sparkContext.parallelize(dataset)
@@ -214,6 +222,14 @@ class ClusteringEvaluatorSuite
 
   }
 
+  /*
+  Use the following python code to load the data and evaluate it using scikit-learn package.
+
+  from sklearn import datasets
+  from sklearn.metrics import silhouette_score
+  iris = datasets.load_iris()
+  round(silhouette_score(iris.data, iris.target, metric='cosine'), 10)
+  */
   test("cosine Silhouette") {
     val result = BigDecimal(0.7222369298)
     val dsRDD = spark.sparkContext.parallelize(dataset)
