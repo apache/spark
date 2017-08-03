@@ -1213,6 +1213,16 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @name NULL
 setGeneric("ltrim", function(x) { standardGeneric("ltrim") })
 
+#' @rdname column_collection_functions
+#' @export
+#' @name NULL
+setGeneric("map_keys", function(x) { standardGeneric("map_keys") })
+
+#' @rdname column_collection_functions
+#' @export
+#' @name NULL
+setGeneric("map_values", function(x) { standardGeneric("map_values") })
+
 #' @rdname column_misc_functions
 #' @export
 #' @name NULL

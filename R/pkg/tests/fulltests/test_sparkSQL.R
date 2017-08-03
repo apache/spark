@@ -1436,6 +1436,14 @@ test_that("column functions", {
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 
+  # Test map_keys() and map_values()
+  df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
+  result <- collect(select(df, map_keys(df$map)))[[1]]
+  expect_equal(result, list(list("x", "y")))
+
+  result <- collect(select(df, map_values(df$map)))[[1]]
+  expect_equal(result, list(list(1, 2)))
+
   # Test that stats::lag is working
   expect_equal(length(lag(ldeaths, 12)), 72)
 
