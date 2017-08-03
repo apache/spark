@@ -19,6 +19,8 @@ package org.apache.spark.ml.clustering
 
 import java.util.Locale
 
+import scala.util.{Failure, Success, Try}
+
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 import org.json4s.JsonAST.JObject
@@ -32,10 +34,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasCheckpointInterval, HasFeaturesCol, HasMaxIter, HasSeed}
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
-  EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel,
-  LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel,
-  OnlineLDAOptimizer => OldOnlineLDAOptimizer}
+import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel, EMLDAOptimizer => OldEMLDAOptimizer, LDA => OldLDA, LDAModel => OldLDAModel, LDAOptimizer => OldLDAOptimizer, LocalLDAModel => OldLocalLDAModel, OnlineLDAOptimizer => OldOnlineLDAOptimizer}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
@@ -184,19 +183,23 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /**
    * For Online optimizer only (currently): [[optimizer]] = "online".
 
-   * An initial model used as a starting point for the learning, instead of a random
-   * initialization. Can be used for incremental learning.
+   * An initial model to be used as a starting point for the learning, instead of a random
+   * initialization. Provide path of previous LDAModel
    *
    * @group param
    */
   @Since("2.3.0")
-  final val initialModel = new Param[LDAModel](this, "initialModel", "Set an initial starting " +
-      "point, instead of a random initilization, based on a previously built LDAModel. Only" +
-      "supported by online model", (value: LDAModel) => value.isInstanceOf[LocalLDAModel])
+  final val initialModel = new Param[String](this, "initialModel", "Path to a serialized " +
+      "LDAModel to use as a starting point, instead of a random initilization. Only" +
+      "supported by online model.", (value: String) => validateInitialModel(value))
 
   /** @group getParam */
   @Since("2.3.0")
-  def getInitialModel : LDAModel = $(initialModel)
+  def getInitialModel : String = $(initialModel)
+
+  protected def validateInitialModel(value: String): Boolean = {
+    Try(LocalLDAModel.load(value)).isSuccess
+  }
 
 
   /**
@@ -888,7 +891,7 @@ class LDA @Since("1.6.0") (
 
   /** @group setParam */
   @Since("2.3.0")
-  def setInitialModel(value: LDAModel): this.type = set(initialModel, value)
+  def setInitialModel(value: String): this.type = set(initialModel, value)
 
   /** @group setParam */
   @Since("1.6.0")
@@ -924,7 +927,7 @@ class LDA @Since("1.6.0") (
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, topicDistributionCol, k, maxIter, subsamplingRate,
       checkpointInterval, keepLastCheckpoint, optimizeDocConcentration, topicConcentration,
-      learningDecay, optimizer, learningOffset, seed)
+      learningDecay, optimizer, learningOffset, seed, initialModel)
 
     val oldLDA = new OldLDA()
       .setK($(k))
@@ -936,7 +939,8 @@ class LDA @Since("1.6.0") (
       .setOptimizer(getOldOptimizer)
 
     if (isSet(initialModel)) {
-      oldLDA.setInitialModel($(initialModel).oldLocalModel)
+      val init = LocalLDAModel.load($(initialModel))
+      oldLDA.setInitialModel(init.oldLocalModel)
     }
 
     // TODO: persist here, or in old LDA?

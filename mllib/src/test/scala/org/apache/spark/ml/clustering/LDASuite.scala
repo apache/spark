@@ -17,14 +17,17 @@
 
 package org.apache.spark.ml.clustering
 
+import java.io.File
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.mock.MockitoSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel}
+import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedLDAModel,
+LocalLDAModel => OldLocalLDAModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql._
 
@@ -34,7 +37,7 @@ object LDASuite {
       rows: Int,
       k: Int,
       vocabSize: Int): DataFrame = {
-    val avgWC = 1  // average instances of each word in a doc
+    val avgWC = 1 // average instances of each word in a doc
     val sc = spark.sparkContext
     val rng = new java.util.Random()
     rng.setSeed(1)
@@ -58,6 +61,15 @@ object LDASuite {
     "subsamplingRate" -> 0.051,
     "docConcentration" -> Array(2.0)
   )
+
+  private def generateInitModel(
+      k: Int,
+      dataset: Dataset[_],
+      initModelPath: String): LocalLDAModel = {
+    val initModel = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2).fit(dataset)
+    initModel.save(initModelPath)
+    initModel.asInstanceOf[LocalLDAModel]
+  }
 }
 
 
@@ -68,10 +80,19 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   val k: Int = 5
   val vocabSize: Int = 30
   @transient var dataset: Dataset[_] = _
+  @transient var initModel: LocalLDAModel = _
+  @transient var initModelPath: String = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = LDASuite.generateLDAData(spark, 50, k, vocabSize)
+    initModelPath = getTempPath
+    initModel = LDASuite.generateInitModel(k, dataset, initModelPath)
+  }
+
+
+  private def getTempPath: String = {
+    new File(tempDir, Identifiable.randomUID("lda")).getPath
   }
 
   test("default parameters") {
@@ -95,13 +116,13 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
   test("set parameters") {
     val lda = new LDA()
-      .setFeaturesCol("test_feature")
-      .setMaxIter(33)
-      .setSeed(123)
-      .setCheckpointInterval(7)
-      .setK(9)
-      .setTopicConcentration(0.56)
-      .setTopicDistributionCol("myOutput")
+        .setFeaturesCol("test_feature")
+        .setMaxIter(33)
+        .setSeed(123)
+        .setCheckpointInterval(7)
+        .setK(9)
+        .setTopicConcentration(0.56)
+        .setTopicDistributionCol("myOutput")
 
     assert(lda.getFeaturesCol === "test_feature")
     assert(lda.getMaxIter === 33)
@@ -126,9 +147,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     lda.setOptimizeDocConcentration(false)
     assert(!lda.getOptimizeDocConcentration)
 
-    val init = new LocalLDAModel("", 10, null, spark)
-    lda.setInitialModel(init)
-    assert(lda.getInitialModel === init)
+    lda.setInitialModel(initModelPath)
+    assert(lda.getInitialModel === initModelPath)
   }
 
   test("parameters validation") {
@@ -177,12 +197,13 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       new LDA().setSubsamplingRate(1.1)
     }
     intercept[IllegalArgumentException] {
-      val init = new LocalLDAModel("", 10, null, spark)
-      new LDA().setOptimizer("em").setInitialModel(init).transformSchema(dummyDF.schema)
+      new LDA().setOptimizer("em").setInitialModel(initModelPath).transformSchema(dummyDF.schema)
     }
     intercept[IllegalArgumentException] {
-      val init = new DistributedLDAModel("", 10, mock[OldDistributedLDAModel], spark, None)
-      new LDA().setInitialModel(init)
+      val initModel = new DistributedLDAModel("", 10, mock[OldDistributedLDAModel], spark, None)
+      val initModelPath = getTempPath
+      initModel.save(initModelPath)
+      new LDA().setInitialModel(initModelPath)
     }
   }
 
@@ -232,11 +253,8 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   }
 
   test("fit & transform with Online LDA with initial model") {
-    val dsInit = dataset
-    val modelInit = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2).fit(dsInit)
-
     val lda = new LDA().setK(k).setSeed(1).setOptimizer("online").setMaxIter(2)
-    lda.setInitialModel(modelInit)
+    lda.setInitialModel(initModelPath)
     val model = lda.fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(lda, model)
@@ -247,7 +265,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     assert(model.topicsMatrix.numRows === vocabSize)
     assert(model.topicsMatrix.numCols === k)
     assert(!model.isDistributed)
-    assert(model.getInitialModel === modelInit)
+    assert(model.getInitialModel === initModelPath)
 
     // transform()
     val transformed = model.transform(dataset)
@@ -309,10 +327,11 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
       assert(model.vocabSize === model2.vocabSize)
       assert(Vectors.dense(model.topicsMatrix.toArray) ~==
-        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
+          Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
       assert(Vectors.dense(model.getDocConcentration) ~==
-        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+          Vectors.dense(model2.getDocConcentration) absTol 1e-6)
     }
+
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset, LDASuite.allParamSettings,
       LDASuite.allParamSettings, checkModelData)
@@ -322,9 +341,9 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     def checkModelData(model: LDAModel, model2: LDAModel): Unit = {
       assert(model.vocabSize === model2.vocabSize)
       assert(Vectors.dense(model.topicsMatrix.toArray) ~==
-        Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
+          Vectors.dense(model2.topicsMatrix.toArray) absTol 1e-6)
       assert(Vectors.dense(model.getDocConcentration) ~==
-        Vectors.dense(model2.getDocConcentration) absTol 1e-6)
+          Vectors.dense(model2.getDocConcentration) absTol 1e-6)
       val logPrior = model.asInstanceOf[DistributedLDAModel].logPrior
       val logPrior2 = model2.asInstanceOf[DistributedLDAModel].logPrior
       val trainingLogLikelihood =
@@ -334,6 +353,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
       assert(logPrior ~== logPrior2 absTol 1e-6)
       assert(trainingLogLikelihood ~== trainingLogLikelihood2 absTol 1e-6)
     }
+
     val lda = new LDA()
     testEstimatorAndModelReadWrite(lda, dataset,
       LDASuite.allParamSettings ++ Map("optimizer" -> "em"),
@@ -359,7 +379,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   test("EM LDA checkpointing: remove last checkpoint") {
     // Checkpoint dir is set by MLlibTestSparkContext
     val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3).setCheckpointInterval(1)
-      .setKeepLastCheckpoint(false)
+        .setKeepLastCheckpoint(false)
     val model_ = lda.fit(dataset)
     assert(model_.isInstanceOf[DistributedLDAModel])
     val model = model_.asInstanceOf[DistributedLDAModel]
@@ -370,7 +390,7 @@ class LDASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
   test("EM LDA disable checkpointing") {
     // Checkpoint dir is set by MLlibTestSparkContext
     val lda = new LDA().setK(2).setSeed(1).setOptimizer("em").setMaxIter(3)
-      .setCheckpointInterval(-1)
+        .setCheckpointInterval(-1)
     val model_ = lda.fit(dataset)
     assert(model_.isInstanceOf[DistributedLDAModel])
     val model = model_.asInstanceOf[DistributedLDAModel]
