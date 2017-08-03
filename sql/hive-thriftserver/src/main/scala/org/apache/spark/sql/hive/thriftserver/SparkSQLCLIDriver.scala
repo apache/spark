@@ -142,7 +142,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       // If the same property is configured by spark.hadoop.xxx, we ignore it and
       // obey settings from spark properties
       val k = kv.getKey
-      val v = sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + kv.getKey, kv.getValue)
+      val v = sys.props.getOrElseUpdate(SPARK_HADOOP_PROP_PREFIX + k, kv.getValue)
       (k, v)
     }
 
