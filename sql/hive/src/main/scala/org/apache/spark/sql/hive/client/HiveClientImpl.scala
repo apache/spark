@@ -55,6 +55,8 @@ import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
+import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_PROVIDER
+
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
  * Note that this class is typically loaded with an internal classloader for each instantiation,
@@ -936,7 +938,10 @@ private[hive] object HiveClientImpl {
     }
 
     table.bucketSpec match {
-      case Some(bucketSpec) if DDLUtils.isHiveTable(table) =>
+      case Some(bucketSpec) if DDLUtils.isHiveTable(table) ||
+        (table.tableType != CatalogTableType.VIEW &&
+          table.properties.get(DATASOURCE_PROVIDER).isEmpty) =>
+
         hiveTable.setNumBuckets(bucketSpec.numBuckets)
         hiveTable.setBucketCols(bucketSpec.bucketColumnNames.toList.asJava)
 

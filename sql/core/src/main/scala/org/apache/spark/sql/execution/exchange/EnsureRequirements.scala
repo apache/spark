@@ -243,13 +243,13 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       rightPartitioning: Partitioning): (Seq[Expression], Seq[Expression]) = {
     if (leftKeys.forall(_.deterministic) && rightKeys.forall(_.deterministic)) {
       leftPartitioning match {
-        case HashPartitioning(leftExpressions, _)
+        case HashPartitioning(leftExpressions, _, _)
           if leftExpressions.length == leftKeys.length &&
             leftKeys.forall(x => leftExpressions.exists(_.semanticEquals(x))) =>
           reorder(leftKeys, rightKeys, leftExpressions, leftKeys)
 
         case _ => rightPartitioning match {
-          case HashPartitioning(rightExpressions, _)
+          case HashPartitioning(rightExpressions, _, _)
             if rightExpressions.length == rightKeys.length &&
               rightKeys.forall(x => rightExpressions.exists(_.semanticEquals(x))) =>
             reorder(leftKeys, rightKeys, rightExpressions, rightKeys)

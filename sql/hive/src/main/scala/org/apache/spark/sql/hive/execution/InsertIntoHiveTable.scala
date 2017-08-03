@@ -25,8 +25,9 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, ExternalCatalog}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, HiveHash}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashClusteredDistribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
@@ -164,25 +165,10 @@ case class InsertIntoHiveTable(
       }
     }
 
-    table.bucketSpec match {
-      case Some(bucketSpec) =>
-        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
-        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
-        // set to false
-        val enforceBucketingConfig = "hive.enforce.bucketing"
-        val enforceSortingConfig = "hive.enforce.sorting"
-
-        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
-          "currently does NOT populate bucketed output which is compatible with Hive."
-
-        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
-          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
-          throw new AnalysisException(message)
-        } else {
-          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
-            s"$enforceSortingConfig are set to false.")
-        }
-      case _ => // do nothing since table has no bucketing
+    if (!overwrite && table.bucketSpec.isDefined) {
+      throw new AnalysisException(s"Appending data to hive bucketed table ${table.qualifiedName} " +
+        s"is not allowed as it will break the table's bucketing guarantee. Consider overwriting " +
+        s"instead.")
     }
 
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
@@ -200,6 +186,16 @@ case class InsertIntoHiveTable(
       outputLocation = tmpLocation.toString,
       allColumns = outputColumns,
       partitionAttributes = partitionAttributes)
+
+    // TODO(tejasp) validate bucketing based on number of files before loading data into metastore
+    if (table.bucketSpec.isDefined) {
+      if (partition.nonEmpty && numDynamicPartitions > 0) {
+        // TODO(tejasp) goto to leaf partition dir
+        // validateBucketing(hadoopConf, Seq(tmpLocation), table.bucketSpec.get.numBuckets)
+      } else {
+        validateBucketing(hadoopConf, Seq(tmpLocation), table.bucketSpec.get.numBuckets)
+      }
+    }
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
@@ -263,6 +259,61 @@ case class InsertIntoHiveTable(
         tmpLocation.toString, // TODO: URI
         overwrite,
         isSrcLocal = false)
+    }
+  }
+
+  def validateBucketing(conf: Configuration, outputPaths: Seq[Path], numBuckets: Int): Unit = {
+    val bucketedFilePattern = """part-(\d+)(?:.*)?$""".r
+
+    def getBucketIdFromFilename(fileName : String): Option[Int] =
+      fileName match {
+        case bucketedFilePattern(bucketId) => Some(bucketId.toInt)
+        case _ => None
+      }
+
+    outputPaths.foreach(outputPath => {
+      val fs = outputPath.getFileSystem(conf)
+      val files = fs.listStatus(outputPath).sortBy(_.getPath.getName)
+      var expectedBucketId = 0
+
+      files.foreach(f => {
+        val fileName = f.getPath.getName
+        getBucketIdFromFilename(fileName) match {
+          case Some(bucketId) if bucketId == expectedBucketId =>
+            expectedBucketId += 1
+          case Some(bucketId) if bucketId > expectedBucketId =>
+            // TODO(tejasp) Tasks which do not produce any data would still have to create an
+            // empty file so that we are in par with Hive's support of matching the output
+            // files produced
+            throw new AnalysisException(
+              s"Invalid bucketed output: Missing output file for bucket $expectedBucketId " +
+                s"in temporary output location $outputPath, expected buckets = ${files.length}")
+          case None if fileName == "_SUCCESS" =>
+            // do nothing
+          case _ =>
+            // In case there is any other file in the output directory, fail the job because we
+            // strict guarantee about all files in a bucketed output directory
+            throw new AnalysisException(
+              s"Invalid bucketed output: Output file $fileName does not match with table's " +
+                s"bucketing spec. Temporary output location : $outputPath")
+        }
+      })
+    })
+  }
+
+  override def requiredDistribution: Seq[Distribution] = {
+    val allColumns = query.output
+    val partitionColumnNames = partition.keySet
+    val dataColumns = allColumns.filterNot(c => partitionColumnNames.contains(c.name))
+
+    table.bucketSpec match {
+      case Some(bucketSpec) if bucketSpec.numBuckets > 1 =>
+        val bucketSpec = table.bucketSpec.get
+        val bucketColumns = bucketSpec.bucketColumnNames.map(b => dataColumns.find(_.name == b).get)
+        Seq(HashClusteredDistribution(bucketColumns, Option(bucketSpec.numBuckets),
+          classOf[HiveHash]))
+
+      case _ => Seq(UnspecifiedDistribution)
     }
   }
 }

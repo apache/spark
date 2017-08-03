@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import scala.language.existentials
+
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -83,6 +86,11 @@ case class ClusteredDistribution(
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
+  require(
+    requiredNumPartitions.isEmpty || requiredNumPartitions.get >= 0,
+    "If the required number of partitions is defined for ClusteredDistribution, it should be a " +
+      " non negative number but " + requiredNumPartitions.get + " was provided")
+
   override def createPartitioning(numPartitions: Int): Partitioning = {
     assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
       s"This ClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
@@ -99,17 +107,28 @@ case class ClusteredDistribution(
  * This is a strictly stronger guarantee than [[ClusteredDistribution]]. Given a tuple and the
  * number of partitions, this distribution strictly requires which partition the tuple should be in.
  */
-case class HashClusteredDistribution(expressions: Seq[Expression]) extends Distribution {
+case class HashClusteredDistribution(
+    expressions: Seq[Expression],
+    requiredNumPartitions: Option[Int],
+    hashingFunctionClass: Class[_ <: HashExpression[Int]] = classOf[Murmur3Hash])
+  extends Distribution {
+
   require(
     expressions != Nil,
     "The expressions for hash of a HashPartitionedDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
 
-  override def requiredNumPartitions: Option[Int] = None
+  require(
+    requiredNumPartitions.isEmpty || requiredNumPartitions.get >= 0,
+    "If the required number of partitions is defined for ClusteredDistribution, it should be a " +
+      " non negative number but " + requiredNumPartitions.get + " was provided")
 
   override def createPartitioning(numPartitions: Int): Partitioning = {
-    HashPartitioning(expressions, numPartitions)
+    assert(requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions,
+      s"This HashClusteredDistribution requires ${requiredNumPartitions.get} partitions, but " +
+        s"the actual number of partitions is $numPartitions.")
+    HashPartitioning(expressions, numPartitions, hashingFunctionClass)
   }
 }
 
@@ -198,7 +217,10 @@ case object SinglePartition extends Partitioning {
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+case class HashPartitioning(
+    expressions: Seq[Expression],
+    numPartitions: Int,
+    hashingFunctionClass: Class[_ <: HashExpression[Int]] = classOf[Murmur3Hash])
   extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[Expression] = expressions
@@ -209,9 +231,11 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     super.satisfies(required) || {
       required match {
         case h: HashClusteredDistribution =>
-          expressions.length == h.expressions.length && expressions.zip(h.expressions).forall {
-            case (l, r) => l.semanticEquals(r)
-          }
+          (h.requiredNumPartitions.isEmpty || h.requiredNumPartitions.get == numPartitions) &&
+            h.hashingFunctionClass == hashingFunctionClass &&
+            expressions.length == h.expressions.length &&
+            expressions.zip(h.expressions).forall { case (l, r) => l.semanticEquals(r) }
+
         case ClusteredDistribution(requiredClustering, requiredNumPartitions) =>
           expressions.forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
             (requiredNumPartitions.isEmpty || requiredNumPartitions.get == numPartitions)
@@ -222,9 +246,16 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
-   * than numPartitions) based on hashing expressions.
+   * than numPartitions) based on hashing expression(s) and the hashing function.
    */
-  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+  def partitionIdExpression: Expression = {
+    val hashExpression = hashingFunctionClass match {
+      case m if m == classOf[Murmur3Hash] => new Murmur3Hash(expressions)
+      case h if h == classOf[HiveHash] => HiveHash(expressions)
+      case _ => throw new Exception(s"Unsupported hashingFunction: $hashingFunctionClass")
+    }
+    Pmod(hashExpression, Literal(numPartitions))
+  }
 }
 
 /**

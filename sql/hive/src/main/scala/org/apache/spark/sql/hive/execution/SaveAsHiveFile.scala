@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
@@ -52,6 +52,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
       allColumns: Seq[Attribute],
+      bucketIdExpression: Option[Expression] = None,
       customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
       partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
 
@@ -83,7 +84,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, allColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
-      bucketSpec = None,
+      bucketIdExpression = bucketIdExpression,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
   }

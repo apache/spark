@@ -204,7 +204,7 @@ object ShuffleExchangeExec {
       serializer: Serializer): ShuffleDependency[Int, InternalRow, InternalRow] = {
     val part: Partitioner = newPartitioning match {
       case RoundRobinPartitioning(numPartitions) => new HashPartitioner(numPartitions)
-      case HashPartitioning(_, n) =>
+      case HashPartitioning(_, n, _) =>
         new Partitioner {
           override def numPartitions: Int = n
           // For HashPartitioning, the partitioning key is already a valid partition ID, as we use

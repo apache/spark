@@ -18,13 +18,14 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.net.URI
 
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.catalyst.expressions.HiveHashFunction
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -511,33 +512,6 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  testBucketedTable("INSERT should NOT fail if strict bucketing is NOT enforced") {
-    tableName =>
-      withSQLConf("hive.enforce.bucketing" -> "false", "hive.enforce.sorting" -> "false") {
-        sql(s"INSERT INTO TABLE $tableName SELECT 1, 4, 2 AS c, 3 AS b")
-        checkAnswer(sql(s"SELECT a, b, c, d FROM $tableName"), Row(1, 2, 3, 4))
-      }
-  }
-
-  testBucketedTable("INSERT should fail if strict bucketing / sorting is enforced") {
-    tableName =>
-      withSQLConf("hive.enforce.bucketing" -> "true", "hive.enforce.sorting" -> "false") {
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName SELECT 1, 2, 3, 4")
-        }
-      }
-      withSQLConf("hive.enforce.bucketing" -> "false", "hive.enforce.sorting" -> "true") {
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName SELECT 1, 2, 3, 4")
-        }
-      }
-      withSQLConf("hive.enforce.bucketing" -> "true", "hive.enforce.sorting" -> "true") {
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName SELECT 1, 2, 3, 4")
-        }
-      }
-  }
-
   test("SPARK-20594: hive.exec.stagingdir was deleted by Hive") {
     // Set hive.exec.stagingdir under the table directory without start with ".".
     withSQLConf("hive.exec.stagingdir" -> "./test") {
@@ -747,6 +721,104 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           """.stripMargin)
 
         checkAnswer(spark.table("tab2"), Row("a", 3, "b"))
+      }
+    }
+  }
+
+  private def validateBucketingAndSorting(numBuckets: Int, dir: URI): Unit = {
+    val bucketFiles = new File(dir).listFiles().filter(_.getName.startsWith("part-"))
+      .sortWith((x, y) => x.getName < y.getName)
+    assert(bucketFiles.length === numBuckets)
+
+    bucketFiles.zipWithIndex.foreach { case(bucketFile, bucketId) =>
+      val rows = spark.read.format("text").load(bucketFile.getAbsolutePath).collect()
+      var prevKey: Option[Int] = None
+      rows.foreach(row => {
+        val key = row.getString(0).split("\t")(0).toInt
+        assert(HiveHashFunction.hash(key, IntegerType, seed = 0) % numBuckets === bucketId)
+
+        if (prevKey.isDefined) {
+          assert(prevKey.get <= key)
+        }
+        prevKey = Some(key)
+      })
+    }
+  }
+
+  test("Write data to a non-partitioned bucketed table") {
+    val numBuckets = 8
+    val tableName = "nonPartitionedBucketed"
+
+    withTable(tableName) {
+      val session = spark.sessionState
+      sql(s"""
+             |CREATE TABLE $tableName (key int, value string)
+             |CLUSTERED BY (key) SORTED BY (key ASC) into $numBuckets buckets
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+             |""".stripMargin)
+
+      (0 until 100)
+        .map(i => (i, i.toString)).toDF("key", "value")
+        .write.mode(SaveMode.Overwrite).insertInto(tableName)
+
+      val dir = session.catalog.defaultTablePath(session.sqlParser.parseTableIdentifier(tableName))
+      validateBucketingAndSorting(numBuckets, dir)
+    }
+  }
+
+  test("Write data to a bucketed table with static partition") {
+    val numBuckets = 8
+    val tableName = "bucketizedTable"
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable(tableName) {
+        sql(s"""
+              |CREATE TABLE $tableName (key int, value string)
+              |PARTITIONED BY(part1 STRING, part2 STRING)
+              |CLUSTERED BY (key) SORTED BY (key ASC) into $numBuckets buckets
+              |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+              |""".stripMargin)
+
+        (0 until 100)
+          .map(i => (i, i.toString, "val1", "val2")).toDF("key", "value", "part1", "part2")
+          .write.mode(SaveMode.Overwrite).insertInto(tableName)
+
+        val dir = spark.sessionState.catalog.getPartition(
+          spark.sessionState.sqlParser.parseTableIdentifier(tableName),
+          Map("part1" -> "val1", "part2" -> "val2")
+        ).location
+
+        validateBucketingAndSorting(numBuckets, dir)
+      }
+    }
+  }
+
+  test("Write data to a bucketed table with dynamic partitions") {
+    val numBuckets = 7
+    val tableName = "bucketizedTable"
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable(tableName) {
+        sql(s"""
+               |CREATE TABLE $tableName (key int, value string)
+               |PARTITIONED BY(part1 STRING, part2 STRING)
+               |CLUSTERED BY (key) SORTED BY (key ASC) into $numBuckets buckets
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+               |""".stripMargin)
+
+        (0 until 1000)
+          .map(i => (i, i.toString, (if (i > 50) i % 2 else 2 - i % 2).toString, (i % 3).toString))
+          .toDF("key", "value", "part1", "part2")
+          .write.mode(SaveMode.Overwrite).insertInto(tableName)
+
+        val identifier = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
+        (0 until 2).zip(0 until 3).foreach { case (part1, part2) =>
+          val dir = spark.sessionState.catalog.getPartition(
+            identifier, Map("part1" -> part1.toString, "part2" -> part2.toString)
+          ).location
+
+          validateBucketingAndSorting(numBuckets, dir)
+        }
       }
     }
   }
