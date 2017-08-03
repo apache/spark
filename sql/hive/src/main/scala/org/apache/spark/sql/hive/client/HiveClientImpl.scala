@@ -416,9 +416,6 @@ private[hive] class HiveClientImpl(
 
       val properties = Option(h.getParameters).map(_.asScala.toMap).getOrElse(Map())
 
-      val provider = properties.get(HiveExternalCatalog.DATASOURCE_PROVIDER)
-        .orElse(Some(DDLUtils.HIVE_PROVIDER))
-
       // Hive-generated Statistics are also recorded in ignoredProperties
       val ignoredProperties = scala.collection.mutable.Map.empty[String, String]
       for (key <- HiveStatisticsProperties; value <- properties.get(key)) {
@@ -472,7 +469,6 @@ private[hive] class HiveClientImpl(
             throw new AnalysisException("Hive index table is not supported.")
         },
         schema = schema,
-        provider = provider,
         partitionColumnNames = partCols.map(_.name),
         // If the table is written by Spark, we will put bucketing information in table properties,
         // and will always overwrite the bucket spec in hive metastore by the bucketing information
@@ -533,7 +529,7 @@ private[hive] class HiveClientImpl(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
     val qualifiedTableName = s"${table.database}.$tableName"
-    shim.alterTable(client, qualifiedTableName, hiveTable)
+    shim.alterTable(client, qualifiedTableName, hiveTable, table.storage.locationUri.isDefined)
   }
 
   override def createPartitions(
@@ -612,8 +608,10 @@ private[hive] class HiveClientImpl(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withHiveState {
-    val hiveTable = toHiveTable(getTable(db, table), Some(userName))
-    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava)
+    val sparkTable = getTable(db, table)
+    val hiveTable = toHiveTable(sparkTable, Some(userName))
+    shim.alterPartitions(client, table, newParts.map { p => toHivePartition(p, hiveTable) }.asJava,
+      sparkTable.storage.locationUri.isDefined)
   }
 
   /**

@@ -238,9 +238,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     if (DDLUtils.isDatasourceTable(tableDefinition)) {
-      createDataSourceTable(
-        tableDefinition.withNewStorage(locationUri = tableLocation),
-        ignoreIfExists)
+      saveDataSourceTable(tableDefinition.withNewStorage(locationUri = tableLocation)) { table =>
+        saveTableIntoHive(table, ignoreIfExists)
+      }
     } else {
       val tableWithDataSourceProps = tableDefinition.copy(
         // We can't leave `locationUri` empty and count on Hive metastore to set a default table
@@ -257,7 +257,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
+  private def saveDataSourceTable(table: CatalogTable)(saveFn: CatalogTable => Unit): Unit = {
     // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
     val provider = table.provider.get
 
@@ -363,19 +363,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         // specific way.
         try {
           logInfo(message)
-          saveTableIntoHive(table, ignoreIfExists)
+          saveFn(table)
         } catch {
           case NonFatal(e) =>
             val warningMessage =
               s"Could not persist ${table.identifier.quotedString} in a Hive " +
                 "compatible way. Persisting it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
-            saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
+            saveFn(newSparkSQLSpecificMetastoreTable())
         }
 
       case (None, message) =>
         logWarning(message)
-        saveTableIntoHive(newSparkSQLSpecificMetastoreTable(), ignoreIfExists)
+        saveFn(newSparkSQLSpecificMetastoreTable())
     }
   }
 
@@ -610,30 +610,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
     requireTableExists(db, table)
-    val rawTable = getRawTable(db, table)
-    val withNewSchema = rawTable.copy(schema = schema)
-    verifyColumnNames(withNewSchema)
-    // Add table metadata such as table schema, partition columns, etc. to table properties.
-    val updatedTable = withNewSchema.copy(
-      properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
-
-    // If it's a data source table, make sure the original schema is left unchanged; the
-    // actual schema is recorded as a table property.
-    val tableToStore = if (DDLUtils.isDatasourceTable(updatedTable)) {
-      updatedTable.copy(schema = rawTable.schema)
+    val updatedTable = getTable(db, table).copy(schema = schema)
+    verifyColumnNames(updatedTable)
+    if (DDLUtils.isDatasourceTable(updatedTable)) {
+      saveDataSourceTable(updatedTable) { table =>
+        client.alterTable(table)
+      }
     } else {
-      updatedTable
-    }
-
-    try {
-      client.alterTable(tableToStore)
-    } catch {
-      case NonFatal(e) =>
-        val warningMessage =
-          s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
-            "compatible way. Updating Hive metastore in Spark SQL specific format."
-        logWarning(warningMessage, e)
-        client.alterTable(updatedTable.copy(schema = tableToStore.partitionSchema))
+      client.alterTable(updatedTable)
     }
   }
 

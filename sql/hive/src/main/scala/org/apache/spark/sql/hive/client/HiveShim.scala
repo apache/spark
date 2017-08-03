@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.lang.{Boolean => JBoolean, Integer => JInteger, Long => JLong}
 import java.lang.reflect.{InvocationTargetException, Method, Modifier}
 import java.net.URI
-import java.util.{ArrayList => JArrayList, List => JList, Locale, Map => JMap, Set => JSet}
+import java.util.{ArrayList => JArrayList, HashMap => JHashMap, List => JList, Locale, Map => JMap, Set => JSet}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -86,9 +86,13 @@ private[client] sealed abstract class Shim {
 
   def getMetastoreClientConnectRetryDelayMillis(conf: HiveConf): Long
 
-  def alterTable(hive: Hive, tableName: String, table: Table): Unit
+  def alterTable(hive: Hive, tableName: String, table: Table, allowGatherStats: Boolean): Unit
 
-  def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit
+  def alterPartitions(
+      hive: Hive,
+      tableName: String,
+      newParts: JList[Partition],
+      allowGatherStats: Boolean): Unit
 
   def createPartitions(
       hive: Hive,
@@ -397,11 +401,19 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     hive.dropTable(dbName, tableName, deleteData, ignoreIfNotExists)
   }
 
-  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
+  override def alterTable(
+      hive: Hive,
+      tableName: String,
+      table: Table,
+      allowGatherStats: Boolean): Unit = {
     alterTableMethod.invoke(hive, tableName, table)
   }
 
-  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
+  override def alterPartitions(
+      hive: Hive,
+      tableName: String,
+      newParts: JList[Partition],
+      allowGatherStats: Boolean): Unit = {
     alterPartitionsMethod.invoke(hive, tableName, newParts)
   }
 
@@ -1008,9 +1020,6 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
 
   // true if there is any following stats task
   protected lazy val hasFollowingStatsTask = JBoolean.FALSE
-  // TODO: Now, always set environmentContext to null. In the future, we should avoid setting
-  // hive-generated stats to -1 when altering tables by using environmentContext. See Hive-12730
-  protected lazy val environmentContextInAlterTable = null
 
   private lazy val loadPartitionMethod =
     findMethod(
@@ -1102,11 +1111,35 @@ private[client] class Shim_v2_1 extends Shim_v2_0 {
       hasFollowingStatsTask, AcidUtils.Operation.NOT_ACID)
   }
 
-  override def alterTable(hive: Hive, tableName: String, table: Table): Unit = {
-    alterTableMethod.invoke(hive, tableName, table, environmentContextInAlterTable)
+  override def alterTable(
+      hive: Hive,
+      tableName: String,
+      table: Table,
+      allowGatherStats: Boolean): Unit = {
+    alterTableMethod.invoke(hive, tableName, table, createEnvironmentContext(allowGatherStats))
   }
 
-  override def alterPartitions(hive: Hive, tableName: String, newParts: JList[Partition]): Unit = {
-    alterPartitionsMethod.invoke(hive, tableName, newParts, environmentContextInAlterTable)
+  override def alterPartitions(
+      hive: Hive,
+      tableName: String,
+      newParts: JList[Partition],
+      allowGatherStats: Boolean): Unit = {
+    alterPartitionsMethod.invoke(hive, tableName, newParts,
+      createEnvironmentContext(allowGatherStats))
+  }
+
+  // TODO: In the future, we should avoid setting hive-generated stats to -1 when altering tables.
+  // See HIVE-12730.
+  private def createEnvironmentContext(allowGatherStats: Boolean): EnvironmentContext = {
+    if (!allowGatherStats) {
+      val properties = new JHashMap[String, String]()
+      properties.put("DO_NOT_UPDATE_STATS", "true")
+
+      val ctx = new EnvironmentContext()
+      ctx.setProperties(properties)
+      ctx
+    } else {
+      null
+    }
   }
 }
