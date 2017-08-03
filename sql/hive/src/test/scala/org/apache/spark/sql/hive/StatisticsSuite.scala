@@ -19,13 +19,15 @@ package org.apache.spark.sql.hive
 
 import java.io.{File, PrintWriter}
 
-import org.apache.hadoop.hive.common.StatsSetupConst
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
+
+import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -36,6 +38,12 @@ import org.apache.spark.sql.types._
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
+  private def dropMetadata(schema: StructType): StructType = {
+    val newFields = schema.fields.map { f =>
+      StructField(f.name, f.dataType, f.nullable, Metadata.empty)
+    }
+    StructType(newFields)
+  }
 
   test("Hive serde tables should fallback to HDFS for size estimation") {
     withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
@@ -127,6 +135,72 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
     spark.sessionState.catalog.dropTable(
       TableIdentifier("tempTable"), ignoreIfNotExists = true, purge = false)
+  }
+
+  test("analyze non hive compatible datasource tables") {
+    val table = "parquet_tab"
+    withTable(table) {
+      sql(
+        s"""
+          |CREATE TABLE $table (a int, b int)
+          |USING parquet
+          |OPTIONS (skipHiveMetadata true)
+        """.stripMargin)
+
+      // Verify that the schema stored in catalog is a dummy one used for
+      // data source tables. The actual schema is stored in table properties.
+      val rawSchema = dropMetadata(hiveClient.getTable("default", table).schema)
+      val expectedRawSchema = new StructType()
+        .add("col", "array<string>")
+      assert(rawSchema == expectedRawSchema)
+
+      val actualSchema = spark.sharedState.externalCatalog.getTable("default", table).schema
+      val expectedActualSchema = new StructType()
+        .add("a", "int")
+        .add("b", "int")
+      assert(actualSchema == expectedActualSchema)
+
+      sql(s"INSERT INTO $table VALUES (1, 1)")
+      sql(s"INSERT INTO $table VALUES (2, 1)")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS a, b")
+      val fetchedStats0 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(2))
+      assert(fetchedStats0.get.colStats == Map(
+        "a" -> ColumnStat(2, Some(1), Some(2), 0, 4, 4),
+        "b" -> ColumnStat(1, Some(1), Some(1), 0, 4, 4)))
+    }
+  }
+
+  test("Analyze hive serde tables when schema is not same as schema in table properties") {
+
+    val table = "hive_serde"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (C1 INT, C2 STRING, C3 DOUBLE)")
+
+      // Verify that the table schema stored in hive catalog is
+      // different than the schema stored in table properties.
+      val rawSchema = dropMetadata(hiveClient.getTable("default", table).schema)
+      val expectedRawSchema = new StructType()
+        .add("c1", "int")
+        .add("c2", "string")
+        .add("c3", "double")
+      assert(rawSchema == expectedRawSchema)
+
+      val actualSchema = spark.sharedState.externalCatalog.getTable("default", table).schema
+      val expectedActualSchema = new StructType()
+        .add("C1", "int")
+        .add("C2", "string")
+        .add("C3", "double")
+      assert(actualSchema == expectedActualSchema)
+
+      sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
+      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS C1")
+      val fetchedStats1 =
+        checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(1)).get
+      assert(fetchedStats1.colStats == Map(
+        "C1" -> ColumnStat(distinctCount = 1, min = Some(1), max = Some(1), nullCount = 0,
+          avgLen = 4, maxLen = 4)))
+    }
   }
 
   test("SPARK-21079 - analyze table with location different than that of individual partitions") {
