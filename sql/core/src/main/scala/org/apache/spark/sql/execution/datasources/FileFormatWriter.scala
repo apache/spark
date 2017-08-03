@@ -33,10 +33,10 @@ import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, _}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
@@ -126,7 +126,7 @@ object FileFormatWriter extends Logging {
       // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
       // guarantee the data distribution is same between shuffle and bucketed data source, which
       // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+      HashPartitioning(bucketColumns, spec.numBuckets, classOf[HiveHash]).partitionIdExpression
     }
     val sortColumns = bucketSpec.toSeq.flatMap {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -514,18 +514,18 @@ object FileFormatWriter extends Logging {
       var recordsInFile: Long = 0L
       var fileCounter = 0
       val updatedPartitions = mutable.Set[String]()
-      var currentPartionValues: Option[UnsafeRow] = None
+      var currentPartitionValues: Option[UnsafeRow] = None
       var currentBucketId: Option[Int] = None
 
       for (row <- iter) {
         val nextPartitionValues = if (isPartitioned) Some(getPartitionValues(row)) else None
         val nextBucketId = if (isBucketed) Some(getBucketId(row)) else None
 
-        if (currentPartionValues != nextPartitionValues || currentBucketId != nextBucketId) {
+        if (currentPartitionValues != nextPartitionValues || currentBucketId != nextBucketId) {
           // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-          if (isPartitioned && currentPartionValues != nextPartitionValues) {
-            currentPartionValues = Some(nextPartitionValues.get.copy())
-            statsTrackers.foreach(_.newPartition(currentPartionValues.get))
+          if (isPartitioned && currentPartitionValues != nextPartitionValues) {
+            currentPartitionValues = Some(nextPartitionValues.get.copy())
+            statsTrackers.foreach(_.newPartition(currentPartitionValues.get))
           }
           if (isBucketed) {
             currentBucketId = nextBucketId
@@ -536,7 +536,7 @@ object FileFormatWriter extends Logging {
           fileCounter = 0
 
           releaseResources()
-          newOutputWriter(currentPartionValues, currentBucketId, fileCounter, updatedPartitions)
+          newOutputWriter(currentPartitionValues, currentBucketId, fileCounter, updatedPartitions)
         } else if (desc.maxRecordsPerFile > 0 &&
             recordsInFile >= desc.maxRecordsPerFile) {
           // Exceeded the threshold in terms of the number of records per file.
@@ -547,7 +547,7 @@ object FileFormatWriter extends Logging {
             s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
           releaseResources()
-          newOutputWriter(currentPartionValues, currentBucketId, fileCounter, updatedPartitions)
+          newOutputWriter(currentPartitionValues, currentBucketId, fileCounter, updatedPartitions)
         }
         val outputRow = getOutputRow(row)
         currentWriter.write(outputRow)

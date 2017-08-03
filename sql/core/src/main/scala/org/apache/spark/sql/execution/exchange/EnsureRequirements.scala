@@ -50,7 +50,9 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       numPartitions: Int): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
-      case ClusteredDistribution(clustering) => HashPartitioning(clustering, numPartitions)
+      case ClusteredDistribution(clustering, numClusters, hashingFunctionClass) =>
+        HashPartitioning(clustering, numClusters.getOrElse(numPartitions),
+          hashingFunctionClass.getOrElse(classOf[Murmur3Hash]))
       case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
       case dist => sys.error(s"Do not know how to satisfy distribution $dist")
     }

@@ -23,9 +23,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, SortOrder}
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -42,6 +43,9 @@ trait RunnableCommand extends logical.Command {
   // The map used to record the metrics of running the command. This will be passed to
   // `ExecutedCommand` during query planning.
   lazy val metrics: Map[String, SQLMetric] = Map.empty
+
+  def requiredDistribution: Seq[Distribution] =
+    Seq.fill(children.size)(UnspecifiedDistribution)
 
   def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     throw new NotImplementedError
@@ -93,6 +97,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
   override def executeToIterator: Iterator[InternalRow] = sideEffectResult.toIterator
 
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
+
+  override def requiredChildDistribution: Seq[Distribution] = cmd.requiredDistribution
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
