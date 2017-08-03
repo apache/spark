@@ -76,6 +76,32 @@ abstract class UnaryMathExpression(val f: Double => Double, name: String)
   }
 }
 
+abstract class UnaryNonnegativeExpression(f: Double => Double, name: String)
+  extends UnaryMathExpression(f, name) {
+
+  override def nullable: Boolean = true
+
+  // values less than to yAsymptote eval to null in Hive, instead of NaN or -Infinity
+  protected val yAsymptote: Double = 0.0
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val d = input.asInstanceOf[Double]
+    if (d < yAsymptote) null else f(d)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        if ($c < $yAsymptote) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = java.lang.Math.${funcName}($c);
+        }
+      """
+    )
+  }
+}
+
 abstract class UnaryLogExpression(f: Double => Double, name: String)
     extends UnaryMathExpression(f, name) {
 
@@ -536,7 +562,7 @@ case class Sinh(child: Expression) extends UnaryMathExpression(math.sinh, "SINH"
       > SELECT _FUNC_(4);
        2.0
   """)
-case class Sqrt(child: Expression) extends UnaryMathExpression(math.sqrt, "SQRT")
+case class Sqrt(child: Expression) extends UnaryNonnegativeExpression(math.sqrt, "SQRT")
 
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the tangent of `expr`.",
