@@ -165,7 +165,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         .add("C2", "string")
         .add("C3", "double")
       assert(actualSchema == expectedActualSchema)
-      
+
       sql(s"INSERT INTO TABLE $table SELECT 1, 'a', 10.0")
       sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS C1")
       val fetchedStats1 =
