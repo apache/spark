@@ -39,7 +39,7 @@ object ExpressionSet {
  * guaranteed to see at least one such expression.  For example:
  *
  * {{{
- *   val set = AttributeSet(a + 1, 1 + a)
+ *   val set = ExpressionSet(a + 1, 1 + a)
  *
  *   set.iterator => Iterator(a + 1)
  *   set.contains(a + 1) => true

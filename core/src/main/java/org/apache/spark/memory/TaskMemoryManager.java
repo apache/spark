@@ -19,6 +19,7 @@ package org.apache.spark.memory;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.BitSet;
@@ -184,6 +185,10 @@ public class TaskMemoryManager {
                 break;
               }
             }
+          } catch (ClosedByInterruptException e) {
+            // This called by user to kill a task (e.g: speculative task).
+            logger.error("error while calling spill() on " + c, e);
+            throw new RuntimeException(e.getMessage());
           } catch (IOException e) {
             logger.error("error while calling spill() on " + c, e);
             throw new OutOfMemoryError("error while calling spill() on " + c + " : "
@@ -201,6 +206,10 @@ public class TaskMemoryManager {
               Utils.bytesToString(released), consumer);
             got += memoryManager.acquireExecutionMemory(required - got, taskAttemptId, mode);
           }
+        } catch (ClosedByInterruptException e) {
+          // This called by user to kill a task (e.g: speculative task).
+          logger.error("error while calling spill() on " + consumer, e);
+          throw new RuntimeException(e.getMessage());
         } catch (IOException e) {
           logger.error("error while calling spill() on " + consumer, e);
           throw new OutOfMemoryError("error while calling spill() on " + consumer + " : "

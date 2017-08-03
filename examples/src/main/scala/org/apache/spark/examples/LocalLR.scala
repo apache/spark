@@ -60,12 +60,12 @@ object LocalLR {
 
     val data = generateData
     // Initialize w to a random value
-    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {
       println("On iteration " + i)
-      var gradient = DenseVector.zeros[Double](D)
+      val gradient = DenseVector.zeros[Double](D)
       for (p <- data) {
         val scale = (1 / (1 + math.exp(-p.y * (w.dot(p.x)))) - 1) * p.y
         gradient +=  p.x * scale

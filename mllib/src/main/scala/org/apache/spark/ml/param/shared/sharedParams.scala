@@ -162,9 +162,7 @@ private[ml] trait HasThreshold extends Params {
    * Param for threshold in binary classification prediction, in range [0, 1].
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
-
-  setDefault(threshold, 0.5)
+  val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
   def getThreshold: Double = $(threshold)
@@ -176,7 +174,7 @@ private[ml] trait HasThreshold extends Params {
 private[ml] trait HasThresholds extends Params {
 
   /**
-   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
+   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values &gt; 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
    * @group param
    */
   final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold", (t: Array[Double]) => t.forall(_ >= 0) && t.count(_ == 0) <= 1)
@@ -273,7 +271,7 @@ private[ml] trait HasHandleInvalid extends Params {
    * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
    * @group param
    */
-  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
 
   /** @group getParam */
   final def getHandleInvalid: String = $(handleInvalid)
@@ -352,7 +350,7 @@ private[ml] trait HasStepSize extends Params {
    * Param for Step size to be used for each iteration of optimization (&gt; 0).
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization (> 0)", ParamValidators.gt(0))
+  val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization (> 0)", ParamValidators.gt(0))
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
@@ -374,17 +372,15 @@ private[ml] trait HasWeightCol extends Params {
 }
 
 /**
- * Trait for shared param solver (default: "auto").
+ * Trait for shared param solver.
  */
 private[ml] trait HasSolver extends Params {
 
   /**
-   * Param for the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+   * Param for the solver algorithm for optimization.
    * @group param
    */
-  final val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'")
-
-  setDefault(solver, "auto")
+  val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
 
   /** @group getParam */
   final def getSolver: String = $(solver)

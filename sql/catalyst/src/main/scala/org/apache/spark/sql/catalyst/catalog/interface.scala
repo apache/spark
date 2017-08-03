@@ -27,11 +27,11 @@ import com.google.common.base.Objects
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 
 
@@ -75,7 +75,7 @@ case class CatalogStorageFormat(
     CatalogUtils.maskCredentials(properties) match {
       case props if props.isEmpty => // No-op
       case props =>
-        map.put("Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
+        map.put("Storage Properties", props.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]"))
     }
     map
   }
@@ -316,7 +316,7 @@ case class CatalogTable(
       }
     }
 
-    if (properties.nonEmpty) map.put("Properties", tableProperties)
+    if (properties.nonEmpty) map.put("Table Properties", tableProperties)
     stats.foreach(s => map.put("Statistics", s.simpleString))
     map ++= storage.toLinkedHashMap
     if (tracksPartitionsInCatalog) map.put("Partition Provider", "Catalog")
@@ -426,17 +426,19 @@ case class CatalogRelation(
     Objects.hashCode(tableMeta.identifier, output)
   }
 
-  override def preCanonicalized: LogicalPlan = copy(tableMeta = CatalogTable(
-    identifier = tableMeta.identifier,
-    tableType = tableMeta.tableType,
-    storage = CatalogStorageFormat.empty,
-    schema = tableMeta.schema,
-    partitionColumnNames = tableMeta.partitionColumnNames,
-    bucketSpec = tableMeta.bucketSpec,
-    createTime = -1
-  ))
+  override lazy val canonicalized: LogicalPlan = copy(
+    tableMeta = tableMeta.copy(
+      storage = CatalogStorageFormat.empty,
+      createTime = -1
+    ),
+    dataCols = dataCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index))
+    },
+    partitionCols = partitionCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
+    })
 
-  override def computeStats(conf: SQLConf): Statistics = {
+  override def computeStats(): Statistics = {
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for
     // hive serde tables, we will always generate a statistics.
     // TODO: unify the table stats generation.

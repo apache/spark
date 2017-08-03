@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StoreUpdate}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.types.{DataType, IntegerType}
@@ -99,7 +99,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  test("GroupState - setTimeout**** with NoTimeout") {
+  test("GroupState - setTimeout - with NoTimeout") {
     for (initValue <- Seq(None, Some(5))) {
       val states = Seq(
         GroupStateImpl.createForStreaming(initValue, 1000, 1000, NoTimeout, hasTimedOut = false),
@@ -117,7 +117,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  test("GroupState - setTimeout**** with ProcessingTimeTimeout") {
+  test("GroupState - setTimeout - with ProcessingTimeTimeout") {
     // for streaming queries
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
       None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
@@ -156,7 +156,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
   }
 
-  test("GroupState - setTimeout**** with EventTimeTimeout") {
+  test("GroupState - setTimeout - with EventTimeTimeout") {
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
       None, 1000, 1000, EventTimeTimeout, false)
 
@@ -195,7 +195,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
   }
 
-  test("GroupState - illegal params to setTimeout****") {
+  test("GroupState - illegal params to setTimeout") {
     var state: GroupStateImpl[Int] = null
 
     // Test setTimeout****() with illegal values
@@ -508,22 +508,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     expectedState = Some(5),                                  // state should change
     expectedTimeoutTimestamp = 5000)                          // timestamp should change
 
-  test("StateStoreUpdater - rows are cloned before writing to StateStore") {
-    // function for running count
-    val func = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
-      state.update(state.getOption.getOrElse(0) + values.size)
-      Iterator.empty
-    }
-    val store = newStateStore()
-    val plan = newFlatMapGroupsWithStateExec(func)
-    val updater = new plan.StateStoreUpdater(store)
-    val data = Seq(1, 1, 2)
-    val returnIter = updater.updateStateForKeysWithData(data.iterator.map(intToRow))
-    returnIter.size // consume the iterator to force store updates
-    val storeData = store.iterator.map { case (k, v) => (rowToInt(k), rowToInt(v)) }.toSet
-    assert(storeData === Set((1, 2), (2, 1)))
-  }
-
   test("flatMapGroupsWithState - streaming") {
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
@@ -680,7 +664,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(ProcessingTime("1 second"), triggerClock = clock),
+      StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
       AddData(inputData, "a"),
       AdvanceManualClock(1 * 1000),
       CheckLastBatch(("a", "1")),
@@ -745,7 +729,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
 
     testStream(result, Update)(
-      StartStream(ProcessingTime("1 second")),
+      StartStream(Trigger.ProcessingTime("1 second")),
       AddData(inputData, ("a", 11), ("a", 13), ("a", 15)), // Set timeout timestamp of ...
       CheckLastBatch(("a", 15)),                           // "a" to 15 + 5 = 20s, watermark to 5s
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
@@ -917,7 +901,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
           .flatMapGroupsWithState(Update, ProcessingTimeTimeout)(stateFunc)
 
       testStream(result, Update)(
-        StartStream(ProcessingTime("1 second"), triggerClock = clock),
+        StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
         AddData(inputData, ("a", 1L)),
         AdvanceManualClock(1 * 1000),
         CheckLastBatch(("a", "1"))
@@ -1016,11 +1000,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       callFunction()
       val updatedStateRow = store.get(key)
       assert(
-        updater.getStateObj(updatedStateRow).map(_.toString.toInt) === expectedState,
+        Option(updater.getStateObj(updatedStateRow)).map(_.toString.toInt) === expectedState,
         "final state not as expected")
-      if (updatedStateRow.nonEmpty) {
+      if (updatedStateRow != null) {
         assert(
-          updater.getTimeoutTimestamp(updatedStateRow.get) === expectedTimeoutTimestamp,
+          updater.getTimeoutTimestamp(updatedStateRow) === expectedTimeoutTimestamp,
           "final timeout timestamp not as expected")
       }
     }
@@ -1080,26 +1064,20 @@ object FlatMapGroupsWithStateSuite {
     import scala.collection.JavaConverters._
     private val map = new ConcurrentHashMap[UnsafeRow, UnsafeRow]
 
-    override def iterator(): Iterator[(UnsafeRow, UnsafeRow)] = {
-      map.entrySet.iterator.asScala.map { case e => (e.getKey, e.getValue) }
+    override def iterator(): Iterator[UnsafeRowPair] = {
+      map.entrySet.iterator.asScala.map { case e => new UnsafeRowPair(e.getKey, e.getValue) }
     }
 
-    override def filter(c: (UnsafeRow, UnsafeRow) => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
-      iterator.filter { case (k, v) => c(k, v) }
+    override def get(key: UnsafeRow): UnsafeRow = map.get(key)
+    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = {
+      map.put(key.copy(), newValue.copy())
     }
-
-    override def get(key: UnsafeRow): Option[UnsafeRow] = Option(map.get(key))
-    override def put(key: UnsafeRow, newValue: UnsafeRow): Unit = map.put(key, newValue)
     override def remove(key: UnsafeRow): Unit = { map.remove(key) }
-    override def remove(condition: (UnsafeRow) => Boolean): Unit = {
-      iterator.map(_._1).filter(condition).foreach(map.remove)
-    }
     override def commit(): Long = version + 1
     override def abort(): Unit = { }
     override def id: StateStoreId = null
     override def version: Long = 0
-    override def updates(): Iterator[StoreUpdate] = { throw new UnsupportedOperationException }
-    override def numKeys(): Long = map.size
+    override def metrics: StateStoreMetrics = new StateStoreMetrics(map.size, 0, Map.empty)
     override def hasCommitted: Boolean = true
   }
 }

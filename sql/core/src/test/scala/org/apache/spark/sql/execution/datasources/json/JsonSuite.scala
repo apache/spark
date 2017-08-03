@@ -826,7 +826,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       StructField("b", DecimalType(2, 2), true):: Nil)
 
     assert(expectedSchema === jsonDF.schema)
-    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal(0.01)))
+    checkAnswer(jsonDF, Row(1.0E-39D, BigDecimal("0.01")))
 
     val mergedJsonDF = spark.read
       .option("prefersDecimal", "true")
@@ -839,7 +839,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     assert(expectedMergedSchema === mergedJsonDF.schema)
     checkAnswer(
       mergedJsonDF,
-      Row(1.0E-39D, BigDecimal(0.01)) ::
+      Row(1.0E-39D, BigDecimal("0.01")) ::
       Row(1.0E38D, BigDecimal("92233720368547758070")) :: Nil
     )
   }
@@ -937,14 +937,16 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       Row(Map("e" -> null)) :: Nil
     )
 
-    checkAnswer(
-      sql("select `map`['c'] from jsonWithSimpleMap"),
-      Row(null) ::
-      Row(null) ::
-      Row(3) ::
-      Row(1) ::
-      Row(null) :: Nil
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkAnswer(
+        sql("select `map`['c'] from jsonWithSimpleMap"),
+        Row(null) ::
+        Row(null) ::
+        Row(3) ::
+        Row(1) ::
+        Row(null) :: Nil
+      )
+    }
 
     val innerStruct = StructType(
       StructField("field1", ArrayType(IntegerType, true), true) ::
@@ -966,15 +968,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       Row(Map("f" -> Row(null, null))) :: Nil
     )
 
-    checkAnswer(
-      sql("select `map`['a'].field1, `map`['c'].field2 from jsonWithComplexMap"),
-      Row(Seq(1, 2, 3, null), null) ::
-      Row(null, null) ::
-      Row(null, 4) ::
-      Row(null, 3) ::
-      Row(null, null) ::
-      Row(null, null) :: Nil
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkAnswer(
+        sql("select `map`['a'].field1, `map`['c'].field2 from jsonWithComplexMap"),
+        Row(Seq(1, 2, 3, null), null) ::
+        Row(null, null) ::
+        Row(null, 4) ::
+        Row(null, 3) ::
+        Row(null, null) ::
+        Row(null, null) :: Nil
+      )
+    }
   }
 
   test("SPARK-2096 Correctly parse dot notations") {
@@ -1036,24 +1040,24 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
   }
 
   test("Corrupt records: FAILFAST mode") {
-    val schema = StructType(
-        StructField("a", StringType, true) :: Nil)
     // `FAILFAST` mode should throw an exception for corrupt records.
     val exceptionOne = intercept[SparkException] {
       spark.read
         .option("mode", "FAILFAST")
         .json(corruptRecords)
-    }
-    assert(exceptionOne.getMessage.contains("JsonParseException"))
+    }.getMessage
+    assert(exceptionOne.contains(
+      "Malformed records are detected in schema inference. Parse Mode: FAILFAST."))
 
     val exceptionTwo = intercept[SparkException] {
       spark.read
         .option("mode", "FAILFAST")
-        .schema(schema)
+        .schema("a string")
         .json(corruptRecords)
         .collect()
-    }
-    assert(exceptionTwo.getMessage.contains("JsonParseException"))
+    }.getMessage
+    assert(exceptionTwo.contains(
+      "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
   }
 
   test("Corrupt records: DROPMALFORMED mode") {
@@ -1814,7 +1818,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
       assert(new File(path).listFiles().exists(_.getName.endsWith(".gz")))
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("multiLine", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write
         .option("compression", "gZiP")
@@ -1836,7 +1840,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("multiLine", true).json(path)
       val jsonDir = new File(dir, "json").getCanonicalPath
       jsonDF.coalesce(1).write.json(jsonDir)
 
@@ -1865,7 +1869,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).json(path)
+      val jsonDF = spark.read.option("multiLine", true).json(path)
       // no corrupt record column should be created
       assert(jsonDF.schema === StructType(Seq()))
       // only the first object should be read
@@ -1886,7 +1890,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).option("mode", "PERMISSIVE").json(path)
+      val jsonDF = spark.read.option("multiLine", true).option("mode", "PERMISSIVE").json(path)
       assert(jsonDF.count() === corruptRecordCount)
       assert(jsonDF.schema === new StructType()
         .add("_corrupt_record", StringType)
@@ -1917,7 +1921,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         .write
         .text(path)
 
-      val jsonDF = spark.read.option("wholeFile", true).option("mode", "DROPMALFORMED").json(path)
+      val jsonDF = spark.read.option("multiLine", true).option("mode", "DROPMALFORMED").json(path)
       checkAnswer(jsonDF, Seq(Row("test")))
     }
   }
@@ -1940,21 +1944,23 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       // `FAILFAST` mode should throw an exception for corrupt records.
       val exceptionOne = intercept[SparkException] {
         spark.read
-          .option("wholeFile", true)
+          .option("multiLine", true)
           .option("mode", "FAILFAST")
           .json(path)
       }
-      assert(exceptionOne.getMessage.contains("Failed to infer a common schema"))
+      assert(exceptionOne.getMessage.contains("Malformed records are detected in schema " +
+        "inference. Parse Mode: FAILFAST."))
 
       val exceptionTwo = intercept[SparkException] {
         spark.read
-          .option("wholeFile", true)
+          .option("multiLine", true)
           .option("mode", "FAILFAST")
           .schema(schema)
           .json(path)
           .collect()
       }
-      assert(exceptionTwo.getMessage.contains("Failed to parse a value"))
+      assert(exceptionTwo.getMessage.contains("Malformed records are detected in record " +
+        "parsing. Parse Mode: FAILFAST."))
     }
   }
 

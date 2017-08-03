@@ -33,6 +33,7 @@ import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
@@ -369,6 +370,41 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     backend.start()
   }
 
+  test("failover timeout is set in created scheduler driver") {
+    val failoverTimeoutIn = 3600.0
+    initializeSparkConf(Map(DRIVER_FAILOVER_TIMEOUT.key -> failoverTimeoutIn.toString))
+    sc = new SparkContext(sparkConf)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+
+    val securityManager = mock[SecurityManager]
+
+    val backend = new MesosCoarseGrainedSchedulerBackend(
+      taskScheduler, sc, "master", securityManager) {
+      override protected def createSchedulerDriver(
+          masterUrl: String,
+          scheduler: Scheduler,
+          sparkUser: String,
+          appName: String,
+          conf: SparkConf,
+          webuiUrl: Option[String] = None,
+          checkpoint: Option[Boolean] = None,
+          failoverTimeout: Option[Double] = None,
+          frameworkId: Option[String] = None): SchedulerDriver = {
+        markRegistered()
+        assert(failoverTimeout.isDefined)
+        assert(failoverTimeout.get.equals(failoverTimeoutIn))
+        driver
+      }
+    }
+
+    backend.start()
+  }
+
   test("honors unset spark.mesos.containerizer") {
     setBackend(Map("spark.mesos.executor.docker.image" -> "test"))
 
@@ -511,29 +547,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
 
   test("mesos sets configurable labels on tasks") {
     val taskLabelsString = "mesos:test,label:test"
-    setBackend(Map(
-      "spark.mesos.task.labels" -> taskLabelsString
-    ))
-
-    // Build up the labels
-    val taskLabels = Protos.Labels.newBuilder()
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("mesos").setValue("test").build())
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("label").setValue("test").build())
-      .build()
-
-    val offers = List(Resources(backend.executorMemory(sc), 1))
-    offerResources(offers)
-    val launchedTasks = verifyTaskLaunched(driver, "o1")
-
-    val labels = launchedTasks.head.getLabels
-
-    assert(launchedTasks.head.getLabels.equals(taskLabels))
-  }
-
-  test("mesos ignored invalid labels and sets configurable labels on tasks") {
-    val taskLabelsString = "mesos:test,label:test,incorrect:label:here"
     setBackend(Map(
       "spark.mesos.task.labels" -> taskLabelsString
     ))

@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,14 +66,19 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** Returns each chunk part of a stream. */
   private final StreamManager streamManager;
 
+  /** The max number of chunks being transferred and not finished yet. */
+  private final long maxChunksBeingTransferred;
+
   public TransportRequestHandler(
       Channel channel,
       TransportClient reverseClient,
-      RpcHandler rpcHandler) {
+      RpcHandler rpcHandler,
+      Long maxChunksBeingTransferred) {
     this.channel = channel;
     this.reverseClient = reverseClient;
     this.rpcHandler = rpcHandler;
     this.streamManager = rpcHandler.getStreamManager();
+    this.maxChunksBeingTransferred = maxChunksBeingTransferred;
   }
 
   @Override
@@ -117,7 +123,13 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
         req.streamChunkId);
     }
-
+    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
+    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
+      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
+        chunksBeingTransferred, maxChunksBeingTransferred);
+      channel.close();
+      return;
+    }
     ManagedBuffer buf;
     try {
       streamManager.checkAuthorization(reverseClient, req.streamChunkId.streamId);
@@ -130,10 +142,25 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       return;
     }
 
-    respond(new ChunkFetchSuccess(req.streamChunkId, buf));
+    streamManager.chunkBeingSent(req.streamChunkId.streamId);
+    respond(new ChunkFetchSuccess(req.streamChunkId, buf)).addListener(future -> {
+      streamManager.chunkSent(req.streamChunkId.streamId);
+    });
   }
 
   private void processStreamRequest(final StreamRequest req) {
+    if (logger.isTraceEnabled()) {
+      logger.trace("Received req from {} to fetch stream {}", getRemoteAddress(channel),
+        req.streamId);
+    }
+
+    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
+    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
+      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
+        chunksBeingTransferred, maxChunksBeingTransferred);
+      channel.close();
+      return;
+    }
     ManagedBuffer buf;
     try {
       buf = streamManager.openStream(req.streamId);
@@ -145,7 +172,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     }
 
     if (buf != null) {
-      respond(new StreamResponse(req.streamId, buf.size(), buf));
+      streamManager.streamBeingSent(req.streamId);
+      respond(new StreamResponse(req.streamId, buf.size(), buf)).addListener(future -> {
+        streamManager.streamSent(req.streamId);
+      });
     } else {
       respond(new StreamFailure(req.streamId, String.format(
         "Stream '%s' was not found.", req.streamId)));
@@ -187,9 +217,9 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
    * Responds to a single message with some Encodable object. If a failure occurs while sending,
    * it will be logged and the channel closed.
    */
-  private void respond(Encodable result) {
+  private ChannelFuture respond(Encodable result) {
     SocketAddress remoteAddress = channel.remoteAddress();
-    channel.writeAndFlush(result).addListener(future -> {
+    return channel.writeAndFlush(result).addListener(future -> {
       if (future.isSuccess()) {
         logger.trace("Sent result {} to client {}", result, remoteAddress);
       } else {

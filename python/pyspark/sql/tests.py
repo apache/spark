@@ -30,8 +30,10 @@ import pickle
 import functools
 import time
 import datetime
-
+import array
+import ctypes
 import py4j
+
 try:
     import xmlrunner
 except ImportError:
@@ -46,14 +48,33 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
+_have_pandas = False
+try:
+    import pandas
+    _have_pandas = True
+except:
+    # No Pandas, but that's okay, we'll skip those tests
+    pass
+
 from pyspark import SparkContext
 from pyspark.sql import SparkSession, SQLContext, HiveContext, Column, Row
 from pyspark.sql.types import *
-from pyspark.sql.types import UserDefinedType, _infer_type
-from pyspark.tests import ReusedPySparkTestCase, SparkSubmitTests
+from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
+from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings
+from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
+from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
 from pyspark.sql.functions import UserDefinedFunction, sha2, lit
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
+
+
+_have_arrow = False
+try:
+    import pyarrow
+    _have_arrow = True
+except:
+    # No Arrow, but that's okay, we'll skip those tests
+    pass
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -258,8 +279,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(columns[1], str))
 
     def test_explode(self):
-        from pyspark.sql.functions import explode
-        d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
+        from pyspark.sql.functions import explode, explode_outer, posexplode_outer
+        d = [
+            Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"}),
+            Row(a=1, intlist=[], mapfield={}),
+            Row(a=1, intlist=None, mapfield=None),
+        ]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
 
@@ -271,6 +296,18 @@ class SQLTests(ReusedPySparkTestCase):
         result = data.select(explode(data.mapfield).alias("a", "b")).select("a", "b").collect()
         self.assertEqual(result[0][0], "a")
         self.assertEqual(result[0][1], "b")
+
+        result = [tuple(x) for x in data.select(posexplode_outer("intlist")).collect()]
+        self.assertEqual(result, [(0, 1), (1, 2), (2, 3), (None, None), (None, None)])
+
+        result = [tuple(x) for x in data.select(posexplode_outer("mapfield")).collect()]
+        self.assertEqual(result, [(0, 'a', 'b'), (None, None, None), (None, None, None)])
+
+        result = [x[0] for x in data.select(explode_outer("intlist")).collect()]
+        self.assertEqual(result, [1, 2, 3, None, None])
+
+        result = [tuple(x) for x in data.select(explode_outer("mapfield")).collect()]
+        self.assertEqual(result, [('a', 'b'), (None, None), (None, None)])
 
     def test_and_in_expression(self):
         self.assertEqual(4, self.df.filter((self.df.key <= 10) & (self.df.value <= "2")).count())
@@ -457,15 +494,25 @@ class SQLTests(ReusedPySparkTestCase):
             df.select(add_three("id").alias("plus_three")).collect()
         )
 
-    def test_wholefile_json(self):
+    def test_non_existed_udf(self):
+        spark = self.spark
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
+                                lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
+
+    def test_non_existed_udaf(self):
+        spark = self.spark
+        self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",
+                                lambda: spark.udf.registerJavaUDAF("udaf1", "non_existed_udaf"))
+
+    def test_multiLine_json(self):
         people1 = self.spark.read.json("python/test_support/sql/people.json")
         people_array = self.spark.read.json("python/test_support/sql/people_array.json",
-                                            wholeFile=True)
+                                            multiLine=True)
         self.assertEqual(people1.collect(), people_array.collect())
 
-    def test_wholefile_csv(self):
+    def test_multiline_csv(self):
         ages_newlines = self.spark.read.csv(
-            "python/test_support/sql/ages_newlines.csv", wholeFile=True)
+            "python/test_support/sql/ages_newlines.csv", multiLine=True)
         expected = [Row(_c0=u'Joe', _c1=u'20', _c2=u'Hi,\nI am Jeo'),
                     Row(_c0=u'Tom', _c1=u'30', _c2=u'My name is Tom'),
                     Row(_c0=u'Hyukjin', _c1=u'25', _c2=u'I am Hyukjin\n\nI love Spark!')]
@@ -629,6 +676,27 @@ class SQLTests(ReusedPySparkTestCase):
             """Identity"""
             return x
 
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
+
+        class F(object):
+            """Identity"""
+            def __call__(self, x):
+                return x
+
+        f = F()
+        return_type = IntegerType()
+        f_ = udf(f, return_type)
+
+        self.assertTrue(f.__doc__ in f_.__doc__)
+        self.assertEqual(f, f_.func)
+        self.assertEqual(return_type, f_.returnType)
+
+        f = functools.partial(f, x=1)
         return_type = IntegerType()
         f_ = udf(f, return_type)
 
@@ -828,7 +896,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_udt(self):
-        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _verify_type
+        from pyspark.sql.types import _parse_datatype_json_string, _infer_type, _make_type_verifier
         from pyspark.sql.tests import ExamplePointUDT, ExamplePoint
 
         def check_datatype(datatype):
@@ -844,8 +912,8 @@ class SQLTests(ReusedPySparkTestCase):
         check_datatype(structtype_with_udt)
         p = ExamplePoint(1.0, 2.0)
         self.assertEqual(_infer_type(p), ExamplePointUDT())
-        _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
-        self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], ExamplePointUDT()))
+        _make_type_verifier(ExamplePointUDT())(ExamplePoint(1.0, 2.0))
+        self.assertRaises(ValueError, lambda: _make_type_verifier(ExamplePointUDT())([1.0, 2.0]))
 
         check_datatype(PythonOnlyUDT())
         structtype_with_udt = StructType([StructField("label", DoubleType(), False),
@@ -853,8 +921,10 @@ class SQLTests(ReusedPySparkTestCase):
         check_datatype(structtype_with_udt)
         p = PythonOnlyPoint(1.0, 2.0)
         self.assertEqual(_infer_type(p), PythonOnlyUDT())
-        _verify_type(PythonOnlyPoint(1.0, 2.0), PythonOnlyUDT())
-        self.assertRaises(ValueError, lambda: _verify_type([1.0, 2.0], PythonOnlyUDT()))
+        _make_type_verifier(PythonOnlyUDT())(PythonOnlyPoint(1.0, 2.0))
+        self.assertRaises(
+            ValueError,
+            lambda: _make_type_verifier(PythonOnlyUDT())([1.0, 2.0]))
 
     def test_simple_udt_in_df(self):
         schema = StructType().add("key", LongType()).add("val", PythonOnlyUDT())
@@ -1171,26 +1241,29 @@ class SQLTests(ReusedPySparkTestCase):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1.fieldNames(), struct2.names)
         self.assertEqual(struct1, struct2)
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1.fieldNames(), struct2.names)
         self.assertNotEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1.fieldNames(), struct2.names)
         self.assertEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1.fieldNames(), struct2.names)
         self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
-        with self.assertRaises(ValueError):
-            struct1 = StructType().add("name")
+        self.assertRaises(ValueError, lambda: StructType().add("name"))
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         for field in struct1:
@@ -1203,12 +1276,34 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertIs(struct1["f1"], struct1.fields[0])
         self.assertIs(struct1[0], struct1.fields[0])
         self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
-        with self.assertRaises(KeyError):
-            not_a_field = struct1["f9"]
-        with self.assertRaises(IndexError):
-            not_a_field = struct1[9]
-        with self.assertRaises(TypeError):
-            not_a_field = struct1[9.9]
+        self.assertRaises(KeyError, lambda: struct1["f9"])
+        self.assertRaises(IndexError, lambda: struct1[9])
+        self.assertRaises(TypeError, lambda: struct1[9.9])
+
+    def test_parse_datatype_string(self):
+        from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
+        for k, t in _all_atomic_types.items():
+            if t != NullType:
+                self.assertEqual(t(), _parse_datatype_string(k))
+        self.assertEqual(IntegerType(), _parse_datatype_string("int"))
+        self.assertEqual(DecimalType(1, 1), _parse_datatype_string("decimal(1  ,1)"))
+        self.assertEqual(DecimalType(10, 1), _parse_datatype_string("decimal( 10,1 )"))
+        self.assertEqual(DecimalType(11, 1), _parse_datatype_string("decimal(11,1)"))
+        self.assertEqual(
+            ArrayType(IntegerType()),
+            _parse_datatype_string("array<int >"))
+        self.assertEqual(
+            MapType(IntegerType(), DoubleType()),
+            _parse_datatype_string("map< int, double  >"))
+        self.assertEqual(
+            StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
+            _parse_datatype_string("struct<a:int, c:double >"))
+        self.assertEqual(
+            StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
+            _parse_datatype_string("a:int, c:double"))
+        self.assertEqual(
+            StructType([StructField("a", IntegerType()), StructField("c", DoubleType())]),
+            _parse_datatype_string("a INT, c DOUBLE"))
 
     def test_metadata_null(self):
         from pyspark.sql.types import StructType, StringType, StructField
@@ -1697,40 +1792,58 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType([
             StructField("name", StringType(), True),
             StructField("age", IntegerType(), True),
-            StructField("height", DoubleType(), True)])
+            StructField("height", DoubleType(), True),
+            StructField("spy", BooleanType(), True)])
 
         # fillna shouldn't change non-null values
-        row = self.spark.createDataFrame([(u'Alice', 10, 80.1)], schema).fillna(50).first()
+        row = self.spark.createDataFrame([(u'Alice', 10, 80.1, True)], schema).fillna(50).first()
         self.assertEqual(row.age, 10)
 
         # fillna with int
-        row = self.spark.createDataFrame([(u'Alice', None, None)], schema).fillna(50).first()
+        row = self.spark.createDataFrame([(u'Alice', None, None, None)], schema).fillna(50).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.0)
 
         # fillna with double
-        row = self.spark.createDataFrame([(u'Alice', None, None)], schema).fillna(50.1).first()
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(50.1).first()
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, 50.1)
 
+        # fillna with bool
+        row = self.spark.createDataFrame(
+            [(u'Alice', None, None, None)], schema).fillna(True).first()
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.spy, True)
+
         # fillna with string
-        row = self.spark.createDataFrame([(None, None, None)], schema).fillna("hello").first()
+        row = self.spark.createDataFrame([(None, None, None, None)], schema).fillna("hello").first()
         self.assertEqual(row.name, u"hello")
         self.assertEqual(row.age, None)
 
         # fillna with subset specified for numeric cols
         row = self.spark.createDataFrame(
-            [(None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna(50, subset=['name', 'age']).first()
         self.assertEqual(row.name, None)
         self.assertEqual(row.age, 50)
         self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, None)
 
-        # fillna with subset specified for numeric cols
+        # fillna with subset specified for string cols
         row = self.spark.createDataFrame(
-            [(None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
+            [(None, None, None, None)], schema).fillna("haha", subset=['name', 'age']).first()
         self.assertEqual(row.name, "haha")
         self.assertEqual(row.age, None)
         self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, None)
+
+        # fillna with subset specified for bool cols
+        row = self.spark.createDataFrame(
+            [(None, None, None, None)], schema).fillna(True, subset=['name', 'spy']).first()
+        self.assertEqual(row.name, None)
+        self.assertEqual(row.age, None)
+        self.assertEqual(row.height, None)
+        self.assertEqual(row.spy, True)
 
         # fillna with dictionary for boolean types
         row = self.spark.createDataFrame([Row(a=None), Row(a=True)]).fillna({"a": True}).first()
@@ -1989,6 +2102,22 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema.simpleString(), "struct<value:int>")
         self.assertEqual(df.collect(), [Row(key=i) for i in range(100)])
 
+    def test_join_without_on(self):
+        df1 = self.spark.range(1).toDF("a")
+        df2 = self.spark.range(1).toDF("b")
+
+        try:
+            self.spark.conf.set("spark.sql.crossJoin.enabled", "false")
+            self.assertRaises(AnalysisException, lambda: df1.join(df2, how="inner").collect())
+
+            self.spark.conf.set("spark.sql.crossJoin.enabled", "true")
+            actual = df1.join(df2, how="inner").collect()
+            expected = [Row(a=0, b=0)]
+            self.assertEqual(actual, expected)
+        finally:
+            # We should unset this. Otherwise, other tests are affected.
+            self.spark.conf.unset("spark.sql.crossJoin.enabled")
+
     # Regression test for invalid join methods when on is None, Spark-14761
     def test_invalid_join_method(self):
         df1 = self.spark.createDataFrame([("Alice", 5), ("Bob", 8)], ["name", "age"])
@@ -2218,6 +2347,97 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
 
+    # test for SPARK-16542
+    def test_array_types(self):
+        # This test need to make sure that the Scala type selected is at least
+        # as large as the python's types. This is necessary because python's
+        # array types depend on C implementation on the machine. Therefore there
+        # is no machine independent correspondence between python's array types
+        # and Scala types.
+        # See: https://docs.python.org/2/library/array.html
+
+        def assertCollectSuccess(typecode, value):
+            row = Row(myarray=array.array(typecode, [value]))
+            df = self.spark.createDataFrame([row])
+            self.assertEqual(df.first()["myarray"][0], value)
+
+        # supported string types
+        #
+        # String types in python's array are "u" for Py_UNICODE and "c" for char.
+        # "u" will be removed in python 4, and "c" is not supported in python 3.
+        supported_string_types = []
+        if sys.version_info[0] < 4:
+            supported_string_types += ['u']
+            # test unicode
+            assertCollectSuccess('u', u'a')
+        if sys.version_info[0] < 3:
+            supported_string_types += ['c']
+            # test string
+            assertCollectSuccess('c', 'a')
+
+        # supported float and double
+        #
+        # Test max, min, and precision for float and double, assuming IEEE 754
+        # floating-point format.
+        supported_fractional_types = ['f', 'd']
+        assertCollectSuccess('f', ctypes.c_float(1e+38).value)
+        assertCollectSuccess('f', ctypes.c_float(1e-38).value)
+        assertCollectSuccess('f', ctypes.c_float(1.123456).value)
+        assertCollectSuccess('d', sys.float_info.max)
+        assertCollectSuccess('d', sys.float_info.min)
+        assertCollectSuccess('d', sys.float_info.epsilon)
+
+        # supported signed int types
+        #
+        # The size of C types changes with implementation, we need to make sure
+        # that there is no overflow error on the platform running this test.
+        supported_signed_int_types = list(
+            set(_array_signed_int_typecode_ctype_mappings.keys())
+            .intersection(set(_array_type_mappings.keys())))
+        for t in supported_signed_int_types:
+            ctype = _array_signed_int_typecode_ctype_mappings[t]
+            max_val = 2 ** (ctypes.sizeof(ctype) * 8 - 1)
+            assertCollectSuccess(t, max_val - 1)
+            assertCollectSuccess(t, -max_val)
+
+        # supported unsigned int types
+        #
+        # JVM does not have unsigned types. We need to be very careful to make
+        # sure that there is no overflow error.
+        supported_unsigned_int_types = list(
+            set(_array_unsigned_int_typecode_ctype_mappings.keys())
+            .intersection(set(_array_type_mappings.keys())))
+        for t in supported_unsigned_int_types:
+            ctype = _array_unsigned_int_typecode_ctype_mappings[t]
+            assertCollectSuccess(t, 2 ** (ctypes.sizeof(ctype) * 8) - 1)
+
+        # all supported types
+        #
+        # Make sure the types tested above:
+        # 1. are all supported types
+        # 2. cover all supported types
+        supported_types = (supported_string_types +
+                           supported_fractional_types +
+                           supported_signed_int_types +
+                           supported_unsigned_int_types)
+        self.assertEqual(set(supported_types), set(_array_type_mappings.keys()))
+
+        # all unsupported types
+        #
+        # Keys in _array_type_mappings is a complete list of all supported types,
+        # and types not in _array_type_mappings are considered unsupported.
+        # `array.typecodes` are not supported in python 2.
+        if sys.version_info[0] < 3:
+            all_types = set(['c', 'b', 'B', 'u', 'h', 'H', 'i', 'I', 'l', 'L', 'f', 'd'])
+        else:
+            all_types = set(array.typecodes)
+        unsupported_types = all_types - set(supported_types)
+        # test unsupported types
+        for t in unsupported_types:
+            with self.assertRaises(TypeError):
+                a = array.array(t)
+                self.spark.createDataFrame([Row(myarray=a)]).collect()
+
     def test_bucketed_write(self):
         data = [
             (1, "foo", 3.0), (2, "foo", 5.0),
@@ -2265,6 +2485,28 @@ class SQLTests(ReusedPySparkTestCase):
             .sortBy("y", "z")
             .mode("overwrite").saveAsTable("pyspark_bucket"))
         self.assertSetEqual(set(data), set(self.spark.table("pyspark_bucket").collect()))
+
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas(self):
+        import numpy as np
+        schema = StructType().add("a", IntegerType()).add("b", StringType())\
+                             .add("c", BooleanType()).add("d", FloatType())
+        data = [
+            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
+            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+        ]
+        df = self.spark.createDataFrame(data, schema)
+        types = df.toPandas().dtypes
+        self.assertEquals(types[0], np.int32)
+        self.assertEquals(types[1], np.object)
+        self.assertEquals(types[2], np.bool)
+        self.assertEquals(types[3], np.float32)
+
+    def test_create_dataframe_from_array_of_long(self):
+        import array
+        data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]
+        df = self.spark.createDataFrame(data)
+        self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
 
 class HiveSparkSubmitTests(SparkSubmitTests):
@@ -2571,6 +2813,262 @@ class HiveContextSQLTests(ReusedPySparkTestCase):
             self.assertTrue(range_frame_match())
 
         importlib.reload(window)
+
+
+class DataTypeVerificationTests(unittest.TestCase):
+
+    def test_verify_type_exception_msg(self):
+        self.assertRaisesRegexp(
+            ValueError,
+            "test_name",
+            lambda: _make_type_verifier(StringType(), nullable=False, name="test_name")(None))
+
+        schema = StructType([StructField('a', StructType([StructField('b', IntegerType())]))])
+        self.assertRaisesRegexp(
+            TypeError,
+            "field b in field a",
+            lambda: _make_type_verifier(schema)([["data"]]))
+
+    def test_verify_type_ok_nullable(self):
+        obj = None
+        types = [IntegerType(), FloatType(), StringType(), StructType([])]
+        for data_type in types:
+            try:
+                _make_type_verifier(data_type, nullable=True)(obj)
+            except Exception:
+                self.fail("verify_type(%s, %s, nullable=True)" % (obj, data_type))
+
+    def test_verify_type_not_nullable(self):
+        import array
+        import datetime
+        import decimal
+
+        schema = StructType([
+            StructField('s', StringType(), nullable=False),
+            StructField('i', IntegerType(), nullable=True)])
+
+        class MyObj:
+            def __init__(self, **kwargs):
+                for k, v in kwargs.items():
+                    setattr(self, k, v)
+
+        # obj, data_type
+        success_spec = [
+            # String
+            ("", StringType()),
+            (u"", StringType()),
+            (1, StringType()),
+            (1.0, StringType()),
+            ([], StringType()),
+            ({}, StringType()),
+
+            # UDT
+            (ExamplePoint(1.0, 2.0), ExamplePointUDT()),
+
+            # Boolean
+            (True, BooleanType()),
+
+            # Byte
+            (-(2**7), ByteType()),
+            (2**7 - 1, ByteType()),
+
+            # Short
+            (-(2**15), ShortType()),
+            (2**15 - 1, ShortType()),
+
+            # Integer
+            (-(2**31), IntegerType()),
+            (2**31 - 1, IntegerType()),
+
+            # Long
+            (2**64, LongType()),
+
+            # Float & Double
+            (1.0, FloatType()),
+            (1.0, DoubleType()),
+
+            # Decimal
+            (decimal.Decimal("1.0"), DecimalType()),
+
+            # Binary
+            (bytearray([1, 2]), BinaryType()),
+
+            # Date/Timestamp
+            (datetime.date(2000, 1, 2), DateType()),
+            (datetime.datetime(2000, 1, 2, 3, 4), DateType()),
+            (datetime.datetime(2000, 1, 2, 3, 4), TimestampType()),
+
+            # Array
+            ([], ArrayType(IntegerType())),
+            (["1", None], ArrayType(StringType(), containsNull=True)),
+            ([1, 2], ArrayType(IntegerType())),
+            ((1, 2), ArrayType(IntegerType())),
+            (array.array('h', [1, 2]), ArrayType(IntegerType())),
+
+            # Map
+            ({}, MapType(StringType(), IntegerType())),
+            ({"a": 1}, MapType(StringType(), IntegerType())),
+            ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=True)),
+
+            # Struct
+            ({"s": "a", "i": 1}, schema),
+            ({"s": "a", "i": None}, schema),
+            ({"s": "a"}, schema),
+            ({"s": "a", "f": 1.0}, schema),
+            (Row(s="a", i=1), schema),
+            (Row(s="a", i=None), schema),
+            (Row(s="a", i=1, f=1.0), schema),
+            (["a", 1], schema),
+            (["a", None], schema),
+            (("a", 1), schema),
+            (MyObj(s="a", i=1), schema),
+            (MyObj(s="a", i=None), schema),
+            (MyObj(s="a"), schema),
+        ]
+
+        # obj, data_type, exception class
+        failure_spec = [
+            # String (match anything but None)
+            (None, StringType(), ValueError),
+
+            # UDT
+            (ExamplePoint(1.0, 2.0), PythonOnlyUDT(), ValueError),
+
+            # Boolean
+            (1, BooleanType(), TypeError),
+            ("True", BooleanType(), TypeError),
+            ([1], BooleanType(), TypeError),
+
+            # Byte
+            (-(2**7) - 1, ByteType(), ValueError),
+            (2**7, ByteType(), ValueError),
+            ("1", ByteType(), TypeError),
+            (1.0, ByteType(), TypeError),
+
+            # Short
+            (-(2**15) - 1, ShortType(), ValueError),
+            (2**15, ShortType(), ValueError),
+
+            # Integer
+            (-(2**31) - 1, IntegerType(), ValueError),
+            (2**31, IntegerType(), ValueError),
+
+            # Float & Double
+            (1, FloatType(), TypeError),
+            (1, DoubleType(), TypeError),
+
+            # Decimal
+            (1.0, DecimalType(), TypeError),
+            (1, DecimalType(), TypeError),
+            ("1.0", DecimalType(), TypeError),
+
+            # Binary
+            (1, BinaryType(), TypeError),
+
+            # Date/Timestamp
+            ("2000-01-02", DateType(), TypeError),
+            (946811040, TimestampType(), TypeError),
+
+            # Array
+            (["1", None], ArrayType(StringType(), containsNull=False), ValueError),
+            ([1, "2"], ArrayType(IntegerType()), TypeError),
+
+            # Map
+            ({"a": 1}, MapType(IntegerType(), IntegerType()), TypeError),
+            ({"a": "1"}, MapType(StringType(), IntegerType()), TypeError),
+            ({"a": None}, MapType(StringType(), IntegerType(), valueContainsNull=False),
+             ValueError),
+
+            # Struct
+            ({"s": "a", "i": "1"}, schema, TypeError),
+            (Row(s="a"), schema, ValueError),     # Row can't have missing field
+            (Row(s="a", i="1"), schema, TypeError),
+            (["a"], schema, ValueError),
+            (["a", "1"], schema, TypeError),
+            (MyObj(s="a", i="1"), schema, TypeError),
+            (MyObj(s=None, i="1"), schema, ValueError),
+        ]
+
+        # Check success cases
+        for obj, data_type in success_spec:
+            try:
+                _make_type_verifier(data_type, nullable=False)(obj)
+            except Exception:
+                self.fail("verify_type(%s, %s, nullable=False)" % (obj, data_type))
+
+        # Check failure cases
+        for obj, data_type, exp in failure_spec:
+            msg = "verify_type(%s, %s, nullable=False) == %s" % (obj, data_type, exp)
+            with self.assertRaises(exp, msg=msg):
+                _make_type_verifier(data_type, nullable=False)(obj)
+
+
+@unittest.skipIf(not _have_arrow, "Arrow not installed")
+class ArrowTests(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+        cls.spark.conf.set("spark.sql.execution.arrow.enable", "true")
+        cls.schema = StructType([
+            StructField("1_str_t", StringType(), True),
+            StructField("2_int_t", IntegerType(), True),
+            StructField("3_long_t", LongType(), True),
+            StructField("4_float_t", FloatType(), True),
+            StructField("5_double_t", DoubleType(), True)])
+        cls.data = [("a", 1, 10, 0.2, 2.0),
+                    ("b", 2, 20, 0.4, 4.0),
+                    ("c", 3, 30, 0.8, 6.0)]
+
+    def assertFramesEqual(self, df_with_arrow, df_without):
+        msg = ("DataFrame from Arrow is not equal" +
+               ("\n\nWith Arrow:\n%s\n%s" % (df_with_arrow, df_with_arrow.dtypes)) +
+               ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
+        self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
+
+    def test_unsupported_datatype(self):
+        schema = StructType([StructField("dt", DateType(), True)])
+        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: df.toPandas())
+
+    def test_null_conversion(self):
+        df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
+                                             self.data)
+        pdf = df_null.toPandas()
+        null_counts = pdf.isnull().sum().tolist()
+        self.assertTrue(all([c == 1 for c in null_counts]))
+
+    def test_toPandas_arrow_toggle(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        self.spark.conf.set("spark.sql.execution.arrow.enable", "false")
+        pdf = df.toPandas()
+        self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
+        pdf_arrow = df.toPandas()
+        self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_pandas_round_trip(self):
+        import pandas as pd
+        import numpy as np
+        data_dict = {}
+        for j, name in enumerate(self.schema.names):
+            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
+        # need to convert these to numpy types first
+        data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
+        data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
+        pdf = pd.DataFrame(data=data_dict)
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        pdf_arrow = df.toPandas()
+        self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_filtered_frame(self):
+        df = self.spark.range(3).toDF("i")
+        pdf = df.filter("i < 0").toPandas()
+        self.assertEqual(len(pdf.columns), 1)
+        self.assertEqual(pdf.columns[0], "i")
+        self.assertTrue(pdf.empty)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

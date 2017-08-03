@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.net.URI
 
+import scala.language.existentials
+
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
@@ -36,6 +38,7 @@ import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 // TODO(gatorsmile): combine HiveCatalogedDDLSuite and HiveDDLSuite
 class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeAndAfterEach {
@@ -159,7 +162,6 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
   test("drop table") {
     testDropTable(isDatasourceTable = false)
   }
-
 }
 
 class HiveDDLSuite
@@ -345,7 +347,7 @@ class HiveDDLSuite
     val e = intercept[AnalysisException] {
       sql("CREATE TABLE tbl(a int) PARTITIONED BY (a string)")
     }
-    assert(e.message == "Found duplicate column(s) in table definition of `default`.`tbl`: a")
+    assert(e.message == "Found duplicate column(s) in the table definition of `default`.`tbl`: `a`")
   }
 
   test("add/drop partition with location - managed table") {
@@ -805,7 +807,7 @@ class HiveDDLSuite
 
       checkAnswer(
         sql(s"DESC $tabName").select("col_name", "data_type", "comment"),
-        Row("# col_name", "data_type", "comment") :: Row("a", "int", "test") :: Nil
+        Row("a", "int", "test") :: Nil
       )
     }
   }
@@ -1651,7 +1653,7 @@ class HiveDDLSuite
   test("create hive table with a non-existing location") {
     withTable("t", "t1") {
       withTempPath { dir =>
-        spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '$dir'")
+        spark.sql(s"CREATE TABLE t(a int, b int) USING hive LOCATION '${dir.toURI}'")
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.location == makeQualifiedPath(dir.getAbsolutePath))
@@ -1668,7 +1670,7 @@ class HiveDDLSuite
              |CREATE TABLE t1(a int, b int)
              |USING hive
              |PARTITIONED BY(a)
-             |LOCATION '$dir'
+             |LOCATION '${dir.toURI}'
            """.stripMargin)
 
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1696,7 +1698,7 @@ class HiveDDLSuite
               s"""
                  |CREATE TABLE t
                  |USING hive
-                 |LOCATION '$dir'
+                 |LOCATION '${dir.toURI}'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -1712,7 +1714,7 @@ class HiveDDLSuite
                  |CREATE TABLE t1
                  |USING hive
                  |PARTITIONED BY(a, b)
-                 |LOCATION '$dir'
+                 |LOCATION '${dir.toURI}'
                  |AS SELECT 3 as a, 4 as b, 1 as c, 2 as d
                """.stripMargin)
             val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1738,21 +1740,21 @@ class HiveDDLSuite
                  |CREATE TABLE t(a string, `$specialChars` string)
                  |USING $datasource
                  |PARTITIONED BY(`$specialChars`)
-                 |LOCATION '$dir'
+                 |LOCATION '${dir.toURI}'
                """.stripMargin)
 
             assert(dir.listFiles().isEmpty)
             spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`=2) SELECT 1")
             val partEscaped = s"${ExternalCatalogUtils.escapePathName(specialChars)}=2"
             val partFile = new File(dir, partEscaped)
-            assert(partFile.listFiles().length >= 1)
+            assert(partFile.listFiles().nonEmpty)
             checkAnswer(spark.table("t"), Row("1", "2") :: Nil)
 
             withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
               spark.sql(s"INSERT INTO TABLE t PARTITION(`$specialChars`) SELECT 3, 4")
               val partEscaped1 = s"${ExternalCatalogUtils.escapePathName(specialChars)}=4"
               val partFile1 = new File(dir, partEscaped1)
-              assert(partFile1.listFiles().length >= 1)
+              assert(partFile1.listFiles().nonEmpty)
               checkAnswer(spark.table("t"), Row("1", "2") :: Row("3", "4") :: Nil)
             }
           }
@@ -1763,15 +1765,22 @@ class HiveDDLSuite
 
   Seq("a b", "a:b", "a%b").foreach { specialChars =>
     test(s"hive table: location uri contains $specialChars") {
+      // On Windows, it looks colon in the file name is illegal by default. See
+      // https://support.microsoft.com/en-us/help/289627
+      assume(!Utils.isWindows || specialChars != "a:b")
+
       withTable("t") {
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          // The parser does not recognize the backslashes on Windows as they are.
+          // These currently should be escaped.
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t(a string)
                |USING hive
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
@@ -1794,12 +1803,13 @@ class HiveDDLSuite
         withTempDir { dir =>
           val loc = new File(dir, specialChars)
           loc.mkdir()
+          val escapedLoc = loc.getAbsolutePath.replace("\\", "\\\\")
           spark.sql(
             s"""
                |CREATE TABLE t1(a string, b string)
                |USING hive
                |PARTITIONED BY(b)
-               |LOCATION '$loc'
+               |LOCATION '$escapedLoc'
              """.stripMargin)
 
           val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t1"))
@@ -1810,16 +1820,20 @@ class HiveDDLSuite
           if (specialChars != "a:b") {
             spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
             val partFile = new File(loc, "b=2")
-            assert(partFile.listFiles().length >= 1)
+            assert(partFile.listFiles().nonEmpty)
             checkAnswer(spark.table("t1"), Row("1", "2") :: Nil)
 
             spark.sql("INSERT INTO TABLE t1 PARTITION(b='2017-03-03 12:13%3A14') SELECT 1")
             val partFile1 = new File(loc, "b=2017-03-03 12:13%3A14")
             assert(!partFile1.exists())
-            val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
-            assert(partFile2.listFiles().length >= 1)
-            checkAnswer(spark.table("t1"),
-              Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+
+            if (!Utils.isWindows) {
+              // Actual path becomes "b=2017-03-03%2012%3A13%253A14" on Windows.
+              val partFile2 = new File(loc, "b=2017-03-03 12%3A13%253A14")
+              assert(partFile2.listFiles().nonEmpty)
+              checkAnswer(spark.table("t1"),
+                Row("1", "2") :: Row("1", "2017-03-03 12:13%3A14") :: Nil)
+            }
           } else {
             val e = intercept[AnalysisException] {
               spark.sql("INSERT INTO TABLE t1 PARTITION(b=2) SELECT 1")
@@ -1941,6 +1955,46 @@ class HiveDDLSuite
           }
         }
       }
+    }
+  }
+
+  test("SPARK-21216: join with a streaming DataFrame") {
+    import org.apache.spark.sql.execution.streaming.MemoryStream
+    import testImplicits._
+
+    implicit val _sqlContext = spark.sqlContext
+
+    Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word").createOrReplaceTempView("t1")
+    // Make a table and ensure it will be broadcast.
+    sql("""CREATE TABLE smallTable(word string, number int)
+          |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
+          |STORED AS TEXTFILE
+        """.stripMargin)
+
+    sql(
+      """INSERT INTO smallTable
+        |SELECT word, number from t1
+      """.stripMargin)
+
+    val inputData = MemoryStream[Int]
+    val joined = inputData.toDS().toDF()
+      .join(spark.table("smallTable"), $"value" === $"number")
+
+    val sq = joined.writeStream
+      .format("memory")
+      .queryName("t2")
+      .start()
+    try {
+      inputData.addData(1, 2)
+
+      sq.processAllAvailable()
+
+      checkAnswer(
+        spark.table("t2"),
+        Seq(Row(1, "one", 1), Row(2, "two", 2))
+      )
+    } finally {
+      sq.stop()
     }
   }
 }

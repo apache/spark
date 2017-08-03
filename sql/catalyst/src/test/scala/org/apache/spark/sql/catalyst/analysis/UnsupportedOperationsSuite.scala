@@ -491,7 +491,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   // Other unary operations
   testUnaryOperatorInStreamingPlan(
-    "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
+    "sample", Sample(0.1, 1, true, 1L, _), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
     "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
 

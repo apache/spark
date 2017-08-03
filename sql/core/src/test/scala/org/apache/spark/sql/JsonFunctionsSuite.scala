@@ -156,10 +156,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
   }
 
-  test("from_json uses DDL strings for defining a schema") {
+  test("from_json uses DDL strings for defining a schema - java") {
     val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
     checkAnswer(
       df.select(from_json($"value", "a INT, b STRING", new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("from_json uses DDL strings for defining a schema - scala") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
       Row(Row(1, "haa")) :: Nil)
   }
 

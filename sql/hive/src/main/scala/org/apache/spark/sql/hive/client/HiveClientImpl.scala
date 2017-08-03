@@ -391,7 +391,7 @@ private[hive] class HiveClientImpl(
         val sortColumnNames = if (allAscendingSorted) {
           sortColumnOrders.map(_.getCol)
         } else {
-          Seq()
+          Seq.empty
         }
         Option(BucketSpec(h.getNumBuckets, h.getBucketCols.asScala, sortColumnNames))
       } else {
@@ -434,6 +434,8 @@ private[hive] class HiveClientImpl(
       }
       val comment = properties.get("comment")
 
+      // Here we are reading statistics from Hive.
+      // Note that this statistics could be overridden by Spark's statistics if that's available.
       val totalSize = properties.get(StatsSetupConst.TOTAL_SIZE).map(BigInt(_))
       val rawDataSize = properties.get(StatsSetupConst.RAW_DATA_SIZE).map(BigInt(_))
       val rowCount = properties.get(StatsSetupConst.ROW_COUNT).map(BigInt(_)).filter(_ >= 0)

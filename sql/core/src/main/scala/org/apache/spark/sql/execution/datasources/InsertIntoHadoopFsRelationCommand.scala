@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogT
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
@@ -52,21 +54,19 @@ case class InsertIntoHadoopFsRelationCommand(
     mode: SaveMode,
     catalogTable: Option[CatalogTable],
     fileIndex: Option[FileIndex])
-  extends RunnableCommand {
-
+  extends DataWritingCommand {
   import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.escapePathName
 
-  override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
+  override def children: Seq[LogicalPlan] = query :: Nil
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
+    assert(children.length == 1)
+
     // Most formats don't do well with duplicate columns, so lets not allow that
-    if (query.schema.fieldNames.length != query.schema.fieldNames.distinct.length) {
-      val duplicateColumns = query.schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s): $duplicateColumns found, " +
-        "cannot save to file.")
-    }
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      query.schema,
+      s"when inserting into $outputPath",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     val fs = outputPath.getFileSystem(hadoopConf)
@@ -98,8 +98,7 @@ case class InsertIntoHadoopFsRelationCommand(
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = outputPath.toString,
-      isAppend = isAppend)
+      outputPath = outputPath.toString)
 
     val doInsertion = (mode, pathExists) match {
       case (SaveMode.ErrorIfExists, true) =>
@@ -121,8 +120,16 @@ case class InsertIntoHadoopFsRelationCommand(
 
     if (doInsertion) {
 
-      // Callback for updating metastore partition metadata after the insertion job completes.
-      def refreshPartitionsCallback(updatedPartitions: Seq[TablePartitionSpec]): Unit = {
+      // Callback for updating metric and metastore partition metadata
+      // after the insertion job completes.
+      def refreshCallback(summary: Seq[ExecutedWriteSummary]): Unit = {
+        val updatedPartitions = summary.flatMap(_.updatedPartitions)
+          .distinct.map(PartitioningUtils.parsePathFragment)
+
+        // Updating metrics.
+        updateWritingMetrics(summary)
+
+        // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {
           val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
           if (newPartitions.nonEmpty) {
@@ -144,7 +151,7 @@ case class InsertIntoHadoopFsRelationCommand(
 
       FileFormatWriter.write(
         sparkSession = sparkSession,
-        queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
+        plan = children.head,
         fileFormat = fileFormat,
         committer = committer,
         outputSpec = FileFormatWriter.OutputSpec(
@@ -152,13 +159,18 @@ case class InsertIntoHadoopFsRelationCommand(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        refreshFunction = refreshPartitionsCallback,
+        refreshFunction = refreshCallback,
         options = options)
 
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())
       // refresh data cache if table is cached
       sparkSession.catalog.refreshByPath(outputPath.toString)
+
+      if (catalogTable.nonEmpty) {
+        CommandUtils.updateTableStats(sparkSession, catalogTable.get)
+      }
+
     } else {
       logInfo("Skipping insertion into a relation that already exists.")
     }
