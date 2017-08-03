@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -110,7 +111,6 @@ public class SparkLauncher {
   // Visible for testing.
   final SparkSubmitCommandBuilder builder;
   File workingDir;
-  boolean redirectToLog;
   boolean redirectErrorStream;
   ProcessBuilder.Redirect errorStream;
   ProcessBuilder.Redirect outputStream;
@@ -446,7 +446,6 @@ public class SparkLauncher {
    */
   public SparkLauncher redirectToLog(String loggerName) {
     setConf(CHILD_PROCESS_LOGGER_NAME, loggerName);
-    redirectToLog = true;
     return this;
   }
 
@@ -459,11 +458,22 @@ public class SparkLauncher {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    Process childProc = createBuilder().start();
-    if (redirectToLog) {
-      String loggerName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
-      new OutputRedirector(childProc.getInputStream(), loggerName, REDIRECTOR_FACTORY);
+    ProcessBuilder pb = createBuilder();
+
+    boolean outputToLog = outputStream == null;
+    boolean errorToLog = !redirectErrorStream && errorStream == null;
+
+    String loggerName = getLoggerName();
+    if (loggerName != null && outputToLog && errorToLog) {
+      pb.redirectErrorStream(true);
     }
+
+    Process childProc = pb.start();
+    if (loggerName != null) {
+      InputStream logStream = outputToLog ? childProc.getInputStream() : childProc.getErrorStream();
+      new OutputRedirector(logStream, loggerName, REDIRECTOR_FACTORY);
+    }
+
     return childProc;
   }
 
@@ -498,30 +508,35 @@ public class SparkLauncher {
       handle.addListener(l);
     }
 
-    String loggerName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
+    String loggerName = getLoggerName();
     ProcessBuilder pb = createBuilder();
+
+    boolean outputToLog = outputStream == null;
+    boolean errorToLog = !redirectErrorStream && errorStream == null;
+
     // Only setup stderr + stdout to logger redirection if user has not otherwise configured output
     // redirection.
-    if (loggerName == null) {
-      String appName = builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
-      if (appName == null) {
-        if (builder.appName != null) {
-          appName = builder.appName;
-        } else if (builder.mainClass != null) {
-          int dot = builder.mainClass.lastIndexOf(".");
-          if (dot >= 0 && dot < builder.mainClass.length() - 1) {
-            appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
-          } else {
-            appName = builder.mainClass;
-          }
-        } else if (builder.appResource != null) {
-          appName = new File(builder.appResource).getName();
+    if (loggerName == null && (outputToLog || errorToLog)) {
+      String appName;
+      if (builder.appName != null) {
+        appName = builder.appName;
+      } else if (builder.mainClass != null) {
+        int dot = builder.mainClass.lastIndexOf(".");
+        if (dot >= 0 && dot < builder.mainClass.length() - 1) {
+          appName = builder.mainClass.substring(dot + 1, builder.mainClass.length());
         } else {
-          appName = String.valueOf(COUNTER.incrementAndGet());
+          appName = builder.mainClass;
         }
+      } else if (builder.appResource != null) {
+        appName = new File(builder.appResource).getName();
+      } else {
+        appName = String.valueOf(COUNTER.incrementAndGet());
       }
       String loggerPrefix = getClass().getPackage().getName();
       loggerName = String.format("%s.app.%s", loggerPrefix, appName);
+    }
+
+    if (outputToLog && errorToLog) {
       pb.redirectErrorStream(true);
     }
 
@@ -529,7 +544,12 @@ public class SparkLauncher {
       String.valueOf(LauncherServer.getServerInstance().getPort()));
     pb.environment().put(LauncherProtocol.ENV_LAUNCHER_SECRET, handle.getSecret());
     try {
-      handle.setChildProc(pb.start(), loggerName);
+      Process child = pb.start();
+      InputStream logStream = null;
+      if (loggerName != null) {
+        logStream = outputToLog ? child.getInputStream() : child.getErrorStream();
+      }
+      handle.setChildProc(child, loggerName, logStream);
     } catch (IOException ioe) {
       handle.kill();
       throw ioe;
@@ -538,10 +558,9 @@ public class SparkLauncher {
     return handle;
   }
 
-  private ProcessBuilder createBuilder() {
+  private ProcessBuilder createBuilder() throws IOException {
     List<String> cmd = new ArrayList<>();
-    String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
-    cmd.add(join(File.separator, builder.getSparkHome(), "bin", script));
+    cmd.add(findSparkSubmit());
     cmd.addAll(builder.buildSparkSubmitArgs());
 
     // Since the child process is a batch script, let's quote things so that special characters are
@@ -568,11 +587,11 @@ public class SparkLauncher {
     // Similarly, if redirectToLog is specified, no other redirections should be specified.
     checkState(!redirectErrorStream || errorStream == null,
       "Cannot specify both redirectError() and redirectError(...) ");
-    checkState(!redirectToLog ||
-      (!redirectErrorStream && errorStream == null && outputStream == null),
+    checkState(getLoggerName() == null ||
+      ((!redirectErrorStream && errorStream == null) || outputStream == null),
       "Cannot used redirectToLog() in conjunction with other redirection methods.");
 
-    if (redirectErrorStream || redirectToLog) {
+    if (redirectErrorStream) {
       pb.redirectErrorStream(true);
     }
     if (errorStream != null) {
@@ -583,6 +602,16 @@ public class SparkLauncher {
     }
 
     return pb;
+  }
+
+  // Visible for testing.
+  String findSparkSubmit() throws IOException {
+    String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
+    return join(File.separator, builder.getSparkHome(), "bin", script);
+  }
+
+  private String getLoggerName() throws IOException {
+    return builder.getEffectiveConfig().get(CHILD_PROCESS_LOGGER_NAME);
   }
 
   private static class ArgumentValidator extends SparkSubmitOptionParser {
