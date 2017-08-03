@@ -126,7 +126,7 @@ class Model(Transformer):
 @inherit_doc
 class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
     """
-    Abstract class for transformers that tae one input column, apply a transoformation to it,
+    Abstract class for transformers that take one input column, apply transformation,
     and output the result as a new column.
 
     .. versionadded:: 2.3.0
@@ -135,21 +135,23 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
     @abstractmethod
     def createTransformFunc(self):
         """
-        Creates the transoform function using the given param map.
+        Creates the transform function using the given param map. The input param map already takes
+        account of the embedded param map. So the param values should be determined
+        solely by the input param map.
         """
         raise NotImplementedError()
 
     @abstractmethod
     def outputDataType(self):
         """
-        Returns the data type of the output column as a sql type
+        Returns the data type of the output column.
         """
         raise NotImplementedError()
 
     @abstractmethod
     def validateInputType(self, inputType):
         """
-        Validates the input type. Throws an exception if it is invalid.
+        Validates the input type. Throw an exception if it is invalid.
         """
         raise NotImplementedError()
 
@@ -166,7 +168,6 @@ class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
 
     def _transform(self, dataset):
         self.transformSchema(dataset.schema)
-        transformFunc = self.createTransformFunc()
         transformUDF = udf(self.createTransformFunc(), self.outputDataType())
         transformedDataset = dataset.withColumn(self.getOutputCol(),
                                                 transformUDF(dataset[self.getInputCol()]))

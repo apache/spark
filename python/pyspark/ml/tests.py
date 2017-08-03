@@ -66,7 +66,7 @@ from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
-from pyspark.sql.types import DoubleType
+from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -147,8 +147,9 @@ class MockUnaryTransformer(UnaryTransformer):
         return DoubleType()
 
     def validateInputType(self, inputType):
-        assert inputType == DoubleType(), "Bad input type: {}. ".format(inputType) + \
-            "Requires Integer."
+        if inputType != DoubleType():
+            raise TypeError("Bad input type: {}. ".format(inputType) +
+                            "Requires Integer.")
 
 
 class MockEstimator(Estimator, HasFake):
@@ -1989,6 +1990,18 @@ class ChiSquareTestTests(SparkSessionTestCase):
 
 class UnaryTransformerTests(SparkSessionTestCase):
 
+    def test_unary_transformer_validate_input_type(self):
+        shiftVal = 3
+        transformer = MockUnaryTransformer(shiftVal=shiftVal)\
+            .setInputCol("input").setOutputCol("output")
+
+        # should not raise any errors
+        transformer.validateInputType(DoubleType())
+
+        with self.assertRaises(TypeError):
+            # passing the wrong input type should raise an error
+            transformer.validateInputType(IntegerType())
+
     def test_unary_transformer_transform(self):
         shiftVal = 3
         transformer = MockUnaryTransformer(shiftVal=shiftVal)\
@@ -1998,11 +2011,15 @@ class UnaryTransformerTests(SparkSessionTestCase):
         df = df.withColumn("input", df.input.cast(dataType="double"))
 
         transformed_df = transformer.transform(df)
-        output = transformed_df.select("output").collect()
+        inputCol = transformed_df.select("input").collect()
+        outputCol = transformed_df.select("output").collect()
 
         original = range(10)
-        for i, out in enumerate(output):
-            self.assertEqual(out.output, original[i] + shiftVal)
+        self.assertEqual(len(original), len(inputCol))
+        self.assertEqual(len(original), len(outputCol))
+        for i, out in enumerate(outputCol):
+            self.assertEqual(original[i], inputCol[i].input)
+            self.assertEqual(original[i] + shiftVal, out.output)
 
 
 if __name__ == "__main__":
