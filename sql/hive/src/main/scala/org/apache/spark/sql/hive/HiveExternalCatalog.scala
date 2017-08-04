@@ -32,7 +32,8 @@ import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -43,7 +44,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.HiveSerDe
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -257,6 +258,20 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  /**
+   * Retrieve a configuration value for the current active session, if any.
+   */
+  private def currentSessionConf[T](entry: ConfigEntry[T]): T = {
+    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).map { session =>
+      session.conf.get(entry)
+    }.getOrElse {
+      // If there's no active session, try to read from the SparkConf object instead. Normally
+      // there should be an active session, but unit tests invoke methods on the catalog directly,
+      // so that might not be true in some cases.
+      conf.get(entry)
+    }
+  }
+
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
     // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
     val provider = table.provider.get
@@ -288,6 +303,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // bucket specification to empty. Note that partition columns are retained, so that we can
     // call partition-related Hive API later.
     def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
+      val hiveCompatible = Map(DATASOURCE_HIVE_COMPATIBLE -> "false")
       table.copy(
         // Hive only allows directory paths as location URIs while Spark SQL data source tables
         // also allow file paths. For non-hive-compatible format, we should not set location URI
@@ -297,11 +313,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           properties = storagePropsWithLocation),
         schema = table.partitionSchema,
         bucketSpec = None,
-        properties = table.properties ++ tableProperties)
+        properties = table.properties ++ tableProperties ++ hiveCompatible)
     }
 
     // converts the table metadata to Hive compatible format, i.e. set the serde information.
     def newHiveCompatibleMetastoreTable(serde: HiveSerDe): CatalogTable = {
+      val hiveCompatible = Map(DATASOURCE_HIVE_COMPATIBLE -> "true")
       val location = if (table.tableType == EXTERNAL) {
         // When we hit this branch, we are saving an external data source table with hive
         // compatible format, which means the data source is file-based and must have a `path`.
@@ -320,7 +337,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           serde = serde.serde,
           properties = storagePropsWithLocation
         ),
-        properties = table.properties ++ tableProperties)
+        properties = table.properties ++ tableProperties ++ hiveCompatible)
     }
 
     val qualifiedTableName = table.identifier.quotedString
@@ -339,6 +356,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case _ if table.bucketSpec.nonEmpty =>
         val message =
           s"Persisting bucketed data source table $qualifiedTableName into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
+        (None, message)
+
+      case _ if currentSessionConf(SQLConf.CASE_SENSITIVE) =>
+        val message =
+          s"Persisting case sensitive data source table $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
         (None, message)
 
@@ -386,6 +409,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * can be used as table properties later.
    */
   private def tableMetaToTableProps(table: CatalogTable): mutable.Map[String, String] = {
+    tableMetaToTableProps(table, table.schema)
+  }
+
+  private def tableMetaToTableProps(
+      table: CatalogTable,
+      schema: StructType): mutable.Map[String, String] = {
     val partitionColumns = table.partitionColumnNames
     val bucketSpec = table.bucketSpec
 
@@ -394,7 +423,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // property. In this case, we split the JSON string and store each part as a separate table
     // property.
     val threshold = conf.get(SCHEMA_STRING_LENGTH_THRESHOLD)
-    val schemaJsonString = table.schema.json
+    val schemaJsonString = schema.json
     // Split the JSON string.
     val parts = schemaJsonString.grouped(threshold).toSeq
     properties.put(DATASOURCE_SCHEMA_NUMPARTS, parts.size.toString)
@@ -611,30 +640,39 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def alterTableSchema(db: String, table: String, schema: StructType): Unit = withClient {
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
-    val withNewSchema = rawTable.copy(schema = schema)
-    verifyColumnNames(withNewSchema)
     // Add table metadata such as table schema, partition columns, etc. to table properties.
-    val updatedTable = withNewSchema.copy(
-      properties = withNewSchema.properties ++ tableMetaToTableProps(withNewSchema))
+    val updatedProperties = rawTable.properties ++ tableMetaToTableProps(rawTable, schema)
 
-    // If it's a data source table, make sure the original schema is left unchanged; the
-    // actual schema is recorded as a table property.
-    val tableToStore = if (DDLUtils.isDatasourceTable(updatedTable)) {
-      updatedTable.copy(schema = rawTable.schema)
+    // Detect whether this is a Hive-compatible table.
+    val provider = rawTable.properties.get(DATASOURCE_PROVIDER)
+    val isHiveCompatible = if (provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)) {
+      rawTable.properties.get(DATASOURCE_HIVE_COMPATIBLE) match {
+        case Some(value) =>
+          value.toBoolean
+        case _ =>
+          // If the property is not set, the table may have been created by an old version
+          // of Spark. Those versions set a "path" property in the table's storage descriptor
+          // for non-Hive-compatible tables, so use that to detect compatibility.
+          rawTable.storage.properties.get("path").isDefined
+      }
     } else {
-      updatedTable
+      // All non-DS tables are treated as regular Hive tables.
+      true
     }
 
-    try {
-      client.alterTable(tableToStore)
-    } catch {
-      case NonFatal(e) =>
-        val warningMessage =
-          s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
-            "compatible way. Updating Hive metastore in Spark SQL specific format."
-        logWarning(warningMessage, e)
-        client.alterTable(updatedTable.copy(schema = tableToStore.partitionSchema))
+    val updatedTable = if (isHiveCompatible) {
+      val _updated = rawTable.copy(properties = updatedProperties, schema = schema)
+      verifyColumnNames(_updated)
+      _updated
+    } else {
+      // If the table is not Hive-compatible, the schema of the table should not be overwritten with
+      // the updated schema. The previous value stored in the metastore should be preserved; that
+      // will be either the table's original partition schema, or a placeholder schema inserted by
+      // the Hive client wrapper if the partition schema was empty.
+      rawTable.copy(properties = updatedProperties)
     }
+
+    client.alterTable(updatedTable)
   }
 
   override def alterTableStats(
@@ -1202,6 +1240,7 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
   val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
   val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+  val DATASOURCE_HIVE_COMPATIBLE = SPARK_SQL_PREFIX + "hive.compatibility"
 
   val STATISTICS_PREFIX = SPARK_SQL_PREFIX + "statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"

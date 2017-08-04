@@ -414,10 +414,7 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "partitioned view"
       }
 
-      val properties = Option(h.getParameters).map(_.asScala.toMap).getOrElse(Map())
-
-      val provider = properties.get(HiveExternalCatalog.DATASOURCE_PROVIDER)
-        .orElse(Some(DDLUtils.HIVE_PROVIDER))
+      val properties = Option(h.getParameters).map(_.asScala.toMap).orNull
 
       // Hive-generated Statistics are also recorded in ignoredProperties
       val ignoredProperties = scala.collection.mutable.Map.empty[String, String]
@@ -472,7 +469,6 @@ private[hive] class HiveClientImpl(
             throw new AnalysisException("Hive index table is not supported.")
         },
         schema = schema,
-        provider = provider,
         partitionColumnNames = partCols.map(_.name),
         // If the table is written by Spark, we will put bucketing information in table properties,
         // and will always overwrite the bucket spec in hive metastore by the bucketing information
@@ -913,7 +909,13 @@ private[hive] object HiveClientImpl {
     }
     // after SPARK-19279, it is not allowed to create a hive table with an empty schema,
     // so here we should not add a default col schema
-    if (schema.isEmpty && DDLUtils.isDatasourceTable(table)) {
+    //
+    // Because HiveExternalCatalog sometimes writes back "raw" tables that have not been
+    // completely translated to Spark's view, the provider information needs to be looked
+    // up in two places.
+    val provider = table.provider.orElse(
+      table.properties.get(HiveExternalCatalog.DATASOURCE_PROVIDER))
+    if (schema.isEmpty && provider != Some(DDLUtils.HIVE_PROVIDER)) {
       // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
       // set a default serde here (this was done in Hive), and so if the user provides
       // an empty schema Hive would automatically populate the schema with a single
