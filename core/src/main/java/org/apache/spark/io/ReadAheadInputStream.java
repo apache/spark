@@ -24,7 +24,6 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
@@ -37,7 +36,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class ReadAheadInputStream extends InputStream {
 
-  private Lock stateChangeLock = new ReentrantLock();
+  private ReentrantLock stateChangeLock = new ReentrantLock();
 
   @GuardedBy("stateChangeLock")
   private ByteBuffer activeBuffer;
@@ -197,6 +196,7 @@ public class ReadAheadInputStream extends InputStream {
    * the stateChangeLock is already acquired in the caller before calling this function.
    */
   private int readInternal(byte[] b, int offset, int len) throws IOException {
+    assert (stateChangeLock.isLocked());
     if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
       throw new IndexOutOfBoundsException();
     }
@@ -253,6 +253,7 @@ public class ReadAheadInputStream extends InputStream {
    * the stateChangeLock is already acquired in the caller before calling this function.
    */
   private long skipInternal(long n) throws IOException {
+    assert (stateChangeLock.isLocked());
     if (n <= 0L) {
       return 0L;
     }
