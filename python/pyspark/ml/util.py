@@ -353,6 +353,8 @@ class DefaultParamsWritable(MLWritable):
 
     def write(self):
         """Returns a DefaultParamsWriter instance for this class."""
+        from pyspark.ml.param import Params
+
         if isinstance(self, Params):
             return DefaultParamsWriter(self)
         else:
