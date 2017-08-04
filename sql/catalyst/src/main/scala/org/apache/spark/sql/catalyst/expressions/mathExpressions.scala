@@ -102,6 +102,29 @@ abstract class UnaryLogExpression(f: Double => Double, name: String)
   }
 }
 
+abstract class UnaryArcExpression(f: Double => Double, name: String)
+  extends UnaryMathExpression(f, name) {
+
+  override def nullable: Boolean = true
+
+  protected override def nullSafeEval(input: Any): Any = {
+    val d = input.asInstanceOf[Double]
+    if (d < -1 || d > 1) null else f(d)
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    nullSafeCodeGen(ctx, ev, c =>
+      s"""
+        if ($c < -1 || $c > 1) {
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = java.lang.Math.${funcName}($c);
+        }
+      """
+    )
+  }
+}
+
 /**
  * A binary expression specifically for math functions that take two `Double`s as input and returns
  * a `Double`.
@@ -170,29 +193,29 @@ case class Pi() extends LeafMathExpression(math.Pi, "PI")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arccosine) of `expr` if -1<=`expr`<=1 or NaN otherwise.",
+  usage = "_FUNC_(expr) - Returns the inverse cosine (a.k.a. arccosine) of `expr` if -1<=`expr`<=1 or NULL otherwise.",
   extended = """
     Examples:
       > SELECT _FUNC_(1);
        0.0
       > SELECT _FUNC_(2);
-       NaN
+       NULL
   """)
 // scalastyle:on line.size.limit
-case class Acos(child: Expression) extends UnaryMathExpression(math.acos, "ACOS")
+case class Acos(child: Expression) extends UnaryArcExpression(math.acos, "ACOS")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arcsine) the arc sin of `expr` if -1<=`expr`<=1 or NaN otherwise.",
+  usage = "_FUNC_(expr) - Returns the inverse sine (a.k.a. arcsine) the arc sin of `expr` if -1<=`expr`<=1 or NULL otherwise.",
   extended = """
     Examples:
       > SELECT _FUNC_(0);
        0.0
       > SELECT _FUNC_(2);
-       NaN
+       NULL
   """)
 // scalastyle:on line.size.limit
-case class Asin(child: Expression) extends UnaryMathExpression(math.asin, "ASIN")
+case class Asin(child: Expression) extends UnaryArcExpression(math.asin, "ASIN")
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
