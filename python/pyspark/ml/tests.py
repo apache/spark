@@ -2011,15 +2011,10 @@ class UnaryTransformerTests(SparkSessionTestCase):
         df = df.withColumn("input", df.input.cast(dataType="double"))
 
         transformed_df = transformer.transform(df)
-        inputCol = transformed_df.select("input").collect()
-        outputCol = transformed_df.select("output").collect()
+        results = transformed_df.select("input", "output").collect()
 
-        original = range(10)
-        self.assertEqual(len(original), len(inputCol))
-        self.assertEqual(len(original), len(outputCol))
-        for i, out in enumerate(outputCol):
-            self.assertEqual(original[i], inputCol[i].input)
-            self.assertEqual(original[i] + shiftVal, out.output)
+        for res in results:
+            self.assertEqual(res.input + shiftVal, res.output)
 
 
 if __name__ == "__main__":
