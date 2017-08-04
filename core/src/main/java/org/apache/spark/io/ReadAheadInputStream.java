@@ -14,6 +14,7 @@
 package org.apache.spark.io;
 
 import com.google.common.base.Preconditions;
+import com.google.common.primitives.Ints;
 import org.apache.spark.storage.StorageUtils;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -70,6 +71,15 @@ public class ReadAheadInputStream extends InputStream {
 
   private final byte[] oneByte = new byte[1];
 
+  /**
+   * Creates a <code>ReadAheadInputStream</code> with the specified buffer size and read-ahead
+   * threshold
+   *
+   * @param   inputStream                 The underlying input stream.
+   * @param   bufferSizeInBytes           The buffer size.
+   * @param   readAheadThresholdInBytes   If the active buffer has less data than the read-ahead
+   *                                      threshold, an async read is triggered.
+   */
   public ReadAheadInputStream(InputStream inputStream, int bufferSizeInBytes, int readAheadThresholdInBytes) {
     Preconditions.checkArgument(bufferSizeInBytes > 0, "bufferSizeInBytes should be greater than 0");
     Preconditions.checkArgument(readAheadThresholdInBytes > 0 && readAheadThresholdInBytes < bufferSizeInBytes,
@@ -108,8 +118,9 @@ public class ReadAheadInputStream extends InputStream {
       // Please note that it is safe to release the lock and read into the read ahead buffer
       // because either of following two conditions will hold - 1. The active buffer has
       // data available to read so the reader will not read from the read ahead buffer.
-      // 2. The active buffer is exhausted, in that case the reader waits for this async
-      // read to complete. So there is no race condition in both the situations.
+      // 2. This is the first time read is called or the active buffer is exhausted,
+      // in that case the reader waits for this async read to complete.
+      // So there is no race condition in both the situations.
       int nRead = 0;
       while (nRead == 0) {
         try {
@@ -186,16 +197,14 @@ public class ReadAheadInputStream extends InputStream {
    * the stateChangeLock is already acquired in the caller before calling this function.
    */
   private int readInternal(byte[] b, int offset, int len) throws IOException {
-
     if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
       throw new IndexOutOfBoundsException();
     }
-    if (!activeBuffer.hasRemaining() && !isReadInProgress) {
-      // This condition will only be triggered for the first time read is called.
-      readAsync(activeBuffer);
-      waitForAsyncReadComplete();
-    }
-    if (!activeBuffer.hasRemaining() && isReadInProgress) {
+    if (!activeBuffer.hasRemaining()) {
+      if (!isReadInProgress) {
+        // This condition will only be triggered for the first time read is called.
+        readAsync(activeBuffer);
+      }
       waitForAsyncReadComplete();
     }
 
@@ -252,7 +261,7 @@ public class ReadAheadInputStream extends InputStream {
     }
     if (available() >= n) {
       // we can skip from the internal buffers
-      int toSkip = (int)n;
+      int toSkip = Ints.checkedCast(n);
       byte[] temp = new byte[toSkip];
       while (toSkip > 0) {
         int skippedBytes = read(temp, 0, toSkip);

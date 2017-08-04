@@ -72,10 +72,13 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
+    final Double readAheadFraction =
+      SparkEnv.get().conf().getDouble("spark.unsafe.sorter.spill.read.ahead.fraction", 0.5);
+
     final InputStream bs =
         new ReadAheadInputStream(
             new NioBufferedFileInputStream(file, (int) bufferSizeBytes),
-            (int)bufferSizeBytes, (int)bufferSizeBytes / 2);
+            (int)bufferSizeBytes, (int)(bufferSizeBytes * readAheadFraction));
     try {
       this.in = serializerManager.wrapStream(blockId, bs);
       this.din = new DataInputStream(this.in);
