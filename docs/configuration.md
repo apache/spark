@@ -2326,7 +2326,7 @@ from this directory.
 # Inheriting Hadoop Cluster Configuration
 
 If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
-should be included on Spark's class path:
+should be included on Spark's classpath:
 
 * `hdfs-site.xml`, which provides default behaviors for the HDFS client.
 * `core-site.xml`, which sets the default filesystem name.
@@ -2340,13 +2340,13 @@ to a location containing the configuration files.
 
 # Custom Hadoop/Hive Configuration
 
-If your Spark applications interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
-configuration files in Spark's class path.
+If your Spark application is interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
+configuration files in Spark's classpath.
 
 Multiple running applications might require different Hadoop/Hive client side configurations.
 You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive-site.xml` in
-Spark's class path for each application, but it is not very convenient and these
-files are best to be shared with common properties to avoid hard-coding certain configurations.
+Spark's classpath for each application. In a Spark cluster running on YARN, these configuration
+files are set cluster-wide, and cannot safely be changed by the application.
 
 The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
 They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
@@ -2369,27 +2369,3 @@ Also, you can modify or add configurations at runtime:
   --conf spark.hadoop.abc.def=xyz \ 
   myApp.jar
 {% endhighlight %}
-
-## Typical Hadoop/Hive Configurations
-
-<table>
-<tr>
-  <td><code>spark.hadoop.<br />mapreduce.fileoutputcommitter.algorithm.version</code></td>
-  <td>1</td>
-  <td>
-    The file output committer algorithm version, valid algorithm version number: 1 or 2.
-    Version 2 may have better performance, but version 1 may handle failures better in certain situations,
-    as per <a href="https://issues.apache.org/jira/browse/MAPREDUCE-4815">MAPREDUCE-4815</a>.
-  </td>
-</tr>
-
-<tr>
-  <td><code>spark.hadoop.<br />fs.hdfs.impl.disable.cache</code></td>
-  <td>false</td>
-  <td>
-    When true, return a fresh HDFS filesystem instance, bypassing the HDFS cache mechanism.
-    This is to prevent the DFSClient from using an old cached token to connect to the NameNode,
-    which might fails long-running Spark applications. see <a href="https://issues.apache.org/jira/browse/HDFS-9276">HDFS-9276</a>.
-  </td>
-</tr>
-</table>
