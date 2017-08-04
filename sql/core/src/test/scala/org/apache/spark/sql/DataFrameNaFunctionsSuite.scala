@@ -248,7 +248,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out(4) === Row("Amy", null, null))
     assert(out(5) === Row(null, null, null))
 
-    // Replace only the age column
+    // Replace only the age column and with null
     val out1 = input.na.replace("age", Map[Any, Any](
       16 -> 61,
       60 -> null,
