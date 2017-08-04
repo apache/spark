@@ -150,7 +150,7 @@ case class DataSource(
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+        SparkHadoopUtil.get.globPathIfNecessary(qualified, hadoopConf)
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
@@ -383,7 +383,7 @@ case class DataSource(
           val hdfsPath = new Path(path)
           val fs = hdfsPath.getFileSystem(hadoopConf)
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-          val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
+          val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified, hadoopConf)
 
           if (globPath.isEmpty) {
             throw new AnalysisException(s"Path does not exist: $qualified")
