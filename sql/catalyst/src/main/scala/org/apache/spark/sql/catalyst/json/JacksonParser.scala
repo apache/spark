@@ -375,7 +375,6 @@ object JacksonParser {
       }
     }
     var currentChar: Char = input.read().toChar
-    private var endToken: Option[Char] = None
     private var previousToken: Option[Char] = None
     private var nextRecord = readNext
 
@@ -400,7 +399,7 @@ object JacksonParser {
     }
 
     private def readJsonObject: Option[String] = {
-      endToken = currentChar match {
+      val endToken = currentChar match {
         case '{' => Some('}')
         case '[' => Some(']')
         case _ => None
@@ -421,26 +420,25 @@ object JacksonParser {
           case _ => sb.append(currentChar)
         }
       }
-      if (input.available() > 0) {
-        moveToNextChar()
-      }
+
       Some(sb.toString())
     }
 
     private def readNext: Option[String] = {
-      if (input.available() <= 0) {
-        return None
-      }
-
-      while (currentChar.isWhitespace
-        && input.available() > 0) {
+      while (input.available() > 0
+        && currentChar.isWhitespace) {
         moveToNextChar()
       }
       if (input.available() <= 0) {
         return None
       }
 
-      readJsonObject
+      val next = readJsonObject
+
+      if (input.available() > 0) {
+        moveToNextChar()
+      }
+      next
     }
   }
 }
