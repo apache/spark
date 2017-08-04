@@ -38,6 +38,7 @@ import scala.io.Source
 import scala.reflect.ClassTag
 import scala.util.Try
 import scala.util.control.{ControlThrowable, NonFatal}
+import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
@@ -2571,6 +2572,23 @@ private[spark] object Utils extends Logging {
       sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
     }
   }
+
+  private[util] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
+  private[util] val SECRET_REDACTION_PATTERN = "(?i)secret|password".r
+
+  def redact(kvs: Map[String, String]): Seq[(String, String)] = {
+    val redactionPattern = SECRET_REDACTION_PATTERN
+        redact(redactionPattern, kvs.toArray)
+  }
+
+  private def redact(redactPattern: Regex, kvs: Array[(String, String)]): Seq[(String, String)] = {
+    kvs.map { kv =>
+      redactPattern.findFirstIn(kv._1)
+        .map { _ => (kv._1, REDACTION_REPLACEMENT_TEXT) }
+        .getOrElse(kv)
+    }
+  }
+
 }
 
 private[util] object CallerContext extends Logging {
