@@ -35,9 +35,28 @@ function delete_virtualenv() {
 }
 trap delete_virtualenv EXIT
 
+PYTHON_EXECS=()
 # Some systems don't have pip or virtualenv - in those cases our tests won't work.
-if ! hash virtualenv 2>/dev/null; then
-  echo "Missing virtualenv skipping pip installability tests."
+if hash virtualenv 2>/dev/null && [ ! -n "$USE_CONDA" ]; then
+  echo "virtualenv installed - using. Note if this is a conda virtual env you may wish to set USE_CONDA"
+  # Figure out which Python execs we should test pip installation with
+  if hash python2 2>/dev/null; then
+    # We do this since we are testing with virtualenv and the default virtual env python
+    # is in /usr/bin/python
+    PYTHON_EXECS+=('python2')
+  elif hash python 2>/dev/null; then
+    # If python2 isn't installed fallback to python if available
+    PYTHON_EXECS+=('python')
+  fi
+  if hash python3 2>/dev/null; then
+    PYTHON_EXECS+=('python3')
+  fi
+elif hash conda 2>/dev/null; then
+  echo "Using conda virtual enviroments"
+  PYTHON_EXECS=('3.5')
+  USE_CONDA=1
+else
+  echo "Missing virtualenv & conda, skipping pip installability tests"
   exit 0
 fi
 if ! hash pip 2>/dev/null; then
@@ -45,22 +64,8 @@ if ! hash pip 2>/dev/null; then
   exit 0
 fi
 
-# Figure out which Python execs we should test pip installation with
-PYTHON_EXECS=()
-if hash python2 2>/dev/null; then
-  # We do this since we are testing with virtualenv and the default virtual env python
-  # is in /usr/bin/python
-  PYTHON_EXECS+=('python2')
-elif hash python 2>/dev/null; then
-  # If python2 isn't installed fallback to python if available
-  PYTHON_EXECS+=('python')
-fi
-if hash python3 2>/dev/null; then
-  PYTHON_EXECS+=('python3')
-fi
-
 # Determine which version of PySpark we are building for archive name
-PYSPARK_VERSION=$(python -c "exec(open('python/pyspark/version.py').read());print __version__")
+PYSPARK_VERSION=$(python3 -c "exec(open('python/pyspark/version.py').read());print(__version__)")
 PYSPARK_DIST="$FWDIR/python/dist/pyspark-$PYSPARK_VERSION.tar.gz"
 # The pip install options we use for all the pip commands
 PIP_OPTIONS="--upgrade --no-cache-dir --force-reinstall "
@@ -75,18 +80,24 @@ for python in "${PYTHON_EXECS[@]}"; do
     echo "Using $VIRTUALENV_BASE for virtualenv"
     VIRTUALENV_PATH="$VIRTUALENV_BASE"/$python
     rm -rf "$VIRTUALENV_PATH"
-    mkdir -p "$VIRTUALENV_PATH"
-    virtualenv --python=$python "$VIRTUALENV_PATH"
-    source "$VIRTUALENV_PATH"/bin/activate
-    # Upgrade pip & friends
-    pip install --upgrade pip pypandoc wheel
-    pip install numpy # Needed so we can verify mllib imports
+    if [ -n "$USE_CONDA" ]; then
+      conda create -y -p "$VIRTUALENV_PATH" python=$python numpy pandas pip setuptools
+      source activate "$VIRTUALENV_PATH"
+    else
+      mkdir -p "$VIRTUALENV_PATH"
+      virtualenv --python=$python "$VIRTUALENV_PATH"
+      source "$VIRTUALENV_PATH"/bin/activate
+    fi
+    # Upgrade pip & friends if using virutal env
+    if [ ! -n "USE_CONDA" ]; then
+      pip install --upgrade pip pypandoc wheel numpy
+    fi
 
     echo "Creating pip installable source dist"
     cd "$FWDIR"/python
     # Delete the egg info file if it exists, this can cache the setup file.
     rm -rf pyspark.egg-info || echo "No existing egg info file, skipping deletion"
-    $python setup.py sdist
+    python setup.py sdist
 
 
     echo "Installing dist into virtual env"
@@ -111,6 +122,13 @@ for python in "${PYTHON_EXECS[@]}"; do
     python "$FWDIR"/python/pyspark/context.py
 
     cd "$FWDIR"
+
+    # conda / virtualenv enviroments need to be deactivated differently
+    if [ -n "$USE_CONDA" ]; then
+      source deactivate
+    else
+      deactivate
+    fi
 
   done
 done

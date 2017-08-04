@@ -46,8 +46,8 @@ object TextSocketSource {
  * support for fault recovery and keeping all of the text read in memory forever.
  */
 class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlContext: SQLContext)
-  extends Source with Logging
-{
+  extends Source with Logging {
+
   @GuardedBy("this")
   private var socket: Socket = null
 
@@ -168,6 +168,8 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       socket = null
     }
   }
+
+  override def toString: String = s"TextSocketSource[host: $host, port: $port]"
 }
 
 class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegister with Logging {
@@ -193,13 +195,17 @@ class TextSocketSourceProvider extends StreamSourceProvider with DataSourceRegis
     if (!parameters.contains("port")) {
       throw new AnalysisException("Set a port to read from with option(\"port\", ...).")
     }
-    val schema =
+    if (schema.nonEmpty) {
+      throw new AnalysisException("The socket source does not support a user-specified schema.")
+    }
+
+    val sourceSchema =
       if (parseIncludeTimestamp(parameters)) {
         TextSocketSource.SCHEMA_TIMESTAMP
       } else {
         TextSocketSource.SCHEMA_REGULAR
       }
-    ("textSocket", schema)
+    ("textSocket", sourceSchema)
   }
 
   override def createSource(

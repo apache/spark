@@ -76,13 +76,14 @@ Refer to the [`SingularValueDecomposition` Java docs](api/java/org/apache/spark/
 
 The same code applies to `IndexedRowMatrix` if `U` is defined as an
 `IndexedRowMatrix`.
+</div>
+<div data-lang="python" markdown="1">
+Refer to the [`SingularValueDecomposition` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.SingularValueDecomposition) for details on the API.
 
-In order to run the above application, follow the instructions
-provided in the [Self-Contained
-Applications](quick-start.html#self-contained-applications) section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
+{% include_example python/mllib/svd_example.py %}
 
+The same code applies to `IndexedRowMatrix` if `U` is defined as an
+`IndexedRowMatrix`.
 </div>
 </div>
 
@@ -118,17 +119,21 @@ Refer to the [`PCA` Scala docs](api/scala/index.html#org.apache.spark.mllib.feat
 
 The following code demonstrates how to compute principal components on a `RowMatrix`
 and use them to project the vectors into a low-dimensional space.
-The number of columns should be small, e.g, less than 1000.
 
 Refer to the [`RowMatrix` Java docs](api/java/org/apache/spark/mllib/linalg/distributed/RowMatrix.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/mllib/JavaPCAExample.java %}
 
 </div>
-</div>
 
-In order to run the above application, follow the instructions
-provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
-section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
+<div data-lang="python" markdown="1">
+
+The following code demonstrates how to compute principal components on a `RowMatrix`
+and use them to project the vectors into a low-dimensional space.
+
+Refer to the [`RowMatrix` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.linalg.distributed.RowMatrix) for details on the API.
+
+{% include_example python/mllib/pca_rowmatrix_example.py %}
+
+</div>
+</div>

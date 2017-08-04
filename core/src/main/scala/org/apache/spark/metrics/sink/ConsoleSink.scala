@@ -17,7 +17,7 @@
 
 package org.apache.spark.metrics.sink
 
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.{ConsoleReporter, MetricRegistry}
@@ -39,7 +39,7 @@ private[spark] class ConsoleSink(val property: Properties, val registry: MetricR
   }
 
   val pollUnit: TimeUnit = Option(property.getProperty(CONSOLE_KEY_UNIT)) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(CONSOLE_DEFAULT_UNIT)
   }
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.{FetchFailed, TaskFailedReason}
+import org.apache.spark.{FetchFailed, TaskContext, TaskFailedReason}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
@@ -26,6 +26,11 @@ import org.apache.spark.util.Utils
  * back to DAGScheduler (through TaskEndReason) so we'd resubmit the previous stage.
  *
  * Note that bmAddress can be null.
+ *
+ * To prevent user code from hiding this fetch failure, in the constructor we call
+ * [[TaskContext.setFetchFailed()]].  This means that you *must* throw this exception immediately
+ * after creating it -- you cannot create it, check some condition, and then decide to ignore it
+ * (or risk triggering any other exceptions).  See SPARK-19276.
  */
 private[spark] class FetchFailedException(
     bmAddress: BlockManagerId,
@@ -44,6 +49,12 @@ private[spark] class FetchFailedException(
       cause: Throwable) {
     this(bmAddress, shuffleId, mapId, reduceId, cause.getMessage, cause)
   }
+
+  // SPARK-19276. We set the fetch failure in the task context, so that even if there is user-code
+  // which intercepts this exception (possibly wrapping it), the Executor can still tell there was
+  // a fetch failure, and send the correct error msg back to the driver.  We wrap with an Option
+  // because the TaskContext is not defined in some test cases.
+  Option(TaskContext.get()).map(_.setFetchFailed(this))
 
   def toTaskFailedReason: TaskFailedReason = FetchFailed(bmAddress, shuffleId, mapId, reduceId,
     Utils.exceptionString(this))

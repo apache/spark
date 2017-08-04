@@ -58,7 +58,8 @@ private[spark] object BlockManagerMessages {
 
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
-      maxMemSize: Long,
+      maxOnHeapMemSize: Long,
+      maxOffHeapMemSize: Long,
       sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 

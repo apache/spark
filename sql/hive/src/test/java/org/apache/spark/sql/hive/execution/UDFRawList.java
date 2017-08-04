@@ -25,6 +25,7 @@ import java.util.List;
  * UDF that returns a raw (non-parameterized) java List.
  */
 public class UDFRawList extends UDF {
+  @SuppressWarnings("rawtypes")
   public List evaluate(Object o) {
     return Collections.singletonList("data1");
   }

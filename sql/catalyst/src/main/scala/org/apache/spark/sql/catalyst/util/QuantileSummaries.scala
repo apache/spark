@@ -176,17 +176,19 @@ class QuantileSummaries(
    * @param quantile the target quantile
    * @return
    */
-  def query(quantile: Double): Double = {
+  def query(quantile: Double): Option[Double] = {
     require(quantile >= 0 && quantile <= 1.0, "quantile should be in the range [0.0, 1.0]")
     require(headSampled.isEmpty,
       "Cannot operate on an uncompressed summary, call compress() first")
 
+    if (sampled.isEmpty) return None
+
     if (quantile <= relativeError) {
-      return sampled.head.value
+      return Some(sampled.head.value)
     }
 
     if (quantile >= 1 - relativeError) {
-      return sampled.last.value
+      return Some(sampled.last.value)
     }
 
     // Target rank
@@ -200,11 +202,11 @@ class QuantileSummaries(
       minRank += curSample.g
       val maxRank = minRank + curSample.delta
       if (maxRank - targetError <= rank && rank <= minRank + targetError) {
-        return curSample.value
+        return Some(curSample.value)
       }
       i += 1
     }
-    sampled.last.value
+    Some(sampled.last.value)
   }
 }
 

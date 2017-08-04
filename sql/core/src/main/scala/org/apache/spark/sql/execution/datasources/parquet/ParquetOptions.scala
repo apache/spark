@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.util.Locale
+
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
@@ -40,9 +42,11 @@ private[parquet] class ParquetOptions(
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
   val compressionCodecClassName: String = {
-    val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
+    val codecName = parameters.getOrElse("compression",
+      sqlConf.parquetCompressionCodec).toLowerCase(Locale.ROOT)
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
-      val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
+      val availableCodecs =
+        shortParquetCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
       throw new IllegalArgumentException(s"Codec [$codecName] " +
         s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
     }

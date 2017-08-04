@@ -36,17 +36,17 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     )
   }
 
-  test("compatible BroadcastMode") {
+  test("BroadcastMode.canonicalized") {
     val mode1 = IdentityBroadcastMode
     val mode2 = HashedRelationBroadcastMode(Literal(1L) :: Nil)
     val mode3 = HashedRelationBroadcastMode(Literal("s") :: Nil)
 
-    assert(mode1.compatibleWith(mode1))
-    assert(!mode1.compatibleWith(mode2))
-    assert(!mode2.compatibleWith(mode1))
-    assert(mode2.compatibleWith(mode2))
-    assert(!mode2.compatibleWith(mode3))
-    assert(mode3.compatibleWith(mode3))
+    assert(mode1.canonicalized == mode1.canonicalized)
+    assert(mode1.canonicalized != mode2.canonicalized)
+    assert(mode2.canonicalized != mode1.canonicalized)
+    assert(mode2.canonicalized == mode2.canonicalized)
+    assert(mode2.canonicalized != mode3.canonicalized)
+    assert(mode3.canonicalized == mode3.canonicalized)
   }
 
   test("BroadcastExchange same result") {
@@ -70,7 +70,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
 
     assert(!exchange1.sameResult(exchange2))
     assert(!exchange2.sameResult(exchange3))
-    assert(!exchange3.sameResult(exchange4))
+    assert(exchange3.sameResult(exchange4))
     assert(exchange4 sameResult exchange3)
   }
 
@@ -98,7 +98,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     assert(exchange1 sameResult exchange2)
     assert(!exchange2.sameResult(exchange3))
     assert(!exchange3.sameResult(exchange4))
-    assert(!exchange4.sameResult(exchange5))
+    assert(exchange4.sameResult(exchange5))
     assert(exchange5 sameResult exchange4)
   }
 }

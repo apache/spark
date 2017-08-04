@@ -24,7 +24,8 @@ import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
@@ -33,14 +34,12 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
- * :: Experimental ::
- * A class to manage all the [[StreamingQuery]] active on a `SparkSession`.
+ * A class to manage all the [[StreamingQuery]] active in a `SparkSession`.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
-class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession) extends Logging {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
@@ -234,9 +233,8 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
     }
 
     if (sparkSession.sessionState.conf.adaptiveExecutionEnabled) {
-      throw new AnalysisException(
-        s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
-          "is not supported in streaming DataFrames/Datasets")
+      logWarning(s"${SQLConf.ADAPTIVE_EXECUTION_ENABLED.key} " +
+          "is not supported in streaming DataFrames/Datasets and will be disabled.")
     }
 
     new StreamingQueryWrapper(new StreamExecution(
@@ -334,5 +332,6 @@ class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
       }
       awaitTerminationLock.notifyAll()
     }
+    stateStoreCoordinator.deactivateInstances(terminatedQuery.runId)
   }
 }

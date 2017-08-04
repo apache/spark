@@ -25,20 +25,21 @@ library(SparkR)
 sparkR.session(appName = "SparkR-ML-bisectingKmeans-example")
 
 # $example on$
-irisDF <- createDataFrame(iris)
+t <- as.data.frame(Titanic)
+training <- createDataFrame(t)
 
 # Fit bisecting k-means model with four centers
-model <- spark.bisectingKmeans(df, Sepal_Length ~ Sepal_Width, k = 4)
+model <- spark.bisectingKmeans(training, Class ~ Survived, k = 4)
 
 # get fitted result from a bisecting k-means model
 fitted.model <- fitted(model, "centers")
 
 # Model summary
-summary(fitted.model)
+head(summary(fitted.model))
 
 # fitted values on training data
-fitted <- predict(model, df)
-head(select(fitted, "Sepal_Length", "prediction"))
+fitted <- predict(model, training)
+head(select(fitted, "Class", "prediction"))
 # $example off$
 
 sparkR.session.stop()

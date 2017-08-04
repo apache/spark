@@ -301,6 +301,14 @@ object HistoryServer extends Logging {
       logDebug(s"Clearing ${SecurityManager.SPARK_AUTH_CONF}")
       config.set(SecurityManager.SPARK_AUTH_CONF, "false")
     }
+
+    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
+      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
+        "only using spark.history.ui.acl.enable")
+      config.set("spark.acls.enable", "false")
+      config.set("spark.ui.acls.enable", "false")
+    }
+
     new SecurityManager(config)
   }
 

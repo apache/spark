@@ -63,7 +63,9 @@ case class TableIdentifier(table: String, database: Option[String])
 }
 
 /** A fully qualified identifier for a table (i.e., database.tableName) */
-case class QualifiedTableName(database: String, name: String)
+case class QualifiedTableName(database: String, name: String) {
+  override def toString: String = s"$database.$name"
+}
 
 object TableIdentifier {
   def apply(tableName: String): TableIdentifier = new TableIdentifier(tableName)

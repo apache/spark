@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.net.URI
+import java.util.Locale
+
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -38,8 +41,10 @@ class DDLCommandSuite extends PlanTest {
     val e = intercept[ParseException] {
       parser.parsePlan(sql)
     }
-    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
-    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p.toLowerCase)) }
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains("operation not allowed"))
+    containsThesePhrases.foreach { p =>
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(p.toLowerCase(Locale.ROOT)))
+    }
   }
 
   private def parseAs[T: ClassTag](query: String): T = {
@@ -176,8 +181,29 @@ class DDLCommandSuite extends PlanTest {
         |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
         |FILE '/path/to/file'
       """.stripMargin
+    val sql3 =
+      """
+        |CREATE OR REPLACE TEMPORARY FUNCTION helloworld3 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING JAR '/path/to/jar1',
+        |JAR '/path/to/jar2'
+      """.stripMargin
+    val sql4 =
+      """
+        |CREATE OR REPLACE FUNCTION hello.world1 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
+        |FILE '/path/to/file'
+      """.stripMargin
+    val sql5 =
+      """
+        |CREATE FUNCTION IF NOT EXISTS hello.world2 as
+        |'com.matthewrathbone.example.SimpleUDFExample' USING ARCHIVE '/path/to/archive',
+        |FILE '/path/to/file'
+      """.stripMargin
     val parsed1 = parser.parsePlan(sql1)
     val parsed2 = parser.parsePlan(sql2)
+    val parsed3 = parser.parsePlan(sql3)
+    val parsed4 = parser.parsePlan(sql4)
+    val parsed5 = parser.parsePlan(sql5)
     val expected1 = CreateFunctionCommand(
       None,
       "helloworld",
@@ -185,7 +211,7 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
         FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
-      isTemp = true)
+      isTemp = true, ifNotExists = false, replace = false)
     val expected2 = CreateFunctionCommand(
       Some("hello"),
       "world",
@@ -193,9 +219,36 @@ class DDLCommandSuite extends PlanTest {
       Seq(
         FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
         FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
-      isTemp = false)
+      isTemp = false, ifNotExists = false, replace = false)
+    val expected3 = CreateFunctionCommand(
+      None,
+      "helloworld3",
+      "com.matthewrathbone.example.SimpleUDFExample",
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
+        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
+      isTemp = true, ifNotExists = false, replace = true)
+    val expected4 = CreateFunctionCommand(
+      Some("hello"),
+      "world1",
+      "com.matthewrathbone.example.SimpleUDFExample",
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
+        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
+      isTemp = false, ifNotExists = false, replace = true)
+    val expected5 = CreateFunctionCommand(
+      Some("hello"),
+      "world2",
+      "com.matthewrathbone.example.SimpleUDFExample",
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
+        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
+      isTemp = false, ifNotExists = true, replace = false)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+    comparePlans(parsed3, expected3)
+    comparePlans(parsed4, expected4)
+    comparePlans(parsed5, expected5)
   }
 
   test("drop function") {
@@ -317,7 +370,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create hive table - property values must be set") {
@@ -334,7 +387,7 @@ class DDLCommandSuite extends PlanTest {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     val ct = parseAs[CreateTable](query)
     assert(ct.tableDesc.tableType == CatalogTableType.EXTERNAL)
-    assert(ct.tableDesc.storage.locationUri == Some("/something/anything"))
+    assert(ct.tableDesc.storage.locationUri == Some(new URI("/something/anything")))
   }
 
   test("create table - with partitioned by") {
@@ -409,7 +462,7 @@ class DDLCommandSuite extends PlanTest {
     val expectedTableDesc = CatalogTable(
       identifier = TableIdentifier("my_tab"),
       tableType = CatalogTableType.EXTERNAL,
-      storage = CatalogStorageFormat.empty.copy(locationUri = Some("/tmp/file")),
+      storage = CatalogStorageFormat.empty.copy(locationUri = Some(new URI("/tmp/file"))),
       schema = new StructType().add("a", IntegerType).add("b", StringType),
       provider = Some("parquet"))
 
@@ -525,13 +578,13 @@ class DDLCommandSuite extends PlanTest {
       """.stripMargin
     val sql4 =
       """
-       |ALTER TABLE table_name PARTITION (test, dt='2008-08-08',
+       |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08',
        |country='us') SET SERDE 'org.apache.class' WITH SERDEPROPERTIES ('columns'='foo,bar',
        |'field.delim' = ',')
       """.stripMargin
     val sql5 =
       """
-       |ALTER TABLE table_name PARTITION (test, dt='2008-08-08',
+       |ALTER TABLE table_name PARTITION (test=1, dt='2008-08-08',
        |country='us') SET SERDEPROPERTIES ('columns'='foo,bar', 'field.delim' = ',')
       """.stripMargin
     val parsed1 = parser.parsePlan(sql1)
@@ -553,12 +606,12 @@ class DDLCommandSuite extends PlanTest {
       tableIdent,
       Some("org.apache.class"),
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> null, "dt" -> "2008-08-08", "country" -> "us")))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     val expected5 = AlterTableSerDePropertiesCommand(
       tableIdent,
       None,
       Some(Map("columns" -> "foo,bar", "field.delim" -> ",")),
-      Some(Map("test" -> null, "dt" -> "2008-08-08", "country" -> "us")))
+      Some(Map("test" -> "1", "dt" -> "2008-08-08", "country" -> "us")))
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
@@ -778,13 +831,7 @@ class DDLCommandSuite extends PlanTest {
     assertUnsupported("ALTER TABLE table_name SKEWED BY (key) ON (1,5,6) STORED AS DIRECTORIES")
   }
 
-  test("alter table: add/replace columns (not allowed)") {
-    assertUnsupported(
-      """
-       |ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us')
-       |ADD COLUMNS (new_col1 INT COMMENT 'test_comment', new_col2 LONG
-       |COMMENT 'test_comment2') CASCADE
-      """.stripMargin)
+  test("alter table: replace columns (not allowed)") {
     assertUnsupported(
       """
        |ALTER TABLE table_name REPLACE COLUMNS (new_col1 INT
@@ -831,6 +878,14 @@ class DDLCommandSuite extends PlanTest {
         "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
     }.getMessage
     assert(e.contains("Found duplicate keys 'a'"))
+  }
+
+  test("empty values in non-optional partition specs") {
+    val e = intercept[ParseException] {
+      parser.parsePlan(
+        "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
+    }.getMessage
+    assert(e.contains("Found an empty partition key 'b'"))
   }
 
   test("drop table") {

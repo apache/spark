@@ -249,4 +249,36 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       }
     }
   }
+
+  test("SPARK-19841: watermarkPredicate should filter based on keys") {
+    val input = MemoryStream[(Int, Int)]
+    val df = input.toDS.toDF("time", "id")
+      .withColumn("time", $"time".cast("timestamp"))
+      .withWatermark("time", "1 second")
+      .dropDuplicates("id", "time") // Change the column positions
+      .select($"id")
+    testStream(df)(
+      AddData(input, 1 -> 1, 1 -> 1, 1 -> 2),
+      CheckLastBatch(1, 2),
+      AddData(input, 1 -> 1, 2 -> 3, 2 -> 4),
+      CheckLastBatch(3, 4),
+      AddData(input, 1 -> 0, 1 -> 1, 3 -> 5, 3 -> 6), // Drop (1 -> 0, 1 -> 1) due to watermark
+      CheckLastBatch(5, 6),
+      AddData(input, 1 -> 0, 4 -> 7), // Drop (1 -> 0) due to watermark
+      CheckLastBatch(7)
+    )
+  }
+
+  test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
+    val input = MemoryStream[(Int, Int)]
+    val df = input.toDS.toDF("id", "time")
+      .withColumn("time", $"time".cast("timestamp"))
+      .withWatermark("time", "1 second")
+      .dropDuplicates("id")
+      .select($"id", $"time".cast("long"))
+    testStream(df)(
+      AddData(input, 1 -> 1, 1 -> 2, 2 -> 2),
+      CheckLastBatch(1 -> 1, 2 -> 2)
+    )
+  }
 }

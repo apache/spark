@@ -18,11 +18,16 @@
 package org.apache.spark.sql.test
 
 import java.io.File
+import java.util.Locale
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
+import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -40,7 +45,6 @@ object LastOptions {
     saveMode = null
   }
 }
-
 
 /** Dummy provider. */
 class DefaultSource
@@ -107,10 +111,25 @@ class DefaultSourceWithoutUserSpecifiedSchema
   }
 }
 
+object MessageCapturingCommitProtocol {
+  val commitMessages = new ConcurrentLinkedQueue[TaskCommitMessage]()
+}
+
+class MessageCapturingCommitProtocol(jobId: String, path: String)
+    extends HadoopMapReduceCommitProtocol(jobId, path) {
+
+  // captures commit messages for testing
+  override def onTaskCommit(msg: TaskCommitMessage): Unit = {
+    MessageCapturingCommitProtocol.commitMessages.offer(msg)
+  }
+}
+
+
 class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with BeforeAndAfter {
   import testImplicits._
 
   private val userSchema = new StructType().add("s", StringType)
+  private val userSchemaString = "s STRING"
   private val textSchema = new StructType().add("value", StringType)
   private val data = Seq("1", "2", "3")
   private val dir = Utils.createTempDir(namePrefix = "input").getCanonicalPath
@@ -128,7 +147,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         .start()
     }
     Seq("'writeStream'", "only", "streaming Dataset/DataFrame").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -260,13 +279,13 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     var w = df.write.partitionBy("value")
     var e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
 
     w = df.write.bucketBy(2, "value")
     e = intercept[AnalysisException](w.jdbc(null, null, null))
     Seq("jdbc", "bucketing").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      assert(e.getMessage.toLowerCase(Locale.ROOT).contains(s.toLowerCase(Locale.ROOT)))
     }
   }
 
@@ -289,6 +308,19 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     spark.read.format("org.apache.spark.sql.test").load(dir, dir, dir)
     spark.read.format("org.apache.spark.sql.test").load(Seq(dir, dir): _*)
     Option(dir).map(spark.read.format("org.apache.spark.sql.test").load)
+  }
+
+  test("write path implements onTaskCommit API correctly") {
+    withSQLConf(
+        "spark.sql.sources.commitProtocolClass" ->
+          classOf[MessageCapturingCommitProtocol].getCanonicalName) {
+      withTempDir { dir =>
+        val path = dir.getCanonicalPath
+        MessageCapturingCommitProtocol.commitMessages.clear()
+        spark.range(10).repartition(10).write.mode("overwrite").parquet(path)
+        assert(MessageCapturingCommitProtocol.commitMessages.size() == 10)
+      }
+    }
   }
 
   test("read a data source that does not extend SchemaRelationProvider") {
@@ -356,7 +388,8 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
 
     // Reader, with user specified schema, should just apply user schema on the file data
     val e = intercept[AnalysisException] { spark.read.schema(userSchema).textFile() }
-    assert(e.getMessage.toLowerCase.contains("user specified schema not supported"))
+    assert(e.getMessage.toLowerCase(Locale.ROOT).contains(
+      "user specified schema not supported"))
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(dir, dir) }
     intercept[AnalysisException] { spark.read.schema(userSchema).textFile(Seq(dir, dir): _*) }
@@ -370,9 +403,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val schema = df.schema
 
     // Reader, without user specified schema
-    intercept[IllegalArgumentException] {
+    val message = intercept[AnalysisException] {
       testRead(spark.read.csv(), Seq.empty, schema)
-    }
+    }.getMessage
+    assert(message.contains("Unable to infer schema for CSV. It must be specified manually."))
+
     testRead(spark.read.csv(dir), data, schema)
     testRead(spark.read.csv(dir, dir), data ++ data, schema)
     testRead(spark.read.csv(Seq(dir, dir): _*), data ++ data, schema)
@@ -643,6 +678,101 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         spark.read.schema(schema).table("t")
       }.getMessage
       assert(e.contains("User specified schema not supported with `table`"))
+    }
+  }
+
+  test("SPARK-20431: Specify a schema by using a DDL-formatted string") {
+    spark.createDataset(data).write.mode(SaveMode.Overwrite).text(dir)
+    testRead(spark.read.schema(userSchemaString).text(), Seq.empty, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(dir), data, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(dir, dir), data ++ data, userSchema)
+    testRead(spark.read.schema(userSchemaString).text(Seq(dir, dir): _*), data ++ data, userSchema)
+  }
+
+  test("SPARK-20460 Check name duplication in buckets") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        var errorMsg = intercept[AnalysisException] {
+          Seq((1, 1)).toDF("col", c0).write.bucketBy(2, c0, c1).saveAsTable("t")
+        }.getMessage
+        assert(errorMsg.contains("Found duplicate column(s) in the bucket definition"))
+
+        errorMsg = intercept[AnalysisException] {
+          Seq((1, 1)).toDF("col", c0).write.bucketBy(2, "col").sortBy(c0, c1).saveAsTable("t")
+        }.getMessage
+        assert(errorMsg.contains("Found duplicate column(s) in the sort definition"))
+      }
+    }
+  }
+
+  test("SPARK-20460 Check name duplication in schema") {
+    def checkWriteDataColumnDuplication(
+        format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val errorMsg = intercept[AnalysisException] {
+        Seq((1, 1)).toDF(colName0, colName1).write.format(format).mode("overwrite")
+          .save(tempDir.getAbsolutePath)
+      }.getMessage
+      assert(errorMsg.contains("Found duplicate column(s) when inserting into"))
+    }
+
+    def checkReadUserSpecifiedDataColumnDuplication(
+        df: DataFrame, format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
+      df.write.format(format).mode("overwrite").save(testDir.getAbsolutePath)
+      val errorMsg = intercept[AnalysisException] {
+        spark.read.format(format).schema(s"$colName0 INT, $colName1 INT")
+          .load(testDir.getAbsolutePath)
+      }.getMessage
+      assert(errorMsg.contains("Found duplicate column(s) in the data schema:"))
+    }
+
+    def checkReadPartitionColumnDuplication(
+        format: String, colName0: String, colName1: String, tempDir: File): Unit = {
+      val testDir = Utils.createTempDir(tempDir.getAbsolutePath)
+      Seq(1).toDF("col").write.format(format).mode("overwrite")
+        .save(s"${testDir.getAbsolutePath}/$colName0=1/$colName1=1")
+      val errorMsg = intercept[AnalysisException] {
+        spark.read.format(format).load(testDir.getAbsolutePath)
+      }.getMessage
+      assert(errorMsg.contains("Found duplicate column(s) in the partition schema:"))
+    }
+
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        withTempDir { src =>
+          // Check CSV format
+          checkWriteDataColumnDuplication("csv", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "csv", c0, c1, src)
+          // If `inferSchema` is true, a CSV format is duplicate-safe (See SPARK-16896)
+          var testDir = Utils.createTempDir(src.getAbsolutePath)
+          Seq("a,a", "1,1").toDF().coalesce(1).write.mode("overwrite").text(testDir.getAbsolutePath)
+          val df = spark.read.format("csv").option("inferSchema", true).option("header", true)
+            .load(testDir.getAbsolutePath)
+          checkAnswer(df, Row(1, 1))
+          checkReadPartitionColumnDuplication("csv", c0, c1, src)
+
+          // Check JSON format
+          checkWriteDataColumnDuplication("json", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "json", c0, c1, src)
+          // Inferred schema cases
+          testDir = Utils.createTempDir(src.getAbsolutePath)
+          Seq(s"""{"$c0":3, "$c1":5}""").toDF().write.mode("overwrite")
+            .text(testDir.getAbsolutePath)
+          val errorMsg = intercept[AnalysisException] {
+            spark.read.format("json").option("inferSchema", true).load(testDir.getAbsolutePath)
+          }.getMessage
+          assert(errorMsg.contains("Found duplicate column(s) in the data schema:"))
+          checkReadPartitionColumnDuplication("json", c0, c1, src)
+
+          // Check Parquet format
+          checkWriteDataColumnDuplication("parquet", c0, c1, src)
+          checkReadUserSpecifiedDataColumnDuplication(
+            Seq((1, 1)).toDF("c0", "c1"), "parquet", c0, c1, src)
+          checkReadPartitionColumnDuplication("parquet", c0, c1, src)
+        }
+      }
     }
   }
 }

@@ -153,7 +153,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
     "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
-    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors"
+    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
+    "executor memory usage" -> "applications/app-20161116163331-0000/executors"
     // Todo: enable this test when logging the even of onBlockUpdated. See: SPARK-13845
     // "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
   )
@@ -564,13 +565,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     assert(jobcount === getNumJobs("/jobs"))
 
     // no need to retain the test dir now the tests complete
-    logDir.deleteOnExit();
-
+    logDir.deleteOnExit()
   }
 
   test("ui and api authorization checks") {
-    val appId = "app-20161115172038-0000"
-    val owner = "jose"
+    val appId = "local-1430917381535"
+    val owner = "irashid"
     val admin = "root"
     val other = "alice"
 
@@ -589,8 +589,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val port = server.boundPort
     val testUrls = Seq(
-      s"http://localhost:$port/api/v1/applications/$appId/jobs",
-      s"http://localhost:$port/history/$appId/jobs/")
+      s"http://localhost:$port/api/v1/applications/$appId/1/jobs",
+      s"http://localhost:$port/history/$appId/1/jobs/",
+      s"http://localhost:$port/api/v1/applications/$appId/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
 
     tests.foreach { case (user, expectedCode) =>
       testUrls.foreach { url =>

@@ -90,8 +90,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
       .setMaxIter(2)
     val model = gbt.fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(gbt, model)
     val preds = model.transform(df)
     val predictions = preds.select("prediction").rdd.map(_.getDouble(0))
     // Checks based on SPARK-8736 (to ensure it is not doing classification)
@@ -184,7 +183,8 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val allParamSettings = TreeTests.allParamSettings ++ Map("lossType" -> "squared")
     val continuousData: DataFrame =
       TreeTests.setMetadata(rdd, Map.empty[Int, Int], numClasses = 0)
-    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(gbt, continuousData, allParamSettings,
+      allParamSettings, checkModelData)
   }
 }
 

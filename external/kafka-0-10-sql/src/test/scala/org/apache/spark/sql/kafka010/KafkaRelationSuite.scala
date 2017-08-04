@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.kafka010
 
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.kafka.common.TopicPartition
@@ -195,7 +196,7 @@ class KafkaRelationSuite extends QueryTest with BeforeAndAfter with SharedSQLCon
         reader.load()
       }
       expectedMsgs.foreach { m =>
-        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
       }
     }
 

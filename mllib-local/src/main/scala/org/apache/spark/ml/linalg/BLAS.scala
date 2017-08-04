@@ -29,7 +29,7 @@ private[spark] object BLAS extends Serializable {
   @transient private var _nativeBLAS: NetlibBLAS = _
 
   // For level-1 routines, we use Java implementation.
-  private def f2jBLAS: NetlibBLAS = {
+  private[ml] def f2jBLAS: NetlibBLAS = {
     if (_f2jBLAS == null) {
       _f2jBLAS = new F2jBLAS
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.net.URI
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -47,7 +49,8 @@ case class SinkFileStatus(
     action: String) {
 
   def toFileStatus: FileStatus = {
-    new FileStatus(size, isDir, blockReplication, blockSize, modificationTime, new Path(path))
+    new FileStatus(
+      size, isDir, blockReplication, blockSize, modificationTime, new Path(new URI(path)))
   }
 }
 
@@ -77,7 +80,7 @@ object SinkFileStatus {
  * (drops the deleted files).
  */
 class FileStreamSinkLog(
-    metadataLogVersion: String,
+    metadataLogVersion: Int,
     sparkSession: SparkSession,
     path: String)
   extends CompactibleFileStreamLog[SinkFileStatus](metadataLogVersion, sparkSession, path) {
@@ -106,7 +109,7 @@ class FileStreamSinkLog(
 }
 
 object FileStreamSinkLog {
-  val VERSION = "v1"
+  val VERSION = 1
   val DELETE_ACTION = "delete"
   val ADD_ACTION = "add"
 }

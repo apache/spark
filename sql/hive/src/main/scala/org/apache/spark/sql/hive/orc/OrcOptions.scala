@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.util.Locale
+
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
@@ -41,9 +43,9 @@ private[orc] class OrcOptions(@transient private val parameters: CaseInsensitive
     val codecName = parameters
       .get("compression")
       .orElse(orcCompressionConf)
-      .getOrElse("snappy").toLowerCase
+      .getOrElse("snappy").toLowerCase(Locale.ROOT)
     if (!shortOrcCompressionCodecNames.contains(codecName)) {
-      val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
+      val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase(Locale.ROOT))
       throw new IllegalArgumentException(s"Codec [$codecName] " +
         s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
     }

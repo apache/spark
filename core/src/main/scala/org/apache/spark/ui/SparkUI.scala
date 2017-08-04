@@ -60,6 +60,8 @@ private[spark] class SparkUI private (
 
   var appId: String = _
 
+  var appSparkVersion = org.apache.spark.SPARK_VERSION
+
   private var streamingJobProgressListener: Option[SparkListener] = None
 
   /** Initialize all components of the server. */
@@ -84,7 +86,9 @@ private[spark] class SparkUI private (
   initialize()
 
   def getSparkUser: String = {
-    environmentListener.systemProperties.toMap.getOrElse("user.name", "<unknown>")
+    environmentListener.sparkUser
+      .orElse(environmentListener.systemProperties.toMap.get("user.name"))
+      .getOrElse("<unknown>")
   }
 
   def getAppName: String = appName
@@ -117,8 +121,9 @@ private[spark] class SparkUI private (
         endTime = new Date(-1),
         duration = 0,
         lastUpdated = new Date(startTime),
-        sparkUser = "",
-        completed = false
+        sparkUser = getSparkUser,
+        completed = false,
+        appSparkVersion = appSparkVersion
       ))
     ))
   }
@@ -139,6 +144,7 @@ private[spark] abstract class SparkUITab(parent: SparkUI, prefix: String)
 
   def appName: String = parent.appName
 
+  def appSparkVersion: String = parent.appSparkVersion
 }
 
 private[spark] object SparkUI {

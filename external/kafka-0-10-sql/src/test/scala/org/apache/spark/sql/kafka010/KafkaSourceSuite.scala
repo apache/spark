@@ -20,7 +20,7 @@ package org.apache.spark.sql.kafka010
 import java.io._
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Paths}
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -37,7 +37,9 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
+import org.apache.spark.sql.kafka010.KafkaSourceProvider._
 import org.apache.spark.sql.streaming.{ProcessingTime, StreamTest}
+import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.{SharedSQLContext, TestSparkSession}
 import org.apache.spark.util.Utils
 
@@ -204,7 +206,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
           override def serialize(metadata: KafkaSourceOffset, out: OutputStream): Unit = {
             out.write(0)
             val writer = new BufferedWriter(new OutputStreamWriter(out, UTF_8))
-            writer.write(s"v0\n${metadata.json}")
+            writer.write(s"v99999\n${metadata.json}")
             writer.flush
           }
         }
@@ -226,7 +228,12 @@ class KafkaSourceSuite extends KafkaSourceTest {
         source.getOffset.get // Read initial offset
       }
 
-      assert(e.getMessage.contains("Please upgrade your Spark"))
+      Seq(
+        s"maximum supported log version is v${KafkaSource.VERSION}, but encountered v99999",
+        "produced by a newer version of Spark and cannot be read by this version"
+      ).foreach { message =>
+        assert(e.getMessage.contains(message))
+      }
     }
   }
 
@@ -294,8 +301,6 @@ class KafkaSourceSuite extends KafkaSourceTest {
       ),
       StopStream,
       StartStream(ProcessingTime(100), clock),
-      waitUntilBatchProcessed,
-      AdvanceManualClock(100),
       waitUntilBatchProcessed,
       // smallest now empty, 1 more from middle, 9 more from biggest
       CheckAnswer(1, 10, 100, 101, 102, 103, 104, 105, 106, 107,
@@ -486,7 +491,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
         reader.load()
       }
       expectedMsgs.foreach { m =>
-        assert(ex.getMessage.toLowerCase.contains(m.toLowerCase))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(m.toLowerCase(Locale.ROOT)))
       }
     }
 
@@ -519,7 +524,7 @@ class KafkaSourceSuite extends KafkaSourceTest {
           .option(s"$key", value)
         reader.load()
       }
-      assert(ex.getMessage.toLowerCase.contains("not supported"))
+      assert(ex.getMessage.toLowerCase(Locale.ROOT).contains("not supported"))
     }
 
     testUnsupportedConfig("kafka.group.id")
@@ -604,6 +609,24 @@ class KafkaSourceSuite extends KafkaSourceTest {
     query.stop()
     // `failOnDataLoss` is `false`, we should not fail the query
     assert(query.exception.isEmpty)
+  }
+
+  test("get offsets from case insensitive parameters") {
+    for ((optionKey, optionValue, answer) <- Seq(
+      (STARTING_OFFSETS_OPTION_KEY, "earLiEst", EarliestOffsetRangeLimit),
+      (ENDING_OFFSETS_OPTION_KEY, "laTest", LatestOffsetRangeLimit),
+      (STARTING_OFFSETS_OPTION_KEY, """{"topic-A":{"0":23}}""",
+        SpecificOffsetRangeLimit(Map(new TopicPartition("topic-A", 0) -> 23))))) {
+      val offset = getKafkaOffsetRangeLimit(Map(optionKey -> optionValue), optionKey, answer)
+      assert(offset === answer)
+    }
+
+    for ((optionKey, answer) <- Seq(
+      (STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit),
+      (ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit))) {
+      val offset = getKafkaOffsetRangeLimit(Map.empty, optionKey, answer)
+      assert(offset === answer)
+    }
   }
 
   private def newTopic(): String = s"topic-${topicId.getAndIncrement()}"

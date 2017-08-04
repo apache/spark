@@ -70,11 +70,13 @@ class TaskInfo(
 
   var killed = false
 
-  private[spark] def markGettingResult(time: Long = System.currentTimeMillis) {
+  private[spark] def markGettingResult(time: Long) {
     gettingResultTime = time
   }
 
-  private[spark] def markFinished(state: TaskState, time: Long = System.currentTimeMillis) {
+  private[spark] def markFinished(state: TaskState, time: Long) {
+    // finishTime should be set larger than 0, otherwise "finished" below will return false.
+    assert(time > 0)
     finishTime = time
     if (state == TaskState.FAILED) {
       failed = true

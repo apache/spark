@@ -151,7 +151,7 @@ class HiveSparkSubmitSuite
     // the HiveContext code mistakenly overrides the class loader that contains user classes.
     // For more detail, see sql/hive/src/test/resources/regression-test-SPARK-8489/*scala.
     val version = Properties.versionNumberString match {
-      case v if v.startsWith("2.10") || v.startsWith("2.11") => v.substring(0, 4)
+      case v if v.startsWith("2.12") || v.startsWith("2.11") => v.substring(0, 4)
       case x => throw new Exception(s"Unsupported Scala Version: $x")
     }
     val jarDir = getTestResourcePath("regression-test-SPARK-8489")
@@ -485,7 +485,7 @@ object SetWarehouseLocationTest extends Logging {
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("default")))
       val expectedLocation =
-        "file:" + expectedWarehouseLocation.toString + "/testlocation"
+        CatalogUtils.stringToURI(s"file:${expectedWarehouseLocation.toString}/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -500,8 +500,8 @@ object SetWarehouseLocationTest extends Logging {
       sparkSession.sql("create table testLocation (a int)")
       val tableMetadata =
         catalog.getTableMetadata(TableIdentifier("testLocation", Some("testLocationDB")))
-      val expectedLocation =
-        "file:" + expectedWarehouseLocation.toString + "/testlocationdb.db/testlocation"
+      val expectedLocation = CatalogUtils.stringToURI(
+        s"file:${expectedWarehouseLocation.toString}/testlocationdb.db/testlocation")
       val actualLocation = tableMetadata.location
       if (actualLocation != expectedLocation) {
         throw new Exception(
@@ -868,14 +868,16 @@ object SPARK_18360 {
       val rawTable = hiveClient.getTable("default", "test_tbl")
       // Hive will use the value of `hive.metastore.warehouse.dir` to generate default table
       // location for tables in default database.
-      assert(rawTable.storage.locationUri.get.contains(newWarehousePath))
+      assert(rawTable.storage.locationUri.map(
+        CatalogUtils.URIToString(_)).get.contains(newWarehousePath))
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = false, purge = false)
 
       spark.sharedState.externalCatalog.createTable(tableMeta, ignoreIfExists = false)
       val readBack = spark.sharedState.externalCatalog.getTable("default", "test_tbl")
       // Spark SQL will use the location of default database to generate default table
       // location for tables in default database.
-      assert(readBack.storage.locationUri.get.contains(defaultDbLocation))
+      assert(readBack.storage.locationUri.map(CatalogUtils.URIToString(_))
+        .get.contains(defaultDbLocation))
     } finally {
       hiveClient.dropTable("default", "test_tbl", ignoreIfNotExists = true, purge = false)
       hiveClient.runSqlHive(s"SET hive.metastore.warehouse.dir=$defaultDbLocation")

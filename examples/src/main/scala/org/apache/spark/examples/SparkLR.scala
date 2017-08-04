@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession
 
 /**
  * Logistic regression based classification.
- * Usage: SparkLR [slices]
+ * Usage: SparkLR [partitions]
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
  * please refer to org.apache.spark.ml.classification.LogisticRegression.
@@ -72,7 +72,7 @@ object SparkLR {
     val points = spark.sparkContext.parallelize(generateData, numSlices).cache()
 
     // Initialize w to a random value
-    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
+    val w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {

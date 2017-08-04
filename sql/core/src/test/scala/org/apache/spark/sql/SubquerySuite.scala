@@ -27,23 +27,23 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   val row = identity[(java.lang.Integer, java.lang.Double)](_)
 
   lazy val l = Seq(
-    row(1, 2.0),
-    row(1, 2.0),
-    row(2, 1.0),
-    row(2, 1.0),
-    row(3, 3.0),
-    row(null, null),
-    row(null, 5.0),
-    row(6, null)).toDF("a", "b")
+    row((1, 2.0)),
+    row((1, 2.0)),
+    row((2, 1.0)),
+    row((2, 1.0)),
+    row((3, 3.0)),
+    row((null, null)),
+    row((null, 5.0)),
+    row((6, null))).toDF("a", "b")
 
   lazy val r = Seq(
-    row(2, 3.0),
-    row(2, 3.0),
-    row(3, 2.0),
-    row(4, 1.0),
-    row(null, null),
-    row(null, 5.0),
-    row(6, null)).toDF("c", "d")
+    row((2, 3.0)),
+    row((2, 3.0)),
+    row((3, 2.0)),
+    row((4, 1.0)),
+    row((null, null)),
+    row((null, 5.0)),
+    row((6, null))).toDF("c", "d")
 
   lazy val t = r.filter($"c".isNotNull && $"d".isNotNull)
 
@@ -72,7 +72,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("rdd deserialization does not crash [SPARK-15791]") {
+  test("SPARK-15791: rdd deserialization does not crash") {
     sql("select (select 1 as b) as b").rdd.count()
   }
 
@@ -517,7 +517,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     val msg1 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
     }
-    assert(msg1.getMessage.contains("Correlated scalar subqueries must be Aggregated"))
+    assert(msg1.getMessage.contains("Correlated scalar subqueries must be aggregated"))
 
     val msg2 = intercept[AnalysisException] {
       sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
@@ -622,7 +622,12 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
     checkAnswer(
-      sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
+      sql(
+        """
+          |select l.b, (select (r.c + count(*)) is null
+          |from r
+          |where l.a = r.c group by r.c) from l
+        """.stripMargin),
       Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
         Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
   }
@@ -650,7 +655,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
           """
             | select c1 from onerow t1
             | where exists (select 1
-            |               from   (select 1 from onerow t2 LIMIT 1)
+            |               from   (select c1 from onerow t2 LIMIT 1) t2
             |               where  t1.c1=t2.c1)""".stripMargin),
         Row(1) :: Nil)
     }
@@ -817,12 +822,57 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql(
           """
-          | select c2
-          | from t1
-          | where exists (select *
-          |               from t2 lateral view explode(arr_c2) q as c2
-                          where t1.c1 = t2.c1)""".stripMargin),
+          | SELECT c2
+          | FROM t1
+          | WHERE EXISTS (SELECT *
+          |               FROM t2 LATERAL VIEW explode(arr_c2) q AS c2
+                          WHERE t1.c1 = t2.c1)""".stripMargin),
         Row(1) :: Row(0) :: Nil)
+
+      val msg1 = intercept[AnalysisException] {
+        sql(
+          """
+            | SELECT c1
+            | FROM t2
+            | WHERE EXISTS (SELECT *
+            |               FROM t1 LATERAL VIEW explode(t2.arr_c2) q AS c2
+            |               WHERE t1.c1 = t2.c1)
+          """.stripMargin)
+      }
+      assert(msg1.getMessage.contains(
+        "Expressions referencing the outer query are not supported outside of WHERE/HAVING"))
+    }
+  }
+
+  test("SPARK-19933 Do not eliminate top-level aliases in sub-queries") {
+    withTempView("t1", "t2") {
+      spark.range(4).createOrReplaceTempView("t1")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t1)"),
+        Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
+
+      spark.range(2).createOrReplaceTempView("t2")
+      checkAnswer(
+        sql("select * from t1 where id in (select id as id from t2)"),
+        Row(0) :: Row(1) :: Nil)
+    }
+  }
+
+  test("ListQuery and Exists should work even no correlated references") {
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c AND (r.d in (select d from r) OR l.a >= 1)"),
+      Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) :: Row(2, 1.0, 2, 3.0) ::
+        Row(2, 1.0, 2, 3.0) :: Row(3.0, 3.0, 3, 2.0) :: Row(6, null, 6, null) :: Nil)
+    checkAnswer(
+      sql("select * from l, r where l.a = r.c + 1 AND (exists (select * from r) OR l.a = r.c)"),
+      Row(3, 3.0, 2, 3.0) :: Row(3, 3.0, 2, 3.0) :: Nil)
+  }
+
+  test("SPARK-20688: correctly check analysis for scalar sub-queries") {
+    withTempView("t") {
+      Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("t")
+      val e = intercept[AnalysisException](sql("SELECT (SELECT count(*) FROM t WHERE a = 1)"))
+      assert(e.message.contains("cannot resolve '`a`' given input columns: [t.i, t.j]"))
     }
   }
 }

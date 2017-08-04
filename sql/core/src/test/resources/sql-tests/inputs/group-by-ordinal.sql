@@ -49,6 +49,9 @@ select a, count(a) from (select 1 as a) tmp group by 1 order by 1;
 -- group by ordinal followed by having
 select count(a), a from (select 1 as a) tmp group by 2 having a > 0;
 
+-- mixed cases: group-by ordinals and aliases
+select a, a AS k, count(b) from data group by k, 1;
+
 -- turn of group by ordinal
 set spark.sql.groupByOrdinal=false;
 

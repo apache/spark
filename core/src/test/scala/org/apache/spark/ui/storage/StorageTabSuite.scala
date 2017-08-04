@@ -26,7 +26,7 @@ import org.apache.spark.storage._
 /**
  * Test various functionality in the StorageListener that supports the StorageTab.
  */
-class StorageTabSuite extends SparkFunSuite with LocalSparkContext with BeforeAndAfter {
+class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   private var bus: LiveListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
   private var storageListener: StorageListener = _
@@ -43,8 +43,7 @@ class StorageTabSuite extends SparkFunSuite with LocalSparkContext with BeforeAn
 
   before {
     val conf = new SparkConf()
-    sc = new SparkContext("local", "test", conf)
-    bus = new LiveListenerBus(sc)
+    bus = new LiveListenerBus(conf)
     storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)
@@ -75,7 +74,7 @@ class StorageTabSuite extends SparkFunSuite with LocalSparkContext with BeforeAn
     // Submitting RDDInfos with duplicate IDs does nothing
     val rddInfo0Cached = new RDDInfo(0, "freedom", 100, StorageLevel.MEMORY_ONLY, Seq(10))
     rddInfo0Cached.numCachedPartitions = 1
-    val stageInfo0Cached = new StageInfo(0, 0, "0", 100, Seq(rddInfo0), Seq.empty, "details")
+    val stageInfo0Cached = new StageInfo(0, 0, "0", 100, Seq(rddInfo0Cached), Seq.empty, "details")
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0Cached))
     assert(storageListener._rddInfoMap.size === 4)
     assert(storageListener.rddInfoList.size === 2)

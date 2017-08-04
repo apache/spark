@@ -37,6 +37,9 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "20")
     assert(conf.getConf(confEntry, 5) === 20)
 
+    conf.setConfString(key, " 20")
+    assert(conf.getConf(confEntry, 5) === 20)
+
     val e = intercept[IllegalArgumentException] {
       conf.setConfString(key, "abc")
     }
@@ -75,6 +78,8 @@ class SQLConfEntrySuite extends SparkFunSuite {
     assert(conf.getConfString(key) === "true")
     assert(conf.getConf(confEntry, false) === true)
 
+    conf.setConfString(key, " true ")
+    assert(conf.getConf(confEntry, false) === true)
     val e = intercept[IllegalArgumentException] {
       conf.setConfString(key, "abc")
     }
@@ -186,5 +191,23 @@ class SQLConfEntrySuite extends SparkFunSuite {
       conf.setConfString(confEntry.key, "-1")
     }
     assert(e2.getMessage === "The maximum size of the cache must not be negative")
+  }
+
+  test("clone SQLConf") {
+    val original = new SQLConf
+    val key = "spark.sql.SQLConfEntrySuite.clone"
+    assert(original.getConfString(key, "noentry") === "noentry")
+
+    // inheritance
+    original.setConfString(key, "orig")
+    val clone = original.clone()
+    assert(original ne clone)
+    assert(clone.getConfString(key, "noentry") === "orig")
+
+    // independence
+    clone.setConfString(key, "clone")
+    assert(original.getConfString(key, "noentry") === "orig")
+    original.setConfString(key, "dontcopyme")
+    assert(clone.getConfString(key, "noentry") === "clone")
   }
 }

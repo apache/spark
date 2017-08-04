@@ -52,8 +52,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getTol === 1e-4)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
-    // copied model must have the same parent
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(kmeans, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -150,7 +149,8 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       assert(model.clusterCenters === model2.clusterCenters)
     }
     val kmeans = new KMeans()
-    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings, checkModelData)
+    testEstimatorAndModelReadWrite(kmeans, dataset, KMeansSuite.allParamSettings,
+      KMeansSuite.allParamSettings, checkModelData)
   }
 }
 

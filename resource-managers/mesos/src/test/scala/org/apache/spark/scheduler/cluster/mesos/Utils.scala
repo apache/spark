@@ -28,6 +28,17 @@ import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 
 object Utils {
+
+  val TEST_FRAMEWORK_ID = FrameworkID.newBuilder()
+    .setValue("test-framework-id")
+    .build()
+
+  val TEST_MASTER_INFO = MasterInfo.newBuilder()
+    .setId("test-master")
+    .setIp(0)
+    .setPort(0)
+    .build()
+
   def createOffer(
       offerId: String,
       slaveId: String,

@@ -24,8 +24,9 @@ import java.util.regex.Pattern
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.{JobConf, Master}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api.ApplicationConstants
@@ -35,10 +36,13 @@ import org.apache.hadoop.yarn.util.ConverterUtils
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.yarn.security.{ConfigurableCredentialManager, CredentialUpdater}
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.security.CredentialUpdater
+import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
+
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -57,8 +61,11 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   // Return an appropriate (subclass) of Configuration. Creating a config initializes some Hadoop
   // subsystems. Always create a new config, don't reuse yarnConf.
-  override def newConfiguration(conf: SparkConf): Configuration =
-    new YarnConfiguration(super.newConfiguration(conf))
+  override def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new YarnConfiguration(super.newConfiguration(conf))
+    hadoopConf.addResource(Client.SPARK_HADOOP_CONF_FILE)
+    hadoopConf
+  }
 
   // Add any user credentials to the job conf which are necessary for running on a secure Hadoop
   // cluster
@@ -87,8 +94,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   }
 
   private[spark] override def startCredentialUpdater(sparkConf: SparkConf): Unit = {
-    credentialUpdater =
-      new ConfigurableCredentialManager(sparkConf, newConfiguration(sparkConf)).credentialUpdater()
+    val hadoopConf = newConfiguration(sparkConf)
+    val credentialManager = new YARNHadoopDelegationTokenManager(
+      sparkConf,
+      hadoopConf,
+      conf => YarnSparkHadoopUtil.get.hadoopFSsToAccess(sparkConf, conf))
+    credentialUpdater = new CredentialUpdater(sparkConf, hadoopConf, credentialManager)
     credentialUpdater.start()
   }
 
@@ -102,6 +113,21 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   private[spark] def getContainerId: ContainerId = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
     ConverterUtils.toContainerId(containerIdString)
+  }
+
+  /** The filesystems for which YARN should fetch delegation tokens. */
+  private[spark] def hadoopFSsToAccess(
+      sparkConf: SparkConf,
+      hadoopConf: Configuration): Set[FileSystem] = {
+    val filesystemsToAccess = sparkConf.get(FILESYSTEMS_TO_ACCESS)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .toSet
+
+    val stagingFS = sparkConf.get(STAGING_DIR)
+      .map(new Path(_).getFileSystem(hadoopConf))
+      .getOrElse(FileSystem.get(hadoopConf))
+
+    filesystemsToAccess + stagingFS
   }
 }
 
@@ -280,10 +306,7 @@ object YarnSparkHadoopUtil {
 
       initialNumExecutors
     } else {
-      val targetNumExecutors =
-        sys.env.get("SPARK_EXECUTOR_INSTANCES").map(_.toInt).getOrElse(numExecutors)
-      // System property can override environment variable.
-      conf.get(EXECUTOR_INSTANCES).getOrElse(targetNumExecutors)
+      conf.get(EXECUTOR_INSTANCES).getOrElse(numExecutors)
     }
   }
 }

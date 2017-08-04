@@ -97,7 +97,7 @@ building for particular Hive and Hive Thriftserver distributions.
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
 
-## Contributing
+## Contributing
 
 Please review the [Contribution to Spark guide](http://spark.apache.org/contributing.html)
 for information on how to get started contributing to the project.

@@ -344,7 +344,7 @@ private[spark] class MemoryStore(
     val serializationStream: SerializationStream = {
       val autoPick = !blockId.isInstanceOf[StreamBlockId]
       val ser = serializerManager.getSerializer(classTag, autoPick).newInstance()
-      ser.serializeStream(serializerManager.wrapStream(blockId, redirectableStream))
+      ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
     // Request enough memory to begin unrolling

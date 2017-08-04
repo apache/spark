@@ -271,7 +271,7 @@ class GaussianMixture private (
   private def initCovariance(x: IndexedSeq[BV[Double]]): BreezeMatrix[Double] = {
     val mu = vectorMean(x)
     val ss = BDV.zeros[Double](x(0).length)
-    x.foreach(xi => ss += (xi - mu) :^ 2.0)
+    x.foreach(xi => ss += (xi - mu) ^:^ 2.0)
     diag(ss / x.length.toDouble)
   }
 }

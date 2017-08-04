@@ -86,7 +86,10 @@ class MinHashLSHModel private[ml](
   }
 
   @Since("2.1.0")
-  override def copy(extra: ParamMap): this.type = defaultCopy(extra)
+  override def copy(extra: ParamMap): MinHashLSHModel = {
+    val copied = new MinHashLSHModel(uid, randCoefficients).setParent(parent)
+    copyValues(copied, extra)
+  }
 
   @Since("2.1.0")
   override def write: MLWriter = new MinHashLSHModel.MinHashLSHModelWriter(this)

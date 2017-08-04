@@ -74,7 +74,7 @@ abstract class Classifier[
    *                 and features (`Vector`).
    * @param numClasses  Number of classes label can take.  Labels must be integers in the range
    *                    [0, numClasses).
-   * @throws SparkException  if any label is not an integer >= 0
+   * @note Throws `SparkException` if any label is a non-integer or is negative
    */
   protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
     require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
