@@ -772,10 +772,13 @@ case class RepartitionByExpression(
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
-case object OneRowRelation extends LeafNode {
+case class OneRowRelation() extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
+
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
 }
 
 /** A logical plan for `dropDuplicates`. */

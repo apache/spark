@@ -302,7 +302,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitQuerySpecification(
       ctx: QuerySpecificationContext): LogicalPlan = withOrigin(ctx) {
-    val from = OneRowRelation.optional(ctx.fromClause) {
+    val from = OneRowRelation().optional(ctx.fromClause) {
       visitFromClause(ctx.fromClause)
     }
     withQuerySpecification(ctx, from)
