@@ -369,7 +369,9 @@ class StreamExecution(
         logDebug(s"Found possibly unprocessed offsets $availableOffsets " +
           s"at batch timestamp ${offsetSeqMetadata.batchTimestampMs}")
 
-        offsetLog.get(batchId - 1).foreach {
+        offsetLog.get(batchId - 1).getOrElse {
+            throw new IllegalStateException(s"batch $batchId doesn't exist")
+        }.foreach {
           case lastOffsets =>
             committedOffsets = lastOffsets.toStreamProgress(sources)
             logDebug(s"Resuming with committed offsets: $committedOffsets")
@@ -457,7 +459,9 @@ class StreamExecution(
 
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from the previous batch.
-        val prevBatchOff = offsetLog.get(currentBatchId - 1)
+        val prevBatchOff = offsetLog.get(currentBatchId - 1).getOrElse {
+            throw new IllegalStateException(s"batch $batchId doesn't exist")
+        }
         if (prevBatchOff.isDefined) {
           prevBatchOff.get.toStreamProgress(sources).foreach {
             case (src, off) => src.commit(off)
