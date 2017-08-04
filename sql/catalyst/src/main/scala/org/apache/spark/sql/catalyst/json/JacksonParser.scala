@@ -366,7 +366,7 @@ class JacksonParser(
 object JacksonParser {
   private[spark] def splitDocuments(input: InputStream) = new Iterator[String] {
 
-    implicit class JsonCharacter(char: Char) {
+    private implicit class JsonCharacter(char: Char) {
       def isJsonObjectFinished(endToken: Option[Char]): Boolean = {
         endToken match {
           case None => char == '}' || char == ']'
