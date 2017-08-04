@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.python
 
@@ -26,8 +26,8 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, Pyth
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -97,11 +97,14 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
         projection(inputRow)
       }
 
+      val context = TaskContext.get()
+
       val inputIterator = ArrowConverters.toPayloadIterator(
-          projectedRowIter, schema, conf.arrowMaxRecordsPerBatch).
+          projectedRowIter, schema, conf.arrowMaxRecordsPerBatch, context).
         map(_.asPythonSerializable)
 
-      val context = TaskContext.get()
+      val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex.
+        map { case (attr, i) => attr.withName(s"_$i") })
 
       // Output iterator for results from Python.
       val outputIterator = new PythonRunner(
@@ -112,7 +115,9 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       val resultProj = UnsafeProjection.create(output, output)
 
       val outputRowIterator = ArrowConverters.fromPayloadIterator(
-        outputIterator.map(ArrowPayload(_)))
+        outputIterator.map(new ArrowPayload(_)), context)
+
+      assert(schemaOut.equals(outputRowIterator.schema))
 
       outputRowIterator.map { outputRow =>
         resultProj(joined(queue.remove(), outputRow))
