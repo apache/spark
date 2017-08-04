@@ -93,7 +93,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     // to make a replication attempt to inactive store fail fast
-    conf.set("spark.core.connection.ack.wait.timeout", "1s")
+    conf.set("spark.network.timeout", "1s")
     // to make cached peers refresh frequently
     conf.set("spark.storage.cachedPeersTtl", "10")
 

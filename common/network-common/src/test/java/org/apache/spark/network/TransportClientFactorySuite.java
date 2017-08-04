@@ -188,7 +188,7 @@ public class TransportClientFactorySuite {
 
       @Override
       public String get(String name) {
-        if ("spark.shuffle.io.connectionTimeout".equals(name)) {
+        if ("spark.network.timeout".equals(name)) {
           // We should make sure there is enough time for us to observe the channel is active
           return "1s";
         }
