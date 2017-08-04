@@ -146,10 +146,6 @@ class MLWriter(BaseReadWrite):
         self.shouldOverwrite = True
         return self
 
-    def session(self, sparkSession):
-        """Sets the Spark Session to use for saving."""
-        super(MLWriter, self).session(sparkSession)
-
 
 @inherit_doc
 class JavaMLWriter(MLWriter):
@@ -231,10 +227,6 @@ class MLReader(BaseReadWrite):
     def load(self, path):
         """Load the ML instance from the input path."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
-
-    def session(self, sparkSession):
-        """Sets the Spark Session to use for loading."""
-        super(MLReader, self).session(sparkSession)
 
 
 @inherit_doc
@@ -373,6 +365,8 @@ class DefaultParamsWriter(MLWriter):
     """
     .. note:: DeveloperApi
 
+    Specialization of :py:class:`MLWriter` for :py:class:`Params` types
+
     Class for writing Estimators and Transformers whose parameters are JSON-serializable.
 
     .. versionadded:: 2.3.0
@@ -383,10 +377,10 @@ class DefaultParamsWriter(MLWriter):
         self.instance = instance
 
     def saveImpl(self, path):
-        DefaultParamsWriter.save_metadata(self.instance, path, self.sc)
+        DefaultParamsWriter.saveMetadata(self.instance, path, self.sc)
 
     @staticmethod
-    def save_metadata(instance, path, sc, extraMetadata=None, paramMap=None):
+    def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
         """
         Saves metadata + Params to: path + "/metadata"
         - class
@@ -408,10 +402,10 @@ class DefaultParamsWriter(MLWriter):
     @staticmethod
     def _get_metadata_to_save(instance, sc, extraMetadata=None, paramMap=None):
         """
-        Helper for [[save_metadata()]] which extracts the JSON to save.
+        Helper for [[saveMetadata()]] which extracts the JSON to save.
         This is useful for ensemble models which need to save metadata for many sub-models.
 
-        @see [[save_metadata()]] for details on what this includes.
+        @see [[saveMetadata()]] for details on what this includes.
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
@@ -455,6 +449,8 @@ class DefaultParamsReadable(MLReadable):
 class DefaultParamsReader(MLReader):
     """
     .. note:: DeveloperApi
+
+    Specialization of :py:class:`MLReader` for :py:class:`Params` types
 
     Default `MLReader` implementation for transformers and estimators that
     contain basic (json-serializable) params and no data. This will not handle
