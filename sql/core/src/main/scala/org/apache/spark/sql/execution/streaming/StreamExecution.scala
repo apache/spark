@@ -439,7 +439,7 @@ class StreamExecution(
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
         offsetLog.get(latestBatchId - 1).getOrElse {
-            throw new IllegalStateException(s"batch $batchId doesn't exist")
+            throw new IllegalStateException(s"batch $latestBatchId doesn't exist")
         }.foreach { secondLatestBatchId =>
           committedOffsets = secondLatestBatchId.toStreamProgress(sources)
         }
@@ -568,7 +568,7 @@ class StreamExecution(
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from the previous batch.
         val prevBatchOff = offsetLog.get(currentBatchId - 1).getOrElse {
-            throw new IllegalStateException(s"batch $batchId doesn't exist")
+            throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
         }
         if (prevBatchOff.isDefined) {
           prevBatchOff.get.toStreamProgress(sources).foreach {
