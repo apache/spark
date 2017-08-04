@@ -168,7 +168,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
-    newHiveConf.foreach{ kv =>
+    newHiveConf.foreach { kv =>
       SparkSQLEnv.sqlContext.setConf(kv._1, kv._2)
     }
 

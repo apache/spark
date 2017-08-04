@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -404,12 +405,7 @@ private[spark] object HiveUtils extends Logging {
     propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
     propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
-    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-    sys.props.foreach { case (key, value) =>
-      if (key.startsWith("spark.hadoop.")) {
-        propMap.put(key.substring("spark.hadoop.".length), value)
-      }
-    }
+    SparkHadoopUtil.get.appendSparkHadoopConfigs(propMap)
 
     propMap.toMap
   }

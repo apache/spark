@@ -24,6 +24,7 @@ import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -99,14 +100,27 @@ class SparkHadoopUtil extends Logging {
           hadoopConf.set("fs.s3a.session.token", sessionToken)
         }
       }
-      // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-      conf.getAll.foreach { case (key, value) =>
-        if (key.startsWith("spark.hadoop.")) {
-          hadoopConf.set(key.substring("spark.hadoop.".length), value)
-        }
-      }
+      appendSparkHadoopConfigs(conf, hadoopConf)
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
+    }
+  }
+
+  def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+    conf.getAll.foreach { case (key, value) =>
+      if (key.startsWith("spark.hadoop.")) {
+        hadoopConf.set(key.substring("spark.hadoop.".length), value)
+      }
+    }
+  }
+
+  def appendSparkHadoopConfigs(propMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+    sys.props.foreach { case (key, value) =>
+      if (key.startsWith("spark.hadoop.")) {
+        propMap.put(key.substring("spark.hadoop.".length), value)
+      }
     }
   }
 
