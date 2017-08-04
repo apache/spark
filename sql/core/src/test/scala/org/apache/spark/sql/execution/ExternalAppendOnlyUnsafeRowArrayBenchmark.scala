@@ -143,7 +143,7 @@ object ExternalAppendOnlyUnsafeRowArrayBenchmark {
     benchmark.addCase("ExternalAppendOnlyUnsafeRowArray") { _: Int =>
       var sum = 0L
       for (_ <- 0L until iterations) {
-        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold)
+        val array = new ExternalAppendOnlyUnsafeRowArray(numSpillThreshold, numSpillThreshold)
         rows.foreach(x => array.add(x))
 
         val iterator = array.generateIterator()
