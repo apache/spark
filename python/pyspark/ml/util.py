@@ -83,7 +83,7 @@ class BaseReadWrite(object):
 
         .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        raise NotImplementedError("Read/Write is not yet implemented for type: %s" % type(self))
 
     def session(self, sparkSession):
         """
@@ -92,14 +92,21 @@ class BaseReadWrite(object):
         self._sparkSession = sparkSession
         return self
 
+    @property
     def sparkSession(self):
+        """
+        Returns the user-specified Spark Session or the default.
+        """
         if self._sparkSession is None:
             self._sparkSession = SparkSession.builder.getOrCreate()
         return self._sparkSession
 
     @property
     def sc(self):
-        return self.sparkSession().sparkContext
+        """
+        Returns the underlying `SparkContext`.
+        """
+        return self.sparkSession.sparkContext
 
 
 @inherit_doc
@@ -128,20 +135,16 @@ class MLWriter(BaseReadWrite):
         self.saveImpl(path)
 
     def saveImpl(self, path):
+        """
+        save() handles overwriting and then calls this method.  Subclasses should override this
+        method to implement the actual saving of the instance.
+        """
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def overwrite(self):
         """Overwrites if the output path already exists."""
         self.shouldOverwrite = True
         return self
-
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for saving.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def session(self, sparkSession):
         """Sets the Spark Session to use for saving."""
@@ -229,14 +232,6 @@ class MLReader(BaseReadWrite):
         """Load the ML instance from the input path."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for loading.
-
-        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
-        """
-        super(MLReader, self).context(sqlContext)
-
     def session(self, sparkSession):
         """Sets the Spark Session to use for loading."""
         super(MLReader, self).session(sparkSession)
@@ -300,13 +295,6 @@ class JavaMLReader(MLReader):
             java_obj = getattr(java_obj, name)
         return java_obj
 
-    @classmethod
-    def _load_given_name(cls, java_class):
-        java_obj = _jvm()
-        for name in java_class.split("."):
-            java_obj = getattr(java_obj, name)
-        return java_obj
-
 
 @inherit_doc
 class MLReadable(object):
@@ -358,8 +346,15 @@ class JavaPredictionModel():
 @inherit_doc
 class DefaultParamsWritable(MLWritable):
     """
-    Class for making simple Params types writable. Assumes that all parameters
-    are JSON-serializable.
+    .. note:: DeveloperApi
+
+    Helper trait for making simple `Params` types writable.  If a `Params` class stores
+    all data as [[pyspark.ml.param.Param]] values, then extending this trait will provide
+    a default implementation of writing saved instances of the class.
+    This only handles simple [[pyspark.ml.param.Param]] types; e.g., it will not handle
+    [[pyspark.sql.Dataset]].
+
+    @see `DefaultParamsReadable`, the counterpart to this trait
 
     .. versionadded:: 2.3.0
     """
@@ -376,6 +371,8 @@ class DefaultParamsWritable(MLWritable):
 @inherit_doc
 class DefaultParamsWriter(MLWriter):
     """
+    .. note:: DeveloperApi
+
     Class for writing Estimators and Transformers whose parameters are JSON-serializable.
 
     .. versionadded:: 2.3.0
@@ -390,16 +387,32 @@ class DefaultParamsWriter(MLWriter):
 
     @staticmethod
     def save_metadata(instance, path, sc, extraMetadata=None, paramMap=None):
+        """
+        Saves metadata + Params to: path + "/metadata"
+        - class
+        - timestamp
+        - sparkVersion
+        - uid
+        - paramMap
+        - (optionally, extra metadata)
+        @param extraMetadata  Extra metadata to be saved at same level as uid, paramMap, etc.
+        @param paramMap  If given, this is saved in the "paramMap" field.
+        """
         metadataPath = os.path.join(path, "metadata")
-        metadataJson = DefaultParamsWriter.get_metadata_to_save(instance,
-                                                                metadataPath,
-                                                                sc,
-                                                                extraMetadata,
-                                                                paramMap)
+        metadataJson = DefaultParamsWriter._get_metadata_to_save(instance,
+                                                                 sc,
+                                                                 extraMetadata,
+                                                                 paramMap)
         sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
 
     @staticmethod
-    def get_metadata_to_save(instance, path, sc, extraMetadata=None, paramMap=None):
+    def _get_metadata_to_save(instance, sc, extraMetadata=None, paramMap=None):
+        """
+        Helper for [[save_metadata()]] which extracts the JSON to save.
+        This is useful for ensemble models which need to save metadata for many sub-models.
+
+        @see [[save_metadata()]] for details on what this includes.
+        """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
         params = instance.extractParamMap()
@@ -420,8 +433,15 @@ class DefaultParamsWriter(MLWriter):
 @inherit_doc
 class DefaultParamsReadable(MLReadable):
     """
-    Class for making simple Params types readable. Assumes that all parameters
-    are JSON-serializable.
+    .. note:: DeveloperApi
+
+    Helper trait for making simple `Params` types readable.  If a `Params` class stores
+    all data as [[pyspark.ml.param.Param]] values, then extending this trait will provide
+    a default implementation of reading saved instances of the class.
+    This only handles simple [[pyspark.ml.param.Param]] types; e.g., it will not handle
+    [[pyspark.sql.Dataset]].
+
+    @see `DefaultParamsWritable`, the counterpart to this trait
 
     .. versionadded:: 2.3.0
     """
@@ -435,7 +455,11 @@ class DefaultParamsReadable(MLReadable):
 @inherit_doc
 class DefaultParamsReader(MLReader):
     """
-    Class for reading Estimators and Transformers whose parameters are JSON-serializable.
+    .. note:: DeveloperApi
+
+    Default `MLReader` implementation for transformers and estimators that
+    contain basic (json-serializable) params and no data. This will not handle
+    more complex params or types with data (e.g., models with coefficients).
 
     .. versionadded:: 2.3.0
     """
@@ -466,13 +490,25 @@ class DefaultParamsReader(MLReader):
 
     @staticmethod
     def loadMetadata(path, sc, expectedClassName=""):
+        """
+        Load metadata saved using [[DefaultParamsWriter.saveMetadata()]]
+
+        @param expectedClassName  If non empty, this is checked against the loaded metadata.
+        """
         metadataPath = os.path.join(path, "metadata")
         metadataStr = sc.textFile(metadataPath, 1).first()
-        loadedVals = DefaultParamsReader.parseMetaData(metadataStr, expectedClassName)
+        loadedVals = DefaultParamsReader._parseMetaData(metadataStr, expectedClassName)
         return loadedVals
 
     @staticmethod
-    def parseMetaData(metadataStr, expectedClassName=""):
+    def _parseMetaData(metadataStr, expectedClassName=""):
+        """
+        Parse metadata JSON string produced by [[DefaultParamsWriter._get_metadata_to_save()]].
+        This is a helper function for [[loadMetadata()]].
+
+        @param metadataStr  JSON string of metadata
+        @param expectedClassName  If non empty, this is checked against the loaded metadata.
+        """
         metadata = json.loads(metadataStr)
         className = metadata['class']
         if len(expectedClassName) > 0:
@@ -482,6 +518,9 @@ class DefaultParamsReader(MLReader):
 
     @staticmethod
     def getAndSetParams(instance, metadata):
+        """
+        Extract Params from metadata, and set them in the instance.
+        """
         for paramName in metadata['paramMap']:
             param = instance.getParam(paramName)
             paramValue = metadata['paramMap'][paramName]
@@ -489,6 +528,10 @@ class DefaultParamsReader(MLReader):
 
     @staticmethod
     def loadParamsInstance(path, sc):
+        """
+        Load a `Params` instance from the given path, and return it.
+        This assumes the instance inherits from [[MLReadable]].
+        """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
         py_type = DefaultParamsReader.__get_class(metadata['class'])
         instance = py_type()

@@ -1165,6 +1165,33 @@ class PersistenceTest(SparkSessionTestCase):
         except OSError:
             pass
 
+    def test_default_read_write(self):
+        temp_path = tempfile.mkdtemp()
+
+        lr = LogisticRegression()
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+        writer = DefaultParamsWriter(lr)
+
+        savePath = temp_path + "/lr"
+        writer.saveImpl(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr2 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
+
+        # test overwrite
+        lr.setThreshold(.8)
+        writer.overwrite().save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr3 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr3.uid)
+        self.assertEqual(lr.extractParamMap(), lr3.extractParamMap())
+
 
 class LDATest(SparkSessionTestCase):
 
@@ -1962,46 +1989,6 @@ class ChiSquareTestTests(SparkSessionTestCase):
         fieldNames = set(field.name for field in res.schema.fields)
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
-
-
-class DefaultReadWriteTests(SparkSessionTestCase):
-
-    def test_default_read_write(self):
-        temp_path = tempfile.mkdtemp()
-
-        lr = LogisticRegression()
-        lr.setMaxIter(50)
-        lr.setThreshold(.75)
-        writer = DefaultParamsWriter(lr)
-
-        savePath = temp_path + "/lr"
-        writer.saveImpl(savePath)
-
-        reader = DefaultParamsReadable.read()
-        lr2 = reader.load(savePath)
-
-        self.assertEqual(lr.uid, lr2.uid)
-        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
-
-    def test_default_read_write_with_overwrite(self):
-        temp_path = tempfile.mkdtemp()
-
-        lr = LogisticRegression()
-        lr.setMaxIter(50)
-        lr.setThreshold(.75)
-        writer = DefaultParamsWriter(lr)
-
-        savePath = temp_path + "/lr"
-        writer.saveImpl(savePath)
-
-        lr.setThreshold(.8)
-        writer.overwrite().save(savePath)
-
-        reader = DefaultParamsReadable.read()
-        lr2 = reader.load(savePath)
-
-        self.assertEqual(lr.uid, lr2.uid)
-        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
 
 
 if __name__ == "__main__":
