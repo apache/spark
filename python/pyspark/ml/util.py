@@ -418,8 +418,7 @@ class DefaultParamsWriter(MLWriter):
         params = instance.extractParamMap()
         jsonParams = {}
         if paramMap is not None:
-            for p in paramMap:
-                jsonParams[p.name] = paramMap[p]
+            jsonParams = paramMap
         else:
             for p in params:
                 jsonParams[p.name] = params[p]
