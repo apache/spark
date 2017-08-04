@@ -463,7 +463,7 @@ private[hive] class TestHiveSparkSession(
       // has already set the execution id.
       if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
         // We don't actually have a `QueryExecution` here, use a fake one instead.
-        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation)) {
+        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation())) {
           createCmds.foreach(_())
         }
       } else {
