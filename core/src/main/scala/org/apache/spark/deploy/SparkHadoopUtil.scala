@@ -226,22 +226,22 @@ class SparkHadoopUtil extends Logging {
   }
 
   def globPath(pattern: Path): Seq[Path] = {
-    globPath(pattern, conf)
+    val fs = pattern.getFileSystem(conf)
+    globPath(fs, pattern)
   }
 
-  def globPath(pattern: Path, hadoopConf: Configuration): Seq[Path] = {
-    val fs = pattern.getFileSystem(hadoopConf)
+  def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
       statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
     }.getOrElse(Seq.empty[Path])
   }
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
-    globPathIfNecessary(pattern, conf)
+    if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
   }
 
-  def globPathIfNecessary(pattern: Path, hadoopConf: Configuration): Seq[Path] = {
-    if (isGlobPath(pattern)) globPath(pattern, hadoopConf) else Seq(pattern)
+  def globPathIfNecessary(fs: FileSystem, pattern: Path): Seq[Path] = {
+    if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
   /**
