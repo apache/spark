@@ -294,8 +294,13 @@ private[spark] object Utils extends Logging {
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs()) {
+        if (!dir.mkdirs()) {
           dir = null
+        }
+        if (dir.exists()) {
+          logInfo(s"$dir exists,can't create a new directory.")
+          dir = null
+          return dir.getCanonicalFile
         }
       } catch { case e: SecurityException => dir = null; }
     }
