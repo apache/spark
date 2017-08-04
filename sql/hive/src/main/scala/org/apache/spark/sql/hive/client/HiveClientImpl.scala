@@ -49,6 +49,7 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -123,20 +124,10 @@ private[hive] class HiveClientImpl(
       }
     }
 
-    def isCliSessionState(state: SessionState): Boolean = {
-      var temp: Class[_] = if (state != null) state.getClass else null
-      var found = false
-      while (temp != null && !found) {
-        found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
-        temp = temp.getSuperclass
-      }
-      found
-    }
-
     val ret = try {
       // originState will be created if not exists, will never be null
       val originalState = SessionState.get()
-      if (isCliSessionState(originalState)) {
+      if (HiveUtils.isCliSessionState(originalState)) {
         // In `SparkSQLCLIDriver`, we have already started a `CliSessionState`,
         // which contains information like configurations from command line. Later
         // we call `SparkSQLEnv.init()` there, which would run into this part again.

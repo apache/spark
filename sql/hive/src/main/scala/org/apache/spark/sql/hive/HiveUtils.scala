@@ -32,6 +32,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
@@ -229,6 +230,16 @@ private[spark] object HiveUtils extends Logging {
     }.toMap
   }
 
+  def isCliSessionState(state: SessionState = SessionState.get): Boolean = {
+    var temp: Class[_] = if (state != null) state.getClass else null
+    var found = false
+    while (temp != null && !found) {
+      found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
+      temp = temp.getSuperclass
+    }
+    found
+  }
+
   /**
    * Create a [[HiveClient]] used for execution.
    *
@@ -312,7 +323,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
         config = configurations,
-        isolationOn = false,
+        isolationOn = isCliSessionState(),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
