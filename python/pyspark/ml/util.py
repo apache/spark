@@ -532,6 +532,7 @@ class DefaultParamsReader(MLReader):
         This assumes the instance inherits from [[MLReadable]].
         """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
-        py_type = DefaultParamsReader.__get_class(metadata['class'])
-        instance = py_type()
+        pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
+        py_type = DefaultParamsReader.__get_class(pythonClassName)
+        instance = py_type.load(path)
         return instance
