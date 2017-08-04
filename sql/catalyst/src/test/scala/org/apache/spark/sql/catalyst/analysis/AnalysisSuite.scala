@@ -384,7 +384,7 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
       expression: Expression,
       expectedDataType: DataType): Unit = {
     val afterAnalyze =
-      Project(Seq(Alias(expression, "a")()), OneRowRelation).analyze.expressions.head
+      Project(Seq(Alias(expression, "a")()), OneRowRelation()).analyze.expressions.head
     if (!afterAnalyze.dataType.equals(expectedDataType)) {
       fail(
         s"""

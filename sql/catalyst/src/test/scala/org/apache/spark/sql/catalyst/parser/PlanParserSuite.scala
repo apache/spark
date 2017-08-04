@@ -88,11 +88,11 @@ class PlanParserSuite extends AnalysisTest {
       cte(table("cte1").select(star()), "cte1" -> table("a").select(star())))
     assertEqual(
       "with cte1 (select 1) select * from cte1",
-      cte(table("cte1").select(star()), "cte1" -> OneRowRelation.select(1)))
+      cte(table("cte1").select(star()), "cte1" -> OneRowRelation().select(1)))
     assertEqual(
       "with cte1 (select 1), cte2 as (select * from cte1) select * from cte2",
       cte(table("cte2").select(star()),
-        "cte1" -> OneRowRelation.select(1),
+        "cte1" -> OneRowRelation().select(1),
         "cte2" -> table("cte1").select(star())))
     intercept(
       "with cte1 (select 1), cte1 as (select 1 from cte1) select * from cte1",
@@ -100,8 +100,8 @@ class PlanParserSuite extends AnalysisTest {
   }
 
   test("simple select query") {
-    assertEqual("select 1", OneRowRelation.select(1))
-    assertEqual("select a, b", OneRowRelation.select('a, 'b))
+    assertEqual("select 1", OneRowRelation().select(1))
+    assertEqual("select a, b", OneRowRelation().select('a, 'b))
     assertEqual("select a, b from db.c", table("db", "c").select('a, 'b))
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
     assertEqual(
@@ -109,7 +109,7 @@ class PlanParserSuite extends AnalysisTest {
       table("db", "c").select('a, 'b).where('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
-    assertEqual("select from tbl", OneRowRelation.select('from.as("tbl")))
+    assertEqual("select from tbl", OneRowRelation().select('from.as("tbl")))
   }
 
   test("reverse select query") {
