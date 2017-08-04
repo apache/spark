@@ -389,10 +389,12 @@ private[spark] class MesosClusterScheduler(
 
     val envBuilder = Environment.newBuilder()
 
+    // add normal environment variables
     env.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
     }
 
+    // add secret environment variables
     getSecretEnvVar(desc).foreach { variable =>
       logInfo(s"Setting secret name=${variable.getSecret.getReference.getName} " +
         s"on environment variable name=${variable.getName}")
@@ -406,9 +408,14 @@ private[spark] class MesosClusterScheduler(
   private def getSecretEnvVar(desc: MesosDriverDescription): Option[Variable] = {
     desc.conf.get(config.SECRET_ENVKEY).map { envKey =>
       desc.conf.get(config.SECRET_NAME).map { secretName =>
-        val reference = Secret.Reference.newBuilder().setName(secretName)
-        val secret = Secret.newBuilder().setReference(reference)
-        Variable.newBuilder().setName(envKey).setSecret(secret).build()
+        val secret = Secret.newBuilder()
+          .setReference(Secret.Reference.newBuilder().setName(secretName).build())
+          .setType(Secret.Type.REFERENCE)
+          .build()
+        Variable.newBuilder()
+          .setName(envKey)
+          .setType(Variable.Type.SECRET)
+          .setSecret(secret).build()
       }.getOrElse {
         throw new SparkException(
           s"${config.SECRET_ENVKEY.key} is set, but ${config.SECRET_NAME.key} is not set.")
@@ -689,6 +696,7 @@ private[spark] class MesosClusterScheduler(
         tasks)
     }
     tasks.foreach { case (offerId, taskInfos) =>
+      logTrace(s"Launching taskInfo\n ${taskInfos.toString}")
       driver.launchTasks(Collections.singleton(offerId), taskInfos.asJava)
     }
 

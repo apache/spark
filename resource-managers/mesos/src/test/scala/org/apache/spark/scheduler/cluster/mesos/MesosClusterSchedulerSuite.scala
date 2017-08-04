@@ -19,15 +19,15 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.{Collection, Collections, Date}
 
-import scala.collection.JavaConverters._
+import org.apache.mesos.Protos.Environment.Variable
 
+import scala.collection.JavaConverters._
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
-
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
@@ -361,10 +361,18 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
 
     val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
 
+    assert(launchedTasks.head
+      .getCommand
+      .getEnvironment
+      .getVariablesCount == 2)  // SPARK_SUBMIT_OPS and the secret
+
     val variable = launchedTasks.head.getCommand.getEnvironment
       .getVariablesList.asScala.filter(_.getName == envKey).head
 
+    assert(variable.getSecret.isInitialized)
+    assert(variable.getSecret.getType == Secret.Type.REFERENCE)
     assert(variable.getSecret.getReference.getName == secretName)
+    assert(variable.getType == Variable.Type.SECRET)
   }
 
   test("Creates a file-based secret.") {
