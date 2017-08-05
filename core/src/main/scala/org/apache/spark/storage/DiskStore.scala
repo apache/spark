@@ -25,9 +25,11 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ListBuffer
+
 import com.google.common.io.{ByteStreams, Closeables, Files}
 import io.netty.channel.{DefaultFileRegion, FileRegion}
 import io.netty.util.AbstractReferenceCounted
+
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.ManagedBuffer
@@ -155,14 +157,14 @@ private class DiskBlockData(
   override def toInputStream(): InputStream = new FileInputStream(file)
 
   /**
-    * Returns a Netty-friendly wrapper for the block's data.
-    *
-    * Please see `ManagedBuffer.convertToNetty()` for more details.
-    */
+  * Returns a Netty-friendly wrapper for the block's data.
+  *
+  * Please see `ManagedBuffer.convertToNetty()` for more details.
+  */
   override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
 
   override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
-    Utils.tryWithResource(open()){ channel =>
+    Utils.tryWithResource(open()) { channel =>
       var remaining = blockSize
       val chunks = new ListBuffer[ByteBuffer]()
       while (remaining > 0) {
@@ -178,7 +180,9 @@ private class DiskBlockData(
   }
 
   override def toByteBuffer(): ByteBuffer = {
-    require( size < Int.MaxValue, s"can't create a byte buffer of size $blockSize since it exceeds Int.MaxValue ${Int.MaxValue}.")
+    require( size < Int.MaxValue
+      , s"can't create a byte buffer of size $blockSize"
+        + s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
     Utils.tryWithResource(open()) { channel =>
       if (blockSize < minMemoryMapBytes) {
         // For small files, directly read rather than memory map.
