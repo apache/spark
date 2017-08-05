@@ -112,7 +112,7 @@ class SparkHadoopUtil extends Logging {
    */
   def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
     // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
-    conf.getAll.foreach { case (key, value) if key.startsWith("spark.hadoop.") =>
+    for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
       hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
   }
@@ -124,7 +124,7 @@ class SparkHadoopUtil extends Logging {
       srcMap: Map[String, String],
       destMap: HashMap[String, String]): Unit = {
     // Copy any "spark.hadoop.foo=bar" system properties into destMap as "foo=bar"
-    srcMap.foreach { case (key, value) if key.startsWith("spark.hadoop.") =>
+    for ((key, value) <- srcMap if key.startsWith("spark.hadoop.")) {
       destMap.put(key.substring("spark.hadoop.".length), value)
     }
   }
