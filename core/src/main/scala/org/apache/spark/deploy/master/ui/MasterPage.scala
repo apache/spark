@@ -122,6 +122,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                 {state.activeDrivers.length} Running,
                 {state.completedDrivers.length} Completed </li>
               <li><strong>Status:</strong> {state.status}</li>
+              <li><strong>Log Directory:</strong> {System.getenv("SPARK_LOG_DIR")}</li>
             </ul>
           </div>
         </div>
