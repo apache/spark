@@ -16,6 +16,10 @@
 #
 
 import py4j
+import sys
+
+if sys.version >= '3':
+    unicode = str
 
 
 class CapturedException(Exception):
@@ -24,7 +28,11 @@ class CapturedException(Exception):
         self.stackTrace = stackTrace
 
     def __str__(self):
-        return repr(self.desc)
+        desc = self.desc
+        if isinstance(desc, unicode):
+            return str(desc.encode('utf-8'))
+        else:
+            return str(desc)
 
 
 class AnalysisException(CapturedException):
