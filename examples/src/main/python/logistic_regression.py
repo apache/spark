@@ -55,13 +55,15 @@ if __name__ == "__main__":
       Please refer to examples/src/main/python/ml/logistic_regression_with_elastic_net.py
       to see how ML's implementation is used.""", file=sys.stderr)
 
-    spark = SparkSession\
-        .builder\
-        .appName("PythonLR")\
-        .getOrCreate()
-
-    points = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])\
-        .mapPartitions(readPointBatch).cache()
+    spark = (SparkSession
+             .builder
+             .appName("PythonLR")
+             .getOrCreate())
+    points = (spark.read
+              .text(sys.argv[1])
+              .rdd.map(lambda r: r[0])
+              .mapPartitions(readPointBatch)
+              .cache())
     iterations = int(sys.argv[2])
 
     # Initialize w to a random value

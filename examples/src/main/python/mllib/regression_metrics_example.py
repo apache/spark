@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark import SparkContext
 # $example on$
-from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 from pyspark.mllib.evaluation import RegressionMetrics
 from pyspark.mllib.linalg import DenseVector
+from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
 # $example off$
 
-from pyspark import SparkContext
 
 if __name__ == "__main__":
     sc = SparkContext(appName="Regression Metrics Example")

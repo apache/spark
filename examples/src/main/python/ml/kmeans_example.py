@@ -20,8 +20,8 @@ from __future__ import print_function
 # $example on$
 from pyspark.ml.clustering import KMeans
 # $example off$
-
 from pyspark.sql import SparkSession
+
 
 """
 An example demonstrating k-means clustering.
@@ -32,10 +32,10 @@ This example requires NumPy (http://www.numpy.org/).
 """
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("KMeansExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("KMeansExample")
+             .getOrCreate())
 
     # $example on$
     # Loads data.

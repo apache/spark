@@ -22,17 +22,17 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml import Pipeline
-from pyspark.ml.regression import GBTRegressor
-from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import VectorIndexer
+from pyspark.ml.regression import GBTRegressor
 # $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("GradientBoostedTreeRegressorExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("GradientBoostedTreeRegressorExample")
+             .getOrCreate())
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.
@@ -40,8 +40,9 @@ if __name__ == "__main__":
 
     # Automatically identify categorical features, and index them.
     # Set maxCategories so features with > 4 distinct values are treated as continuous.
-    featureIndexer =\
-        VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
+    featureIndexer = VectorIndexer(inputCol="features",
+                                   outputCol="indexedFeatures",
+                                   maxCategories=4).fit(data)
 
     # Split the data into training and test sets (30% held out for testing)
     (trainingData, testData) = data.randomSplit([0.7, 0.3])
@@ -62,8 +63,9 @@ if __name__ == "__main__":
     predictions.select("prediction", "label", "features").show(5)
 
     # Select (prediction, true label) and compute test error
-    evaluator = RegressionEvaluator(
-        labelCol="label", predictionCol="prediction", metricName="rmse")
+    evaluator = RegressionEvaluator(labelCol="label",
+                                    predictionCol="prediction",
+                                    metricName="rmse")
     rmse = evaluator.evaluate(predictions)
     print("Root Mean Squared Error (RMSE) on test data = %g" % rmse)
 

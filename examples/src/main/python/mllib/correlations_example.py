@@ -17,12 +17,14 @@
 
 from __future__ import print_function
 
+# $example on$
 import numpy as np
-
+# $example off$
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.stat import Statistics
 # $example off$
+
 
 if __name__ == "__main__":
     sc = SparkContext(appName="CorrelationsExample")  # SparkContext

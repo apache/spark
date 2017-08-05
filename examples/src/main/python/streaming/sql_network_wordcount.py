@@ -32,8 +32,8 @@ from __future__ import print_function
 import sys
 
 from pyspark import SparkContext
-from pyspark.streaming import StreamingContext
 from pyspark.sql import Row, SparkSession
+from pyspark.streaming import StreamingContext
 
 
 def getSparkSessionInstance(sparkConf):
@@ -74,8 +74,8 @@ if __name__ == "__main__":
             wordsDataFrame.createOrReplaceTempView("words")
 
             # Do word count on table using SQL and print it
-            wordCountsDataFrame = \
-                spark.sql("select word, count(*) as total from words group by word")
+            wordCountsDataFrame = spark.sql(
+                "select word, count(*) as total from words group by word")
             wordCountsDataFrame.show()
         except:
             pass

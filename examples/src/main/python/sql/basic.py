@@ -17,13 +17,13 @@
 
 from __future__ import print_function
 
-# $example on:init_session$
-from pyspark.sql import SparkSession
-# $example off:init_session$
-
 # $example on:schema_inferring$
 from pyspark.sql import Row
 # $example off:schema_inferring$
+#
+# $example on:init_session$
+from pyspark.sql import SparkSession
+# $example off:init_session$
 
 # $example on:programmatic_schema$
 # Import data types
@@ -202,11 +202,11 @@ def programmatic_schema_example(spark):
 
 if __name__ == "__main__":
     # $example on:init_session$
-    spark = SparkSession \
-        .builder \
-        .appName("Python Spark SQL basic example") \
-        .config("spark.some.config.option", "some-value") \
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("Python Spark SQL basic example")
+             .config("spark.some.config.option", "some-value")
+             .getOrCreate())
     # $example off:init_session$
 
     basic_df_example(spark)

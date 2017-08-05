@@ -17,17 +17,18 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import ChiSqSelector
 from pyspark.ml.linalg import Vectors
 # $example off$
+from pyspark.sql import SparkSession
+
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("ChiSqSelectorExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("ChiSqSelectorExample")
+             .getOrCreate())
 
     # $example on$
     df = spark.createDataFrame([

@@ -32,15 +32,16 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("IsotonicRegressionExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("IsotonicRegressionExample")
+             .getOrCreate())
 
     # $example on$
     # Loads data.
-    dataset = spark.read.format("libsvm")\
-        .load("data/mllib/sample_isotonic_regression_libsvm_data.txt")
+    dataset = (spark.read
+               .format("libsvm")
+               .load("data/mllib/sample_isotonic_regression_libsvm_data.txt"))
 
     # Trains an isotonic regression model.
     model = IsotonicRegression().fit(dataset)

@@ -27,6 +27,7 @@ import time
 from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 
+
 if __name__ == "__main__":
 
     sc = SparkContext(appName="PythonStreamingQueueStream")

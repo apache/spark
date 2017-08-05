@@ -21,18 +21,19 @@ Collaborative Filtering Classification Example.
 from __future__ import print_function
 
 from pyspark import SparkContext
-
 # $example on$
 from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel, Rating
 # $example off$
+
 
 if __name__ == "__main__":
     sc = SparkContext(appName="PythonCollaborativeFilteringExample")
     # $example on$
     # Load and parse the data
     data = sc.textFile("data/mllib/als/test.data")
-    ratings = data.map(lambda l: l.split(','))\
-        .map(lambda l: Rating(int(l[0]), int(l[1]), float(l[2])))
+    ratings = (data
+               .map(lambda l: l.split(','))
+               .map(lambda l: Rating(int(l[0]), int(l[1]), float(l[2]))))
 
     # Build the recommendation model using Alternating Least Squares
     rank = 10

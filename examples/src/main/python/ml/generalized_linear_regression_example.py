@@ -17,10 +17,11 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.regression import GeneralizedLinearRegression
+from pyspark.sql import SparkSession
 # $example off$
+
 
 """
 An example demonstrating generalized linear regression.
@@ -29,15 +30,16 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("GeneralizedLinearRegressionExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("GeneralizedLinearRegressionExample")
+             .getOrCreate())
 
     # $example on$
     # Load training data
-    dataset = spark.read.format("libsvm")\
-        .load("data/mllib/sample_linear_regression_data.txt")
+    dataset = (spark
+               .read.format("libsvm")
+               .load("data/mllib/sample_linear_regression_data.txt"))
 
     glr = GeneralizedLinearRegression(family="gaussian", link="identity", maxIter=10, regParam=0.3)
 

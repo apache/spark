@@ -17,16 +17,17 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import Binarizer
 # $example off$
+from pyspark.sql import SparkSession
+
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("BinarizerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("BinarizerExample")
+             .getOrCreate())
 
     # $example on$
     continuousDataFrame = spark.createDataFrame([

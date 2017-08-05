@@ -95,13 +95,15 @@ def parquet_schema_merging_example(spark):
     # Create a simple DataFrame, stored into a partition directory
     sc = spark.sparkContext
 
-    squaresDF = spark.createDataFrame(sc.parallelize(range(1, 6))
+    squaresDF = spark.createDataFrame(sc
+                                      .parallelize(range(1, 6))
                                       .map(lambda i: Row(single=i, double=i ** 2)))
     squaresDF.write.parquet("data/test_table/key=1")
 
     # Create another DataFrame in a new partition directory,
     # adding a new column and dropping an existing column
-    cubesDF = spark.createDataFrame(sc.parallelize(range(6, 11))
+    cubesDF = spark.createDataFrame(sc
+                                    .parallelize(range(6, 11))
                                     .map(lambda i: Row(single=i, triple=i ** 3)))
     cubesDF.write.parquet("data/test_table/key=2")
 
@@ -165,13 +167,12 @@ def jdbc_dataset_example(spark):
     # $example on:jdbc_dataset$
     # Note: JDBC loading and saving can be achieved via either the load/save or jdbc methods
     # Loading data from a JDBC source
-    jdbcDF = spark.read \
-        .format("jdbc") \
-        .option("url", "jdbc:postgresql:dbserver") \
-        .option("dbtable", "schema.tablename") \
-        .option("user", "username") \
-        .option("password", "password") \
-        .load()
+    jdbcDF = (spark.read
+              .option("url", "jdbc:postgresql:dbserver")
+              .option("dbtable", "schema.tablename")
+              .option("user", "username")
+              .option("password", "password")
+              .load())
 
     jdbcDF2 = spark.read \
         .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
@@ -199,10 +200,10 @@ def jdbc_dataset_example(spark):
 
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("Python Spark SQL data source example") \
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("Python Spark SQL data source example")
+             .getOrCreate())
 
     basic_datasource_example(spark)
     parquet_example(spark)

@@ -23,16 +23,18 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("NaiveBayesExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("NaiveBayesExample")
+             .getOrCreate())
 
     # $example on$
     # Load training data
-    data = spark.read.format("libsvm") \
-        .load("data/mllib/sample_libsvm_data.txt")
+    data = (spark.read
+            .format("libsvm")
+            .load("data/mllib/sample_libsvm_data.txt"))
 
     # Split the data into train and test
     splits = data.randomSplit([0.6, 0.4], 1234)
@@ -50,7 +52,8 @@ if __name__ == "__main__":
     predictions.show()
 
     # compute accuracy on the test set
-    evaluator = MulticlassClassificationEvaluator(labelCol="label", predictionCol="prediction",
+    evaluator = MulticlassClassificationEvaluator(labelCol="label",
+                                                  predictionCol="prediction",
                                                   metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test set accuracy = " + str(accuracy))

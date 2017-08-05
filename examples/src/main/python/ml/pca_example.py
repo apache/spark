@@ -23,11 +23,12 @@ from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("PCAExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("PCAExample")
+             .getOrCreate())
 
     # $example on$
     data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),

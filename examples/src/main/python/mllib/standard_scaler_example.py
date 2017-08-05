@@ -24,6 +24,7 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.mllib.util import MLUtils
 # $example off$
 
+
 if __name__ == "__main__":
     sc = SparkContext(appName="StandardScalerExample")  # SparkContext
 

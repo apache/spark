@@ -22,17 +22,18 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml import Pipeline
-from pyspark.ml.regression import DecisionTreeRegressor
-from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import VectorIndexer
+from pyspark.ml.regression import DecisionTreeRegressor
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("DecisionTreeRegressionExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("DecisionTreeRegressionExample")
+             .getOrCreate())
 
     # $example on$
     # Load the data stored in LIBSVM format as a DataFrame.
@@ -40,8 +41,9 @@ if __name__ == "__main__":
 
     # Automatically identify categorical features, and index them.
     # We specify maxCategories so features with > 4 distinct values are treated as continuous.
-    featureIndexer =\
-        VectorIndexer(inputCol="features", outputCol="indexedFeatures", maxCategories=4).fit(data)
+    featureIndexer = VectorIndexer(inputCol="features",
+                                   outputCol="indexedFeatures",
+                                   maxCategories=4).fit(data)
 
     # Split the data into training and test sets (30% held out for testing)
     (trainingData, testData) = data.randomSplit([0.7, 0.3])

@@ -30,6 +30,7 @@ import sys
 from pyspark import SparkContext
 from pyspark.mllib.feature import Word2Vec
 
+
 USAGE = ("bin/spark-submit --driver-memory 4g "
          "examples/src/main/python/mllib/word2vec.py text8_lines")
 

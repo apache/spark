@@ -18,16 +18,17 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.linalg import Vectors
 from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.linalg import Vectors
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("VectorAssemblerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("VectorAssemblerExample")
+             .getOrCreate())
 
     # $example on$
     dataset = spark.createDataFrame(

@@ -29,10 +29,10 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("BisectingKMeansExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("BisectingKMeansExample")
+             .getOrCreate())
 
     # $example on$
     # Loads data.

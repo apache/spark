@@ -22,15 +22,18 @@ from pyspark.ml.classification import LogisticRegression
 # $example off$
 from pyspark.sql import SparkSession
 
+
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("LogisticRegressionWithElasticNet")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("LogisticRegressionWithElasticNet")
+             .getOrCreate())
 
     # $example on$
     # Load training data
-    training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    training = (spark.read
+                .format("libsvm")
+                .load("data/mllib/sample_libsvm_data.txt"))
 
     lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 

@@ -24,10 +24,10 @@ from pyspark.ml.linalg import Vectors
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("MaxAbsScalerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("MaxAbsScalerExample")
+             .getOrCreate())
 
     # $example on$
     dataFrame = spark.createDataFrame([

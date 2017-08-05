@@ -21,6 +21,7 @@ import sys
 
 from pyspark.sql import SparkSession
 
+
 """
 Read data file users.parquet in local Spark distro:
 
@@ -49,10 +50,10 @@ if __name__ == "__main__":
 
     path = sys.argv[1]
 
-    spark = SparkSession\
-        .builder\
-        .appName("ParquetInputFormat")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("ParquetInputFormat")
+             .getOrCreate())
 
     sc = spark.sparkContext
 

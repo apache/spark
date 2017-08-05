@@ -55,10 +55,10 @@ if __name__ == "__main__":
        as an example! Please refer to examples/src/main/python/ml/kmeans_example.py for an
        example on how to use ML's KMeans implementation.""", file=sys.stderr)
 
-    spark = SparkSession\
-        .builder\
-        .appName("PythonKMeans")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("PythonKMeans")
+             .getOrCreate())
 
     lines = spark.read.text(sys.argv[1]).rdd.map(lambda r: r[0])
     data = lines.map(parseVector).cache()

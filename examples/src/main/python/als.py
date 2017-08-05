@@ -26,8 +26,8 @@ from __future__ import print_function
 import sys
 
 import numpy as np
-from numpy.random import rand
 from numpy import matrix
+from numpy.random import rand
 from pyspark.sql import SparkSession
 
 LAMBDA = 0.01   # regularization
@@ -62,10 +62,10 @@ if __name__ == "__main__":
       example. Please use pyspark.ml.recommendation.ALS for more
       conventional use.""", file=sys.stderr)
 
-    spark = SparkSession\
-        .builder\
-        .appName("PythonALS")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("PythonALS")
+             .getOrCreate())
 
     sc = spark.sparkContext
 
@@ -87,17 +87,19 @@ if __name__ == "__main__":
     usb = sc.broadcast(us)
 
     for i in range(ITERATIONS):
-        ms = sc.parallelize(range(M), partitions) \
-               .map(lambda x: update(x, usb.value, Rb.value)) \
-               .collect()
+        ms = (sc
+              .parallelize(range(M), partitions)
+              .map(lambda x: update(x, usb.value, Rb.value))
+              .collect())
         # collect() returns a list, so array ends up being
         # a 3-d array, we take the first 2 dims for the matrix
         ms = matrix(np.array(ms)[:, :, 0])
         msb = sc.broadcast(ms)
 
-        us = sc.parallelize(range(U), partitions) \
-               .map(lambda x: update(x, msb.value, Rb.value.T)) \
-               .collect()
+        us = (sc
+              .parallelize(range(U), partitions)
+              .map(lambda x: update(x, msb.value, Rb.value.T))
+              .collect())
         us = matrix(np.array(us)[:, :, 0])
         usb = sc.broadcast(us)
 

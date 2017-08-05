@@ -1467,10 +1467,10 @@ See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_
 # Lazily instantiated global instance of SparkSession
 def getSparkSessionInstance(sparkConf):
     if ("sparkSessionSingletonInstance" not in globals()):
-        globals()["sparkSessionSingletonInstance"] = SparkSession \
-            .builder \
-            .config(conf=sparkConf) \
-            .getOrCreate()
+        globals()["sparkSessionSingletonInstance"] = (SparkSession
+            .builder
+            .config(conf=sparkConf)
+            .getOrCreate())
     return globals()["sparkSessionSingletonInstance"]
 
 ...

@@ -22,6 +22,7 @@ from pyspark import SparkContext
 from pyspark.mllib.stat import KernelDensity
 # $example off$
 
+
 if __name__ == "__main__":
     sc = SparkContext(appName="KernelDensityEstimationExample")  # SparkContext
 

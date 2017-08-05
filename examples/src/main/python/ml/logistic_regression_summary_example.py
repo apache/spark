@@ -29,10 +29,10 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("LogisticRegressionSummary") \
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("LogisticRegressionSummary")
+             .getOrCreate())
 
     # Load training data
     training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

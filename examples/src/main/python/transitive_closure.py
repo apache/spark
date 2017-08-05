@@ -41,10 +41,10 @@ if __name__ == "__main__":
     """
     Usage: transitive_closure [partitions]
     """
-    spark = SparkSession\
-        .builder\
-        .appName("PythonTransitiveClosure")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("PythonTransitiveClosure")
+             .getOrCreate())
 
     partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     tc = spark.sparkContext.parallelize(generateGraph(), partitions).cache()

@@ -31,15 +31,16 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession \
-        .builder \
-        .appName("OneVsRestExample") \
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("OneVsRestExample")
+             .getOrCreate())
 
     # $example on$
     # load data file.
-    inputData = spark.read.format("libsvm") \
-        .load("data/mllib/sample_multiclass_classification_data.txt")
+    inputData = (spark.read
+                 .format("libsvm")
+                 .load("data/mllib/sample_multiclass_classification_data.txt"))
 
     # generate the train/test split.
     (train, test) = inputData.randomSplit([0.8, 0.2])

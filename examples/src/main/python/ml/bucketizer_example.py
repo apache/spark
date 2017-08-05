@@ -17,16 +17,17 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import Bucketizer
 # $example off$
+from pyspark.sql import SparkSession
+
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("BucketizerExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("BucketizerExample")
+             .getOrCreate())
 
     # $example on$
     splits = [-float("inf"), -0.5, 0.0, 0.5, float("inf")]
@@ -39,7 +40,7 @@ if __name__ == "__main__":
     # Transform original data into its bucket index.
     bucketedData = bucketizer.transform(dataFrame)
 
-    print("Bucketizer output with %d buckets" % (len(bucketizer.getSplits())-1))
+    print("Bucketizer output with %d buckets" % (len(bucketizer.getSplits()) - 1))
     bucketedData.show()
     # $example off$
 

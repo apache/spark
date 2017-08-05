@@ -35,27 +35,29 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession\
-        .builder\
-        .appName("CrossValidatorExample")\
-        .getOrCreate()
+    spark = (SparkSession
+             .builder
+             .appName("CrossValidatorExample")
+             .getOrCreate())
 
     # $example on$
     # Prepare training documents, which are labeled.
-    training = spark.createDataFrame([
-        (0, "a b c d e spark", 1.0),
-        (1, "b d", 0.0),
-        (2, "spark f g h", 1.0),
-        (3, "hadoop mapreduce", 0.0),
-        (4, "b spark who", 1.0),
-        (5, "g d a y", 0.0),
-        (6, "spark fly", 1.0),
-        (7, "was mapreduce", 0.0),
-        (8, "e spark program", 1.0),
-        (9, "a e c l", 0.0),
-        (10, "spark compile", 1.0),
-        (11, "hadoop software", 0.0)
-    ], ["id", "text", "label"])
+    training = spark.createDataFrame(
+        [
+            (0, "a b c d e spark", 1.0),
+            (1, "b d", 0.0),
+            (2, "spark f g h", 1.0),
+            (3, "hadoop mapreduce", 0.0),
+            (4, "b spark who", 1.0),
+            (5, "g d a y", 0.0),
+            (6, "spark fly", 1.0),
+            (7, "was mapreduce", 0.0),
+            (8, "e spark program", 1.0),
+            (9, "a e c l", 0.0),
+            (10, "spark compile", 1.0),
+            (11, "hadoop software", 0.0)
+        ],
+        ["id", "text", "label"])
 
     # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
