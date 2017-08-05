@@ -14,7 +14,6 @@
 package org.apache.spark.io;
 
 import com.google.common.base.Preconditions;
-import com.google.common.primitives.Ints;
 import org.apache.spark.storage.StorageUtils;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -262,7 +261,7 @@ public class ReadAheadInputStream extends InputStream {
     }
     if (available() >= n) {
       // we can skip from the internal buffers
-      int toSkip = Ints.checkedCast(n);
+      int toSkip = (int)n;
       byte[] temp = new byte[toSkip];
       while (toSkip > 0) {
         int skippedBytes = read(temp, 0, toSkip);
