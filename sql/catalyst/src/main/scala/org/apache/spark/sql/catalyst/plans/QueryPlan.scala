@@ -203,11 +203,11 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   final lazy val canonicalized: PlanType = {
     var plan = doCanonicalize()
+    // If the plan has not been changed due to canonicalization, make a copy of it so we don't
+    // mutate the original plan's _isCanonicalizedPlan flag.
     if (plan eq this) {
       plan = plan.makeCopy(plan.mapProductIterator(x => x.isInstanceOf[AnyRef]))
     }
-    // Change only the root node, since it is unlikely some code would go into the subtree (not
-    // the root) and try execute that part.
     plan._isCanonicalizedPlan = true
     plan
   }
