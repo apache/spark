@@ -185,8 +185,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * This is used solely for making sure we wouldn't execute a canonicalized plan.
    * See [[canonicalized]] on how this is set.
    */
-  @transient
-  private var _isCanonicalizedPlan: Boolean = false
+  @transient private var _isCanonicalizedPlan: Boolean = false
 
   protected def isCanonicalizedPlan: Boolean = _isCanonicalizedPlan
 
@@ -201,7 +200,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * Plan nodes that require special canonicalization should override [[doCanonicalize()]].
    * They should remove expressions cosmetic variations themselves.
    */
-  final lazy val canonicalized: PlanType = {
+  @transient final lazy val canonicalized: PlanType = {
     var plan = doCanonicalize()
     // If the plan has not been changed due to canonicalization, make a copy of it so we don't
     // mutate the original plan's _isCanonicalizedPlan flag.
