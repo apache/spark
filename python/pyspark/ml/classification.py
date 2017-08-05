@@ -1352,8 +1352,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
                 weightCol = self.getWeightCol()
             else:
                 warnings.warn("weightCol is ignored, "
-                              "as it is not supported by {} now.".format(
-                                  classifier.__class__.__name__))
+                              "as it is not supported by {0} now.".format(classifier))
 
         if weightCol:
             multiclassLabeled = dataset.select(labelCol, featuresCol, weightCol)
