@@ -405,7 +405,12 @@ private[spark] object HiveUtils extends Logging {
     propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
     propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
-    SparkHadoopUtil.get.appendSparkHadoopConfigs(propMap)
+    // SPARK-21451: Spark will gather all `spark.hadoop.*` properties from a `SparkConf` to a
+    // Hadoop Configuration internally, as long as it happens after SparkContext initialized.
+    // Some instances such as `CliSessionState` used in `SparkSQLCliDriver` may also rely on these
+    // Configuration. But it happens before SparkContext initialized, we need to take them from
+    // system properties in the form of regular hadoop configurations.
+    SparkHadoopUtil.get.appendSparkHadoopConfigs(sys.props.toMap, propMap)
 
     propMap.toMap
   }

@@ -22,6 +22,7 @@ import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
+import scala.collection.immutable.Map
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
@@ -75,7 +76,6 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-
   /**
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
    * configuration.
@@ -106,21 +106,26 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
+  /**
+   * Appends spark.hadoop.* configurations from a [[SparkConf]] to a Hadoop
+   * configuration without the spark.hadoop. prefix.
+   */
   def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
-    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-    conf.getAll.foreach { case (key, value) =>
-      if (key.startsWith("spark.hadoop.")) {
-        hadoopConf.set(key.substring("spark.hadoop.".length), value)
-      }
+    // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
+    conf.getAll.foreach { case (key, value) if key.startsWith("spark.hadoop.") =>
+      hadoopConf.set(key.substring("spark.hadoop.".length), value)
     }
   }
 
-  def appendSparkHadoopConfigs(propMap: HashMap[String, String]): Unit = {
-    // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-    sys.props.foreach { case (key, value) =>
-      if (key.startsWith("spark.hadoop.")) {
-        propMap.put(key.substring("spark.hadoop.".length), value)
-      }
+  /**
+   * Appends spark.hadoop.* configurations from a Map to another without the spark.hadoop. prefix.
+   */
+  def appendSparkHadoopConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hadoop.foo=bar" system properties into destMap as "foo=bar"
+    srcMap.foreach { case (key, value) if key.startsWith("spark.hadoop.") =>
+      destMap.put(key.substring("spark.hadoop.".length), value)
     }
   }
 
