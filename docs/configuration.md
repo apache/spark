@@ -1091,6 +1091,40 @@ Apart from these, the following properties are also available, and may be useful
     to get the replication level of the block to the initial number.
   </td>
 </tr>
+<tr>
+  <td><code>spark.storage.replication.policy</code></td>
+  <td>
+    org.apache.spark.storage.<br />RandomBlockReplicationPolicy
+  </td>
+  <td>
+    The policy to use for choosing peers when replicating blocks. The default policy would randomly
+    choose the peers to replicate to. A more resilient replication policy is provided by
+    <code>org.apache.spark.storage.BasicBlockReplicationPolicy</code>, which makes use of the
+    topology information of the hosts to choose the peers, much like the HDFS blocks replication
+    strategy: it would try to choose the first replica within the same rack, and a third replica on
+    a different rack. See <code>spark.storage.replication.topologyMapper</code> below for how to
+    provide the topology information for the hosts.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.replication.topologyMapper</code></td>
+  <td>
+    org.apache.spark.storage.<br />DefaultTopologyMapper
+  </td>
+  <td>
+    The topology information of a host is determined by a topology mapping service defined by the
+    abstract class <code>org.apache.spark.storage.TopologyMapper</code>, which can be configured by
+    this property. A default implementation that assumes all hosts are in the same rack is provided
+    by <code>org.apache.spark.storage.DefaultTopologyMapper</code>. A file-based implementation is
+    provided by <code>org.apache.spark.storage.FileBasedTopologyMapper</code>, which reads the
+    topology information from the file <code>org.apache.spark.storage.topologyFile</code>. Each line
+    of this file is of the format of <code>host1 = /rack1</code> and provides a mapping from a host
+    name to its rack information. <em>Note:</em> This configuration only takes effect when
+    <code>spark.storage.replication.policy</code> is set to a a policy that takes the topology
+    information into consideration, e.g.
+    <code>org.apache.spark.storage.BasicBlockReplicationPolicy</code>.
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
