@@ -1416,13 +1416,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  def testGetOrElseUpdateForLargeBlock(storageLevel : StorageLevel){
+  def testGetOrElseUpdateForLargeBlock(storageLevel : StorageLevel) {
     store = makeBlockManager(6L * 1024 * 1024 * 1024, "exec1")
     def mkBlobs() = {
       val rng = new java.util.Random(42)
-      Iterator.fill(2 * 1024 + 1){
-        val buff = new Array[Byte](1024 * 1024)
-        rng.nextBytes(buff)
+      val buff = new Array[Byte](1024 * 1024)
+      rng.nextBytes(buff)
+      Iterator.fill(2 * 1024 + 1) {
         buff
       }
     }
@@ -1452,11 +1452,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       })
     }
     val getBlockRes = store.getBlockData(RDDBlockId(42, 0))
-    withClue(getBlockRes){
+    withClue(getBlockRes) {
       try {
         assert(getBlockRes.size() >= 2 * 1024 * 1024 * 1024)
-        Utils.tryWithResource(getBlockRes.createInputStream()){ inpStrm =>
-          val iter = store.serializerManager.dataDeserializeStream(RDDBlockId(42, 0), inpStrm)(implicitly[ClassTag[Array[Byte]]])
+        Utils.tryWithResource(getBlockRes.createInputStream()) { inpStrm =>
+          val iter = store
+            .serializerManager
+            .dataDeserializeStream(RDDBlockId(42, 0)
+              , inpStrm)(implicitly[ClassTag[Array[Byte]]])
           assert(iter.zipAll(mkBlobs(), null, null).forall {
             case (a, b) =>
               a != null &&
@@ -1468,37 +1471,21 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         getBlockRes.release()
       }
     }
-/*
-    val res2 = store.getOrElseUpdate(
-      RDDBlockId(42, 0),
-      storageLevel,
-      implicitly[ClassTag[Array[Byte]]],
-      mkBlobs _
-    )
-    withClue(res2) {
-      assert(res2.isLeft)
-      assert(res2.left.get.data.zipAll(mkBlobs(), null, null).forall {
-        case (a, b) =>
-          a != null &&
-            b != null &&
-            a.asInstanceOf[Array[Byte]].seq == b.asInstanceOf[Array[Byte]].seq
-      })
-    }*/
   }
 
-  test("getOrElseUpdate > 2gb, storage level = disk only"){
+  test("getOrElseUpdate > 2gb, storage level = disk only") {
     testGetOrElseUpdateForLargeBlock(StorageLevel.DISK_ONLY)
   }
 
-  test("getOrElseUpdate > 2gb, storage level = memory deserialized"){
+  test("getOrElseUpdate > 2gb, storage level = memory deserialized") {
     testGetOrElseUpdateForLargeBlock(StorageLevel.MEMORY_ONLY)
   }
 
-  test("getOrElseUpdate > 2gb, storage level = off-heap"){
+  test("getOrElseUpdate > 2gb, storage level = off-heap") {
     testGetOrElseUpdateForLargeBlock(StorageLevel.OFF_HEAP)
   }
 
-  test("getOrElseUpdate > 2gb, storage level = memory serialized"){
+  test("getOrElseUpdate > 2gb, storage level = memory serialized") {
     testGetOrElseUpdateForLargeBlock(StorageLevel.MEMORY_ONLY_SER)
   }
 }
