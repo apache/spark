@@ -1752,6 +1752,15 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row(1, "a"))
   }
 
+  test("SPARK-21646: BinaryComparison shouldn't auto cast string to int/long") {
+    val str1 = Long.MaxValue.toString + "1"
+    val str2 = Int.MaxValue.toString + "1"
+    val str3 = "10"
+    val df = Seq(str1 -> "a", str2 -> "b", str3 -> "c").toDF("c1", "c2")
+    assert(df.filter($"c1" > 0).count() === 3)
+    assert(df.filter($"c1" > 0L).count() === 3)
+  }
+
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     // invalid table names
