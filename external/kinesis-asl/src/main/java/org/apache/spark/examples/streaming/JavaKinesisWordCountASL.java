@@ -129,7 +129,9 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     String regionName = KinesisExampleUtils.getRegionNameByEndpoint(endpointUrl);
 
     // Setup the Spark config and StreamingContext
-    SparkConf sparkConfig = new SparkConf().setAppName("JavaKinesisWordCountASL");
+    SparkConf sparkConfig = new SparkConf()
+      .setAppName("JavaKinesisWordCountASL")
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer");
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConfig, batchInterval);
 
     // Create the Kinesis DStreams
