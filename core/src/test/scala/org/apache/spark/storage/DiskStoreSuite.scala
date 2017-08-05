@@ -50,18 +50,18 @@ class DiskStoreSuite extends SparkFunSuite {
     val diskStoreMapped = new DiskStore(conf.clone().set(confKey, "0"), diskBlockManager,
       securityManager)
     diskStoreMapped.putBytes(blockId, byteBuffer)
-    val mapped = diskStoreMapped.getBytes(blockId).asInstanceOf[ByteBufferBlockData].buffer
+    val mapped = diskStoreMapped.getBytes(blockId).toByteBuffer()
     assert(diskStoreMapped.remove(blockId))
 
     val diskStoreNotMapped = new DiskStore(conf.clone().set(confKey, "1m"), diskBlockManager,
       securityManager)
     diskStoreNotMapped.putBytes(blockId, byteBuffer)
-    val notMapped = diskStoreNotMapped.getBytes(blockId).asInstanceOf[ByteBufferBlockData].buffer
+    val notMapped = diskStoreNotMapped.getBytes(blockId).toByteBuffer()
 
     // Not possible to do isInstanceOf due to visibility of HeapByteBuffer
-    assert(notMapped.getChunks().forall(_.getClass.getName.endsWith("HeapByteBuffer")),
+    assert(notMapped.getClass.getName.endsWith("HeapByteBuffer"),
       "Expected HeapByteBuffer for un-mapped read")
-    assert(mapped.getChunks().forall(_.isInstanceOf[MappedByteBuffer]),
+    assert(mapped.isInstanceOf[MappedByteBuffer],
       "Expected MappedByteBuffer for mapped read")
 
     def arrayFromByteBuffer(in: ByteBuffer): Array[Byte] = {
@@ -70,8 +70,8 @@ class DiskStoreSuite extends SparkFunSuite {
       array
     }
 
-    assert(Arrays.equals(mapped.toArray, bytes))
-    assert(Arrays.equals(notMapped.toArray, bytes))
+    assert(Arrays.equals(new ChunkedByteBuffer(mapped).toArray, bytes))
+    assert(Arrays.equals(new ChunkedByteBuffer(notMapped).toArray, bytes))
   }
 
   test("block size tracking") {
@@ -98,7 +98,7 @@ class DiskStoreSuite extends SparkFunSuite {
     val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
 
     val mb = 1024*1024
-    val gb = 1024*mb
+    val gb = 1024L*mb
 
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>
