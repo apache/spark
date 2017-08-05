@@ -270,4 +270,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
+
+  test("SPARK-21588 SQLContext.getConf(key, null) should return null") {
+    assert(null == spark.conf.get("spark.sql.thriftServer.incrementalCollect", null))
+    assert("<undefined>" == spark.conf.get(
+      "spark.sql.thriftServer.incrementalCollect", "<undefined>"))
+  }
 }
