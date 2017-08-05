@@ -206,7 +206,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     // If the plan has not been changed due to canonicalization, make a copy of it so we don't
     // mutate the original plan's _isCanonicalizedPlan flag.
     if (plan eq this) {
-      plan = plan.makeCopy(plan.mapProductIterator(x => x.isInstanceOf[AnyRef]))
+      plan = plan.makeCopy(plan.mapProductIterator(x => x.asInstanceOf[AnyRef]))
     }
     plan._isCanonicalizedPlan = true
     plan
