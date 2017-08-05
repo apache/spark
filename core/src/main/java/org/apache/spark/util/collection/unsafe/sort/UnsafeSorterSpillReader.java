@@ -73,7 +73,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     }
 
     final Double readAheadFraction =
-      SparkEnv.get().conf().getDouble("spark.unsafe.sorter.spill.read.ahead.fraction", 0.5);
+        SparkEnv.get() == null ? 0.5 :
+             SparkEnv.get().conf().getDouble("spark.unsafe.sorter.spill.read.ahead.fraction", 0.5);
 
     final InputStream bs =
         new ReadAheadInputStream(
