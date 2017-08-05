@@ -190,7 +190,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("asin") {
     testUnary(Asin, math.asin, (-10 to 10).map(_ * 0.1))
-    testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNaN = true)
+    testUnary(Asin, math.asin, (11 to 20).map(_ * 0.1), expectNull = true)
     checkConsistencyBetweenInterpretedAndCodegen(Asin, DoubleType)
   }
 
@@ -206,7 +206,7 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("acos") {
     testUnary(Acos, math.acos, (-10 to 10).map(_ * 0.1))
-    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNaN = true)
+    testUnary(Acos, math.acos, (11 to 20).map(_ * 0.1), expectNull = true)
     checkConsistencyBetweenInterpretedAndCodegen(Acos, DoubleType)
   }
 
