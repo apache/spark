@@ -43,7 +43,7 @@ class LongType private() extends IntegralType {
    */
   override def defaultSize: Int = 8
 
-  override def simpleString: String = "bigint"
+  override def simpleString: String = "long"
 
   private[spark] override def asNullable: LongType = this
 }
