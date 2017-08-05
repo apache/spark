@@ -1207,7 +1207,10 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
             raise TypeError("%s should be provided as a string" % fieldName)
 
     sc = SparkContext._active_spark_context
-    time_col = _to_java_column(timeColumn)
+    if isinstance(timeColumn, Column):
+        time_col = _to_java_column(timeColumn._jc.toString().encode('utf8'))
+    else:
+        time_col = _to_java_column(timeColumn)
     check_string_field(windowDuration, "windowDuration")
     if slideDuration and startTime:
         check_string_field(slideDuration, "slideDuration")
