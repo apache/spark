@@ -202,7 +202,10 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    * They should remove expressions cosmetic variations themselves.
    */
   final lazy val canonicalized: PlanType = {
-    val plan = doCanonicalize()
+    var plan = doCanonicalize()
+    if (plan eq this) {
+      plan = plan.makeCopy(plan.mapProductIterator(x => x.isInstanceOf[AnyRef]))
+    }
     // Change only the root node, since it is unlikely some code would go into the subtree (not
     // the root) and try execute that part.
     plan._isCanonicalizedPlan = true
