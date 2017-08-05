@@ -25,7 +25,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, ShuffleClient, TempShuffleFileManager}
@@ -256,10 +256,13 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private[this] def splitLocalRemoteBlocks(): ArrayBuffer[FetchRequest] = {
-    // Make remote requests at most maxBytesInFlight / 5 in length; the reason to keep them
-    // smaller than maxBytesInFlight is to allow multiple, parallel fetches from up to 5
+    val numParallelFetchRequests = SparkEnv.get.conf
+      .getInt("spark.reducer.numParallelFetchRequests", 5)
+    // Make remote requests at most maxBytesInFlight / numParallelFetchRequests in length;
+    // the reason to keep them smaller than maxBytesInFlight is to allow multiple,
+    // parallel fetches from up to numParallelFetchRequests
     // nodes, rather than blocking on reading output from one node.
-    val targetRequestSize = math.max(maxBytesInFlight / 5, 1L)
+    val targetRequestSize = math.max(maxBytesInFlight / numParallelFetchRequests, 1L)
     logDebug("maxBytesInFlight: " + maxBytesInFlight + ", targetRequestSize: " + targetRequestSize
       + ", maxBlocksInFlightPerAddress: " + maxBlocksInFlightPerAddress)
 
