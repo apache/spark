@@ -101,6 +101,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           <div class="span12">
             <ul class="unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
+              <li><strong><a href="/metrics/master/json/">Master Metrics</a></strong></li>
               {
                 state.restUri.map { uri =>
                   <li>
@@ -210,9 +211,14 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <a href="#" onclick={confirm} class="kill-link">(kill)</a>
       </form>
     }
+    val appMetrics = if (!app.isFinished) {
+      <a class="kill-link" href={UIUtils.makeHref(parent.master.reverseProxy,
+        app.id, app.desc.appUiUrl) + "/metrics/json/jmx/"}>(App Metrics)</a>
+    }
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
+        {appMetrics}
         {killLink}
       </td>
       <td>

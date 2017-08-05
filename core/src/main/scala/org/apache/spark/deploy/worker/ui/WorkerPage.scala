@@ -66,6 +66,7 @@ private[ui] class WorkerPage(parent: WorkerWebUI) extends WebUIPage("") {
             <li><strong>
               Master URL:</strong> {workerState.masterUrl}
             </li>
+            <li><strong><a href="/metrics/json/jmx">Master Metrics</a></strong></li>
             <li><strong>Cores:</strong> {workerState.cores} ({workerState.coresUsed} Used)</li>
             <li><strong>Memory:</strong> {Utils.megabytesToString(workerState.memory)}
               ({Utils.megabytesToString(workerState.memoryUsed)} Used)</li>
