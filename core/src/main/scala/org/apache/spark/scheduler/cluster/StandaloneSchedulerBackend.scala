@@ -108,7 +108,7 @@ private[spark] class StandaloneSchedulerBackend(
       if (Utils.isDynamicAllocationEnabled(conf)) {
         Some(0)
       } else {
-        None
+        sc.conf.getOption("spark.executor.instances").map(_.toInt)
       }
     val appDesc = ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       webUrl, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
