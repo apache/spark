@@ -52,10 +52,10 @@ class ClusteringEvaluator (val uid: String)
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /**
-    * param for metric name in evaluation
-    * (supports `"squaredSilhouette"` (default), `"cosineSilhouette"`)
-    * @group param
-    */
+   * param for metric name in evaluation
+   * (supports `"squaredSilhouette"` (default), `"cosineSilhouette"`)
+   * @group param
+   */
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("squaredSilhouette", "cosineSilhouette"))
     new Param(

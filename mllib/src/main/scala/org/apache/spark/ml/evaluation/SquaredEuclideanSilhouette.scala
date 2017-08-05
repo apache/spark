@@ -28,12 +28,12 @@ private[evaluation] object SquaredEuclideanSilhouette {
   private[this] var kryoRegistrationPerformed: Boolean = false
 
   /**
-    * This method registers the class
-    * [[org.apache.spark.ml.evaluation.SquaredEuclideanSilhouette.ClusterStats]]
-    * for kryo serialization.
- *
-    * @param sc `SparkContext` to be used
-    */
+   * This method registers the class
+   * [[org.apache.spark.ml.evaluation.SquaredEuclideanSilhouette.ClusterStats]]
+   * for kryo serialization.
+   *
+   * @param sc `SparkContext` to be used
+   */
   def registerKryoClasses(sc: SparkContext): Unit = {
     if (! kryoRegistrationPerformed) {
       sc.getConf.registerKryoClasses(
@@ -46,7 +46,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
   }
 
   case class ClusterStats(Y: Vector, psi: Double, count: Long)
-  
+
   def computeCsi(vector: Vector): Double = {
     var sumOfSquares = 0.0
     vector.foreachActive((_, v) => {
@@ -54,7 +54,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
     })
     sumOfSquares
   }
-  
+
   def computeYVectorPsiAndCount(
       df: DataFrame,
       predictionCol: String,
@@ -111,7 +111,5 @@ private[evaluation] object SquaredEuclideanSilhouette {
       }
     }
     silhouetteCoeff
-
   }
-  
 }

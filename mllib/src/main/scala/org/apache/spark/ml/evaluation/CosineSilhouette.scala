@@ -30,12 +30,12 @@ private[evaluation] object CosineSilhouette {
   private[this] var kryoRegistrationPerformed: Boolean = false
 
   /**
-    * This method registers the class
-    * [[org.apache.spark.ml.evaluation.CosineSilhouette.ClusterStats]]
-    * for kryo serialization.
-    *
-    * @param sc `SparkContext` to be used
-    */
+   * This method registers the class
+   * [[org.apache.spark.ml.evaluation.CosineSilhouette.ClusterStats]]
+   * for kryo serialization.
+   *
+   * @param sc `SparkContext` to be used
+   */
   def registerKryoClasses(sc: SparkContext): Unit = {
     if (! kryoRegistrationPerformed) {
       sc.getConf.registerKryoClasses(
