@@ -88,12 +88,13 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive")
-          && key.startsWith("hive.")) {
-          logWarning(s"SET $key=$value doesn't work, " +
-            s"because Spark doesn't support set hive config dynamically. " +
-            s"Please set hive config through " +
-            s"--conf spark.hadoop.$key=$value before SparkSession is initialized.")
+        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
+          key.startsWith("hive.")) {
+          logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
+            s"the Hive config dynamically. Please passing the Hive-specific config by adding the " +
+            s"prefix spark.hadoop (e.g.,spark.hadoop.$key) when starting a Spark application. " +
+            s"For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
+            s"dynamically-loading-spark-properties.")
         }
         sparkSession.conf.set(key, value)
         Seq(Row(key, value))
