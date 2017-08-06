@@ -396,6 +396,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
   override def sqlOperator: String = "OR"
 
+  override def nullable: Boolean = left.nullable && right.nullable
+
   override def eval(input: InternalRow): Any = {
     val input1 = left.eval(input)
     if (input1 == true) {
