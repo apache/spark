@@ -491,8 +491,10 @@ class PlanParserSuite extends AnalysisTest {
   test("SPARK-20841 Support table column aliases in FROM clause") {
     assertEqual(
       "SELECT * FROM testData AS t(col1, col2)",
-      SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData"), Seq("col1", "col2")))
-        .select(star()))
+      UnresolvedSubqueryColumnAliases(
+        Seq("col1", "col2"),
+        SubqueryAlias("t", UnresolvedRelation(TableIdentifier("testData")))
+      ).select(star()))
   }
 
   test("SPARK-20962 Support subquery column aliases in FROM clause") {
