@@ -184,7 +184,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * For Online optimizer only (currently): [[optimizer]] = "online".
 
    * An initial model to be used as a starting point for the learning, instead of a random
-   * initialization. Provide path of previous LDAModel
+   * initialization. Provide the path to a serialized trained LDAModel.
    *
    * @group param
    */

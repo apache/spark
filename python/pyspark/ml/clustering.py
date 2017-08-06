@@ -1136,14 +1136,14 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     @since("2.3.0")
     def setInitialModel(self, value):
         """
-        Sets the value of :py:attr:`initialmodel`.
+        Sets the value of :py:attr:`initialModel`.
         """
         return self._set(initialModel=value)
 
     @since("2.3.0")
     def getInitialModel(self):
         """
-        Gets the value of :py:attr:`initialmodel` or its default value.
+        Gets the value of :py:attr:`initialModel` or its default value.
         """
         return self.getOrDefault(self.initialModel)
 
