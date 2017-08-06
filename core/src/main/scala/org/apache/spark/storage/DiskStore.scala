@@ -180,7 +180,7 @@ private class DiskBlockData(
   }
 
   override def toByteBuffer(): ByteBuffer = {
-    require( size < Int.MaxValue
+    require( blockSize < Int.MaxValue
       , s"can't create a byte buffer of size $blockSize"
         + s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
     Utils.tryWithResource(open()) { channel =>
