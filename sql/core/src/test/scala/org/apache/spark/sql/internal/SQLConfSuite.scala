@@ -272,8 +272,13 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-21588 SQLContext.getConf(key, null) should return null") {
-    assert(null == spark.conf.get("spark.sql.thriftServer.incrementalCollect", null))
-    assert("<undefined>" == spark.conf.get(
-      "spark.sql.thriftServer.incrementalCollect", "<undefined>"))
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, null))
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, "<undefined>"))
+    }
+
+    assert(spark.conf.getOption("spark.sql.nonexistent").isEmpty)
+    assert(null == spark.conf.get("spark.sql.nonexistent", null))
+    assert("<undefined>" == spark.conf.get("spark.sql.nonexistent", "<undefined>"))
   }
 }
