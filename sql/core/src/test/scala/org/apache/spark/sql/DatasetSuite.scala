@@ -123,41 +123,34 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("coalesce, custom") {
-
-    val maxSplitSize = 512
-    // Similar to the implementation of `test("custom RDD coalescer")` from [[RDDSuite]] we first
-    // write out to disk, to ensure that our splits are in fact [[FileSplit]] instances.
     withTempPath { path =>
-      val data = (1 to 1000).map(i => ClassData(i.toString, i))
-      data.toDS().repartition(50).write.format("csv").save(path.toString)
-
-      val schema = StructType(Seq($"a".string, $"b".int))
+      val maxSplitSize = 512
+      val testData = (1 to 1000).map(i => ClassData(i.toString, i))
+      testData.toDS().repartition(50).write.format("csv").save(path.toString)
 
       withSQLConf(
-        SQLConf.FILES_MAX_PARTITION_BYTES.key -> "200",
-        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "1") {
-
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> (maxSplitSize / 3).toString,
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0"
+      ) {
         val ds = spark.read.format("csv")
-          .schema(schema)
+          .schema("a STRING, b INT")
           .load(path.toString)
           .as[ClassData]
 
         val coalescedDataSet =
-          ds.coalesce(4,
-            partitionCoalescer = Option(new DataSetSizeBasedPartitionCoalescer(maxSplitSize)))
+          ds.coalesce(4, Some(new DatasetSizeBasedPartitionCoalescer(maxSplitSize)))
 
         assert(coalescedDataSet.rdd.partitions.length <= 50)
 
-        var totalPartitionCount = 0L
-        coalescedDataSet.rdd.partitions.foreach(partition => {
-          var splitSizeSum = 0L
-          partition.asInstanceOf[CoalescedRDDPartition].parents.foreach(partition => {
-            splitSizeSum +=
-              partition.asInstanceOf[FilePartition].files.map(_.length).sum
-            totalPartitionCount += 1
-          })
-          assert(splitSizeSum <= maxSplitSize)
-        })
+        val expectedPartitionCount = ds.rdd.partitions.size
+        val totalPartitionCount = coalescedDataSet.rdd.partitions.map { p1 =>
+          val splitSizes = p1.asInstanceOf[CoalescedRDDPartition].parents.map { p2 =>
+            p2.asInstanceOf[FilePartition].files.map(_.length).sum
+          }
+          assert(splitSizes.sum <= maxSplitSize)
+          splitSizes.size
+        }.sum
+        assert(totalPartitionCount === expectedPartitionCount)
       }
     }
   }
@@ -1446,17 +1439,13 @@ case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
 case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
 
-
-class DataSetSizeBasedPartitionCoalescer(maxSize: Int) extends
-  SizeBasedCoalescer(maxSize) {
+class DatasetSizeBasedPartitionCoalescer(maxSize: Int) extends SizeBasedCoalescer(maxSize) {
 
   override def getPartitions(parent: RDD[_]): Array[Partition] = {
-    parent.firstParent.asInstanceOf[FileScanRDD].partitions
+    parent.firstParent.partitions
   }
 
   override def getPartitionSize(partition: Partition): Long = {
-    val res = partition.asInstanceOf[FilePartition].files.map(
-      x => x.length - x.start).sum
-    res
+    partition.asInstanceOf[FilePartition].files.map(x => x.length - x.start).sum
   }
 }

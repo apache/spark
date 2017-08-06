@@ -2662,7 +2662,36 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new Dataset that has at most `numPartitions` partitions.
+   * Returns a new Dataset that an user-defined `PartitionCoalescer` reduces into fewer partitions.
+   * `userDefinedCoalescer` is the same with a coalescer used in the `RDD` coalesce function.
+   *
+   * If a larger number of partitions is requested, it will stay at the current
+   * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in
+   * a narrow dependency, e.g. if you go from 1000 partitions to 100 partitions, there will not
+   * be a shuffle, instead each of the 100 new partitions will claim 10 of the current partitions.
+   *
+   * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+   * this may result in your computation taking place on fewer nodes than
+   * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+   * you can call repartition. This will add a shuffle step, but means the
+   * current upstream partitions will be executed in parallel (per whatever
+   * the current partitioning is).
+   *
+   * @group typedrel
+   * @since 2.3.0
+   */
+  def coalesce(numPartitions: Int, userDefinedCoalescer: Option[PartitionCoalescer]): Dataset[T] = {
+    userDefinedCoalescer.map { coalescer =>
+      withTypedPlan {
+        PartitionCoalesce(numPartitions, coalescer, logicalPlan)
+      }
+    }.getOrElse {
+      coalesce(numPartitions)
+    }
+  }
+
+  /**
+   * Returns a new Dataset that has exactly `numPartitions` partitions, when the fewer partitions
    * are requested. If a larger number of partitions is requested, it will stay at the current
    * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in
    * a narrow dependency, e.g. if you go from 1000 partitions to 100 partitions, there will not
@@ -2675,27 +2704,12 @@ class Dataset[T] private[sql](
    * current upstream partitions will be executed in parallel (per whatever
    * the current partitioning is).
    *
-   * A [[PartitionCoalescer]] can also be supplied allowing the behavior of the partitioning to be
-   * customized similar to [[RDD.coalesce]].
-   *
-   * @group typedrel
-   * @since 2.2.0
-   */
-  def coalesce(numPartitions: Int, partitionCoalescer: Option[PartitionCoalescer]): Dataset[T] =
-    withTypedPlan {
-      PartitionCoalesce(numPartitions, partitionCoalescer, logicalPlan)
-    }
-
-  /**
-   * Returns a new Dataset that has exactly `numPartitions` partitions.
-   * Similar to coalesce defined on an `RDD`, this operation results in a narrow dependency, e.g.
-   * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
-   * the 100 new partitions will claim 10 of the current partitions.
-   *
    * @group typedrel
    * @since 1.6.0
    */
-  def coalesce(numPartitions: Int): Dataset[T] = coalesce(numPartitions, None)
+  def coalesce(numPartitions: Int): Dataset[T] = withTypedPlan {
+    Repartition(numPartitions, shuffle = false, logicalPlan)
+  }
 
   /**
    * Returns a new Dataset that contains only the unique rows from this Dataset.

@@ -23,7 +23,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -755,16 +754,13 @@ case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
 
 /**
  * Returns a new RDD that has at most `numPartitions` partitions. This behavior can be modified by
- * supplying a [[PartitionCoalescer]] to control the behavior of the partitioning.
+ * supplying a `PartitionCoalescer` to control the behavior of the partitioning.
  */
-case class PartitionCoalesce(
-    numPartitions: Int,
-    partitionCoalescer: Option[PartitionCoalescer],
-    child: LogicalPlan) extends UnaryNode {
+case class PartitionCoalesce(numPartitions: Int, coalescer: PartitionCoalescer, child: LogicalPlan)
+  extends UnaryNode {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   override def output: Seq[Attribute] = child.output
 }
-
 
 /**
  * This method repartitions data using [[Expression]]s into `numPartitions`, and receives

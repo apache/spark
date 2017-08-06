@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
+import org.apache.spark.{InterruptibleIterator, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionCoalescer, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -571,10 +570,8 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * current upstream partitions will be executed in parallel (per whatever
  * the current partitioning is).
  */
-case class CoalesceExec(
-    numPartitions: Int,
-    child: SparkPlan,
-    partitionCoalescer: Option[PartitionCoalescer]) extends UnaryExecNode {
+case class CoalesceExec(numPartitions: Int, child: SparkPlan, coalescer: Option[PartitionCoalescer])
+  extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
@@ -583,7 +580,7 @@ case class CoalesceExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().coalesce(numPartitions, shuffle = false, partitionCoalescer)
+    child.execute().coalesce(numPartitions, shuffle = false, coalescer)
   }
 }
 
