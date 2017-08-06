@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.Cross
+import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -487,6 +487,28 @@ class AnalysisSuite extends AnalysisTest with ShouldMatchers {
         "Number of column aliases: 1; number of columns: 4."))
     assertAnalysisError(
       tableColumnsWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 5; number of columns: 4."))
+  }
+
+  test("SPARK-20963 Support aliases for join relations in FROM clause") {
+    def joinRelationWithAliases(outputNames: Seq[String]): LogicalPlan = {
+      val src1 = LocalRelation('id.int, 'v1.string).as("s1")
+      val src2 = LocalRelation('id.int, 'v2.string).as("s2")
+      UnresolvedSubqueryColumnAliases(
+        outputNames,
+        SubqueryAlias(
+          "dst",
+          src1.join(src2, Inner, Option(Symbol("s1.id") === Symbol("s2.id"))))
+      ).select(star())
+    }
+    assertAnalysisSuccess(joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: Nil))
+    assertAnalysisError(
+      joinRelationWithAliases("col1" :: Nil),
+      Seq("Number of column aliases does not match number of columns. " +
+        "Number of column aliases: 1; number of columns: 4."))
+    assertAnalysisError(
+      joinRelationWithAliases("col1" :: "col2" :: "col3" :: "col4" :: "col5" :: Nil),
       Seq("Number of column aliases does not match number of columns. " +
         "Number of column aliases: 5; number of columns: 4."))
   }
