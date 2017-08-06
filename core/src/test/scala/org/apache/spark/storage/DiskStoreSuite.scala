@@ -97,15 +97,15 @@ class DiskStoreSuite extends SparkFunSuite {
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
     val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
 
-    val mb = 1024*1024
-    val gb = 1024L*mb
+    val mb = 1024 * 1024
+    val gb = 1024L * mb
 
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>
       val arr = new Array[Byte](mb)
-      for{
+      for {
         _ <- 0 until 2048
-      }{
+      } {
         val buf = ByteBuffer.wrap(arr)
         while (buf.hasRemaining()) {
           chan.write(buf)

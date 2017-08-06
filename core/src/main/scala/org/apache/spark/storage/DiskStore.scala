@@ -200,7 +200,7 @@ private class DiskBlockData(
 
   override def dispose(): Unit = {}
 
-    private def open() = new FileInputStream(file).getChannel
+  private def open() = new FileInputStream(file).getChannel
 }
 
 private class EncryptedBlockData(
