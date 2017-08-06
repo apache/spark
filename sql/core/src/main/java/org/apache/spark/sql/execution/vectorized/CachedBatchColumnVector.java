@@ -236,7 +236,7 @@ public final class CachedBatchColumnVector extends ReadOnlyColumnVector {
     return unsafeRow.getUTF8String(ORDINAL);
   }
 
-  void initialize() {
+  public void initialize() {
     ByteBuffer byteBuffer = ByteBuffer.wrap(buffer);
     columnAccessor = ColumnAccessor$.MODULE$.apply(type, byteBuffer);
     previousRowId = -1;
