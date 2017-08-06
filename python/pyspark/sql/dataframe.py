@@ -1438,7 +1438,8 @@ class DataFrame(object):
                 "to_replace should be a float, int, long, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
-        if not isinstance(value, valid_types + (type(None), )) and not isinstance(to_replace, dict):
+        if not isinstance(value, valid_types) and value is not None \
+                and not isinstance(to_replace, dict):
             raise ValueError("If to_replace is not a dict, value should be "
                              "a float, int, long, string, list, tuple or None. "
                              "Got {0}".format(type(value)))
@@ -1456,7 +1457,7 @@ class DataFrame(object):
         if isinstance(to_replace, (float, int, long, basestring)):
             to_replace = [to_replace]
 
-        if isinstance(value, (float, int, long, basestring, type(None))):
+        if isinstance(value, (float, int, long, basestring)) or value is None:
             value = [value for _ in range(len(to_replace))]
 
         if isinstance(to_replace, dict):

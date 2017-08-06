@@ -378,7 +378,7 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       case (k: String, null) => (k, null)
       case (k: Boolean, null) => (k, null)
       case (k, null) => (convertToDouble(k), null)
-      case _ @(k, v) => (convertToDouble(k), convertToDouble(v))
+      case (k, v) => (convertToDouble(k), convertToDouble(v))
     }
 
     // targetColumnType is either DoubleType or StringType or BooleanType
