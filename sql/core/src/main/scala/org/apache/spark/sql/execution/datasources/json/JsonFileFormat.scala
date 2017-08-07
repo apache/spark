@@ -120,7 +120,9 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       // for all json fields, i.g., all items in dataSchema.
       val querySchema = if (actualSchema.isEmpty) {
         StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
-      } else { actualSchema }
+      } else {
+        actualSchema
+      }
       val parser = new JacksonParser(querySchema, parsedOptions)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
