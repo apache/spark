@@ -18,9 +18,71 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
-import org.apache.spark.sql.execution.datasources.ExecutedWriteSummary
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+
+
+case class BasicWriteTaskStats(
+  numPartitions: Int,
+  numFiles: Int,
+  numBytes: Long,
+  numRows: Long)
+  extends WriteTaskStats
+
+class BasicWriteTaskStatsTracker extends WriteTaskStatsTracker {
+  var numPartitions = 0
+  var numFiles = 0
+  var numBytes = 0L
+  var numRows = 0L
+
+  override def newFile(filePath: String): Unit = {
+    // FIXME(adrian): call getFileSize and compute numBytes
+    numFiles += 1
+  }
+
+  override def updateStats(row: InternalRow): Unit = {
+    // FIXME(adrian): compute numPartitions
+    numRows += 1
+  }
+
+  override def getFinalStats(): WriteTaskStats = {
+    BasicWriteTaskStats(numPartitions, numFiles, numBytes, numRows)
+  }
+}
+
+class BasicWriteJobStatsTracker(metrics: Map[String, SQLMetric]) extends WriteJobStatsTracker {
+  override def newTaskInstance(): WriteTaskStatsTracker = {
+    new BasicWriteTaskStatsTracker
+  }
+
+  override def processStats(stats: Seq[WriteTaskStats]): Unit = {
+    val sparkContext = SparkContext.getActive.get
+    var numPartitions = 0
+    var numFiles = 0
+    var totalNumBytes: Long = 0L
+    var totalNumOutput: Long = 0L
+
+    val basicStats = stats.map(_.asInstanceOf[BasicWriteTaskStats])
+
+    basicStats.foreach { summary =>
+      numPartitions += summary.numPartitions
+      numFiles += summary.numFiles
+      totalNumBytes += summary.numBytes
+      totalNumOutput += summary.numRows
+    }
+
+    metrics("numFiles").add(numFiles)
+    metrics("numOutputBytes").add(totalNumBytes)
+    metrics("numOutputRows").add(totalNumOutput)
+    metrics("numParts").add(numPartitions)
+
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
+  }
+}
+
 
 /**
  * A special `RunnableCommand` which writes data out and updates metrics.
@@ -37,29 +99,5 @@ trait DataWritingCommand extends RunnableCommand {
     )
   }
 
-  /**
-   * Callback function that update metrics collected from the writing operation.
-   */
-  protected def updateWritingMetrics(writeSummaries: Seq[ExecutedWriteSummary]): Unit = {
-    val sparkContext = SparkContext.getActive.get
-    var numPartitions = 0
-    var numFiles = 0
-    var totalNumBytes: Long = 0L
-    var totalNumOutput: Long = 0L
-
-    writeSummaries.foreach { summary =>
-      numPartitions += summary.updatedPartitions.size
-      numFiles += summary.numOutputFile
-      totalNumBytes += summary.numOutputBytes
-      totalNumOutput += summary.numOutputRows
-    }
-
-    metrics("numFiles").add(numFiles)
-    metrics("numOutputBytes").add(totalNumBytes)
-    metrics("numOutputRows").add(totalNumOutput)
-    metrics("numParts").add(numPartitions)
-
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
-  }
+  val basicWriteJobStatsTracker = new BasicWriteJobStatsTracker(metrics)
 }
