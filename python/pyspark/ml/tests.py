@@ -1174,7 +1174,7 @@ class PersistenceTest(SparkSessionTestCase):
         writer = DefaultParamsWriter(lr)
 
         savePath = temp_path + "/lr"
-        writer.saveImpl(savePath)
+        writer.save(savePath)
 
         reader = DefaultParamsReadable.read()
         lr2 = reader.load(savePath)
