@@ -99,7 +99,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  test("GroupState - setTimeout**** with NoTimeout") {
+  test("GroupState - setTimeout - with NoTimeout") {
     for (initValue <- Seq(None, Some(5))) {
       val states = Seq(
         GroupStateImpl.createForStreaming(initValue, 1000, 1000, NoTimeout, hasTimedOut = false),
@@ -117,7 +117,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  test("GroupState - setTimeout**** with ProcessingTimeTimeout") {
+  test("GroupState - setTimeout - with ProcessingTimeTimeout") {
     // for streaming queries
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
       None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
@@ -156,7 +156,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
   }
 
-  test("GroupState - setTimeout**** with EventTimeTimeout") {
+  test("GroupState - setTimeout - with EventTimeTimeout") {
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
       None, 1000, 1000, EventTimeTimeout, false)
 
@@ -195,7 +195,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
   }
 
-  test("GroupState - illegal params to setTimeout****") {
+  test("GroupState - illegal params to setTimeout") {
     var state: GroupStateImpl[Int] = null
 
     // Test setTimeout****() with illegal values

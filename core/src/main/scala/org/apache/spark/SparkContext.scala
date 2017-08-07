@@ -145,9 +145,8 @@ class SparkContext(config: SparkConf) extends Logging {
     this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
   }
 
-  // NOTE: The below constructors could be consolidated using default arguments. Due to
-  // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
-  // Until we have a good workaround for that bug the constructors remain broken out.
+  // The following constructors are required when Java code accesses SparkContext directly.
+  // Please see SI-4278
 
   /**
    * Alternative constructor that allows setting common Spark properties directly

@@ -245,6 +245,9 @@ abstract class AbstractCommandBuilder {
 
   String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
+    if (path == null && "1".equals(getenv("SPARK_TESTING"))) {
+      path = System.getProperty("spark.test.home");
+    }
     checkState(path != null,
       "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;

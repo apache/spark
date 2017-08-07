@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.parser.ParserUtils
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
 import org.apache.spark.sql.types.{DataType, Metadata, StructType}
@@ -37,19 +37,10 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
- * We could add alias names for columns in a relation:
- * {{{
- *   // Assign alias names
- *   SELECT col1, col2 FROM testData AS t(col1, col2);
- * }}}
  *
  * @param tableIdentifier table name
- * @param outputColumnNames alias names of columns. If these names given, an analyzer adds
- *                          [[Project]] to rename the columns.
  */
-case class UnresolvedRelation(
-    tableIdentifier: TableIdentifier,
-    outputColumnNames: Seq[String] = Seq.empty)
+case class UnresolvedRelation(tableIdentifier: TableIdentifier)
   extends LeafNode {
 
   /** Returns a `.` separated name for this relation. */
@@ -418,6 +409,27 @@ case class UnresolvedAlias(
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def name: String = throw new UnresolvedException(this, "name")
   override def newInstance(): NamedExpression = throw new UnresolvedException(this, "newInstance")
+
+  override lazy val resolved = false
+}
+
+/**
+ * Aliased column names resolved by positions for subquery. We could add alias names for output
+ * columns in the subquery:
+ * {{{
+ *   // Assign alias names for output columns
+ *   SELECT col1, col2 FROM testData AS t(col1, col2);
+ * }}}
+ *
+ * @param outputColumnNames the [[LogicalPlan]] on which this subquery column aliases apply.
+ * @param child the logical plan of this subquery.
+ */
+case class UnresolvedSubqueryColumnAliases(
+    outputColumnNames: Seq[String],
+    child: LogicalPlan)
+  extends UnaryNode {
+
+  override def output: Seq[Attribute] = Nil
 
   override lazy val resolved = false
 }

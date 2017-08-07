@@ -71,7 +71,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
-      case "error" | "default" => SaveMode.ErrorIfExists
+      case "error" | "errorifexists" | "default" => SaveMode.ErrorIfExists
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
         "Accepted save modes are 'overwrite', 'append', 'ignore', 'error'.")
     }
@@ -499,7 +499,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * <ul>
    * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
    * compression codec to use when saving to file. This can be one of the known case-insensitive
-   * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
+   * shorten names(`none`, `snappy`, `gzip`, and `lzo`). This will override
    * `spark.sql.parquet.compression.codec`.</li>
    * </ul>
    *
