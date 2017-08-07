@@ -202,5 +202,9 @@ private[sql] class JacksonGenerator(
    */
   def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
 
+  def write(map: MapData, mapType: MapType): Unit = {
+    writeObject(writeMapData(map, mapType, makeWriter(mapType.valueType)))
+  }
+
   def writeLineEnding(): Unit = gen.writeRaw('\n')
 }

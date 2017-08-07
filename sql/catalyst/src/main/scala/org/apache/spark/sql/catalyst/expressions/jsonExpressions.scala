@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -638,6 +638,7 @@ case class StructsToJson(
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case MapType(kt: DataType, st: StructType, _) => st
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -659,13 +660,19 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
+      case MapType(_: DataType, _: StructType, _: Boolean) =>
+        (map: Any) =>
+          val mapType = child.dataType.asInstanceOf[MapType]
+          gen.write(map.asInstanceOf[MapData], mapType)
+          getAndReset()
     }
   }
 
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType | ArrayType(_: StructType, _) |
+         MapType(_: DataType, _: StructType, _: Boolean) =>
       try {
         JacksonUtils.verifySchema(rowSchema)
         TypeCheckResult.TypeCheckSuccess
