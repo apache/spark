@@ -340,13 +340,11 @@ class DefaultParamsWritable(MLWritable):
     """
     .. note:: DeveloperApi
 
-    Helper trait for making simple `Params` types writable.  If a `Params` class stores
-    all data as [[pyspark.ml.param.Param]] values, then extending this trait will provide
+    Helper trait for making simple :py:class`Params` types writable.  If a :py:class`Params`
+    class stores all data as :py:class:'Param' values, then extending this trait will provide
     a default implementation of writing saved instances of the class.
-    This only handles simple [[pyspark.ml.param.Param]] types; e.g., it will not handle
-    [[pyspark.sql.Dataset]].
-
-    @see `DefaultParamsReadable`, the counterpart to this trait
+    This only handles simple :py:class:'Param' types; e.g., it will not handle
+    :py:class:'Dataset'. See :py:class:`DefaultParamsReadable`, the counterpart to this trait.
 
     .. versionadded:: 2.3.0
     """
@@ -391,8 +389,8 @@ class DefaultParamsWriter(MLWriter):
         - uid
         - paramMap
         - (optionally, extra metadata)
-        @param extraMetadata  Extra metadata to be saved at same level as uid, paramMap, etc.
-        @param paramMap  If given, this is saved in the "paramMap" field.
+        :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
+        :param paramMap:  If given, this is saved in the "paramMap" field.
         """
         metadataPath = os.path.join(path, "metadata")
         metadataJson = DefaultParamsWriter._get_metadata_to_save(instance,
@@ -404,10 +402,10 @@ class DefaultParamsWriter(MLWriter):
     @staticmethod
     def _get_metadata_to_save(instance, sc, extraMetadata=None, paramMap=None):
         """
-        Helper for [[saveMetadata()]] which extracts the JSON to save.
+        Helper for :py:meth:'DefaultParamsWriter.saveMetadata' which extracts the JSON to save.
         This is useful for ensemble models which need to save metadata for many sub-models.
 
-        @see [[saveMetadata()]] for details on what this includes.
+        .. note:: :py:meth:'DefaultParamsWriter.saveMetadata' for details on what this includes.
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
@@ -430,13 +428,12 @@ class DefaultParamsReadable(MLReadable):
     """
     .. note:: DeveloperApi
 
-    Helper trait for making simple `Params` types readable.  If a `Params` class stores
-    all data as [[pyspark.ml.param.Param]] values, then extending this trait will provide
-    a default implementation of reading saved instances of the class.
-    This only handles simple [[pyspark.ml.param.Param]] types; e.g., it will not handle
-    [[pyspark.sql.Dataset]].
-
-    @see `DefaultParamsWritable`, the counterpart to this trait
+    Helper trait for making simple :py:class:`Params` types readable.
+    If a :py:class:`Params` class stores all data as :py:class:'Param' values,
+    then extending this trait will provide a default implementation of reading saved
+    instances of the class. This only handles simple :py:class:'Param' types;
+    e.g., it will not handle :py:class:'Dataset'. See :py:class:`DefaultParamsWritable`,
+    the counterpart to this trait.
 
     .. versionadded:: 2.3.0
     """
@@ -488,9 +485,9 @@ class DefaultParamsReader(MLReader):
     @staticmethod
     def loadMetadata(path, sc, expectedClassName=""):
         """
-        Load metadata saved using [[DefaultParamsWriter.saveMetadata()]]
+        Load metadata saved using :py:meth:'DefaultParamsWriter.saveMetadata'
 
-        @param expectedClassName  If non empty, this is checked against the loaded metadata.
+        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
         """
         metadataPath = os.path.join(path, "metadata")
         metadataStr = sc.textFile(metadataPath, 1).first()
@@ -500,11 +497,11 @@ class DefaultParamsReader(MLReader):
     @staticmethod
     def _parseMetaData(metadataStr, expectedClassName=""):
         """
-        Parse metadata JSON string produced by [[DefaultParamsWriter._get_metadata_to_save()]].
-        This is a helper function for [[loadMetadata()]].
+        Parse metadata JSON string produced by :py:meth:'DefaultParamsWriter._get_metadata_to_save'.
+        This is a helper function for :py:meth:'DefaultParamsReader.loadMetadata'.
 
-        @param metadataStr  JSON string of metadata
-        @param expectedClassName  If non empty, this is checked against the loaded metadata.
+        :param metadataStr:  JSON string of metadata
+        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
         """
         metadata = json.loads(metadataStr)
         className = metadata['class']
@@ -526,8 +523,8 @@ class DefaultParamsReader(MLReader):
     @staticmethod
     def loadParamsInstance(path, sc):
         """
-        Load a `Params` instance from the given path, and return it.
-        This assumes the instance inherits from [[MLReadable]].
+        Load a :py:class:`Params` instance from the given path, and return it.
+        This assumes the instance inherits from :py:class:'MLReadable'.
         """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
         pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
