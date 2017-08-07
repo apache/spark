@@ -782,7 +782,11 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir, "sample.json")
     val writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8)
-    writer.write(Seq("{\"field\": 1}", "{\"field\": 2}", "{\"field\": \"3\"}").mkString("\n"))
+    val data =
+      """{"field": 1}
+        |{"field": 2}
+        |{"field": "3"}""".stripMargin
+    writer.write(data)
     writer.close()
 
     val schema = new StructType()
@@ -792,5 +796,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
     val dfFromFile = spark.read.schema(schema).json(file.getAbsolutePath)
     assert(dfFromFile.filter($"_corrupt_record".isNotNull).count() == 1)
     assert(dfFromFile.filter($"_corrupt_record".isNull).count() == 2)
+
+    Utils.deleteRecursively(tempDir)
   }
 }
