@@ -1194,21 +1194,21 @@ class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Seria
       totalSum += splitSize
     }
 
-    while (index < partitions.length) {
+    while (index < partitions.size) {
       val partition = partitions(index)
       val splitSize = getPartitionSize(partition)
       if (currentSum + splitSize < maxSize) {
         addPartition(partition, splitSize)
         index += 1
-        if (index == partitions.length) {
-          updateGroups()
+        if (index == partitions.size) {
+          updateGroups
         }
       } else {
-        if (currentGroup.partitions.isEmpty) {
+        if (currentGroup.partitions.size == 0) {
           addPartition(partition, splitSize)
           index += 1
         } else {
-          updateGroups()
+          updateGroups
         }
       }
     }

@@ -560,7 +560,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * Physical plan for returning a new RDD that has exactly `numPartitions` partitions.
  * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
  * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
- * the 100 new partitions will claim 10 of the current partitions.  If a larger number of partitions
+ * the 100 new partitions will claim 10 of the current partitions. If a larger number of partitions
  * is requested, it will stay at the current number of partitions.
  *
  * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
@@ -569,6 +569,13 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * you see ShuffleExchange. This will add a shuffle step, but means the
  * current upstream partitions will be executed in parallel (per whatever
  * the current partitioning is).
+ *
+ * If you want to define how to coalesce partitions, you can set a custom strategy
+ * to coalesce partitions in `coalescer`.
+ *
+ * @param numPartitions Number of partitions this coalescer tries to reduce partitions into
+ * @param child the SparkPlan
+ * @param coalescer Optional coalescer that an user specifies
  */
 case class CoalesceExec(numPartitions: Int, child: SparkPlan, coalescer: Option[PartitionCoalescer])
   extends UnaryExecNode {
