@@ -2386,7 +2386,7 @@ class SparkContext(config: SparkConf) extends Logging {
       }
       if (extraListeners.nonEmpty) {
         val group = GroupOfListener(extraListeners, "extraListeners")
-        listenerBus.addIsolatedListener(group, None)
+        listenerBus.addListener(group, true)
         logInfo("extra-listeners registered")
       }
     } catch {

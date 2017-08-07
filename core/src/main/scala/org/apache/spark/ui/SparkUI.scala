@@ -33,7 +33,7 @@ import org.apache.spark.ui.exec.{ExecutorsListener, ExecutorsTab}
 import org.apache.spark.ui.jobs.{JobProgressListener, JobsTab, StagesTab}
 import org.apache.spark.ui.scope.RDDOperationGraphListener
 import org.apache.spark.ui.storage.{StorageListener, StorageTab}
-import org.apache.spark.util.{Utils, WithMultipleListenerBus}
+import org.apache.spark.util.{Utils, WithListenerBus}
 
 /**
  * Top level user interface for a Spark application.
@@ -161,7 +161,7 @@ private[spark] object SparkUI {
   def createLiveUI(
                     sc: SparkContext,
                     conf: SparkConf,
-        listenerBus: WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
+        listenerBus: WithListenerBus[SparkListenerInterface, SparkListenerEvent],
                     jobProgressListener: JobProgressListener,
                     securityManager: SecurityManager,
                     appName: String,
@@ -172,7 +172,7 @@ private[spark] object SparkUI {
 
   def createHistoryUI(
                        conf: SparkConf,
-       listenerBus: WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
+       listenerBus: WithListenerBus[SparkListenerInterface, SparkListenerEvent],
                        securityManager: SecurityManager,
                        appName: String,
                        basePath: String,
@@ -184,7 +184,7 @@ private[spark] object SparkUI {
       Utils.getContextOrSparkClassLoader).asScala
     listenerFactories.foreach { listenerFactory =>
       val listeners = listenerFactory.createListeners(conf, sparkUI)
-      listeners.foreach(listenerBus.addListener)
+      listeners.foreach(l => listenerBus.addListener(l, false))
     }
     sparkUI
   }
@@ -199,7 +199,7 @@ private[spark] object SparkUI {
   private def create(
                       sc: Option[SparkContext],
                       conf: SparkConf,
-         listenerBus: WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent],
+         listenerBus: WithListenerBus[SparkListenerInterface, SparkListenerEvent],
                       securityManager: SecurityManager,
                       appName: String,
                       basePath: String = "",
@@ -218,11 +218,11 @@ private[spark] object SparkUI {
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 
-    listenerBus.addIsolatedListener(
+    listenerBus.addListener(
       GroupOfListener(
       Seq(environmentListener, storageStatusListener, executorsListener,
         storageListener, operationGraphListener),
-      "ui"), None)
+      "ui"), true)
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
       executorsListener, _jobProgressListener, storageListener, operationGraphListener,

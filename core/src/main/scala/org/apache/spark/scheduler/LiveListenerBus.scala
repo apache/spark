@@ -31,7 +31,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.scheduler.bus._
 import org.apache.spark.scheduler.bus.BusQueue.{GenericProcessor, GroupOfListener}
-import org.apache.spark.util.WithMultipleListenerBus
+import org.apache.spark.util.WithListenerBus
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -41,7 +41,7 @@ import org.apache.spark.util.WithMultipleListenerBus
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
 private[spark] class LiveListenerBus(conf: SparkConf)
-  extends WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent] with Logging{
+  extends WithListenerBus[SparkListenerInterface, SparkListenerEvent] with Logging{
 
   import LiveListenerBus._
 
@@ -63,25 +63,24 @@ private[spark] class LiveListenerBus(conf: SparkConf)
   private val stopped = new AtomicBoolean(false)
 
    /**
-    * Add a listener to the default pool.
+    * if isolatedIfPossible is true, add the listener to an isolated pool.
+    * Otherwise add it to the default pool.
     * This method is thread-safe and can be called in any thread.
     */
-  final override def addListener(listener: SparkListenerInterface): Unit = {
+  final override def addListener(listener: SparkListenerInterface,
+                                 isolatedIfPossible: Boolean): Unit = {
     startStopAddRemoveLock.lock()
-    Try(defaultListenerPool.addListener(listener))
+    Try{
+      if (isolatedIfPossible) {
+         addQueue(BusQueue(
+          conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
+          listener,
+          BusQueue.ALL_MESSAGES))
+      } else {
+        defaultListenerPool.addListener(listener)
+      }
+    }
     startStopAddRemoveLock.unlock()
-  }
-
-   /**
-    * Add a listener to an isolated pool.
-    * This method is thread-safe and can be called in any thread.
-    */
-  final override def addIsolatedListener(listener: SparkListenerInterface,
-                          eventFilter: Option[SparkListenerEvent => Boolean]): Unit = {
-    addQueue(BusQueue(
-      conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
-      listener,
-      eventFilter.getOrElse(BusQueue.ALL_MESSAGES)))
   }
 
    /**

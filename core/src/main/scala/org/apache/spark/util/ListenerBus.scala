@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 
 private [spark] trait WithListenerBus[L <: AnyRef, E]{
 
-  def addListener(listener: L): Unit
+  def addListener(listener: L, isolatedIfPossible: Boolean = false): Unit
 
   def removeListener(listener: L): Unit
 
@@ -35,14 +35,6 @@ private [spark] trait WithListenerBus[L <: AnyRef, E]{
 
   private[spark] def listeners: Seq[L]
 }
-
-private [spark] trait WithMultipleListenerBus[L <: AnyRef, E]
-  extends WithListenerBus[L, E]{
-
-  private[spark] def addIsolatedListener(listener: L,
-                                         eventFilter: Option[E => Boolean]): Unit
-}
-
 
 /**
  * An event bus which posts events to its listeners.
@@ -55,7 +47,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends WithListenerBus[L, E] w
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  final override def addListener(listener: L): Unit = {
+  final override def addListener(listener: L, isolatedIfPossible: Boolean) : Unit = {
     internalListeners.add(listener)
   }
 

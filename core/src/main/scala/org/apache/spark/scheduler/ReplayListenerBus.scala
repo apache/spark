@@ -27,21 +27,12 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.ReplayListenerBus._
-import org.apache.spark.util.{JsonProtocol, WithMultipleListenerBus}
+import org.apache.spark.util.JsonProtocol
 
 /**
  * A SparkListenerBus that can be used to replay events from serialized event data.
  */
-private[spark] class ReplayListenerBus extends SparkListenerBus
-  with WithMultipleListenerBus[SparkListenerInterface, SparkListenerEvent] with Logging {
-
-   /**
-    * For this synchronous implementation, this method is equivalent to the simple addListener
-    */
-  final override def addIsolatedListener(
-      listener: SparkListenerInterface,
-      eventFilter: Option[(SparkListenerEvent) => Boolean]): Unit =
-    addListener(listener)
+private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 
   /**
    * Replay each event in the order maintained in the given stream. The stream is expected to
