@@ -1089,8 +1089,8 @@ private[spark] object RandomForest extends Logging {
     var numNodesInGroup = 0
     // If maxMemoryInMB is set very small, we want to still try to split 1 node,
     // so we allow one iteration if memUsage == 0.
-    var flag = true
-    while (nodeStack.nonEmpty && flag) {
+    var groupDone = false
+    while (nodeStack.nonEmpty && !groupDone) {
       val (treeIndex, node) = nodeStack.top
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
@@ -1111,7 +1111,7 @@ private[spark] object RandomForest extends Logging {
         numNodesInGroup += 1
         memUsage += nodeMemUsage
       } else {
-        flag = false
+        groupDone = true
       }
     }
     if (memUsage > maxMemoryUsage) {
