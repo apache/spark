@@ -357,6 +357,8 @@ class CodegenContext {
 
   /**
    * Returns the length of codegen function  is too long or not
+   * It will count the lines of every codegen function, if there is a function of length
+   * greater than spark.sql.codegen.MaxFunctionLength, it will return true.
    */
   def existTooLongFunction(): Boolean = {
     classFunctions.exists { case (className, functions) =>
