@@ -133,8 +133,25 @@ case class Not(child: Expression)
 /**
  * Evaluates to `true` if `list` contains `value`.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.")
+  usage = "expr1 _FUNC_(expr2, expr3, ...) - Returns true if `expr` equals to any valN.",
+  arguments = """
+    Arguments:
+      * expr1, expr2, expr3, ... - the arguments must be same type.
+  """,
+  examples = """
+    Examples:
+      > SELECT 1 _FUNC_(1, 2, 3);
+       true
+      > SELECT 1 _FUNC_(2, 3, 4);
+       false
+      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 1), named_struct('a', 1, 'b', 3));
+       false
+      > SELECT named_struct('a', 1, 'b', 2) _FUNC_(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
+       true
+  """)
+// scalastyle:on line.size.limit
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
@@ -484,7 +501,20 @@ object Equality {
 }
 
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT true _FUNC_ NULL;
+       NULL
+      > SELECT NULL _FUNC_ NULL;
+       NULL
+  """)
 case class EqualTo(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -518,6 +548,19 @@ case class EqualTo(left: Expression, right: Expression)
   usage = """
     expr1 _FUNC_ expr2 - Returns same result as the EQUAL(=) operator for non-null operands,
       but returns true if both are null, false if one of the them is null.
+  """,
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT true _FUNC_ NULL;
+       false
+      > SELECT NULL _FUNC_ NULL;
+       true
   """)
 case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComparison {
 
@@ -564,8 +607,25 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   }
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+  """,
+  examples = """
+    Examples:
+      > SELECT 1 _FUNC_ 2;
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       false
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       true
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
+// scalastyle:on line.size.limit
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -576,8 +636,25 @@ case class LessThan(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       true
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
+// scalastyle:on line.size.limit
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -588,8 +665,25 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       false
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       false
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
+// scalastyle:on line.size.limit
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -600,8 +694,25 @@ case class GreaterThan(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
+// scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.")
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
+  arguments = """
+    Arguments:
+      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+  """,
+  examples = """
+    Examples:
+      > SELECT 2 _FUNC_ 1;
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
+       true
+      > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
+       false
+      > SELECT 1 _FUNC_ NULL;
+       NULL
+  """)
+// scalastyle:on line.size.limit
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
