@@ -574,8 +574,8 @@ object SQLConf {
 
   val WHOLESTAGE_MAX_FUNCTION_LEN = buildConf("spark.sql.codegen.MaxFunctionLength")
     .internal()
-    .doc("The maximum number of function length that will be supported before" +
-    " deactivating whole-stage codegen.")
+    .doc("The maximum lines of a function that will be supported before" +
+      " deactivating whole-stage codegen.")
     .intConf
     .createWithDefault(1500)
 

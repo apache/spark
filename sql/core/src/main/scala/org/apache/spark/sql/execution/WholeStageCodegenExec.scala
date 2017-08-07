@@ -372,7 +372,10 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     val (ctx, cleanedSource) = doCodeGen()
     val existLongFunction = ctx.existTooLongFunction
     if (existLongFunction) {
-      logWarning(s"Function is too long, Whole-stage codegen disabled for this plan:\n "
+      logWarning(s"Found too long generated codes and JIT optimization might not work, " +
+        s"Whole-stage codegen disabled for this plan, " +
+        s"You can change the config spark.sql.codegen.MaxFunctionLength " +
+        s"to adjust the function length limit:\n "
         + s"$treeString")
       return child.execute()
     }
