@@ -150,7 +150,7 @@ class MLWriter(BaseReadWrite):
 @inherit_doc
 class JavaMLWriter(MLWriter):
     """
-    (Private) Specialization of :py:class:'MLWriter' for :py:class:'JavaParams' types
+    (Private) Specialization of :py:class:`MLWriter` for :py:class:`JavaParams` types
     """
 
     def __init__(self, instance):
@@ -188,7 +188,7 @@ class JavaMLWriter(MLWriter):
 @inherit_doc
 class MLWritable(object):
     """
-    Mixin for ML instances that provide :py:class:'MLWriter'.
+    Mixin for ML instances that provide :py:class:`MLWriter`.
 
     .. versionadded:: 2.0.0
     """
@@ -205,7 +205,7 @@ class MLWritable(object):
 @inherit_doc
 class JavaMLWritable(MLWritable):
     """
-    (Private) Mixin for ML instances that provide :py:class:'JavaMLWriter'.
+    (Private) Mixin for ML instances that provide :py:class:`JavaMLWriter`.
     """
 
     def write(self):
@@ -232,7 +232,7 @@ class MLReader(BaseReadWrite):
 @inherit_doc
 class JavaMLReader(MLReader):
     """
-    (Private) Specialization of :py:class:'MLReader' for :py:class:'JavaParams' types
+    (Private) Specialization of :py:class:`MLReader` for :py:class:`JavaParams` types
     """
 
     def __init__(self, clazz):
@@ -291,7 +291,7 @@ class JavaMLReader(MLReader):
 @inherit_doc
 class MLReadable(object):
     """
-    Mixin for instances that provide :py:class:'MLReader'.
+    Mixin for instances that provide :py:class:`MLReader`.
 
     .. versionadded:: 2.0.0
     """
@@ -340,11 +340,11 @@ class DefaultParamsWritable(MLWritable):
     """
     .. note:: DeveloperApi
 
-    Helper trait for making simple :py:class:'Params' types writable.  If a :py:class:'Params'
-    class stores all data as :py:class:'Param' values, then extending this trait will provide
+    Helper trait for making simple :py:class:`Params` types writable.  If a :py:class:`Params`
+    class stores all data as :py:class:`Param` values, then extending this trait will provide
     a default implementation of writing saved instances of the class.
-    This only handles simple :py:class:'Param' types; e.g., it will not handle
-    :py:class:'Dataset'. See :py:class:'DefaultParamsReadable', the counterpart to this trait.
+    This only handles simple :py:class:`Param` types; e.g., it will not handle
+    :py:class:`Dataset`. See :py:class:`DefaultParamsReadable`, the counterpart to this trait.
 
     .. versionadded:: 2.3.0
     """
@@ -365,7 +365,7 @@ class DefaultParamsWriter(MLWriter):
     """
     .. note:: DeveloperApi
 
-    Specialization of :py:class:`MLWriter` for :py:class:'Params' types
+    Specialization of :py:class:`MLWriter` for :py:class:`Params` types
 
     Class for writing Estimators and Transformers whose parameters are JSON-serializable.
 
@@ -402,10 +402,10 @@ class DefaultParamsWriter(MLWriter):
     @staticmethod
     def _get_metadata_to_save(instance, sc, extraMetadata=None, paramMap=None):
         """
-        Helper for :py:meth:'DefaultParamsWriter.saveMetadata' which extracts the JSON to save.
+        Helper for :py:meth:`DefaultParamsWriter.saveMetadata` which extracts the JSON to save.
         This is useful for ensemble models which need to save metadata for many sub-models.
 
-        .. note:: :py:meth:'DefaultParamsWriter.saveMetadata' for details on what this includes.
+        .. note:: :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
         """
         uid = instance.uid
         cls = instance.__module__ + '.' + instance.__class__.__name__
@@ -428,11 +428,11 @@ class DefaultParamsReadable(MLReadable):
     """
     .. note:: DeveloperApi
 
-    Helper trait for making simple :py:class:'Params' types readable.
-    If a :py:class:'Params' class stores all data as :py:class:'Param' values,
+    Helper trait for making simple :py:class:`Params` types readable.
+    If a :py:class:`Params` class stores all data as :py:class:`Param` values,
     then extending this trait will provide a default implementation of reading saved
-    instances of the class. This only handles simple :py:class:'Param' types;
-    e.g., it will not handle :py:class:'Dataset'. See :py:class:'DefaultParamsWritable',
+    instances of the class. This only handles simple :py:class:`Param` types;
+    e.g., it will not handle :py:class:`Dataset`. See :py:class:`DefaultParamsWritable`,
     the counterpart to this trait.
 
     .. versionadded:: 2.3.0
@@ -449,9 +449,9 @@ class DefaultParamsReader(MLReader):
     """
     .. note:: DeveloperApi
 
-    Specialization of :py:class:'MLReader' for :py:class:'Params' types
+    Specialization of :py:class:`MLReader` for :py:class:`Params` types
 
-    Default 'MLReader' implementation for transformers and estimators that
+    Default :py:class:`MLReader` implementation for transformers and estimators that
     contain basic (json-serializable) params and no data. This will not handle
     more complex params or types with data (e.g., models with coefficients).
 
@@ -485,7 +485,7 @@ class DefaultParamsReader(MLReader):
     @staticmethod
     def loadMetadata(path, sc, expectedClassName=""):
         """
-        Load metadata saved using :py:meth:'DefaultParamsWriter.saveMetadata'
+        Load metadata saved using :py:meth:`DefaultParamsWriter.saveMetadata`
 
         :param expectedClassName:  If non empty, this is checked against the loaded metadata.
         """
@@ -497,8 +497,8 @@ class DefaultParamsReader(MLReader):
     @staticmethod
     def _parseMetaData(metadataStr, expectedClassName=""):
         """
-        Parse metadata JSON string produced by :py:meth:'DefaultParamsWriter._get_metadata_to_save'.
-        This is a helper function for :py:meth:'DefaultParamsReader.loadMetadata'.
+        Parse metadata JSON string produced by :py:meth`DefaultParamsWriter._get_metadata_to_save`.
+        This is a helper function for :py:meth:`DefaultParamsReader.loadMetadata`.
 
         :param metadataStr:  JSON string of metadata
         :param expectedClassName:  If non empty, this is checked against the loaded metadata.
@@ -523,8 +523,8 @@ class DefaultParamsReader(MLReader):
     @staticmethod
     def loadParamsInstance(path, sc):
         """
-        Load a :py:class:'Params' instance from the given path, and return it.
-        This assumes the instance inherits from :py:class:'MLReadable'.
+        Load a :py:class:`Params` instance from the given path, and return it.
+        This assumes the instance inherits from :py:class:`MLReadable`.
         """
         metadata = DefaultParamsReader.loadMetadata(path, sc)
         pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
