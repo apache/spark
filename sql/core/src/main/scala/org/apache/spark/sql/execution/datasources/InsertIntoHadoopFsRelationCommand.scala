@@ -152,7 +152,7 @@ case class InsertIntoHadoopFsRelationCommand(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        statsTrackers = Seq(basicWriteJobStatsTracker),
+        statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
         refreshFunction = refreshCallback,
         options = options)
 

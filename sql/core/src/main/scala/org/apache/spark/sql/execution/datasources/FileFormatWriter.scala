@@ -282,9 +282,9 @@ object FileFormatWriter extends Logging {
    * the corresponding [[WriteTaskStats]] from all executors.
    */
   private def processStats(
-    statsTrackers: Seq[WriteJobStatsTracker],
-    stats: Seq[Seq[WriteTaskStats]])
-  : Unit = {
+      statsTrackers: Seq[WriteJobStatsTracker],
+      stats: Seq[Seq[WriteTaskStats]])
+    : Unit = {
 
     val statsTransposed = stats.transpose
     assert(statsTrackers.length == statsTransposed.length)
@@ -304,23 +304,10 @@ object FileFormatWriter extends Logging {
      * Writes data out to files, and then returns the summary of relative information which
      * includes the list of partition strings written out. The list of partitions is sent back
      * to the driver and used to update the catalog. Other information will be sent back to the
-     * driver too and used to update the metrics in UI.
+     * driver too and used to e.g. update the metrics in UI.
      */
     def execute(iterator: Iterator[InternalRow]): ExecutedWriteSummary
     def releaseResources(): Unit
-
-    /**
-     * A helper function used to determine the size in  bytes of a written file.
-     */
-    protected def getFileSize(conf: Configuration, filePath: String): Long = {
-      if (filePath != null) {
-        val path = new Path(filePath)
-        val fs = path.getFileSystem(conf)
-        fs.getFileStatus(path).getLen()
-      } else {
-        0L
-      }
-    }
   }
 
   /** ExecuteWriteTask for empty partitions */
@@ -412,6 +399,8 @@ object FileFormatWriter extends Logging {
 
     // currentWriter is initialized whenever we see a new key
     private var currentWriter: OutputWriter = _
+    private var currentPartition: String = _
+    private var currentBucket: Int = _
 
     val statsTrackers: Seq[WriteTaskStatsTracker] =
       desc.statsTrackers.map(_.newTaskInstance())
@@ -451,18 +440,23 @@ object FileFormatWriter extends Logging {
       } else {
         Option(getPartitionPath(partColsAndBucketId).getString(0))
       }
-      partDir.foreach(updatedPartitions.add)
+      partDir.foreach { dir =>
+        updatedPartitions.add(dir)
+        statsTrackers.foreach(_.newPartition(dir))
+      }
 
       // If the bucketId expression is defined, the bucketId column is right after the partition
       // columns.
-      val bucketId = if (desc.bucketIdExpression.isDefined) {
-        BucketingUtils.bucketIdToString(partColsAndBucketId.getInt(desc.partitionColumns.length))
-      } else {
-        ""
+      val bucketId = desc.bucketIdExpression.map { _ =>
+        partColsAndBucketId.getInt(desc.partitionColumns.length)
       }
+      bucketId.foreach { id =>
+        statsTrackers.foreach(_.newBucket(id))
+      }
+      val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
       // This must be in a form that matches our bucketing format. See BucketingUtils.
-      val ext = f"$bucketId.c$fileCounter%03d" +
+      val ext = f"$bucketIdStr.c$fileCounter%03d" +
         desc.outputWriterFactory.getFileExtension(taskAttemptContext)
 
       val customPath = partDir match {
@@ -482,7 +476,7 @@ object FileFormatWriter extends Logging {
         dataSchema = desc.dataColumns.toStructType,
         context = taskAttemptContext)
 
-      statsTrackers.map(_.newFile(currentPath))
+      statsTrackers.foreach(_.newFile(currentPath))
     }
 
     override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {

@@ -353,7 +353,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      statsTrackers = Seq(basicWriteJobStatsTracker),
+      statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       refreshFunction = _ => Unit,
       options = Map.empty)
 

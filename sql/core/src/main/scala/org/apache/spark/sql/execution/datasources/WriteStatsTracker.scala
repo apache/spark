@@ -34,6 +34,16 @@ trait WriteTaskStats
  */
 trait WriteTaskStatsTracker {
   /**
+   * FIXME
+   * @param partDir
+   */
+  def newPartition(partDir: String): Unit
+  /**
+   * FIXME
+   * @param bucketId
+   */
+  def newBucket(bucketId: Int): Unit
+  /**
    * Process the fact that a new file is about to be written.
    * @param filePath Path of the file into which future rows will be written.
    */
