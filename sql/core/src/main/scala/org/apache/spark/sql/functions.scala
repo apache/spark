@@ -2408,6 +2408,8 @@ object functions {
    * returns the slice of byte array that starts at `pos` in byte and is of length `len`
    * when str is Binary type
    *
+   * @note The position is not zero based, but 1 based index.
+   *
    * @group string_funcs
    * @since 1.5.0
    */
