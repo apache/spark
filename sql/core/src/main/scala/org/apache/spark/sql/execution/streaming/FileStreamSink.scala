@@ -128,6 +128,7 @@ class FileStreamSink(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = None,
+        statsTrackers = Nil,
         refreshFunction = _ => (),
         options = options)
     }

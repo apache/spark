@@ -119,17 +119,10 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     if (doInsertion) {
-
-      // Callback for updating metric and metastore partition metadata
-      // after the insertion job completes.
+      // Callback for updating metastore partition metadata after the insertion job completes.
       def refreshCallback(summary: Seq[ExecutedWriteSummary]): Unit = {
         val updatedPartitions = summary.flatMap(_.updatedPartitions)
           .distinct.map(PartitioningUtils.parsePathFragment)
-
-        // Updating metrics.
-        updateWritingMetrics(summary)
-
-        // Updating metastore partition metadata.
         if (partitionsTrackedByCatalog) {
           val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
           if (newPartitions.nonEmpty) {
@@ -159,6 +152,7 @@ case class InsertIntoHadoopFsRelationCommand(
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
+        statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
         refreshFunction = refreshCallback,
         options = options)
 

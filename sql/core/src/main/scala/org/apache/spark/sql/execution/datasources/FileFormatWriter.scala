@@ -35,7 +35,7 @@ import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, _}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
@@ -70,7 +70,8 @@ object FileFormatWriter extends Logging {
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
       val maxRecordsPerFile: Long,
-      val timeZoneId: String)
+      val timeZoneId: String,
+      val statsTrackers: Seq[WriteJobStatsTracker])
     extends Serializable {
 
     assert(AttributeSet(allColumns) == AttributeSet(partitionColumns ++ dataColumns),
@@ -94,7 +95,11 @@ object FileFormatWriter extends Logging {
    *    exception is thrown during task commitment, also aborts that task.
    * 4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
    *    thrown during job commitment, also aborts the job.
+   * 5. If the job is succesfully committed, perform any post-commit operations such as refreshing
+   *    partitions, processing statistics, etc.
    */
+  // scalastyle:off
+  // because of having more than 10 function parameters
   def write(
       sparkSession: SparkSession,
       plan: SparkPlan,
@@ -104,8 +109,10 @@ object FileFormatWriter extends Logging {
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
+      statsTrackers: Seq[WriteJobStatsTracker],
       refreshFunction: (Seq[ExecutedWriteSummary]) => Unit,
       options: Map[String, String]): Unit = {
+  // scalastyle:on
 
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
@@ -146,7 +153,8 @@ object FileFormatWriter extends Logging {
       maxRecordsPerFile = caseInsensitiveOptions.get("maxRecordsPerFile").map(_.toLong)
         .getOrElse(sparkSession.sessionState.conf.maxRecordsPerFile),
       timeZoneId = caseInsensitiveOptions.get(DateTimeUtils.TIMEZONE_OPTION)
-        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone)
+        .getOrElse(sparkSession.sessionState.conf.sessionLocalTimeZone),
+      statsTrackers = statsTrackers
     )
 
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
@@ -200,6 +208,7 @@ object FileFormatWriter extends Logging {
       committer.commitJob(job, commitMsgs)
       logInfo(s"Job ${job.getJobID} committed.")
       refreshFunction(ret.map(_.summary))
+      processStats(description.statsTrackers, ret.map(_.summary.stats))
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${job.getJobID}.", cause)
       committer.abortJob(job)
@@ -238,7 +247,7 @@ object FileFormatWriter extends Logging {
     val writeTask =
       if (sparkPartitionId != 0 && !iterator.hasNext) {
         // In case of empty job, leave first partition to save meta for file format like parquet.
-        new EmptyDirectoryWriteTask
+        new EmptyDirectoryWriteTask(description)
       } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
       } else {
@@ -269,6 +278,25 @@ object FileFormatWriter extends Logging {
   }
 
   /**
+   * For every registered [[WriteJobStatsTracker]], call `processStats()` on it, passing it
+   * the corresponding [[WriteTaskStats]] from all executors.
+   */
+  private def processStats(
+      statsTrackers: Seq[WriteJobStatsTracker],
+      stats: Seq[Seq[WriteTaskStats]])
+    : Unit = {
+
+    val statsTransposed = stats.transpose
+    assert(statsTrackers.length == statsTransposed.length,
+      s"""statsTrackers = ${statsTrackers}
+         |statsTransposed = ${statsTransposed}
+       """.stripMargin)
+    statsTrackers.zip(statsTransposed).foreach {
+      case (statsTracker, stats) => statsTracker.processStats(stats)
+    }
+  }
+
+  /**
    * A simple trait for writing out data in a single Spark task, without any concerns about how
    * to commit or abort tasks. Exceptions thrown by the implementation of this trait will
    * automatically trigger task aborts.
@@ -276,43 +304,26 @@ object FileFormatWriter extends Logging {
   private trait ExecuteWriteTask {
 
     /**
-     * The data structures used to measure metrics during writing.
-     */
-    protected var numOutputRows: Long = 0L
-    protected var numOutputBytes: Long = 0L
-
-    /**
      * Writes data out to files, and then returns the summary of relative information which
      * includes the list of partition strings written out. The list of partitions is sent back
      * to the driver and used to update the catalog. Other information will be sent back to the
-     * driver too and used to update the metrics in UI.
+     * driver too and used to e.g. update the metrics in UI.
      */
     def execute(iterator: Iterator[InternalRow]): ExecutedWriteSummary
     def releaseResources(): Unit
-
-    /**
-     * A helper function used to determine the size in  bytes of a written file.
-     */
-    protected def getFileSize(conf: Configuration, filePath: String): Long = {
-      if (filePath != null) {
-        val path = new Path(filePath)
-        val fs = path.getFileSystem(conf)
-        fs.getFileStatus(path).getLen()
-      } else {
-        0L
-      }
-    }
   }
 
   /** ExecuteWriteTask for empty partitions */
-  private class EmptyDirectoryWriteTask extends ExecuteWriteTask {
+  private class EmptyDirectoryWriteTask(description: WriteJobDescription)
+    extends ExecuteWriteTask {
+
+    val statsTrackers: Seq[WriteTaskStatsTracker] =
+      description.statsTrackers.map(_.newTaskInstance())
 
     override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {
       ExecutedWriteSummary(
         updatedPartitions = Set.empty,
-        numOutputFile = 0,
-        numOutputBytes = 0,
-        numOutputRows = 0)
+        stats = statsTrackers.map(_.getFinalStats()))
     }
 
     override def releaseResources(): Unit = {}
@@ -325,11 +336,13 @@ object FileFormatWriter extends Logging {
       committer: FileCommitProtocol) extends ExecuteWriteTask {
 
     private[this] var currentWriter: OutputWriter = _
-    private[this] var currentPath: String = _
+
+    val statsTrackers: Seq[WriteTaskStatsTracker] =
+      description.statsTrackers.map(_.newTaskInstance())
 
     private def newOutputWriter(fileCounter: Int): Unit = {
       val ext = description.outputWriterFactory.getFileExtension(taskAttemptContext)
-      currentPath = committer.newTaskTempFile(
+      val currentPath = committer.newTaskTempFile(
         taskAttemptContext,
         None,
         f"-c$fileCounter%03d" + ext)
@@ -338,6 +351,8 @@ object FileFormatWriter extends Logging {
         path = currentPath,
         dataSchema = description.dataColumns.toStructType,
         context = taskAttemptContext)
+
+      statsTrackers.map(_.newFile(currentPath))
     }
 
     override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {
@@ -353,29 +368,24 @@ object FileFormatWriter extends Logging {
 
           recordsInFile = 0
           releaseResources()
-          numOutputRows += recordsInFile
           newOutputWriter(fileCounter)
         }
 
         val internalRow = iter.next()
         currentWriter.write(internalRow)
+        statsTrackers.foreach(_.newRow(internalRow))
         recordsInFile += 1
       }
       releaseResources()
-      numOutputRows += recordsInFile
-
       ExecutedWriteSummary(
         updatedPartitions = Set.empty,
-        numOutputFile = fileCounter + 1,
-        numOutputBytes = numOutputBytes,
-        numOutputRows = numOutputRows)
+        stats = statsTrackers.map(_.getFinalStats()))
     }
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         try {
           currentWriter.close()
-          numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
           currentWriter = null
         }
@@ -395,7 +405,33 @@ object FileFormatWriter extends Logging {
     // currentWriter is initialized whenever we see a new key
     private var currentWriter: OutputWriter = _
 
-    private var currentPath: String = _
+    private val statsTrackers: Seq[WriteTaskStatsTracker] =
+      desc.statsTrackers.map(_.newTaskInstance())
+
+    private val isPartitioned = desc.partitionColumns.nonEmpty
+
+    private val getPartitionValues: InternalRow => Option[UnsafeRow] = {
+      if (isPartitioned) {
+        val proj = UnsafeProjection.create(desc.partitionColumns, desc.allColumns)
+        row => Some(proj(row))
+      } else {
+        _ => None
+      }
+    }
+
+    private val isBucketed = desc.bucketIdExpression.isDefined
+
+    private val getBucketId: InternalRow => Option[Int] = {
+      if (isBucketed) {
+        val proj = UnsafeProjection.create(desc.bucketIdExpression.toSeq, desc.allColumns)
+        row => Some(proj(row).getInt(0))
+      } else {
+        _ => None
+      }
+    }
+
+    // Returns the data columns to be written given an input row
+    private val getOutputRow = UnsafeProjection.create(desc.dataColumns, desc.allColumns)
 
     /** Expressions that given partition columns build a path string like: col1=val/col2=val/... */
     private def partitionPathExpression: Seq[Expression] = {
@@ -408,14 +444,17 @@ object FileFormatWriter extends Logging {
       }
     }
 
+    // Generates the partition path given the row generated by `getPartitionColsAndBucketId`.
+    private lazy val getPartitionPath = UnsafeProjection.create(
+      Seq(Concat(partitionPathExpression)), desc.partitionColumns)
+
     /**
      * Opens a new OutputWriter given a partition key and optional bucket id.
      * If bucket id is specified, we will append it to the end of the file name, but before the
      * file extension, e.g. part-r-00009-ea518ad4-455a-4431-b471-d24e03814677-00002.gz.parquet
      *
-     * @param partColsAndBucketId a row consisting of partition columns and a bucket id for the
-     *                            current row.
-     * @param getPartitionPath a function that projects the partition values into a path string.
+     * @param partitionValues TODO
+     * @param bucketId TODO
      * @param fileCounter the number of files that have been written in the past for this specific
      *                    partition. This is used to limit the max number of records written for a
      *                    single file. The value should start from 0.
@@ -423,36 +462,24 @@ object FileFormatWriter extends Logging {
      *                          path of this writer to it.
      */
     private def newOutputWriter(
-        partColsAndBucketId: InternalRow,
-        getPartitionPath: UnsafeProjection,
+        partitionValues: Option[InternalRow],
+        bucketId: Option[Int],
         fileCounter: Int,
         updatedPartitions: mutable.Set[String]): Unit = {
-      val partDir = if (desc.partitionColumns.isEmpty) {
-        None
-      } else {
-        Option(getPartitionPath(partColsAndBucketId).getString(0))
-      }
+
+      val partDir = partitionValues.map(getPartitionPath(_).getString(0))
       partDir.foreach(updatedPartitions.add)
 
-      // If the bucketId expression is defined, the bucketId column is right after the partition
-      // columns.
-      val bucketId = if (desc.bucketIdExpression.isDefined) {
-        BucketingUtils.bucketIdToString(partColsAndBucketId.getInt(desc.partitionColumns.length))
-      } else {
-        ""
-      }
+      val bucketIdStr = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
 
       // This must be in a form that matches our bucketing format. See BucketingUtils.
-      val ext = f"$bucketId.c$fileCounter%03d" +
+      val ext = f"$bucketIdStr.c$fileCounter%03d" +
         desc.outputWriterFactory.getFileExtension(taskAttemptContext)
 
-      val customPath = partDir match {
-        case Some(dir) =>
+      val customPath = partDir.flatMap { dir =>
           desc.customPartitionLocations.get(PartitioningUtils.parsePathFragment(dir))
-        case _ =>
-          None
       }
-      currentPath = if (customPath.isDefined) {
+      val currentPath = if (customPath.isDefined) {
         committer.newTaskTempFileAbsPath(taskAttemptContext, customPath.get, ext)
       } else {
         committer.newTaskTempFile(taskAttemptContext, partDir, ext)
@@ -462,78 +489,68 @@ object FileFormatWriter extends Logging {
         path = currentPath,
         dataSchema = desc.dataColumns.toStructType,
         context = taskAttemptContext)
+
+      statsTrackers.foreach(_.newFile(currentPath))
     }
 
     override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {
-      val getPartitionColsAndBucketId = UnsafeProjection.create(
-        desc.partitionColumns ++ desc.bucketIdExpression, desc.allColumns)
-
-      // Generates the partition path given the row generated by `getPartitionColsAndBucketId`.
-      val getPartPath = UnsafeProjection.create(
-        Seq(Concat(partitionPathExpression)), desc.partitionColumns)
-
-      // Returns the data columns to be written given an input row
-      val getOutputRow = UnsafeProjection.create(desc.dataColumns, desc.allColumns)
-
       // If anything below fails, we should abort the task.
       var recordsInFile: Long = 0L
       var fileCounter = 0
-      var totalFileCounter = 0
-      var currentPartColsAndBucketId: UnsafeRow = null
       val updatedPartitions = mutable.Set[String]()
+      var currentPartionValues: Option[UnsafeRow] = None
+      var currentBucketId: Option[Int] = None
 
       for (row <- iter) {
-        val nextPartColsAndBucketId = getPartitionColsAndBucketId(row)
-        if (currentPartColsAndBucketId != nextPartColsAndBucketId) {
-          if (currentPartColsAndBucketId != null) {
-            totalFileCounter += (fileCounter + 1)
+        val nextPartitionValues: Option[UnsafeRow] = getPartitionValues(row)
+        val nextBucketId: Option[Int] = getBucketId(row)
+
+        if (currentPartionValues != nextPartitionValues || currentBucketId != nextBucketId) {
+          // See a new partition or bucket - write to a new partition dir (or a new bucket file).
+
+          if (isPartitioned && currentPartionValues != nextPartitionValues) {
+            currentPartionValues = Some(nextPartitionValues.get.copy())
+            statsTrackers.foreach(_.newPartition(currentPartionValues.get))
           }
 
-          // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-          currentPartColsAndBucketId = nextPartColsAndBucketId.copy()
-          logDebug(s"Writing partition: $currentPartColsAndBucketId")
+          if (isBucketed) {
+            currentBucketId = nextBucketId
+            statsTrackers.foreach(_.newBucket(currentBucketId.get))
+          }
 
-          numOutputRows += recordsInFile
           recordsInFile = 0
           fileCounter = 0
 
           releaseResources()
-          newOutputWriter(currentPartColsAndBucketId, getPartPath, fileCounter, updatedPartitions)
+          newOutputWriter(currentPartionValues, currentBucketId, fileCounter, updatedPartitions)
         } else if (desc.maxRecordsPerFile > 0 &&
             recordsInFile >= desc.maxRecordsPerFile) {
           // Exceeded the threshold in terms of the number of records per file.
           // Create a new file by increasing the file counter.
-
-          numOutputRows += recordsInFile
           recordsInFile = 0
           fileCounter += 1
           assert(fileCounter < MAX_FILE_COUNTER,
             s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
           releaseResources()
-          newOutputWriter(currentPartColsAndBucketId, getPartPath, fileCounter, updatedPartitions)
+          newOutputWriter(currentPartionValues, currentBucketId, fileCounter, updatedPartitions)
         }
-        currentWriter.write(getOutputRow(row))
+        val outputRow = getOutputRow(row)
+        currentWriter.write(outputRow)
+        statsTrackers.foreach(_.newRow(outputRow))
         recordsInFile += 1
       }
-      if (currentPartColsAndBucketId != null) {
-        totalFileCounter += (fileCounter + 1)
-      }
       releaseResources()
-      numOutputRows += recordsInFile
 
       ExecutedWriteSummary(
         updatedPartitions = updatedPartitions.toSet,
-        numOutputFile = totalFileCounter,
-        numOutputBytes = numOutputBytes,
-        numOutputRows = numOutputRows)
+        stats = statsTrackers.map(_.getFinalStats()))
     }
 
     override def releaseResources(): Unit = {
       if (currentWriter != null) {
         try {
           currentWriter.close()
-          numOutputBytes += getFileSize(taskAttemptContext.getConfiguration, currentPath)
         } finally {
           currentWriter = null
         }
@@ -547,12 +564,8 @@ object FileFormatWriter extends Logging {
  *
  * @param updatedPartitions the partitions updated during writing data out. Only valid
  *                          for dynamic partition.
- * @param numOutputFile the total number of files.
- * @param numOutputRows the number of output rows.
- * @param numOutputBytes the bytes of output data.
+ * @param stats TODO
  */
 case class ExecutedWriteSummary(
   updatedPartitions: Set[String],
-  numOutputFile: Int,
-  numOutputRows: Long,
-  numOutputBytes: Long)
+  stats: Seq[WriteTaskStats])
