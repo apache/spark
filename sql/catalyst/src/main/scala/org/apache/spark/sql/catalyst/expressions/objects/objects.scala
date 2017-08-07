@@ -154,13 +154,13 @@ case class StaticInvoke(
     val evaluate = if (returnNullable) {
       if (ctx.defaultValue(dataType) == "null") {
         s"""
-          ${ev.value} = $callFunc;
+          ${ev.value} = (($javaType) ($callFunc));
           ${ev.isNull} = ${ev.value} == null;
         """
       } else {
         val boxedResult = ctx.freshName("boxedResult")
         s"""
-          ${ctx.boxedType(dataType)} $boxedResult = $callFunc;
+          ${ctx.boxedType(dataType)} $boxedResult = (($javaType) ($callFunc));
           ${ev.isNull} = $boxedResult == null;
           if (!${ev.isNull}) {
             ${ev.value} = $boxedResult;
@@ -170,7 +170,7 @@ case class StaticInvoke(
     } else {
       s"${ev.value} = $callFunc;"
     }
-    // final $javaType ${ev.value} = (($javaType) ($resultIsNull ? ${ctx.defaultValue(dataType)} : $callFunc));
+
     val code = s"""
       $argCode
       $prepareIsNull
