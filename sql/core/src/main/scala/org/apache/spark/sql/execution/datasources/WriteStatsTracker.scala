@@ -34,12 +34,12 @@ trait WriteTaskStats
  */
 trait WriteTaskStatsTracker {
   /**
-   * FIXME
-   * @param partDir
+   * TODO
+   * @param partitionValues
    */
-  def newPartition(partDir: String): Unit
+  def newPartition(partitionValues: InternalRow): Unit
   /**
-   * FIXME
+   * TODO
    * @param bucketId
    */
   def newBucket(bucketId: Int): Unit
@@ -54,7 +54,7 @@ trait WriteTaskStatsTracker {
    * @note The row will be written to the file most recently specified via `setFile()`.
    * @param row Current data row to be processed.
    */
-  def updateStats(row: InternalRow): Unit
+  def newRow(row: InternalRow): Unit
 
   /**
    * Returns the final statistics computed so far.

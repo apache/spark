@@ -64,7 +64,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
 
-  override def newPartition(partDir: String): Unit = {
+  override def newPartition(partitionValues: InternalRow): Unit = {
     numPartitions += 1
   }
 
@@ -80,7 +80,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     numFiles += 1
   }
 
-  override def updateStats(row: InternalRow): Unit = {
+  override def newRow(row: InternalRow): Unit = {
     numRows += 1
   }
 
