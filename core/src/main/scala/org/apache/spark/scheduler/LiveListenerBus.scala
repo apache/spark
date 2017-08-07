@@ -54,22 +54,16 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
 
   private[spark] val metrics = new LiveListenerBusMetrics(conf, eventQueue)
 
+  private val slowQueueThresholdMs = conf.get(LISTENER_BUS_EVENT_QUEUE_SLOW_THRESHOLD_MS)
+
   // Indicate if `start()` is called
   private val started = new AtomicBoolean(false)
   // Indicate if `stop()` is called
   private val stopped = new AtomicBoolean(false)
 
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
-
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
-
   // Indicate if we are processing some event
   // Guarded by `self`
   private var processingEvent = false
-
-  private val logDroppedEvent = new AtomicBoolean(false)
 
   // A counter that represents the number of events produced and consumed in the queue
   private val eventLock = new Semaphore(0)
@@ -139,30 +133,18 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
       logDebug(s"$name has already stopped! Dropping event $event")
       return
     }
-    metrics.numEventsPosted.inc()
-    val eventAdded = eventQueue.offer(event)
-    if (eventAdded) {
-      eventLock.release()
-    } else {
-      onDropEvent(event)
+
+    val putStart = System.nanoTime()
+    eventQueue.put(event)
+    val putElapsed = System.nanoTime() - putStart
+    eventLock.release()
+
+    if (putElapsed > slowQueueThresholdMs) {
+      logWarning("Slow event queue uptake: Took %.3fms to post to event queue."
+          .format(putElapsed / 1000000f))
     }
 
-    val droppedEvents = droppedEventsCounter.get
-    if (droppedEvents > 0) {
-      // Don't log too frequently
-      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-        // There may be multiple threads trying to decrease droppedEventsCounter.
-        // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
-        // then that thread will update it.
-        if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
-          val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
-          logWarning(s"Dropped $droppedEvents SparkListenerEvents since " +
-            new java.util.Date(prevLastReportTimestamp))
-        }
-      }
-    }
+    metrics.numEventsPosted.inc()
   }
 
   /**
@@ -215,24 +197,6 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
     } else {
       // Keep quiet
     }
-  }
-
-  /**
-   * If the event queue exceeds its capacity, the new events will be dropped. The subclasses will be
-   * notified with the dropped events.
-   *
-   * Note: `onDropEvent` can be called in any thread.
-   */
-  def onDropEvent(event: SparkListenerEvent): Unit = {
-    metrics.numDroppedEvents.inc()
-    droppedEventsCounter.incrementAndGet()
-    if (logDroppedEvent.compareAndSet(false, true)) {
-      // Only log the following message once to avoid duplicated annoying logs.
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with " +
-        "the rate at which tasks are being started by the scheduler.")
-    }
-    logTrace(s"Dropping event $event")
   }
 }
 

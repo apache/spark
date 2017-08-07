@@ -171,6 +171,11 @@ package object config {
       .checkValue(_ > 0, "The capacity of listener bus event queue must not be negative")
       .createWithDefault(10000)
 
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_SLOW_THRESHOLD_MS =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.slowThresholdMs")
+      .intConf
+      .createWithDefault(10)
+
   private[spark] val LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED =
     ConfigBuilder("spark.scheduler.listenerbus.metrics.maxListenerClassesTimed")
       .internal()
