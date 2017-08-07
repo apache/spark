@@ -411,7 +411,11 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
         .outputMode("append")
         .format("console")
         .start()
-      q.processAllAvailable()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
     }
   }
 
