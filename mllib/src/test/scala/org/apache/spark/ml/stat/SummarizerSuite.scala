@@ -522,7 +522,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   // TODO: this test should not be committed. It is here to isolate some performance hotspots.
-  test("performance test") {
+  ignore("performance test") {
 
     import scala.util.Random
     val rand = new Random()
