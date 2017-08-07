@@ -356,7 +356,7 @@ class CodegenContext {
   private val placeHolderToComments = new mutable.HashMap[String, String]
 
   /**
-   * Returns the length of codegen function  is too long or not
+   * Returns if the length of codegen function is too long or not
    * It will count the lines of every codegen function, if there is a function of length
    * greater than spark.sql.codegen.MaxFunctionLength, it will return true.
    */
