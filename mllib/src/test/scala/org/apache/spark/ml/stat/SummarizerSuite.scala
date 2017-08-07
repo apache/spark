@@ -522,7 +522,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   // TODO: this test should not be committed. It is here to isolate some performance hotspots.
-  test("perf test") {
+  test("performance test") {
 
     import scala.util.Random
     val rand = new Random()
@@ -542,7 +542,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       println(s"----------n=${n}, dim=${dim}, partition=${rdd1.getNumPartitions}--------------")
 
       val trieouts = 20
-      val warm_up_times = 5
+      val warm_up_times = 10
       rdd1.cache()
       rdd1.count()
       val rdd2 = sc.parallelize(1 to n, numPartitions).map { idx =>

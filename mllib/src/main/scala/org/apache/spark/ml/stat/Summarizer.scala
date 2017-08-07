@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
  * Users should not directly create such builders, but instead use one of the methods in
  * [[Summarizer]].
  */
-@Since("2.2.0")
+@Since("2.3.0")
 abstract class SummaryBuilder {
   /**
    * Returns an aggregate object that contains the summary of the column with the requested metrics.
@@ -45,10 +45,10 @@ abstract class SummaryBuilder {
    * @return an aggregate column that contains the statistics. The exact content of this
    *         structure is determined during the creation of the builder.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def summary(featuresCol: Column, weightCol: Column): Column
 
-  @Since("2.2.0")
+  @Since("2.3.0")
   def summary(featuresCol: Column): Column = summary(featuresCol, lit(1.0))
 }
 
@@ -71,7 +71,7 @@ abstract class SummaryBuilder {
  *   val Row(mean_) = meanDF.first()
  * }}}
  */
-@Since("2.2.0")
+@Since("2.3.0")
 object Summarizer extends Logging {
 
   import SummaryBuilderImpl._
@@ -95,7 +95,7 @@ object Summarizer extends Logging {
    * @return a builder.
    * @throws IllegalArgumentException if one of the metric names is not understood.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def metrics(firstMetric: String, metrics: String*): SummaryBuilder = {
     val (typedMetrics, computeMetrics) = getRelevantMetrics(Seq(firstMetric) ++ metrics)
     new SummaryBuilderImpl(typedMetrics, computeMetrics)
@@ -219,7 +219,7 @@ object SummaryBuilderImpl extends Logging {
   case object ComputeMax extends ComputeMetrics
   case object ComputeMin extends ComputeMetrics
 
-  class SummarizerBuffer(
+  private[stat] class SummarizerBuffer(
       requestedMetrics: Seq[Metrics],
       requestedCompMetrics: Seq[ComputeMetrics]
   ) extends Serializable {
@@ -248,7 +248,7 @@ object SummaryBuilderImpl extends Logging {
     /**
      * Add a new sample to this summarizer, and update the statistical summary.
      */
-    def addRaw(instance: TraversableIndexedSeq, weight: Double): this.type = {
+    def add(instance: Vector, weight: Double): this.type = {
       require(weight >= 0.0, s"sample weight, ${weight} has to be >= 0.0")
       if (weight == 0.0) return this
 
@@ -322,22 +322,8 @@ object SummaryBuilderImpl extends Logging {
       this
     }
 
-    def addRaw(instance: TraversableIndexedSeq): this.type = addRaw(instance, 1.0)
+    def add(instance: Vector): this.type = add(instance, 1.0)
 
-    // For test
-    def add(sample: Vector, weight: Double): this.type = {
-      val v = new TraversableIndexedSeq {
-
-        override def size: Int = sample.size
-
-        override def foreachActive(f: (Int, Double) => Unit): Unit = {
-          sample.foreachActive(f)
-        }
-      }
-      addRaw(v, weight)
-    }
-
-    def add(sample: Vector): this.type = add(sample, 1.0)
     /**
      * Merge another SummarizerBuffer, and update the statistical summary.
      * (Note that it's in place merging; as a result, `this` object will be modified.)
@@ -547,35 +533,11 @@ object SummaryBuilderImpl extends Logging {
       // val features = udt.deserialize(featuresExpr.eval(row))
       val featuresDatum = featuresExpr.eval(row).asInstanceOf[InternalRow]
 
-      val isDense = featuresDatum.getByte(0) == 1
-
-      val indices: ArrayData = if (isDense) null else featuresDatum.getArray(2)
-      val values: ArrayData = featuresDatum.getArray(3)
-      val _size = if (isDense) values.numElements() else featuresDatum.getInt(1)
-
-      val features = new TraversableIndexedSeq {
-
-        override def foreachActive(f: (Int, Double) => Unit): Unit = {
-          var i = 0
-          if (isDense) {
-            while (i < _size) {
-              f(i, values.getDouble(i))
-              i += 1
-            }
-          } else {
-            while (i < indices.numElements()) {
-              f(indices.getInt(i), values.getDouble(i))
-              i += 1
-            }
-          }
-        }
-
-        override def size: Int = _size
-      }
+      val features = udt.deserialize(featuresDatum)
 
       val weight = weightExpr.eval(row).asInstanceOf[Double]
 
-      state.addRaw(features, weight)
+      state.add(features, weight)
       state
     }
 
@@ -617,14 +579,6 @@ object SummaryBuilderImpl extends Logging {
 
     override def prettyName: String = "aggregate_metrics"
 
-  }
-
-
-  trait TraversableIndexedSeq {
-
-    def foreachActive(f: (Int, Double) => Unit): Unit
-
-    def size: Int
   }
 
   private[this] val udt = new VectorUDT
