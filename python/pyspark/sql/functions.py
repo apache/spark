@@ -1425,7 +1425,7 @@ def substring(str, pos, len):
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
     when str is Binary type.
-    
+
     .. note:: The position is not zero based, but 1 based index.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
