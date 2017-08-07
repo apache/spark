@@ -340,7 +340,7 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.MaxFunctionLength", "10000")
+      sparkSession.conf.set("spark.sql.codegen.MaxFunctionLength", "1000")
       f()
     }
 
@@ -349,10 +349,10 @@ class AggregateBenchmark extends BenchmarkBase {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_111-b14 on Windows 7 6.1
     Intel64 Family 6 Model 58 Stepping 9, GenuineIntel
-    max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    codegen = F                                    443 /  507          1.5         676.0       1.0X
-    codegen = T                                   3279 / 3283          0.2        5002.6       0.1X
+    max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns) Relative
+    ----------------------------------------------------------------------------------------------
+    codegen = F                                    443 /  507          1.5         676.0     1.0X
+    codegen = T                                   3279 / 3283          0.2        5002.6     0.1X
      */
   }
 
