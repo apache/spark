@@ -825,7 +825,7 @@ object TypeCoercion {
         case (e: SpecialFrameBoundary, _) => e
         case (e, _: DateType) => e
         case (e, _: TimestampType) => e
-        case (e: Expression, t: DataType) if e.dataType != t && Cast.canCast(e.dataType, t) =>
+        case (e: Expression, t) if e.dataType != t && Cast.canCast(e.dataType, t) =>
           Cast(e, t)
         case _ => boundary
       }
