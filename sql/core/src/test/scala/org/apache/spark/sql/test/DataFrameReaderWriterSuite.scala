@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.test
 
-import java.io.File
+import java.io.{File, FileOutputStream, OutputStreamWriter}
+import java.nio.charset.StandardCharsets
 import java.util.Locale
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -774,5 +775,22 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext with Be
         }
       }
     }
+  }
+
+  test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
+    "from a file") {
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir, "sample.json")
+    val writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8)
+    writer.write(Seq("{\"field\": 1}", "{\"field\": 2}", "{\"field\": \"3\"}").mkString("\n"))
+    writer.close()
+
+    val schema = new StructType()
+      .add("field", ByteType)
+      .add("_corrupt_record", StringType)
+
+    val dfFromFile = spark.read.schema(schema).json(file.getAbsolutePath)
+    assert(dfFromFile.filter($"_corrupt_record".isNotNull).count() == 1)
+    assert(dfFromFile.filter($"_corrupt_record".isNull).count() == 2)
   }
 }
