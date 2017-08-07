@@ -211,9 +211,9 @@ class WindowSpec private[sql](
 
   /**
    * @param start boundary start, inclusive. The frame is unbounded if the expression is
-   *              [[UnboundedPreceding]].
+   *              [[org.apache.spark.sql.catalyst.expressions.UnboundedPreceding]].
    * @param end boundary end, inclusive. The frame is unbounded if the expression is
-   *            [[UnboundedFollowing]].
+   *            [[org.apache.spark.sql.catalyst.expressions.UnboundedFollowing]].
    * @since 2.3.0
    */
   def rangeBetween(start: Column, end: Column): WindowSpec = {
