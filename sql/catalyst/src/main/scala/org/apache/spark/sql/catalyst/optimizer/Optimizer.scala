@@ -344,9 +344,6 @@ object LimitPushDown extends Rule[LogicalPlan] {
         case _ => join
       }
       LocalLimit(exp, newJoin)
-
-    case LocalLimit(exp, watermark: EventTimeWatermark) =>
-      LocalLimit(exp, watermark.copy(child = LocalLimit(exp, watermark.child)))
   }
 }
 
