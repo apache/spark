@@ -746,20 +746,22 @@ abstract class RepartitionOperation extends UnaryNode {
  * [[RepartitionByExpression]] as this method is called directly by DataFrame's, because the user
  * asked for `coalesce` or `repartition`. [[RepartitionByExpression]] is used when the consumer
  * of the output requires some specific ordering or distribution of the data.
+ *
+ * If `shuffle` = false (`coalesce` cases), this logical plan can have an user-specified strategy
+ * to coalesce input partitions.
+ *
+ * @param numPartitions How many partitions to use in the output RDD
+ * @param shuffle Whether to shuffle when repartitioning
+ * @param child the LogicalPlan
+ * @param coalescer Optional coalescer that an user specifies
  */
-case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
+case class Repartition(
+    numPartitions: Int,
+    shuffle: Boolean,
+    child: LogicalPlan,
+    coalescer: Option[PartitionCoalescer] = None)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
-}
-
-/**
- * Returns a new RDD that has at most `numPartitions` partitions. This behavior can be modified by
- * supplying a `PartitionCoalescer` to control the behavior of the partitioning.
- */
-case class PartitionCoalesce(numPartitions: Int, coalescer: PartitionCoalescer, child: LogicalPlan)
-  extends UnaryNode {
-  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
-  override def output: Seq[Attribute] = child.output
 }
 
 /**

@@ -596,14 +596,15 @@ object CollapseProject extends Rule[LogicalPlan] {
 object CollapseRepartition extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     // Case 1: When a Repartition has a child of Repartition or RepartitionByExpression,
-    // 1) When the top node does not enable the shuffle (i.e., coalesce API), but the child
-    //   enables the shuffle. Returns the child node if the last numPartitions is bigger;
-    //   otherwise, keep unchanged.
+    // 1) When the top node does not enable the shuffle (i.e., coalesce with no user-specified
+    //   strategy), but the child enables the shuffle. Returns the child node if the last
+    //   numPartitions is bigger; otherwise, keep unchanged.
     // 2) In the other cases, returns the top node with the child's child
-    case r @ Repartition(_, _, child: RepartitionOperation) => (r.shuffle, child.shuffle) match {
-      case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
-      case _ => r.copy(child = child.child)
-    }
+    case r @ Repartition(_, _, child: RepartitionOperation, None) =>
+      (r.shuffle, child.shuffle) match {
+        case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
+        case _ => r.copy(child = child.child)
+      }
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>

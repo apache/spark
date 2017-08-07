@@ -244,7 +244,7 @@ class PlannerSuite extends SharedSQLContext {
     assert(countRepartitions(doubleRepartitioned.queryExecution.logical) === 3)
     assert(countRepartitions(doubleRepartitioned.queryExecution.optimizedPlan) === 2)
     doubleRepartitioned.queryExecution.optimizedPlan match {
-      case Repartition (numPartitions, shuffle, Repartition(_, shuffleChild, _)) =>
+      case Repartition(numPartitions, shuffle, Repartition(_, shuffleChild, _, _), _) =>
         assert(numPartitions === 5)
         assert(shuffle === false)
         assert(shuffleChild === true)

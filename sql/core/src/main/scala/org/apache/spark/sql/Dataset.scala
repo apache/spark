@@ -2680,14 +2680,9 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 2.3.0
    */
-  def coalesce(numPartitions: Int, userDefinedCoalescer: Option[PartitionCoalescer]): Dataset[T] = {
-    userDefinedCoalescer.map { coalescer =>
-      withTypedPlan {
-        PartitionCoalesce(numPartitions, coalescer, logicalPlan)
-      }
-    }.getOrElse {
-      coalesce(numPartitions)
-    }
+  def coalesce(numPartitions: Int, userDefinedCoalescer: Option[PartitionCoalescer])
+    : Dataset[T] = withTypedPlan {
+    Repartition(numPartitions, shuffle = false, logicalPlan, userDefinedCoalescer)
   }
 
   /**
