@@ -646,7 +646,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // convert table statistics to properties so that we can persist them through hive client
     var statsProperties =
       if (stats.isDefined) {
-        statsToProperties(stats.get, rawTable.schema)
+        statsToProperties(stats.get, schema)
       } else {
         new mutable.HashMap[String, String]()
       }
@@ -1075,7 +1075,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // convert partition statistics to properties so that we can persist them through hive api
     val withStatsProps = lowerCasedParts.map(p => {
       if (p.stats.isDefined) {
-        val statsProperties = statsToProperties(p.stats.get, rawTable.schema)
+        val statsProperties = statsToProperties(p.stats.get, schema)
         p.copy(parameters = p.parameters ++ statsProperties)
       } else {
         p
