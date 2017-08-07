@@ -651,9 +651,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           value.toBoolean
         case _ =>
           // If the property is not set, the table may have been created by an old version
-          // of Spark. Those versions set a "path" property in the table's storage descriptor
-          // for non-Hive-compatible tables, so use that to detect compatibility.
-          rawTable.storage.properties.get("path").isDefined
+          // of Spark. Detect Hive compatibility by comparing the table's serde with the
+          // serde for the table's data source. If they match, the table is Hive-compatible.
+          // If they don't, they're not, because of some other table property that made it
+          // not initially Hive-compatible.
+          HiveSerDe.sourceToSerDe(provider.get) == rawTable.storage.serde
       }
     } else {
       // All non-DS tables are treated as regular Hive tables.
