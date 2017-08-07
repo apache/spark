@@ -21,7 +21,7 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -590,4 +590,24 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       """{"t":"2015-12-31T16:00:00"}"""
     )
   }
+
+  test("SPARK-21513: to_json support map[string, struct] to json") {
+    val schema = MapType(StringType, StructType(StructField("a", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map("test" -> InternalRow(1))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input, gmtId),
+      """{"test":{"a":1}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[struct, struct] to json") {
+    val schema = MapType(StructType(StructField("a", IntegerType) :: Nil),
+      StructType(StructField("b", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input, gmtId),
+      """{"[1]":{"b":2}}"""
+    )
+  }
+
 }
