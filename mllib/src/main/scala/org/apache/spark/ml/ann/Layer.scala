@@ -361,9 +361,15 @@ private[ann] trait TopologyModel extends Serializable {
    * Forward propagation
    *
    * @param data input data
+   * @param includeLastLayer include last layer when computing. In MultilayerPerceptronClassifier,
+   *                         The last layer is always softmax, add the includeLastLayer parameter,
+   *                         when true the forward computing will contains last layer, otherwise
+   *                         not. The parameter is used when we need rawPrediction, the last layer
+   *                         softmax should discard.
+   *
    * @return array of outputs for each of the layers
    */
-  def forward(data: BDM[Double], containsLastLayer: Boolean): Array[BDM[Double]]
+  def forward(data: BDM[Double], includeLastLayer: Boolean): Array[BDM[Double]]
 
   /**
    * Prediction of the model
@@ -479,7 +485,7 @@ private[ml] class FeedForwardModel private(
   private var outputs: Array[BDM[Double]] = null
   private var deltas: Array[BDM[Double]] = null
 
-  override def forward(data: BDM[Double], containsLastLayer: Boolean): Array[BDM[Double]] = {
+  override def forward(data: BDM[Double], includeLastLayer: Boolean): Array[BDM[Double]] = {
     // Initialize output arrays for all layers. Special treatment for InPlace
     val currentBatchSize = data.cols
     // TODO: allocate outputs as one big array and then create BDMs from it
@@ -497,7 +503,7 @@ private[ml] class FeedForwardModel private(
       }
     }
     layerModels(0).eval(data, outputs(0))
-    val end = if (containsLastLayer) layerModels.length else layerModels.length - 1
+    val end = if (includeLastLayer) layerModels.length else layerModels.length - 1
     for (i <- 1 until end) {
       layerModels(i).eval(outputs(i - 1), outputs(i))
     }
