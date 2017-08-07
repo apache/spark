@@ -78,6 +78,8 @@ private[spark] class DTStatsAggregator(
 
   /**
    * Array of parent node sufficient stats.
+   * Parent stats need to be explicitly tracked in the [[DTStatsAggregator]] for unordered
+   * categorical features.
    */
   private val parentStats: Array[Double] = new Array[Double](statsSize)
 
