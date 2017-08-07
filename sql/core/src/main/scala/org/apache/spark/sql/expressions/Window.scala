@@ -159,17 +159,6 @@ object Window {
   }
 
   /**
-   * @param start boundary start, inclusive. The frame is unbounded if this evals to
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
-   *            maximum long value (`Window.unboundedFollowing`).
-   * @since 2.3.0
-   */
-  def rowsBetween(start: Column, end: Column): WindowSpec = {
-    spec.rowsBetween(start, end)
-  }
-
-  /**
    * Creates a [[WindowSpec]] with the frame boundaries defined,
    * from `start` (inclusive) to `end` (inclusive).
    *
@@ -222,10 +211,10 @@ object Window {
   }
 
   /**
-   * @param start boundary start, inclusive. The frame is unbounded if this evals to
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
-   *            maximum long value (`Window.unboundedFollowing`).
+   * @param start boundary start, inclusive. The frame is unbounded if the expression is
+   *              [[UnboundedPreceding]].
+   * @param end boundary end, inclusive. The frame is unbounded if the expression is
+   *            [[UnboundedFollowing]].
    * @since 2.3.0
    */
   def rangeBetween(start: Column, end: Column): WindowSpec = {

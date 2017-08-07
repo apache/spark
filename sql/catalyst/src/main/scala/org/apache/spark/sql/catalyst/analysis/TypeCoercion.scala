@@ -823,8 +823,8 @@ object TypeCoercion {
     private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
       (boundary, dt) match {
         case (e: SpecialFrameBoundary, _) => e
-        case (e: Expression, _: DateType) => e
-        case (e: Expression, _: TimestampType) => e
+        case (e, _: DateType) => e
+        case (e, _: TimestampType) => e
         case (e: Expression, t: DataType) if e.dataType != t && Cast.canCast(e.dataType, t) =>
           Cast(e, t)
         case _ => boundary

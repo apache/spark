@@ -779,28 +779,31 @@ object functions {
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
   /**
-   * Window function: returns the value that represents the first row in the window partition.
+   * Window function: returns the special frame boundary that represents the first row in the
+   * window partition.
    *
    * @group window_funcs
    * @since 2.3.0
    */
-  def unboundedPreceding(): Column = lit(Window.unboundedPreceding)
+  def unboundedPreceding(): Column = Column(UnboundedPreceding)
 
   /**
-   * Window function: returns the value that represents the last row in the window partition.
+   * Window function: returns the special frame boundary that represents the last row in the
+   * window partition.
    *
    * @group window_funcs
    * @since 2.3.0
    */
-  def unboundedFollowing(): Column = lit(Window.unboundedFollowing)
+  def unboundedFollowing(): Column = Column(UnboundedFollowing)
 
   /**
-   * Window function: returns the value that represents the current row in the window partition.
+   * Window function: returns the special frame boundary that represents the current row in the
+   * window partition.
    *
    * @group window_funcs
    * @since 2.3.0
    */
-  def currentRow(): Column = lit(Window.currentRow)
+  def currentRow(): Column = Column(CurrentRow)
 
   /**
    * Window function: returns the cumulative distribution of values within a window partition,

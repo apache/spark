@@ -144,24 +144,6 @@ class WindowSpec private[sql](
   }
 
   /**
-   * @param start boundary start, inclusive. The frame is unbounded if this evals to
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
-   *            maximum long value (`Window.unboundedFollowing`).
-   * @since 2.3.0
-   */
-  def rowsBetween(start: Column, end: Column): WindowSpec = {
-    val boundaryStart = extractBoundary(start.expr)
-
-    val boundaryEnd = extractBoundary(end.expr)
-
-    new WindowSpec(
-      partitionSpec,
-      orderSpec,
-      SpecifiedWindowFrame(RowFrame, boundaryStart, boundaryEnd))
-  }
-
-  /**
    * Defines the frame boundaries, from `start` (inclusive) to `end` (inclusive).
    *
    * Both `start` and `end` are relative from the current row. For example, "0" means
@@ -228,31 +210,17 @@ class WindowSpec private[sql](
   }
 
   /**
-   * @param start boundary start, inclusive. The frame is unbounded if this evals to
-   *              the minimum long value (`Window.unboundedPreceding`).
-   * @param end boundary end, inclusive. The frame is unbounded if this evals to the
-   *            maximum long value (`Window.unboundedFollowing`).
+   * @param start boundary start, inclusive. The frame is unbounded if the expression is
+   *              [[UnboundedPreceding]].
+   * @param end boundary end, inclusive. The frame is unbounded if the expression is
+   *            [[UnboundedFollowing]].
    * @since 2.3.0
    */
   def rangeBetween(start: Column, end: Column): WindowSpec = {
-    val boundaryStart = extractBoundary(start.expr)
-
-    val boundaryEnd = extractBoundary(end.expr)
-
     new WindowSpec(
       partitionSpec,
       orderSpec,
-      SpecifiedWindowFrame(RangeFrame, boundaryStart, boundaryEnd))
-  }
-
-  private def extractBoundary(expr: Expression): Expression = expr match {
-    case e if !e.foldable => e
-    case _ => expr.eval() match {
-      case 0 => CurrentRow
-      case Long.MinValue => UnboundedPreceding
-      case Long.MaxValue => UnboundedFollowing
-      case _ => expr
-    }
+      SpecifiedWindowFrame(RangeFrame, start.expr, end.expr))
   }
 
   /**
