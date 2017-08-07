@@ -34,7 +34,7 @@ class ChildProcAppHandle implements SparkAppHandle {
   private final String secret;
   private final LauncherServer server;
 
-  private Process childProc;
+  private volatile Process childProc;
   private boolean disposed;
   private LauncherConnection connection;
   private List<Listener> listeners;
@@ -96,9 +96,7 @@ class ChildProcAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void kill() {
-    if (!disposed) {
-      disconnect();
-    }
+    disconnect();
     if (childProc != null) {
       try {
         childProc.exitValue();
@@ -118,12 +116,38 @@ class ChildProcAppHandle implements SparkAppHandle {
     this.childProc = childProc;
     if (logStream != null) {
       this.redirector = new OutputRedirector(logStream, loggerName,
-        SparkLauncher.REDIRECTOR_FACTORY);
+        SparkLauncher.REDIRECTOR_FACTORY, this);
+    } else {
+      // If there is no log redirection, spawn a thread that will wait for the child process
+      // to finish.
+      Thread waiter = SparkLauncher.REDIRECTOR_FACTORY.newThread(this::monitorChild);
+      waiter.setDaemon(true);
+      waiter.start();
     }
   }
 
   void setConnection(LauncherConnection connection) {
     this.connection = connection;
+  }
+
+  /**
+   * Callback for when the child process exits. Forcefully put the application in a final state,
+   * overwriting the current final state unless it is already FAILED.
+   */
+  synchronized void childProcessExited() {
+    disconnect();
+
+    int ec;
+    try {
+      ec = childProc.exitValue();
+    } catch (Exception e) {
+      ec = 1;
+    }
+
+    if (!state.isFinal() || (ec != 0 && state != State.FAILED)) {
+      state = State.LOST;
+      fireEvent(false);
+    }
   }
 
   LauncherServer getServer() {
@@ -134,7 +158,7 @@ class ChildProcAppHandle implements SparkAppHandle {
     return connection;
   }
 
-  void setState(State s) {
+  synchronized void setState(State s) {
     if (!state.isFinal()) {
       state = s;
       fireEvent(false);
@@ -144,17 +168,12 @@ class ChildProcAppHandle implements SparkAppHandle {
     }
   }
 
-  void setAppId(String appId) {
+  synchronized void setAppId(String appId) {
     this.appId = appId;
     fireEvent(true);
   }
 
-  // Visible for testing.
-  boolean isRunning() {
-    return childProc == null || childProc.isAlive() || (redirector != null && redirector.isAlive());
-  }
-
-  private synchronized void fireEvent(boolean isInfoChanged) {
+  private void fireEvent(boolean isInfoChanged) {
     if (listeners != null) {
       for (Listener l : listeners) {
         if (isInfoChanged) {
@@ -164,6 +183,17 @@ class ChildProcAppHandle implements SparkAppHandle {
         }
       }
     }
+  }
+
+  private void monitorChild() {
+    while (childProc.isAlive()) {
+      try {
+        childProc.waitFor();
+      } catch (Exception e) {
+        // Try again.
+      }
+    }
+    childProcessExited();
   }
 
 }
