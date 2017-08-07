@@ -118,7 +118,10 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       // the derived `actualSchema` is empty and the `_corrupt_record` are all null for all rows.
       // When users requires only `_corrupt_record`, we assume that the corrupt records are required
       // for all json fields, i.g., all items in dataSchema.
-      val querySchema = if (actualSchema.isEmpty) dataSchema else actualSchema
+      val querySchema =
+      if (actualSchema.isEmpty) {
+        StructType(dataSchema.filterNot(_.name == parsedOptions.columnNameOfCorruptRecord))
+      } else actualSchema
       val parser = new JacksonParser(querySchema, parsedOptions)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
