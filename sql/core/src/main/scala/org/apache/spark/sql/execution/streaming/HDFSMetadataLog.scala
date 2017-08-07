@@ -123,7 +123,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           serialize(metadata, output)
           return Some(tempPath)
         } finally {
-          IOUtils.closeQuietly(output)
+          output.close()
         }
       } catch {
         case e: FileAlreadyExistsException =>
