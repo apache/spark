@@ -66,28 +66,28 @@ package object config {
 
   private[spark] val SECRET_NAME =
     ConfigBuilder("spark.mesos.driver.secret.name")
-      .doc("Set the secret's reference name.  Consult the Mesos Secret protobuf for more " +
-        "information.")
+      .doc("A comma-seperated list of secret references. Consult the Mesos Secret protobuf for " +
+        "more information.")
       .stringConf
       .createOptional
 
   private[spark] val SECRET_VALUE =
     ConfigBuilder("spark.mesos.driver.secret.value")
-      .doc("TODO")
+      .doc("A comma-seperated list of secret values.")
       .stringConf
       .createOptional
 
   private[spark] val SECRET_ENVKEY =
     ConfigBuilder("spark.mesos.driver.secret.envkey")
-      .doc("Set the environment variable to contain the secret.  The environment variable will " +
-        "be set on the driver.")
+      .doc("A comma-seperated list of the environment variables to contain the secrets." +
+        "The environment variable will be set on the driver.")
       .stringConf
       .createOptional
 
   private[spark] val SECRET_FILENAME =
     ConfigBuilder("spark.mesos.driver.secret.filename")
-      .doc("Set the name of the file the secret will be written to.  Consult the Mesos Secret " +
-        "protobuf for more information.")
+      .doc("A comma-seperated list of file paths secret will be written to.  Consult the Mesos " +
+        "Secret protobuf for more information.")
       .stringConf
       .createOptional
 
