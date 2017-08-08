@@ -31,18 +31,38 @@ trait WriteTaskStats
 /**
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
+ *
+ * This trait is coupled with the way [[FileFormatWriter]] works, in the sense that its methods
+ * will be called according to how tuples are being written out to disk, namely in sorted order
+ * according to partitionValue(s), then bucketId.
+ *
+ * As such, a typical call scenario is:
+ *
+ * newPartition -> newBucket -> newFile -> newRow -.
+ *    ^        |______^___________^ ^         ^____|
+ *    |               |             |______________|
+ *    |               |____________________________|
+ *    |____________________________________________|
+ *
+ * newPartition and newBucket events are only triggered if the relation to be written out is
+ * partitioned and/or bucketed, respectively.
  */
 trait WriteTaskStatsTracker {
+
   /**
-   * TODO
-   * @param partitionValues
+   * Process the fact that a new partition is about to be written.
+   * Only triggered when the relation is partitioned by a (non-empty) sequence of columns.
+   * @param partitionValues The values that define this new partition.
    */
   def newPartition(partitionValues: InternalRow): Unit
+
   /**
-   * TODO
-   * @param bucketId
+   * Process the fact that a new bucket is about to written.
+   * Only triggered when the relation is bucketed by a (non-empty) sequence of columns.
+   * @param bucketId The bucket number.
    */
   def newBucket(bucketId: Int): Unit
+
   /**
    * Process the fact that a new file is about to be written.
    * @param filePath Path of the file into which future rows will be written.
@@ -50,8 +70,8 @@ trait WriteTaskStatsTracker {
   def newFile(filePath: String): Unit
 
   /**
-   * Use the given `row` to update the tracked statistics accordingly.
-   * @note The row will be written to the file most recently specified via `setFile()`.
+   * Process the fact that a new row to update the tracked statistics accordingly.
+   * The row will be written to the most recently witnessed file (via `newFile`).
    * @param row Current data row to be processed.
    */
   def newRow(row: InternalRow): Unit
@@ -92,7 +112,7 @@ trait WriteJobStatsTracker
    *                def processStats(stats: Seq[S]): Unit
    *              but that leads to too much complication in the [[FileFormatWriter]].
    *              Instead, you may feel free to cast the `stats` to the expected derived type
-   *              when implementing this method in a derived classes.
+   *              when implementing this method in a derived class.
    *              The framework will make sure to call this with the right arguments.
    */
   def processStats(stats: Seq[WriteTaskStats]): Unit

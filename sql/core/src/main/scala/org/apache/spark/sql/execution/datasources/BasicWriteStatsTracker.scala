@@ -28,7 +28,8 @@ import org.apache.spark.util.SerializableConfiguration
 
 
 /**
- * TODO
+ * Simple metrics collected during an instance of [[FileFormatWriter.ExecuteWriteTask]].
+ * These were first introduced in https://github.com/apache/spark/pull/18159 (SPARK-20703).
  */
 case class BasicWriteTaskStats(
     numPartitions: Int,
@@ -39,7 +40,7 @@ case class BasicWriteTaskStats(
 
 
 /**
- * TODO
+ * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
  * @param hadoopConf
  */
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
@@ -54,13 +55,9 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
 
   private def getFileSize(filePath: String): Long = {
-    if (filePath != null) {
-      val path = new Path(filePath)
-      val fs = path.getFileSystem(hadoopConf)
-      fs.getFileStatus(path).getLen()
-    } else {
-      0L
-    }
+    val path = new Path(filePath)
+    val fs = path.getFileSystem(hadoopConf)
+    fs.getFileStatus(path).getLen()
   }
 
 
@@ -69,11 +66,12 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   }
 
   override def newBucket(bucketId: Int): Unit = {
-    /* currently unhandled */
+    // currently unhandled
   }
 
   override def newFile(filePath: String): Unit = {
     if (numFiles > 0) {
+      // we assume here that we've finished writing to disk the previous file by now
       numBytes += getFileSize(curFile)
     }
     curFile = filePath
@@ -94,7 +92,10 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
 
 
 /**
- * TODO
+ * Simple [[WriteJobStatsTracker]] implementation that's serializable, capable of
+ * instantiating [[BasicWriteTaskStatsTracker]] on executors and processing the
+ * [[BasicWriteTaskStats]] they produce by aggregating the metrics and posting them
+ * as DriverMetricUpdates.
  */
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
@@ -107,8 +108,8 @@ class BasicWriteJobStatsTracker(
 
   override def processStats(stats: Seq[WriteTaskStats]): Unit = {
     val sparkContext = SparkContext.getActive.get
-    var numPartitions = 0
-    var numFiles = 0
+    var numPartitions: Long = 0L
+    var numFiles: Long = 0L
     var totalNumBytes: Long = 0L
     var totalNumOutput: Long = 0L
 
