@@ -205,7 +205,9 @@ case class BucketSpec(
  *                           configured.
  * @param ignoredProperties is a list of table properties that are used by the underlying table
  *                          but ignored by Spark SQL yet.
- * @param createVersion records the version of Spark that created this table metadata.
+ * @param createVersion records the version of Spark that created this table metadata. The default
+ *                      is '2.2 or prior'. We expect it will be read from the catalog or filled by
+ *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
  */
 case class CatalogTable(
     identifier: TableIdentifier,

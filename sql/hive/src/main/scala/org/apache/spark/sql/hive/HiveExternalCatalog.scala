@@ -705,7 +705,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     // Restore version info
-    val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "")
+    val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "2.2 or prior")
 
     // Restore Spark's statistics from information in Metastore.
     val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
