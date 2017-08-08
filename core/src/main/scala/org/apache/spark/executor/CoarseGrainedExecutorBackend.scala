@@ -219,6 +219,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
+      val driverUri = new java.net.URI(driverUrl)
+      val driverHost = driverUri.getHost
+      val driverPort = driverUri.getPort
+      driverConf.set("spark.driver.host", driverHost)
+      driverConf.set("spark.driver.port", driverPort.toString)
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
 
