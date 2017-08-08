@@ -35,7 +35,7 @@ import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
-import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
