@@ -400,7 +400,6 @@ object HDFSMetadataLog {
 
     /**
      * Rename a path. Note that this implementation is not atomic.
-     *
      * @throws FileNotFoundException if source path does not exist.
      * @throws FileAlreadyExistsException if destination path already exists.
      * @throws IOException if renaming fails for some unknown reason.
