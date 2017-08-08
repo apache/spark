@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -25,9 +25,12 @@ import java.util.stream.Stream;
 
 import com.google.common.base.Preconditions;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Wrapper around types managed in a KVStore, providing easy access to their indexed fields.
  */
+@Private
 public class KVTypeInfo {
 
   private final Class<?> type;
