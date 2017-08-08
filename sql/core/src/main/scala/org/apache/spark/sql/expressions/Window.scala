@@ -176,7 +176,7 @@ object Window {
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
    * expression must have a numerical data type. An exception can be made when the offset is
-   * unbounded, because no value modification is needed, in this case multiple and non-literal
+   * unbounded, because no value modification is needed, in this case multiple and non-numeric
    * ORDER BY expression are allowed.
    *
    * {{{
@@ -229,7 +229,7 @@ object Window {
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
    * expression must have a numerical/date/timestamp data type. An exception can be made when the
    * offset is unbounded, because no value modification is needed, in this case multiple and
-   * non-literal ORDER BY expression are allowed.
+   * non-numerical/date/timestamp data type ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window
