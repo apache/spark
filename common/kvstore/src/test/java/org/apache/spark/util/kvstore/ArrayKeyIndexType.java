@@ -15,13 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
-public class InMemoryIteratorSuite extends DBIteratorSuite {
+import java.util.Arrays;
+
+public class ArrayKeyIndexType {
+
+  @KVIndex
+  public int[] key;
+
+  @KVIndex("id")
+  public String[] id;
 
   @Override
-  protected KVStore createStore() {
-    return new InMemoryStore();
+  public boolean equals(Object o) {
+    if (o instanceof ArrayKeyIndexType) {
+      ArrayKeyIndexType other = (ArrayKeyIndexType) o;
+      return Arrays.equals(key, other.key) && Arrays.equals(id, other.id);
+    }
+    return false;
+  }
+
+  @Override
+  public int hashCode() {
+    return key.hashCode();
   }
 
 }

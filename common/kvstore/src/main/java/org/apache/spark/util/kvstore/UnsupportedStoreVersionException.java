@@ -15,34 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
-import java.io.File;
+import java.io.IOException;
 
-import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
+import org.apache.spark.annotation.Private;
 
-public class LevelDBIteratorSuite extends DBIteratorSuite {
-
-  private static File dbpath;
-  private static LevelDB db;
-
-  @AfterClass
-  public static void cleanup() throws Exception {
-    if (db != null) {
-      db.close();
-    }
-    if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
-    }
-  }
-
-  @Override
-  protected KVStore createStore() throws Exception {
-    dbpath = File.createTempFile("test.", ".ldb");
-    dbpath.delete();
-    db = new LevelDB(dbpath);
-    return db;
-  }
+/**
+ * Exception thrown when the store implementation is not compatible with the underlying data.
+ */
+@Private
+public class UnsupportedStoreVersionException extends IOException {
 
 }

@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.io.Closeable;
+
+import org.apache.spark.annotation.Private;
 
 /**
  * Abstraction for a local key/value store for storing app data.
@@ -59,6 +61,7 @@ import java.io.Closeable;
  * KVStore instances are thread-safe for both reads and writes.
  * </p>
  */
+@Private
 public interface KVStore extends Closeable {
 
   /**
