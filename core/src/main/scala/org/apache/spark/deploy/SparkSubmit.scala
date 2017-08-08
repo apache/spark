@@ -581,16 +581,13 @@ object SparkSubmit extends CommandLineUtils {
     if (clusterManager == YARN || clusterManager == LOCAL) {
       if (args.principal != null) {
         require(args.keytab != null, "Keytab must be specified when principal is specified")
-        Try { SparkHadoopUtil.get.loginUserFromKeytab(args.principal, args.keytab)} match {
-          case Success(_) =>
-            // Add keytab and principal configurations in sysProps to make them available
-            // for later use; e.g. in spark sql, the isolated class loader used to talk
-            // to HiveMetastore will use these settings. They will be set as Java system
-            // properties and then loaded by SparkConf
-            sysProps.put("spark.yarn.keytab", args.keytab)
-            sysProps.put("spark.yarn.principal", args.principal)
-          case Failure(exception) => throw exception
-        }
+        SparkHadoopUtil.get.loginUserFromKeytab(args.principal, args.keytab)
+        // Add keytab and principal configurations in sysProps to make them available
+        // for later use; e.g. in spark sql, the isolated class loader used to talk
+        // to HiveMetastore will use these settings. They will be set as Java system
+        // properties and then loaded by SparkConf
+        sysProps.put("spark.yarn.keytab", args.keytab)
+        sysProps.put("spark.yarn.principal", args.principal)
       }
     }
 

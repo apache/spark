@@ -102,7 +102,6 @@ private[hive] class HiveClientImpl(
     case hive.v2_1 => new Shim_v2_1()
   }
 
-
   // Create an internal session state for this HiveClientImpl.
   val state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
@@ -232,7 +231,8 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  override def toString: String = state.toString
+  /** Return the associated Hive [[SessionState]] of this [[HiveClientImpl]] */
+  override def getState: SessionState = withHiveState(state)
 
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.

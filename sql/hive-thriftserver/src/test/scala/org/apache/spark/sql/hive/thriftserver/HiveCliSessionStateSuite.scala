@@ -33,25 +33,24 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
       case (key, value) => hiveConf.set(key, value)
     }
     val sessionState: SessionState = new CliSessionState(hiveConf)
-    doTest(sessionState, true)
-  }
-
-  test("SessionState will not be reused") {
-    val hiveConf = new HiveConf(classOf[SessionState])
-    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
-      case (key, value) => hiveConf.set(key, value)
-    }
-    val sessionState: SessionState = new SessionState(hiveConf)
-    doTest(sessionState, false)
-  }
-
-  def doTest(state: SessionState, expected: Boolean): Unit = {
-    SessionState.start(state)
+    SessionState.start(sessionState)
     val s1 = SessionState.get
     val sparkConf = new SparkConf()
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val s2 = HiveUtils.newClientForMetadata(sparkConf, hadoopConf).getState
+    assert(s1 === s2)
+    assert(s2.isInstanceOf[CliSessionState])
+  }
+
+  test("SessionState will not be reused") {
+    val sparkConf = new SparkConf()
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+      case (key, value) => hadoopConf.set(key, value)
+    }
     val hiveClient = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
-    assert((hiveClient.toString == s1.toString) === expected)
-    SessionState.get().close()
+    val s1 = hiveClient.getState
+    val s2 = hiveClient.newSession().getState
+    assert(s1 !== s2)
   }
 }
