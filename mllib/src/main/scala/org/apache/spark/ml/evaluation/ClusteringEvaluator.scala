@@ -20,12 +20,12 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.linalg.{Vector, VectorElementWiseSum, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{avg, col, count, sum}
+import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -82,46 +82,13 @@ class ClusteringEvaluator (val uid: String)
 
     val metric: Double = $(metricName) match {
       case "squaredSilhouette" =>
-        computeSquaredSilhouette(dataset)
+        SquaredEuclideanSilhouette.computeSquaredSilhouette(
+          dataset,
+          $(predictionCol),
+          $(featuresCol)
+        )
     }
     metric
-  }
-
-  private[this] def computeSquaredSilhouette(dataset: Dataset[_]): Double = {
-    SquaredEuclideanSilhouette.registerKryoClasses(dataset.sparkSession.sparkContext)
-
-    val computeCsi = dataset.sparkSession.udf.register("computeCsi",
-      SquaredEuclideanSilhouette.computeCsi _ )
-    val dfWithCsi = dataset.withColumn("csi", computeCsi(col($(featuresCol))))
-
-    // compute aggregate values for clusters
-    // needed by the algorithm
-    val clustersAggregateValues = SquaredEuclideanSilhouette
-      .computeYVectorPsiAndCount(dfWithCsi, $(predictionCol), $(featuresCol))
-
-    val clustersMap = clustersAggregateValues.collect().map(row => {
-      row.getAs[Int]($(predictionCol)) ->
-        SquaredEuclideanSilhouette.ClusterStats(
-          row.getAs[Vector]("y"),
-          row.getAs[Double]("psi"),
-          row.getAs[Long]("count")
-        )
-    }).toMap
-
-    val broadcastedClustersMap = dataset.sparkSession.sparkContext.broadcast(clustersMap)
-
-    val computeSilhouette = dataset.sparkSession.udf.register("computeSilhouette",
-      SquaredEuclideanSilhouette
-        .computeSquaredSilhouetteCoefficient(broadcastedClustersMap, _: Vector, _: Int, _: Double)
-    )
-
-    val squaredSilhouetteDF = dfWithCsi
-      .withColumn("silhouetteCoefficient",
-        computeSilhouette(col($(featuresCol)), col($(predictionCol)), col("csi"))
-      )
-      .agg(avg(col("silhouetteCoefficient")))
-
-    squaredSilhouetteDF.collect()(0).getDouble(0)
   }
 
 }
@@ -156,48 +123,62 @@ private[evaluation] object SquaredEuclideanSilhouette {
     }
   }
 
-  case class ClusterStats(Y: Vector, psi: Double, count: Long)
+  case class ClusterStats(featureSum: Vector, squaredNormSum: Double, numOfPoints: Long)
 
-  def computeCsi(vector: Vector): Double = {
-    var sumOfSquares = 0.0
-    vector.foreachActive((_, v) => {
-      sumOfSquares += v * v
-    })
-    sumOfSquares
-  }
-
-  def computeYVectorPsiAndCount(
-                                 df: DataFrame,
-                                 predictionCol: String,
-                                 featuresCol: String): DataFrame = {
-    val Yudaf = new VectorElementWiseSum()
-    df.groupBy(predictionCol)
-      .agg(
-        count("*").alias("count"),
-        sum("csi").alias("psi"),
-        Yudaf(col(featuresCol)).alias("y")
+  def computeClusterStats(
+    df: DataFrame,
+    predictionCol: String,
+    featuresCol: String): Map[Int, ClusterStats] = {
+    val numFeatures = df.select(col(featuresCol)).first().getAs[Vector](0).size
+    val clustersStatsRDD = df.select(col(predictionCol), col(featuresCol), col("squaredNorm"))
+      .rdd
+      .map { row => (row.getInt(0), (row.getAs[Vector](1), row.getDouble(2))) }
+      .aggregateByKey[(DenseVector, Double, Long)]((Vectors.zeros(numFeatures).toDense, 0.0, 0L))(
+        seqOp = {
+          case (
+              (featureSum: DenseVector, squaredNormSum: Double, numOfPoints: Long),
+              (features, squaredNorm)
+            ) =>
+            BLAS.axpy(1.0, features, featureSum)
+            (featureSum, squaredNormSum + squaredNorm, numOfPoints + 1)
+        },
+        combOp = {
+          case (
+              (featureSum1, squaredNormSum1, numOfPoints1),
+              (featureSum2, squaredNormSum2, numOfPoints2)
+            ) =>
+            BLAS.axpy(1.0, featureSum2, featureSum1)
+            (featureSum1, squaredNormSum1 + squaredNormSum2, numOfPoints1 + numOfPoints2)
+        }
       )
+
+    clustersStatsRDD
+      .collectAsMap()
+      .mapValues {
+        case (featureSum: DenseVector, squaredNormSum: Double, numOfPoints: Long) =>
+          SquaredEuclideanSilhouette.ClusterStats(featureSum, squaredNormSum, numOfPoints)
+      }
+      .toMap
   }
 
   def computeSquaredSilhouetteCoefficient(
      broadcastedClustersMap: Broadcast[Map[Int, ClusterStats]],
      vector: Vector,
      clusterId: Int,
-     csi: Double): Double = {
+     squaredNorm: Double): Double = {
 
-    def compute(csi: Double, point: Vector, clusterStats: ClusterStats): Double = {
-      var YmultiplyPoint = 0.0
-      point.foreachActive((idx, v) => {
-        YmultiplyPoint += clusterStats.Y(idx) * v
-      })
+    def compute(squaredNorm: Double, point: Vector, clusterStats: ClusterStats): Double = {
+      val pointDotClusterFeaturesSum = BLAS.dot(point, clusterStats.featureSum)
 
-      csi + clusterStats.psi / clusterStats.count - 2 * YmultiplyPoint / clusterStats.count
+      squaredNorm +
+        clusterStats.squaredNormSum / clusterStats.numOfPoints -
+        2 * pointDotClusterFeaturesSum / clusterStats.numOfPoints
     }
 
     var minOther = Double.MaxValue
     for(c <- broadcastedClustersMap.value.keySet) {
       if (c != clusterId) {
-        val sil = compute(csi, vector, broadcastedClustersMap.value(c))
+        val sil = compute(squaredNorm, vector, broadcastedClustersMap.value(c))
         if(sil < minOther) {
           minOther = sil
         }
@@ -206,11 +187,11 @@ private[evaluation] object SquaredEuclideanSilhouette {
     val clusterCurrentPoint = broadcastedClustersMap.value(clusterId)
     // adjustment for excluding the node itself from
     // the computation of the average dissimilarity
-    val clusterSil = if (clusterCurrentPoint.count == 1) {
+    val clusterSil = if (clusterCurrentPoint.numOfPoints == 1) {
       0
     } else {
-      compute(csi, vector, clusterCurrentPoint) * clusterCurrentPoint.count /
-        (clusterCurrentPoint.count - 1)
+      compute(squaredNorm, vector, clusterCurrentPoint) * clusterCurrentPoint.numOfPoints /
+        (clusterCurrentPoint.numOfPoints - 1)
     }
 
     var silhouetteCoeff = 0.0
@@ -223,6 +204,37 @@ private[evaluation] object SquaredEuclideanSilhouette {
     }
     silhouetteCoeff
 
+  }
+
+  def computeSquaredSilhouette(dataset: Dataset[_],
+    predictionCol: String,
+    featuresCol: String): Double = {
+    SquaredEuclideanSilhouette.registerKryoClasses(dataset.sparkSession.sparkContext)
+
+    val squaredNorm = udf {
+      features: Vector =>
+        math.pow(Vectors.norm(features, 2.0), 2.0)
+    }
+    val dfWithSquaredNorm = dataset.withColumn("squaredNorm", squaredNorm(col(featuresCol)))
+
+    // compute aggregate values for clusters
+    // needed by the algorithm
+    val clustersStatsMap = SquaredEuclideanSilhouette
+      .computeClusterStats(dfWithSquaredNorm, predictionCol, featuresCol)
+
+    val bClustersStatsMap = dataset.sparkSession.sparkContext.broadcast(clustersStatsMap)
+
+    val computeSilhouette = dataset.sparkSession.udf.register("computeSilhouette",
+      computeSquaredSilhouetteCoefficient(bClustersStatsMap, _: Vector, _: Int, _: Double)
+    )
+
+    val squaredSilhouetteDF = dfWithSquaredNorm
+      .withColumn("silhouetteCoefficient",
+        computeSilhouette(col(featuresCol), col(predictionCol), col("squaredNorm"))
+      )
+      .agg(avg(col("silhouetteCoefficient")))
+
+    squaredSilhouetteDF.collect()(0).getDouble(0)
   }
 
 }
