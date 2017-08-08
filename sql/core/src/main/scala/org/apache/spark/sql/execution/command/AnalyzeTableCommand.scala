@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 
 
 /**
@@ -41,11 +41,7 @@ case class AnalyzeTableCommand(
     // Compute stats for the whole table
     val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
     val newRowCount =
-      if (noscan) {
-        None
-      } else {
-        Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
-      }
+      if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
 
     // Update the metastore if the above statistics of the table are different from those
     // recorded in the metastore.
