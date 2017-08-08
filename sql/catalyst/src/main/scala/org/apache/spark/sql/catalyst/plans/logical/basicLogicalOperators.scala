@@ -762,6 +762,8 @@ case class Repartition(
     coalescer: Option[PartitionCoalescer] = None)
   extends RepartitionOperation {
   require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
+  require(!shuffle || coalescer.isEmpty,
+    "Custom coalescer is not allowed for repartition(shuffle=true)")
 }
 
 /**

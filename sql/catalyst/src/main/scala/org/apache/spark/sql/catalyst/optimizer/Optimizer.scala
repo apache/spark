@@ -600,10 +600,12 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     //   strategy), but the child enables the shuffle. Returns the child node if the last
     //   numPartitions is bigger; otherwise, keep unchanged.
     // 2) In the other cases, returns the top node with the child's child
-    case r @ Repartition(_, _, child: RepartitionOperation, None) =>
+    case r @ Repartition(_, _, child: RepartitionOperation, coalescer) =>
       (r.shuffle, child.shuffle) match {
-        case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
-        case _ => r.copy(child = child.child)
+        case (false, true) =>
+          if (coalescer.isEmpty && r.numPartitions >= child.numPartitions) child else r
+        case _ =>
+          r.copy(child = child.child)
       }
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
     // we can remove the child.
