@@ -43,7 +43,7 @@ else:
 
     # backported from subprocess module in Python 2.7
     def subprocess_check_call(*popenargs, **kwargs):
-        retcode = call(*popenargs, **kwargs)
+        retcode = subprocess.call(*popenargs, **kwargs)
         if retcode:
             cmd = kwargs.get("args")
             if cmd is None:
