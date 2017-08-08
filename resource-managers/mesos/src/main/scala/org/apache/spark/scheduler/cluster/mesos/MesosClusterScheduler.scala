@@ -28,6 +28,7 @@ import org.apache.mesos.{Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
+import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.MesosDriverDescription
@@ -406,6 +407,7 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getSecretEnvVar(desc: MesosDriverDescription): Option[Variable] = {
+
     desc.conf.get(config.SECRET_ENVKEY).map { envKey =>
       desc.conf.get(config.SECRET_NAME).map { secretName =>
         val secret = Secret.newBuilder()
@@ -586,7 +588,80 @@ private[spark] class MesosClusterScheduler(
     containerInfo
   }
 
-  private def getSecretVolume(desc: MesosDriverDescription): Option[Volume] = {
+  private def createReferenceSecret(name: String): Secret = {
+    Secret.newBuilder()
+      .setReference(Secret.Reference.newBuilder().setName(name))
+      .setType(Secret.Type.REFERENCE)
+      .build()
+  }
+
+  private def createValueSecret(data: String): Secret = {
+    Secret.newBuilder()
+      .setType(Secret.Type.VALUE)
+      .setValue(Secret.Value.newBuilder().setData(ByteString.copyFrom(data.getBytes)))
+      .build()
+  }
+
+  private def getSecretVolume(desc: MesosDriverDescription): List[Volume] = {
+    val valueSecrets: Seq[Secret] = {
+      if (desc.conf.get(config.SECRET_VALUE).isDefined) {
+        desc.conf.get(config.SECRET_VALUE)
+          .get.split(",").map(s => createValueSecret(s))
+      } else {
+        Seq.empty[Secret]
+      }
+    }
+    val referenceSecrets: Seq[Secret] = {
+      if (desc.conf.get(config.SECRET_NAME).isDefined) {
+        desc.conf.get(config.SECRET_NAME)
+          .get.split(",").map(s => createReferenceSecret(s))
+      } else {
+        Seq.empty[Secret]
+      }
+    }
+
+    val secretPaths: Seq[String] = desc.conf.get(config.SECRET_FILENAME)
+      .getOrElse("")
+      .split(",")
+      .toSeq
+
+    if (referenceSecrets.nonEmpty && (secretPaths.length != referenceSecrets.length)) {
+      throw new SparkException(
+        s"Need to give equal numbers of reference secret names and file paths for file-based " +
+          s"secrets got secrets $referenceSecrets, and paths $secretPaths")
+    }
+
+    if (valueSecrets.nonEmpty && (secretPaths.length != valueSecrets.length)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secret values and file paths for file-based secrets " +
+          s"got secrets $valueSecrets, and paths $secretPaths")
+    }
+
+    val refVols: List[Volume] = referenceSecrets.zip(secretPaths).map {
+      case (s, p) =>
+        val source = Volume.Source.newBuilder()
+          .setType(Volume.Source.Type.SECRET)
+          .setSecret(s)
+        Volume.newBuilder()
+          .setContainerPath(p)
+          .setSource(source)
+          .setMode(Volume.Mode.RO)
+          .build
+    }.toList
+
+    val labelVols: List[Volume] = valueSecrets.zip(secretPaths).map {
+      case (v, p) =>
+        val source = Volume.Source.newBuilder()
+          .setType(Volume.Source.Type.SECRET)
+          .setSecret(v)
+        Volume.newBuilder()
+          .setContainerPath(p)
+          .setSource(source)
+          .setMode(Volume.Mode.RO)
+          .build()
+    }.toList
+
+    /*
     desc.conf.get(config.SECRET_FILENAME).map { filename =>
       desc.conf.get(config.SECRET_NAME).map { secretName =>
         val reference = Secret.Reference.newBuilder().setName(secretName)
@@ -606,6 +681,8 @@ private[spark] class MesosClusterScheduler(
           s"${config.SECRET_FILENAME.key} is set, but ${config.SECRET_NAME.key} is not set.")
       }
     }
+    */
+    refVols ++ labelVols
   }
 
   /**

@@ -63,10 +63,17 @@ package object config {
         "Ex. key:value,key2:value2")
       .stringConf
       .createOptional
+
   private[spark] val SECRET_NAME =
     ConfigBuilder("spark.mesos.driver.secret.name")
       .doc("Set the secret's reference name.  Consult the Mesos Secret protobuf for more " +
         "information.")
+      .stringConf
+      .createOptional
+
+  private[spark] val SECRET_VALUE =
+    ConfigBuilder("spark.mesos.driver.secret.value")
+      .doc("TODO")
       .stringConf
       .createOptional
 

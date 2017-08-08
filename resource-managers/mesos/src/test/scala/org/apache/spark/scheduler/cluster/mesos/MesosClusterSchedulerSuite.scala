@@ -20,14 +20,13 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.util.{Collection, Collections, Date}
 
 import scala.collection.JavaConverters._
-
 import org.apache.mesos.Protos.{Environment, Secret, TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Value.{Scalar, Type}
 import org.apache.mesos.SchedulerDriver
+import org.apache.mesos.protobuf.ByteString
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
 import org.scalatest.mock.MockitoSugar
-
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
@@ -375,12 +374,12 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(variable.getType == Environment.Variable.Type.SECRET)
   }
 
-  test("Creates a file-based secret.") {
+  test("Creates a file-based reference secrets.") {
     setScheduler()
-
     val mem = 1000
     val cpu = 1
-    val secretName = "/path/to/secret"
+    val secretName = "/path/to/secret,/anothersecret"
+    val secretPath = "/topsecret,/mypassword"
     val driverDesc = new MesosDriverDescription(
       "d1",
       "jar",
@@ -391,17 +390,61 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       Map("spark.mesos.executor.home" -> "test",
         "spark.app.name" -> "test",
         "spark.mesos.driver.secret.name" -> secretName,
-        "spark.mesos.driver.secret.filename" -> "/path/to/file"),
+        "spark.mesos.driver.secret.filename" -> secretPath),
       "s1",
       new Date())
     val response = scheduler.submitDriver(driverDesc)
-
+    assert(response.success)
     val offer = Utils.createOffer("o1", "s1", mem, cpu)
     scheduler.resourceOffers(driver, Collections.singletonList(offer))
-
     val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val volumes = launchedTasks.head.getContainer.getVolumesList
+    assert(volumes.size() == 2)
+    val secretVolOne = volumes.get(0)
+    assert(secretVolOne.getContainerPath == "/topsecret")
+    assert(secretVolOne.getSource.getSecret.getType == Secret.Type.REFERENCE)
+    assert(secretVolOne.getSource.getSecret.getReference.getName == "/path/to/secret")
+    val secretVolTwo = volumes.get(1)
+    assert(secretVolTwo.getContainerPath == "/mypassword")
+    assert(secretVolTwo.getSource.getSecret.getType == Secret.Type.REFERENCE)
+    assert(secretVolTwo.getSource.getSecret.getReference.getName == "/anothersecret")
+  }
 
-    val secret = launchedTasks.head.getContainer.getVolumes(0).getSource.getSecret
-    assert(secret.getReference.getName == secretName)
+  test("Creates a file-based value secrets.") {
+    setScheduler()
+    val mem = 1000
+    val cpu = 1
+    val secretName = "user,password"
+    val secretPath = "/whoami,/mypassword"
+    val driverDesc = new MesosDriverDescription(
+      "d1",
+      "jar",
+      mem,
+      cpu,
+      true,
+      command,
+      Map("spark.mesos.executor.home" -> "test",
+        "spark.app.name" -> "test",
+        "spark.mesos.driver.secret.value" -> secretName,
+        "spark.mesos.driver.secret.filename" -> secretPath),
+      "s1",
+      new Date())
+    val response = scheduler.submitDriver(driverDesc)
+    assert(response.success)
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, Collections.singletonList(offer))
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val volumes = launchedTasks.head.getContainer.getVolumesList
+    assert(volumes.size() == 2)
+    val secretVolOne = volumes.get(0)
+    assert(secretVolOne.getContainerPath == "/whoami")
+    assert(secretVolOne.getSource.getSecret.getType == Secret.Type.VALUE)
+    assert(secretVolOne.getSource.getSecret.getValue.getData ==
+      ByteString.copyFrom("user".getBytes))
+    val secretVolTwo = volumes.get(1)
+    assert(secretVolTwo.getContainerPath == "/mypassword")
+    assert(secretVolTwo.getSource.getSecret.getType == Secret.Type.VALUE)
+    assert(secretVolTwo.getSource.getSecret.getValue.getData ==
+      ByteString.copyFrom("password".getBytes))
   }
 }
