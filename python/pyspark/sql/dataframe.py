@@ -1373,8 +1373,8 @@ class DataFrame(object):
             Value to be replaced.
             If the value is a dict, then `value` is ignored and `to_replace` must be a
             mapping between a value and a replacement.
-        :param value: int, long, float, string, list or None.
-            The replacement value must be an int, long, float, string or None. If `value` is a
+        :param value: bool, int, long, float, string, list or None.
+            The replacement value must be a bool, int, long, float, string or None. If `value` is a
             list, `value` should be of the same length and type as `to_replace`.
             If `value` is a scalar and `to_replace` is a sequence, then `value` is
             used as a replacement for each item in `to_replace`.
@@ -1435,13 +1435,13 @@ class DataFrame(object):
         valid_types = (bool, float, int, long, basestring, list, tuple)
         if not isinstance(to_replace, valid_types + (dict, )):
             raise ValueError(
-                "to_replace should be a float, int, long, string, list, tuple, or dict. "
+                "to_replace should be a bool, float, int, long, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
         if not isinstance(value, valid_types) and value is not None \
                 and not isinstance(to_replace, dict):
             raise ValueError("If to_replace is not a dict, value should be "
-                             "a float, int, long, string, list, tuple or None. "
+                             "a bool, float, int, long, string, list, tuple or None. "
                              "Got {0}".format(type(value)))
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
