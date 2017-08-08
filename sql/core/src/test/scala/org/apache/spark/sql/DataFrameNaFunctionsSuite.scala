@@ -262,7 +262,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))
 
-    // Replace with null
+    // Replace String with String and null
     val out2 = input.na.replace("name", Map(
       "Bob" -> "Bravo",
       "Alice" -> null
@@ -274,5 +274,24 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out2(3).get(2).asInstanceOf[Double].isNaN)
     assert(out2(4) === Row("Amy", null, null))
     assert(out2(5) === Row(null, null, null))
+
+    // Replace Double with null
+    val out3 = input.na.replace("age", Map[Any, Any](
+      16 -> null
+    )).collect()
+
+    assert(out3(0) === Row("Bob", null, 176.5))
+    assert(out3(1) === Row("Alice", null, 164.3))
+    assert(out3(2) === Row("David", 60, null))
+    assert(out3(3).get(2).asInstanceOf[Double].isNaN)
+    assert(out3(4) === Row("Amy", null, null))
+    assert(out3(5) === Row(null, null, null))
+
+    // Replace String with null and then drop rows containing null
+    checkAnswer(
+      input.na.replace("name", Map(
+        "Bob" -> null
+      )).na.drop("name" :: Nil).select("name"),
+      Row("Alice") :: Row("David") :: Row("Nina") :: Row("Amy") :: Nil)
   }
 }

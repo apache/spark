@@ -260,10 +260,6 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Replaces values matching keys in `replacement` map with the corresponding values.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
-   * `replacement` map value can have null.
-   * If `col` is "*", then the replacement is applied on all string columns or numeric columns.
    *
    * {{{
    *   import com.google.common.collect.ImmutableMap;
@@ -278,8 +274,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   df.na.replace("*", ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param col name of the column to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param col name of the column to apply the value replacement. If `col` is "*",
+   *            replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -289,9 +288,6 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * Replaces values matching keys in `replacement` map with the corresponding values.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
-   * `replacement` map value can have null.
    *
    * {{{
    *   import com.google.common.collect.ImmutableMap;
@@ -303,8 +299,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   df.na.replace(new String[] {"firstname", "lastname"}, ImmutableMap.of("UNKNOWN", "unnamed"));
    * }}}
    *
-   * @param cols list of columns to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param cols list of columns to apply the value replacement. If `col` is "*",
+   *             replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -314,11 +313,6 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
-   * `replacement` map value can have null.
-   * If `col` is "*",
-   * then the replacement is applied on all string columns , numeric columns or boolean columns.
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height".
@@ -331,8 +325,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   df.na.replace("*", Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param col name of the column to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param col name of the column to apply the value replacement. If `col` is "*",
+   *            replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -346,9 +343,6 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
 
   /**
    * (Scala-specific) Replaces values matching keys in `replacement` map.
-   * Key and value of `replacement` map must have the same type, and
-   * can only be doubles, strings or booleans.
-   * `replacement` map value can have null.
    *
    * {{{
    *   // Replaces all occurrences of 1.0 with 2.0 in column "height" and "weight".
@@ -358,8 +352,11 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
    *   df.na.replace("firstname" :: "lastname" :: Nil, Map("UNKNOWN" -> "unnamed"));
    * }}}
    *
-   * @param cols list of columns to apply the value replacement
-   * @param replacement value replacement map, as explained above
+   * @param cols list of columns to apply the value replacement. If `col` is "*",
+   *             replacement is applied on all string, numeric or boolean columns.
+   * @param replacement value replacement map. Key and value of `replacement` map must have
+   *                    the same type, and can only be doubles, strings or booleans.
+   *                    The map value can have nulls.
    *
    * @since 1.3.1
    */
@@ -370,8 +367,8 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       return df
     }
 
-    // replacementMap is either Map[String, String], Map[Double, Double], Map[Boolean,Boolean]
-    // while value can have null
+    // Convert the NumericType in replacement map to DoubleType,
+    // while leaving StringType, BooleanType and null untouched.
     val replacementMap: Map[_, _] = replacement.map {
       case (k, v: String) => (k, v)
       case (k, v: Boolean) => (k, v)
@@ -381,7 +378,9 @@ final class DataFrameNaFunctions private[sql](df: DataFrame) {
       case (k, v) => (convertToDouble(k), convertToDouble(v))
     }
 
-    // targetColumnType is either DoubleType or StringType or BooleanType
+    // targetColumnType is either DoubleType, StringType or BooleanType,
+    // depending on the type of first key in replacement map.
+    // Only fields of targetColumnType will perform replacement.
     val targetColumnType = replacement.head._1 match {
       case _: jl.Double | _: jl.Float | _: jl.Integer | _: jl.Long => DoubleType
       case _: jl.Boolean => BooleanType

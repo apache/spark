@@ -1457,20 +1457,19 @@ class DataFrame(object):
         if isinstance(to_replace, (float, int, long, basestring)):
             to_replace = [to_replace]
 
-        if isinstance(value, (float, int, long, basestring)) or value is None:
-            value = [value for _ in range(len(to_replace))]
-
         if isinstance(to_replace, dict):
             rep_dict = to_replace
             if value is not None:
                 warnings.warn("to_replace is a dict and value is not None. value will be ignored.")
         else:
+            if isinstance(value, (float, int, long, basestring)) or value is None:
+                value = [value for _ in range(len(to_replace))]
             rep_dict = dict(zip(to_replace, value))
 
         if isinstance(subset, basestring):
             subset = [subset]
 
-        # Verify we were not passed in mixed type generics."
+        # Verify we were not passed in mixed type generics.
         if not any(all_of_type(rep_dict.keys())
                    and all_of_type(x for x in rep_dict.values() if x is not None)
                    for all_of_type in [all_of_bool, all_of_str, all_of_numeric]):
