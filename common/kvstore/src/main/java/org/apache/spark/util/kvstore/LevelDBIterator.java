@@ -198,11 +198,7 @@ class LevelDBIterator<T> implements KVStoreIterator<T> {
    */
   @Override
   protected void finalize() throws Throwable {
-    try {
-      close();
-    } catch (Exception e) {
-      // Ignore error here, db may have been closed already.
-    }
+    db.closeIterator(this);
   }
 
   private byte[] loadNext() {
