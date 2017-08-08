@@ -419,7 +419,8 @@ class DefaultParamsWriter(MLWriter):
         basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
                          "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
         if extraMetadata is not None:
-            basicMetadata.update(extraMetadata)
+            for key, value in extraMetadata:
+                basicMetadata[key] = value
         return json.dumps(basicMetadata, separators=[',',  ':'])
 
 
