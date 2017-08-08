@@ -570,6 +570,8 @@ private[spark] class MesosClusterScheduler(
 
     val appName = desc.conf.get("spark.app.name")
 
+    val driverLabels = MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS)
+      .getOrElse(""))
 
     TaskInfo.newBuilder()
       .setTaskId(taskId)
@@ -579,7 +581,7 @@ private[spark] class MesosClusterScheduler(
       .setContainer(getContainerInfo(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-      .setLabels(MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS).getOrElse("")))
+      .setLabels(driverLabels)
       .build
   }
 
