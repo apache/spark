@@ -84,18 +84,14 @@ class MultilayerPerceptronClassifierSuite
   }
 
   test("strong dataset test") {
-    val layers = Array[Int](4, 5, 5, 4)
+    val layers = Array[Int](4, 5, 5, 2)
 
-    val rnd = new scala.util.Random(1234L)
-
-    val strongDataset = Seq.tabulate(4) { index =>
-      (Vectors.dense(
-        rnd.nextGaussian(),
-        rnd.nextGaussian() * 2.0,
-        rnd.nextGaussian() * 3.0,
-        rnd.nextGaussian() * 2.0
-      ), (index % 4).toDouble)
-    }.toDF("features", "label")
+    val strongDataset = Seq(
+      (Vectors.dense(1, 2, 3, 4), 0d, Vectors.dense(1d, 0d)),
+      (Vectors.dense(4, 3, 2, 1), 1d, Vectors.dense(0d, 1d)),
+      (Vectors.dense(1, 1, 1, 1), 0d, Vectors.dense(.5, .5)),
+      (Vectors.dense(1, 1, 1, 1), 1d, Vectors.dense(.5, .5))
+    ).toDF("features", "label", "expectedProbability")
     val trainer = new MultilayerPerceptronClassifier()
       .setLayers(layers)
       .setBlockSize(1)
@@ -107,9 +103,9 @@ class MultilayerPerceptronClassifierSuite
     model.setProbabilityCol("probability")
     MLTestingUtils.checkCopyAndUids(trainer, model)
     // result.select("probability").show(false)
-    val predictionAndLabels = result.select("prediction", "label").collect()
-    predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
-      assert(p == l)
+    result.select("probability", "expectedProbability").collect().foreach {
+      case Row(p: Vector, e: Vector) =>
+        assert(p ~== e absTol 1e-3)
     }
   }
 
