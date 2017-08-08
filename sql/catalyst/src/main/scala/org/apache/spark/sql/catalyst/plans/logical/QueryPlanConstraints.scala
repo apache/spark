@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.OptimizerUtils._
 
 
 trait QueryPlanConstraints { self: LogicalPlan =>
@@ -127,7 +128,29 @@ trait QueryPlanConstraints { self: LogicalPlan =>
         })
       case _ => // No inference
     }
-    inferredConstraints -- constraints
+
+    val allConstraints = inferredConstraints ++ constraints
+    val additionalConstraints = inferredConstraints -- constraints
+
+    // Filters out meaningless constraints, e.g., given constraint `a = 1`, `b = 1`, `a = c`, and
+    // `b = c`, we first infer `a = b`. This constraint is trivially true, so we drop here.
+    // See SPARK-21652 for details.
+    val equalityPredicates =
+      AttributeMap(getLiteralEqualityPredicates(allConstraints.toSeq).map(_._1))
+    additionalConstraints.filterNot {
+      case b: BinaryComparison =>
+        (b.left, b.right) match {
+          case (l: Attribute, r: Attribute) =>
+            (equalityPredicates.get(l), equalityPredicates.get(r)) match {
+              case (Some(leftLiteral), Some(rightLiteral)) =>
+                b.withNewChildren(leftLiteral:: rightLiteral :: Nil).eval(EmptyRow)
+                  .asInstanceOf[Boolean]
+              case _ => false
+            }
+          case _ => false
+        }
+      case _ => false
+    }
   }
 
   /**
