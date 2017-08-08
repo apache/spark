@@ -36,9 +36,11 @@ case class TestDataPoint2(x: Int, s: String)
 
 object TestForTypeAlias {
   type TwoInt = (Int, Int)
-  def tupleTypeAlias: TwoInt = (1, 1)
-
+  type ThreeInt = (TwoInt, Int)
   type SeqOfTwoInt = Seq[TwoInt]
+
+  def tupleTypeAlias: TwoInt = (1, 1)
+  def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
   def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
@@ -1330,6 +1332,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.tupleTypeAlias)),
       ("", (1, 1)))
+
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.nestedTupleTypeAlias)),
+      ("", ((1, 1), 2)))
 
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
