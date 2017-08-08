@@ -230,7 +230,8 @@ private[spark] object HiveUtils extends Logging {
     }.toMap
   }
 
-  def isCliSessionState(state: SessionState = SessionState.get): Boolean = {
+  def isCliSessionState(): Boolean = {
+    val state = SessionState.get
     var temp: Class[_] = if (state != null) state.getClass else null
     var found = false
     while (temp != null && !found) {
@@ -323,7 +324,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
         config = configurations,
-        isolationOn = isCliSessionState(),
+        isolationOn = !isCliSessionState(),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {

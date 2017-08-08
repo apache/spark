@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.IOException
+import java.io.{File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
@@ -136,8 +136,15 @@ class SparkHadoopUtil extends Logging {
 
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
 
-  def loginUserFromKeytab(principalName: String, keytabFilename: String) {
-    UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
+    if (!new File(keytabFilename).exists()) {
+      throw new SparkException(s"Keytab file: ${keytabFilename}" +
+        " specified in spark.yarn.keytab does not exist")
+    } else {
+      logInfo("Attempting to login to Kerberos" +
+        s" using principal: ${principalName} and keytab: ${keytabFilename}")
+      UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+    }
   }
 
   /**

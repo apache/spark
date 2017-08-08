@@ -35,9 +35,9 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Tab
 import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer.HIVE_COLUMN_ORDER_ASC
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.AnalysisException
@@ -49,7 +49,6 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.client.HiveClientImpl._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
@@ -103,99 +102,72 @@ private[hive] class HiveClientImpl(
     case hive.v2_1 => new Shim_v2_1()
   }
 
+
   // Create an internal session state for this HiveClientImpl.
   val state: SessionState = {
     val original = Thread.currentThread().getContextClassLoader
-    // Switch to the initClassLoader.
-    Thread.currentThread().setContextClassLoader(initClassLoader)
-
-    // Set up kerberos credentials for UserGroupInformation.loginUser within
-    // current class loader
-    if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-      val principalName = sparkConf.get("spark.yarn.principal")
-      val keytabFileName = sparkConf.get("spark.yarn.keytab")
-      if (!new File(keytabFileName).exists()) {
-        throw new SparkException(s"Keytab file: ${keytabFileName}" +
-          " specified in spark.yarn.keytab does not exist")
-      } else {
-        logInfo("Attempting to login to Kerberos" +
-          s" using principal: ${principalName} and keytab: ${keytabFileName}")
-        UserGroupInformation.loginUserFromKeytab(principalName, keytabFileName)
+    if (clientLoader.isolationOn) {
+      // Switch to the initClassLoader.
+      Thread.currentThread().setContextClassLoader(initClassLoader)
+      // Set up kerberos credentials for UserGroupInformation.loginUser within
+      // current class loader
+      if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
+        val principal = sparkConf.get("spark.yarn.principal")
+        val keytab = sparkConf.get("spark.yarn.keytab")
+        SparkHadoopUtil.get.loginUserFromKeytab(principal, keytab)
       }
-    }
-
-    val ret = try {
-      // originState will be created if not exists, will never be null
-      val originalState = SessionState.get()
-      if (HiveUtils.isCliSessionState(originalState)) {
-        // In `SparkSQLCLIDriver`, we have already started a `CliSessionState`,
-        // which contains information like configurations from command line. Later
-        // we call `SparkSQLEnv.init()` there, which would run into this part again.
-        // so we should keep `conf` and reuse the existing instance of `CliSessionState`.
-        originalState
-      } else {
-        val hiveConf = new HiveConf(classOf[SessionState])
-        // 1: we set all confs in the hadoopConf to this hiveConf.
-        // This hadoopConf contains user settings in Hadoop's core-site.xml file
-        // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
-        // SharedState and put settings in this hadoopConf instead of relying on HiveConf
-        // to load user settings. Otherwise, HiveConf's initialize method will override
-        // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
-        // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
-        // has hive-site.xml. So, HiveConf will use that to override its default values.
-        hadoopConf.iterator().asScala.foreach { entry =>
-          val key = entry.getKey
-          val value = entry.getValue
-          if (key.toLowerCase(Locale.ROOT).contains("password")) {
-            logDebug(s"Applying Hadoop and Hive config to Hive Conf: $key=xxx")
-          } else {
-            logDebug(s"Applying Hadoop and Hive config to Hive Conf: $key=$value")
-          }
-          hiveConf.set(key, value)
-        }
-        // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-        // the initial value will be the current thread's context class loader
-        // (i.e. initClassLoader at here).
-        // We call initialConf.setClassLoader(initClassLoader) at here to make
-        // this action explicit.
-        hiveConf.setClassLoader(initClassLoader)
-        // 2: we set all spark confs to this hiveConf.
-        sparkConf.getAll.foreach { case (k, v) =>
-          if (k.toLowerCase(Locale.ROOT).contains("password")) {
-            logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
-          } else {
-            logDebug(s"Applying Spark config to Hive Conf: $k=$v")
-          }
-          hiveConf.set(k, v)
-        }
-        // 3: we set all entries in config to this hiveConf.
-        extraConfig.foreach { case (k, v) =>
-          if (k.toLowerCase(Locale.ROOT).contains("password")) {
-            logDebug(s"Applying extra config to HiveConf: $k=xxx")
-          } else {
-            logDebug(s"Applying extra config to HiveConf: $k=$v")
-          }
-          hiveConf.set(k, v)
-        }
-        val state = new SessionState(hiveConf)
-        if (clientLoader.cachedHive != null) {
-          Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
-        }
-        SessionState.start(state)
-        state.out = new PrintStream(outputBuffer, true, "UTF-8")
-        state.err = new PrintStream(outputBuffer, true, "UTF-8")
-        state
+      try {
+        newState()
+      } finally {
+        Thread.currentThread().setContextClassLoader(original)
       }
-    } finally {
-      Thread.currentThread().setContextClassLoader(original)
+    } else {
+      Option(SessionState.get()).getOrElse(newState())
     }
-    ret
   }
 
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
       s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
+
+  private def newState(): SessionState = {
+    val hiveConf = new HiveConf(classOf[SessionState])
+    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
+    // the initial value will be the current thread's context class loader
+    // (i.e. initClassLoader at here).
+    // We call initialConf.setClassLoader(initClassLoader) at here to make
+    // this action explicit.
+    hiveConf.setClassLoader(initClassLoader)
+
+    // 1: Take all from the hadoopConf to this hiveConf.
+    // This hadoopConf contains user settings in Hadoop's core-site.xml file
+    // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
+    // SharedState and put settings in this hadoopConf instead of relying on HiveConf
+    // to load user settings. Otherwise, HiveConf's initialize method will override
+    // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
+    // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
+    // has hive-site.xml. So, HiveConf will use that to override its default values.
+    // 2: we set all spark confs to this hiveConf.
+    // 3: we set all entries in config to this hiveConf.
+    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ sparkConf.getAll.toMap ++ extraConfig).foreach { case (k, v) =>
+      if (k.toLowerCase(Locale.ROOT).contains("password")) {
+        logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
+      } else {
+        logDebug(s"Applying Spark config to Hive Conf: $k=$v")
+      }
+      hiveConf.set(k, v)
+    }
+    val state = new SessionState(hiveConf)
+    if (clientLoader.cachedHive != null) {
+      Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
+    }
+    SessionState.start(state)
+    state.out = new PrintStream(outputBuffer, true, "UTF-8")
+    state.err = new PrintStream(outputBuffer, true, "UTF-8")
+    state
+  }
 
   /** Returns the configuration for the current session. */
   def conf: HiveConf = state.getConf
@@ -259,6 +231,8 @@ private[hive] class HiveClientImpl(
       c
     }
   }
+
+  override def toString: String = state.toString
 
   /**
    * Runs `f` with ThreadLocal session state and classloaders configured for this version of hive.
