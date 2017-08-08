@@ -72,6 +72,8 @@ trait WriteTaskStatsTracker {
   /**
    * Process the fact that a new row to update the tracked statistics accordingly.
    * The row will be written to the most recently witnessed file (via `newFile`).
+   * @note Keep in mind that any overhead here is per-row, obviously,
+   *       so implementations should be as lightweight as possible.
    * @param row Current data row to be processed.
    */
   def newRow(row: InternalRow): Unit

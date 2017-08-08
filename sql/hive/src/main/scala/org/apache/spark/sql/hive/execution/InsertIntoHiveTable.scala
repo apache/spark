@@ -354,7 +354,7 @@ case class InsertIntoHiveTable(
       partitionColumns = partitionAttributes,
       bucketSpec = None,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      refreshFunction = _ => Unit,
+      refreshFunction = _ => (),
       options = Map.empty)
 
     if (partition.nonEmpty) {
