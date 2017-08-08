@@ -419,6 +419,27 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze partitions case sensitivity") {
+    val tableName = "analyzeTable_part"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val message = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+        }.getMessage
+        assert(message.contains(s"Partition specification for table '${tableName.toLowerCase}' " +
+            "in database 'default' refers to unknown partition column(s): DS"))
+      }
+    }
+  }
+
   test("analyze non-existent partition") {
 
     def assertAnalysisException(analyzeCommand: String, errorMessage: String): Unit = {

@@ -36,17 +36,20 @@ import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
  *
  * If `partitionSpec` mentions unknown partition column, an `AnalysisException` is raised.
  *
- * By default, total number of rows and total size in bytes is calculated. When `noscan`
- * is `false`, only total size in bytes is computed.
+ * By default, total number of rows and total size in bytes are calculated. When `noscan`
+ * is `true`, only total size in bytes is computed.
  */
 case class AnalyzePartitionCommand(
     tableIdent: TableIdentifier,
     partitionSpec: Map[String, Option[String]],
     noscan: Boolean = true) extends RunnableCommand {
 
-  private def validatePartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
+  private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val partitionColumnNames = table.partitionColumnNames.toSet
-    val invalidColumnNames = partitionSpec.keys.filterNot(partitionColumnNames.contains(_))
+    val keys =
+      if (conf.caseSensitiveAnalysis) partitionSpec.keys
+      else partitionSpec.keys.map(_.toLowerCase)
+    val invalidColumnNames = keys.filterNot(partitionColumnNames.contains(_))
     if (invalidColumnNames.nonEmpty) {
       val tableId = table.identifier
       throw new AnalysisException(s"Partition specification for table '${tableId.table}' " +
@@ -58,7 +61,8 @@ case class AnalyzePartitionCommand(
     if (filteredSpec.isEmpty) {
       None
     } else {
-      Some(filteredSpec.mapValues(_.get))
+      if (conf.caseSensitiveAnalysis) Some(filteredSpec.mapValues(_.get))
+      else Some(filteredSpec.map { case (key, value) => (key.toLowerCase, value.get) })
     }
   }
 
@@ -71,7 +75,7 @@ case class AnalyzePartitionCommand(
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
 
-    val partitionValueSpec = validatePartitionSpec(tableMeta)
+    val partitionValueSpec = getPartitionSpec(tableMeta)
 
     val partitions = sessionState.catalog.listPartitions(tableMeta.identifier, partitionValueSpec)
 
