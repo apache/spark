@@ -608,7 +608,9 @@ private[spark] class ExecutorAllocationManager(
     // Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
 
+    // Number of speculative tasks to be scheduled in each stage
     private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
+    // The speculative tasks started in each stage
     private val stageIdToSpeculativeTaskIndices = new mutable.HashMap[Int, mutable.HashSet[Int]]
 
     // stageId to tuple (the number of task with locality preferences, a map where each pair is a
