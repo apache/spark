@@ -453,6 +453,8 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 
 abstract class BinaryComparison extends BinaryOperator with Predicate {
 
+  // Note that we need to give a superset of allowable input types since orderable types are not
+  // finitely enumerable. The allowable types are checked below by checkInputDataTypes.
   override def inputType: AbstractDataType = AnyDataType
 
   override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
