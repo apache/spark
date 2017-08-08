@@ -78,6 +78,12 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val SECRET_VALUE =
+    ConfigBuilder("spark.mesos.driver.secret.value")
+      .doc("TODO")
+      .stringConf
+      .createOptional
+
   private[spark] val SECRET_ENVKEY =
     ConfigBuilder("spark.mesos.driver.secret.envkey")
       .doc("Set the environment variable to contain the secret.  The environment variable will " +
