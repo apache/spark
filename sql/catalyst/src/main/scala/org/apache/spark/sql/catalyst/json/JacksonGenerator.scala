@@ -41,6 +41,7 @@ private[sql] class JacksonGenerator(
   private val arrElementWriter: ValueWriter = (arr: SpecializedGetters, i: Int) => {
     writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
   }
+  private val mapValueWriter: ValueWriter = makeWriter(schema)
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
@@ -203,7 +204,7 @@ private[sql] class JacksonGenerator(
   def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
 
   def write(map: MapData, mapType: MapType): Unit = {
-    writeObject(writeMapData(map, mapType, makeWriter(mapType.valueType)))
+    writeObject(writeMapData(map, mapType, mapValueWriter))
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')
