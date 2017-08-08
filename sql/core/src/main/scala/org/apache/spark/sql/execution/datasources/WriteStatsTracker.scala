@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 trait WriteTaskStats
   extends Serializable
 
+
 /**
  * A trait for classes that are capable of collecting statistics on data that's being processed by
  * a single write task in [[FileFormatWriter]] - i.e. there should be one instance per executor.
@@ -85,6 +86,7 @@ trait WriteTaskStatsTracker {
    */
   def getFinalStats(): WriteTaskStats
 }
+
 
 /**
  * A class implementing this trait is basically a collection of parameters that are necessary
