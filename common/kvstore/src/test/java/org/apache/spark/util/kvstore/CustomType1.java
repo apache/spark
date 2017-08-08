@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import com.google.common.base.Objects;
 

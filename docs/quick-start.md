@@ -297,12 +297,13 @@ We'll create a very simple Spark application, `SimpleApp.java`:
 {% highlight java %}
 /* SimpleApp.java */
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.Dataset;
 
 public class SimpleApp {
   public static void main(String[] args) {
     String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
     SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
-    Dataset<String> logData = spark.read.textFile(logFile).cache();
+    Dataset<String> logData = spark.read().textFile(logFile).cache();
 
     long numAs = logData.filter(s -> s.contains("a")).count();
     long numBs = logData.filter(s -> s.contains("b")).count();
@@ -389,7 +390,7 @@ As an example, we'll create a simple Spark application, `SimpleApp.py`:
 from pyspark.sql import SparkSession
 
 logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
-spark = SparkSession.builder().appName(appName).master(master).getOrCreate()
+spark = SparkSession.builder.appName("SimpleApp").getOrCreate()
 logData = spark.read.text(logFile).cache()
 
 numAs = logData.filter(logData.value.contains('a')).count()
@@ -421,15 +422,14 @@ $ YOUR_SPARK_HOME/bin/spark-submit \
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
 
-If you have PySpark pip installed into your enviroment (e.g. `pip instal pyspark` you can run your application with the regular Python interpeter or use the provided spark-submit as you prefer.
+If you have PySpark pip installed into your enviroment (e.g., `pip install pyspark`), you can run your application with the regular Python interpreter or use the provided 'spark-submit' as you prefer.
 
 {% highlight bash %}
-# Use spark-submit to run your application
+# Use the Python interpreter to run your application
 $ python SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
-
 
 </div>
 </div>

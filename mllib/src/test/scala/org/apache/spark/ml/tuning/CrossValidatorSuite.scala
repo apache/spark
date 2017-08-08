@@ -245,7 +245,7 @@ class CrossValidatorSuite
       .setNumFolds(20)
       .setEstimatorParamMaps(paramMaps)
 
-    ValidatorParamsSuiteHelpers.testFileMove(cv)
+    ValidatorParamsSuiteHelpers.testFileMove(cv, tempDir)
   }
 
   test("read/write: CrossValidator with complex estimator") {

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -25,6 +25,8 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Serializer used to translate between app-defined types and the LevelDB store.
  *
@@ -33,6 +35,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * and integers to be written as values directly, which will be written as UTF-8 strings.
  * </p>
  */
+@Private
 public class KVStoreSerializer {
 
   /**
