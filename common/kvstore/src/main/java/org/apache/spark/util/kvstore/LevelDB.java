@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.io.IOException;
@@ -36,9 +36,12 @@ import org.iq80.leveldb.DB;
 import org.iq80.leveldb.Options;
 import org.iq80.leveldb.WriteBatch;
 
+import org.apache.spark.annotation.Private;
+
 /**
  * Implementation of KVStore that uses LevelDB as the underlying data store.
  */
+@Private
 public class LevelDB implements KVStore {
 
   @VisibleForTesting
