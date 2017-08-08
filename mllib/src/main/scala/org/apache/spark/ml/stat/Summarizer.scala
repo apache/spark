@@ -70,6 +70,9 @@ abstract class SummaryBuilder {
  *   val meanDF = dataframe.select(Summarizer.mean($"features"))
  *   val Row(mean_) = meanDF.first()
  * }}}
+ *
+ * Note: Currently, the performance of this interface is about 2x~3x slower then using the RDD
+ * interface.
  */
 @Since("2.3.0")
 object Summarizer extends Logging {
@@ -94,6 +97,9 @@ object Summarizer extends Logging {
    * @param metrics additional metrics that can be provided.
    * @return a builder.
    * @throws IllegalArgumentException if one of the metric names is not understood.
+   *
+   * Note: Currently, the performance of this interface is about 2x~3x slower then using the RDD
+   * interface.
    */
   @Since("2.3.0")
   def metrics(firstMetric: String, metrics: String*): SummaryBuilder = {
