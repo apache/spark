@@ -188,7 +188,7 @@ class ClusteringEvaluatorSuite
   ))
 
   test("params") {
-    ParamsSuite.checkParams(new RegressionEvaluator)
+    ParamsSuite.checkParams(new ClusteringEvaluator)
   }
 
   test("read/write") {

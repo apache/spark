@@ -43,7 +43,7 @@ class ClusteringEvaluator (val uid: String)
 
   def this() = this(Identifiable.randomUID("SquaredEuclideanSilhouette"))
 
-  override def copy(pMap: ParamMap): Evaluator = this.defaultCopy(pMap)
+  override def copy(pMap: ParamMap): ClusteringEvaluator = this.defaultCopy(pMap)
 
   override def isLargerBetter: Boolean = true
 
