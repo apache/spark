@@ -115,7 +115,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
    * should interpret these special data source properties and restore the original table metadata
    * before returning it.
    */
-  private def getRawTable(db: String, table: String): CatalogTable = withClient {
+  private[hive] def getRawTable(db: String, table: String): CatalogTable = withClient {
     client.getTable(db, table)
   }
 
