@@ -83,6 +83,36 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
+  test("strong dataset test") {
+    val layers = Array[Int](4, 5, 5, 4)
+
+    val rnd = new scala.util.Random(1234L)
+
+    val strongDataset = Seq.tabulate(4) { index =>
+      (Vectors.dense(
+        rnd.nextGaussian(),
+        rnd.nextGaussian() * 2.0,
+        rnd.nextGaussian() * 3.0,
+        rnd.nextGaussian() * 2.0
+      ), (index % 4).toDouble)
+    }.toDF("features", "label")
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(strongDataset)
+    val result = model.transform(strongDataset)
+    model.setProbabilityCol("probability")
+    MLTestingUtils.checkCopyAndUids(trainer, model)
+    // result.select("probability").show(false)
+    val predictionAndLabels = result.select("prediction", "label").collect()
+    predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
+      assert(p == l)
+    }
+  }
+
   test("test model probability") {
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
