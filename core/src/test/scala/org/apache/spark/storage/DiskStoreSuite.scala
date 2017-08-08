@@ -104,7 +104,7 @@ class DiskStoreSuite extends SparkFunSuite {
     diskStore.put(blockId) { chan =>
       val arr = new Array[Byte](mb)
       for {
-        _ <- 0 until 2048
+        _ <- 0 until 3072
       } {
         val buf = ByteBuffer.wrap(arr)
         while (buf.hasRemaining()) {
@@ -114,7 +114,7 @@ class DiskStoreSuite extends SparkFunSuite {
     }
 
     val blockData = diskStore.getBytes(blockId)
-    assert(blockData.size == 2 * gb)
+    assert(blockData.size == 3 * gb)
   }
 
   test("block data encryption") {

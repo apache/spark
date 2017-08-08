@@ -1416,7 +1416,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     }
   }
 
-  def testGetOrElseUpdateForLargeBlock(storageLevel : StorageLevel) {
+  def testGetOrElseUpdateForLargeBlock(storageLevel: StorageLevel) {
     store = makeBlockManager(6L * 1024 * 1024 * 1024, "exec1")
     def mkBlobs() = {
       val rng = new java.util.Random(42)
