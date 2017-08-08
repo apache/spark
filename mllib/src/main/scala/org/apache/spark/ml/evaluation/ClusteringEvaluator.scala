@@ -17,13 +17,15 @@
 
 package org.apache.spark.ml.evaluation
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.ml.linalg.{Vector, VectorElementWiseSum, VectorUDT}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
-import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions.{avg, col}
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.{avg, col, count, sum}
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -53,15 +55,15 @@ class ClusteringEvaluator (val uid: String)
 
   /**
    * param for metric name in evaluation
-   * (supports `"squaredSilhouette"` (default), `"cosineSilhouette"`)
+   * (supports `"squaredSilhouette"` (default))
    * @group param
    */
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("squaredSilhouette", "cosineSilhouette"))
+    val allowedParams = ParamValidators.inArray(Array("squaredSilhouette"))
     new Param(
       this,
       "metricName",
-      "metric name in evaluation (squaredSilhouette|cosineSilhouette)",
+      "metric name in evaluation (squaredSilhouette)",
       allowedParams
     )
   }
@@ -81,46 +83,8 @@ class ClusteringEvaluator (val uid: String)
     val metric: Double = $(metricName) match {
       case "squaredSilhouette" =>
         computeSquaredSilhouette(dataset)
-      case "cosineSilhouette" =>
-        computeCosineSilhouette(dataset)
     }
     metric
-  }
-
-  private[this] def computeCosineSilhouette(dataset: Dataset[_]): Double = {
-    CosineSilhouette.registerKryoClasses(dataset.sparkSession.sparkContext)
-
-    val computeCsi = dataset.sparkSession.udf.register("computeCsi",
-      CosineSilhouette.computeCsi _ )
-    val dfWithCsi = dataset.withColumn("csi", computeCsi(col($(featuresCol))))
-
-    // compute aggregate values for clusters
-    // needed by the algorithm
-    val clustersAggregateValues = CosineSilhouette
-      .computeOmegaAndCount(dfWithCsi, $(predictionCol), $(featuresCol))
-
-    val clustersMap = clustersAggregateValues.collect().map(row => {
-      row.getAs[Int]($(predictionCol)) ->
-        CosineSilhouette.ClusterStats(
-          row.getAs[Vector]("omega"),
-          row.getAs[Long]("count")
-        )
-    }).toMap
-
-    val broadcastedClustersMap = dataset.sparkSession.sparkContext.broadcast(clustersMap)
-
-    val computeSilhouette = dataset.sparkSession.udf.register("computeSilhouette",
-      CosineSilhouette
-        .computeCosineSilhouetteCoefficient(broadcastedClustersMap, _: Vector, _: Int, _: Vector)
-    )
-
-    val cosineSilhouetteDF = dfWithCsi
-      .withColumn("silhouetteCoefficient",
-        computeSilhouette(col($(featuresCol)), col($(predictionCol)), col("csi"))
-      )
-      .agg(avg(col("silhouetteCoefficient")))
-
-    cosineSilhouetteDF.collect()(0).getDouble(0)
   }
 
   private[this] def computeSquaredSilhouette(dataset: Dataset[_]): Double = {
@@ -167,5 +131,98 @@ object ClusteringEvaluator
   extends DefaultParamsReadable[ClusteringEvaluator] {
 
   override def load(path: String): ClusteringEvaluator = super.load(path)
+
+}
+
+private[evaluation] object SquaredEuclideanSilhouette {
+
+  private[this] var kryoRegistrationPerformed: Boolean = false
+
+  /**
+   * This method registers the class
+   * [[org.apache.spark.ml.evaluation.SquaredEuclideanSilhouette.ClusterStats]]
+   * for kryo serialization.
+   *
+   * @param sc `SparkContext` to be used
+   */
+  def registerKryoClasses(sc: SparkContext): Unit = {
+    if (! kryoRegistrationPerformed) {
+      sc.getConf.registerKryoClasses(
+        Array(
+          classOf[SquaredEuclideanSilhouette.ClusterStats]
+        )
+      )
+      kryoRegistrationPerformed = true
+    }
+  }
+
+  case class ClusterStats(Y: Vector, psi: Double, count: Long)
+
+  def computeCsi(vector: Vector): Double = {
+    var sumOfSquares = 0.0
+    vector.foreachActive((_, v) => {
+      sumOfSquares += v * v
+    })
+    sumOfSquares
+  }
+
+  def computeYVectorPsiAndCount(
+                                 df: DataFrame,
+                                 predictionCol: String,
+                                 featuresCol: String): DataFrame = {
+    val Yudaf = new VectorElementWiseSum()
+    df.groupBy(predictionCol)
+      .agg(
+        count("*").alias("count"),
+        sum("csi").alias("psi"),
+        Yudaf(col(featuresCol)).alias("y")
+      )
+  }
+
+  def computeSquaredSilhouetteCoefficient(
+     broadcastedClustersMap: Broadcast[Map[Int, ClusterStats]],
+     vector: Vector,
+     clusterId: Int,
+     csi: Double): Double = {
+
+    def compute(csi: Double, point: Vector, clusterStats: ClusterStats): Double = {
+      var YmultiplyPoint = 0.0
+      point.foreachActive((idx, v) => {
+        YmultiplyPoint += clusterStats.Y(idx) * v
+      })
+
+      csi + clusterStats.psi / clusterStats.count - 2 * YmultiplyPoint / clusterStats.count
+    }
+
+    var minOther = Double.MaxValue
+    for(c <- broadcastedClustersMap.value.keySet) {
+      if (c != clusterId) {
+        val sil = compute(csi, vector, broadcastedClustersMap.value(c))
+        if(sil < minOther) {
+          minOther = sil
+        }
+      }
+    }
+    val clusterCurrentPoint = broadcastedClustersMap.value(clusterId)
+    // adjustment for excluding the node itself from
+    // the computation of the average dissimilarity
+    val clusterSil = if (clusterCurrentPoint.count == 1) {
+      0
+    } else {
+      compute(csi, vector, clusterCurrentPoint) * clusterCurrentPoint.count /
+        (clusterCurrentPoint.count - 1)
+    }
+
+    var silhouetteCoeff = 0.0
+    if (clusterSil < minOther) {
+      silhouetteCoeff = 1 - (clusterSil / minOther)
+    } else {
+      if (clusterSil > minOther) {
+        silhouetteCoeff = (minOther / clusterSil) - 1
+      }
+    }
+    silhouetteCoeff
+
+  }
 
 }

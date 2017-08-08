@@ -195,7 +195,7 @@ class ClusteringEvaluatorSuite
     val evaluator = new ClusteringEvaluator()
       .setPredictionCol("myPrediction")
       .setFeaturesCol("myLabel")
-      .setMetricName("cosineSilhouette")
+      .setMetricName("squaredSilhouette")
     testDefaultReadWrite(evaluator)
   }
 
@@ -221,31 +221,5 @@ class ClusteringEvaluatorSuite
     assertResult(result)(actual)
 
   }
-
-  /*
-  Use the following python code to load the data and evaluate it using scikit-learn package.
-
-  from sklearn import datasets
-  from sklearn.metrics import silhouette_score
-  iris = datasets.load_iris()
-  round(silhouette_score(iris.data, iris.target, metric='cosine'), 10)
-  */
-  test("cosine Silhouette") {
-    val result = BigDecimal(0.7222369298)
-    val dsRDD = spark.sparkContext.parallelize(dataset)
-    val df = spark.createDataFrame(dsRDD, dsStruct)
-
-    val evaluator = new ClusteringEvaluator()
-      .setFeaturesCol("point")
-      .setPredictionCol("label")
-      .setMetricName("cosineSilhouette")
-    val actual = BigDecimal(evaluator.evaluate(df))
-      .setScale(10, BigDecimal.RoundingMode.HALF_UP)
-    assertResult(result)(actual)
-
-  }
-
-
-
 
 }
