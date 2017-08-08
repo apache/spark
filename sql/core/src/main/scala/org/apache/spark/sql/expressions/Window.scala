@@ -175,7 +175,7 @@ object Window {
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a literal data type. An exception can be made when the offset is
+   * expression must have a numerical data type. An exception can be made when the offset is
    * unbounded, because no value modification is needed, in this case multiple and non-literal
    * ORDER BY expression are allowed.
    *
@@ -218,18 +218,18 @@ object Window {
    * "current row", while "lit(-1)" means one off before the current row, and "lit(5)" means the
    * five off after the current row.
    *
-   * Users should use `unboundedPreceding()`, `unboundedFollowing()`, and `currentRow()` to specify
-   * special boundary values, literals are not transformed to
-   * [[org.apache.spark.sql.catalyst.expressions.SpecialFrameBoundary]]s.
+   * Users should use `unboundedPreceding()`, `unboundedFollowing()`, and `currentRow()` from
+   * [[org.apache.spark.sql.functions]] to specify special boundary values, literals are not
+   * transformed to [[org.apache.spark.sql.catalyst.expressions.SpecialFrameBoundary]]s.
    *
    * A range-based boundary is based on the actual value of the ORDER BY
    * expression(s). An offset is used to alter the value of the ORDER BY expression, for
    * instance if the current order by expression has a value of 10 and the lower bound offset
    * is -3, the resulting lower bound for the current row will be 10 - 3 = 7. This however puts a
    * number of constraints on the ORDER BY expressions: there can be only one expression and this
-   * expression must have a literal data type. An exception can be made when the offset is
-   * unbounded, because no value modification is needed, in this case multiple and non-literal
-   * ORDER BY expression are allowed.
+   * expression must have a numerical/date/timestamp data type. An exception can be made when the
+   * offset is unbounded, because no value modification is needed, in this case multiple and
+   * non-literal ORDER BY expression are allowed.
    *
    * {{{
    *   import org.apache.spark.sql.expressions.Window

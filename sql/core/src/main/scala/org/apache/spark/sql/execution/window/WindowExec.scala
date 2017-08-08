@@ -144,7 +144,7 @@ case class WindowExec(
         val boundExpr = (expr.dataType, boundOffset.dataType) match {
           case (DateType, IntegerType) => DateAdd(expr, boundOffset)
           case (TimestampType, CalendarIntervalType) =>
-            TimeAdd(expr, boundOffset, Some(DateTimeUtils.defaultTimeZone.getID))
+            TimeAdd(expr, boundOffset, Some(conf.sessionLocalTimeZone))
           case (a, b) if a== b => Add(expr, boundOffset)
         }
         val bound = newMutableProjection(boundExpr :: Nil, child.output)
