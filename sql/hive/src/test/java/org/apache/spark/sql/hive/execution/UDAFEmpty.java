@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFEvaluator;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 
 /**
- * a empty UDAF that throws a semantic exception
+ * An empty UDAF that throws a semantic exception
  */
 public class UDAFEmpty extends AbstractGenericUDAFResolver {
     @Override
