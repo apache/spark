@@ -29,8 +29,10 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
 
   test("CliSessionState will be reused") {
     val hiveConf = new HiveConf(classOf[SessionState])
+    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+      case (key, value) => hiveConf.set(key, value)
+    }
     val sessionState: SessionState = new CliSessionState(hiveConf)
-    SessionState.start(sessionState)
     doTest(sessionState, true)
   }
 
@@ -41,18 +43,15 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
     }
     val sessionState: SessionState = new SessionState(hiveConf)
     doTest(sessionState, false)
-
   }
 
   def doTest(state: SessionState, expected: Boolean): Unit = {
-
     SessionState.start(state)
     val s1 = SessionState.get
-
     val sparkConf = new SparkConf()
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
     val hiveClient = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
-
     assert((hiveClient.toString == s1.toString) === expected)
+    SessionState.get().close()
   }
 }
