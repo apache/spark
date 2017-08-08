@@ -491,6 +491,19 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED =
+    ConfigBuilder("spark.kubernetes.driver.hdfslocality.clusterNodeNameDNSLookup.enabled")
+      .doc("Whether or not HDFS locality support code should look up DNS for full hostnames of" +
+        " cluster nodes. In some K8s clusters, notably GKE, cluster node names are short" +
+        " hostnames, and so comparing them against HDFS datanode hostnames always fail. To fix," +
+        " enable this flag. This is disabled by default because DNS lookup can be expensive." +
+        " The driver can slow down and fail to respond to executor heartbeats in time." +
+        " If enabling this flag, make sure your DNS server has enough capacity" +
+        " for the workload.")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val KUBERNETES_EXECUTOR_LIMIT_CORES =
     ConfigBuilder("spark.kubernetes.executor.limit.cores")
       .doc("Specify the hard cpu limit for a single executor pod")
