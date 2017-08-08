@@ -642,8 +642,13 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       if (stats.get.rowCount.isDefined) {
         statsProperties += STATISTICS_NUM_ROWS -> stats.get.rowCount.get.toString()
       }
+
+      // For datasource tables and hive serde tables created by spark 2.1 or higher,
+      // the data schema is stored in the table properties.
+      val schema = restoreTableMetadata(rawTable).schema
+
       val colNameTypeMap: Map[String, DataType] =
-        rawTable.schema.fields.map(f => (f.name, f.dataType)).toMap
+        schema.fields.map(f => (f.name, f.dataType)).toMap
       stats.get.colStats.foreach { case (colName, colStat) =>
         colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
           statsProperties += (columnStatKeyPropName(colName, k) -> v)
@@ -1088,8 +1093,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
     val partColNameMap = buildLowerCasePartColNameMap(getTable(db, table))
-    client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
+    val res = client.getPartitions(db, table, partialSpec.map(lowerCasePartitionSpec)).map { part =>
       part.copy(spec = restorePartitionSpec(part.spec, partColNameMap))
+    }
+
+    partialSpec match {
+      // This might be a bug of Hive: When the partition value inside the partial partition spec
+      // contains dot, and we ask Hive to list partitions w.r.t. the partial partition spec, Hive
+      // treats dot as matching any single character and may return more partitions than we
+      // expected. Here we do an extra filter to drop unexpected partitions.
+      case Some(spec) if spec.exists(_._2.contains(".")) =>
+        res.filter(p => isPartialPartitionSpec(spec, p.spec))
+      case _ => res
     }
   }
 

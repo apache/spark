@@ -236,7 +236,10 @@ object FileFormatWriter extends Logging {
     committer.setupTask(taskAttemptContext)
 
     val writeTask =
-      if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
+      if (sparkPartitionId != 0 && !iterator.hasNext) {
+        // In case of empty job, leave first partition to save meta for file format like parquet.
+        new EmptyDirectoryWriteTask
+      } else if (description.partitionColumns.isEmpty && description.bucketIdExpression.isEmpty) {
         new SingleDirectoryWriteTask(description, taskAttemptContext, committer)
       } else {
         new DynamicPartitionWriteTask(description, taskAttemptContext, committer)
@@ -299,6 +302,20 @@ object FileFormatWriter extends Logging {
         0L
       }
     }
+  }
+
+  /** ExecuteWriteTask for empty partitions */
+  private class EmptyDirectoryWriteTask extends ExecuteWriteTask {
+
+    override def execute(iter: Iterator[InternalRow]): ExecutedWriteSummary = {
+      ExecutedWriteSummary(
+        updatedPartitions = Set.empty,
+        numOutputFile = 0,
+        numOutputBytes = 0,
+        numOutputRows = 0)
+    }
+
+    override def releaseResources(): Unit = {}
   }
 
   /** Writes data to a single directory (used for non-dynamic-partition writes). */

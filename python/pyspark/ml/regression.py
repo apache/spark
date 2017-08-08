@@ -1014,6 +1014,11 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                      "Supported options: " + ", ".join(GBTParams.supportedLossTypes),
                      typeConverter=TypeConverters.toString)
 
+    stepSize = Param(Params._dummy(), "stepSize",
+                     "Step size (a.k.a. learning rate) in interval (0, 1] for shrinking " +
+                     "the contribution of each estimator.",
+                     typeConverter=TypeConverters.toFloat)
+
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
@@ -1739,6 +1744,9 @@ class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSumm
         then the last element returned corresponds to the intercept.
         """
         return self._call_java("pValues")
+
+    def __repr__(self):
+        return self._call_java("toString")
 
 
 if __name__ == "__main__":

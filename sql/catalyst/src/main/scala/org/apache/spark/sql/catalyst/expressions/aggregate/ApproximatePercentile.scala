@@ -58,7 +58,7 @@ import org.apache.spark.sql.types._
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
        [10.0,10.0,10.0]

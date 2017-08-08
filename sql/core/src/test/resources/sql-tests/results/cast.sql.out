@@ -194,6 +194,8 @@ DESC FUNCTION EXTENDED boolean
 struct<function_desc:string>
 -- !query 23 output
 Class: org.apache.spark.sql.catalyst.expressions.Cast
-Extended Usage:N/A.
+Extended Usage:
+    No example/argument for boolean.
+
 Function: boolean
 Usage: boolean(expr) - Casts the value `expr` to the target data type `boolean`.

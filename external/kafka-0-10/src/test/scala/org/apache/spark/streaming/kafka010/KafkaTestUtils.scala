@@ -257,7 +257,7 @@ private[kafka010] class KafkaTestUtils extends Logging {
 
         zkUtils.getLeaderForPartition(topic, partition).isDefined &&
           Request.isValidBrokerId(leaderAndInSyncReplicas.leader) &&
-          leaderAndInSyncReplicas.isr.size >= 1
+          leaderAndInSyncReplicas.isr.nonEmpty
 
       case _ =>
         false

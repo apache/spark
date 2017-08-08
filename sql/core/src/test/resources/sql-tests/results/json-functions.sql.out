@@ -27,6 +27,8 @@ Extended Usage:
       > SELECT to_json(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
   
+    Since: 2.2.0
+
 Function: to_json
 Usage: to_json(expr[, options]) - Returns a json string with a given struct value
 
@@ -105,6 +107,8 @@ Extended Usage:
       > SELECT from_json('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
   
+    Since: 2.2.0
+
 Function: from_json
 Usage: from_json(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.
 
