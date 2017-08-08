@@ -755,6 +755,7 @@ private[spark] class Client(
       props.store(writer, "Spark configuration.")
       writer.flush()
       confStream.closeEntry()
+      writer.close()
     } finally {
       confStream.close()
     }
