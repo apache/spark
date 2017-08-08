@@ -96,6 +96,15 @@ class JDBCSuite extends SparkFunSuite
         |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
        """.stripMargin.replaceAll("\n", " "))
 
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW partsoverflow
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         partitionColumn 'THEID', lowerBound '-9223372036854775808',
+        |         upperBound '9223372036854775807', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
       + "d SMALLINT, e BIGINT)").executeUpdate()
     conn.prepareStatement("insert into test.inttypes values (1, false, 3, 4, 1234567890123)"
@@ -376,6 +385,12 @@ class JDBCSuite extends SparkFunSuite
     assert(ids(2) === 3)
   }
 
+  test("overflow of partition bound difference does not give negative stride") {
+    val df = sql("SELECT * FROM partsoverflow")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 3)
+  }
+
   test("Register JDBC query with renamed fields") {
     // Regression test for bug SPARK-7345
     sql(
@@ -404,6 +419,28 @@ class JDBCSuite extends SparkFunSuite
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+  }
+
+  test("Missing partition columns") {
+    withView("tempPeople") {
+      val e = intercept[IllegalArgumentException] {
+        sql(
+          s"""
+             |CREATE OR REPLACE TEMPORARY VIEW tempPeople
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             |  url 'jdbc:h2:mem:testdb0;user=testUser;password=testPass',
+             |  dbtable 'TEST.PEOPLE',
+             |  lowerBound '0',
+             |  upperBound '52',
+             |  numPartitions '53',
+             |  fetchSize '10000' )
+           """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+      assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+        "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+        "'numPartitions'"))
+    }
   }
 
   test("Basic API with FetchSize") {

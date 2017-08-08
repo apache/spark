@@ -19,10 +19,10 @@ package org.apache.spark.network.shuffle;
 
 import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.LongBuffer;
+import java.nio.file.Files;
 
 /**
  * Keeps the index information for a particular map output
@@ -38,7 +38,7 @@ public class ShuffleIndexInformation {
     offsets = buffer.asLongBuffer();
     DataInputStream dis = null;
     try {
-      dis = new DataInputStream(new FileInputStream(indexFile));
+      dis = new DataInputStream(Files.newInputStream(indexFile.toPath()));
       dis.readFully(buffer.array());
     } finally {
       if (dis != null) {
