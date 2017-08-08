@@ -37,6 +37,9 @@ case class TestDataPoint2(x: Int, s: String)
 object TestForTypeAlias {
   type TwoInt = (Int, Int)
   def tupleTypeAlias: TwoInt = (1, 1)
+
+  type SeqOfTwoInt = Seq[TwoInt]
+  def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
 }
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
@@ -1323,10 +1326,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.orderBy('id), expected)
   }
 
-  test("SPARK-21567: Dataset with Tuple of type alias") {
+  test("SPARK-21567: Dataset should work with type alias") {
     checkDataset(
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.tupleTypeAlias)),
       ("", (1, 1)))
+
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
+      ("", Seq((1, 1), (2, 2))))
   }
 }
 
