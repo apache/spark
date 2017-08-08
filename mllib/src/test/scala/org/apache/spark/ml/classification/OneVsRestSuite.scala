@@ -33,6 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -141,6 +142,16 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setClassifier(logReg)
     val output = ovr.fit(dataset).transform(dataset)
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
+  }
+
+  test("SPARK-21306: OneVsRest should support setWeightCol") {
+    val dataset2 = dataset.withColumn("weight", lit(1.0))
+    // classifier inherits hasWeightCol
+    val ova = new OneVsRest().setWeightCol("weight").setClassifier(new LogisticRegression())
+    assert(ova.fit(dataset2) !== null)
+    // classifier doesn't inherit hasWeightCol
+    val ova2 = new OneVsRest().setWeightCol("weight").setClassifier(new DecisionTreeClassifier())
+    assert(ova2.fit(dataset2) !== null)
   }
 
   test("OneVsRest.copy and OneVsRestModel.copy") {
