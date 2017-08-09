@@ -333,7 +333,6 @@ class SharedReadWrite():
     @staticmethod
     def checkStagesForJava(stages):
         allStagesAreJava = True
-        stages = self.stages
         for stage in stages:
             if not isinstance(stage, JavaMLWritable):
                 allStagesAreJava = False
