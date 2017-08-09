@@ -11,7 +11,7 @@ name="${pkg%.tgz}"
 rm -r $HOME/$name*
 cp -v $pkg $HOME
 cd $HOME && \
-  tar -xzvf $pkg && \
+  tar -xzf $pkg && \
   cd -
 cp -v \
   $HOME/$ref_name/conf/spark-env.sh \
@@ -26,6 +26,6 @@ for host in ivt-spark1 ivt-spark2
 do
   ssh $host "rm -r $name*"
   scp $pkg $host:
-  ssh $host "tar -xzvf $pkg"
+  ssh $host "tar -xzf $pkg"
   ssh $host "cp -v $ref_name/conf/spark-env.sh $name/conf/"
 done
