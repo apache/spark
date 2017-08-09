@@ -19,12 +19,11 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Matrices, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizers
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import DifferentiableLossAggregatorSuite.getClassificationSummarizers
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
@@ -50,7 +49,7 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       fitIntercept: Boolean,
       isMultinomial: Boolean): LogisticAggregator = {
     val (featuresSummarizer, ySummarizer) =
-      DifferentiableLossAggregatorSuite.getClassificationSummarizers(instances)
+      Summarizers.getClassificationSummarizers(sc.parallelize(instances))
     val numClasses = ySummarizer.histogram.length
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
@@ -128,7 +127,8 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val numFeatures = instances.head.features.size
     val numClasses = instances.map(_.label).toSet.size
     val intercepts = Vectors.dense(interceptArray)
-    val (featuresSummarizer, ySummarizer) = getClassificationSummarizers(instances)
+    val (featuresSummarizer, ySummarizer) =
+      Summarizers.getClassificationSummarizers(sc.parallelize(instances))
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val weightSum = instances.map(_.weight).sum
 
@@ -194,7 +194,8 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val coefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val numFeatures = binaryInstances.head.features.size
-    val (featuresSummarizer, _) = getClassificationSummarizers(binaryInstances)
+    val (featuresSummarizer, _) =
+      Summarizers.getClassificationSummarizers(sc.parallelize(binaryInstances))
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val weightSum = binaryInstances.map(_.weight).sum
 

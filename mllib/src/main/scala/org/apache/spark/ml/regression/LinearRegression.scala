@@ -36,10 +36,9 @@ import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.stat.Summarizers
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.RegressionMetrics
-import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -254,20 +253,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val (featuresSummarizer, ySummarizer) = {
-      val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-        instance: Instance) =>
-          (c._1.add(instance.features, instance.weight),
-            c._2.add(Vectors.dense(instance.label), instance.weight))
-
-      val combOp = (c1: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
-        c2: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer)) =>
-          (c1._1.merge(c2._1), c1._2.merge(c2._2))
-
-      instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer
-      )(seqOp, combOp, $(aggregationDepth))
-    }
+    val (featuresSummarizer, ySummarizer) =
+      Summarizers.getRegressionSummarizers(instances, $(aggregationDepth))
 
     val yMean = ySummarizer.mean(0)
     val rawYStd = math.sqrt(ySummarizer.variance(0))

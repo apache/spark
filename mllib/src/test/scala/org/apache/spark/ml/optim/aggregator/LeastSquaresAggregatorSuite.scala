@@ -19,12 +19,11 @@ package org.apache.spark.ml.optim.aggregator
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
+import org.apache.spark.ml.stat.Summarizers
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
-
-  import DifferentiableLossAggregatorSuite.getRegressionSummarizers
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
@@ -54,7 +53,8 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
       instances: Array[Instance],
       coefficients: Vector,
       fitIntercept: Boolean): LeastSquaresAggregator = {
-    val (featuresSummarizer, ySummarizer) = getRegressionSummarizers(instances)
+    val (featuresSummarizer, ySummarizer) =
+      Summarizers.getRegressionSummarizers(sc.parallelize(instances))
     val yStd = math.sqrt(ySummarizer.variance(0))
     val yMean = ySummarizer.mean(0)
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
@@ -105,7 +105,8 @@ class LeastSquaresAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
      */
     val coefficients = Vectors.dense(1.0, 2.0)
     val numFeatures = coefficients.size
-    val (featuresSummarizer, ySummarizer) = getRegressionSummarizers(instances)
+    val (featuresSummarizer, ySummarizer) =
+      Summarizers.getRegressionSummarizers(sc.parallelize(instances))
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val featuresMean = featuresSummarizer.mean.toArray
     val yStd = math.sqrt(ySummarizer.variance(0))
