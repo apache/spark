@@ -79,14 +79,11 @@ class CrossValidatorSuite
       .setEvaluator(eval)
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
-    assert(cvModel.hasSummary)
-    assert(cvModel.summary.params === lrParamMaps)
-    assert(cvModel.summary.trainingMetrics.count() === lrParamMaps.length)
-
     val expected = lrParamMaps.zip(cvModel.avgMetrics).map { case (map, metric) =>
       Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString))
     }
-    assert(cvModel.summary.trainingMetrics.collect().toSet === expected.toSet)
+    assert(cvModel.tuningSummary.collect().toSet === expected.toSet)
+    assert(cvModel.tuningSummary.columns.last === eval.getMetricName)
   }
 
   test("cross validation with linear regression") {

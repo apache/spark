@@ -23,12 +23,13 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -84,6 +85,32 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
     instrumentation.logNamedValue("estimator", $(estimator).getClass.getCanonicalName)
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
     instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
+  }
+
+
+  /**
+   * Summary of grid search tuning in the format of DataFrame. Each row contains one candidate
+   * paramMap and the corresponding metric of trained model.
+   */
+  protected def getTuningSummaryDF(metrics: Array[Double]): DataFrame = {
+    val params = $(estimatorParamMaps)
+    require(params.nonEmpty, "estimator param maps should not be empty")
+    require(params.length == metrics.length, "estimator param maps number should match metrics")
+    val metricName = $(evaluator) match {
+      case b: BinaryClassificationEvaluator => b.getMetricName
+      case m: MulticlassClassificationEvaluator => m.getMetricName
+      case r: RegressionEvaluator => r.getMetricName
+      case _ => "metrics"
+    }
+    val spark = SparkSession.builder().getOrCreate()
+    val sc = spark.sparkContext
+    val fields = params(0).toSeq.sortBy(_.param.name).map(_.param.name) ++ Seq(metricName)
+    val schema = new StructType(fields.map(name => StructField(name, StringType)).toArray)
+    val rows = sc.parallelize(params.zip(metrics)).map { case (param, metric) =>
+      val values = param.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString)
+      Row.fromSeq(values)
+    }
+    spark.createDataFrame(rows, schema)
   }
 }
 

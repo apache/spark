@@ -25,7 +25,6 @@ import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
@@ -134,10 +133,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
     instr.logSuccess(bestModel)
-    val model = new CrossValidatorModel(uid, bestModel, metrics).setParent(this)
-    val summary = new TuningSummary(epm, metrics, bestIndex)
-    model.setSummary(Some(summary))
-    copyValues(model)
+    copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
   @Since("1.4.0")
@@ -233,28 +229,12 @@ class CrossValidatorModel private[ml] (
     bestModel.transformSchema(schema)
   }
 
-  private var trainingSummary: Option[TuningSummary] = None
-
-  private[tuning] def setSummary(summary: Option[TuningSummary]): this.type = {
-    this.trainingSummary = summary
-    this
-  }
-
   /**
-   * Return true if there exists summary of model.
+   * Summary of grid search tuning in the format of DataFrame. Each row contains one candidate
+   * paramMap and the corresponding metric of trained model.
    */
   @Since("2.3.0")
-  def hasSummary: Boolean = trainingSummary.nonEmpty
-
-  /**
-   * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
-   */
-  @Since("2.3.0")
-  def summary: TuningSummary = trainingSummary.getOrElse {
-    throw new SparkException(
-      s"No training summary available for the ${this.getClass.getSimpleName}")
-  }
+  lazy val tuningSummary: DataFrame = this.getTuningSummaryDF(avgMetrics)
 
   @Since("1.4.0")
   override def copy(extra: ParamMap): CrossValidatorModel = {

@@ -72,14 +72,11 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
     val tvsModel = tvs.fit(dataset)
-    assert(tvsModel.hasSummary)
-    assert(tvsModel.summary.params === lrParamMaps)
-    assert(tvsModel.summary.trainingMetrics.count() === lrParamMaps.length)
-
     val expected = lrParamMaps.zip(tvsModel.validationMetrics).map { case (map, metric) =>
       Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString))
     }
-    assert(tvsModel.summary.trainingMetrics.collect().toSet === expected.toSet)
+    assert(tvsModel.tuningSummary.collect().toSet === expected.toSet)
+    assert(tvsModel.tuningSummary.columns.last === eval.getMetricName)
   }
 
   test("train validation with linear regression") {
