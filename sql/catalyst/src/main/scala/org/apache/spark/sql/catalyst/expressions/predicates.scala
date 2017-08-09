@@ -504,11 +504,13 @@ object Equality {
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.",
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type.
   """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT 1 _FUNC_ '1';
        true
       > SELECT true _FUNC_ NULL;
        NULL
@@ -551,11 +553,13 @@ case class EqualTo(left: Expression, right: Expression)
   """,
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type.
   """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT 1 _FUNC_ '1';
        true
       > SELECT true _FUNC_ NULL;
        false
@@ -612,12 +616,14 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type, and must be a type that can be ordered/compared.
   """,
   examples = """
     Examples:
       > SELECT 1 _FUNC_ 2;
        true
+      > SELECT 1.1 _FUNC_ '1';
+       false
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
        false
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
@@ -641,11 +647,13 @@ case class LessThan(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type, and must be a type that can be ordered/compared.
   """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 2;
+       true
+      > SELECT 1.0 _FUNC_ '1';
        true
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
        true
@@ -670,11 +678,13 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type, and must be a type that can be ordered/compared.
   """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 1;
+       true
+      > SELECT 2 _FUNC_ '1.1';
        true
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
        false
@@ -696,15 +706,17 @@ case class GreaterThan(left: Expression, right: Expression)
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
+  usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.",
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type which must be a type that can be ordered/compared.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type, and must be a type that can be ordered/compared.
   """,
   examples = """
     Examples:
       > SELECT 2 _FUNC_ 1;
        true
+      > SELECT 2.0 _FUNC_ '2.1';
+       false
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-07-30 04:17:52');
        true
       > SELECT to_date('2009-07-30 04:17:52') _FUNC_ to_date('2009-08-01 04:17:52');
