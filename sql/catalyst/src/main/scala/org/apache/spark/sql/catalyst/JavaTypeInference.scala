@@ -119,6 +119,10 @@ object JavaTypeInference {
         val (valueDataType, nullable) = inferDataType(valueType, seenTypeSet)
         (MapType(keyDataType, valueDataType, nullable), true)
 
+      case other if other.isEnum =>
+        (StructType(Seq(StructField(typeToken.getRawType.getSimpleName,
+          StringType, nullable = false))), true)
+
       case other =>
         if (seenTypeSet.contains(other)) {
           throw new UnsupportedOperationException(
@@ -128,18 +132,13 @@ object JavaTypeInference {
 
         // TODO: we should only collect properties that have getter and setter. However, some tests
         // pass in scala case class as java bean class which doesn't have getter and setter.
-        if (typeToken.getRawType.isEnum) {
-          (StructType(Seq(new StructField(typeToken.getRawType.getSimpleName,
-            StringType, false))), true)
-        } else {
-          val properties = getJavaBeanReadableProperties(other)
-          val fields = properties.map { property =>
-            val returnType = typeToken.method(property.getReadMethod).getReturnType
-            val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
-            new StructField(property.getName, dataType, nullable)
-          }
-          (new StructType(fields), true)
+        val properties = getJavaBeanReadableProperties(other)
+        val fields = properties.map { property =>
+          val returnType = typeToken.method(property.getReadMethod).getReturnType
+          val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
+          new StructField(property.getName, dataType, nullable)
         }
+        (new StructType(fields), true)
     }
   }
 
@@ -345,7 +344,9 @@ object JavaTypeInference {
     }
   }
 
-  /** Returns an expression for serializing an object of the given type to an internal row. */
+  /**
+    * Returns an expression for serializing an object of the given type to an internal row.
+    */
   def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
     val nullSafeInput = AssertNotNull(inputObject, Seq("top level input bean"))
