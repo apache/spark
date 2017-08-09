@@ -611,7 +611,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
   }
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than `expr2`.",
   arguments = """
@@ -632,7 +631,6 @@ case class EqualNullSafe(left: Expression, right: Expression) extends BinaryComp
       > SELECT 1 _FUNC_ NULL;
        NULL
   """)
-// scalastyle:on line.size.limit
 case class LessThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -643,7 +641,6 @@ case class LessThan(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lt(input1, input2)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is less than or equal to `expr2`.",
   arguments = """
@@ -664,7 +661,6 @@ case class LessThan(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """)
-// scalastyle:on line.size.limit
 case class LessThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -675,7 +671,6 @@ case class LessThanOrEqual(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.lteq(input1, input2)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than `expr2`.",
   arguments = """
@@ -696,7 +691,6 @@ case class LessThanOrEqual(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """)
-// scalastyle:on line.size.limit
 case class GreaterThan(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
@@ -707,7 +701,6 @@ case class GreaterThan(left: Expression, right: Expression)
   protected override def nullSafeEval(input1: Any, input2: Any): Any = ordering.gt(input1, input2)
 }
 
-// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` is greater than or equal to `expr2`.",
   arguments = """
@@ -728,7 +721,6 @@ case class GreaterThan(left: Expression, right: Expression)
       > SELECT 1 _FUNC_ NULL;
        NULL
   """)
-// scalastyle:on line.size.limit
 case class GreaterThanOrEqual(left: Expression, right: Expression)
     extends BinaryComparison with NullIntolerant {
 
