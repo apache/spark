@@ -120,15 +120,16 @@ private[hive] class HiveClientImpl(
         Thread.currentThread().setContextClassLoader(original)
       }
     } else {
-      // Isolation off means we detect a CliSessionState instance in current thread. 1: Inside the
-      // spark project, we have already started a CliSessionState  in `SparkSQLCLIDriver`, which
-      // contains information like configurations from command lines. Later, we call
-      // `SparkSQLEnv.init()` there, which would new a hive client again into this part again. so we
-      // should keep those configurations and reuse the existing instance of `CliSessionState`. In
-      // this case, SessionState.get will always return a CliSessionState.
-      // In another case, a user app may start a CliSessionState outside spark project with built in
-      // hive jars, which will turn off isolation, after that, SessionSate.detachSession is called
-      // to remove the current state, hive client created later will init its state by newState()
+      // Isolation off means we detect a CliSessionState instance in current thread.
+      // 1: Inside the spark project, we have already started a CliSessionState in
+      // `SparkSQLCLIDriver`, which contains configurations from command lines. Later, we call
+      // `SparkSQLEnv.init()` there, which would new a hive client again. so we should keep those
+      // configurations and reuse the existing instance of `CliSessionState`. In this case,
+      // SessionState.get will always return a CliSessionState.
+      // 2: In another case, a user app may start a CliSessionState outside spark project with built
+      // in hive jars, which will turn off isolation, if SessionSate.detachSession is
+      // called to remove the current state after that, hive client created later will initialize
+      // its own state by newState()
       Option(SessionState.get).getOrElse(newState())
     }
   }
