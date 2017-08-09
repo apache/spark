@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.Add
 import org.apache.spark.sql.catalyst.plans.{FullOuter, LeftOuter, PlanTest, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class LimitPushdownSuite extends PlanTest {
 
