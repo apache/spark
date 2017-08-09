@@ -371,7 +371,7 @@ object JavaTypeInference {
   def enumDeserializer[T <: Enum[T]](enum: Class[T]): InternalRow => T = {
     assert(enum.isEnum)
     value: InternalRow =>
-      Enum.valueOf(enum, UTF8String.fromBytes(value.asInstanceOf[UnsafeRow].getBytes).toString)
+      Enum.valueOf(enum, value.getUTF8String(0).toString)
   }
 
   /** Returns enum value for given enum type and value index */
@@ -464,8 +464,9 @@ object JavaTypeInference {
           )
 
         case other if other.isEnum =>
+          CreateNamedStruct(expressions.Literal("enum") ::
           StaticInvoke(JavaTypeInference.getClass, StringType, "serializeEnumName",
-          expressions.Literal.create(other.getName, StringType) :: inputObject :: Nil)
+          expressions.Literal.create(other.getName, StringType) :: inputObject :: Nil) :: Nil)
 
         case other =>
           val properties = getJavaBeanReadableAndWritableProperties(other)

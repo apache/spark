@@ -1322,11 +1322,11 @@ public class JavaDatasetSuite implements Serializable {
       this.regularField = regularField;
     }
 
-    public EnumBean getField() {
+    public EnumBean getEnumField() {
       return enumField;
     }
 
-    public void setField(EnumBean field) {
+    public void setEnumField(EnumBean field) {
       this.enumField = field;
     }
 
@@ -1353,7 +1353,8 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testBeanWithEnum() {
-    List<BeanWithEnum> data = Arrays.asList(new BeanWithEnum(EnumBean.A, "string"));
+    List<BeanWithEnum> data = Arrays.asList(new BeanWithEnum(EnumBean.A, "mira avenue"),
+            new BeanWithEnum(EnumBean.B, "flower boulevard"));
     Encoder<BeanWithEnum> encoder = Encoders.bean(BeanWithEnum.class);
     Dataset<BeanWithEnum> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(ds.collectAsList(), data);

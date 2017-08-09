@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
-import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType, DataType, StringType}
 import org.apache.spark.util.Utils
 
 /**
@@ -81,9 +81,19 @@ object ExpressionEncoder {
       ClassTag[T](cls))
   }
 
+  def javaEnumSchema[T](beanClass: Class[T]): DataType = {
+    StructType(Seq(StructField("enum",
+      StructType(Seq(StructField(beanClass.getSimpleName, StringType, nullable = false))),
+      nullable = false)))
+  }
+
   // TODO: improve error message for java bean encoder.
   def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
-    val schema = JavaTypeInference.inferDataType(beanClass)._1
+    val schema = if (beanClass.isEnum) {
+      javaEnumSchema(beanClass)
+    } else {
+      JavaTypeInference.inferDataType(beanClass)._1
+    }
     assert(schema.isInstanceOf[StructType])
 
     val serializer = JavaTypeInference.serializerFor(beanClass)
