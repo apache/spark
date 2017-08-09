@@ -345,8 +345,8 @@ object JavaTypeInference {
   }
 
   /**
-    * Returns an expression for serializing an object of the given type to an internal row.
-    */
+   * Returns an expression for serializing an object of the given type to an internal row.
+   */
   def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
     val nullSafeInput = AssertNotNull(inputObject, Seq("top level input bean"))
