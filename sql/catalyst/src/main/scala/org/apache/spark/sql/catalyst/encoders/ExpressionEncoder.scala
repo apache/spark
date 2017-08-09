@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
-import org.apache.spark.sql.types.{BooleanType, ObjectType, StructField, StructType, DataType, StringType}
+import org.apache.spark.sql.types.{BooleanType, DataType, ObjectType, StringType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
