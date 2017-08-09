@@ -261,37 +261,48 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(out1(3).get(2).asInstanceOf[Double].isNaN)
     assert(out1(4) === Row("Amy", null, null))
     assert(out1(5) === Row(null, null, null))
+  }
+
+  test("replace with null") {
+    val input = Seq[(String, java.lang.Double, java.lang.Boolean)](
+      ("Bob", 176.5, true),
+      ("Alice", 164.3, false),
+      ("David", null, true)
+    ).toDF("name", "height", "married")
 
     // Replace String with String and null
-    val out2 = input.na.replace("name", Map(
-      "Bob" -> "Bravo",
-      "Alice" -> null
-    )).collect()
-
-    assert(out2(0) === Row("Bravo", 16, 176.5))
-    assert(out2(1) === Row(null, null, 164.3))
-    assert(out2(2) === Row("David", 60, null))
-    assert(out2(3).get(2).asInstanceOf[Double].isNaN)
-    assert(out2(4) === Row("Amy", null, null))
-    assert(out2(5) === Row(null, null, null))
+    checkAnswer(
+      input.na.replace("name", Map(
+        "Bob" -> "Bravo",
+        "Alice" -> null
+      )),
+      Row("Bravo", 176.5, true) ::
+        Row(null, 164.3, false) ::
+        Row("David", null, true) :: Nil)
 
     // Replace Double with null
-    val out3 = input.na.replace("age", Map[Any, Any](
-      16 -> null
-    )).collect()
+    checkAnswer(
+      input.na.replace("height", Map[Any, Any](
+        164.3 -> null
+      )),
+      Row("Bob", 176.5, true) ::
+        Row("Alice", null, false) ::
+        Row("David", null, true) :: Nil)
 
-    assert(out3(0) === Row("Bob", null, 176.5))
-    assert(out3(1) === Row("Alice", null, 164.3))
-    assert(out3(2) === Row("David", 60, null))
-    assert(out3(3).get(2).asInstanceOf[Double].isNaN)
-    assert(out3(4) === Row("Amy", null, null))
-    assert(out3(5) === Row(null, null, null))
+    // Replace Boolean with null
+    checkAnswer(
+      input.na.replace("*", Map[Any, Any](
+        false -> null
+      )),
+      Row("Bob", 176.5, true) ::
+        Row("Alice", 164.3, null) ::
+        Row("David", null, true) :: Nil)
 
     // Replace String with null and then drop rows containing null
     checkAnswer(
       input.na.replace("name", Map(
         "Bob" -> null
       )).na.drop("name" :: Nil).select("name"),
-      Row("Alice") :: Row("David") :: Row("Nina") :: Row("Amy") :: Nil)
+      Row("Alice") :: Row("David") :: Nil)
   }
 }
