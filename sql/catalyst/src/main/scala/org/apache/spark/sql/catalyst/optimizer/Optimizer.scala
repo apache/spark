@@ -495,8 +495,14 @@ object ColumnPruning extends Rule[LogicalPlan] {
     // Eliminate no-op Projects
     case p @ Project(_, child) if sameOutput(child.output, p.output) => child
 
-    // Can't prune the columns on LeafNode
-    case p @ Project(_, _: LeafNode) => p
+    // Can't prune the columns on LeafNode for deterministic projects
+    case p @ Project(fields, _: LeafNode) if fields.forall(_.deterministic) => p
+
+    // The fields of Project contains non-deterministic.
+    // e.g Rand. Project will be split to two project.
+    case p @ Project(fields, child)
+      if !fields.forall(_.deterministic) && (child.outputSet -- p.references).nonEmpty =>
+      p.copy(child = prunedChild(child, p.references))
 
     // for all other logical plans that inherits the output from it's children
     case p @ Project(_, child) =>
@@ -535,6 +541,8 @@ object ColumnPruning extends Rule[LogicalPlan] {
 object CollapseProject extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+    case p1 @ Project(fields, p2 @ Project(_, _: LeafNode))
+      if !fields.forall(_.deterministic) && p2.references.nonEmpty => p1
     case p1 @ Project(_, p2: Project) =>
       if (haveCommonNonDeterministicOutput(p1.projectList, p2.projectList)) {
         p1

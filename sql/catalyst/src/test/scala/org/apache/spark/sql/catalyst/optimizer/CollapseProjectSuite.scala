@@ -119,4 +119,28 @@ class CollapseProjectSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-21520 collapse project contains nondeterministic, dependent into one deterministic") {
+    val query = testRelation
+      .select(('a).as('a_plus))
+      .select(Rand(10).as('rand), 'a_plus)
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-21520 collapse project into one nondeterministic, dependent into two deterministic") {
+    val query = testRelation
+      .select(('a ).as('a_plus), ('b).as('b_plus))
+      .select(Rand(10).as('rand))
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

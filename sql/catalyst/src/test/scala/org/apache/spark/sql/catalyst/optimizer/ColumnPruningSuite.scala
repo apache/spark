@@ -360,5 +360,47 @@ class ColumnPruningSuite extends PlanTest {
     comparePlans(optimized2, expected2.analyze)
   }
 
+  test("SPARK-21520 the fields of project only is nondeterministic") {
+    val testRelation = LocalRelation('key.int, 'value.string)
+
+    // The fields of project only is non-deterministic.
+    val originalQuery =
+    testRelation
+      .select(Rand(10).as("rand"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    // correctAnswer:
+    // Project [rand(10) AS rand#5]
+    // +- LocalRelation <empty>, [key#0, value#1]
+    val correctAnswer = originalQuery.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-21520 the fields of project contains nondeterministic") {
+    val testRelation = LocalRelation('key.int, 'value.string)
+
+    // The fields of project contains non-deterministic.
+    // e.g Rand function. project will be split to two project.
+    val originalQuery =
+    testRelation
+      .select($"key".as("key_a"), Rand(10).as("rand"))
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    // correctAnswer:
+    // Project [key#0 AS key_a#4, rand(10) AS rand#5]
+    // +- Project [key#0]
+    //    +- LocalRelation <empty>, [key#0, value#1]
+    val correctAnswer =
+    testRelation
+      .select($"key")
+      .select($"key".as("key_a"), Rand(10).as("rand"))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   // todo: add more tests for column pruning
 }
