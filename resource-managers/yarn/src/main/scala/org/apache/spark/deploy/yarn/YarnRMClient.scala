@@ -75,7 +75,7 @@ private[spark] class YarnRMClient extends Logging {
 
     logInfo("Registering the ApplicationMaster")
     synchronized {
-      var response = amClient.registerApplicationMaster(Utils.localHostName(), port, uiAddress)
+      var response = amClient.registerApplicationMaster(Utils.localHostName(), port, trackingUrl)
       registered = true
       masterkey = response.getClientToAMTokenMasterKey()
     }
