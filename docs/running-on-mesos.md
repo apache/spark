@@ -482,18 +482,18 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.secret.envkey</code></td>
   <td><code>(none)</code></td>
   <td>
-    If set, the contents of the secret referenced by
-    spark.mesos.driver.secret.name will be written to the provided
-    environment variable in the driver's process.
+    A comma-seperated list that, if set, the contents of the secret referenced 
+    by spark.mesos.driver.secret.name or spark.mesos.driver.value will be 
+    written to the provided environment variable in the driver's process.
   </td>
   </tr>
   <tr>
 <td><code>spark.mesos.driver.secret.filename</code></td>
   <td><code>(none)</code></td>
   <td>
-    If set, the contents of the secret referenced by
-    spark.mesos.driver.secret.name will be written to the provided
-    file.  Relative paths are relative to the container's work
+    A comma-seperated list that, if set, the contents of the secret referenced by
+    spark.mesos.driver.secret.name or spark.mesos.driver.secret.value will be 
+    written to the provided file.  Relative paths are relative to the container's work
     directory.  Absolute paths must already exist.  Consult the Mesos Secret
     protobuf for more information.
   </td>
@@ -502,7 +502,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.secret.name</code></td>
   <td><code>(none)</code></td>
   <td>
-    Set the secret's reference name.  Consult the Mesos Secret
+    A comma-seperated list of secret references.  Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.secret.value</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-seperated list of secret values.  Consult the Mesos Secret
     protobuf for more information.
   </td>
 </tr>
