@@ -461,7 +461,8 @@ object HDFSMetadataLog {
         if (minBatchId != startId.get) {
           val missingBatchIds = startId.get to minBatchId
           throw new IllegalStateException(
-            s"batches (${missingBatchIds.mkString(", ")}) don't exist")
+            s"batches (${missingBatchIds.mkString(", ")}) don't exist " +
+              s"(startId: $startId, endId: $endId)")
         }
       }
 
@@ -471,7 +472,8 @@ object HDFSMetadataLog {
         if (maxBatchId != endId.get) {
           val missingBatchIds = maxBatchId to endId.get
           throw new IllegalStateException(
-            s"batches (${missingBatchIds.mkString(", ")}) don't  exist")
+            s"batches (${missingBatchIds.mkString(", ")}) don't  exist " +
+              s"(startId: $startId, endId: $endId)")
         }
       }
     }
@@ -481,7 +483,8 @@ object HDFSMetadataLog {
       val maxBatchId = batchIds.last
       val missingBatchIds = (minBatchId to maxBatchId).toSet -- batchIds
       if (missingBatchIds.nonEmpty) {
-        throw new IllegalStateException(s"batches (${missingBatchIds.mkString(", ")}) don't exist")
+        throw new IllegalStateException(s"batches (${missingBatchIds.mkString(", ")}) " +
+          s"don't exist (startId: $startId, endId: $endId)")
       }
     }
   }
