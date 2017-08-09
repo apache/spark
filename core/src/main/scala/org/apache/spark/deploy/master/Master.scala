@@ -133,6 +133,7 @@ private[deploy] class Master(
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     if (reverseProxy) {
       masterWebUiUrl = conf.get("spark.ui.reverseProxyUrl", masterWebUiUrl)
+      webUi.addProxy()
       logInfo(s"Spark Master is acting as a reverse proxy. Master, Workers and " +
        s"Applications UIs are available at $masterWebUiUrl")
     }
@@ -769,9 +770,6 @@ private[deploy] class Master(
     workers += worker
     idToWorker(worker.id) = worker
     addressToWorker(workerAddress) = worker
-    if (reverseProxy) {
-       webUi.addProxyTargets(worker.id, worker.webUiAddress)
-    }
     true
   }
 
@@ -780,9 +778,7 @@ private[deploy] class Master(
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
     addressToWorker -= worker.endpoint.address
-    if (reverseProxy) {
-      webUi.removeProxyTargets(worker.id)
-    }
+
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
       exec.application.driver.send(ExecutorUpdated(
@@ -844,9 +840,6 @@ private[deploy] class Master(
     endpointToApp(app.driver) = app
     addressToApp(appAddress) = app
     waitingApps += app
-    if (reverseProxy) {
-      webUi.addProxyTargets(app.id, app.desc.appUiUrl)
-    }
   }
 
   private def finishApplication(app: ApplicationInfo) {
@@ -860,9 +853,7 @@ private[deploy] class Master(
       idToApp -= app.id
       endpointToApp -= app.driver
       addressToApp -= app.driver.address
-      if (reverseProxy) {
-        webUi.removeProxyTargets(app.id)
-      }
+
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach { a =>

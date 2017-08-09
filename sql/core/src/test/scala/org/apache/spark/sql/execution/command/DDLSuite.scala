@@ -68,6 +68,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
+      createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
   }
 

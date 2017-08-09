@@ -25,7 +25,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.types.{CalendarIntervalType, DateType, IntegerType, TimestampType}
 
 /**
  * This class calculates and outputs (windowed) aggregates over the rows in a single (sorted)
@@ -139,7 +141,12 @@ case class WindowExec(
         }
 
         // Create the projection which returns the current 'value' modified by adding the offset.
-        val boundExpr = Add(expr, Cast(boundOffset, expr.dataType))
+        val boundExpr = (expr.dataType, boundOffset.dataType) match {
+          case (DateType, IntegerType) => DateAdd(expr, boundOffset)
+          case (TimestampType, CalendarIntervalType) =>
+            TimeAdd(expr, boundOffset, Some(conf.sessionLocalTimeZone))
+          case (a, b) if a== b => Add(expr, boundOffset)
+        }
         val bound = newMutableProjection(boundExpr :: Nil, child.output)
 
         // Construct the ordering. This is used to compare the result of current value projection

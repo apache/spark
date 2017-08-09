@@ -205,6 +205,9 @@ case class BucketSpec(
  *                           configured.
  * @param ignoredProperties is a list of table properties that are used by the underlying table
  *                          but ignored by Spark SQL yet.
+ * @param createVersion records the version of Spark that created this table metadata. The default
+ *                      is an empty string. We expect it will be read from the catalog or filled by
+ *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -217,6 +220,7 @@ case class CatalogTable(
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
+    createVersion: String = "",
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
@@ -302,8 +306,9 @@ case class CatalogTable(
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner.nonEmpty) map.put("Owner", owner)
-    map.put("Created", new Date(createTime).toString)
+    map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Created By", "Spark " + createVersion)
     map.put("Type", tableType.name)
     provider.foreach(map.put("Provider", _))
     bucketSpec.foreach(map ++= _.toLinkedHashMap)
