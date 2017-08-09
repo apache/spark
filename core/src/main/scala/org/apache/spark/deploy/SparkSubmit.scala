@@ -494,6 +494,10 @@ object SparkSubmit extends CommandLineUtils {
     if (deployMode == CLIENT || isYarnCluster) {
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {
+        val hadoopConf = new HadoopConfiguration()
+        args.primaryResource =
+          Option(args.primaryResource).map(
+            downloadFile(_, targetDir, args.sparkProperties, hadoopConf)).orNull
         childClasspath += args.primaryResource
       }
       if (args.jars != null) { childClasspath ++= args.jars.split(",") }
