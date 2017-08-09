@@ -940,7 +940,7 @@ private[spark] object Utils extends Logging {
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
-    customHostname.getOrElse(localIpAddress.getCanonicalHostName)
+    customHostname.getOrElse(localIpAddress.getHostAddress)
   }
 
   /**
