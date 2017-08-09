@@ -348,7 +348,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes Project operator to both sides of a UNION operator.
+ * Pushes Project operator to both sides of a Union operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
