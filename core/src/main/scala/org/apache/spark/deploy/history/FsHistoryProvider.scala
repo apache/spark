@@ -714,11 +714,11 @@ private class KVStoreScalaSerializer extends KVStoreSerializer {
 
 }
 
-case class KVStoreMetadata(
+private[history] case class KVStoreMetadata(
   val version: Long,
   val logDir: String)
 
-case class LogInfo(
+private[history] case class LogInfo(
   @KVIndexParam val logPath: String,
   val fileSize: Long)
 
