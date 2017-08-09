@@ -356,7 +356,7 @@ class SharedReadWrite():
         - save metadata to path/metadata
         - save stages to stages/IDX_UID
         """
-        stageUids = map(lambda x: x.uid, stages)
+        stageUids = [stage.uid for stage in stages]
         jsonParams = {'stageUids': stageUids, 'savedAsPython': True}
         DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams)
         stagesDir = os.path.join(path, "stages")
