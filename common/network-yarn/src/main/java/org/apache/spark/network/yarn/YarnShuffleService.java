@@ -333,6 +333,17 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
+   * Check the chosen DB file available or not.
+   */
+  protected Boolean checkFileAvailable(File file) {
+      if (file.canWrite()){
+        return true;
+      }
+
+      return false;
+  }
+
+  /**
    * Figure out the recovery path and handle moving the DB if YARN NM recovery gets enabled
    * when it previously was not. If YARN NM recovery is enabled it uses that path, otherwise
    * it will uses a YARN local dir.
@@ -340,7 +351,7 @@ public class YarnShuffleService extends AuxiliaryService {
   protected File initRecoveryDb(String dbName) {
     if (_recoveryPath != null) {
         File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
-        if (recoveryFile.exists()) {
+        if (recoveryFile.exists() && checkFileAvailable(recoveryFile)) {
           return recoveryFile;
         }
     }
@@ -348,12 +359,16 @@ public class YarnShuffleService extends AuxiliaryService {
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
       File f = new File(new Path(dir).toUri().getPath(), dbName);
+      // 1. `_recoveryPath` not exists, `f` should be writable;
+      // 2. `_recoveryPath` exists, `newLoc` should be writable;
       if (f.exists()) {
         if (_recoveryPath == null) {
-          // If NM recovery is not enabled, we should specify the recovery path using NM local
-          // dirs, which is compatible with the old code.
-          _recoveryPath = new Path(dir);
-          return f;
+          if (checkFileAvailable(f)) {
+            // If NM recovery is not enabled, we should specify the recovery path using NM local
+            // dirs, which is compatible with the old code.
+            _recoveryPath = new Path(dir);
+            return f;
+          }
         } else {
           // If the recovery path is set then either NM recovery is enabled or another recovery
           // DB has been initialized. If NM recovery is enabled and had set the recovery path
@@ -374,10 +389,25 @@ public class YarnShuffleService extends AuxiliaryService {
                 dbName, _recoveryPath.toString(), e);
             }
           }
-          return new File(newLoc.toUri().getPath());
+          File newLocFile = new File(newLoc.toUri().getPath());
+          if (checkFileAvailable(newLocFile)) {
+            return newLocFile;
+          }
         }
       }
     }
+
+    // Find a local_dir which is writable, to avoid creating ldb in a read-only disk.
+    if (_recoveryPath == null) {
+      for (String dir : localDirs) {
+        File f = new File(dir);
+        if (checkFileAvailable(f)) {
+          _recoveryPath = new Path(dir);
+          break;
+        }
+      }
+    }
+
     if (_recoveryPath == null) {
       _recoveryPath = new Path(localDirs[0]);
     }
