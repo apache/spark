@@ -126,6 +126,8 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
+  private[spark] val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
+
   private[spark] val KUBERNETES_DRIVER_ANNOTATIONS =
     ConfigBuilder("spark.kubernetes.driver.annotations")
       .doc("Custom annotations that will be added to the driver pod. This should be a" +

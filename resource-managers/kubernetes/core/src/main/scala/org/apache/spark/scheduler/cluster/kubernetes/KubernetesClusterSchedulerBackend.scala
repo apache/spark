@@ -457,7 +457,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .withValue(cp)
         .build()
     }
-    val requiredEnv = Seq(
+    val requiredEnv = (Seq(
       (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       // Executor backend expects integral value for executor cores, so round it up to an int.
@@ -465,7 +465,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
       (ENV_EXECUTOR_MEMORY, executorMemoryString),
       (ENV_APPLICATION_ID, applicationId()),
       (ENV_EXECUTOR_ID, executorId),
-      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*"))
+      (ENV_MOUNTED_CLASSPATH, s"$executorJarsDownloadDir/*")) ++ sc.executorEnvs.toSeq)
       .map(env => new EnvVarBuilder()
         .withName(env._1)
         .withValue(env._2)

@@ -770,6 +770,22 @@ from the other deployment modes. See the [configuration page](configuration.html
     <code>myIdentifier</code>. Multiple node selector keys can be added by setting multiple configurations with this prefix.
   </td>
 </tr>
+<tr>
+  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td> 
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to
+    the Executor process. The user can specify multiple of these to set multiple environment variables.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driverEnv.[EnvironmentVariableName]</code></td> 
+  <td>(none)</td>
+  <td>
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to
+    the Driver process. The user can specify multiple of these to set multiple environment variables.
+  </td>
+</tr>
 </table>
 
 
