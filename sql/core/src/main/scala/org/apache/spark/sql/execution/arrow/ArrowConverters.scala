@@ -113,6 +113,10 @@ private[sql] object ArrowConverters {
     }
   }
 
+  /**
+   * Maps Iterator from ArrowPayload to InternalRow. Returns a pair containing the row iterator
+   * and the schema from the first batch of Arrow data read.
+   */
   private[sql] def fromPayloadIterator(
       payloadIter: Iterator[ArrowPayload],
       context: TaskContext): (Iterator[InternalRow], StructType) = {
