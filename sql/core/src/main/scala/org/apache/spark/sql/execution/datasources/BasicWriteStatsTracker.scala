@@ -46,12 +46,12 @@ case class BasicWriteTaskStats(
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   extends WriteTaskStatsTracker {
 
-  var numPartitions: Int = 0
-  var numFiles: Int = 0
-  var numBytes: Long = 0L
-  var numRows: Long = 0L
+  private[this] var numPartitions: Int = 0
+  private[this] var numFiles: Int = 0
+  private[this] var numBytes: Long = 0L
+  private[this] var numRows: Long = 0L
 
-  var curFile: String = null
+  private[this] var curFile: String = null
 
 
   private def getFileSize(filePath: String): Long = {

@@ -286,16 +286,19 @@ object FileFormatWriter extends Logging {
       statsPerTask: Seq[Seq[WriteTaskStats]])
     : Unit = {
 
+    val numStatsTrackers = statsTrackers.length
+    assert(statsPerTask.forall(_.length == numStatsTrackers),
+      s"""Every WriteTask should have produced one `WriteTaskStats` object for every tracker.
+         |There are ${numStatsTrackers} statsTrackers, but some task returned
+         |${statsPerTask.find(_.length != numStatsTrackers).get.length} results instead.
+       """.stripMargin)
+
     val statsPerTracker = if (statsPerTask.nonEmpty) {
       statsPerTask.transpose
     } else {
       statsTrackers.map(_ => Seq.empty)
     }
-    assert(statsTrackers.length == statsPerTracker.length,
-      s"""Every WriteTask should have produced one `WriteTaskStats` object for every tracker.
-         |statsTrackers = ${statsTrackers}
-         |statsPerTracker = ${statsPerTracker}
-     """.stripMargin)
+
     statsTrackers.zip(statsPerTracker).foreach {
       case (statsTracker, stats) => statsTracker.processStats(stats)
     }
