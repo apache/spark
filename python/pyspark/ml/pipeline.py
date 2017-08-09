@@ -131,11 +131,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     @since("2.0.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        allStagesAreJava = True
-        stages = self.getStages()
-        for stage in stages:
-            if not isinstance(stage, JavaMLWritable):
-                allStagesAreJava = False
+        allStagesAreJava = SharedReadWrite.checkStagesForJava(self.getStages())
         if allStagesAreJava:
             return JavaMLWriter(self)
         return PipelineWriter(self)
@@ -282,11 +278,7 @@ class PipelineModel(Model, MLReadable, MLWritable):
     @since("2.0.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        allStagesAreJava = True
-        stages = self.stages
-        for stage in stages:
-            if not isinstance(stage, JavaMLWritable):
-                allStagesAreJava = False
+        allStagesAreJava = SharedReadWrite.checkStagesForJava(self.stages)
         if allStagesAreJava:
             return JavaMLWriter(self)
         return PipelineModelWriter(self)
@@ -337,6 +329,16 @@ class SharedReadWrite():
 
     .. versionadded:: 2.3.0
     """
+
+    @staticmethod
+    def checkStagesForJava(stages):
+        allStagesAreJava = True
+        stages = self.stages
+        for stage in stages:
+            if not isinstance(stage, JavaMLWritable):
+                allStagesAreJava = False
+                break
+        return allStagesAreJava
 
     @staticmethod
     def validateStages(stages):
