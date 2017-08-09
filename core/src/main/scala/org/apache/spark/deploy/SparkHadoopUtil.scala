@@ -138,8 +138,7 @@ class SparkHadoopUtil extends Logging {
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
     if (!new File(keytabFilename).exists()) {
-      throw new SparkException(s"Keytab file: ${keytabFilename}" +
-        " specified in spark.yarn.keytab does not exist")
+      throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
       logInfo("Attempting to login to Kerberos" +
         s" using principal: ${principalName} and keytab: ${keytabFilename}")

@@ -230,6 +230,11 @@ private[spark] object HiveUtils extends Logging {
     }.toMap
   }
 
+  /**
+   * Check current Thread's SessionState type
+   * @return true when SessionState.get returns an instance of CliSessionState,
+   *         false when it gets non-CliSessionState instance or null
+   */
   def isCliSessionState(): Boolean = {
     val state = SessionState.get
     var temp: Class[_] = if (state != null) state.getClass else null

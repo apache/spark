@@ -28,7 +28,7 @@ import javax.net.ssl._
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-import scala.util.{Failure, Properties, Success, Try}
+import scala.util.Properties
 
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils

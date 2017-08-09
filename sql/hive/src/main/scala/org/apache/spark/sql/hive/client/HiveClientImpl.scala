@@ -108,8 +108,7 @@ private[hive] class HiveClientImpl(
     if (clientLoader.isolationOn) {
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
-      // Set up kerberos credentials for UserGroupInformation.loginUser within
-      // current class loader
+      // Set up kerberos credentials for UserGroupInformation.loginUser within current class loader
       if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
         val principal = sparkConf.get("spark.yarn.principal")
         val keytab = sparkConf.get("spark.yarn.keytab")
@@ -121,7 +120,16 @@ private[hive] class HiveClientImpl(
         Thread.currentThread().setContextClassLoader(original)
       }
     } else {
-      Option(SessionState.get()).getOrElse(newState())
+      // Isolation off means we detect a CliSessionState instance in current thread. 1: Inside the
+      // spark project, we have already started a CliSessionState  in `SparkSQLCLIDriver`, which
+      // contains information like configurations from command lines. Later, we call
+      // `SparkSQLEnv.init()` there, which would new a hive client again into this part again. so we
+      // should keep those configurations and reuse the existing instance of `CliSessionState`. In
+      // this case, SessionState.get will always return a CliSessionState.
+      // In another case, a user app may start a CliSessionState outside spark project with built in
+      // hive jars, which will turn off isolation, after that, SessionSate.detachSession is called
+      // to remove the current state, hive client created later will init its state by newState()
+      Option(SessionState.get).getOrElse(newState())
     }
   }
 
@@ -151,11 +159,11 @@ private[hive] class HiveClientImpl(
     // 3: we set all entries in config to this hiveConf.
     (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
       ++ sparkConf.getAll.toMap ++ extraConfig).foreach { case (k, v) =>
-      if (k.toLowerCase(Locale.ROOT).contains("password")) {
-        logDebug(s"Applying Spark config to Hive Conf: $k=xxx")
-      } else {
-        logDebug(s"Applying Spark config to Hive Conf: $k=$v")
-      }
+      logDebug(
+        s"""
+           |Applying Hadoop/Hive/Spark and extra properties to Hive Conf:
+           |$k=${if (k.toLowerCase(Locale.ROOT).contains("password")) "xxx" else v}
+         """.stripMargin)
       hiveConf.set(k, v)
     }
     val state = new SessionState(hiveConf)
