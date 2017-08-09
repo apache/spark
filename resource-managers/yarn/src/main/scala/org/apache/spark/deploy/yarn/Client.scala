@@ -18,17 +18,24 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, InetSocketAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.PrivilegedExceptionAction
+import java.util.concurrent.TimeoutException
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
+import scala.concurrent.ExecutionContext
+import scala.util.control.Breaks._
 import scala.util.control.NonFatal
+import scala.collection.JavaConversions._
 
+import io.netty.handler.codec.base64.Base64;
+import io.netty.buffer.Unpooled;
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.base.Objects
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -45,16 +52,18 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
-import org.apache.hadoop.yarn.util.Records
+import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.yarn.ApplicationMasterMessages.KillApplication
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.util.{CallerContext, Utils}
+import org.apache.spark.util.{CallerContext, RpcUtils, SparkExitCode, ThreadUtils, Utils}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef,RpcEnv, ThreadSafeRpcEndpoint}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1149,6 +1158,90 @@ private[spark] class Client(
     }
   }
 
+  def killSparkApplication(securityManager: SecurityManager): Unit = {
+    setupCredentials()
+    yarnClient.init(yarnConf)
+    yarnClient.start
+    val appId = ConverterUtils.toApplicationId(args.userArgs(0))
+    val AMEndpoint = setupAMConnection(appId, securityManager)
+    try {
+      val timeout = RpcUtils.askRpcTimeout(sparkConf)
+      val success = timeout.awaitResult(AMEndpoint.ask[Boolean](KillApplication))
+      if (!success) {
+        throw new SparkException(s"Current user doesn't have modify ACL")
+        return
+      }
+    } catch {
+      case e: TimeoutException =>
+        throw new SparkException(s"Timed out waiting to kill the application: $appId")
+    }
+
+    var currentTime = System.currentTimeMillis
+    val timeKillIssued = currentTime
+
+    val killTimeOut  =sparkConf.get(CLIENT_TO_AM_HARD_KILL_TIMEOUT)
+    while ((currentTime< timeKillIssued + killTimeOut)
+        && !isAppInTerminalState(appId)) {
+      try
+        Thread.sleep(1000L)
+      catch {
+        case ie: InterruptedException => break
+      }
+      currentTime = System.currentTimeMillis
+    }
+    if (!isAppInTerminalState(appId)) {
+      yarnClient.killApplication(appId)
+    }
+  }
+
+  private def setupAMConnection(appId: ApplicationId, securityManager: SecurityManager): RpcEndpointRef = {
+    logInfo(s"APP ID $appId")
+    val report = getApplicationReport(appId)
+    val state = report.getYarnApplicationState
+    if (report.getHost() == null || "".equals(report.getHost()) || "N/A".equals(report.getHost())) {
+      throw new SparkException(s"AM for $appId not assigned or dont have view ACL for it")
+    }
+    if ( state != YarnApplicationState.RUNNING) {
+      throw new SparkException(s"Application $appId needs to be in RUNNING")
+    }
+
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val serviceAddr = new InetSocketAddress(report.getHost(), report.getRpcPort())
+
+      val clientToAMToken = report.getClientToAMToken
+      val token = ConverterUtils.convertFromYarn(clientToAMToken, serviceAddr)
+
+      // Fetch Identifier, secretkey from the report, encode it  and Set it in the Security Manager
+      val userName = token.getIdentifier
+      var userstring = Base64.encode(Unpooled.wrappedBuffer(userName)).toString(UTF_8);
+      securityManager.setSaslUser(userstring)
+      val secretkey = token.getPassword
+      var secretkeystring = Base64.encode(Unpooled.wrappedBuffer(secretkey)).toString(UTF_8);
+      securityManager.setSecretKey(secretkeystring)
+    }
+
+    sparkConf.set("spark.rpc.connectionUsingTokens","true")
+    val rpcEnv =
+      RpcEnv.create("yarnDriverClient", Utils.localHostName(), 0, sparkConf, securityManager)
+    val AMHostPort = RpcAddress(report.getHost, report.getRpcPort)
+    val AMEndpoint = rpcEnv.setupEndpointRef(AMHostPort,
+      ApplicationMaster.ENDPOINT_NAME)
+
+    AMEndpoint
+  }
+
+  private def checkAppStatus(appId: ApplicationId): YarnApplicationState = {
+    val report = getApplicationReport(appId)
+    report.getYarnApplicationState
+  }
+
+  private def isAppInTerminalState(appId: ApplicationId): Boolean = {
+    var status = checkAppStatus(appId)
+    return (status == YarnApplicationState.KILLED
+        || status == YarnApplicationState.FAILED
+        || status == YarnApplicationState.FINISHED)
+  }
+
   private def findPySparkArchives(): Seq[String] = {
     sys.env.get("PYSPARK_ARCHIVES_PATH")
       .map(_.split(",").toSeq)
@@ -1184,6 +1277,14 @@ private object Client extends Logging {
     sparkConf.remove("spark.files")
     val args = new ClientArguments(argStrings)
     new Client(args, sparkConf).run()
+  }
+
+  def yarnKillSubmission(argStrings: Array[String]): Unit = {
+    System.setProperty("SPARK_YARN_MODE", "true")
+    val sparkConf = new SparkConf
+    val args = new ClientArguments(argStrings)
+
+    new Client(args, sparkConf).killSparkApplication(new SecurityManager(sparkConf))
   }
 
   // Alias for the user jar

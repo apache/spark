@@ -121,8 +121,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv, numUsableCores: Int) exte
 
   /** Posts a message sent by a remote endpoint. */
   def postRemoteMessage(message: RequestMessage, callback: RpcResponseCallback): Unit = {
-    val rpcCallContext =
-      new RemoteNettyRpcCallContext(nettyEnv, callback, message.senderAddress)
+    val rpcCallContext = new RemoteNettyRpcCallContext(nettyEnv, callback,
+      message.senderAddress, message.senderUserName)
     val rpcMessage = RpcMessage(message.senderAddress, message.content, rpcCallContext)
     postMessage(message.receiver.name, rpcMessage, (e) => callback.onFailure(e))
   }

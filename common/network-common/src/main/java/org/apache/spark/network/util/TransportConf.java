@@ -108,6 +108,9 @@ public class TransportConf {
   /** Number of threads used in the client thread pool. Default to 0, which is 2x#cores. */
   public int clientThreads() { return conf.getInt(SPARK_NETWORK_IO_CLIENTTHREADS_KEY, 0); }
 
+  /** If true, the current RPC connection is a Client to AM connection */
+  public boolean isConnectionUsingTokens() { return conf.getBoolean("spark.rpc.connectionUsingTokens", false); }
+
   /**
    * Receive buffer size (SO_RCVBUF).
    * Note: the optimal size for receive buffer and send buffer should be

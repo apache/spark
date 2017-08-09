@@ -453,6 +453,23 @@ To use a custom metrics.properties for the application master and executors, upd
   name matches both the include and the exclude pattern, this file will be excluded eventually.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.clientToAM.port</code></td>
+  <td>0</td>
+  <td>
+  Port the application master listens on for connections from the client.
+  This port is specified when registering the AM with YARN so that client can later know which
+  port to connect to from the application Report.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.hardKillTimeout</code></td>
+  <td>60s</td>
+  <td>
+  Number of milliseconds to wait before the job client kills the application.
+  After the wait, client will attempt to terminate the YARN application.
+  </td>
+</tr>
 </table>
 
 # Important notes

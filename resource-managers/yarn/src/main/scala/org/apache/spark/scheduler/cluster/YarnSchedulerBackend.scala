@@ -24,6 +24,8 @@ import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records.{ApplicationAttemptId, ApplicationId}
+import org.apache.hadoop.io.DataOutputBuffer
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
@@ -271,6 +273,8 @@ private[spark] abstract class YarnSchedulerBackend(
             logError("Error requesting driver to remove executor" +
               s" $executorId for reason $reason", e)
         }(ThreadUtils.sameThread)
+      case StopSparkContext =>
+        sc.stop
     }
 
 

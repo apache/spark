@@ -23,7 +23,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.client.RpcResponseCallback
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
 
-private[netty] abstract class NettyRpcCallContext(override val senderAddress: RpcAddress)
+private[netty] abstract class NettyRpcCallContext(
+    override val senderAddress: RpcAddress,
+    override val senderUserName: String = null)
   extends RpcCallContext with Logging {
 
   protected def send(message: Any): Unit
@@ -57,8 +59,9 @@ private[netty] class LocalNettyRpcCallContext(
 private[netty] class RemoteNettyRpcCallContext(
     nettyEnv: NettyRpcEnv,
     callback: RpcResponseCallback,
-    senderAddress: RpcAddress)
-  extends NettyRpcCallContext(senderAddress) {
+    senderAddress: RpcAddress,
+    senderUserName: String)
+  extends NettyRpcCallContext(senderAddress, senderUserName) {
 
   override protected def send(message: Any): Unit = {
     val reply = nettyEnv.serialize(message)

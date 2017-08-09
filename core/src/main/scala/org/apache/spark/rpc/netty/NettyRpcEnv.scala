@@ -543,7 +543,8 @@ private[netty] class NettyRpcEndpointRef(
 private[netty] class RequestMessage(
     val senderAddress: RpcAddress,
     val receiver: NettyRpcEndpointRef,
-    val content: Any) {
+    val content: Any,
+    val senderUserName: String = null){
 
   /** Manually serialize [[RequestMessage]] to minimize the size. */
   def serialize(nettyEnv: NettyRpcEnv): ByteBuffer = {
@@ -653,9 +654,15 @@ private[netty] class NettyRpcHandler(
     assert(addr != null)
     val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
     val requestMessage = RequestMessage(nettyEnv, client, message)
+
+    if (client.getClientUser != null) {
+      requestMessage = RequestMessage(requestMessage.senderAddress, requestMessage.receiver,
+        requestMessage.content, client.getClientUser)
+    }
     if (requestMessage.senderAddress == null) {
       // Create a new message with the socket address of the client as the sender.
-      new RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content)
+      new RequestMessage(clientAddr, requestMessage.receiver, requestMessage.content,
+        client.getClientUser)
     } else {
       // The remote RpcEnv listens to some port, we should also fire a RemoteProcessConnected for
       // the listening address

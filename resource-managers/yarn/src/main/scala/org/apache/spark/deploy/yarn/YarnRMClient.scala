@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.nio.ByteBuffer
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.yarn.api.records._
@@ -39,6 +41,7 @@ private[spark] class YarnRMClient extends Logging {
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
   private var registered: Boolean = false
+  private var masterkey: ByteBuffer = _
 
   /**
    * Registers the application master with the RM.
@@ -58,7 +61,8 @@ private[spark] class YarnRMClient extends Logging {
       uiAddress: Option[String],
       uiHistoryAddress: String,
       securityMgr: SecurityManager,
-      localResources: Map[String, LocalResource]
+      localResources: Map[String, LocalResource],
+      port: Int = 0
     ): YarnAllocator = {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
@@ -71,8 +75,9 @@ private[spark] class YarnRMClient extends Logging {
 
     logInfo("Registering the ApplicationMaster")
     synchronized {
-      amClient.registerApplicationMaster(Utils.localHostName(), 0, trackingUrl)
+      var response = amClient.registerApplicationMaster(Utils.localHostName(), port, uiAddress)
       registered = true
+      masterkey = response.getClientToAMTokenMasterKey()
     }
     new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
       localResources, new SparkRackResolver())
@@ -89,6 +94,9 @@ private[spark] class YarnRMClient extends Logging {
       amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
     }
   }
+  /** Obtain the MasterKey reported back from YARN when Registering AM*/
+  def getMasterKey(): ByteBuffer = masterkey
+
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId = {

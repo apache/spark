@@ -95,7 +95,7 @@ public class SaslRpcHandler extends RpcHandler {
         // First message in the handshake, setup the necessary state.
         client.setClientId(saslMessage.appId);
         saslServer = new SparkSaslServer(saslMessage.appId, secretKeyHolder,
-          conf.saslServerAlwaysEncrypt());
+          conf.saslServerAlwaysEncrypt(), conf);
       }
 
       byte[] response;
@@ -114,6 +114,7 @@ public class SaslRpcHandler extends RpcHandler {
     // method returns. This assumes that the code ensures, through other means, that no outbound
     // messages are being written to the channel while negotiation is still going on.
     if (saslServer.isComplete()) {
+      cient.setClientUser(saslServer.getUserName());
       if (!SparkSaslServer.QOP_AUTH_CONF.equals(saslServer.getNegotiatedProperty(Sasl.QOP))) {
         logger.debug("SASL authentication successful for channel {}", client);
         complete(true);
