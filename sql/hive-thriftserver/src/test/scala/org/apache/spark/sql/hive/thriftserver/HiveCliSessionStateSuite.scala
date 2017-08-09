@@ -27,30 +27,38 @@ import org.apache.spark.sql.hive.HiveUtils
 
 class HiveCliSessionStateSuite extends SparkFunSuite {
 
+  def withSessionClear(f: () => Unit): Unit = {
+    try f finally SessionState.detachSession()
+  }
+
   test("CliSessionState will be reused") {
-    val hiveConf = new HiveConf(classOf[SessionState])
-    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
-      case (key, value) => hiveConf.set(key, value)
+    withSessionClear { () =>
+      val hiveConf = new HiveConf(classOf[SessionState])
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+        case (key, value) => hiveConf.set(key, value)
+      }
+      val sessionState: SessionState = new CliSessionState(hiveConf)
+      SessionState.start(sessionState)
+      val s1 = SessionState.get
+      val sparkConf = new SparkConf()
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+      val s2 = HiveUtils.newClientForMetadata(sparkConf, hadoopConf).getState
+      assert(s1 === s2)
+      assert(s2.isInstanceOf[CliSessionState])
     }
-    val sessionState: SessionState = new CliSessionState(hiveConf)
-    SessionState.start(sessionState)
-    val s1 = SessionState.get
-    val sparkConf = new SparkConf()
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val s2 = HiveUtils.newClientForMetadata(sparkConf, hadoopConf).getState
-    assert(s1 === s2)
-    assert(s2.isInstanceOf[CliSessionState])
   }
 
   test("SessionState will not be reused") {
-    val sparkConf = new SparkConf()
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
-      case (key, value) => hadoopConf.set(key, value)
+    withSessionClear { () =>
+      val sparkConf = new SparkConf()
+      val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
+        case (key, value) => hadoopConf.set(key, value)
+      }
+      val hiveClient = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
+      val s1 = hiveClient.getState
+      val s2 = hiveClient.newSession().getState
+      assert(s1 !== s2)
     }
-    val hiveClient = HiveUtils.newClientForMetadata(sparkConf, hadoopConf)
-    val s1 = hiveClient.getState
-    val s2 = hiveClient.newSession().getState
-    assert(s1 !== s2)
   }
 }
