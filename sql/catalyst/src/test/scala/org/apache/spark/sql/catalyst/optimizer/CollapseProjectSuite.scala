@@ -119,4 +119,29 @@ class CollapseProjectSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("collapse one nondeterministic, one deterministic, dependent projects into one") {
+    val query = testRelation
+      .select(('a).as('a_plus))
+      .select(Rand(10).as('rand), 'a_plus)
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("collapse one nondeterministic, independent projects into two") {
+    val query = testRelation
+      .select(('a ).as('a_plus), ('b).as('b_plus))
+      .select(Rand(10).as('rand))
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 }
