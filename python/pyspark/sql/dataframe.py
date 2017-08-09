@@ -1837,7 +1837,7 @@ class DataFrameNaFunctions(object):
 
     fill.__doc__ = DataFrame.fillna.__doc__
 
-    def replace(self, to_replace, value, subset=None):
+    def replace(self, to_replace, value=None, subset=None):
         return self.df.replace(to_replace, value, subset)
 
     replace.__doc__ = DataFrame.replace.__doc__
