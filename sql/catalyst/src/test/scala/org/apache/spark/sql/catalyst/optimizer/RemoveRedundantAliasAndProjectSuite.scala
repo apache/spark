@@ -31,7 +31,7 @@ class RemoveRedundantAliasAndProjectSuite extends PlanTest with PredicateHelper 
     val batches = Batch(
       "RemoveAliasOnlyProject",
       FixedPoint(50),
-      PushProjection,
+      PushProjectionThroughUnion,
       RemoveRedundantAliases,
       RemoveRedundantProject) :: Nil
   }

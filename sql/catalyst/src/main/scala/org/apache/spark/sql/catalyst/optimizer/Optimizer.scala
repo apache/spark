@@ -76,7 +76,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       RemoveRepetitionFromGroupExpressions) ::
     Batch("Operator Optimizations", fixedPoint, Seq(
       // Operator push down
-      PushProjection,
+      PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
@@ -250,7 +250,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         }
 
         // Create the attribute mapping. Note that the currentNextAttrPairs can contain duplicate
-        // keys in case of Union (this is caused by the PushProjection rule); in this
+        // keys in case of Union (this is caused by the PushProjectionThroughUnion rule); in this
         // case we use the the first mapping (which should be provided by the first child).
         val mapping = AttributeMap(currentNextAttrPairs)
 
@@ -285,7 +285,7 @@ object RemoveRedundantProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[LocalLimit]] beneath UNION ALL, streamed inputs of outer joins, and watermark.
+ * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
@@ -348,17 +348,14 @@ object LimitPushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes Project operator through a given operation.
+ * Pushes Project operator to both sides of a UNION operator.
  * Operations that are safe to pushdown are listed as follows.
  * Union:
  * Right now, Union means UNION ALL, which does not de-duplicate rows. So, it is
  * safe to pushdown Filters and Projections through it. Filter pushdown is handled by another
  * rule PushDownPredicate. Once we add UNION DISTINCT, we will not be able to pushdown Projections.
- * EventTimeWatermark:
- * Watermark operations are pass-through. So it's safe to push a Project through it as long as the
- * field with the watermark is retained.
  */
-object PushProjection extends Rule[LogicalPlan] with PredicateHelper {
+object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper {
 
   /**
    * Maps Attributes from the left side to the corresponding Attribute on the right side.
@@ -410,14 +407,6 @@ object PushProjection extends Rule[LogicalPlan] with PredicateHelper {
           Project(projectList.map(pushToRight(_, rewrites)), child)
         }
         Union(newFirstChild +: newOtherChildren)
-      } else {
-        p
-      }
-
-    case p @ Project(projectList, watermark: EventTimeWatermark) =>
-      // Push as long as the project doesn't eliminates the attribute.
-      if (projectList.exists(_.references.contains(watermark.eventTime))) {
-        watermark.copy(child = Project(projectList, watermark.child))
       } else {
         p
       }
@@ -878,12 +867,6 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
-    case filter @ Filter(_, u: UnaryNode)
-        if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u.child) { predicate =>
-        u.withNewChildren(Seq(Filter(predicate, u.child)))
-      }
-
     case filter @ Filter(condition, watermark: EventTimeWatermark) =>
       // We can only push deterministic predicates which don't reference the watermark attribute.
       // We could in theory span() only on determinism and pull out deterministic predicates
@@ -901,6 +884,12 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         if (stayUp.isEmpty) newWatermark else Filter(stayUp.reduceLeft(And), newWatermark)
       } else {
         filter
+      }
+
+    case filter @ Filter(_, u: UnaryNode)
+        if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
+      pushDownPredicate(filter, u.child) { predicate =>
+        u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
 

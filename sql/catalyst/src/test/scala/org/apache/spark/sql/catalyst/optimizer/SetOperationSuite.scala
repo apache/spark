@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.unsafe.types.CalendarInterval
 
 class SetOperationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -33,7 +32,7 @@ class SetOperationSuite extends PlanTest {
         EliminateSubqueryAliases) ::
       Batch("Union Pushdown", Once,
         CombineUnions,
-        PushProjection,
+        PushProjectionThroughUnion,
         PushDownPredicate,
         PruneFilters) :: Nil
   }
@@ -144,18 +143,5 @@ class SetOperationSuite extends PlanTest {
       Union(Distinct(Union(query1 :: query2 :: Nil)),
             Distinct(Union(query3 :: query4 :: Nil))).analyze
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
-  }
-
-  test("Push project through watermark when it contains the watermarked attribute") {
-    val interval = new CalendarInterval(2, 2000L)
-    val query = EventTimeWatermark('c, interval, testRelation).select('a, 'c)
-    val correctAnswer = EventTimeWatermark('c, interval, testRelation.select('a, 'c)).analyze
-    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze, checkAnalysis = false)
-  }
-
-  test("Don't push project through watermark when it doesn't contain the attribute") {
-    val interval = new CalendarInterval(2, 2000L)
-    val query = EventTimeWatermark('c, interval, testRelation).select('a, 'b')
-    comparePlans(Optimize.execute(query.analyze), query.analyze, checkAnalysis = false)
   }
 }
