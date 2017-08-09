@@ -73,11 +73,11 @@ public final class ColumnarBatch {
   }
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
-    ColumnVector[] columns = allocateVectors(schema, maxRows, memMode);
-    return create(schema, columns, maxRows);
+    ColumnVector[] columns = allocateCols(schema, maxRows, memMode);
+    return new ColumnarBatch(schema, columns, maxRows);
   }
 
-  private static ColumnVector[] allocateVectors(StructType schema, int maxRows, MemoryMode memMode) {
+  private static ColumnVector[] allocateCols(StructType schema, int maxRows, MemoryMode memMode) {
     ColumnVector[] columns = new ColumnVector[schema.size()];
     for (int i = 0; i < schema.fields().length; ++i) {
       StructField field = schema.fields()[i];
@@ -90,17 +90,10 @@ public final class ColumnarBatch {
       StructType schema,
       ReadOnlyColumnVector[] columns,
       int numRows) {
-    for (ReadOnlyColumnVector c: columns) {
-      assert(c.capacity >= numRows);
-    }
-    ColumnarBatch batch = create(schema, columns, numRows);
+    assert(schema.length() == columns.length);
+    ColumnarBatch batch = new ColumnarBatch(schema, columns, numRows);
     batch.setNumRows(numRows);
     return batch;
-  }
-
-  private static ColumnarBatch create(StructType schema, ColumnVector[] columns, int capacity) {
-    assert(schema.length() == columns.length);
-    return new ColumnarBatch(schema, columns, capacity);
   }
 
   /**
