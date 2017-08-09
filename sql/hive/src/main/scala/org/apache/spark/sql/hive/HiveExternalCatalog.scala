@@ -643,26 +643,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedProperties = rawTable.properties ++ tableMetaToTableProps(rawTable, schema)
 
-    // Detect whether this is a Hive-compatible table.
-    val provider = rawTable.properties.get(DATASOURCE_PROVIDER)
-    val isHiveCompatible = if (provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)) {
-      rawTable.properties.get(DATASOURCE_HIVE_COMPATIBLE) match {
-        case Some(value) =>
-          value.toBoolean
-        case _ =>
-          // If the property is not set, the table may have been created by an old version
-          // of Spark. Detect Hive compatibility by comparing the table's serde with the
-          // serde for the table's data source. If they match, the table is Hive-compatible.
-          // If they don't, they're not, because of some other table property that made it
-          // not initially Hive-compatible.
-          HiveSerDe.sourceToSerDe(provider.get) == rawTable.storage.serde
-      }
-    } else {
-      // All non-DS tables are treated as regular Hive tables.
-      true
-    }
-
-    val updatedTable = if (isHiveCompatible) {
+    val updatedTable = if (isHiveCompatible(rawTable)) {
       val _updated = rawTable.copy(properties = updatedProperties, schema = schema)
       verifyColumnNames(_updated)
       _updated
@@ -1222,6 +1203,27 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   override def listFunctions(db: String, pattern: String): Seq[String] = withClient {
     requireDbExists(db)
     client.listFunctions(db, pattern)
+  }
+
+  /** Detect whether a table is stored with Hive-compatible metadata. */
+  private def isHiveCompatible(table: CatalogTable): Boolean = {
+    val provider = table.provider.orElse(table.properties.get(DATASOURCE_PROVIDER))
+    if (provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)) {
+      table.properties.get(DATASOURCE_HIVE_COMPATIBLE) match {
+        case Some(value) =>
+          value.toBoolean
+        case _ =>
+          // If the property is not set, the table may have been created by an old version
+          // of Spark. Detect Hive compatibility by comparing the table's serde with the
+          // serde for the table's data source. If they match, the table is Hive-compatible.
+          // If they don't, they're not, because of some other table property that made it
+          // not initially Hive-compatible.
+          HiveSerDe.sourceToSerDe(provider.get) == table.storage.serde
+      }
+    } else {
+      // All non-DS tables are treated as regular Hive tables.
+      true
+    }
   }
 
 }
