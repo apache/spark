@@ -369,7 +369,7 @@ class SharedReadWrite():
         """
         Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`
 
-        :return:  (UID, list of stages)
+        :return: (UID, list of stages)
         """
         stagesDir = os.path.join(path, "stages")
         stageUids = metadata['paramMap']['stageUids']
