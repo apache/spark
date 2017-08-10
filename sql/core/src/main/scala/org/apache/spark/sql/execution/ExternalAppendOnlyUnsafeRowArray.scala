@@ -36,11 +36,11 @@ import org.apache.spark.util.collection.unsafe.sort.{UnsafeExternalSorter, Unsaf
  * would flush to disk after [[numRowsSpillThreshold]] is met (or before if there is
  * excessive memory consumption). Setting these threshold involves following trade-offs:
  *
- * - If [[numRowsSpillThreshold]] is too high, the in-memory array may occupy more memory than
- *   is available, resulting in OOM.
- * - If [[numRowsInMemoryBufferThreshold]] is too low, data will be spilled frequently and lead to
- *   excessive disk writes. This may lead to a performance regression compared to the normal
- *   case of using an [[ArrayBuffer]] or [[Array]].
+ * - If [[numRowsInMemoryBufferThreshold]] is too high, the in-memory array may occupy more memory
+ *   than is available, resulting in OOM.
+ * - If [[numRowsSpillThreshold]] is too low, data will be spilled frequently and lead to
+ *   excessive disk writes. This may lead to a performance regression compared to the normal case
+ *   of using an [[ArrayBuffer]] or [[Array]].
  */
 private[sql] class ExternalAppendOnlyUnsafeRowArray(
     taskMemoryManager: TaskMemoryManager,
