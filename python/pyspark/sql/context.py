@@ -174,7 +174,7 @@ class SQLContext(object):
 
     @ignore_unicode_prefix
     @since(1.2)
-    def registerFunction(self, name, f, returnType=StringType()):
+    def registerFunction(self, name, f, returnType=StringType(), nullable=True):
         """Registers a python function (including lambda function) as a UDF
         so it can be used in SQL statements.
 
@@ -204,7 +204,7 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
-        return self.sparkSession.catalog.registerFunction(name, f, returnType)
+        return self.sparkSession.catalog.registerFunction(name, f, returnType, nullable)
 
     @ignore_unicode_prefix
     @since(2.1)
@@ -565,8 +565,8 @@ class UDFRegistration(object):
     def __init__(self, sqlContext):
         self.sqlContext = sqlContext
 
-    def register(self, name, f, returnType=StringType()):
-        return self.sqlContext.registerFunction(name, f, returnType)
+    def register(self, name, f, returnType=StringType(), nullable=True):
+        return self.sqlContext.registerFunction(name, f, returnType, nullable)
 
     def registerJavaFunction(self, name, javaClassName, returnType=None):
         self.sqlContext.registerJavaFunction(name, javaClassName, returnType)

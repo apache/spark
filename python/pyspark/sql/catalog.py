@@ -226,7 +226,7 @@ class Catalog(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def registerFunction(self, name, f, returnType=StringType()):
+    def registerFunction(self, name, f, returnType=StringType(), nullable=True):
         """Registers a python function (including lambda function) as a UDF
         so it can be used in SQL statements.
 
@@ -257,7 +257,7 @@ class Catalog(object):
         [Row(stringLengthInt(test)=4)]
         """
         udf = UserDefinedFunction(f, returnType=returnType, name=name,
-                                  evalType=PythonEvalType.SQL_BATCHED_UDF)
+                                  evalType=PythonEvalType.SQL_BATCHED_UDF, nullable=nullable)
         self._jsparkSession.udf().registerPython(name, udf._judf)
         return udf._wrapped()
 

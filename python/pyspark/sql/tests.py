@@ -518,6 +518,35 @@ class SQLTests(ReusedSQLTestCase):
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udf",
                                 lambda: spark.udf.registerJavaFunction("udf1", "non_existed_udf"))
 
+    def test_udf_no_nulls(self):
+        from pyspark.sql.functions import udf
+        plus_four = udf(lambda x: x + 4, IntegerType(), False)
+        df = self.spark.range(10)
+        res = df.select(plus_four(df['id']).alias('plus_four'))
+        self.assertFalse(res.schema['plus_four'].nullable)
+        self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
+
+    def test_udf_no_nulls_with_callable(self):
+        df = self.spark.range(10)
+
+        class PlusFour:
+            def __call__(self, col):
+                if col is not None:
+                    return col + 4
+
+        call = PlusFour()
+        pudf = UserDefinedFunction(call, LongType(), False)
+        res = df.select(pudf(df['id']).alias('plus_four'))
+        self.assertFalse(res.schema['plus_four'].nullable)
+        self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
+
+    def test_udf_registration_no_nulls(self):
+        plus_four = self.spark.udf.register("plus_four", lambda x: x + 4, IntegerType(), False)
+        df = self.spark.range(10)
+        res = df.select(plus_four(df['id']).alias('plus_four'))
+        self.assertFalse(res.schema['plus_four'].nullable)
+        self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
+
     def test_non_existed_udaf(self):
         spark = self.spark
         self.assertRaisesRegexp(AnalysisException, "Can not load class non_existed_udaf",

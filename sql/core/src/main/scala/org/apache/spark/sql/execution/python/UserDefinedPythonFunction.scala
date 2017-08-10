@@ -31,13 +31,42 @@ case class UserDefinedPythonFunction(
     dataType: DataType,
     pythonEvalType: Int) {
 
+  private var _nullable: Boolean = true
+
+  /**
+   * Returns true when the UDF can return a nullable value.
+   */
+  def nullable: Boolean = _nullable
+
   def builder(e: Seq[Expression]): PythonUDF = {
+<<<<<<< HEAD
     PythonUDF(name, func, dataType, e, pythonEvalType)
+=======
+    PythonUDF(name, func, dataType, e, pythonEvalType, _nullable)
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */
   def apply(exprs: Column*): Column = {
     val udf = builder(exprs.map(_.expr))
     Column(udf)
+  }
+
+  private def copyAll(): UserDefinedPythonFunction = {
+    val udf = copy()
+    udf._nullable = _nullable
+    udf
+  }
+
+  /**
+   * Updates UserDefinedFunction with a given nullability.
+   */
+  def withNullability(nullable: Boolean): UserDefinedPythonFunction = {
+    if (nullable == _nullable) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._nullable = nullable
+      udf
+    }
   }
 }

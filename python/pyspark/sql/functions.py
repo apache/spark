@@ -2072,7 +2072,7 @@ class PandasUDFType(object):
 
 
 @since(1.3)
-def udf(f=None, returnType=StringType()):
+def udf(f=None, returnType=StringType(), nullable=True):
     """Creates a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
@@ -2112,10 +2112,10 @@ def udf(f=None, returnType=StringType()):
         # for decorator use it as a returnType
         return_type = f or returnType
         return functools.partial(_create_udf, returnType=return_type,
-                                 evalType=PythonEvalType.SQL_BATCHED_UDF)
+                                 evalType=PythonEvalType.SQL_BATCHED_UDF, nullable=nullable)
     else:
         return _create_udf(f=f, returnType=returnType,
-                           evalType=PythonEvalType.SQL_BATCHED_UDF)
+                           evalType=PythonEvalType.SQL_BATCHED_UDF, nullable=nullable)
 
 
 @since(2.3)
