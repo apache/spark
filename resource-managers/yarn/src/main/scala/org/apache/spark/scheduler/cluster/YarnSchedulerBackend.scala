@@ -40,7 +40,7 @@ import org.apache.spark.util.{RpcUtils, ThreadUtils}
 private[spark] abstract class YarnSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv, None) {
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
   private val stopped = new AtomicBoolean(false)
 

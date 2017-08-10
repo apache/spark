@@ -46,11 +46,10 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  */
 private[spark]
 class CoarseGrainedSchedulerBackend(
-    scheduler: TaskSchedulerImpl,
-    val rpcEnv: RpcEnv,
-    hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager])
-    extends ExecutorAllocationClient with SchedulerBackend with Logging
-{
+  scheduler: TaskSchedulerImpl,
+  val rpcEnv: RpcEnv)
+  extends ExecutorAllocationClient with SchedulerBackend with Logging {
+
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   protected val totalCoreCount = new AtomicInteger(0)
   // Total number of executors that are currently registered
@@ -101,6 +100,9 @@ class CoarseGrainedSchedulerBackend(
 
   // The num of current max ExecutorId used to re-register appMaster
   @volatile protected var currentExecutorIdCounter = 0
+
+  // hadoop token manager used by some sub-classes (e.g. Mesos)
+  protected val hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   // Hadoop delegation tokens to be sent to the executors.
   private val hadoopDelegationCreds = getHadoopDelegationCreds()
@@ -689,7 +691,7 @@ class CoarseGrainedSchedulerBackend(
   }
 
   private def getHadoopDelegationCreds(): Option[Array[Byte]] = {
-    if (UserGroupInformation.isSecurityEnabled) {
+    if (UserGroupInformation.isSecurityEnabled && hadoopDelegationTokenManager.isDefined) {
       hadoopDelegationTokenManager.map { manager =>
         val creds = UserGroupInformation.getCurrentUser.getCredentials
         val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
