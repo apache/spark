@@ -349,12 +349,24 @@ public class YarnShuffleService extends AuxiliaryService {
    * it will uses a YARN local dir.
    */
   protected File initRecoveryDb(String dbName) {
+    Boolean bolRecoveryPathAvailable = true;
+
     if (_recoveryPath != null) {
         File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
-        if (recoveryFile.exists() && checkFileAvailable(recoveryFile)) {
+
+        bolRecoveryPathAvailable = checkFileAvailable(recoveryFile);
+        logger.info("Recovery path {} ldb available: {}.", _recoveryPath, bolRecoveryPathAvailable);
+        if (recoveryFile.exists() && bolRecoveryPathAvailable) {
           return recoveryFile;
         }
     }
+
+    // If recovery path unavailable, no use it any more.
+    if (!bolRecoveryPathAvailable) {
+      logger.warn("Recovery path {} unavailable: set it to null", _recoveryPath);
+      _recoveryPath = null;
+    }
+
     // db doesn't exist in recovery path go check local dirs for it
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
@@ -375,6 +387,9 @@ public class YarnShuffleService extends AuxiliaryService {
           // make sure to move all DBs to the recovery path from the old NM local dirs.
           // If another DB was initialized first just make sure all the DBs are in the same
           // location.
+          if (!bolRecoveryPathAvailable) {
+              continue;
+          }
           Path newLoc = new Path(_recoveryPath, dbName);
           Path copyFrom = new Path(f.toURI());
           if (!newLoc.equals(copyFrom)) {
@@ -389,10 +404,7 @@ public class YarnShuffleService extends AuxiliaryService {
                 dbName, _recoveryPath.toString(), e);
             }
           }
-          File newLocFile = new File(newLoc.toUri().getPath());
-          if (checkFileAvailable(newLocFile)) {
-            return newLocFile;
-          }
+          return new File(newLoc.toUri().getPath());
         }
       }
     }
