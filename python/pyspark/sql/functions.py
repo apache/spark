@@ -1874,7 +1874,7 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, nullable=True):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
@@ -1889,6 +1889,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+        self._nullable = nullable
 
     @property
     def _judf(self):
@@ -1910,6 +1911,7 @@ class UserDefinedFunction(object):
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
             self._name, wrapped_func, jdt)
+        judf = judf.withNullability(self._nullable)
         return judf
 
     def __call__(self, *cols):
@@ -1919,7 +1921,7 @@ class UserDefinedFunction(object):
 
 
 @since(1.3)
-def udf(f=None, returnType=StringType()):
+def udf(f=None, returnType=StringType(), nullable=True):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
@@ -1950,7 +1952,7 @@ def udf(f=None, returnType=StringType()):
     +----------+--------------+------------+
     """
     def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType)
+        udf_obj = UserDefinedFunction(f, returnType, nullable=nullable)
 
         @functools.wraps(f)
         def wrapper(*args):
