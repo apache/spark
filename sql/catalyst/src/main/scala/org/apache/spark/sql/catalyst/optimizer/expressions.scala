@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.util.OptimizerUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -72,26 +73,10 @@ object ConstantFolding extends Rule[LogicalPlan] {
  *   in the AND node.
  */
 object ConstantPropagation extends Rule[LogicalPlan] with PredicateHelper {
-  private def containsNonConjunctionPredicates(expression: Expression): Boolean = expression.find {
-    case _: Not | _: Or => true
-    case _ => false
-  }.isDefined
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case f: Filter => f transformExpressionsUp {
       case and: And =>
-        val conjunctivePredicates =
-          splitConjunctivePredicates(and)
-            .filter(expr => expr.isInstanceOf[EqualTo] || expr.isInstanceOf[EqualNullSafe])
-            .filterNot(expr => containsNonConjunctionPredicates(expr))
-
-        val equalityPredicates = conjunctivePredicates.collect {
-          case e @ EqualTo(left: AttributeReference, right: Literal) => ((left, right), e)
-          case e @ EqualTo(left: Literal, right: AttributeReference) => ((right, left), e)
-          case e @ EqualNullSafe(left: AttributeReference, right: Literal) => ((left, right), e)
-          case e @ EqualNullSafe(left: Literal, right: AttributeReference) => ((right, left), e)
-        }
-
+        val equalityPredicates = getLiteralEqualityPredicates(splitConjunctivePredicates(and))
         val constantsMap = AttributeMap(equalityPredicates.map(_._1))
         val predicates = equalityPredicates.map(_._2).toSet
 

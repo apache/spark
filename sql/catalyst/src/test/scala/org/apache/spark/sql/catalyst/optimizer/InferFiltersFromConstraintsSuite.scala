@@ -212,4 +212,21 @@ class InferFiltersFromConstraintsSuite extends PlanTest {
       comparePlans(optimized, originalQuery)
     }
   }
+
+  test("SPARK-21652 Should not infer the constraints that are trivially true") {
+    val r1 = LocalRelation('r1a.int, 'r1b.int)
+    val r2 = LocalRelation('r2a.int)
+    val originalQuery = r1
+      .where('r1a === 1 && 'r1b === 1)
+      .join(r2, Inner, Some('r1a === 'r2a && 'r1b === 'r2a)).analyze
+    val optimized = Optimize.execute(originalQuery)
+    val correctAnswer = r1
+      .where(IsNotNull('r1a) && IsNotNull('r1b) && 'r1a === 1 && 'r1b === 1)
+      .join(
+        r2.where(IsNotNull('r2a) && 'r2a === 1),
+        Inner,
+        Some('r1a === 'r2a && 'r1b === 'r2a)
+      ).analyze
+    comparePlans(optimized, correctAnswer)
+  }
 }
