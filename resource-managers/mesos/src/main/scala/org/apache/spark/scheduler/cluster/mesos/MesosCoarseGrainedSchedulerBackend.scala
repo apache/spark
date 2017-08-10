@@ -21,12 +21,11 @@ import java.io.File
 import java.util.{Collections, List => JList}
 import java.util.concurrent.locks.ReentrantLock
 
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.SchedulerDriver
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
-
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
-import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
@@ -62,6 +61,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override val hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
     Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
+
+  override val hadoopDelegationCreds: Option[Array[Byte]] = getHadoopDelegationCreds()
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2

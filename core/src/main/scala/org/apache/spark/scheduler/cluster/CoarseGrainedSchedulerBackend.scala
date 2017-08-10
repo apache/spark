@@ -105,7 +105,7 @@ class CoarseGrainedSchedulerBackend(
   protected val hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   // Hadoop delegation tokens to be sent to the executors.
-  private val hadoopDelegationCreds = getHadoopDelegationCreds()
+  protected val hadoopDelegationCreds: Option[Array[Byte]] = None
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -690,7 +690,7 @@ class CoarseGrainedSchedulerBackend(
     true
   }
 
-  private def getHadoopDelegationCreds(): Option[Array[Byte]] = {
+  protected def getHadoopDelegationCreds(): Option[Array[Byte]] = {
     if (UserGroupInformation.isSecurityEnabled && hadoopDelegationTokenManager.isDefined) {
       hadoopDelegationTokenManager.map { manager =>
         val creds = UserGroupInformation.getCurrentUser.getCredentials
