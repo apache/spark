@@ -217,7 +217,9 @@ object SparkSubmit extends CommandLineUtils {
    *   (4) the main class for the child
    * Exposed for testing.
    */
-  private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+  private[deploy] def prepareSubmitEnvironment(
+       args: SparkSubmitArguments,
+       hadoopConf: HadoopConfiguration = new HadoopConfiguration())
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
@@ -319,8 +321,7 @@ object SparkSubmit extends CommandLineUtils {
         RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
       }
     }
-
-    val hadoopConf = new HadoopConfiguration()
+    
     val targetDir = DependencyUtils.createTempDir()
 
     // Resolve glob path for different resources.
