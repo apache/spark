@@ -19,6 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -149,9 +150,11 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     )
 
     val emptyCols = ($(inputCols) zip summary.counts).filter(_._2 == 0).map(_._1)
-    require(emptyCols.isEmpty, s"surrogate cannot be computed. " +
-      s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
-      s"missingValue(${$(missingValue)})")
+    if(emptyCols.nonEmpty) {
+      throw new SparkException(s"surrogate cannot be computed. " +
+        s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
+        s"missingValue(${$(missingValue)})")
+    }
 
     val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(summary.values)))
     val schema = StructType($(inputCols).map(col => StructField(col, DoubleType, nullable = false)))
