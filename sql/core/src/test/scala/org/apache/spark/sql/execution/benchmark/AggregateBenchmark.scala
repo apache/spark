@@ -355,11 +355,11 @@ class AggregateBenchmark extends BenchmarkBase {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_111-b14 on Windows 7 6.1
     Intel64 Family 6 Model 58 Stepping 9, GenuineIntel
-    max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns) Relative
+    max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)  Per Row(ns)  Relative
     ----------------------------------------------------------------------------------------------
-    codegen = F                                    462 /  533          1.4         704.4     1.0X
-    codegen = T maxLinesPerFunction = 10000       3444 / 3447          0.2        5255.3     0.1X
-    codegen = T maxLinesPerFunction = 1500         447 /  478          1.5         682.1     1.0X
+    codegen = F                                    462 /  533          1.4       704.4     1.0X
+    codegen = T maxLinesPerFunction = 10000       3444 / 3447          0.2      5255.3     0.1X
+    codegen = T maxLinesPerFunction = 1500         447 /  478          1.5       682.1     1.0X
      */
   }
 

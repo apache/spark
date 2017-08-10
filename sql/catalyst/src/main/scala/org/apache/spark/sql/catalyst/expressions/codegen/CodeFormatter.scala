@@ -92,10 +92,10 @@ object CodeFormatter {
 
   def stripExtraNewLinesAndComments(input: String): String = {
     val commentReg =
-      ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" +   // strip /*comment*/
-        """([ |\t]*?\/\/[\s\S]*?\n)""").r               // strip //comment
+      ("""([ |\t]*?\/\*[\s|\S]*?\*\/[ |\t]*?)|""" +    // strip /*comment*/
+       """([ |\t]*?\/\/[\s\S]*?\n)""").r               // strip //comment
     val codeWithoutComment = commentReg.replaceAllIn(input, "")
-    codeWithoutComment.replaceAll("""\n\s*\n""", "\n")          // strip ExtraNewLines
+    codeWithoutComment.replaceAll("""\n\s*\n""", "\n") // strip ExtraNewLines
   }
 }
 
