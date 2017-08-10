@@ -166,7 +166,6 @@ class JavaParams(JavaWrapper, Params):
                     value = _java2py(sc, self._java_obj.getDefault(java_param)).get()
                     self._setDefault(**{param.name: value})
 
-
     def _transfer_param_map_from_java(self, javaParamMap):
         """
         Transforms a Java ParamMap into a Python ParamMap.
