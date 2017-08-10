@@ -193,7 +193,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
           .child.isInstanceOf[ProjectExec]
     )
     assert(wholeStageCodegenExec.isDefined)
-    val (ctx, cleanedSource) =
+    val (ctx, _) =
       wholeStageCodegenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
     assert(ctx.isTooLongGeneratedFunction === true)
   }
@@ -216,7 +216,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
           .child.isInstanceOf[ProjectExec]
     )
     assert(wholeStageCodegenExec.isDefined)
-    val (ctx, cleanedSource) =
+    val (ctx, _) =
       wholeStageCodegenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
     assert(ctx.isTooLongGeneratedFunction === false)
   }
