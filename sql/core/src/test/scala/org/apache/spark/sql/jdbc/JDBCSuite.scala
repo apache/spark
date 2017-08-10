@@ -1009,12 +1009,21 @@ class JDBCSuite extends SparkFunSuite
   }
 
   test("SPARK-21519: option sessionInitStatement, run SQL to initialize the database session.") {
-    val initSQL = "SET @MYTESTVAR 21519"
-    val df = spark.read.format("jdbc")
+    val initSQL1 = "SET @MYTESTVAR 21519"
+    val df1 = spark.read.format("jdbc")
       .option("url", urlWithUserAndPass)
       .option("dbtable", "(SELECT NVL(@MYTESTVAR, -1))")
-      .option("sessionInitStatement", initSQL)
+      .option("sessionInitStatement", initSQL1)
       .load()
-    assert(df.collect() === Array(Row(21519)))
+    assert(df1.collect() === Array(Row(21519)))
+
+    val initSQL2 = "SET SCHEMA DUMMY"
+    val df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .option("sessionInitStatement", initSQL2)
+      .load()
+    val e = intercept[SparkException] {df2.collect()}.getMessage
+    assert(e.contains("""Schema "DUMMY" not found"""))
   }
 }
