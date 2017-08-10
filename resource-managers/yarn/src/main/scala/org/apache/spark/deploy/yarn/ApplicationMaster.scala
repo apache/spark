@@ -17,23 +17,22 @@
 
 package org.apache.spark.deploy.yarn
 
-import javax.crypto.SecretKey
-import javax.crypto.spec.SecretKeySpec;
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
 import java.util.concurrent.{TimeoutException, TimeUnit}
+import javax.crypto.SecretKey
+import javax.crypto.spec.SecretKeySpec
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.base64.Base64;
-import com.google.common.base.Charsets;
-
+import com.google.common.base.Charsets
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
+import io.netty.handler.codec.base64.Base64
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
@@ -48,17 +47,17 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, YARNHadoopDelegationTokenManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
-import org.apache.spark.rpc._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util._
-import org.apache.spark.network.{TransportContext, BlockDataManager}
+import org.apache.spark.network.{BlockDataManager, TransportContext}
 import org.apache.spark.network.client.TransportClientBootstrap
-import org.apache.spark.network.netty.{SparkTransportConf, NettyBlockRpcServer}
+import org.apache.spark.network.netty.{NettyBlockRpcServer, SparkTransportConf}
 import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
 import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.rpc._
 import org.apache.spark.rpc.netty.NettyRpcCallContext
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util._
 
 /**
  * Common application master functionality for Spark on Yarn.
@@ -451,7 +450,7 @@ private[spark] class ApplicationMaster(
        driverRef: RpcEndpointRef,
        securityManager: SecurityManager): RpcEndpointRef = {
     val serversparkConf = new SparkConf()
-    serversparkConf.set("spark.rpc.connectionUsingTokens","true")
+    serversparkConf.set("spark.rpc.connectionUsingTokens", "true")
 
     val amRpcEnv =
       RpcEnv.create(ApplicationMaster.SYSTEM_NAME, Utils.localHostName(), port, serversparkConf,
@@ -459,8 +458,8 @@ private[spark] class ApplicationMaster(
     clientToAMPort = amRpcEnv.address.port
 
     val clientAMEndpoint =
-      amRpcEnv.setupEndpoint(ApplicationMaster.ENDPOINT_NAME, new ClientToAMEndpoint(amRpcEnv, driverRef,
-        securityManager))
+      amRpcEnv.setupEndpoint(ApplicationMaster.ENDPOINT_NAME,
+        new ClientToAMEndpoint(amRpcEnv, driverRef, securityManager))
     clientAMEndpoint
   }
 

@@ -1,0 +1,882 @@
+WARNING: '--force' is deprecated and ignored.
+exec: curl --progress-bar -L https://downloads.typesafe.com/zinc/0.3.15/zinc-0.3.15.tgz
+                                                                           0.1%#                                                                          2.2%#####                                                                      7.6%#############                                                             18.2%#####################                                                     29.3%############################                                              40.2%#####################################                                     51.8%#############################################                             63.2%###################################################                       71.0%#########################################################                 79.5%##############################################################            87.5%###################################################################       93.5%######################################################################## 100.0%
+exec: curl --progress-bar -L https://downloads.typesafe.com/scala/2.11.8/scala-2.11.8.tgz
+                                                                           0.3%#                                                                          2.5%#####                                                                      8.3%########                                                                  11.7%#############                                                             19.0%##################                                                        25.1%#######################                                                   32.0%###########################                                               38.8%################################                                          45.5%#####################################                                     52.7%###########################################                               60.1%################################################                          67.3%#####################################################                     74.3%##########################################################                81.9%################################################################          89.1%#####################################################################     96.6%######################################################################## 100.0%
+Using `mvn` from path: /Users/jlee2/apache-maven-3.5.0/bin/mvn
+[INFO] Scanning for projects...
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] Spark Project Parent POM
+[INFO] Spark Project Tags
+[INFO] Spark Project Sketch
+[INFO] Spark Project Local DB
+[INFO] Spark Project Networking
+[INFO] Spark Project Shuffle Streaming Service
+[INFO] Spark Project Unsafe
+[INFO] Spark Project Launcher
+[INFO] Spark Project Core
+[INFO] Spark Project ML Local Library
+[INFO] Spark Project GraphX
+[INFO] Spark Project Streaming
+[INFO] Spark Project Catalyst
+[INFO] Spark Project SQL
+[INFO] Spark Project ML Library
+[INFO] Spark Project Tools
+[INFO] Spark Project Hive
+[INFO] Spark Project REPL
+[INFO] Spark Project YARN Shuffle Service
+[INFO] Spark Project YARN
+[INFO] Spark Project Hive Thrift Server
+[INFO] Spark Project Assembly
+[INFO] Spark Project External Flume Sink
+[INFO] Spark Project External Flume
+[INFO] Spark Project External Flume Assembly
+[INFO] Spark Integration for Kafka 0.8
+[INFO] Kafka 0.10 Source for Structured Streaming
+[INFO] Spark Project Examples
+[INFO] Spark Project External Kafka Assembly
+[INFO] Spark Integration for Kafka 0.10
+[INFO] Spark Integration for Kafka 0.10 Assembly
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Parent POM 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-parent_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-parent_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-parent_2.11 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-parent_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-parent_2.11 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-parent_2.11 ---
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-parent_2.11 ---
+Discovery starting.
+Discovery completed in 49 milliseconds.
+Run starting. Expected test count is: 0
+DiscoverySuite:
+Run completed in 153 milliseconds.
+Total number of tests run: 0
+Suites: completed 1, aborted 0
+Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+No tests were executed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Tags 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-tags_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-tags_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/common/tags/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/common/tags/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-tags_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-library/2.11.8/scala-library-2.11.8.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-tags_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-tags_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/tags/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-tags_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-tags_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[info] 'compiler-interface' not yet compiled for Scala 2.11.8. Compiling...
+[info]   Compilation completed in 12.451 s
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 2 Scala sources and 6 Java sources to /Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/classes...
+[info] Compile success at Aug 10, 2017 11:09:42 AM [16.051s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-tags_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/common/tags/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-tags_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/tags/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-tags_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-tags_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-tags_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 3 Java sources to /Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/test-classes...
+[info] Compile success at Aug 10, 2017 11:09:44 AM [1.675s]
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-tags_2.11 ---
+Downloading: https://repo1.maven.org/maven2/org/apache/maven/surefire/surefire-junit4/2.19.1/surefire-junit4-2.19.1.pom
+Progress (1): 2.8/3.3 kBProgress (1): 3.3 kB                        Downloaded: https://repo1.maven.org/maven2/org/apache/maven/surefire/surefire-junit4/2.19.1/surefire-junit4-2.19.1.pom (3.3 kB at 11 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/maven/surefire/surefire-providers/2.19.1/surefire-providers-2.19.1.pom
+Progress (1): 2.1/2.6 kBProgress (1): 2.6 kB                        Downloaded: https://repo1.maven.org/maven2/org/apache/maven/surefire/surefire-providers/2.19.1/surefire-providers-2.19.1.pom (2.6 kB at 88 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/maven/surefire/surefire-junit4/2.19.1/surefire-junit4-2.19.1.jar
+Progress (1): 2.1/75 kBProgress (1): 4.9/75 kBProgress (1): 7.7/75 kBProgress (1): 10/75 kB Progress (1): 13/75 kBProgress (1): 16/75 kBProgress (1): 19/75 kBProgress (1): 21/75 kBProgress (1): 24/75 kBProgress (1): 27/75 kBProgress (1): 30/75 kBProgress (1): 32/75 kBProgress (1): 36/75 kBProgress (1): 40/75 kBProgress (1): 44/75 kBProgress (1): 49/75 kBProgress (1): 53/75 kBProgress (1): 57/75 kBProgress (1): 61/75 kBProgress (1): 65/75 kBProgress (1): 69/75 kBProgress (1): 73/75 kBProgress (1): 75 kB                      Downloaded: https://repo1.maven.org/maven2/org/apache/maven/surefire/surefire-junit4/2.19.1/surefire-junit4-2.19.1.jar (75 kB at 1.2 MB/s)
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+
+Results :
+
+Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-tags_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-tags_2.11 ---
+Discovery starting.
+Discovery completed in 70 milliseconds.
+Run starting. Expected test count is: 0
+DiscoverySuite:
+Run completed in 145 milliseconds.
+Total number of tests run: 0
+Suites: completed 1, aborted 0
+Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+No tests were executed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Sketch 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-sketch_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/common/sketch/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/common/sketch/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-sketch_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-library/2.11.8/scala-library-2.11.8.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-sketch_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/sketch/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-sketch_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-sketch_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 9 Java sources to /Users/jlee2/Yahoo/yspark_2/common/sketch/target/scala-2.11/classes...
+[info] Compile success at Aug 10, 2017 11:09:49 AM [1.326s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-sketch_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/common/sketch/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-sketch_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/sketch/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-sketch_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-sketch_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-sketch_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 3 Scala sources to /Users/jlee2/Yahoo/yspark_2/common/sketch/target/scala-2.11/test-classes...
+[info] Compile success at Aug 10, 2017 11:09:52 AM [3.115s]
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-sketch_2.11 ---
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+
+Results :
+
+Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-sketch_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-sketch_2.11 ---
+Discovery starting.
+Discovery completed in 180 milliseconds.
+Run starting. Expected test count is: 29
+BloomFilterSuite:
+- accuracy - Byte
+- mergeInPlace - Byte
+- accuracy - Short
+- mergeInPlace - Short
+- accuracy - Int
+- mergeInPlace - Int
+- accuracy - Long
+- mergeInPlace - Long
+- accuracy - String
+- mergeInPlace - String
+- incompatible merge
+BitArraySuite:
+- error case when create BitArray
+- bitSize
+- set
+- normal operation
+- merge
+CountMinSketchSuite:
+- accuracy - Byte
+- mergeInPlace - Byte
+- accuracy - Short
+- mergeInPlace - Short
+- accuracy - Int
+- mergeInPlace - Int
+- accuracy - Long
+- mergeInPlace - Long
+- accuracy - String
+- mergeInPlace - String
+- accuracy - Byte array
+- mergeInPlace - Byte array
+- incompatible merge
+Run completed in 14 seconds, 530 milliseconds.
+Total number of tests run: 29
+Suites: completed 4, aborted 0
+Tests: succeeded 29, failed 0, canceled 0, ignored 0, pending 0
+All tests passed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Local DB 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-kvstore_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-kvstore_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-kvstore_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.6.7/jackson-annotations-2.6.7.jar:/Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-library/2.11.8/scala-library-2.11.8.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.6.7.1/jackson-databind-2.6.7.1.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.6.7/jackson-core-2.6.7.jar:/Users/jlee2/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-kvstore_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-kvstore_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-kvstore_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-kvstore_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 12 Java sources to /Users/jlee2/Yahoo/yspark_2/common/kvstore/target/scala-2.11/classes...
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/main/java/org/apache/spark/util/kvstore/InMemoryStore.java:174: warning: [rawtypes] found raw type: InMemoryView
+[warn]       return new InMemoryView(type, all, ti);
+[warn]                  ^
+[warn]   missing type arguments for generic class InMemoryView<T>
+[warn]   where T is a type-variable:
+[warn]     T extends Object declared in class InMemoryView
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/main/java/org/apache/spark/util/kvstore/KVStoreIterator.java:34: warning: [try] auto-closeable resource KVStoreIterator<T> has a member method close() that could throw InterruptedException
+[warn] public interface KVStoreIterator<T> extends Iterator<T>, AutoCloseable {
+[warn]        ^
+[warn]   where T is a type-variable:
+[warn]     T extends Object declared in interface KVStoreIterator
+[warn] 2 warnings
+[info] Compile success at Aug 10, 2017 11:10:10 AM [1.727s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-kvstore_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/common/kvstore/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-kvstore_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-kvstore_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-kvstore_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-kvstore_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 10 Java sources to /Users/jlee2/Yahoo/yspark_2/common/kvstore/target/scala-2.11/test-classes...
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/DBIteratorSuite.java:387: warning: [try] auto-closeable resource KVStoreIterator<?> has a member method close() that could throw InterruptedException
+[warn]     try(KVStoreIterator<?> it = db.view(i.getClass()).closeableIterator()) {
+[warn]                            ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:67: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]     try(Timer.Context ctx = dbCreation.time()) {
+[warn]                       ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:75: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]       try(Timer.Context ctx = dbClose.time()) {
+[warn]                         ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:194: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]         try(Timer.Context ctx = create.time()) {
+[warn]                           ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:201: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]       try(Timer.Context ctx = iter.time()) {
+[warn]                         ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:210: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]       try(Timer.Context ctx = timer.time()) {
+[warn]                         ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:219: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]       try(Timer.Context ctx = delete.time()) {
+[warn]                         ^
+[warn] /Users/jlee2/Yahoo/yspark_2/common/kvstore/src/test/java/org/apache/spark/util/kvstore/LevelDBBenchmark.java:228: warning: [try] auto-closeable resource ctx is never referenced in body of corresponding try statement
+[warn]       try(Timer.Context ctx = delete.time()) {
+[warn]                         ^
+[warn] 8 warnings
+[info] Compile success at Aug 10, 2017 11:10:12 AM [2.305s]
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-kvstore_2.11 ---
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running org.apache.spark.util.kvstore.ArrayWrappersSuite
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.126 sec - in org.apache.spark.util.kvstore.ArrayWrappersSuite
+Running org.apache.spark.util.kvstore.InMemoryIteratorSuite
+Tests run: 38, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.498 sec - in org.apache.spark.util.kvstore.InMemoryIteratorSuite
+Running org.apache.spark.util.kvstore.InMemoryStoreSuite
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 sec - in org.apache.spark.util.kvstore.InMemoryStoreSuite
+Running org.apache.spark.util.kvstore.LevelDBIteratorSuite
+Tests run: 38, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.982 sec - in org.apache.spark.util.kvstore.LevelDBIteratorSuite
+Running org.apache.spark.util.kvstore.LevelDBSuite
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.156 sec - in org.apache.spark.util.kvstore.LevelDBSuite
+Running org.apache.spark.util.kvstore.LevelDBTypeInfoSuite
+Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.019 sec - in org.apache.spark.util.kvstore.LevelDBTypeInfoSuite
+
+Results :
+
+Tests run: 100, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-kvstore_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-kvstore_2.11 ---
+Discovery starting.
+Discovery completed in 225 milliseconds.
+Run starting. Expected test count is: 0
+DiscoverySuite:
+Run completed in 346 milliseconds.
+Total number of tests run: 0
+Suites: completed 1, aborted 0
+Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+No tests were executed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Networking 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.pom
+Progress (1): 2.1/2.2 kBProgress (1): 2.2 kB                        Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.pom (2.2 kB at 83 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/apache-curator/2.7.1/apache-curator-2.7.1.pom
+Progress (1): 2.2/32 kBProgress (1): 4.9/32 kBProgress (1): 7.7/32 kBProgress (1): 10/32 kB Progress (1): 13/32 kBProgress (1): 16/32 kBProgress (1): 19/32 kBProgress (1): 21/32 kBProgress (1): 24/32 kBProgress (1): 27/32 kBProgress (1): 30/32 kBProgress (1): 32 kB                      Downloaded: https://repo1.maven.org/maven2/org/apache/curator/apache-curator/2.7.1/apache-curator-2.7.1.pom (32 kB at 884 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.pom
+Progress (1): 2.1/2.3 kBProgress (1): 2.3 kB                        Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.pom (2.3 kB at 84 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.pom
+Progress (1): 2.1/2.4 kBProgress (1): 2.4 kB                        Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.pom (2.4 kB at 99 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.jar
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.jar
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.jar
+Progress (1): 2.1/186 kBProgress (1): 4.9/186 kBProgress (1): 7.7/186 kBProgress (1): 10/186 kB Progress (1): 13/186 kBProgress (1): 16/186 kBProgress (1): 19/186 kBProgress (1): 21/186 kBProgress (1): 24/186 kBProgress (1): 27/186 kBProgress (1): 30/186 kBProgress (1): 32/186 kBProgress (1): 36/186 kBProgress (1): 40/186 kBProgress (1): 44/186 kBProgress (1): 49/186 kBProgress (1): 53/186 kBProgress (1): 57/186 kBProgress (1): 61/186 kBProgress (1): 65/186 kBProgress (1): 69/186 kBProgress (1): 73/186 kBProgress (1): 77/186 kBProgress (1): 81/186 kBProgress (1): 85/186 kBProgress (1): 89/186 kBProgress (1): 94/186 kBProgress (1): 98/186 kBProgress (1): 102/186 kBProgress (1): 106/186 kBProgress (1): 110/186 kBProgress (1): 114/186 kBProgress (1): 118/186 kBProgress (1): 122/186 kBProgress (1): 126/186 kBProgress (1): 130/186 kBProgress (1): 135/186 kBProgress (1): 139/186 kBProgress (1): 143/186 kBProgress (1): 147/186 kBProgress (1): 151/186 kBProgress (1): 155/186 kBProgress (1): 159/186 kBProgress (1): 163/186 kBProgress (1): 167/186 kBProgress (1): 171/186 kBProgress (1): 176/186 kBProgress (1): 180/186 kBProgress (1): 184/186 kBProgress (1): 186 kB    Progress (2): 186 kB | 2.1/70 kBProgress (3): 186 kB | 2.1/70 kB | 2.1/270 kBProgress (3): 186 kB | 4.9/70 kB | 2.1/270 kBProgress (3): 186 kB | 7.7/70 kB | 2.1/270 kBProgress (3): 186 kB | 7.7/70 kB | 4.9/270 kBProgress (3): 186 kB | 10/70 kB | 4.9/270 kB Progress (3): 186 kB | 10/70 kB | 7.7/270 kBProgress (3): 186 kB | 10/70 kB | 10/270 kB Progress (3): 186 kB | 13/70 kB | 10/270 kBProgress (3): 186 kB | 16/70 kB | 10/270 kBProgress (3): 186 kB | 16/70 kB | 13/270 kB                                           Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.jar (186 kB at 3.4 MB/s)
+Progress (2): 19/70 kB | 13/270 kBProgress (2): 19/70 kB | 16/270 kBProgress (2): 21/70 kB | 16/270 kBProgress (2): 21/70 kB | 19/270 kBProgress (2): 24/70 kB | 19/270 kBProgress (2): 24/70 kB | 21/270 kBProgress (2): 27/70 kB | 21/270 kBProgress (2): 27/70 kB | 24/270 kBProgress (2): 30/70 kB | 24/270 kBProgress (2): 30/70 kB | 27/270 kBProgress (2): 32/70 kB | 27/270 kBProgress (2): 32/70 kB | 30/270 kBProgress (2): 32/70 kB | 32/270 kBProgress (2): 36/70 kB | 32/270 kBProgress (2): 40/70 kB | 32/270 kBProgress (2): 44/70 kB | 32/270 kBProgress (2): 49/70 kB | 32/270 kBProgress (2): 49/70 kB | 36/270 kBProgress (2): 49/70 kB | 40/270 kBProgress (2): 49/70 kB | 44/270 kBProgress (2): 53/70 kB | 44/270 kBProgress (2): 53/70 kB | 49/270 kBProgress (2): 57/70 kB | 49/270 kBProgress (2): 61/70 kB | 49/270 kBProgress (2): 65/70 kB | 49/270 kBProgress (2): 69/70 kB | 49/270 kBProgress (2): 69/70 kB | 53/270 kBProgress (2): 70 kB | 53/270 kB   Progress (2): 70 kB | 57/270 kBProgress (2): 70 kB | 61/270 kBProgress (2): 70 kB | 65/270 kBProgress (2): 70 kB | 69/270 kBProgress (2): 70 kB | 73/270 kBProgress (2): 70 kB | 77/270 kBProgress (2): 70 kB | 81/270 kBProgress (2): 70 kB | 85/270 kBProgress (2): 70 kB | 89/270 kBProgress (2): 70 kB | 94/270 kBProgress (2): 70 kB | 98/270 kBProgress (2): 70 kB | 102/270 kBProgress (2): 70 kB | 106/270 kBProgress (2): 70 kB | 110/270 kBProgress (2): 70 kB | 114/270 kBProgress (2): 70 kB | 118/270 kBProgress (2): 70 kB | 122/270 kBProgress (2): 70 kB | 126/270 kBProgress (2): 70 kB | 130/270 kBProgress (2): 70 kB | 135/270 kB                                Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.jar (70 kB at 891 kB/s)
+Progress (1): 139/270 kBProgress (1): 143/270 kBProgress (1): 147/270 kBProgress (1): 151/270 kBProgress (1): 155/270 kBProgress (1): 159/270 kBProgress (1): 163/270 kBProgress (1): 167/270 kBProgress (1): 171/270 kBProgress (1): 176/270 kBProgress (1): 180/270 kBProgress (1): 184/270 kBProgress (1): 188/270 kBProgress (1): 192/270 kBProgress (1): 196/270 kBProgress (1): 200/270 kBProgress (1): 204/270 kBProgress (1): 208/270 kBProgress (1): 212/270 kBProgress (1): 216/270 kBProgress (1): 221/270 kBProgress (1): 225/270 kBProgress (1): 229/270 kBProgress (1): 233/270 kBProgress (1): 237/270 kBProgress (1): 241/270 kBProgress (1): 245/270 kBProgress (1): 249/270 kBProgress (1): 253/270 kBProgress (1): 257/270 kBProgress (1): 262/270 kBProgress (1): 266/270 kBProgress (1): 270/270 kBProgress (1): 270 kB                        Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.jar (270 kB at 2.4 MB/s)
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-network-common_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/common/network-common/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/common/network-common/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-network-common_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.7.3/hadoop-yarn-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.7.3/hadoop-yarn-api-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/htrace/htrace-core/3.1.0-incubating/htrace-core-3.1.0-incubating.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.7.3/hadoop-yarn-server-common-2.7.3.jar:/Users/jlee2/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/jlee2/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/jlee2/.m2/repository/org/apache/directory/server/apacheds-kerberos-codec/2.0.0-M15/apacheds-kerberos-codec-2.0.0-M15.jar:/Users/jlee2/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/jlee2/.m2/repository/org/apache/httpcomponents/httpclient/4.5.2/httpclient-4.5.2.jar:/Users/jlee2/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-crypto/1.0.0/commons-crypto-1.0.0.jar:/Users/jlee2/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/jlee2/.m2/repository/commons-io/commons-io/2.4/commons-io-2.4.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.6.7.1/jackson-databind-2.6.7.1.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-lang3/3.5/commons-lang3-3.5.jar:/Users/jlee2/.m2/repository/javax/servlet/jsp/jsp-api/2.1/jsp-api-2.1.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/jlee2/.m2/repository/io/netty/netty/3.9.9.Final/netty-3.9.9.Final.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-auth/2.7.3/hadoop-auth-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-client/2.7.3/hadoop-client-2.7.3.jar:/Users/jlee2/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.7.3/hadoop-hdfs-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.7.3/hadoop-mapreduce-client-shuffle-2.7.3.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/jlee2/.m2/repository/org/apache/directory/api/api-util/1.0.0-M20/api-util-1.0.0-M20.jar:/Users/jlee2/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/jlee2/.m2/repository/com/google/code/gson/gson/2.2.4/gson-2.2.4.jar:/Users/jlee2/.m2/repository/org/apache/directory/api/api-asn1-api/1.0.0-M20/api-asn1-api-1.0.0-M20.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.7.3/hadoop-mapreduce-client-core-2.7.3.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.6.7/jackson-annotations-2.6.7.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-common/2.7.3/hadoop-common-2.7.3.jar:/Users/jlee2/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/jlee2/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/jlee2/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/jlee2/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/jlee2/.m2/repository/org/apache/directory/server/apacheds-i18n/2.0.0-M15/apacheds-i18n-2.0.0-M15.jar:/Users/jlee2/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/jlee2/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/jlee2/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/jlee2/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.7.3/hadoop-yarn-client-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/zookeeper/zookeeper/3.4.6/zookeeper-3.4.6.jar:/Users/jlee2/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/jlee2/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/jlee2/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/jlee2/.m2/repository/xerces/xercesImpl/2.9.1/xercesImpl-2.9.1.jar:/Users/jlee2/.m2/repository/com/google/guava/guava/14.0.1/guava-14.0.1.jar:/Users/jlee2/.m2/repository/org/xerial/snappy/snappy-java/1.1.2.6/snappy-java-1.1.2.6.jar:/Users/jlee2/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-annotations/2.7.3/hadoop-annotations-2.7.3.jar:/Users/jlee2/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.6.7/jackson-core-2.6.7.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/jlee2/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.7.3/hadoop-mapreduce-client-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.7.3/hadoop-mapreduce-client-jobclient-2.7.3.jar:/Users/jlee2/.m2/repository/javax/xml/stream/stax-api/1.0-2/stax-api-1.0-2.jar:/Users/jlee2/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.7.3/hadoop-mapreduce-client-app-2.7.3.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/jlee2/.m2/repository/com/google/inject/extensions/guice-servlet/3.0/guice-servlet-3.0.jar:/Users/jlee2/.m2/repository/io/netty/netty-all/4.0.43.Final/netty-all-4.0.43.Final.jar:/Users/jlee2/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/jlee2/.m2/repository/org/apache/httpcomponents/httpcore/4.4.4/httpcore-4.4.4.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-network-common_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/network-common/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-network-common_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-network-common_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 73 Java sources to /Users/jlee2/Yahoo/yspark_2/common/network-common/target/scala-2.11/classes...
+[warn] /Users/jlee2/Yahoo/yspark_2/common/network-common/src/main/java/org/apache/spark/network/util/NettyUtils.java:112: warning: [deprecation] PooledByteBufAllocator(boolean,int,int,int,int,int,int,int) in PooledByteBufAllocator has been deprecated
+[warn]     return new PooledByteBufAllocator(
+[warn]            ^
+[warn] 1 warning
+[info] Compile success at Aug 10, 2017 11:10:24 AM [3.557s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-network-common_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/common/network-common/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-network-common_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-network-common_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-network-common_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-network-common_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 18 Java sources to /Users/jlee2/Yahoo/yspark_2/common/network-common/target/scala-2.11/test-classes...
+[warn] /Users/jlee2/Yahoo/yspark_2/common/network-common/src/test/java/org/apache/spark/network/TransportRequestHandlerSuite.java:105: warning: [rawtypes] found raw type: GenericFutureListener
+[warn]     private List<GenericFutureListener> listeners = new ArrayList<>();
+[warn]                  ^
+[warn]   missing type arguments for generic class GenericFutureListener<F>
+[warn]   where F is a type-variable:
+[warn]     F extends Future<?> declared in interface GenericFutureListener
+[warn] /Users/jlee2/Yahoo/yspark_2/common/network-common/src/test/java/org/apache/spark/network/TransportRequestHandlerSuite.java:129: warning: [unchecked] unchecked call to operationComplete(F) as a member of the raw type GenericFutureListener
+[warn]           listener.operationComplete(this);
+[warn]                                     ^
+[warn]   where F is a type-variable:
+[warn]     F extends Future<?> declared in interface GenericFutureListener
+[warn] 2 warnings
+[info] Compile success at Aug 10, 2017 11:10:29 AM [3.338s]
+[INFO] 
+[INFO] --- maven-jar-plugin:3.0.2:test-jar (prepare-test-jar) @ spark-network-common_2.11 ---
+[INFO] Building jar: /Users/jlee2/Yahoo/yspark_2/common/network-common/target/spark-network-common_2.11-2.3.0-SNAPSHOT-tests.jar
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-network-common_2.11 ---
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running org.apache.spark.network.ChunkFetchIntegrationSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.623 sec - in org.apache.spark.network.ChunkFetchIntegrationSuite
+Running org.apache.spark.network.crypto.AuthEngineSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.376 sec - in org.apache.spark.network.crypto.AuthEngineSuite
+Running org.apache.spark.network.crypto.AuthIntegrationSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 5.665 sec - in org.apache.spark.network.crypto.AuthIntegrationSuite
+Running org.apache.spark.network.crypto.AuthMessagesSuite
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 sec - in org.apache.spark.network.crypto.AuthMessagesSuite
+Running org.apache.spark.network.protocol.MessageWithHeaderSuite
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.026 sec - in org.apache.spark.network.protocol.MessageWithHeaderSuite
+Running org.apache.spark.network.ProtocolSuite
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 sec - in org.apache.spark.network.ProtocolSuite
+Running org.apache.spark.network.RequestTimeoutIntegrationSuite
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 31.308 sec - in org.apache.spark.network.RequestTimeoutIntegrationSuite
+Running org.apache.spark.network.RpcIntegrationSuite
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.246 sec - in org.apache.spark.network.RpcIntegrationSuite
+Running org.apache.spark.network.sasl.SparkSaslSuite
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.322 sec - in org.apache.spark.network.sasl.SparkSaslSuite
+Running org.apache.spark.network.server.OneForOneStreamManagerSuite
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 sec - in org.apache.spark.network.server.OneForOneStreamManagerSuite
+Running org.apache.spark.network.StreamSuite
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.136 sec - in org.apache.spark.network.StreamSuite
+Running org.apache.spark.network.TransportClientFactorySuite
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.123 sec - in org.apache.spark.network.TransportClientFactorySuite
+Running org.apache.spark.network.TransportRequestHandlerSuite
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.015 sec - in org.apache.spark.network.TransportRequestHandlerSuite
+Running org.apache.spark.network.TransportResponseHandlerSuite
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.022 sec - in org.apache.spark.network.TransportResponseHandlerSuite
+Running org.apache.spark.network.util.CryptoUtilsSuite
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0 sec - in org.apache.spark.network.util.CryptoUtilsSuite
+Running org.apache.spark.network.util.TransportFrameDecoderSuite
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.061 sec - in org.apache.spark.network.util.TransportFrameDecoderSuite
+
+Results :
+
+Tests run: 71, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-network-common_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-network-common_2.11 ---
+Discovery starting.
+Discovery completed in 148 milliseconds.
+Run starting. Expected test count is: 0
+DiscoverySuite:
+Run completed in 242 milliseconds.
+Total number of tests run: 0
+Suites: completed 1, aborted 0
+Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+No tests were executed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Shuffle Streaming Service 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-network-shuffle_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/common/network-shuffle/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/common/network-shuffle/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-network-shuffle_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.7.3/hadoop-yarn-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.7.3/hadoop-yarn-api-2.7.3.jar:/Users/jlee2/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/jlee2/.m2/repository/org/apache/htrace/htrace-core/3.1.0-incubating/htrace-core-3.1.0-incubating.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.7.3/hadoop-yarn-server-common-2.7.3.jar:/Users/jlee2/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/jlee2/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/jlee2/.m2/repository/org/apache/directory/server/apacheds-kerberos-codec/2.0.0-M15/apacheds-kerberos-codec-2.0.0-M15.jar:/Users/jlee2/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/jlee2/Yahoo/yspark_2/common/network-common/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/apache/httpcomponents/httpclient/4.5.2/httpclient-4.5.2.jar:/Users/jlee2/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-crypto/1.0.0/commons-crypto-1.0.0.jar:/Users/jlee2/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/jlee2/.m2/repository/commons-io/commons-io/2.4/commons-io-2.4.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.6.7.1/jackson-databind-2.6.7.1.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-lang3/3.5/commons-lang3-3.5.jar:/Users/jlee2/.m2/repository/javax/servlet/jsp/jsp-api/2.1/jsp-api-2.1.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/jlee2/.m2/repository/io/netty/netty/3.9.9.Final/netty-3.9.9.Final.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-auth/2.7.3/hadoop-auth-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-client/2.7.3/hadoop-client-2.7.3.jar:/Users/jlee2/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.7.3/hadoop-hdfs-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.7.3/hadoop-mapreduce-client-shuffle-2.7.3.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/jlee2/.m2/repository/org/apache/directory/api/api-util/1.0.0-M20/api-util-1.0.0-M20.jar:/Users/jlee2/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/jlee2/.m2/repository/com/google/code/gson/gson/2.2.4/gson-2.2.4.jar:/Users/jlee2/.m2/repository/org/apache/directory/api/api-asn1-api/1.0.0-M20/api-asn1-api-1.0.0-M20.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.7.3/hadoop-mapreduce-client-core-2.7.3.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.6.7/jackson-annotations-2.6.7.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-common/2.7.3/hadoop-common-2.7.3.jar:/Users/jlee2/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/jlee2/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/jlee2/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/jlee2/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/jlee2/.m2/repository/org/apache/directory/server/apacheds-i18n/2.0.0-M15/apacheds-i18n-2.0.0-M15.jar:/Users/jlee2/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/jlee2/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/jlee2/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/jlee2/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.7.3/hadoop-yarn-client-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/zookeeper/zookeeper/3.4.6/zookeeper-3.4.6.jar:/Users/jlee2/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/jlee2/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/jlee2/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/jlee2/.m2/repository/xerces/xercesImpl/2.9.1/xercesImpl-2.9.1.jar:/Users/jlee2/.m2/repository/org/slf4j/slf4j-log4j12/1.7.16/slf4j-log4j12-1.7.16.jar:/Users/jlee2/.m2/repository/org/xerial/snappy/snappy-java/1.1.2.6/snappy-java-1.1.2.6.jar:/Users/jlee2/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-annotations/2.7.3/hadoop-annotations-2.7.3.jar:/Users/jlee2/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.6.7/jackson-core-2.6.7.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/jlee2/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.7.3/hadoop-mapreduce-client-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.7.3/hadoop-mapreduce-client-jobclient-2.7.3.jar:/Users/jlee2/.m2/repository/javax/xml/stream/stax-api/1.0-2/stax-api-1.0-2.jar:/Users/jlee2/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.7.3/hadoop-mapreduce-client-app-2.7.3.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/jlee2/.m2/repository/com/google/inject/extensions/guice-servlet/3.0/guice-servlet-3.0.jar:/Users/jlee2/.m2/repository/io/netty/netty-all/4.0.43.Final/netty-all-4.0.43.Final.jar:/Users/jlee2/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/jlee2/.m2/repository/org/apache/httpcomponents/httpcore/4.4.4/httpcore-4.4.4.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-network-shuffle_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/network-shuffle/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-network-shuffle_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-network-shuffle_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 20 Java sources to /Users/jlee2/Yahoo/yspark_2/common/network-shuffle/target/scala-2.11/classes...
+[info] Compile success at Aug 10, 2017 11:11:15 AM [2.389s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-network-shuffle_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/common/network-shuffle/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-network-shuffle_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-network-shuffle_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-network-shuffle_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-network-shuffle_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 10 Java sources to /Users/jlee2/Yahoo/yspark_2/common/network-shuffle/target/scala-2.11/test-classes...
+[info] Compile success at Aug 10, 2017 11:11:17 AM [2.136s]
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-network-shuffle_2.11 ---
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running org.apache.spark.network.sasl.SaslIntegrationSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.082 sec - in org.apache.spark.network.sasl.SaslIntegrationSuite
+Running org.apache.spark.network.shuffle.BlockTransferMessagesSuite
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.001 sec - in org.apache.spark.network.shuffle.BlockTransferMessagesSuite
+Running org.apache.spark.network.shuffle.ExternalShuffleBlockHandlerSuite
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 sec - in org.apache.spark.network.shuffle.ExternalShuffleBlockHandlerSuite
+Running org.apache.spark.network.shuffle.ExternalShuffleBlockResolverSuite
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.295 sec - in org.apache.spark.network.shuffle.ExternalShuffleBlockResolverSuite
+Running org.apache.spark.network.shuffle.ExternalShuffleCleanupSuite
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.792 sec - in org.apache.spark.network.shuffle.ExternalShuffleCleanupSuite
+Running org.apache.spark.network.shuffle.ExternalShuffleIntegrationSuite
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.509 sec - in org.apache.spark.network.shuffle.ExternalShuffleIntegrationSuite
+Running org.apache.spark.network.shuffle.ExternalShuffleSecuritySuite
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.078 sec - in org.apache.spark.network.shuffle.ExternalShuffleSecuritySuite
+Running org.apache.spark.network.shuffle.OneForOneBlockFetcherSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.012 sec - in org.apache.spark.network.shuffle.OneForOneBlockFetcherSuite
+Running org.apache.spark.network.shuffle.RetryingBlockFetcherSuite
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.066 sec - in org.apache.spark.network.shuffle.RetryingBlockFetcherSuite
+
+Results :
+
+Tests run: 40, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-network-shuffle_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-network-shuffle_2.11 ---
+Discovery starting.
+Discovery completed in 109 milliseconds.
+Run starting. Expected test count is: 0
+DiscoverySuite:
+Run completed in 177 milliseconds.
+Total number of tests run: 0
+Suites: completed 1, aborted 0
+Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+No tests were executed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Unsafe 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-unsafe_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/common/unsafe/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/common/unsafe/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-unsafe_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/com/twitter/chill-java/0.8.0/chill-java-0.8.0.jar:/Users/jlee2/.m2/repository/com/esotericsoftware/minlog/1.3.0/minlog-1.3.0.jar:/Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-library/2.11.8/scala-library-2.11.8.jar:/Users/jlee2/.m2/repository/com/esotericsoftware/kryo-shaded/3.0.3/kryo-shaded-3.0.3.jar:/Users/jlee2/.m2/repository/com/twitter/chill_2.11/0.8.0/chill_2.11-0.8.0.jar:/Users/jlee2/.m2/repository/org/objenesis/objenesis/2.1/objenesis-2.1.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-unsafe_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/unsafe/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-unsafe_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-unsafe_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 16 Java sources to /Users/jlee2/Yahoo/yspark_2/common/unsafe/target/scala-2.11/classes...
+[info] Compile success at Aug 10, 2017 11:11:26 AM [4.162s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-unsafe_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/common/unsafe/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-unsafe_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/common/unsafe/src/test/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-unsafe_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-unsafe_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-unsafe_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 1 Scala source and 5 Java sources to /Users/jlee2/Yahoo/yspark_2/common/unsafe/target/scala-2.11/test-classes...
+[info] Compile success at Aug 10, 2017 11:11:33 AM [7.243s]
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-unsafe_2.11 ---
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running org.apache.spark.unsafe.array.LongArraySuite
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.049 sec - in org.apache.spark.unsafe.array.LongArraySuite
+Running org.apache.spark.unsafe.hash.Murmur3_x86_32Suite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.361 sec - in org.apache.spark.unsafe.hash.Murmur3_x86_32Suite
+Running org.apache.spark.unsafe.PlatformUtilSuite
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.041 sec - in org.apache.spark.unsafe.PlatformUtilSuite
+Running org.apache.spark.unsafe.types.CalendarIntervalSuite
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.009 sec - in org.apache.spark.unsafe.types.CalendarIntervalSuite
+Running org.apache.spark.unsafe.types.UTF8StringSuite
+Tests run: 34, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.067 sec - in org.apache.spark.unsafe.types.UTF8StringSuite
+
+Results :
+
+Tests run: 50, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-unsafe_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-unsafe_2.11 ---
+Discovery starting.
+Discovery completed in 279 milliseconds.
+Run starting. Expected test count is: 19
+UTF8StringPropertyCheckSuite:
+- toString
+- numChars
+- startsWith
+- endsWith
+- toUpperCase
+- toLowerCase
+- compare
+- substring
+- contains
+- trim, trimLeft, trimRight
+- reverse
+- indexOf
+- repeat
+- lpad, rpad
+- concat
+- concatWs
+- split !!! IGNORED !!!
+- levenshteinDistance
+- hashCode
+- equals
+Run completed in 1 second, 622 milliseconds.
+Total number of tests run: 19
+Suites: completed 2, aborted 0
+Tests: succeeded 19, failed 0, canceled 0, ignored 1, pending 0
+All tests passed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Launcher 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-launcher_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/launcher/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/launcher/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-launcher_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.7.3/hadoop-yarn-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.7.3/hadoop-yarn-api-2.7.3.jar:/Users/jlee2/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-library/2.11.8/scala-library-2.11.8.jar:/Users/jlee2/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.jar:/Users/jlee2/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/jlee2/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/jlee2/.m2/repository/javax/activation/activation/1.1/activation-1.1.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.7.3/hadoop-yarn-client-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/zookeeper/zookeeper/3.4.6/zookeeper-3.4.6.jar:/Users/jlee2/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/jlee2/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/jlee2/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/jlee2/.m2/repository/org/xerial/snappy/snappy-java/1.1.2.6/snappy-java-1.1.2.6.jar:/Users/jlee2/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/commons-io/commons-io/2.4/commons-io-2.4.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/jlee2/.m2/repository/io/netty/netty/3.9.9.Final/netty-3.9.9.Final.jar:/Users/jlee2/.m2/repository/javax/xml/stream/stax-api/1.0-2/stax-api-1.0-2.jar:/Users/jlee2/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-launcher_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] skip non existing resourceDirectory /Users/jlee2/Yahoo/yspark_2/launcher/src/main/resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-launcher_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-launcher_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 16 Java sources to /Users/jlee2/Yahoo/yspark_2/launcher/target/scala-2.11/classes...
+[info] Compile success at Aug 10, 2017 11:11:41 AM [2.441s]
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (create-tmp-dir) @ spark-launcher_2.11 ---
+[INFO] Executing tasks
+
+main:
+    [mkdir] Created dir: /Users/jlee2/Yahoo/yspark_2/launcher/target/tmp
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:testResources (default-testResources) @ spark-launcher_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 2 resources
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:testCompile (default-testCompile) @ spark-launcher_2.11 ---
+[INFO] Not compiling test sources
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (generate-test-classpath) @ spark-launcher_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:testCompile (scala-test-compile-first) @ spark-launcher_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 6 Java sources to /Users/jlee2/Yahoo/yspark_2/launcher/target/scala-2.11/test-classes...
+[info] Compile success at Aug 10, 2017 11:11:44 AM [1.897s]
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (default-test) @ spark-launcher_2.11 ---
+
+-------------------------------------------------------
+ T E S T S
+-------------------------------------------------------
+Running org.apache.spark.launcher.CommandBuilderUtilsSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.076 sec - in org.apache.spark.launcher.CommandBuilderUtilsSuite
+Running org.apache.spark.launcher.LauncherServerSuite
+Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.338 sec - in org.apache.spark.launcher.LauncherServerSuite
+Running org.apache.spark.launcher.OutputRedirectionSuite
+Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.112 sec - in org.apache.spark.launcher.OutputRedirectionSuite
+Running org.apache.spark.launcher.SparkSubmitCommandBuilderSuite
+Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.049 sec - in org.apache.spark.launcher.SparkSubmitCommandBuilderSuite
+Running org.apache.spark.launcher.SparkSubmitOptionParserSuite
+Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.155 sec - in org.apache.spark.launcher.SparkSubmitOptionParserSuite
+
+Results :
+
+Tests run: 34, Failures: 0, Errors: 0, Skipped: 0
+
+[INFO] 
+[INFO] --- maven-surefire-plugin:2.19.1:test (test) @ spark-launcher_2.11 ---
+[INFO] Skipping execution of surefire because it has already been run for this configuration
+[INFO] 
+[INFO] --- scalatest-maven-plugin:1.0:test (test) @ spark-launcher_2.11 ---
+Discovery starting.
+Discovery completed in 115 milliseconds.
+Run starting. Expected test count is: 0
+DiscoverySuite:
+Run completed in 220 milliseconds.
+Total number of tests run: 0
+Suites: completed 1, aborted 0
+Tests: succeeded 0, failed 0, canceled 0, ignored 0, pending 0
+No tests were executed.
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Building Spark Project Core 2.3.0-SNAPSHOT
+[INFO] ------------------------------------------------------------------------
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-test/2.7.1/curator-test-2.7.1.pom
+Progress (1): 2.0 kB                    Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-test/2.7.1/curator-test-2.7.1.pom (2.0 kB at 70 kB/s)
+Downloading: https://repo1.maven.org/maven2/org/apache/curator/curator-test/2.7.1/curator-test-2.7.1.jar
+Progress (1): 2.1/39 kBProgress (1): 4.9/39 kBProgress (1): 7.7/39 kBProgress (1): 10/39 kB Progress (1): 13/39 kBProgress (1): 16/39 kBProgress (1): 19/39 kBProgress (1): 21/39 kBProgress (1): 24/39 kBProgress (1): 27/39 kBProgress (1): 30/39 kBProgress (1): 32/39 kBProgress (1): 35/39 kBProgress (1): 38/39 kBProgress (1): 39 kB                      Downloaded: https://repo1.maven.org/maven2/org/apache/curator/curator-test/2.7.1/curator-test-2.7.1.jar (39 kB at 1.2 MB/s)
+[INFO] 
+[INFO] --- maven-enforcer-plugin:1.4.1:enforce (enforce-versions) @ spark-core_2.11 ---
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:add-source (eclipse-add-source) @ spark-core_2.11 ---
+[INFO] Add Source directory: /Users/jlee2/Yahoo/yspark_2/core/src/main/scala
+[INFO] Add Test Source directory: /Users/jlee2/Yahoo/yspark_2/core/src/test/scala
+[INFO] 
+[INFO] --- maven-dependency-plugin:3.0.0:build-classpath (default-cli) @ spark-core_2.11 ---
+[INFO] Dependencies classpath:
+/Users/jlee2/.m2/repository/mx4j/mx4j/3.0.2/mx4j-3.0.2.jar:/Users/jlee2/.m2/repository/io/dropwizard/metrics/metrics-core/3.1.2/metrics-core-3.1.2.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/module/jackson-module-scala_2.11/2.6.7.1/jackson-module-scala_2.11-2.6.7.1.jar:/Users/jlee2/.m2/repository/org/apache/htrace/htrace-core/3.1.0-incubating/htrace-core-3.1.0-incubating.jar:/Users/jlee2/.m2/repository/com/google/protobuf/protobuf-java/2.5.0/protobuf-java-2.5.0.jar:/Users/jlee2/.m2/repository/net/java/dev/jets3t/jets3t/0.9.3/jets3t-0.9.3.jar:/Users/jlee2/.m2/repository/org/lz4/lz4-java/1.4.0/lz4-java-1.4.0.jar:/Users/jlee2/.m2/repository/aopalliance/aopalliance/1.0/aopalliance-1.0.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-continuation/9.3.20.v20170531/jetty-continuation-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/io/dropwizard/metrics/metrics-jvm/3.1.2/metrics-jvm-3.1.2.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-servlets/9.3.20.v20170531/jetty-servlets-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/fusesource/leveldbjni/leveldbjni-all/1.8/leveldbjni-all-1.8.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/bundles/repackaged/jersey-guava/2.22.2/jersey-guava-2.22.2.jar:/Users/jlee2/.m2/repository/io/dropwizard/metrics/metrics-json/3.1.2/metrics-json-3.1.2.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-crypto/1.0.0/commons-crypto-1.0.0.jar:/Users/jlee2/.m2/repository/com/google/inject/guice/3.0/guice-3.0.jar:/Users/jlee2/.m2/repository/commons-io/commons-io/2.4/commons-io-2.4.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-lang3/3.5/commons-lang3-3.5.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-jaxrs/1.9.13/jackson-jaxrs-1.9.13.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-reflect/2.11.8/scala-reflect-2.11.8.jar:/Users/jlee2/.m2/repository/org/json4s/json4s-jackson_2.11/3.2.11/json4s-jackson_2.11-3.2.11.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-auth/2.7.3/hadoop-auth-2.7.3.jar:/Users/jlee2/.m2/repository/com/esotericsoftware/minlog/1.3.0/minlog-1.3.0.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-client/2.7.3/hadoop-client-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-shuffle/2.7.3/hadoop-mapreduce-client-shuffle-2.7.3.jar:/Users/jlee2/.m2/repository/javax/mail/mail/1.4.7/mail-1.4.7.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-core-asl/1.9.13/jackson-core-asl-1.9.13.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-xml/9.3.20.v20170531/jetty-xml-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/javax/validation/validation-api/1.1.0.Final/validation-api-1.1.0.Final.jar:/Users/jlee2/.m2/repository/org/bouncycastle/bcprov-jdk15on/1.51/bcprov-jdk15on-1.51.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/core/jersey-common/2.22.2/jersey-common-2.22.2.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-core/2.7.3/hadoop-mapreduce-client-core-2.7.3.jar:/Users/jlee2/.m2/repository/com/google/code/findbugs/jsr305/1.3.9/jsr305-1.3.9.jar:/Users/jlee2/.m2/repository/javax/xml/bind/jaxb-api/2.2.2/jaxb-api-2.2.2.jar:/Users/jlee2/.m2/repository/org/glassfish/hk2/hk2-api/2.4.0-b34/hk2-api-2.4.0-b34.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/core/jersey-server/2.22.2/jersey-server-2.22.2.jar:/Users/jlee2/.m2/repository/com/twitter/chill-java/0.8.0/chill-java-0.8.0.jar:/Users/jlee2/.m2/repository/commons-lang/commons-lang/2.6/commons-lang-2.6.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-server/9.3.20.v20170531/jetty-server-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-client/2.7.3/hadoop-yarn-client-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/zookeeper/zookeeper/3.4.6/zookeeper-3.4.6.jar:/Users/jlee2/.m2/repository/org/tukaani/xz/1.0/xz-1.0.jar:/Users/jlee2/.m2/repository/javax/activation/activation/1.1.1/activation-1.1.1.jar:/Users/jlee2/.m2/repository/commons-codec/commons-codec/1.10/commons-codec-1.10.jar:/Users/jlee2/.m2/repository/org/javassist/javassist/3.18.1-GA/javassist-3.18.1-GA.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-client/9.3.20.v20170531/jetty-client-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/apache/ivy/ivy/2.4.0/ivy-2.4.0.jar:/Users/jlee2/.m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar:/Users/jlee2/.m2/repository/commons-beanutils/commons-beanutils-core/1.8.0/commons-beanutils-core-1.8.0.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-util/9.3.20.v20170531/jetty-util-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/javax/servlet/javax.servlet-api/3.1.0/javax.servlet-api-3.1.0.jar:/Users/jlee2/.m2/repository/org/glassfish/hk2/osgi-resource-locator/1.0.1/osgi-resource-locator-1.0.1.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-core/2.6.7/jackson-core-2.6.7.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-math3/3.4.1/commons-math3-3.4.1.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-common/2.7.3/hadoop-mapreduce-client-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-jobclient/2.7.3/hadoop-mapreduce-client-jobclient-2.7.3.jar:/Users/jlee2/.m2/repository/javax/xml/stream/stax-api/1.0-2/stax-api-1.0-2.jar:/Users/jlee2/.m2/repository/org/apache/avro/avro/1.7.7/avro-1.7.7.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-xc/1.9.13/jackson-xc-1.9.13.jar:/Users/jlee2/.m2/repository/org/glassfish/hk2/hk2-utils/2.4.0-b34/hk2-utils-2.4.0-b34.jar:/Users/jlee2/.m2/repository/org/glassfish/hk2/external/aopalliance-repackaged/2.4.0-b34/aopalliance-repackaged-2.4.0-b34.jar:/Users/jlee2/.m2/repository/io/netty/netty-all/4.0.43.Final/netty-all-4.0.43.Final.jar:/Users/jlee2/.m2/repository/org/glassfish/hk2/external/javax.inject/2.4.0-b34/javax.inject-2.4.0-b34.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/containers/jersey-container-servlet-core/2.22.2/jersey-container-servlet-core-2.22.2.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/module/jackson-module-paranamer/2.6.7/jackson-module-paranamer-2.6.7.jar:/Users/jlee2/.m2/repository/oro/oro/2.0.8/oro-2.0.8.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-compiler/2.11.8/scala-compiler-2.11.8.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-common/2.7.3/hadoop-yarn-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-api/2.7.3/hadoop-yarn-api-2.7.3.jar:/Users/jlee2/.m2/repository/org/roaringbitmap/RoaringBitmap/0.5.11/RoaringBitmap-0.5.11.jar:/Users/jlee2/.m2/repository/log4j/log4j/1.2.17/log4j-1.2.17.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-yarn-server-common/2.7.3/hadoop-yarn-server-common-2.7.3.jar:/Users/jlee2/.m2/repository/org/scala-lang/scala-library/2.11.8/scala-library-2.11.8.jar:/Users/jlee2/.m2/repository/com/twitter/parquet-hadoop-bundle/1.6.0/parquet-hadoop-bundle-1.6.0.jar:/Users/jlee2/Yahoo/yspark_2/launcher/target/scala-2.11/classes:/Users/jlee2/Yahoo/yspark_2/common/unsafe/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-proxy/9.3.20.v20170531/jetty-proxy-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-framework/2.7.1/curator-framework-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-recipes/2.7.1/curator-recipes-2.7.1.jar:/Users/jlee2/.m2/repository/org/apache/commons/commons-compress/1.4.1/commons-compress-1.4.1.jar:/Users/jlee2/.m2/repository/org/apache/directory/server/apacheds-kerberos-codec/2.0.0-M15/apacheds-kerberos-codec-2.0.0-M15.jar:/Users/jlee2/.m2/repository/com/jamesmurty/utils/java-xmlbuilder/1.0/java-xmlbuilder-1.0.jar:/Users/jlee2/.m2/repository/org/slf4j/slf4j-api/1.7.16/slf4j-api-1.7.16.jar:/Users/jlee2/Yahoo/yspark_2/common/network-common/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/apache/xbean/xbean-asm5-shaded/4.4/xbean-asm5-shaded-4.4.jar:/Users/jlee2/.m2/repository/org/apache/httpcomponents/httpclient/4.5.2/httpclient-4.5.2.jar:/Users/jlee2/.m2/repository/org/json4s/json4s-core_2.11/3.2.11/json4s-core_2.11-3.2.11.jar:/Users/jlee2/.m2/repository/org/mortbay/jetty/jetty-util/6.1.26/jetty-util-6.1.26.jar:/Users/jlee2/Yahoo/yspark_2/common/network-shuffle/target/scala-2.11/classes:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-databind/2.6.7.1/jackson-databind-2.6.7.1.jar:/Users/jlee2/.m2/repository/org/codehaus/jackson/jackson-mapper-asl/1.9.13/jackson-mapper-asl-1.9.13.jar:/Users/jlee2/.m2/repository/net/sf/py4j/py4j/0.10.6/py4j-0.10.6.jar:/Users/jlee2/.m2/repository/com/esotericsoftware/kryo-shaded/3.0.3/kryo-shaded-3.0.3.jar:/Users/jlee2/.m2/repository/javax/ws/rs/javax.ws.rs-api/2.0.1/javax.ws.rs-api-2.0.1.jar:/Users/jlee2/.m2/repository/javax/servlet/jsp/jsp-api/2.1/jsp-api-2.1.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/core/jersey-client/2.22.2/jersey-client-2.22.2.jar:/Users/jlee2/.m2/repository/io/netty/netty/3.9.9.Final/netty-3.9.9.Final.jar:/Users/jlee2/.m2/repository/org/apache/avro/avro-mapred/1.7.7/avro-mapred-1.7.7-hadoop2.jar:/Users/jlee2/.m2/repository/xmlenc/xmlenc/0.52/xmlenc-0.52.jar:/Users/jlee2/.m2/repository/com/ning/compress-lzf/1.0.3/compress-lzf-1.0.3.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-hdfs/2.7.3/hadoop-hdfs-2.7.3.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-webapp/9.3.20.v20170531/jetty-webapp-9.3.20.v20170531.jar:/Users/jlee2/Yahoo/yspark_2/common/tags/target/scala-2.11/classes:/Users/jlee2/.m2/repository/org/apache/directory/api/api-util/1.0.0-M20/api-util-1.0.0-M20.jar:/Users/jlee2/.m2/repository/commons-net/commons-net/2.2/commons-net-2.2.jar:/Users/jlee2/.m2/repository/com/google/code/gson/gson/2.2.4/gson-2.2.4.jar:/Users/jlee2/.m2/repository/org/json4s/json4s-ast_2.11/3.2.11/json4s-ast_2.11-3.2.11.jar:/Users/jlee2/.m2/repository/org/apache/directory/api/api-asn1-api/1.0.0-M20/api-asn1-api-1.0.0-M20.jar:/Users/jlee2/.m2/repository/org/scala-lang/scalap/2.11.8/scalap-2.11.8.jar:/Users/jlee2/.m2/repository/com/clearspring/analytics/stream/2.7.0/stream-2.7.0.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-http/9.3.20.v20170531/jetty-http-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-security/9.3.20.v20170531/jetty-security-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-common/2.7.3/hadoop-common-2.7.3.jar:/Users/jlee2/.m2/repository/com/fasterxml/jackson/core/jackson-annotations/2.6.7/jackson-annotations-2.6.7.jar:/Users/jlee2/.m2/repository/com/thoughtworks/paranamer/paranamer/2.6/paranamer-2.6.jar:/Users/jlee2/.m2/repository/commons-configuration/commons-configuration/1.6/commons-configuration-1.6.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/containers/jersey-container-servlet/2.22.2/jersey-container-servlet-2.22.2.jar:/Users/jlee2/.m2/repository/commons-digester/commons-digester/1.8/commons-digester-1.8.jar:/Users/jlee2/.m2/repository/org/slf4j/jul-to-slf4j/1.7.16/jul-to-slf4j-1.7.16.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-io/9.3.20.v20170531/jetty-io-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/apache/directory/server/apacheds-i18n/2.0.0-M15/apacheds-i18n-2.0.0-M15.jar:/Users/jlee2/.m2/repository/commons-beanutils/commons-beanutils/1.7.0/commons-beanutils-1.7.0.jar:/Users/jlee2/.m2/repository/org/scala-lang/modules/scala-xml_2.11/1.0.2/scala-xml_2.11-1.0.2.jar:/Users/jlee2/.m2/repository/org/apache/curator/curator-client/2.7.1/curator-client-2.7.1.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-plus/9.3.20.v20170531/jetty-plus-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/scala-lang/modules/scala-parser-combinators_2.11/1.0.4/scala-parser-combinators_2.11-1.0.4.jar:/Users/jlee2/.m2/repository/commons-cli/commons-cli/1.2/commons-cli-1.2.jar:/Users/jlee2/.m2/repository/io/dropwizard/metrics/metrics-graphite/3.1.2/metrics-graphite-3.1.2.jar:/Users/jlee2/.m2/repository/xerces/xercesImpl/2.9.1/xercesImpl-2.9.1.jar:/Users/jlee2/.m2/repository/net/iharder/base64/2.3.8/base64-2.3.8.jar:/Users/jlee2/.m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.jar:/Users/jlee2/.m2/repository/org/objenesis/objenesis/2.1/objenesis-2.1.jar:/Users/jlee2/.m2/repository/org/slf4j/slf4j-log4j12/1.7.16/slf4j-log4j12-1.7.16.jar:/Users/jlee2/.m2/repository/org/xerial/snappy/snappy-java/1.1.2.6/snappy-java-1.1.2.6.jar:/Users/jlee2/.m2/repository/org/glassfish/jersey/media/jersey-media-jaxb/2.22.2/jersey-media-jaxb-2.22.2.jar:/Users/jlee2/.m2/repository/org/spark-project/spark/unused/1.0.0/unused-1.0.0.jar:/Users/jlee2/.m2/repository/org/apache/avro/avro-ipc/1.7.7/avro-ipc-1.7.7.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-annotations/2.7.3/hadoop-annotations-2.7.3.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-jndi/9.3.20.v20170531/jetty-jndi-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/commons-collections/commons-collections/3.2.2/commons-collections-3.2.2.jar:/Users/jlee2/.m2/repository/com/twitter/chill_2.11/0.8.0/chill_2.11-0.8.0.jar:/Users/jlee2/.m2/repository/org/glassfish/hk2/hk2-locator/2.4.0-b34/hk2-locator-2.4.0-b34.jar:/Users/jlee2/.m2/repository/org/apache/hadoop/hadoop-mapreduce-client-app/2.7.3/hadoop-mapreduce-client-app-2.7.3.jar:/Users/jlee2/.m2/repository/com/google/inject/extensions/guice-servlet/3.0/guice-servlet-3.0.jar:/Users/jlee2/.m2/repository/net/razorvine/pyrolite/4.13/pyrolite-4.13.jar:/Users/jlee2/.m2/repository/org/eclipse/jetty/jetty-servlet/9.3.20.v20170531/jetty-servlet-9.3.20.v20170531.jar:/Users/jlee2/.m2/repository/org/slf4j/jcl-over-slf4j/1.7.16/jcl-over-slf4j-1.7.16.jar:/Users/jlee2/.m2/repository/commons-httpclient/commons-httpclient/3.1/commons-httpclient-3.1.jar:/Users/jlee2/.m2/repository/org/apache/httpcomponents/httpcore/4.4.4/httpcore-4.4.4.jar
+[INFO] 
+[INFO] --- maven-remote-resources-plugin:1.5:process (default) @ spark-core_2.11 ---
+[INFO] 
+[INFO] --- maven-antrun-plugin:1.8:run (default) @ spark-core_2.11 ---
+[INFO] Executing tasks
+
+main:
+[INFO] Executed tasks
+[INFO] 
+[INFO] --- maven-resources-plugin:2.6:resources (default-resources) @ spark-core_2.11 ---
+[INFO] Using 'UTF-8' encoding to copy filtered resources.
+[INFO] Copying 37 resources
+[INFO] Copying 1 resource
+[INFO] Copying 3 resources
+[INFO] 
+[INFO] --- maven-compiler-plugin:3.6.1:compile (default-compile) @ spark-core_2.11 ---
+[INFO] Not compiling main sources
+[INFO] 
+[INFO] --- scala-maven-plugin:3.2.2:compile (scala-compile-first) @ spark-core_2.11 ---
+[INFO] Using zinc server for incremental compilation
+[warn] Pruning sources from previous analysis, due to incompatible CompileSetup.
+[info] Compiling 487 Scala sources and 74 Java sources to /Users/jlee2/Yahoo/yspark_2/core/target/scala-2.11/classes...

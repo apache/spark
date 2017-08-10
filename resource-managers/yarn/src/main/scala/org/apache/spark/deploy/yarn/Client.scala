@@ -22,8 +22,8 @@ import java.net.{InetAddress, InetSocketAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.PrivilegedExceptionAction
-import java.util.concurrent.TimeoutException
 import java.util.{Locale, Properties, UUID}
+import java.util.concurrent.TimeoutException
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
@@ -31,13 +31,12 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.concurrent.ExecutionContext
 import scala.util.control.Breaks._
 import scala.util.control.NonFatal
-import scala.collection.JavaConversions._
 
-import io.netty.handler.codec.base64.Base64;
-import io.netty.buffer.Unpooled;
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.base.Objects
 import com.google.common.io.Files
+import io.netty.buffer.Unpooled
+import io.netty.handler.codec.base64.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -62,8 +61,8 @@ import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.util.{CallerContext, RpcUtils, SparkExitCode, ThreadUtils, Utils}
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef,RpcEnv, ThreadSafeRpcEndpoint}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1179,7 +1178,7 @@ private[spark] class Client(
     var currentTime = System.currentTimeMillis
     val timeKillIssued = currentTime
 
-    val killTimeOut  =sparkConf.get(CLIENT_TO_AM_HARD_KILL_TIMEOUT)
+    val killTimeOut = sparkConf.get(CLIENT_TO_AM_HARD_KILL_TIMEOUT)
     while ((currentTime< timeKillIssued + killTimeOut)
         && !isAppInTerminalState(appId)) {
       try
@@ -1194,7 +1193,9 @@ private[spark] class Client(
     }
   }
 
-  private def setupAMConnection(appId: ApplicationId, securityManager: SecurityManager): RpcEndpointRef = {
+  private def setupAMConnection(
+      appId: ApplicationId,
+      securityManager: SecurityManager): RpcEndpointRef = {
     logInfo(s"APP ID $appId")
     val report = getApplicationReport(appId)
     val state = report.getYarnApplicationState
@@ -1220,7 +1221,7 @@ private[spark] class Client(
       securityManager.setSecretKey(secretkeystring)
     }
 
-    sparkConf.set("spark.rpc.connectionUsingTokens","true")
+    sparkConf.set("spark.rpc.connectionUsingTokens", "true")
     val rpcEnv =
       RpcEnv.create("yarnDriverClient", Utils.localHostName(), 0, sparkConf, securityManager)
     val AMHostPort = RpcAddress(report.getHost, report.getRpcPort)

@@ -94,7 +94,7 @@ private[spark] class YarnRMClient extends Logging {
       amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
     }
   }
-  /** Obtain the MasterKey reported back from YARN when Registering AM*/
+  /** Obtain the MasterKey reported back from YARN when Registering AM. */
   def getMasterKey(): ByteBuffer = masterkey
 
 
