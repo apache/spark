@@ -338,9 +338,15 @@ class AggregateBenchmark extends BenchmarkBase {
       f()
     }
 
-    benchmark.addCase(s"codegen = T") { iter =>
+    benchmark.addCase(s"codegen = T maxLinesPerFunction = 10000") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
       sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "10000")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T maxLinesPerFunction = 1500") { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "1500")
       f()
     }
 
@@ -351,8 +357,9 @@ class AggregateBenchmark extends BenchmarkBase {
     Intel64 Family 6 Model 58 Stepping 9, GenuineIntel
     max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)   Per Row(ns) Relative
     ----------------------------------------------------------------------------------------------
-    codegen = F                                    443 /  507          1.5         676.0     1.0X
-    codegen = T                                   3279 / 3283          0.2        5002.6     0.1X
+    codegen = F                                    462 /  533          1.4         704.4       1.0X
+    codegen = T maxLinesPerFunction = 10000       3444 / 3447          0.2        5255.3       0.1X
+    codegen = T maxLinesPerFunction = 1500         447 /  478          1.5         682.1       1.0X
      */
   }
 
