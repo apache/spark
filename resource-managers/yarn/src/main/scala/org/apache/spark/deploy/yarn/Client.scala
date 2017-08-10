@@ -62,7 +62,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
-import org.apache.spark.util.{CallerContext, RpcUtils, SparkExitCode, ThreadUtils, Utils}
+import org.apache.spark.util.{CallerContext, SparkExitCode, ThreadUtils, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1157,49 +1157,12 @@ private[spark] class Client(
     }
   }
 
-  def killSparkApplication(securityManager: SecurityManager): Unit = {
-    setupCredentials()
-    yarnClient.init(yarnConf)
-    yarnClient.start
-    val appId = ConverterUtils.toApplicationId(args.userArgs(0))
-    val AMEndpoint = setupAMConnection(appId, securityManager)
-    try {
-      val timeout = RpcUtils.askRpcTimeout(sparkConf)
-      val success = timeout.awaitResult(AMEndpoint.ask[Boolean](KillApplication))
-      if (!success) {
-        throw new SparkException(s"Current user doesn't have modify ACL")
-        return
-      }
-    } catch {
-      case e: TimeoutException =>
-        throw new SparkException(s"Timed out waiting to kill the application: $appId")
-    }
-
-    var currentTime = System.currentTimeMillis
-    val timeKillIssued = currentTime
-
-    val killTimeOut = sparkConf.get(CLIENT_TO_AM_HARD_KILL_TIMEOUT)
-    while ((currentTime< timeKillIssued + killTimeOut)
-        && !isAppInTerminalState(appId)) {
-      try
-        Thread.sleep(1000L)
-      catch {
-        case ie: InterruptedException => break
-      }
-      currentTime = System.currentTimeMillis
-    }
-    if (!isAppInTerminalState(appId)) {
-      yarnClient.killApplication(appId)
-    }
-  }
-
   private def setupAMConnection(
       appId: ApplicationId,
       securityManager: SecurityManager): RpcEndpointRef = {
-    logInfo(s"APP ID $appId")
     val report = getApplicationReport(appId)
     val state = report.getYarnApplicationState
-    if (report.getHost() == null || "".equals(report.getHost()) || "N/A".equals(report.getHost())) {
+    if (report.getHost() == null || "".equals(report.getHost())) {
       throw new SparkException(s"AM for $appId not assigned or dont have view ACL for it")
     }
     if ( state != YarnApplicationState.RUNNING) {
@@ -1229,18 +1192,6 @@ private[spark] class Client(
       ApplicationMaster.ENDPOINT_NAME)
 
     AMEndpoint
-  }
-
-  private def checkAppStatus(appId: ApplicationId): YarnApplicationState = {
-    val report = getApplicationReport(appId)
-    report.getYarnApplicationState
-  }
-
-  private def isAppInTerminalState(appId: ApplicationId): Boolean = {
-    var status = checkAppStatus(appId)
-    return (status == YarnApplicationState.KILLED
-        || status == YarnApplicationState.FAILED
-        || status == YarnApplicationState.FINISHED)
   }
 
   private def findPySparkArchives(): Seq[String] = {
@@ -1278,14 +1229,6 @@ private object Client extends Logging {
     sparkConf.remove("spark.files")
     val args = new ClientArguments(argStrings)
     new Client(args, sparkConf).run()
-  }
-
-  def yarnKillSubmission(argStrings: Array[String]): Unit = {
-    System.setProperty("SPARK_YARN_MODE", "true")
-    val sparkConf = new SparkConf
-    val args = new ClientArguments(argStrings)
-
-    new Client(args, sparkConf).killSparkApplication(new SecurityManager(sparkConf))
   }
 
   // Alias for the user jar

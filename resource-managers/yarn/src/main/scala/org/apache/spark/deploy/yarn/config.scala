@@ -187,11 +187,6 @@ package object config {
     .toSequence
     .createWithDefault(Nil)
 
-  private[spark] val CLIENT_TO_AM_HARD_KILL_TIMEOUT = ConfigBuilder("spark.yarn.hardKillTimeout")
-    .internal()
-    .timeConf(TimeUnit.MILLISECONDS)
-    .createWithDefaultString("60s")
-
   /* Client-mode AM configuration. */
 
   private[spark] val AM_CORES = ConfigBuilder("spark.yarn.am.cores")

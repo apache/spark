@@ -127,46 +127,11 @@ object SparkSubmit extends CommandLineUtils {
   }
 
   /**
-   * Kill an existing submission
+   * Kill an existing submission using the REST protocol. Standalone and Mesos cluster mode only.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
-    if (args.master.startsWith("yarn")) {
-      // Use RPC protocol. YARN mode only.
-      val (_, _, sysProps, _) = prepareSubmitEnvironment(args)
-      val applicationID = Seq("--arg", args.submissionToKill)
-      if (args.proxyUser != null) {
-        val proxyUser = UserGroupInformation.createProxyUser(args.proxyUser,
-          UserGroupInformation.getCurrentUser())
-        try {
-          proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
-            override def run(): Unit = {
-              runMethod(applicationID, ArrayBuffer(), sysProps,
-                "org.apache.spark.deploy.yarn.Client", "yarnKillSubmission", args.verbose)
-            }
-          })
-        } catch {
-          case e: Exception =>
-            // Hadoop's AuthorizationException suppresses the exception's stack trace, which
-            // makes the message printed to the output by the JVM not very helpful. Instead,
-            // detect exceptions with empty stack traces here, and treat them differently.
-            if (e.getStackTrace().length == 0) {
-              // scalastyle:off println
-              printStream.println(s"ERROR: ${e.getClass().getName()}: ${e.getMessage()}")
-              // scalastyle:on println
-              exitFn(1)
-            } else {
-              throw e
-            }
-        }
-      } else {
-        runMethod(applicationID, ArrayBuffer(), sysProps, "org.apache.spark.deploy.yarn.Client",
-          "yarnKillSubmission", args.verbose)
-      }
-    } else {
-      // Use Rest protocol. Standalone and Mesos cluster mode only..
-      new RestSubmissionClient(args.master)
-        .killSubmission(args.submissionToKill)
-    }
+    new RestSubmissionClient(args.master)
+      .killSubmission(args.submissionToKill)
   }
 
   /**
@@ -198,7 +163,7 @@ object SparkSubmit extends CommandLineUtils {
         try {
           proxyUser.doAs(new PrivilegedExceptionAction[Unit]() {
             override def run(): Unit = {
-              runMethod(childArgs, childClasspath, sysProps, childMainClass, "main", args.verbose)
+              runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
             }
           })
         } catch {
@@ -216,7 +181,7 @@ object SparkSubmit extends CommandLineUtils {
             }
         }
       } else {
-        runMethod(childArgs, childClasspath, sysProps, childMainClass, "main", args.verbose)
+        runMain(childArgs, childClasspath, sysProps, childMainClass, args.verbose)
       }
     }
 
@@ -716,22 +681,20 @@ object SparkSubmit extends CommandLineUtils {
   }
 
   /**
-   * Run a method of the child class using the provided launch environment.
+   * Run the main method of the child class using the provided launch environment.
    *
    * Note that this main class will not be the one provided by the user if we're
    * running cluster deploy mode or python applications.
    */
-  private def runMethod(
+  private def runMain(
       childArgs: Seq[String],
       childClasspath: Seq[String],
       sysProps: Map[String, String],
       childMainClass: String,
-      childMainMethod: String,
       verbose: Boolean): Unit = {
     // scalastyle:off println
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
-      printStream.println(s"Main method:\n$childMainMethod")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
       // sysProps may contain sensitive information, so redact before printing
       printStream.println(s"System properties:\n${Utils.redact(sysProps).mkString("\n")}")
@@ -788,7 +751,7 @@ object SparkSubmit extends CommandLineUtils {
       printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
-    val mainMethod = mainClass.getMethod(childMainMethod, new Array[String](0).getClass)
+    val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
     if (!Modifier.isStatic(mainMethod.getModifiers)) {
       throw new IllegalStateException("The main method in the given main class must be static")
     }

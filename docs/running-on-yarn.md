@@ -462,14 +462,6 @@ To use a custom metrics.properties for the application master and executors, upd
   port to connect to from the application Report.
   </td>
 </tr>
-<tr>
-  <td><code>spark.yarn.hardKillTimeout</code></td>
-  <td>60s</td>
-  <td>
-  Number of milliseconds to wait before the job client kills the application.
-  After the wait, client will attempt to terminate the YARN application.
-  </td>
-</tr>
 </table>
 
 # Important notes
