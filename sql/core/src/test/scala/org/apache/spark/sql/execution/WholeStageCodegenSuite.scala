@@ -149,4 +149,75 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       assert(df.collect() === Array(Row(1), Row(2)))
     }
   }
+
+  test("SPARK-21603 check there is a too long generated function") {
+    val ds = spark.range(10)
+      .selectExpr(
+        "id",
+        "(id & 1023) as k1",
+        "cast(id & 1023 as double) as k2",
+        "cast(id & 1023 as int) as k3",
+        "case when id > 100 and id <= 200 then 1 else 0 end as v1",
+        "case when id > 200 and id <= 300 then 1 else 0 end as v2",
+        "case when id > 300 and id <= 400 then 1 else 0 end as v3",
+        "case when id > 400 and id <= 500 then 1 else 0 end as v4",
+        "case when id > 500 and id <= 600 then 1 else 0 end as v5",
+        "case when id > 600 and id <= 700 then 1 else 0 end as v6",
+        "case when id > 700 and id <= 800 then 1 else 0 end as v7",
+        "case when id > 800 and id <= 900 then 1 else 0 end as v8",
+        "case when id > 900 and id <= 1000 then 1 else 0 end as v9",
+        "case when id > 1000 and id <= 1100 then 1 else 0 end as v10",
+        "case when id > 1100 and id <= 1200 then 1 else 0 end as v11",
+        "case when id > 1200 and id <= 1300 then 1 else 0 end as v12",
+        "case when id > 1300 and id <= 1400 then 1 else 0 end as v13",
+        "case when id > 1400 and id <= 1500 then 1 else 0 end as v14",
+        "case when id > 1500 and id <= 1600 then 1 else 0 end as v15",
+        "case when id > 1600 and id <= 1700 then 1 else 0 end as v16",
+        "case when id > 1700 and id <= 1800 then 1 else 0 end as v17",
+        "case when id > 1800 and id <= 1900 then 1 else 0 end as v18",
+        "case when id > 1900 and id <= 2000 then 1 else 0 end as v19",
+        "case when id > 2000 and id <= 2100 then 1 else 0 end as v20",
+        "case when id > 2100 and id <= 2200 then 1 else 0 end as v21",
+        "case when id > 2200 and id <= 2300 then 1 else 0 end as v22",
+        "case when id > 2300 and id <= 2400 then 1 else 0 end as v23",
+        "case when id > 2400 and id <= 2500 then 1 else 0 end as v24",
+        "case when id > 2500 and id <= 2600 then 1 else 0 end as v25",
+        "case when id > 2600 and id <= 2700 then 1 else 0 end as v26")
+      .groupBy("k1", "k2", "k3")
+      .sum()
+    val plan = ds.queryExecution.executedPlan
+    val wholeStageCodegenExec = plan.find(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[HashAggregateExec]
+          .child.isInstanceOf[ProjectExec]
+    )
+    assert(wholeStageCodegenExec.isDefined)
+    val (ctx, cleanedSource) =
+      wholeStageCodegenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
+    assert(ctx.isTooLongGeneratedFunction === true)
+  }
+
+  test("SPARK-21603 check there is not a too long generated function") {
+    val ds = spark.range(10)
+      .selectExpr(
+        "id",
+        "(id & 1023) as k1",
+        "cast(id & 1023 as double) as k2",
+        "cast(id & 1023 as int) as k3",
+        "case when id > 100 and id <= 200 then 1 else 0 end as v1")
+      .groupBy("k1", "k2", "k3")
+      .sum()
+    val plan = ds.queryExecution.executedPlan
+    val wholeStageCodegenExec = plan.find(p =>
+      p.isInstanceOf[WholeStageCodegenExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec] &&
+        p.asInstanceOf[WholeStageCodegenExec].child.asInstanceOf[HashAggregateExec]
+          .child.isInstanceOf[ProjectExec]
+    )
+    assert(wholeStageCodegenExec.isDefined)
+    val (ctx, cleanedSource) =
+      wholeStageCodegenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
+    assert(ctx.isTooLongGeneratedFunction === false)
+  }
 }
