@@ -342,8 +342,8 @@ object SparkSubmit extends CommandLineUtils {
       }.orNull
     }
 
-    // In yarn-cluster mode, download remote '--jars' and
-    // primaryResource in order to get correct hadoop token.
+    // In yarn cluster mode, download remote jars and primary resource to local,
+    // these jars will be added to classpath of YARN client to get tokens.
     if (isYarnCluster) {
       args.primaryResource = Option(args.primaryResource).map {
         downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
