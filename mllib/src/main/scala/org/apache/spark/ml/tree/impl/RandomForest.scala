@@ -526,9 +526,10 @@ private[spark] object RandomForest extends Logging {
         // iterator all instances in current partition and update aggregate stats
         points.foreach(binSeqOpWithNodeIdCache(nodeStatsAggregators, _))
 
-        // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
+        // compress allStats of nodeAggregateStats,
+        // and transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+        nodeStatsAggregators.view.map(_.compressAllStats()).zipWithIndex.map(_.swap).iterator
       }
     } else {
       input.mapPartitions { points =>
@@ -544,9 +545,10 @@ private[spark] object RandomForest extends Logging {
         // iterator all instances in current partition and update aggregate stats
         points.foreach(binSeqOp(nodeStatsAggregators, _))
 
-        // transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
+        // compress allStats of nodeAggregateStats,
+        // and transform nodeStatsAggregators array to (nodeIndex, nodeAggregateStats) pairs,
         // which can be combined with other partition using `reduceByKey`
-        nodeStatsAggregators.view.zipWithIndex.map(_.swap).iterator
+        nodeStatsAggregators.view.map(_.compressAllStats()).zipWithIndex.map(_.swap).iterator
       }
     }
 
