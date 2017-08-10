@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -71,22 +72,26 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(invocationCount === 1)
   }
 
-  test("isStreaming") {
+  test("outputMode") {
     val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
     val incrementalRelation = new LocalRelation(
       Seq(AttributeReference("a", IntegerType, nullable = true)())) {
-      override def isStreaming(): Boolean = true
+      override def outputMode: OutputMode = OutputMode.Append()
     }
 
     case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
       override def output: Seq[Attribute] = left.output ++ right.output
     }
 
-    require(relation.isStreaming === false)
-    require(incrementalRelation.isStreaming === true)
-    assert(TestBinaryRelation(relation, relation).isStreaming === false)
-    assert(TestBinaryRelation(incrementalRelation, relation).isStreaming === true)
-    assert(TestBinaryRelation(relation, incrementalRelation).isStreaming === true)
-    assert(TestBinaryRelation(incrementalRelation, incrementalRelation).isStreaming)
+    require(relation.outputMode === OutputMode.Complete())
+    require(incrementalRelation.outputMode === OutputMode.Append())
+    assert(TestBinaryRelation(relation, relation).outputMode
+      === OutputMode.Complete())
+    assert(TestBinaryRelation(incrementalRelation, relation).outputMode
+      === OutputMode.Append())
+    assert(TestBinaryRelation(relation, incrementalRelation).outputMode
+      === OutputMode.Append())
+    assert(TestBinaryRelation(incrementalRelation, incrementalRelation).outputMode
+      === OutputMode.Append())
   }
 }

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.LogicalPlanStats
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 
@@ -47,8 +48,11 @@ abstract class LogicalPlan
    */
   def analyzed: Boolean = _analyzed
 
-  /** Returns true if this subtree contains any streaming data sources. */
-  def isStreaming: Boolean = children.exists(_.isStreaming == true)
+  /** Returns the output mode of this subtree. */
+  def outputMode: OutputMode = {
+    if (children.exists(_.outputMode == OutputMode.Append())) OutputMode.Append()
+    else OutputMode.Complete()
+  }
 
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its

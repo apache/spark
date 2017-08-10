@@ -32,7 +32,7 @@ object UnsupportedOperationChecker {
 
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
-      case p if p.isStreaming =>
+      case p if p.outputMode == OutputMode.Append() =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
       case _ =>
@@ -41,18 +41,19 @@ object UnsupportedOperationChecker {
 
   def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
 
-    if (!plan.isStreaming) {
+    if (plan.outputMode != OutputMode.Append()) {
       throwError(
         "Queries without streaming sources cannot be executed with writeStream.start()")(plan)
     }
 
     /** Collect all the streaming aggregates in a sub plan */
     def collectStreamingAggregates(subplan: LogicalPlan): Seq[Aggregate] = {
-      subplan.collect { case a: Aggregate if a.isStreaming => a }
+      subplan.collect { case a: Aggregate if a.outputMode == OutputMode.Append() => a }
     }
 
     val mapGroupsWithStates = plan.collect {
-      case f: FlatMapGroupsWithState if f.isStreaming && f.isMapGroupsWithState => f
+      case f: FlatMapGroupsWithState if f.funcOutputMode == OutputMode.Append()
+        && f.isMapGroupsWithState => f
     }
 
     // Disallow multiple `mapGroupsWithState`s.
@@ -62,7 +63,8 @@ object UnsupportedOperationChecker {
     }
 
     val flatMapGroupsWithStates = plan.collect {
-      case f: FlatMapGroupsWithState if f.isStreaming && !f.isMapGroupsWithState => f
+      case f: FlatMapGroupsWithState if f.outputMode == OutputMode.Append()
+        && !f.isMapGroupsWithState => f
     }
 
     // Disallow mixing `mapGroupsWithState`s and `flatMapGroupsWithState`s
@@ -123,9 +125,11 @@ object UnsupportedOperationChecker {
      * data.
      */
     def containsCompleteData(subplan: LogicalPlan): Boolean = {
-      val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
+      val aggs = subplan.collect { case a@Aggregate(_, _, _)
+        if a.outputMode == OutputMode.Append() => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
-      !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
+      subplan.outputMode == OutputMode.Complete() ||
+        (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
     }
 
     plan.foreachUp { implicit subPlan =>
@@ -138,7 +142,7 @@ object UnsupportedOperationChecker {
             expr.collect { case ae: AggregateExpression if ae.isDistinct => ae }
           }
           throwErrorIf(
-            child.isStreaming && distinctAggExprs.nonEmpty,
+            child.outputMode == OutputMode.Append() && distinctAggExprs.nonEmpty,
             "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
               "using approx_count_distinct() instead.")
 
@@ -147,7 +151,7 @@ object UnsupportedOperationChecker {
             "streaming DataFrames/Datasets")
 
         // mapGroupsWithState and flatMapGroupsWithState
-        case m: FlatMapGroupsWithState if m.isStreaming =>
+        case m: FlatMapGroupsWithState if m.outputMode == OutputMode.Append() =>
 
           // Check compatibility with output modes and aggregations in query
           val aggsAfterFlatMapGroups = collectStreamingAggregates(plan)
@@ -219,24 +223,26 @@ object UnsupportedOperationChecker {
           joinType match {
 
             case _: InnerLike =>
-              if (left.isStreaming && right.isStreaming) {
+              if (left.outputMode == OutputMode.Append()
+                  && right.outputMode == OutputMode.Append()) {
                 throwError("Inner join between two streaming DataFrames/Datasets is not supported")
               }
 
             case FullOuter =>
-              if (left.isStreaming || right.isStreaming) {
+              if (left.outputMode == OutputMode.Append()
+                  || right.outputMode == OutputMode.Append()) {
                 throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
               }
 
 
             case LeftOuter | LeftSemi | LeftAnti =>
-              if (right.isStreaming) {
+              if (right.outputMode == OutputMode.Append()) {
                 throwError("Left outer/semi/anti joins with a streaming DataFrame/Dataset " +
                     "on the right is not supported")
               }
 
             case RightOuter =>
-              if (left.isStreaming) {
+              if (left.outputMode == OutputMode.Append()) {
                 throwError("Right outer join with a streaming DataFrame/Dataset on the left is " +
                     "not supported")
               }
@@ -248,35 +254,37 @@ object UnsupportedOperationChecker {
               throwError(s"Join type $joinType is not supported with streaming DataFrame/Dataset")
           }
 
-        case c: CoGroup if c.children.exists(_.isStreaming) =>
+        case c: CoGroup if c.children.exists(_.outputMode == OutputMode.Append()) =>
           throwError("CoGrouping with a streaming DataFrame/Dataset is not supported")
 
-        case u: Union if u.children.map(_.isStreaming).distinct.size == 2 =>
+        case u: Union if u.children.map(_.outputMode).distinct.size > 1 =>
           throwError("Union between streaming and batch DataFrames/Datasets is not supported")
 
-        case Except(left, right) if right.isStreaming =>
+        case Except(left, right) if right.outputMode == OutputMode.Append() =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right) if left.isStreaming && right.isStreaming =>
+        case Intersect(left, right) if left.outputMode == OutputMode.Append()
+            && right.outputMode == OutputMode.Append() =>
           throwError("Intersect between two streaming DataFrames/Datasets is not supported")
 
-        case GroupingSets(_, _, child, _) if child.isStreaming =>
+        case GroupingSets(_, _, child, _) if child.outputMode == OutputMode.Append() =>
           throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
-        case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
+        case GlobalLimit(_, _) | LocalLimit(_, _)
+            if subPlan.children.forall(_.outputMode == OutputMode.Append()) =>
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
         case Sort(_, _, _) if !containsCompleteData(subPlan) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets, unless it is on " +
             "aggregated DataFrame/Dataset in Complete output mode")
 
-        case Sample(_, _, _, _, child) if child.isStreaming =>
+        case Sample(_, _, _, _, child) if child.outputMode == OutputMode.Append() =>
           throwError("Sampling is not supported on streaming DataFrames/Datasets")
 
-        case Window(_, _, _, child) if child.isStreaming =>
+        case Window(_, _, _, child) if child.outputMode == OutputMode.Append() =>
           throwError("Non-time-based windows are not supported on streaming DataFrames/Datasets")
 
-        case ReturnAnswer(child) if child.isStreaming =>
+        case ReturnAnswer(child) if child.outputMode == OutputMode.Append() =>
           throwError("Cannot return immediate result on streaming DataFrames/Dataset. Queries " +
             "with streaming DataFrames/Datasets must be executed with writeStream.start().")
 

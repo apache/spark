@@ -711,11 +711,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   case class StreamingPlanWrapper(child: LogicalPlan) extends UnaryNode {
     override def output: Seq[Attribute] = child.output
-    override def isStreaming: Boolean = true
+    override def outputMode: OutputMode = OutputMode.Append()
   }
 
   case class TestStreamingRelation(output: Seq[Attribute]) extends LeafNode {
     def this(attribute: Attribute) = this(Seq(attribute))
-    override def isStreaming: Boolean = true
+    override def outputMode: OutputMode = OutputMode.Append()
   }
 }
