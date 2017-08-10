@@ -106,8 +106,10 @@ abstract class ExternalCatalog
   final def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
     val db = tableDefinition.database
     val name = tableDefinition.identifier.table
+    val tableDefinitionWithVersion =
+      tableDefinition.copy(createVersion = org.apache.spark.SPARK_VERSION)
     postToAll(CreateTablePreEvent(db, name))
-    doCreateTable(tableDefinition, ignoreIfExists)
+    doCreateTable(tableDefinitionWithVersion, ignoreIfExists)
     postToAll(CreateTableEvent(db, name))
   }
 

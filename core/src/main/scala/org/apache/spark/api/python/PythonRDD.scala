@@ -683,7 +683,7 @@ private[spark] object PythonRDD extends Logging {
    * Create a socket server and a background thread to serve the data in `items`,
    *
    * The socket server can only accept one connection, or close if no connection
-   * in 3 seconds.
+   * in 15 seconds.
    *
    * Once a connection comes in, it tries to serialize all the data in `items`
    * and send them into this connection.
@@ -692,8 +692,8 @@ private[spark] object PythonRDD extends Logging {
    */
   def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
-    // Close the socket if no connection in 3 seconds
-    serverSocket.setSoTimeout(3000)
+    // Close the socket if no connection in 15 seconds
+    serverSocket.setSoTimeout(15000)
 
     new Thread(threadName) {
       setDaemon(true)

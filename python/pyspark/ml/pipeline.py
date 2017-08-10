@@ -132,11 +132,6 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
 
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
-
     @classmethod
     @since("2.0.0")
     def read(cls):
@@ -210,11 +205,6 @@ class PipelineModel(Model, MLReadable, MLWritable):
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
         return JavaMLWriter(self)
-
-    @since("2.0.0")
-    def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
-        self.write().save(path)
 
     @classmethod
     @since("2.0.0")

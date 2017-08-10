@@ -391,6 +391,34 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     checkDataset[Long](df, 1L to 100L: _*)
   }
 
+  test("SPARK-21565: watermark operator accepts attributes from replacement") {
+    withTempDir { dir =>
+      dir.delete()
+
+      val df = Seq(("a", 100.0, new java.sql.Timestamp(100L)))
+        .toDF("symbol", "price", "eventTime")
+      df.write.json(dir.getCanonicalPath)
+
+      val input = spark.readStream.schema(df.schema)
+        .json(dir.getCanonicalPath)
+
+      val groupEvents = input
+        .withWatermark("eventTime", "2 seconds")
+        .groupBy("symbol", "eventTime")
+        .agg(count("price") as 'count)
+        .select("symbol", "eventTime", "count")
+      val q = groupEvents.writeStream
+        .outputMode("append")
+        .format("console")
+        .start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+    }
+  }
+
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>
     val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
     assert(progressWithData.stateOperators(0).numRowsTotal === numTotalRows)
