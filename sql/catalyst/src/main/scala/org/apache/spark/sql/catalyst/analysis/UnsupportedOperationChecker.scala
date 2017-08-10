@@ -75,7 +75,7 @@ object UnsupportedOperationChecker {
     // Only allow multiple `FlatMapGroupsWithState(Append)`s in append mode.
     if (flatMapGroupsWithStates.size >= 2 && (
       outputMode != InternalOutputModes.Append ||
-        flatMapGroupsWithStates.exists(_.outputMode != InternalOutputModes.Append)
+        flatMapGroupsWithStates.exists(_.funcOutputMode != InternalOutputModes.Append)
       )) {
       throwError(
         "Multiple flatMapGroupsWithStates are not supported when they are not all in append mode" +
@@ -167,7 +167,7 @@ object UnsupportedOperationChecker {
             if (aggsAfterFlatMapGroups.isEmpty) {
               // flatMapGroupsWithState without aggregation: operation's output mode must
               // match query output mode
-              m.outputMode match {
+              m.funcOutputMode match {
                 case InternalOutputModes.Update if outputMode != InternalOutputModes.Update =>
                   throwError(
                     "flatMapGroupsWithState in update mode is not supported with " +
@@ -183,7 +183,7 @@ object UnsupportedOperationChecker {
             } else {
               // flatMapGroupsWithState with aggregation: update operation mode not allowed, and
               // *groupsWithState after aggregation not allowed
-              if (m.outputMode == InternalOutputModes.Update) {
+              if (m.funcOutputMode == InternalOutputModes.Update) {
                 throwError(
                   "flatMapGroupsWithState in update mode is not supported with " +
                     "aggregation on a streaming DataFrame/Dataset")
