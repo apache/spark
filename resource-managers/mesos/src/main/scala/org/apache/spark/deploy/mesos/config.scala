@@ -70,4 +70,12 @@ package object config {
           "during a temporary disconnection, before tearing down all the executors.")
       .doubleConf
       .createWithDefault(0.0)
+
+  private [spark] val NETWORK_LABELS =
+    ConfigBuilder("spark.mesos.network.labels")
+      .doc("Network labels to pass to CNI plugins.  This is a comma-separated list " +
+        "of key-value pairs, where each key-value pair has the format key:value. " +
+        "Example: key1=val1,key2=val2")
+      .stringConf
+      .createOptional
 }

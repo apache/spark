@@ -21,6 +21,7 @@ import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Vo
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.Logging
 
 /**
@@ -162,7 +163,11 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     }
 
     conf.getOption("spark.mesos.network.name").map { name =>
-      val info = NetworkInfo.newBuilder().setName(name).build()
+      val networkLabels = MesosProtoUtils.mesosLabels(conf.get(NETWORK_LABELS).getOrElse(""))
+      val info = NetworkInfo.newBuilder()
+        .setName(name)
+        .setLabels(networkLabels)
+        .build()
       containerInfo.addNetworkInfos(info)
     }
 
