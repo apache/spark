@@ -209,7 +209,8 @@ private[spark] object JettyUtils extends Logging {
         val id = prefix.drop(1)
 
         // Query master state for id's corresponding UI address
-        // If that address exists, turn it into a valid, target URI string or return null
+        // If that address exists, try to turn it into a valid, target URI string
+        // Otherwise, return null
         idToUiAddress(id)
           .map(createProxyURI(prefix, _, path, request.getQueryString))
           .filter(uri => uri != null && validateDestination(uri.getHost, uri.getPort))
@@ -467,8 +468,10 @@ private[spark] object JettyUtils extends Logging {
       targetUri: URI): String = {
     val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority()
     if (headerValue.startsWith(toReplace)) {
-      clientRequest.getScheme() + "://" + clientRequest.getHeader("host") +
-          clientRequest.getPathInfo() + headerValue.substring(toReplace.length())
+      val id = clientRequest.getPathInfo.substring("/proxy/".length).takeWhile(_ != '/')
+      val headerPath = headerValue.substring(toReplace.length)
+
+      s"${clientRequest.getScheme}://${clientRequest.getHeader("host")}/proxy/$id$headerPath"
     } else {
       null
     }
