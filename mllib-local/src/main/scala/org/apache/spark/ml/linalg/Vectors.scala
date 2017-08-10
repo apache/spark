@@ -152,7 +152,17 @@ sealed trait Vector extends Serializable {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
-      toSparse
+      val ii = new Array[Int](nnz)
+      val vv = new Array[Double](nnz)
+      var k = 0
+      foreachActive { (i, v) =>
+        if (v != 0) {
+          ii(k) = i
+          vv(k) = v
+          k += 1
+        }
+      }
+      new SparseVector(size, ii, vv)
     } else {
       toDense
     }
