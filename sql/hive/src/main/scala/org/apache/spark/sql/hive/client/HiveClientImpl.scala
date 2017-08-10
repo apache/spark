@@ -986,6 +986,7 @@ private[hive] object HiveClientImpl {
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
+    tpart.setCreateTime((System.currentTimeMillis() / 1000).toInt)
     new HivePartition(ht, tpart)
   }
 
