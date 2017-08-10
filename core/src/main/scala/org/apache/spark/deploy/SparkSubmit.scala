@@ -342,6 +342,17 @@ object SparkSubmit extends CommandLineUtils {
       }.orNull
     }
 
+    // In yarn-cluster mode, download remote '--jars' and
+    // primaryResource in order to get correct hadoop token.
+    if (isYarnCluster) {
+      args.primaryResource = Option(args.primaryResource).map {
+        downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
+      }.orNull
+      args.jars = Option(args.jars).map {
+        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
+      }.orNull
+    }
+
 
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
@@ -494,10 +505,6 @@ object SparkSubmit extends CommandLineUtils {
     if (deployMode == CLIENT || isYarnCluster) {
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {
-        val hadoopConf = new HadoopConfiguration()
-        args.primaryResource =
-          Option(args.primaryResource).map(
-            downloadFile(_, targetDir, args.sparkProperties, hadoopConf)).orNull
         childClasspath += args.primaryResource
       }
       if (args.jars != null) { childClasspath ++= args.jars.split(",") }
