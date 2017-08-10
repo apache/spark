@@ -52,7 +52,7 @@ object UnsupportedOperationChecker {
     }
 
     val mapGroupsWithStates = plan.collect {
-      case f: FlatMapGroupsWithState if f.funcOutputMode == OutputMode.Append()
+      case f: FlatMapGroupsWithState if f.outputMode == OutputMode.Append()
         && f.isMapGroupsWithState => f
     }
 
