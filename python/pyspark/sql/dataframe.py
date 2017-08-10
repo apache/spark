@@ -1403,6 +1403,16 @@ class DataFrame(object):
         |null|  null|null|
         +----+------+----+
 
+        >>> df4.na.replace('Alice').show()
+        +----+------+----+
+        | age|height|name|
+        +----+------+----+
+        |  10|    80|null|
+        |   5|  null| Bob|
+        |null|  null| Tom|
+        |null|  null|null|
+        +----+------+----+		
+		
         >>> df4.na.replace(['Alice', 'Bob'], ['A', 'B'], 'name').show()
         +----+------+----+
         | age|height|name|
