@@ -186,6 +186,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("""[{"_1":1}]""") :: Nil)
   }
 
+  test("to_json - map") {
+    val df1 = Seq(Map("a" -> Tuple1(1))).toDF("a")
+    val df2 = Seq(Map(Tuple1(1) -> Tuple1(1))).toDF("a")
+
+    checkAnswer(
+      df1.select(to_json($"a")),
+      Row("""{"a":{"_1":1}}""") :: Nil)
+    checkAnswer(
+      df2.select(to_json($"a")),
+      Row("""{"[0,1]":{"_1":1}}""") :: Nil)
+  }
+
   test("to_json with option") {
     val df = Seq(Tuple1(Tuple1(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0")))).toDF("a")
     val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
