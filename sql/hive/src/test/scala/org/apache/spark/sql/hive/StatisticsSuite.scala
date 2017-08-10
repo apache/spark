@@ -435,7 +435,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
         }.getMessage
         assert(message.contains(s"Partition specification for table '${tableName.toLowerCase}' " +
-            "in database 'default' refers to unknown partition column(s): DS"))
+          "in database 'default' refers to unknown partition column(s): DS"))
       }
     }
   }

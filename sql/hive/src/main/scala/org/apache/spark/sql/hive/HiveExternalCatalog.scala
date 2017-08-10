@@ -1111,6 +1111,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val restoredSpec = restorePartitionSpec(partition.spec, table.partitionColumnNames)
 
     // Restore Spark's statistics from information in Metastore.
+    // Note: partition-level statistics were introduced in 2.3.
     val restoredStats =
       statsFromProperties(partition.parameters, table.identifier.table, table.schema)
     if (restoredStats.isDefined) {
