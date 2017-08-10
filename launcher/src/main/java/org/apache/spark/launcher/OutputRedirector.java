@@ -67,7 +67,7 @@ class OutputRedirector {
       sink.log(Level.FINE, "Error reading child process output.", e);
     } finally {
       if (callback != null) {
-        callback.childProcessExited();
+        callback.monitorChild();
       }
     }
   }

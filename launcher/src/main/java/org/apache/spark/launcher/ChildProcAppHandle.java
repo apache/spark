@@ -98,14 +98,12 @@ class ChildProcAppHandle implements SparkAppHandle {
   public synchronized void kill() {
     disconnect();
     if (childProc != null) {
-      try {
-        childProc.exitValue();
-      } catch (IllegalThreadStateException e) {
+      if (childProc.isAlive()) {
         childProc.destroyForcibly();
-      } finally {
-        childProc = null;
       }
+      childProc = null;
     }
+    setState(State.KILLED);
   }
 
   String getSecret() {
@@ -128,26 +126,6 @@ class ChildProcAppHandle implements SparkAppHandle {
 
   void setConnection(LauncherConnection connection) {
     this.connection = connection;
-  }
-
-  /**
-   * Callback for when the child process exits. Forcefully put the application in a final state,
-   * overwriting the current final state unless it is already FAILED.
-   */
-  synchronized void childProcessExited() {
-    disconnect();
-
-    int ec;
-    try {
-      ec = childProc.exitValue();
-    } catch (Exception e) {
-      ec = 1;
-    }
-
-    if (!state.isFinal() || (ec != 0 && state != State.FAILED)) {
-      state = State.LOST;
-      fireEvent(false);
-    }
   }
 
   LauncherServer getServer() {
@@ -173,6 +151,42 @@ class ChildProcAppHandle implements SparkAppHandle {
     fireEvent(true);
   }
 
+  /**
+   * Wait for the child process to exit and update the handle's state if necessary, accoding to
+   * the exit code.
+   */
+  void monitorChild() {
+    while (childProc.isAlive()) {
+      try {
+        childProc.waitFor();
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Exception waiting for child process to exit.", e);
+      }
+    }
+
+    synchronized (this) {
+      if (disposed) {
+        return;
+      }
+
+      disconnect();
+
+      int ec;
+      try {
+        ec = childProc.exitValue();
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Exception getting child process exit code, assuming failure.", e);
+        ec = 1;
+      }
+
+      // Only override the success state; leave other fail states alone.
+      if (!state.isFinal() || (ec != 0 && state == State.FINISHED)) {
+        state = State.LOST;
+        fireEvent(false);
+      }
+    }
+  }
+
   private void fireEvent(boolean isInfoChanged) {
     if (listeners != null) {
       for (Listener l : listeners) {
@@ -183,17 +197,6 @@ class ChildProcAppHandle implements SparkAppHandle {
         }
       }
     }
-  }
-
-  private void monitorChild() {
-    while (childProc.isAlive()) {
-      try {
-        childProc.waitFor();
-      } catch (Exception e) {
-        // Try again.
-      }
-    }
-    childProcessExited();
   }
 
 }
