@@ -273,16 +273,19 @@ private[jdbc] class JDBCRDD(
     import scala.collection.JavaConverters._
     dialect.beforeFetch(conn, options.asProperties.asScala.toMap)
 
-    // This executes a generic SQL statement (or PL/SQL) before reading
+    // This executes a generic SQL statement (or PL/SQL block) before reading
     // the table/query via JDBC. Use this feature to initialize the database
-    // session environment or for diagnostics.
-    if (options.sessionInitStatement.size > 0) {
-      val statement = conn.prepareStatement(options.sessionInitStatement)
-      try {
-        statement.executeQuery()
-      } finally {
-        statement.close()
-      }
+    // session environment, e.g. for optimizations and/or troubleshooting.
+    options.sessionInitStatement match {
+      case Some(sql) =>
+        val statement = conn.prepareStatement(sql)
+        logInfo(s"Executing sessionInitStatement: $sql")
+        try {
+          statement.execute()
+        } finally {
+          statement.close()
+        }
+      case None =>
     }
 
     // H2's JDBC driver does not support the setSchema() method.  We pass a

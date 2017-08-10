@@ -1007,4 +1007,14 @@ class JDBCSuite extends SparkFunSuite
       assert(sql("select * from people_view").count() == 3)
     }
   }
+
+  test("SPARK-21519: option sessionInitStatement, run SQL to initialize the database session.") {
+    val initSQL = "SET @MYTESTVAR 21519"
+    val df = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "(SELECT NVL(@MYTESTVAR, -1))")
+      .option("sessionInitStatement", initSQL)
+      .load()
+    assert(df.collect() === Array(Row(21519)))
+  }
 }

@@ -136,7 +136,7 @@ class JDBCOptions(
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
   // An option to execute custom SQL before fetching data from the remote DB
-  val sessionInitStatement = parameters.getOrElse(JDBC_SESSION_INIT_STATEMENT, "")
+  val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
 }
 
 object JDBCOptions {
