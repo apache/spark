@@ -19,7 +19,6 @@ package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
@@ -137,26 +136,24 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 
     val selected = dataset.select($(inputCols).map(col(_).cast("double")): _*).rdd
 
-    val summaries = $(strategy) match {
+    val summarizer = $(strategy) match {
       case Imputer.mean =>
-        val emptySummaries = new Imputer.MeanSummaries($(inputCols).length, $(missingValue))
-        selected.treeAggregate(emptySummaries)(
-          seqOp = { case (sum, row) => sum.update(row) },
-          combOp = { case (sum1, sum2) => sum1.merge(sum2) })
-
+        new Imputer.MeanSummarizer($(inputCols).length, $(missingValue))
       case Imputer.median =>
-        val emptySummaries = new Imputer.MedianSummaries($(inputCols).length, $(missingValue))
-        selected.treeAggregate(emptySummaries)(
-          seqOp = { case (sum, row) => sum.update(row) },
-          combOp = { case (sum1, sum2) => sum1.merge(sum2) })
+        new Imputer.MedianSummarizer($(inputCols).length, $(missingValue))
     }
 
-    val emptyCols = ($(inputCols) zip summaries.counts).filter(_._2 == 0).map(_._1)
+    val summary = selected.treeAggregate(summarizer)(
+      seqOp = { case (sum, row) => sum.update(row) },
+      combOp = { case (sum1, sum2) => sum1.merge(sum2) }
+    )
+
+    val emptyCols = ($(inputCols) zip summary.counts).filter(_._2 == 0).map(_._1)
     require(emptyCols.isEmpty, s"surrogate cannot be computed. " +
       s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
       s"missingValue(${$(missingValue)})")
 
-    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(summaries.values)))
+    val rows = spark.sparkContext.parallelize(Seq(Row.fromSeq(summary.values)))
     val schema = StructType($(inputCols).map(col => StructField(col, DoubleType, nullable = false)))
     val surrogateDF = spark.createDataFrame(rows, schema)
     copyValues(new ImputerModel(uid, surrogateDF).setParent(this))
@@ -179,17 +176,19 @@ object Imputer extends DefaultParamsReadable[Imputer] {
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)
 
-  private trait ImputerSummaries extends Serializable {
+  private trait ImputerSummarizer extends Serializable {
     def counts: Array[Long]
     def values: Array[Double]
+    def update(row: Row): ImputerSummarizer
+    def merge(o: ImputerSummarizer): ImputerSummarizer
   }
 
-  private class MeanSummaries(val numCols: Int, val missingValue: Double)
-    extends ImputerSummaries {
+  private class MeanSummarizer(val numCols: Int, val missingValue: Double)
+    extends ImputerSummarizer {
     val counts = Array.ofDim[Long](numCols)
     val values = Array.ofDim[Double](numCols)
 
-    def update(row: Row): MeanSummaries = {
+    override def update(row: Row): MeanSummarizer = {
       var i = 0
       while (i < numCols) {
         if (!row.isNullAt(i)) {
@@ -205,13 +204,14 @@ object Imputer extends DefaultParamsReadable[Imputer] {
       this
     }
 
-    def merge(o: MeanSummaries): MeanSummaries = {
+    override def merge(o: ImputerSummarizer): MeanSummarizer = {
+      val o2 = o.asInstanceOf[MeanSummarizer]
       var i = 0
       while (i < numCols) {
-        if (o.counts(i) > 0) {
-          val diff = o.values(i) - values(i)
-          counts(i) += o.counts(i)
-          values(i) += diff * o.counts(i) / counts(i)
+        if (o2.counts(i) > 0) {
+          val diff = o2.values(i) - values(i)
+          counts(i) += o2.counts(i)
+          values(i) += diff * o2.counts(i) / counts(i)
         }
         i += 1
       }
@@ -219,15 +219,15 @@ object Imputer extends DefaultParamsReadable[Imputer] {
     }
   }
 
-  private class MedianSummaries(val numCols: Int, val missingValue: Double)
-    extends ImputerSummaries {
+  private class MedianSummarizer(val numCols: Int, val missingValue: Double)
+    extends ImputerSummarizer {
     val summaries = Array.fill(numCols)(
       new QuantileSummaries(QuantileSummaries.defaultCompressThreshold, 0.001))
 
     override def counts: Array[Long] = summaries.map(_.count)
     override def values: Array[Double] = summaries.map(_.query(0.5).get)
 
-    def update(row: Row): MedianSummaries = {
+    override def update(row: Row): MedianSummarizer = {
       var i = 0
       while (i < numCols) {
         if (!row.isNullAt(i)) {
@@ -241,10 +241,11 @@ object Imputer extends DefaultParamsReadable[Imputer] {
       this
     }
 
-    def merge(o: MedianSummaries): MedianSummaries = {
+    override def merge(o: ImputerSummarizer): MedianSummarizer = {
+      val o2 = o.asInstanceOf[MedianSummarizer]
       var i = 0
       while (i < numCols) {
-        summaries(i) = summaries(i).compress().merge(o.summaries(i).compress())
+        summaries(i) = summaries(i).compress().merge(o2.summaries(i).compress())
         i += 1
       }
       this
