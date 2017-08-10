@@ -340,7 +340,7 @@ class AggregateBenchmark extends BenchmarkBase {
 
     benchmark.addCase(s"codegen = T") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.MaxFunctionLength", "10000")
+      sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "10000")
       f()
     }
 

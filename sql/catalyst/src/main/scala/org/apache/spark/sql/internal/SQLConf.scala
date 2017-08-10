@@ -572,7 +572,7 @@ object SQLConf {
       "disable logging or -1 to apply no limit.")
     .createWithDefault(1000)
 
-  val WHOLESTAGE_MAX_FUNCTION_LEN = buildConf("spark.sql.codegen.MaxFunctionLength")
+  val WHOLESTAGE_MAX_LINES_PER_FUNCTION = buildConf("spark.sql.codegen.maxLinesPerFunction")
     .internal()
     .doc("The maximum lines of a function that will be supported before" +
       " deactivating whole-stage codegen.")
@@ -1021,7 +1021,7 @@ class SQLConf extends Serializable with Logging {
 
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
-  def maxFunctionLength: Int = getConf(WHOLESTAGE_MAX_FUNCTION_LEN)
+  def maxLinesPerFunction: Int = getConf(WHOLESTAGE_MAX_LINES_PER_FUNCTION)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)

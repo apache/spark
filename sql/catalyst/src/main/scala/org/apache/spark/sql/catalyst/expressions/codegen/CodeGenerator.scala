@@ -356,14 +356,15 @@ class CodegenContext {
   private val placeHolderToComments = new mutable.HashMap[String, String]
 
   /**
-   * Returns if the length of codegen function is too long or not
+   * Returns if there is a codegen function the lines of which is greater than maxLinesPerFunction
    * It will count the lines of every codegen function, if there is a function of length
-   * greater than spark.sql.codegen.MaxFunctionLength, it will return true.
+   * greater than spark.sql.codegen.maxLinesPerFunction, it will return true.
    */
   def existTooLongFunction(): Boolean = {
     classFunctions.exists { case (className, functions) =>
       functions.exists{ case (name, code) =>
-        CodeFormatter.stripExtraNewLines(code).count(_ == '\n') > SQLConf.get.maxFunctionLength
+        val codeWithoutComments = CodeFormatter.stripExtraNewLinesAndComments(code)
+        codeWithoutComments.count(_ == '\n') > SQLConf.get.maxLinesPerFunction
       }
     }
   }
