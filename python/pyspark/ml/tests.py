@@ -458,8 +458,8 @@ class ParamTests(PySparkTestCase):
                 py_default = py_stage.getOrDefault(p)
                 # equality test for NaN is always False
                 if isinstance(java_default, float) and np.isnan(java_default):
-                    java_default = True
-                    py_default = np.isnan(py_default)
+                    java_default = "NaN"
+                    py_default = "NaN" if np.isnan(py_default) else "not NaN"
                 test_self.assertEqual(
                     java_default, py_default,
                     "Java default %s != python default %s of param %s for Params %s"
