@@ -152,6 +152,12 @@ sealed trait Vector extends Serializable {
   def toSparse: SparseVector
 
   /**
+   * Converts this vector to a sparse vector with all explicit zeros removed when the size is known.
+   */
+  @Since("2.3.0")
+  private[linalg] def toSparse(nnz: Int): SparseVector
+
+  /**
    * Converts this vector to a dense vector.
    */
   @Since("1.4.0")
@@ -165,17 +171,7 @@ sealed trait Vector extends Serializable {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
-      val ii = new Array[Int](nnz)
-      val vv = new Array[Double](nnz)
-      var k = 0
-      foreachActive { (i, v) =>
-        if (v != 0) {
-          ii(k) = i
-          vv(k) = v
-          k += 1
-        }
-      }
-      new SparseVector(size, ii, vv)
+      toSparse(nnz)
     } else {
       toDense
     }
@@ -680,8 +676,10 @@ class DenseVector @Since("1.0.0") (
   }
 
   @Since("1.4.0")
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  override def toSparse: SparseVector = toSparse(numNonzeros)
+
+  @Since("2.3.0")
+  private[linalg] override def toSparse(nnz: Int): SparseVector = {
     val ii = new Array[Int](nnz)
     val vv = new Array[Double](nnz)
     var k = 0
@@ -833,8 +831,10 @@ class SparseVector @Since("1.0.0") (
   }
 
   @Since("1.4.0")
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  override def toSparse: SparseVector = toSparse(numNonzeros)
+
+  @Since("2.3.0")
+  private[linalg] override def toSparse(nnz: Int): SparseVector = {
     if (nnz == numActives) {
       this
     } else {
