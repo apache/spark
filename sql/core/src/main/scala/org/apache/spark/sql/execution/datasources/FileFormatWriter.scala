@@ -95,11 +95,10 @@ object FileFormatWriter extends Logging {
    *    exception is thrown during task commitment, also aborts that task.
    * 4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
    *    thrown during job commitment, also aborts the job.
-   * 5. If the job is succesfully committed, perform any post-commit operations such as refreshing
-   *    partitions, processing statistics, etc.
+   * 5. If the job is successfully committed, perform post-commit operations such as
+   *    processing statistics.
+   * @return The set of all partition paths that were updated during this write job.
    */
-  // scalastyle:off
-  // because of having more than 10 function parameters
   def write(
       sparkSession: SparkSession,
       plan: SparkPlan,
@@ -110,9 +109,8 @@ object FileFormatWriter extends Logging {
       partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       statsTrackers: Seq[WriteJobStatsTracker],
-      refreshFunction: (Seq[ExecutedWriteSummary]) => Unit,
-      options: Map[String, String]): Unit = {
-  // scalastyle:on
+      options: Map[String, String])
+    : Set[String] = {
 
     val job = Job.getInstance(hadoopConf)
     job.setOutputKeyClass(classOf[Void])
@@ -207,8 +205,12 @@ object FileFormatWriter extends Logging {
 
       committer.commitJob(job, commitMsgs)
       logInfo(s"Job ${job.getJobID} committed.")
-      refreshFunction(ret.map(_.summary))
+
       processStats(description.statsTrackers, ret.map(_.summary.stats))
+      logInfo(s"Finished processing stats for job ${job.getJobID}.")
+
+      // return a set of all the partition paths that were updated during this job
+      ret.map(_.summary.updatedPartitions).reduceOption(_ ++ _).getOrElse(Set.empty)
     } catch { case cause: Throwable =>
       logError(s"Aborting job ${job.getJobID}.", cause)
       committer.abortJob(job)
@@ -289,7 +291,7 @@ object FileFormatWriter extends Logging {
     val numStatsTrackers = statsTrackers.length
     assert(statsPerTask.forall(_.length == numStatsTrackers),
       s"""Every WriteTask should have produced one `WriteTaskStats` object for every tracker.
-         |There are ${numStatsTrackers} statsTrackers, but some task returned
+         |There are $numStatsTrackers statsTrackers, but some task returned
          |${statsPerTask.find(_.length != numStatsTrackers).get.length} results instead.
        """.stripMargin)
 

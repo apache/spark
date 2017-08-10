@@ -129,7 +129,6 @@ class FileStreamSink(
         partitionColumns = partitionColumns,
         bucketSpec = None,
         statsTrackers = Nil,
-        refreshFunction = _ => (),
         options = options)
     }
   }

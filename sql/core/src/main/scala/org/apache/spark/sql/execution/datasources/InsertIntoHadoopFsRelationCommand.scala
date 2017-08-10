@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.FileFormatWriter.processStats
 import org.apache.spark.sql.util.SchemaUtils
 
 /**
@@ -119,12 +120,11 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     if (doInsertion) {
-      // Callback for updating metastore partition metadata after the insertion job completes.
-      def refreshCallback(summary: Seq[ExecutedWriteSummary]): Unit = {
-        val updatedPartitions = summary.flatMap(_.updatedPartitions)
-          .distinct.map(PartitioningUtils.parsePathFragment)
+
+      def refreshUpdatedPartitions(updatedPartitionPaths: Set[String]): Unit = {
+        val updatedPartitions = updatedPartitionPaths.map(PartitioningUtils.parsePathFragment)
         if (partitionsTrackedByCatalog) {
-          val newPartitions = updatedPartitions.toSet -- initialMatchingPartitions
+          val newPartitions = updatedPartitions -- initialMatchingPartitions
           if (newPartitions.nonEmpty) {
             AlterTableAddPartitionCommand(
               catalogTable.get.identifier, newPartitions.toSeq.map(p => (p, None)),
@@ -142,19 +142,23 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
-      FileFormatWriter.write(
-        sparkSession = sparkSession,
-        plan = children.head,
-        fileFormat = fileFormat,
-        committer = committer,
-        outputSpec = FileFormatWriter.OutputSpec(
-          qualifiedOutputPath.toString, customPartitionLocations),
-        hadoopConf = hadoopConf,
-        partitionColumns = partitionColumns,
-        bucketSpec = bucketSpec,
-        statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-        refreshFunction = refreshCallback,
-        options = options)
+      val updatedPartitionPaths =
+        FileFormatWriter.write(
+          sparkSession = sparkSession,
+          plan = children.head,
+          fileFormat = fileFormat,
+          committer = committer,
+          outputSpec = FileFormatWriter.OutputSpec(
+            qualifiedOutputPath.toString, customPartitionLocations),
+          hadoopConf = hadoopConf,
+          partitionColumns = partitionColumns,
+          bucketSpec = bucketSpec,
+          statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
+          options = options)
+
+
+      // update metastore partition metadata
+      refreshUpdatedPartitions(updatedPartitionPaths)
 
       // refresh cached files in FileIndex
       fileIndex.foreach(_.refresh())
