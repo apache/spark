@@ -258,7 +258,7 @@ class SparkSubmitSuite
     hadoopConf.set("fs.hdfs.impl.disable.cache", "true")
     val theJarFile = File.createTempFile("thejar", ".jar")
     theJarFile.deleteOnExit()
-    val clArgs = Seq(
+    var clArgs = Seq(
       "--deploy-mode", "cluster",
       "--master", "yarn",
       "--executor-memory", "5g",
@@ -266,7 +266,7 @@ class SparkSubmitSuite
       "--jars", "one.jar,two.jar,three.jar",
       "--driver-memory", "4g",
       s"hdfs://${theJarFile.getAbsolutePath}")
-    val appArgs = new SparkSubmitArguments(clArgs)
+    var appArgs = new SparkSubmitArguments(clArgs)
     val (_, classpath, _, _) = prepareSubmitEnvironment(appArgs, hadoopConf)
 
     // In yarn cluster mode, also adding remote jars to classpath
@@ -277,7 +277,7 @@ class SparkSubmitSuite
 
     val oneJarFile = File.createTempFile("onejar", ".jar")
     oneJarFile.deleteOnExit()
-    val clArgs = Seq(
+    clArgs = Seq(
       "--deploy-mode", "cluster",
       "--master", "yarn",
       "--executor-memory", "5g",
@@ -285,14 +285,14 @@ class SparkSubmitSuite
       "--jars", s"hdfs://${oneJarFile.getAbsolutePath}" + ",two.jar,three.jar",
       "--driver-memory", "4g",
       "thejar.jar")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, classpath, _, _) = prepareSubmitEnvironment(appArgs, hadoopConf)
+    appArgs = new SparkSubmitArguments(clArgs)
+    val (_, classpath1, _, _) = prepareSubmitEnvironment(appArgs, hadoopConf)
 
     // In yarn cluster mode, also adding remote jars to classpath
-    classpath(0) should endWith ("thejar.jar")
-    classpath(1) should endWith regex ("one.*.jar")
-    classpath(2) should endWith ("two.jar")
-    classpath(3) should endWith ("three.jar")
+    classpath1(0) should endWith ("thejar.jar")
+    classpath1(1) should endWith regex ("one.*.jar")
+    classpath1(2) should endWith ("two.jar")
+    classpath1(3) should endWith ("three.jar")
   }
 
   test("handles YARN client mode") {
