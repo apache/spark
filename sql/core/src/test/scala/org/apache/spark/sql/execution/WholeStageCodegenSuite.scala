@@ -159,8 +159,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       "id",
       "(id & 1023) as k1",
       "cast(id & 1023 as double) as k2",
-      "cast(id & 1023 as int) as k3"
-    )
+      "cast(id & 1023 as int) as k3")
 
     val ds = spark.range(10)
       .selectExpr(keyExp:::caseExp: _*)
