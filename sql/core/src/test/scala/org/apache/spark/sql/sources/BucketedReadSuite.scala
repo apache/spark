@@ -551,9 +551,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     )
   }
 
-  test("SPARK-19122 if join predicates ordering differ from bucketing and sorting order," +
-    " shuffle and sort should not be done") {
-
+  test("SPARK-19122 Re-order join predicates if they match with the child's output partitioning") {
     val bucketedTableTestSpec = BucketedTableTestSpec(
       Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
       numPartitions = 1,
@@ -562,12 +560,10 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
     def testBucketingWithPredicate(
         joinCondition: (DataFrame, DataFrame) => Column,
-        expectedResult: Option[Array[Row]],
-        returnJoinResult: Boolean = false): Array[Row] = {
+        expectedResult: Option[Array[Row]]): Array[Row] = {
       testBucketing(
         bucketedTableTestSpecLeft = bucketedTableTestSpec,
         bucketedTableTestSpecRight = bucketedTableTestSpec,
-        joinType = "inner",
         joinCondition = joinCondition,
         expectedResult = expectedResult
       )
@@ -575,17 +571,46 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
 
     // Irrespective of the ordering of keys in the join predicate, the query plan and
     // query results should always be the same
-    val result =
-      Some(testBucketingWithPredicate(
-        joinCondition(Seq("i", "j", "k")),
-        None,
-        returnJoinResult = true))
+    val result = Some(testBucketingWithPredicate(joinCondition(Seq("i", "j", "k")), None))
 
     testBucketingWithPredicate(joinCondition(Seq("i", "k", "j")), result)
     testBucketingWithPredicate(joinCondition(Seq("j", "k", "i")), result)
     testBucketingWithPredicate(joinCondition(Seq("j", "i", "k")), result)
     testBucketingWithPredicate(joinCondition(Seq("k", "i", "j")), result)
     testBucketingWithPredicate(joinCondition(Seq("k", "j", "i")), result)
+  }
+
+  test("SPARK-19122 No re-ordering should happen if set of join columns != set of child's " +
+    "partitioning columns") {
+
+    // join predicates is a super set of child's partitioning columns
+    val bucketedTableTestSpec1 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec1,
+      bucketedTableTestSpecRight = bucketedTableTestSpec1,
+      joinCondition = joinCondition(Seq("i", "j", "k"))
+    )
+
+    // child's partitioning columns is a super set of join predicates
+    val bucketedTableTestSpec2 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j", "k"), Seq("i", "j", "k"))),
+        numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec2,
+      bucketedTableTestSpecRight = bucketedTableTestSpec2,
+      joinCondition = joinCondition(Seq("i", "j"))
+    )
+
+    // set of child's partitioning columns != set join predicates (despite the lengths of the
+    // sets are same)
+    val bucketedTableTestSpec3 =
+      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
+    testBucketing(
+      bucketedTableTestSpecLeft = bucketedTableTestSpec3,
+      bucketedTableTestSpecRight = bucketedTableTestSpec3,
+      joinCondition = joinCondition(Seq("j", "k"))
+    )
   }
 
   test("error if there exists any malformed bucket files") {
