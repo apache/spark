@@ -595,7 +595,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val schema = MapType(StringType, StructType(StructField("a", IntegerType) :: Nil))
     val input = Literal.create(ArrayBasedMapData(Map("test" -> InternalRow(1))), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input, gmtId),
+      StructsToJson(Map.empty, input),
       """{"test":{"a":1}}"""
     )
   }
@@ -605,7 +605,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       StructType(StructField("b", IntegerType) :: Nil))
     val input = Literal.create(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
     checkEvaluation(
-      StructsToJson(Map.empty, input, gmtId),
+      StructsToJson(Map.empty, input),
       """{"[1]":{"b":2}}"""
     )
   }
