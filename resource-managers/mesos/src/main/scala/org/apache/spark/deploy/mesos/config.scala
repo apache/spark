@@ -58,7 +58,7 @@ package object config {
 
   private [spark] val DRIVER_LABELS =
     ConfigBuilder("spark.mesos.driver.labels")
-      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs.  Key-value" +
+      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +
         "pairs should be separated by a colon, and commas used to list more than one." +
         "Ex. key:value,key2:value2")
       .stringConf
@@ -66,20 +66,20 @@ package object config {
 
   private[spark] val SECRET_NAME =
     ConfigBuilder("spark.mesos.driver.secret.name")
-      .doc("A comma-seperated list of secret references. Consult the Mesos Secret protobuf for " +
+      .doc("A comma-separated list of secret references. Consult the Mesos Secret protobuf for " +
         "more information.")
       .stringConf
       .createOptional
 
   private[spark] val SECRET_VALUE =
     ConfigBuilder("spark.mesos.driver.secret.value")
-      .doc("A comma-seperated list of secret values.")
+      .doc("A comma-separated list of secret values.")
       .stringConf
       .createOptional
 
   private[spark] val SECRET_ENVKEY =
     ConfigBuilder("spark.mesos.driver.secret.envkey")
-      .doc("A comma-seperated list of the environment variables to contain the secrets." +
+      .doc("A comma-separated list of the environment variables to contain the secrets." +
         "The environment variable will be set on the driver.")
       .stringConf
       .createOptional

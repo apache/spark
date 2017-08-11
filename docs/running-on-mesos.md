@@ -33,7 +33,8 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 # Installing Mesos
 
 Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
-require any special patches of Mesos.
+require any special patches of Mesos. File and environment-based secrets support requires Mesos 1.3.0 or
+newer.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
 
@@ -426,7 +427,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.secret</code></td>
   <td>(none)</td>
   <td>
-    Set the secret with which Spark framework will use to authenticate with Mesos.
+    Set the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
+    authenticating with the registry.
   </td>
 </tr>
 <tr>
@@ -482,7 +484,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.secret.envkey</code></td>
   <td><code>(none)</code></td>
   <td>
-    A comma-seperated list that, if set, the contents of the secret referenced 
+    A comma-separated list that, if set, the contents of the secret referenced
     by spark.mesos.driver.secret.name or spark.mesos.driver.value will be 
     written to the provided environment variable in the driver's process.
   </td>
@@ -491,7 +493,7 @@ See the [configuration page](configuration.html) for information on Spark config
 <td><code>spark.mesos.driver.secret.filename</code></td>
   <td><code>(none)</code></td>
   <td>
-    A comma-seperated list that, if set, the contents of the secret referenced by
+    A comma-separated list that, if set, the contents of the secret referenced by
     spark.mesos.driver.secret.name or spark.mesos.driver.secret.value will be 
     written to the provided file.  Relative paths are relative to the container's work
     directory.  Absolute paths must already exist.  Consult the Mesos Secret
@@ -502,7 +504,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.secret.name</code></td>
   <td><code>(none)</code></td>
   <td>
-    A comma-seperated list of secret references.  Consult the Mesos Secret
+    A comma-separated list of secret references.  Consult the Mesos Secret
     protobuf for more information.
   </td>
 </tr>
@@ -510,7 +512,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.driver.secret.value</code></td>
   <td><code>(none)</code></td>
   <td>
-    A comma-seperated list of secret values.  Consult the Mesos Secret
+    A comma-separated list of secret values.  Consult the Mesos Secret
     protobuf for more information.
   </td>
 </tr>

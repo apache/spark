@@ -397,9 +397,12 @@ private[spark] class MesosClusterScheduler(
 
     // add secret environment variables
     getSecretEnvVar(desc).foreach { variable =>
-      logInfo(s"Setting secret name=${variable.getSecret.getReference.getName} " +
-        s"on environment variable name=${variable.getName}")
-
+      if (variable.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName}" +
+          s"on file ${variable.getName}")
+      } else {
+        logInfo(s"Setting secret on environment variable name=${variable.getName}")
+      }
       envBuilder.addVariables(variable)
     }
 
@@ -589,9 +592,12 @@ private[spark] class MesosClusterScheduler(
     val containerInfo = MesosSchedulerBackendUtil.containerInfo(desc.conf)
 
     getSecretVolume(desc).foreach { volume =>
-      logInfo(s"Setting secret name=${volume.getSource.getSecret.getReference.getName} " +
-        s"on file name=${volume.getContainerPath}")
-
+      if (volume.getSource.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName}" +
+          s"on file ${volume.getContainerPath}")
+      } else {
+        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+      }
       containerInfo.addVolumes(volume)
     }
 
@@ -638,8 +644,6 @@ private[spark] class MesosClusterScheduler(
 
     if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets
   }
-
-
 
   private def illegalSecretInput(dest: Seq[String], s: Seq[Secret]): Boolean = {
     if (dest.isEmpty) {  // no destination set (ie not using secrets of this type
