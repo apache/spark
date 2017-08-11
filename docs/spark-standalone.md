@@ -80,11 +80,12 @@ If you do not have a password-less setup, you can set the environment variable S
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/sbin`:
 
 - `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
-- `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
+- `sbin/start-slaves.sh` - Starts all slave instances on each machine specified in the `conf/slaves` file.
 - `sbin/start-slave.sh` - Starts a slave instance on the machine the script is executed on.
 - `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
 - `sbin/stop-master.sh` - Stops the master that was started via the `sbin/start-master.sh` script.
-- `sbin/stop-slaves.sh` - Stops all slave instances on the machines specified in the `conf/slaves` file.
+- `sbin/stop-slaves.sh` - Stops all slave instances on each machine specified in the `conf/slaves` file.
+- `sbin/stop-slave.sh` - Stops a slave instance on the machine the script is executed on.
 - `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
