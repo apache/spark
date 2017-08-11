@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
-  private[this] var hashingTF: feature.HashingTF = _
+  private[this] var hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("hashingTF"))
@@ -82,7 +82,10 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("1.2.0")
-  def setNumFeatures(value: Int): this.type = set(numFeatures, value)
+  def setNumFeatures(value: Int): this.type = {
+    hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+    set(numFeatures, value)
+  }
 
   /** @group getParam */
   @Since("2.0.0")
@@ -90,24 +93,20 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   /** @group setParam */
   @Since("2.0.0")
-  def setBinary(value: Boolean): this.type = set(binary, value)
+  def setBinary(value: Boolean): this.type = {
+    hashingTF.setBinary(value)
+    set(binary, value)
+  }
 
   /**
    * Returns the index of the input term.
    */
   @Since("2.3.0")
-  def indexOf(term: Any): Int = {
-    if (hashingTF != null) {
-      hashingTF.indexOf(term)
-    } else {
-      throw UninitializedFieldError("Use transform method to initialize the model at first.")
-    }
-  }
+  def indexOf(term: Any): Int = hashingTF.indexOf(term)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
-    hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
     // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
     val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
     val metadata = outputSchema($(outputCol)).metadata
