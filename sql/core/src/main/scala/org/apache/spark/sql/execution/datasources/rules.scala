@@ -19,10 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.Locale
 
-import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -326,14 +329,30 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
 
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
-
-    if (expectedColumns.length != insert.query.schema.length) {
+    val specfiedColumns = insert.specfiedColumns
+    if (specfiedColumns.isDefined && specfiedColumns.get.length !=insert.query.schema.length
+      && expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as the " +
           s"target table: target table has ${insert.table.output.size} column(s) but the " +
           s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
           s"including ${staticPartCols.size} partition column(s) having constant value(s).")
     }
+
+    val insertInto = if (specfiedColumns.isDefined && specfiedColumns.get.nonEmpty) {
+    validateSpecifiedColumns(specfiedColumns, expectedColumns)
+      insert.query match {
+        case localRelation: LocalRelation if !isSpecfiedColumnsEqExpectedColumns(
+          specfiedColumns.get, expectedColumns) =>
+          val columnNames = specfiedColumns.get.map(_.name)
+          val columnNamesIndex = columnNames.zipWithIndex.toMap
+          val fill = fillRows(columnNames, columnNamesIndex, expectedColumns)(_)
+          insert.copy(query = localRelation.copy(expectedColumns, localRelation.data
+            .map(fill)), specfiedColumns = Option(expectedColumns))
+        case _ => insert
+      }
+    }
+    else insert
 
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
@@ -345,13 +364,53 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
            """.stripMargin)
       }
 
-      castAndRenameChildOutput(insert.copy(partition = normalizedPartSpec), expectedColumns)
+      castAndRenameChildOutput(insertInto.copy(partition = normalizedPartSpec), expectedColumns)
     } else {
       // All partition columns are dynamic because the InsertIntoTable command does
       // not explicitly specify partitioning columns.
-      castAndRenameChildOutput(insert, expectedColumns)
+      castAndRenameChildOutput(insertInto, expectedColumns)
         .copy(partition = partColNames.map(_ -> None).toMap)
     }
+  }
+
+  def validateSpecifiedColumns(specfiedColumns: Option[Seq[NamedExpression]],
+                               expectedColumns: Seq[Attribute]): Unit = {
+    val specfiedColumnNames = specfiedColumns.get.map(_.name)
+    if(specfiedColumnNames.distinct.length != specfiedColumnNames.length)
+    {
+      throw new AnalysisException(s"Cannot insert into table " +
+          s"because there are Repeated columns in the specfied columns")
+    }
+    val expectedColumnNames = expectedColumns.map(_.name)
+    if(specfiedColumnNames.exists(!expectedColumnNames.contains(_)))
+    {
+      throw new AnalysisException(s"Cannot insert into table " +
+        s"because there are columns in the specfied columns not existed in expected Columns")
+    }
+  }
+
+  def fillRows(columnNames: Seq[String], columnNamesIndex: Map[String, Int],
+               expectedColumns: Seq[Attribute])
+              (row: InternalRow): InternalRow = {
+    var data = Seq[AnyRef]()
+    expectedColumns.foreach(column => {
+      val line = if (columnNames.contains(column.name) &&
+        !row.isNullAt(columnNamesIndex(column.name))) {
+        row.get(columnNamesIndex(column.name), column.dataType)
+      }
+      else {
+        null
+      }
+      data = data.:+(line)
+    })
+    InternalRow(data: _*)
+  }
+
+  def isSpecfiedColumnsEqExpectedColumns(specfiedColumns: Seq[NamedExpression], expectedColumns:
+  Seq[Attribute]): Boolean = {
+    val result = expectedColumns.map(_.name).zipAll(specfiedColumns.map(_.name), None,
+      None).count(line => line._1 != line._2)
+    result==0
   }
 
   private def castAndRenameChildOutput(
@@ -380,7 +439,7 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
+    case i @ InsertIntoTable(table, _, query, _, _, _) if table.resolved && query.resolved =>
       table match {
         case relation: CatalogRelation =>
           val metadata = relation.tableMeta
@@ -454,7 +513,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _), partition, query, _, _) =>
+      case InsertIntoTable(l @ LogicalRelation(relation, _, _), partition, query, _, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
           case LogicalRelation(src, _, _) => src
@@ -476,7 +535,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
           case _ => failAnalysis(s"$relation does not allow insertion.")
         }
 
-      case InsertIntoTable(t, _, _, _, _)
+      case InsertIntoTable(t, _, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
           t == OneRowRelation ||
