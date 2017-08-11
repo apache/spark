@@ -27,7 +27,8 @@ import com.google.common.base.Objects
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast, ExprId, Literal}
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
@@ -204,6 +205,9 @@ case class BucketSpec(
  *                           configured.
  * @param ignoredProperties is a list of table properties that are used by the underlying table
  *                          but ignored by Spark SQL yet.
+ * @param createVersion records the version of Spark that created this table metadata. The default
+ *                      is an empty string. We expect it will be read from the catalog or filled by
+ *                      ExternalCatalog.createTable. For temporary views, the value will be empty.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -216,6 +220,7 @@ case class CatalogTable(
     owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
+    createVersion: String = "",
     properties: Map[String, String] = Map.empty,
     stats: Option[CatalogStatistics] = None,
     viewText: Option[String] = None,
@@ -301,8 +306,9 @@ case class CatalogTable(
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
     if (owner.nonEmpty) map.put("Owner", owner)
-    map.put("Created", new Date(createTime).toString)
+    map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
+    map.put("Created By", "Spark " + createVersion)
     map.put("Type", tableType.name)
     provider.foreach(map.put("Provider", _))
     bucketSpec.foreach(map ++= _.toLinkedHashMap)
@@ -425,17 +431,19 @@ case class CatalogRelation(
     Objects.hashCode(tableMeta.identifier, output)
   }
 
-  override def preCanonicalized: LogicalPlan = copy(tableMeta = CatalogTable(
-    identifier = tableMeta.identifier,
-    tableType = tableMeta.tableType,
-    storage = CatalogStorageFormat.empty,
-    schema = tableMeta.schema,
-    partitionColumnNames = tableMeta.partitionColumnNames,
-    bucketSpec = tableMeta.bucketSpec,
-    createTime = -1
-  ))
+  override lazy val canonicalized: LogicalPlan = copy(
+    tableMeta = tableMeta.copy(
+      storage = CatalogStorageFormat.empty,
+      createTime = -1
+    ),
+    dataCols = dataCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index))
+    },
+    partitionCols = partitionCols.zipWithIndex.map {
+      case (attr, index) => attr.withExprId(ExprId(index + dataCols.length))
+    })
 
-  override def computeStats: Statistics = {
+  override def computeStats(): Statistics = {
     // For data source tables, we will create a `LogicalRelation` and won't call this method, for
     // hive serde tables, we will always generate a statistics.
     // TODO: unify the table stats generation.

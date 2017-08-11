@@ -82,7 +82,7 @@ case class SortMergeJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
-    case Inner =>
+    case _: InnerLike =>
       val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
       val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering)
       leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
@@ -290,6 +290,7 @@ case class SortMergeJoinExec(
                 currentLeftRow = smjScanner.getStreamedRow
                 val currentRightMatches = smjScanner.getBufferedMatches
                 if (currentRightMatches == null || currentRightMatches.length == 0) {
+                  numOutputRows += 1
                   return true
                 }
                 var found = false

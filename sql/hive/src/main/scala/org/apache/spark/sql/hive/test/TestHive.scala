@@ -449,6 +449,8 @@ private[hive] class TestHiveSparkSession(
 
   private val loadedTables = new collection.mutable.HashSet[String]
 
+  def getLoadedTables: collection.mutable.HashSet[String] = loadedTables
+
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
@@ -461,7 +463,7 @@ private[hive] class TestHiveSparkSession(
       // has already set the execution id.
       if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
         // We don't actually have a `QueryExecution` here, use a fake one instead.
-        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation)) {
+        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation())) {
           createCmds.foreach(_())
         }
       } else {
@@ -552,8 +554,11 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
-    val referencedTestTables = referencedTables.filter(sparkSession.testTables.contains)
+        logical.collect { case UnresolvedRelation(tableIdent) => tableIdent.table }
+    val resolver = sparkSession.sessionState.conf.resolver
+    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
+      referencedTables.exists(resolver(_, testTable))
+    }
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.

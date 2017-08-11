@@ -47,6 +47,10 @@ class IncrementalExecution(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
       sparkSession.sessionState.experimentalMethods) {
+    override def strategies: Seq[Strategy] =
+      extraPlanningStrategies ++
+      sparkSession.sessionState.planner.strategies
+
     override def extraPlanningStrategies: Seq[Strategy] =
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::

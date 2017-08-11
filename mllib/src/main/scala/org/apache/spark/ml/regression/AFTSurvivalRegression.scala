@@ -553,6 +553,8 @@ private class AFTAggregator(
     val ti = data.label
     val delta = data.censor
 
+    require(ti > 0.0, "The lifetime or label should be  greater than 0.")
+
     val localFeaturesStd = bcFeaturesStd.value
 
     val margin = {

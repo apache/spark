@@ -480,8 +480,10 @@ object SQLConf {
 
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
-  val OUTPUT_COMMITTER_CLASS =
-    buildConf("spark.sql.sources.outputCommitterClass").internal().stringConf.createOptional
+  val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
+    .internal()
+    .stringConf
+    .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.sources.commitProtocolClass")
@@ -561,6 +563,14 @@ object SQLConf {
     .doc("The maximum number of switches supported with codegen.")
     .intConf
     .createWithDefault(20)
+
+  val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
+    .internal()
+    .doc("The maximum number of codegen lines to log when errors occur. Use -1 for unlimited.")
+    .intConf
+    .checkValue(maxLines => maxLines >= -1, "The maximum must be a positive integer, 0 to " +
+      "disable logging or -1 to apply no limit.")
+    .createWithDefault(1000)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
@@ -774,6 +784,14 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val AUTO_UPDATE_SIZE =
+    buildConf("spark.sql.statistics.autoUpdate.size")
+      .doc("Enables automatic update for table size once table's data is changed. Note that if " +
+        "the total number of files of the table is very large, this can be expensive and slow " +
+        "down data change commands.")
+      .booleanConf
+      .createWithDefault(false)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -846,6 +864,12 @@ object SQLConf {
       .doc("Threshold for number of rows buffered in cartesian product operator")
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+
+  val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
+    .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
+      " as regular expressions.")
+    .booleanConf
+    .createWithDefault(false)
 
   val ARROW_EXECUTION_ENABLE =
     buildConf("spark.sql.execution.arrow.enable")
@@ -988,6 +1012,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
+  def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
+
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
 
@@ -1101,6 +1127,8 @@ class SQLConf extends Serializable with Logging {
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
+  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
@@ -1122,6 +1150,8 @@ class SQLConf extends Serializable with Logging {
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
+
+  def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
 
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
@@ -1198,10 +1228,12 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    val entry = sqlConfEntries.get(key)
-    if (entry != null && defaultValue != "<undefined>") {
-      // Only verify configs in the SQLConf object
-      entry.valueConverter(defaultValue)
+    if (defaultValue != null && defaultValue != "<undefined>") {
+      val entry = sqlConfEntries.get(key)
+      if (entry != null) {
+        // Only verify configs in the SQLConf object
+        entry.valueConverter(defaultValue)
+      }
     }
     Option(settings.get(key)).getOrElse(defaultValue)
   }

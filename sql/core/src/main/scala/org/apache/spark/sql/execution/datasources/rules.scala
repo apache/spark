@@ -22,13 +22,14 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Try to replaces [[UnresolvedRelation]]s if the plan is for direct query on files.
@@ -222,12 +223,10 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
   }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
-    val columnNames = if (sparkSession.sessionState.conf.caseSensitiveAnalysis) {
-      schema.map(_.name)
-    } else {
-      schema.map(_.name.toLowerCase)
-    }
-    checkDuplication(columnNames, "table definition of " + table.identifier)
+    SchemaUtils.checkSchemaColumnNameDuplication(
+      schema,
+      "in the table definition of " + table.identifier,
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val normalizedPartCols = normalizePartitionColumns(schema, table)
     val normalizedBucketSpec = normalizeBucketSpec(schema, table)
@@ -253,7 +252,10 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       partCols = table.partitionColumnNames,
       resolver = sparkSession.sessionState.conf.resolver)
 
-    checkDuplication(normalizedPartitionCols, "partition")
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartitionCols,
+      "in the partition schema",
+      sparkSession.sessionState.conf.resolver)
 
     if (schema.nonEmpty && normalizedPartitionCols.length == schema.length) {
       if (DDLUtils.isHiveTable(table)) {
@@ -283,8 +285,15 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           tableCols = schema.map(_.name),
           bucketSpec = bucketSpec,
           resolver = sparkSession.sessionState.conf.resolver)
-        checkDuplication(normalizedBucketSpec.bucketColumnNames, "bucket")
-        checkDuplication(normalizedBucketSpec.sortColumnNames, "sort")
+
+        SchemaUtils.checkColumnNameDuplication(
+          normalizedBucketSpec.bucketColumnNames,
+          "in the bucket definition",
+          sparkSession.sessionState.conf.resolver)
+        SchemaUtils.checkColumnNameDuplication(
+          normalizedBucketSpec.sortColumnNames,
+          "in the sort definition",
+          sparkSession.sessionState.conf.resolver)
 
         normalizedBucketSpec.sortColumnNames.map(schema(_)).map(_.dataType).foreach {
           case dt if RowOrdering.isOrderable(dt) => // OK
@@ -294,15 +303,6 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         Some(normalizedBucketSpec)
 
       case None => None
-    }
-  }
-
-  private def checkDuplication(colNames: Seq[String], colType: String): Unit = {
-    if (colNames.distinct.length != colNames.length) {
-      val duplicateColumns = colNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      failAnalysis(s"Found duplicate column(s) in $colType: ${duplicateColumns.mkString(", ")}")
     }
   }
 
@@ -409,6 +409,42 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
   }
 }
 
+
+/**
+ * A rule to do various checks before reading a table.
+ */
+object PreReadCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case operator: LogicalPlan =>
+        operator transformExpressionsUp {
+          case e @ (_: InputFileName | _: InputFileBlockLength | _: InputFileBlockStart) =>
+            checkNumInputFileBlockSources(e, operator)
+            e
+        }
+    }
+  }
+
+  private def checkNumInputFileBlockSources(e: Expression, operator: LogicalPlan): Int = {
+    operator match {
+      case _: CatalogRelation => 1
+      case _ @ LogicalRelation(_: HadoopFsRelation, _, _) => 1
+      case _: LeafNode => 0
+      // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
+      case u: Union =>
+        if (u.children.map(checkNumInputFileBlockSources(e, _)).sum >= 1) 1 else 0
+      case o =>
+        val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
+        if (numInputFileBlockSources > 1) {
+          e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
+        } else {
+          numInputFileBlockSources
+        }
+    }
+  }
+}
+
+
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
@@ -443,7 +479,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
       case InsertIntoTable(t, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
-          t == OneRowRelation ||
+          t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 

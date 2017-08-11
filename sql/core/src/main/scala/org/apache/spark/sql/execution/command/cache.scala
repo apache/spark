@@ -34,16 +34,14 @@ case class CacheTableCommand(
   override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    SQLExecution.ignoreNestedExecutionId(sparkSession) {
-      plan.foreach { logicalPlan =>
-        Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
-      }
-      sparkSession.catalog.cacheTable(tableIdent.quotedString)
+    plan.foreach { logicalPlan =>
+      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
+    }
+    sparkSession.catalog.cacheTable(tableIdent.quotedString)
 
-      if (!isLazy) {
-        // Performs eager caching
-        sparkSession.table(tableIdent).count()
-      }
+    if (!isLazy) {
+      // Performs eager caching
+      sparkSession.table(tableIdent).count()
     }
 
     Seq.empty[Row]

@@ -78,9 +78,9 @@ private[spark] class DTStatsAggregator(
 
   /**
    * Array of parent node sufficient stats.
-   *
-   * Note: this is necessary because stats for the parent node are not available
-   *       on the first iteration of tree learning.
+   * Note: parent stats need to be explicitly tracked in the [[DTStatsAggregator]] for unordered
+   *       categorical features, because the parent [[Node]] object does not have [[ImpurityStats]]
+   *       on the first iteration.
    */
   private val parentStats: Array[Double] = new Array[Double](statsSize)
 
