@@ -100,6 +100,10 @@ private[spark] class DTStatsAggregator(
    *                           from [[getFeatureOffset]].
    */
   def getImpurityCalculator(featureOffset: Int, binIndex: Int): ImpurityCalculator = {
+    if (allStats == null) {
+      allStats = compressedAllStats.toArray
+    }
+
     impurityAggregator.getCalculator(allStats, featureOffset + binIndex * statsSize)
   }
 
@@ -156,6 +160,10 @@ private[spark] class DTStatsAggregator(
    * @param otherBinIndex  This bin is not modified.
    */
   def mergeForFeature(featureOffset: Int, binIndex: Int, otherBinIndex: Int): Unit = {
+    if (allStats == null) {
+      allStats = compressedAllStats.toArray
+    }
+
     impurityAggregator.merge(allStats, featureOffset + binIndex * statsSize,
       featureOffset + otherBinIndex * statsSize)
   }
@@ -169,7 +177,7 @@ private[spark] class DTStatsAggregator(
       s"DTStatsAggregator.merge requires that both aggregators have the same length stats vectors."
         + s" This aggregator is of length $allStatsSize, but the other is ${other.allStatsSize}.")
 
-    if(allStats == null) {
+    if (allStats == null) {
       allStats = compressedAllStats.toArray
     }
 
