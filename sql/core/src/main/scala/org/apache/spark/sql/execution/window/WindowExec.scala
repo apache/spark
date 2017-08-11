@@ -282,6 +282,7 @@ case class WindowExec(
     // Unwrap the expressions and factories from the map.
     val expressions = windowFrameExpressionFactoryPairs.flatMap(_._1)
     val factories = windowFrameExpressionFactoryPairs.map(_._2).toArray
+    val inMemoryThreshold = sqlContext.conf.windowExecBufferInMemoryThreshold
     val spillThreshold = sqlContext.conf.windowExecBufferSpillThreshold
 
     // Start processing.
@@ -312,7 +313,8 @@ case class WindowExec(
         val inputFields = child.output.length
 
         val buffer: ExternalAppendOnlyUnsafeRowArray =
-          new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+          new ExternalAppendOnlyUnsafeRowArray(inMemoryThreshold, spillThreshold)
+
         var bufferIterator: Iterator[UnsafeRow] = _
 
         val windowFunctionResult = new SpecificInternalRow(expressions.map(_.dataType))

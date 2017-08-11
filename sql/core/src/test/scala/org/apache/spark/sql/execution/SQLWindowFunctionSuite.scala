@@ -477,7 +477,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDiNG AND CURRENT RoW)
       """.stripMargin)
 
-    withSQLConf("spark.sql.windowExec.buffer.spill.threshold" -> "1") {
+    withSQLConf("spark.sql.windowExec.buffer.in.memory.threshold" -> "1",
+      "spark.sql.windowExec.buffer.spill.threshold" -> "2") {
       assertSpilled(sparkContext, "test with low buffer spill threshold") {
         checkAnswer(actual, expected)
       }
