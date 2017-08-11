@@ -1006,8 +1006,8 @@ private[hive] object HiveClientImpl {
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
-      createTime = apiPartition.getCreateTime * 1000,
-      lastAccessTime = apiPartition.getLastAccessTime * 1000,
+      createTime = apiPartition.getCreateTime.toLong * 1000,
+      lastAccessTime = apiPartition.getLastAccessTime.toLong * 1000,
       parameters =
         if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
