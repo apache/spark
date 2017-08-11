@@ -137,7 +137,7 @@ case class CurrentBatchTimestamp(
  */
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` after `start_date`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-31
@@ -170,7 +170,7 @@ case class DateAdd(startDate: Expression, days: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_days) - Returns the date that is `num_days` before `start_date`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-29
@@ -199,7 +199,7 @@ case class DateSub(startDate: Expression, days: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the hour component of the string/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        12
@@ -229,7 +229,7 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
 
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the minute component of the string/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        58
@@ -259,7 +259,7 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
 
 @ExpressionDescription(
   usage = "_FUNC_(timestamp) - Returns the second component of the string/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        59
@@ -289,7 +289,7 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of year of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-04-09');
        100
@@ -312,7 +312,7 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the year component of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30');
        2016
@@ -335,7 +335,7 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the quarter of the year for date, in the range 1 to 4.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31');
        3
@@ -358,7 +358,7 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the month component of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-07-30');
        7
@@ -381,7 +381,7 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
 
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of month of the date/timestamp.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
        30
@@ -405,7 +405,7 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the day of the week for date/timestamp (1 = Sunday, 2 = Monday, ..., 7 = Saturday).",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30');
        5
@@ -443,7 +443,7 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the week of the year of the given date. A week is considered to start on a Monday and week 1 is the first week with >3 days.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2008-02-20');
        8
@@ -489,7 +489,7 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, fmt) - Converts `timestamp` to a value of string in the format specified by the date format `fmt`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
        2016
@@ -530,7 +530,7 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr[, pattern]) - Returns the UNIX timestamp of the given time.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
@@ -568,7 +568,7 @@ case class ToUnixTimestamp(
  */
 @ExpressionDescription(
   usage = "_FUNC_([expr[, pattern]]) - Returns the UNIX timestamp of current or specified time.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        1476884637
@@ -720,7 +720,7 @@ abstract class UnixTime
  */
 @ExpressionDescription(
   usage = "_FUNC_(unix_time, format) - Returns `unix_time` in the specified `format`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
        1970-01-01 00:00:00
@@ -829,7 +829,7 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
  */
 @ExpressionDescription(
   usage = "_FUNC_(date) - Returns the last day of the month which the date belongs to.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-01-12');
        2009-01-31
@@ -863,7 +863,7 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(start_date, day_of_week) - Returns the first date which is later than `start_date` and named as indicated.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2015-01-14', 'TU');
        2015-01-20
@@ -964,7 +964,7 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp that corresponds to the same time of day in the given timezone.",
-  extended = """
+  examples = """
     Examples:
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
@@ -1057,7 +1057,7 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(start_date, num_months) - Returns the date that is `num_months` after `start_date`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 1);
        2016-09-30
@@ -1093,7 +1093,7 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp1, timestamp2) - Returns number of months between `timestamp1` and `timestamp2`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
@@ -1136,7 +1136,7 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(timestamp, timezone) - Given a timestamp, which corresponds to a certain time of day in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
@@ -1197,7 +1197,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
       a date. Returns null with invalid input. By default, it follows casting rules to a date if
       the `fmt` is omitted.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-30 04:17:52');
        2009-07-30
@@ -1238,7 +1238,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
       a timestamp. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2016-12-31 00:12:00');
        2016-12-31 00:12:00
@@ -1273,7 +1273,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(date, fmt) - Returns `date` with the time portion of the day truncated to the unit specified by the format model `fmt`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-02-12', 'MM');
        2009-02-01
@@ -1352,7 +1352,7 @@ case class TruncDate(date: Expression, format: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(endDate, startDate) - Returns the number of days from `startDate` to `endDate`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('2009-07-31', '2009-07-30');
        1
