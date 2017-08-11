@@ -151,13 +151,10 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     }
   }
 
-  def genGroupByCodeGenContext(caseNum: Int, maxLinesPerFunction: Int): CodegenContext = {
+  def genGroupByCodeGenContext(caseNum: Int): CodegenContext = {
     val caseExp = (1 to caseNum).map { i =>
       s"case when id > $i and id <= ${i + 1} then 1 else 0 end as v$i"
     }.toList
-
-    spark.conf.set("spark.sql.codegen.maxLinesPerFunction", maxLinesPerFunction)
-
     val keyExp = List(
       "id",
       "(id & 1023) as k1",
@@ -184,22 +181,30 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-21603 check there is a too long generated function") {
-    val ctx = genGroupByCodeGenContext(30, 1500)
-    assert(ctx.isTooLongGeneratedFunction === true)
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "1500") {
+      val ctx = genGroupByCodeGenContext(30)
+      assert(ctx.isTooLongGeneratedFunction === true)
+    }
   }
 
   test("SPARK-21603 check there is not a too long generated function") {
-    val ctx = genGroupByCodeGenContext(1, 1500)
-    assert(ctx.isTooLongGeneratedFunction === false)
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "1500") {
+      val ctx = genGroupByCodeGenContext(1)
+      assert(ctx.isTooLongGeneratedFunction === false)
+    }
   }
 
   test("SPARK-21603 check there is not a too long generated function when threshold is Int.Max") {
-    val ctx = genGroupByCodeGenContext(30, Int.MaxValue)
-    assert(ctx.isTooLongGeneratedFunction === false)
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString) {
+      val ctx = genGroupByCodeGenContext(30)
+      assert(ctx.isTooLongGeneratedFunction === false)
+    }
   }
 
-  test("SPARK-21603 check there is not a too long generated function when threshold is 0") {
-    val ctx = genGroupByCodeGenContext(1, 0)
-    assert(ctx.isTooLongGeneratedFunction === true)
+  test("SPARK-21603 check there is a too long generated function when threshold is 0") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "0") {
+      val ctx = genGroupByCodeGenContext(1)
+      assert(ctx.isTooLongGeneratedFunction === true)
+    }
   }
 }
