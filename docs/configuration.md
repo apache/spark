@@ -510,6 +510,15 @@ Apart from these, the following properties are also available, and may be useful
     Python binary executable to use for PySpark in both driver and executors.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kerberos.tgt</code></td>
+  <td></td>
+  <td>
+    Full path to a ticket-granting ticket (TGT) for the principal specified with <code>--principal</code>.
+  </td>
+</tr>
+
+
 </table>
 
 ### Shuffle Behavior
