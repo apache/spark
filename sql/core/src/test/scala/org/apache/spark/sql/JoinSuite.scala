@@ -126,7 +126,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData join testData2 ON key = a where key = 2",
         classOf[BroadcastHashJoinExec])
     ).foreach(assertJoin)
-    sql("UNCACHE TABLE testData")
   }
 
   test("broadcasted hash outer join operator selection") {
@@ -141,7 +140,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[BroadcastHashJoinExec])
     ).foreach(assertJoin)
-    sql("UNCACHE TABLE testData")
   }
 
   test("multiple-key equi-join is hash-join") {
@@ -473,7 +471,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ).foreach(assertJoin)
     }
 
-    sql("UNCACHE TABLE testData")
   }
 
   test("cross join with broadcast") {
@@ -562,7 +559,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row("2", 3, 2) :: Nil)
     }
 
-    sql("UNCACHE TABLE testData")
   }
 
   test("left semi join") {
