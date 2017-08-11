@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation._
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 import org.apache.spark.util.random.RandomSampler
@@ -779,10 +780,16 @@ case object OneRowRelation extends LeafNode {
 }
 
 /** A logical plan for `dropDuplicates`. */
+case object Deduplicate {
+  def apply(keys: Seq[Attribute], child: LogicalPlan): Deduplicate = {
+    Deduplicate(keys, child, child.outputMode)
+  }
+}
+
 case class Deduplicate(
     keys: Seq[Attribute],
     child: LogicalPlan,
-    streaming: Boolean) extends UnaryNode {
+    originalOutputMode: OutputMode) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 }

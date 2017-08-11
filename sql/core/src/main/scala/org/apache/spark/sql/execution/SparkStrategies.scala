@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.StreamingQuery
+import org.apache.spark.sql.streaming.{OutputMode, StreamingQuery}
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -248,7 +248,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object StreamingDeduplicationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case Deduplicate(keys, child, true) =>
+      case d @ Deduplicate(keys, child, _) if d.originalOutputMode == OutputMode.Append() =>
         StreamingDeduplicateExec(keys, planLater(child)) :: Nil
 
       case _ => Nil
