@@ -24,6 +24,24 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
+ * A pattern that matches all filter operators if condition is deterministic
+ * or child is LeafNode of filter
+ */
+object FilterOperation extends PredicateHelper {
+  type ReturnType = (Expression, LogicalPlan)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case Filter(condition, child) if condition.deterministic =>
+      Some((condition, child))
+
+    case Filter(condition, child: LeafNode) =>
+      Some((condition, child))
+
+    case _ => None
+  }
+}
+
+/**
  * A pattern that matches any number of project or filter operations on top of another relational
  * operator.  All filter operators are collected and their conditions are broken up and returned
  * together with the top project operator.
@@ -60,7 +78,7 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
         (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
-      case Filter(condition, child) if condition.deterministic =>
+      case FilterOperation(condition, child) =>
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
