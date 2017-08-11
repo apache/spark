@@ -986,7 +986,8 @@ private[hive] object HiveClientImpl {
     tpart.setTableName(ht.getTableName)
     tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
-    tpart.setCreateTime((System.currentTimeMillis() / 1000).toInt)
+    tpart.setCreateTime((p.createTime / 1000).toInt)
+    tpart.setLastAccessTime((p.lastAccessTime / 1000).toInt)
     new HivePartition(ht, tpart)
   }
 
@@ -1005,8 +1006,10 @@ private[hive] object HiveClientImpl {
         compressed = apiPartition.getSd.isCompressed,
         properties = Option(apiPartition.getSd.getSerdeInfo.getParameters)
           .map(_.asScala.toMap).orNull),
-        parameters =
-          if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
+      createTime = apiPartition.getCreateTime * 1000,
+      lastAccessTime = apiPartition.getLastAccessTime * 1000,
+      parameters =
+        if (hp.getParameters() != null) hp.getParameters().asScala.toMap else Map.empty)
   }
 
   // Below is the key of table properties for storing Hive-generated statistics

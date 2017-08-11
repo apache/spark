@@ -97,6 +97,8 @@ object CatalogStorageFormat {
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
+    createTime: Long = System.currentTimeMillis,
+    lastAccessTime: Long = -1,
     parameters: Map[String, String] = Map.empty) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
