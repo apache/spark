@@ -167,8 +167,6 @@ abstract class ExternalCatalog
 
   def getTable(db: String, table: String): CatalogTable
 
-  def getTableOption(db: String, table: String): Option[CatalogTable]
-
   def tableExists(db: String, table: String): Boolean
 
   def listTables(db: String): Seq[String]
