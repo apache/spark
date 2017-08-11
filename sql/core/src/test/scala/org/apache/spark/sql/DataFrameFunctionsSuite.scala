@@ -448,6 +448,28 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       rand(Random.nextLong()), randn(Random.nextLong())
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
   }
+
+  private def assertNoExceptions(c: Column): Unit = {
+    for ((wholeStage, useObjectHashAgg) <- Seq((true, false), (false, false), (false, true))) {
+      withSQLConf(
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+        val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
+        // HashAggregate
+        df.groupBy("x").agg(c, sum("y")).collect()
+        // ObjectHashAggregate and SortAggregate
+        df.groupBy("x").agg(c, collect_list("y")).collect()
+      }
+    }
+  }
+
+  test("SPARK-19471: AggregationIterator does not initialize the generated result projection" +
+    " before using it") {
+    Seq(
+      monotonically_increasing_id(), spark_partition_id(),
+      rand(Random.nextLong()), randn(Random.nextLong())
+    ).foreach(assertNoExceptions(_))
+  }
 }
 
 object DataFrameFunctionsSuite {
