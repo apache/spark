@@ -131,7 +131,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     @since("2.0.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        allStagesAreJava = SharedReadWrite.checkStagesForJava(self.getStages())
+        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.getStages())
         if allStagesAreJava:
             return JavaMLWriter(self)
         return PipelineWriter(self)
@@ -187,8 +187,8 @@ class PipelineWriter(MLWriter):
 
     def saveImpl(self, path):
         stages = self.instance.getStages()
-        SharedReadWrite.validateStages(stages)
-        SharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
+        PipelineSharedReadWrite.validateStages(stages)
+        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
 
 
 @inherit_doc
@@ -203,10 +203,10 @@ class PipelineReader(MLReader):
 
     def load(self, path):
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
-        if 'savedAsPython' not in metadata['paramMap']:
+        if 'language' not in metadata['paramMap'] or metadata['paramMap']['language'] != 'Python':
             return JavaMLReader(self.cls).load(path)
         else:
-            uid, stages = SharedReadWrite.load(metadata, self.sc, path)
+            uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
             return Pipeline(stages=stages)._resetUid(uid)
 
 
@@ -222,8 +222,8 @@ class PipelineModelWriter(MLWriter):
 
     def saveImpl(self, path):
         stages = self.instance.stages
-        SharedReadWrite.validateStages(stages)
-        SharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
+        PipelineSharedReadWrite.validateStages(stages)
+        PipelineSharedReadWrite.saveImpl(self.instance, stages, self.sc, path)
 
 
 @inherit_doc
@@ -238,10 +238,10 @@ class PipelineModelReader(MLReader):
 
     def load(self, path):
         metadata = DefaultParamsReader.loadMetadata(path, self.sc)
-        if 'savedAsPython' not in metadata['paramMap']:
+        if 'language' not in metadata['paramMap'] or metadata['paramMap']['language'] != 'Python':
             return JavaMLReader(self.cls).load(path)
         else:
-            uid, stages = SharedReadWrite.load(metadata, self.sc, path)
+            uid, stages = PipelineSharedReadWrite.load(metadata, self.sc, path)
             return PipelineModel(stages=stages)._resetUid(uid)
 
 
@@ -278,7 +278,7 @@ class PipelineModel(Model, MLReadable, MLWritable):
     @since("2.0.0")
     def write(self):
         """Returns an MLWriter instance for this ML instance."""
-        allStagesAreJava = SharedReadWrite.checkStagesForJava(self.stages)
+        allStagesAreJava = PipelineSharedReadWrite.checkStagesForJava(self.stages)
         if allStagesAreJava:
             return JavaMLWriter(self)
         return PipelineModelWriter(self)
@@ -322,22 +322,17 @@ class PipelineModel(Model, MLReadable, MLWritable):
 
 
 @inherit_doc
-class SharedReadWrite():
+class PipelineSharedReadWrite():
     """
     Functions for :py:class:`MLReader` and :py:class:`MLWriter` shared between
-    :py:class:`Pipeline` and :py:class`PipelineModel`
+    :py:class:`Pipeline` and :py:class:`PipelineModel`
 
     .. versionadded:: 2.3.0
     """
 
     @staticmethod
     def checkStagesForJava(stages):
-        allStagesAreJava = True
-        for stage in stages:
-            if not isinstance(stage, JavaMLWritable):
-                allStagesAreJava = False
-                break
-        return allStagesAreJava
+        return all(isinstance(stage, JavaMLWritable) for stage in stages)
 
     @staticmethod
     def validateStages(stages):
@@ -346,7 +341,7 @@ class SharedReadWrite():
         """
         for stage in stages:
             if not isinstance(stage, MLWritable):
-                raise ValueError("Pipeline write will fail on this pipline " +
+                raise ValueError("Pipeline write will fail on this pipeline " +
                                  "because stage %s of type %s is not MLWritable",
                                  stage.uid, type(stage))
 
@@ -358,11 +353,11 @@ class SharedReadWrite():
         - save stages to stages/IDX_UID
         """
         stageUids = [stage.uid for stage in stages]
-        jsonParams = {'stageUids': stageUids, 'savedAsPython': True}
+        jsonParams = {'stageUids': stageUids, 'language': 'Python'}
         DefaultParamsWriter.saveMetadata(instance, path, sc, paramMap=jsonParams)
         stagesDir = os.path.join(path, "stages")
         for index, stage in enumerate(stages):
-            stage.write().save(SharedReadWrite
+            stage.write().save(PipelineSharedReadWrite
                                .getStagePath(stage.uid, index, len(stages), stagesDir))
 
     @staticmethod
@@ -376,7 +371,8 @@ class SharedReadWrite():
         stageUids = metadata['paramMap']['stageUids']
         stages = []
         for index, stageUid in enumerate(stageUids):
-            stagePath = SharedReadWrite.getStagePath(stageUid, index, len(stageUids), stagesDir)
+            stagePath = \
+                PipelineSharedReadWrite.getStagePath(stageUid, index, len(stageUids), stagesDir)
             stage = DefaultParamsReader.loadParamsInstance(stagePath, sc)
             stages.append(stage)
         return (metadata['uid'], stages)
