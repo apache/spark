@@ -190,6 +190,31 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
   }
 
+  test("ask a non-existent endpoint remotely") {
+    env.setupEndpoint("ask-non-existent-remotely", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+        case msg: String =>
+          context.reply(msg)
+      }
+    })
+
+    val anotherEnv = createRpcEnv(new SparkConf(), "remote", 0, clientMode = true)
+    try {
+      val e = intercept[SparkException] {
+        anotherEnv.setupEndpointRef(env.address, "Oops")
+      }
+      // The SparkException cause should be a RpcEndpointNotFoundException
+      assert(e.getCause.isInstanceOf[RpcEndpointNotFoundException])
+      assert(e.getCause.getMessage.contains("Cannot find endpoint"))
+      assert(e.getCause.getMessage.contains(env.address.toString))
+    } finally {
+      anotherEnv.shutdown()
+      anotherEnv.awaitTermination()
+    }
+  }
+
   test("onStart and onStop") {
     val stopLatch = new CountDownLatch(1)
     val calledMethods = mutable.ArrayBuffer[String]()

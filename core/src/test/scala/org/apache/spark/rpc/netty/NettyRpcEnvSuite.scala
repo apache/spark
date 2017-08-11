@@ -35,15 +35,6 @@ class NettyRpcEnvSuite extends RpcEnvSuite with MockitoSugar {
     new NettyRpcEnvFactory().create(config)
   }
 
-  test("non-existent endpoint") {
-    val uri = RpcEndpointAddress(env.address, "nonexist-endpoint").toString
-    val e = intercept[SparkException] {
-      env.setupEndpointRef(env.address, "nonexist-endpoint")
-    }
-    assert(e.getCause.isInstanceOf[RpcEndpointNotFoundException])
-    assert(e.getCause.getMessage.contains(uri))
-  }
-
   test("advertise address different from bind address") {
     val sparkConf = new SparkConf()
     val config = RpcEnvConfig(sparkConf, "test", "localhost", "example.com", 0,
