@@ -82,7 +82,7 @@ package object config {
     ConfigBuilder("spark.mesos.network.labels")
       .doc("Network labels to pass to CNI plugins.  This is a comma-separated list " +
         "of key-value pairs, where each key-value pair has the format key:value. " +
-        "Example: key1=val1,key2=val2")
+        "Example: key1:val1,key2:val2")
       .stringConf
       .createOptional
 }
