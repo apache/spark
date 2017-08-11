@@ -330,8 +330,9 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
     val staticPartCols = normalizedPartSpec.filter(_._2.isDefined).keySet
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
     val specfiedColumns = insert.specfiedColumns
+    validateSpecifiedColumns(specfiedColumns, expectedColumns)
     if (specfiedColumns.isDefined && specfiedColumns.get.length !=insert.query.schema.length
-      && expectedColumns.length != insert.query.schema.length) {
+      || specfiedColumns.isEmpty && expectedColumns.length != insert.query.schema.length) {
       throw new AnalysisException(
         s"$tblName requires that the data to be inserted have the same number of columns as the " +
           s"target table: target table has ${insert.table.output.size} column(s) but the " +
@@ -340,7 +341,6 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
     }
 
     val insertInto = if (specfiedColumns.isDefined && specfiedColumns.get.nonEmpty) {
-    validateSpecifiedColumns(specfiedColumns, expectedColumns)
       insert.query match {
         case localRelation: LocalRelation if !isSpecfiedColumnsEqExpectedColumns(
           specfiedColumns.get, expectedColumns) =>

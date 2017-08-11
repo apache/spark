@@ -188,8 +188,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
 
-    val namedExpressions = Option(Option(ctx.namedExpressionSeq).toSeq
+    var namedExpressions = Option(Option(ctx.namedExpressionSeq).toSeq
       .flatMap(_.namedExpression.asScala).map(typedVisit[NamedExpression]))
+
+    if (namedExpressions.get.asInstanceOf[List[Any]].isEmpty) {
+      namedExpressions = None
+    }
 
     InsertIntoTable(
       UnresolvedRelation(tableIdent),

@@ -66,6 +66,42 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     )
   }
 
+  test("Simple INSERT INTO a JSONRelation VALUES with specified columns") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable (a) VALUES (0)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      Row(0, null)
+    )
+  }
+
+  test("INSERT INTO a JSONRelation VALUES with specified disordered columns") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable (b,a) VALUES ("a",0)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT a, b FROM jsonTable"),
+      Row(0, "a")
+    )
+  }
+
+  test("INSERT INTO a JSONRelation VALUES with specified columns not in expected columns") {
+    sql(
+      s"""
+         |INSERT OVERWRITE TABLE jsonTable (c) VALUES ("c")
+      """.stripMargin)
+
+    val message = intercept[AnalysisException] {
+      sql("INSERT INTO TABLE t1 SELECT a FROM t2")
+    }.getMessage
+    assert(message.contains("specfied columns not existed in expected Columns"))
+  }
+
   test("insert into a temp view that does not point to an insertable data source") {
     import testImplicits._
     withTempView("t1", "t2") {
