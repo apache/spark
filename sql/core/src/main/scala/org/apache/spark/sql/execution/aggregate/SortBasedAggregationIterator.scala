@@ -38,7 +38,7 @@ class SortBasedAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     numOutputRows: SQLMetric)
   extends AggregationIterator(
-    partIndex
+    partIndex,
     groupingExpressions,
     valueAttributes,
     aggregateExpressions,
