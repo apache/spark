@@ -109,6 +109,8 @@ case class CatalogTablePartition(
     if (parameters.nonEmpty) {
       map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
+    map.put("Created Time", new Date(createTime).toString)
+    map.put("Last Access", new Date(lastAccessTime).toString)
     map
   }
 
