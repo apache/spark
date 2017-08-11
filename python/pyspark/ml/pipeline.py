@@ -325,7 +325,7 @@ class PipelineModel(Model, MLReadable, MLWritable):
 class SharedReadWrite():
     """
     Functions for :py:class:`MLReader` and :py:class:`MLWriter` shared between
-    :py:class:'Pipeline' and :py:class'PipelineModel'
+    :py:class:`Pipeline` and :py:class`PipelineModel`
 
     .. versionadded:: 2.3.0
     """
@@ -387,6 +387,6 @@ class SharedReadWrite():
         Get path for saving the given stage.
         """
         stageIdxDigits = len(str(numStages))
-        stageDir = str(stageIdxDigits) + "_" + stageUid
+        stageDir = str(stageIdx).zfill(stageIdxDigits) + "_" + stageUid
         stagePath = os.path.join(stagesDir, stageDir)
         return stagePath
