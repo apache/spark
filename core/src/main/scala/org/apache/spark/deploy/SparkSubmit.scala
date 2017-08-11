@@ -218,8 +218,8 @@ object SparkSubmit extends CommandLineUtils {
    * Exposed for testing.
    */
   private[deploy] def prepareSubmitEnvironment(
-    args: SparkSubmitArguments,
-    hadoopConf: HadoopConfiguration = new HadoopConfiguration())
+      args: SparkSubmitArguments,
+      hadoopConf: HadoopConfiguration = new HadoopConfiguration())
   : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
