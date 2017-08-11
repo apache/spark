@@ -498,17 +498,6 @@ abstract class SessionCatalogSuite extends PlanTest {
     }
   }
 
-  test("get option of table metadata") {
-    withBasicCatalog { catalog =>
-      assert(catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("db2")))
-        == Option(catalog.externalCatalog.getTable("db2", "tbl1")))
-      assert(catalog.getTableMetadataOption(TableIdentifier("unknown_table", Some("db2"))).isEmpty)
-      intercept[NoSuchDatabaseException] {
-        catalog.getTableMetadataOption(TableIdentifier("tbl1", Some("unknown_db")))
-      }
-    }
-  }
-
   test("lookup table relation") {
     withBasicCatalog { catalog =>
       val tempTable1 = Range(1, 10, 1, 10)
