@@ -668,7 +668,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def executorHostname(offer: Offer): String = {
-    if (sc.conf.getOption("spark.mesos.network.name").isDefined) {
+    if (sc.conf.get(NETWORK_NAME).isDefined) {
       // The agent's IP is not visible in a CNI container, so we bind to 0.0.0.0
       "0.0.0.0"
     } else {

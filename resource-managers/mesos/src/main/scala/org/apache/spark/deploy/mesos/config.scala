@@ -71,6 +71,13 @@ package object config {
       .doubleConf
       .createWithDefault(0.0)
 
+  private [spark] val NETWORK_NAME =
+    ConfigBuilder("spark.mesos.network.name")
+      .doc("Attach containers to the given named network. If this job is launched " +
+        "in cluster mode, also launch the driver in the given named network.")
+      .stringConf
+      .createOptional
+
   private [spark] val NETWORK_LABELS =
     ConfigBuilder("spark.mesos.network.labels")
       .doc("Network labels to pass to CNI plugins.  This is a comma-separated list " +

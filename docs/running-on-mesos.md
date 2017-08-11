@@ -545,7 +545,7 @@ See the [configuration page](configuration.html) for information on Spark config
     of key-value pairs, where each key-value pair has the format key:value.
     Example:
 
-    <pre>key1=val1,key2=val2</pre>
+    <pre>key1:val1,key2:val2</pre>
     See
     <a href="http://mesos.apache.org/documentation/latest/cni/#mesos-meta-data-to-cni-plugins">the Mesos CNI docs</a>
     for more details.
