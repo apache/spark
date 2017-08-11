@@ -77,6 +77,7 @@ import org.apache.spark.unsafe.KVIterator
  *   the iterator containing input [[UnsafeRow]]s.
  */
 class TungstenAggregationIterator(
+    partIndex: Int,
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
@@ -91,6 +92,7 @@ class TungstenAggregationIterator(
     spillSize: SQLMetric,
     avgHashProbe: SQLMetric)
   extends AggregationIterator(
+    partIndex,
     groupingExpressions,
     originalInputAttributes,
     aggregateExpressions,
