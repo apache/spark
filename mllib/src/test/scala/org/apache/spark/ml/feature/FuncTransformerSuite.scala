@@ -52,6 +52,19 @@ class FuncTransformerSuite
       expectDF.collect().toSet))
   }
 
+  test("FuncTransformer for scala closure") {
+    val arrayIndexer = new FuncTransformer(udf { i: Int => FuncTransformerSuite.multiplier(i) })
+    val df = Seq(-1, 0, 2).toDF("input")
+    var expectDF = Seq(-5, 0, 10).toDF("output")
+    assert(arrayIndexer.transform(df).select("output").collect().toSet.equals(
+      expectDF.collect().toSet))
+
+    FuncTransformerSuite.factor = 10
+    expectDF = Seq(-10, 0, 20).toDF("output")
+    assert(arrayIndexer.transform(df).select("output").collect().toSet.equals(
+      expectDF.collect().toSet))
+  }
+
   test("FuncTransformer for struct input column") {
     val df = spark.createDataFrame(Seq(
       ("a", (Array(1.2, 2), Array(2))),
@@ -136,4 +149,13 @@ class FuncTransformerSuite
     assert(loaded.transform(df).select("myOutputCol").collect().toSet.equals(
       expectDF.collect().toSet))
   }
+}
+
+object FuncTransformerSuite {
+
+  // factor and multiplier are for Scala closure test
+  var factor = 5
+
+  val multiplier = (i: Int) => i * factor
+
 }
