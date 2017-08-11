@@ -1025,5 +1025,17 @@ class JDBCSuite extends SparkFunSuite
       .load()
     val e = intercept[SparkException] {df2.collect()}.getMessage
     assert(e.contains("""Schema "DUMMY" not found"""))
-  }
+
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW test_sessionInitStatement
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass',
+         |dbtable '(SELECT NVL(@MYTESTVAR1, -1), NVL(@MYTESTVAR2, -1))',
+         |sessionInitStatement 'SET @MYTESTVAR1 21519; SET @MYTESTVAR2 1234')
+       """.stripMargin)
+
+      val df3 = sql("SELECT * FROM test_sessionInitStatement")
+      assert(df3.collect() === Array(Row(21519, 1234)))
+    }
 }
