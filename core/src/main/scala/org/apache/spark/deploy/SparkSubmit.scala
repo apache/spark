@@ -582,18 +582,30 @@ object SparkSubmit extends CommandLineUtils {
     // assure a keytab is available from any place in a JVM
     if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
       if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when principal is specified")
-        if (!new File(args.keytab).exists()) {
-          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
-        } else {
-          // Add keytab and principal configurations in sysProps to make them available
-          // for later use; e.g. in spark sql, the isolated class loader used to talk
-          // to HiveMetastore will use these settings. They will be set as Java system
-          // properties and then loaded by SparkConf
-          sysProps.put("spark.yarn.keytab", args.keytab)
+        require(args.keytab != null || args.tgt != null,
+          "Keytab or TGT must be specified when principal is specified")
+        if (args.keytab != null) {
+          require(args.tgt == null, "Keytab and TGT cannot be used at the same time")
+          if (!new File(args.keytab).exists()) {
+            throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
+          } else {
+            // Add keytab and principal configurations in sysProps to make them available
+            // for later use; e.g. in spark sql, the isolated class loader used to talk
+            // to HiveMetastore will use these settings. They will be set as Java system
+            // properties and then loaded by SparkConf
+            sysProps.put("spark.yarn.keytab", args.keytab)
+            sysProps.put("spark.yarn.principal", args.principal)
+            UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+          }
+        }
+        if (args.tgt != null) {
+          if (!new File(args.tgt).exists()) {
+            throw new SparkException(s"TGT file: ${args.tgt} does not exist")
+          }
+          sysProps.put("spark.kerberos.tgt", args.tgt)
           sysProps.put("spark.yarn.principal", args.principal)
-
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+          UserGroupInformation.setLoginUser(
+            UserGroupInformation.getUGIFromTicketCache(args.tgt, args.principal))
         }
       }
     }

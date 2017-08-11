@@ -72,6 +72,7 @@ class SparkSubmitOptionParser {
   protected final String ARCHIVES = "--archives";
   protected final String EXECUTOR_CORES = "--executor-cores";
   protected final String KEYTAB = "--keytab";
+  protected final String TGT = "--tgt";
   protected final String NUM_EXECUTORS = "--num-executors";
   protected final String PRINCIPAL = "--principal";
   protected final String QUEUE = "--queue";
@@ -101,6 +102,7 @@ class SparkSubmitOptionParser {
     { FILES },
     { JARS },
     { KEYTAB },
+    { TGT },
     { KILL_SUBMISSION },
     { MASTER },
     { NAME },

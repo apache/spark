@@ -45,9 +45,7 @@ import org.apache.spark.util.{RpcUtils, SerializableBuffer, ThreadUtils, Utils}
  * (spark.deploy.*).
  */
 private[spark]
-class CoarseGrainedSchedulerBackend(
-  scheduler: TaskSchedulerImpl,
-  val rpcEnv: RpcEnv)
+class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: RpcEnv)
   extends ExecutorAllocationClient with SchedulerBackend with Logging {
 
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
@@ -102,10 +100,10 @@ class CoarseGrainedSchedulerBackend(
   @volatile protected var currentExecutorIdCounter = 0
 
   // hadoop token manager used by some sub-classes (e.g. Mesos)
-  protected val hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
+  protected var hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   // Hadoop delegation tokens to be sent to the executors.
-  protected val hadoopDelegationCreds: Option[Array[Byte]] = None
+  protected var hadoopDelegationCreds: Option[Array[Byte]] = None
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {

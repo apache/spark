@@ -73,6 +73,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var proxyUser: String = null
   var principal: String = null
   var keytab: String = null
+  var tgt: String = null
 
   // Standalone cluster mode only
   var supervise: Boolean = false
@@ -197,6 +198,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
     keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
+    tgt = Option(tgt).orElse(sparkProperties.get("spark.kerberos.tgt")).orNull
     principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
 
     // Try to set main class from JAR if no --class argument is given
@@ -452,6 +454,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case KEYTAB =>
         keytab = value
+
+      case TGT =>
+        tgt = value
 
       case HELP =>
         printUsageAndExit(0)
