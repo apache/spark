@@ -153,7 +153,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
 
   def genGroupByCodeGenContext(caseNum: Int, maxLinesPerFunction: Int): CodegenContext = {
     val caseExp = (1 to caseNum).map { i =>
-      s"case when id > $i and id <= ${i+1} then 1 else 0 end as v$i"
+      s"case when id > $i and id <= ${i + 1} then 1 else 0 end as v$i"
     }.toList
 
     spark.conf.set("spark.sql.codegen.maxLinesPerFunction", maxLinesPerFunction)
