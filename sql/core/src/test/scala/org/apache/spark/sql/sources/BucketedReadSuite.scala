@@ -254,14 +254,12 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       bucketedTableTestSpecLeft: BucketedTableTestSpec,
       bucketedTableTestSpecRight: BucketedTableTestSpec,
       joinType: String = "inner",
-      joinCondition: (DataFrame, DataFrame) => Column,
-      expectedResult: Option[Array[Row]] = None): Array[Row] = {
+      joinCondition: (DataFrame, DataFrame) => Column): Unit = {
     val BucketedTableTestSpec(bucketSpecLeft, numPartitionsLeft, shuffleLeft, sortLeft) =
       bucketedTableTestSpecLeft
     val BucketedTableTestSpec(bucketSpecRight, numPartitionsRight, shuffleRight, sortRight) =
       bucketedTableTestSpecRight
 
-    var result: Array[Row] = Array.empty
     withTable("bucketed_table1", "bucketed_table2") {
       def withBucket(
           writer: DataFrameWriter[Row],
@@ -317,14 +315,8 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         assert(
           joinOperator.right.find(_.isInstanceOf[SortExec]).isDefined == sortRight,
           s"expected sort in the right child to be $sortRight but found\n${joinOperator.right}")
-
-        if (expectedResult.isDefined) {
-          checkAnswer(joined, expectedResult.get)
-        }
-        result = joined.collect()
       }
     }
-    result
   }
 
   private def joinCondition(joinCols: Seq[String]) (left: DataFrame, right: DataFrame): Column = {
@@ -558,26 +550,23 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
       expectedShuffle = false,
       expectedSort = false)
 
-    def testBucketingWithPredicate(
-        joinCondition: (DataFrame, DataFrame) => Column,
-        expectedResult: Option[Array[Row]]): Array[Row] = {
+    // If the set of join columns is equal to the set of bucketed + sort columns, then
+    // the order of join keys in the query should not matter and there should not be any shuffle
+    // and sort added in the query plan
+    Seq(
+      Seq("i", "j", "k"),
+      Seq("i", "k", "j"),
+      Seq("j", "k", "i"),
+      Seq("j", "i", "k"),
+      Seq("k", "j", "i"),
+      Seq("k", "i", "j")
+    ).foreach(joinKeys => {
       testBucketing(
         bucketedTableTestSpecLeft = bucketedTableTestSpec,
         bucketedTableTestSpecRight = bucketedTableTestSpec,
-        joinCondition = joinCondition,
-        expectedResult = expectedResult
+        joinCondition = joinCondition(joinKeys)
       )
-    }
-
-    // Irrespective of the ordering of keys in the join predicate, the query plan and
-    // query results should always be the same
-    val result = Some(testBucketingWithPredicate(joinCondition(Seq("i", "j", "k")), None))
-
-    testBucketingWithPredicate(joinCondition(Seq("i", "k", "j")), result)
-    testBucketingWithPredicate(joinCondition(Seq("j", "k", "i")), result)
-    testBucketingWithPredicate(joinCondition(Seq("j", "i", "k")), result)
-    testBucketingWithPredicate(joinCondition(Seq("k", "i", "j")), result)
-    testBucketingWithPredicate(joinCondition(Seq("k", "j", "i")), result)
+    })
   }
 
   test("SPARK-19122 No re-ordering should happen if set of join columns != set of child's " +
