@@ -471,22 +471,25 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, expElogbetaBc.value, alpha, gammaShape, k)
-        stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
+        stat(::, ids) := stat(::, ids) + sstats
         gammaPart = gammad :: gammaPart
       }
       Iterator((stat, gammaPart))
     }.persist(StorageLevel.MEMORY_AND_DISK)
     val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
       _ += _, _ += _)
-    val gammat: BDM[Double] = breeze.linalg.DenseMatrix.vertcat(
-      stats.map(_._2).flatMap(list => list).collect().map(_.toDenseMatrix): _*)
-    stats.unpersist()
-    expElogbetaBc.destroy(false)
     val batchResult = statsSum *:* expElogbeta.t
-
     // Note that this is an optimization to avoid batch.count
-    updateLambda(batchResult, (miniBatchFraction * corpusSize).ceil.toInt)
-    if (optimizeDocConcentration) updateAlpha(gammat)
+    val batchSize = (miniBatchFraction * corpusSize).ceil.toInt
+    updateLambda(batchResult, batchSize)
+
+    if (optimizeDocConcentration) {
+      val gammat: RDD[BDV[Double]] = stats.flatMap(_._2)
+      updateAlpha(gammat, batchSize)
+    }
+
+    expElogbetaBc.destroy(false)
+    stats.unpersist()
     this
   }
 
@@ -508,12 +511,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    */
-  private def updateAlpha(gammat: BDM[Double]): Unit = {
+  private def updateAlpha(gammat: RDD[BDV[Double]], N : Double): Unit = {
     val weight = rho()
-    val N = gammat.rows.toDouble
     val alpha = this.alpha.asBreeze.toDenseVector
-    val logphat: BDV[Double] =
-      sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)).t / N
+    val logphat: BDV[Double] = gammat.treeAggregate(BDV.zeros[Double](k))(
+      (sum, gamma) => sum += LDAUtils.dirichletExpectation(gamma),
+      _ += _ )  / N
+
     val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
     val c = N * trigamma(sum(alpha))
