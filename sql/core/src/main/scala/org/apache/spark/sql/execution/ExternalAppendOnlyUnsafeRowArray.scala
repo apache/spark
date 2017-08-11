@@ -64,10 +64,6 @@ private[sql] class ExternalAppendOnlyUnsafeRowArray(
       numRowsSpillThreshold)
   }
 
-  def this(numRowsSpillThreshold: Int) {
-    this(DefaultInitialSizeOfInMemoryBuffer, numRowsSpillThreshold)
-  }
-
   private val initialSizeOfInMemoryBuffer =
     Math.min(DefaultInitialSizeOfInMemoryBuffer, numRowsInMemoryBufferThreshold)
 

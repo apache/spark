@@ -873,6 +873,14 @@ object SQLConf {
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
+  val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of rows guaranteed to be held in memory by the cartesian " +
+        "product operator")
+      .intConf
+      .createWithDefault(4096)
+
   val CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.spill.threshold")
       .internal()
@@ -1152,15 +1160,18 @@ class SQLConf extends Serializable with Logging {
 
   def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
+  def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
+
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
-  def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
+  def sortMergeJoinExecBufferInMemoryThreshold: Int =
+    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def sortMergeJoinExecBufferSpillThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
 
-  def sortMergeJoinExecBufferInMemoryThreshold: Int =
-    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
+  def cartesianProductExecBufferInMemoryThreshold: Int =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def cartesianProductExecBufferSpillThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
