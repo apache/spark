@@ -157,7 +157,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   }
 
   test("broadcast hint in SQL") {
-    import org.apache.spark.sql.catalyst.plans.logical.{BroadcastHint, Join}
+    import org.apache.spark.sql.catalyst.plans.logical.{ResolvedHint, Join}
 
     spark.range(10).createOrReplaceTempView("t")
     spark.range(10).createOrReplaceTempView("u")
@@ -170,12 +170,12 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       val plan3 = sql(s"SELECT /*+ $name(v) */ * FROM t JOIN u ON t.id = u.id").queryExecution
         .optimizedPlan
 
-      assert(plan1.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-      assert(!plan1.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-      assert(!plan2.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-      assert(plan2.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
-      assert(!plan3.asInstanceOf[Join].left.isInstanceOf[BroadcastHint])
-      assert(!plan3.asInstanceOf[Join].right.isInstanceOf[BroadcastHint])
+      assert(plan1.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+      assert(!plan1.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+      assert(!plan2.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+      assert(plan2.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
+      assert(!plan3.asInstanceOf[Join].left.isInstanceOf[ResolvedHint])
+      assert(!plan3.asInstanceOf[Join].right.isInstanceOf[ResolvedHint])
     }
   }
 

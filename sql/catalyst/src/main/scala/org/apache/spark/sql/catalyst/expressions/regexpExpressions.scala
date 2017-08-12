@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.commons.lang3.StringEscapeUtils
@@ -27,8 +28,8 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
-trait StringRegexExpression extends ImplicitCastInputTypes {
-  self: BinaryExpression =>
+abstract class StringRegexExpression extends BinaryExpression
+  with ImplicitCastInputTypes with NullIntolerant {
 
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
@@ -60,7 +61,7 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
     }
   }
 
-  override def sql: String = s"${left.sql} ${prettyName.toUpperCase} ${right.sql}"
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
 
@@ -68,9 +69,39 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
  * Simple RegEx pattern matching function
  */
 @ExpressionDescription(
-  usage = "str _FUNC_ pattern - Returns true if `str` matches `pattern`, or false otherwise.")
-case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+  usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
+    "null if any arguments are null, false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * pattern - a string expression. The pattern is a string which is matched literally, with
+          exception to the following special symbols:
+
+          _ matches any one character in the input (similar to . in posix regular expressions)
+
+          % matches zero or more characters in the input (similar to .* in posix regular
+          expressions)
+
+          The escape character is '\'. If an escape character precedes a special symbol or another
+          escape character, the following character is matched literally. It is invalid to escape
+          any other character.
+
+          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+          to match "\abc", the pattern should be "\\abc".
+
+          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+          to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+          enabled, the pattern to match "\abc" should be "\abc".
+  """,
+  examples = """
+    Examples:
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      true
+  """,
+  note = """
+    Use RLIKE to match with standard regular expressions.
+  """)
+case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
@@ -121,9 +152,34 @@ case class Like(left: Expression, right: Expression)
 }
 
 @ExpressionDescription(
-  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.")
-case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression {
+  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * regexp - a string expression. The pattern string should be a Java regular expression.
+
+          Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
+          parser. For example, to match "\abc", a regular expression for `regexp` can be
+          "^\\abc$".
+
+          There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
+          fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+  """,
+  examples = """
+    Examples:
+      When spark.sql.parser.escapedStringLiterals is disabled (default).
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      true
+
+      When spark.sql.parser.escapedStringLiterals is enabled.
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      true
+  """,
+  note = """
+    Use LIKE to match with simple string pattern.
+  """)
+case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
@@ -176,7 +232,7 @@ case class RLike(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regex) - Splits `str` around occurrences that match `regex`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
        ["one","two","three",""]
@@ -213,7 +269,7 @@ case class StringSplit(str: Expression, pattern: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of `str` that match `regexp` with `rep`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\d+)', 'num');
        num-num
@@ -320,7 +376,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
        100

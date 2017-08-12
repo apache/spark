@@ -59,7 +59,7 @@ private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: 
   @tailrec
   private def parse(args: List[String]): Unit = args match {
     case ("--host" | "-h") :: value :: tail =>
-      Utils.checkHost(value, "Please use hostname " + value)
+      Utils.checkHost(value)
       host = value
       parse(tail)
 

@@ -58,7 +58,7 @@ import org.apache.spark.sql.types._
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(10.0, array(0.5, 0.4, 0.1), 100);
        [10.0,10.0,10.0]
@@ -245,7 +245,8 @@ object ApproximatePercentile {
         val result = new Array[Double](percentages.length)
         var i = 0
         while (i < percentages.length) {
-          result(i) = summaries.query(percentages(i))
+          // Since summaries.count != 0, the query here never return None.
+          result(i) = summaries.query(percentages(i)).get
           i += 1
         }
         result

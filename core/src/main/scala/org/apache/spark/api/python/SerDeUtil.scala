@@ -55,13 +55,12 @@ private[spark] object SerDeUtil extends Logging {
     //    {'d', sizeof(double), d_getitem, d_setitem},
     //    {'\0', 0, 0, 0} /* Sentinel */
     //  };
-    // TODO: support Py_UNICODE with 2 bytes
     val machineCodes: Map[Char, Int] = if (ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN)) {
-      Map('c' -> 1, 'B' -> 0, 'b' -> 1, 'H' -> 3, 'h' -> 5, 'I' -> 7, 'i' -> 9,
+      Map('B' -> 0, 'b' -> 1, 'H' -> 3, 'h' -> 5, 'I' -> 7, 'i' -> 9,
         'L' -> 11, 'l' -> 13, 'f' -> 15, 'd' -> 17, 'u' -> 21
       )
     } else {
-      Map('c' -> 1, 'B' -> 0, 'b' -> 1, 'H' -> 2, 'h' -> 4, 'I' -> 6, 'i' -> 8,
+      Map('B' -> 0, 'b' -> 1, 'H' -> 2, 'h' -> 4, 'I' -> 6, 'i' -> 8,
         'L' -> 10, 'l' -> 12, 'f' -> 14, 'd' -> 16, 'u' -> 20
       )
     }
@@ -72,7 +71,30 @@ private[spark] object SerDeUtil extends Logging {
         val typecode = args(0).asInstanceOf[String].charAt(0)
         // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
         val data = args(1).asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
-        construct(typecode, machineCodes(typecode), data)
+        if (typecode == 'c') {
+          // It seems like the pickle of pypy uses the similar protocol to Python 2.6, which uses
+          // a string for array data instead of list as Python 2.7, and handles an array of
+          // typecode 'c' as 1-byte character.
+          val result = new Array[Char](data.length)
+          var i = 0
+          while (i < data.length) {
+            result(i) = data(i).toChar
+            i += 1
+          }
+          result
+        } else {
+          construct(typecode, machineCodes(typecode), data)
+        }
+      } else if (args.length == 2 && args(0) == "l") {
+        // On Python 2, an array of typecode 'l' should be handled as long rather than int.
+        val values = args(1).asInstanceOf[JArrayList[_]]
+        val result = new Array[Long](values.size)
+        var i = 0
+        while (i < values.size) {
+          result(i) = values.get(i).asInstanceOf[Number].longValue()
+          i += 1
+        }
+        result
       } else {
         super.construct(args)
       }

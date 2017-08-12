@@ -36,11 +36,11 @@ private[r] class MultilayerPerceptronClassifierWrapper private (
 
   import MultilayerPerceptronClassifierWrapper._
 
-  val mlpModel: MultilayerPerceptronClassificationModel =
+  private val mlpModel: MultilayerPerceptronClassificationModel =
     pipeline.stages(1).asInstanceOf[MultilayerPerceptronClassificationModel]
 
-  val weights: Array[Double] = mlpModel.weights.toArray
-  val layers: Array[Int] = mlpModel.layers
+  lazy val weights: Array[Double] = mlpModel.weights.toArray
+  lazy val layers: Array[Int] = mlpModel.layers
 
   def transform(dataset: Dataset[_]): DataFrame = {
     pipeline.transform(dataset)
@@ -62,7 +62,7 @@ private[r] object MultilayerPerceptronClassifierWrapper
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(
+  def fit(  // scalastyle:ignore
       data: DataFrame,
       formula: String,
       blockSize: Int,
@@ -72,11 +72,13 @@ private[r] object MultilayerPerceptronClassifierWrapper
       tol: Double,
       stepSize: Double,
       seed: String,
-      initialWeights: Array[Double]
+      initialWeights: Array[Double],
+      handleInvalid: String
      ): MultilayerPerceptronClassifierWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
     // get labels and feature names from output schema

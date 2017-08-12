@@ -65,8 +65,8 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
 
-      case BroadcastHint(child) =>
-        collectProjectsAndFilters(child)
+      case h: ResolvedHint =>
+        collectProjectsAndFilters(h.child)
 
       case other =>
         (None, Nil, other, Map.empty)
@@ -80,12 +80,12 @@ object PhysicalOperation extends PredicateHelper {
     expr.transform {
       case a @ Alias(ref: AttributeReference, name) =>
         aliases.get(ref)
-          .map(Alias(_, name)(a.exprId, a.qualifier, isGenerated = a.isGenerated))
+          .map(Alias(_, name)(a.exprId, a.qualifier))
           .getOrElse(a)
 
       case a: AttributeReference =>
         aliases.get(a)
-          .map(Alias(_, a.name)(a.exprId, a.qualifier, isGenerated = a.isGenerated)).getOrElse(a)
+          .map(Alias(_, a.name)(a.exprId, a.qualifier)).getOrElse(a)
     }
   }
 }
@@ -167,13 +167,13 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
       : (Seq[(LogicalPlan, InnerLike)], Seq[Expression]) = plan match {
     case Join(left, right, joinType: InnerLike, cond) =>
       val (plans, conditions) = flattenJoin(left, joinType)
-      (plans ++ Seq((right, joinType)), conditions ++ cond.toSeq)
-
+      (plans ++ Seq((right, joinType)), conditions ++
+        cond.toSeq.flatMap(splitConjunctivePredicates))
     case Filter(filterCondition, j @ Join(left, right, _: InnerLike, joinCondition)) =>
       val (plans, conditions) = flattenJoin(j)
       (plans, conditions ++ splitConjunctivePredicates(filterCondition))
 
-    case _ => (Seq((plan, parentJoinType)), Seq())
+    case _ => (Seq((plan, parentJoinType)), Seq.empty)
   }
 
   def unapply(plan: LogicalPlan): Option[(Seq[(LogicalPlan, InnerLike)], Seq[Expression])]

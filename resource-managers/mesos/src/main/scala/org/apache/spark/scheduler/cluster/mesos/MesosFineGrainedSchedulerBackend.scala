@@ -106,6 +106,10 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
     }
     val environment = Environment.newBuilder()
+    sc.conf.getOption("spark.executor.extraClassPath").foreach { cp =>
+      environment.addVariables(
+        Environment.Variable.newBuilder().setName("SPARK_EXECUTOR_CLASSPATH").setValue(cp).build())
+    }
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
@@ -428,7 +432,8 @@ private[spark] class MesosFineGrainedSchedulerBackend(
     recordSlaveLost(d, slaveId, ExecutorExited(status, exitCausedByApp = true))
   }
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     schedulerDriver.killTask(
       TaskID.newBuilder()
         .setValue(taskId.toString).build()

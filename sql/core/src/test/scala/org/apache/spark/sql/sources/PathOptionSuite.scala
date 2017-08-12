@@ -75,13 +75,13 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')
         """.stripMargin)
-      assert(getPathOption("src") == Some("file:/tmp/path"))
+      assert(getPathOption("src").map(makeQualifiedPath) == Some(makeQualifiedPath("/tmp/path")))
     }
 
     // should exist even path option is not specified when creating table
     withTable("src") {
       sql(s"CREATE TABLE src(i int) USING ${classOf[TestOptionsSource].getCanonicalName}")
-      assert(getPathOption("src") == Some(CatalogUtils.URIToString(defaultTablePath("src"))))
+      assert(getPathOption("src").map(makeQualifiedPath) == Some(defaultTablePath("src")))
     }
   }
 
@@ -92,12 +92,12 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
           s"""
             |CREATE TABLE src
             |USING ${classOf[TestOptionsSource].getCanonicalName}
-            |OPTIONS (PATH '$p')
+            |OPTIONS (PATH '${p.toURI}')
             |AS SELECT 1
           """.stripMargin)
-        assert(CatalogUtils.stringToURI(
-          spark.table("src").schema.head.metadata.getString("path")) ==
-          makeQualifiedPath(p.getAbsolutePath))
+        assert(
+          spark.table("src").schema.head.metadata.getString("path") ==
+          p.toURI.toString)
       }
     }
 
@@ -109,8 +109,9 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |AS SELECT 1
           """.stripMargin)
-      assert(spark.table("src").schema.head.metadata.getString("path") ==
-        CatalogUtils.URIToString(defaultTablePath("src")))
+      assert(
+        makeQualifiedPath(spark.table("src").schema.head.metadata.getString("path")) ==
+        defaultTablePath("src"))
     }
   }
 
@@ -122,13 +123,13 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
            |USING ${classOf[TestOptionsSource].getCanonicalName}
            |OPTIONS (PATH '/tmp/path')""".stripMargin)
       sql("ALTER TABLE src SET LOCATION '/tmp/path2'")
-      assert(getPathOption("src") == Some("/tmp/path2"))
+      assert(getPathOption("src").map(makeQualifiedPath) == Some(makeQualifiedPath("/tmp/path2")))
     }
 
     withTable("src", "src2") {
       sql(s"CREATE TABLE src(i int) USING ${classOf[TestOptionsSource].getCanonicalName}")
       sql("ALTER TABLE src RENAME TO src2")
-      assert(getPathOption("src2") == Some(CatalogUtils.URIToString(defaultTablePath("src2"))))
+      assert(getPathOption("src2").map(makeQualifiedPath) == Some(defaultTablePath("src2")))
     }
   }
 

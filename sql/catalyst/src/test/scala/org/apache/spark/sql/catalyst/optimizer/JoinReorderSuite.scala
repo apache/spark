@@ -17,21 +17,17 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Join, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.statsEstimation.{StatsEstimationTestBase, StatsTestPlan}
-import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf.{CBO_ENABLED, JOIN_REORDER_ENABLED}
 
 
 class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
-
-  override val conf = SimpleCatalystConf(
-    caseSensitiveAnalysis = true, cboEnabled = true, joinReorderEnabled = true)
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -43,7 +39,27 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
         ColumnPruning,
         CollapseProject) ::
       Batch("Join Reorder", Once,
-        CostBasedJoinReorder(conf)) :: Nil
+        CostBasedJoinReorder) :: Nil
+  }
+
+  var originalConfCBOEnabled = false
+  var originalConfJoinReorderEnabled = false
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    originalConfCBOEnabled = conf.cboEnabled
+    originalConfJoinReorderEnabled = conf.joinReorderEnabled
+    conf.setConf(CBO_ENABLED, true)
+    conf.setConf(JOIN_REORDER_ENABLED, true)
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      conf.setConf(CBO_ENABLED, originalConfCBOEnabled)
+      conf.setConf(JOIN_REORDER_ENABLED, originalConfJoinReorderEnabled)
+    } finally {
+      super.afterAll()
+    }
   }
 
   /** Set up tables and columns for testing */
@@ -199,31 +215,68 @@ class JoinReorderSuite extends PlanTest with StatsEstimationTestBase {
     assertEqualPlans(originalPlan, bestPlan)
   }
 
+  test("keep the order of attributes in the final output") {
+    val outputLists = Seq("t1.k-1-2", "t1.v-1-10", "t3.v-1-100").permutations
+    while (outputLists.hasNext) {
+      val expectedOrder = outputLists.next().map(nameToAttr)
+      val expectedPlan =
+        t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+          .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+          .select(expectedOrder: _*)
+      // The plan should not change after optimization
+      assertEqualPlans(expectedPlan, expectedPlan)
+    }
+  }
+
+  test("reorder recursively") {
+    // Original order:
+    //          Join
+    //          / \
+    //      Union  t5
+    //       / \
+    //     Join t4
+    //     / \
+    //   Join t3
+    //   / \
+    //  t1  t2
+    val bottomJoins =
+      t1.join(t2).join(t3).where((nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")) &&
+        (nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    val originalPlan = bottomJoins
+      .union(t4.select(nameToAttr("t4.v-1-10")))
+      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+
+    // Should be able to reorder the bottom part.
+    // Best order:
+    //          Join
+    //          / \
+    //      Union  t5
+    //       / \
+    //     Join t4
+    //     / \
+    //   Join t2
+    //   / \
+    //  t1  t3
+    val bestBottomPlan =
+      t1.join(t3, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t3.v-1-100")))
+        .select(nameToAttr("t1.k-1-2"), nameToAttr("t1.v-1-10"))
+        .join(t2, Inner, Some(nameToAttr("t1.k-1-2") === nameToAttr("t2.k-1-5")))
+        .select(nameToAttr("t1.v-1-10"))
+
+    val bestPlan = bestBottomPlan
+      .union(t4.select(nameToAttr("t4.v-1-10")))
+      .join(t5, Inner, Some(nameToAttr("t1.v-1-10") === nameToAttr("t5.v-1-5")))
+
+    assertEqualPlans(originalPlan, bestPlan)
+  }
+
   private def assertEqualPlans(
       originalPlan: LogicalPlan,
       groundTruthBestPlan: LogicalPlan): Unit = {
     val optimized = Optimize.execute(originalPlan.analyze)
-    val normalized1 = normalizePlan(normalizeExprIds(optimized))
-    val normalized2 = normalizePlan(normalizeExprIds(groundTruthBestPlan.analyze))
-    if (!sameJoinPlan(normalized1, normalized2)) {
-      fail(
-        s"""
-           |== FAIL: Plans do not match ===
-           |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-         """.stripMargin)
-    }
-  }
-
-  /** Consider symmetry for joins when comparing plans. */
-  private def sameJoinPlan(plan1: LogicalPlan, plan2: LogicalPlan): Boolean = {
-    (plan1, plan2) match {
-      case (j1: Join, j2: Join) =>
-        (sameJoinPlan(j1.left, j2.left) && sameJoinPlan(j1.right, j2.right)) ||
-          (sameJoinPlan(j1.left, j2.right) && sameJoinPlan(j1.right, j2.left))
-      case _ if plan1.children.nonEmpty && plan2.children.nonEmpty =>
-        (plan1.children, plan2.children).zipped.forall { case (c1, c2) => sameJoinPlan(c1, c2) }
-      case _ =>
-        plan1 == plan2
-    }
+    val expected = groundTruthBestPlan.analyze
+    compareJoinOrder(optimized, expected)
   }
 }

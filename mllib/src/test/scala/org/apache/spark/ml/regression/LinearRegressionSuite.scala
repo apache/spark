@@ -148,8 +148,7 @@ class LinearRegressionSuite
     assert(lir.getSolver == "auto")
     val model = lir.fit(datasetWithDenseFeature)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(lir, model)
     assert(model.hasSummary)
     val copiedModel = model.copy(ParamMap.empty)
     assert(copiedModel.hasSummary)
@@ -842,7 +841,8 @@ class LinearRegressionSuite
       MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
-        datasetWithStrongNoise.as[LabeledPoint], estimator, numClasses, modelEquals)
+        datasetWithStrongNoise.as[LabeledPoint], estimator, numClasses, modelEquals,
+        outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals, seed)
     }

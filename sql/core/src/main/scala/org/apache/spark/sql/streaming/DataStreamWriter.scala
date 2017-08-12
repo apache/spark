@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.streaming
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -27,13 +29,11 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink}
 
 /**
- * :: Experimental ::
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
  * key-value stores, etc). Use `Dataset.writeStream` to access this.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
@@ -230,7 +230,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def start(): StreamingQuery = {
-    if (source.toLowerCase == DDLUtils.HIVE_PROVIDER) {
+    if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "write files of Hive data source directly.")
     }
@@ -377,7 +377,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   private var outputMode: OutputMode = OutputMode.Append
 
-  private var trigger: Trigger = ProcessingTime(0L)
+  private var trigger: Trigger = Trigger.ProcessingTime(0L)
 
   private var extraOptions = new scala.collection.mutable.HashMap[String, String]
 

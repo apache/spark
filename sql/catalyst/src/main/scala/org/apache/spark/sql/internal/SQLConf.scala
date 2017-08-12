@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.{NoSuchElementException, Properties, TimeZone}
+import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable
@@ -63,6 +64,47 @@ object SQLConf {
       SQLConf.register(entry)
     }
   }
+
+  /**
+   * Default config. Only used when there is no active SparkSession for the thread.
+   * See [[get]] for more information.
+   */
+  private val fallbackConf = new ThreadLocal[SQLConf] {
+    override def initialValue: SQLConf = new SQLConf
+  }
+
+  /** See [[get]] for more information. */
+  def getFallbackConf: SQLConf = fallbackConf.get()
+
+  /**
+   * Defines a getter that returns the SQLConf within scope.
+   * See [[get]] for more information.
+   */
+  private val confGetter = new AtomicReference[() => SQLConf](() => fallbackConf.get())
+
+  /**
+   * Sets the active config object within the current scope.
+   * See [[get]] for more information.
+   */
+  def setSQLConfGetter(getter: () => SQLConf): Unit = {
+    confGetter.set(getter)
+  }
+
+  /**
+   * Returns the active config object within the current scope. If there is an active SparkSession,
+   * the proper SQLConf associated with the thread's session is used.
+   *
+   * The way this works is a little bit convoluted, due to the fact that config was added initially
+   * only for physical plans (and as a result not in sql/catalyst module).
+   *
+   * The first time a SparkSession is instantiated, we set the [[confGetter]] to return the
+   * active SparkSession's config. If there is no active SparkSession, it returns using the thread
+   * local [[fallbackConf]]. The reason [[fallbackConf]] is a thread local (rather than just a conf)
+   * is to support setting different config options for different threads so we can potentially
+   * run tests in parallel. At the time this feature was implemented, this was a no-op since we
+   * run unit tests (that does not involve SparkSession) in serial order.
+   */
+  def get: SQLConf = confGetter.get()()
 
   val OPTIMIZER_MAX_ITERATIONS = buildConf("spark.sql.optimizer.maxIterations")
     .internal()
@@ -187,6 +229,23 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val CONSTRAINT_PROPAGATION_ENABLED = buildConf("spark.sql.constraintPropagation.enabled")
+    .internal()
+    .doc("When true, the query optimizer will infer and propagate data constraints in the query " +
+      "plan to optimize them. Constraint propagation can sometimes be computationally expensive" +
+      "for certain kinds of query plans (such as those with a large number of predicates and " +
+      "aliases) which might negatively impact overall runtime.")
+    .booleanConf
+    .createWithDefault(true)
+
+  val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
+    .internal()
+    .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
+      "parser. The default is false since Spark 2.0. Setting it to true can restore the behavior " +
+      "prior to Spark 2.0.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_SCHEMA_MERGING_ENABLED = buildConf("spark.sql.parquet.mergeSchema")
     .doc("When true, the Parquet data source merges schemas collected from all data files, " +
          "otherwise the schema is picked from the summary file or a random data file " +
@@ -218,6 +277,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val PARQUET_INT64_AS_TIMESTAMP_MILLIS = buildConf("spark.sql.parquet.int64AsTimestampMillis")
+    .doc("When true, timestamp values will be stored as INT64 with TIMESTAMP_MILLIS as the " +
+      "extended type. In this mode, the microsecond portion of the timestamp value will be" +
+      "truncated.")
+    .booleanConf
+    .createWithDefault(false)
+
   val PARQUET_CACHE_METADATA = buildConf("spark.sql.parquet.cacheMetadata")
     .doc("Turns on caching of Parquet schema metadata. Can speed up querying of static data.")
     .booleanConf
@@ -227,7 +293,7 @@ object SQLConf {
     .doc("Sets the compression codec use when writing Parquet files. Acceptable values include: " +
       "uncompressed, snappy, gzip, lzo.")
     .stringConf
-    .transform(_.toLowerCase())
+    .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("uncompressed", "snappy", "gzip", "lzo"))
     .createWithDefault("snappy")
 
@@ -279,7 +345,7 @@ object SQLConf {
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
-           "This includes both datasource and converted Hive tables. When partition managment " +
+           "This includes both datasource and converted Hive tables. When partition management " +
            "is enabled, datasource tables store partition in the Hive metastore, and use the " +
            "metastore to prune partitions during query planning.")
       .booleanConf
@@ -308,7 +374,7 @@ object SQLConf {
       "properties) and NEVER_INFER (fallback to using the case-insensitive metastore schema " +
       "instead of inferring).")
     .stringConf
-    .transform(_.toUpperCase())
+    .transform(_.toUpperCase(Locale.ROOT))
     .checkValues(HiveCaseSensitiveInferenceMode.values.map(_.toString))
     .createWithDefault(HiveCaseSensitiveInferenceMode.INFER_AND_SAVE.toString)
 
@@ -321,13 +387,14 @@ object SQLConf {
     .createWithDefault(true)
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = buildConf("spark.sql.columnNameOfCorruptRecord")
-    .doc("The name of internal column for storing raw/un-parsed JSON records that fail to parse.")
+    .doc("The name of internal column for storing raw/un-parsed JSON and CSV records that fail " +
+      "to parse.")
     .stringConf
     .createWithDefault("_corrupt_record")
 
   val BROADCAST_TIMEOUT = buildConf("spark.sql.broadcastTimeout")
     .doc("Timeout in seconds for the broadcast wait time in broadcast joins.")
-    .intConf
+    .timeConf(TimeUnit.SECONDS)
     .createWithDefault(5 * 60)
 
   // This is only used for the thriftserver
@@ -405,10 +472,18 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
+    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
+      "an analysis exception is thrown in the case.")
+    .booleanConf
+    .createWithDefault(true)
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
-  val OUTPUT_COMMITTER_CLASS =
-    buildConf("spark.sql.sources.outputCommitterClass").internal().stringConf.createOptional
+  val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
+    .internal()
+    .stringConf
+    .createOptional
 
   val FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.sources.commitProtocolClass")
@@ -489,6 +564,14 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
+    .internal()
+    .doc("The maximum number of codegen lines to log when errors occur. Use -1 for unlimited.")
+    .intConf
+    .checkValue(maxLines => maxLines >= -1, "The maximum must be a positive integer, 0 to " +
+      "disable logging or -1 to apply no limit.")
+    .createWithDefault(1000)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -505,8 +588,7 @@ object SQLConf {
 
   val IGNORE_CORRUPT_FILES = buildConf("spark.sql.files.ignoreCorruptFiles")
     .doc("Whether to ignore corrupt files. If true, the Spark jobs will continue to run when " +
-      "encountering corrupted or non-existing and contents that have been read will still be " +
-      "returned.")
+      "encountering corrupted files and the contents that have been read will still be returned.")
     .booleanConf
     .createWithDefault(false)
 
@@ -521,6 +603,16 @@ object SQLConf {
     .doc("When true, the planner will try to find out duplicated exchanges and re-use them.")
     .booleanConf
     .createWithDefault(true)
+
+  val STATE_STORE_PROVIDER_CLASS =
+    buildConf("spark.sql.streaming.stateStore.providerClass")
+      .internal()
+      .doc(
+        "The class used to manage state data in stateful streaming queries. This class must " +
+          "be a subclass of StateStoreProvider, and must have a zero-arg constructor.")
+      .stringConf
+      .createWithDefault(
+        "org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider")
 
   val STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT =
     buildConf("spark.sql.streaming.stateStore.minDeltasForSnapshot")
@@ -692,6 +784,14 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val AUTO_UPDATE_SIZE =
+    buildConf("spark.sql.statistics.autoUpdate.size")
+      .doc("Enables automatic update for table size once table's data is changed. Note that if " +
+        "the total number of files of the table is very large, this can be expensive and slow " +
+        "down data change commands.")
+      .booleanConf
+      .createWithDefault(false)
+
   val CBO_ENABLED =
     buildConf("spark.sql.cbo.enabled")
       .doc("Enables CBO for estimation of plan statistics when set true.")
@@ -708,6 +808,7 @@ object SQLConf {
     buildConf("spark.sql.cbo.joinReorder.dp.threshold")
       .doc("The maximum number of joined nodes allowed in the dynamic programming algorithm.")
       .intConf
+      .checkValue(number => number > 0, "The maximum number must be a positive integer.")
       .createWithDefault(12)
 
   val JOIN_REORDER_CARD_WEIGHT =
@@ -719,11 +820,29 @@ object SQLConf {
       .checkValue(weight => weight >= 0 && weight <= 1, "The weight value must be in [0, 1].")
       .createWithDefault(0.7)
 
+  val JOIN_REORDER_DP_STAR_FILTER =
+    buildConf("spark.sql.cbo.joinReorder.dp.star.filter")
+      .doc("Applies star-join filter heuristics to cost based join enumeration.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STARSCHEMA_DETECTION = buildConf("spark.sql.cbo.starSchemaDetection")
+    .doc("When true, it enables join reordering based on star schema detection. ")
+    .booleanConf
+    .createWithDefault(false)
+
+  val STARSCHEMA_FACT_TABLE_RATIO = buildConf("spark.sql.cbo.starJoinFTRatio")
+    .internal()
+    .doc("Specifies the upper limit of the ratio between the largest fact tables" +
+      " for a star join to be considered. ")
+    .doubleConf
+    .createWithDefault(0.9)
+
   val SESSION_LOCAL_TIMEZONE =
     buildConf("spark.sql.session.timeZone")
       .doc("""The ID of session local timezone, e.g. "GMT", "America/Los_Angeles", etc.""")
       .stringConf
-      .createWithDefault(TimeZone.getDefault().getID())
+      .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
@@ -745,6 +864,30 @@ object SQLConf {
       .doc("Threshold for number of rows buffered in cartesian product operator")
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+
+  val SUPPORT_QUOTED_REGEX_COLUMN_NAME = buildConf("spark.sql.parser.quotedRegexColumnNames")
+    .doc("When true, quoted Identifiers (using backticks) in SELECT statement are interpreted" +
+      " as regular expressions.")
+    .booleanConf
+    .createWithDefault(false)
+
+  val ARROW_EXECUTION_ENABLE =
+    buildConf("spark.sql.execution.arrow.enable")
+      .internal()
+      .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
+        "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
+        "StringType, BinaryType, BooleanType, DoubleType, FloatType, ByteType, IntegerType, " +
+        "LongType, ShortType")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ARROW_EXECUTION_MAX_RECORDS_PER_BATCH =
+    buildConf("spark.sql.execution.arrow.maxRecordsPerBatch")
+      .internal()
+      .doc("When using Apache Arrow, limit the maximum number of records that can be written " +
+        "to a single ArrowRecordBatch in memory. If set to zero or negative there is no limit.")
+      .intConf
+      .createWithDefault(10000)
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -778,6 +921,8 @@ class SQLConf extends Serializable with Logging {
   def optimizerMaxIterations: Int = getConf(OPTIMIZER_MAX_ITERATIONS)
 
   def optimizerInSetConversionThreshold: Int = getConf(OPTIMIZER_INSET_CONVERSION_THRESHOLD)
+
+  def stateStoreProviderClass: String = getConf(STATE_STORE_PROVIDER_CLASS)
 
   def stateStoreMinDeltasForSnapshot: Int = getConf(STATE_STORE_MIN_DELTAS_FOR_SNAPSHOT)
 
@@ -867,12 +1012,18 @@ class SQLConf extends Serializable with Logging {
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
+  def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
+
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
 
   def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
+
+  def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
+
+  def escapedStringLiterals: Boolean = getConf(ESCAPED_STRING_LITERALS)
 
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
@@ -911,13 +1062,15 @@ class SQLConf extends Serializable with Logging {
 
   def isParquetINT96AsTimestamp: Boolean = getConf(PARQUET_INT96_AS_TIMESTAMP)
 
+  def isParquetINT64AsTimestampMillis: Boolean = getConf(PARQUET_INT64_AS_TIMESTAMP_MILLIS)
+
   def writeLegacyParquetFormat: Boolean = getConf(PARQUET_WRITE_LEGACY_FORMAT)
 
   def inMemoryPartitionPruning: Boolean = getConf(IN_MEMORY_PARTITION_PRUNING)
 
   def columnNameOfCorruptRecord: String = getConf(COLUMN_NAME_OF_CORRUPT_RECORD)
 
-  def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
+  def broadcastTimeout: Long = getConf(BROADCAST_TIMEOUT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
 
@@ -964,6 +1117,8 @@ class SQLConf extends Serializable with Logging {
 
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
+  def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
@@ -972,11 +1127,15 @@ class SQLConf extends Serializable with Logging {
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 
+  def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
+
   def joinReorderEnabled: Boolean = getConf(SQLConf.JOIN_REORDER_ENABLED)
 
   def joinReorderDPThreshold: Int = getConf(SQLConf.JOIN_REORDER_DP_THRESHOLD)
 
   def joinReorderCardWeight: Double = getConf(SQLConf.JOIN_REORDER_CARD_WEIGHT)
+
+  def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
@@ -987,6 +1146,16 @@ class SQLConf extends Serializable with Logging {
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
 
   def maxNestedViewDepth: Int = getConf(SQLConf.MAX_NESTED_VIEW_DEPTH)
+
+  def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
+
+  def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
+
+  def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
+
+  def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
+
+  def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
   /** ********************** SQLConf functionality methods ************ */
 
@@ -1059,10 +1228,12 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    val entry = sqlConfEntries.get(key)
-    if (entry != null && defaultValue != "<undefined>") {
-      // Only verify configs in the SQLConf object
-      entry.valueConverter(defaultValue)
+    if (defaultValue != null && defaultValue != "<undefined>") {
+      val entry = sqlConfEntries.get(key)
+      if (entry != null) {
+        // Only verify configs in the SQLConf object
+        entry.valueConverter(defaultValue)
+      }
     }
     Option(settings.get(key)).getOrElse(defaultValue)
   }
@@ -1113,5 +1284,14 @@ class SQLConf extends Serializable with Logging {
       case(k, v) => if (v ne null) result.setConfString(k, v)
     }
     result
+  }
+
+  // For test only
+  def copy(entries: (ConfigEntry[_], Any)*): SQLConf = {
+    val cloned = clone()
+    entries.foreach {
+      case (entry, value) => cloned.setConfString(entry.key, value.toString)
+    }
+    cloned
   }
 }

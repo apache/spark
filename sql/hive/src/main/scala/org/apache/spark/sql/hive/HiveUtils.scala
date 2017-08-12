@@ -21,6 +21,7 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.HashMap
@@ -35,6 +36,7 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
@@ -85,8 +87,8 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault("builtin")
 
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
-    .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
-      "the built in support.")
+    .doc("When set to true, the built-in Parquet reader and writer are used to process " +
+      "parquet tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(true)
 
@@ -100,8 +102,8 @@ private[spark] object HiveUtils extends Logging {
 
   val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .internal()
-    .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
-      "the built in support.")
+    .doc("When set to true, the built-in ORC reader and writer are used to process " +
+      "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(false)
 
@@ -244,7 +246,7 @@ private[spark] object HiveUtils extends Logging {
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = conf,
-      execJars = Seq(),
+      execJars = Seq.empty,
       hadoopConf = hadoopConf,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
@@ -338,7 +340,7 @@ private[spark] object HiveUtils extends Logging {
               logWarning(s"Hive jar path '$path' does not exist.")
               Nil
             } else {
-              files.filter(_.getName.toLowerCase.endsWith(".jar"))
+              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar"))
             }
           case path =>
             new File(path) :: Nil
@@ -403,6 +405,13 @@ private[spark] object HiveUtils extends Logging {
     propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
     propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
 
+    // SPARK-21451: Spark will gather all `spark.hadoop.*` properties from a `SparkConf` to a
+    // Hadoop Configuration internally, as long as it happens after SparkContext initialized.
+    // Some instances such as `CliSessionState` used in `SparkSQLCliDriver` may also rely on these
+    // Configuration. But it happens before SparkContext initialized, we need to take them from
+    // system properties in the form of regular hadoop configurations.
+    SparkHadoopUtil.get.appendSparkHadoopConfigs(sys.props.toMap, propMap)
+
     propMap.toMap
   }
 
@@ -413,7 +422,7 @@ private[spark] object HiveUtils extends Logging {
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -436,7 +445,7 @@ private[spark] object HiveUtils extends Logging {
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")

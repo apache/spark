@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, DriverManager}
-import java.util.Properties
+import java.util.{Locale, Properties}
 
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
@@ -55,7 +55,7 @@ class JDBCOptions(
    */
   val asConnectionProperties: Properties = {
     val properties = new Properties()
-    parameters.originalMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase))
+    parameters.originalMap.filterKeys(key => !jdbcOptionNames(key.toLowerCase(Locale.ROOT)))
       .foreach { case (k, v) => properties.setProperty(k, v) }
     properties
   }
@@ -97,10 +97,13 @@ class JDBCOptions(
   val lowerBound = parameters.get(JDBC_LOWER_BOUND).map(_.toLong)
   // the upper bound of the partition column
   val upperBound = parameters.get(JDBC_UPPER_BOUND).map(_.toLong)
-  require(partitionColumn.isEmpty ||
-    (lowerBound.isDefined && upperBound.isDefined && numPartitions.isDefined),
-    s"If '$JDBC_PARTITION_COLUMN' is specified then '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND'," +
-      s" and '$JDBC_NUM_PARTITIONS' are required.")
+  // numPartitions is also used for data source writing
+  require((partitionColumn.isEmpty && lowerBound.isEmpty && upperBound.isEmpty) ||
+    (partitionColumn.isDefined && lowerBound.isDefined && upperBound.isDefined &&
+      numPartitions.isDefined),
+    s"When reading JDBC data sources, users need to specify all or none for the following " +
+      s"options: '$JDBC_PARTITION_COLUMN', '$JDBC_LOWER_BOUND', '$JDBC_UPPER_BOUND', " +
+      s"and '$JDBC_NUM_PARTITIONS'")
   val fetchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_FETCH_SIZE, "0").toInt
     require(size >= 0,
@@ -119,6 +122,7 @@ class JDBCOptions(
   // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
   // TODO: to reuse the existing partition parameters for those partition specific options
   val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
+  val createTableColumnTypes = parameters.get(JDBC_CREATE_TABLE_COLUMN_TYPES)
   val batchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
     require(size >= 1,
@@ -140,7 +144,7 @@ object JDBCOptions {
   private val jdbcOptionNames = collection.mutable.Set[String]()
 
   private def newOption(name: String): String = {
-    jdbcOptionNames += name.toLowerCase
+    jdbcOptionNames += name.toLowerCase(Locale.ROOT)
     name
   }
 
@@ -154,6 +158,7 @@ object JDBCOptions {
   val JDBC_BATCH_FETCH_SIZE = newOption("fetchsize")
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
+  val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
 }

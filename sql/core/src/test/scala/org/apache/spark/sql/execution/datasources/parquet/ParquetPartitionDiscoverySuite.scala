@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.math.BigInteger
 import java.sql.{Date, Timestamp}
-import java.util.{Calendar, TimeZone}
+import java.util.{Calendar, Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -476,7 +477,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       assert(partDf.schema.map(_.name) === Seq("intField", "stringField"))
 
       path.listFiles().foreach { f =>
-        if (!f.getName.startsWith("_") && f.getName.toLowerCase().endsWith(".parquet")) {
+        if (!f.getName.startsWith("_") &&
+            f.getName.toLowerCase(Locale.ROOT).endsWith(".parquet")) {
           // when the input is a path to a parquet file
           val df = spark.read.parquet(f.getCanonicalPath)
           assert(df.schema.map(_.name) === Seq("intField", "stringField"))
@@ -484,7 +486,8 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       }
 
       path.listFiles().foreach { f =>
-        if (!f.getName.startsWith("_") && f.getName.toLowerCase().endsWith(".parquet")) {
+        if (!f.getName.startsWith("_") &&
+            f.getName.toLowerCase(Locale.ROOT).endsWith(".parquet")) {
           // when the input is a path to a parquet file but `basePath` is overridden to
           // the base path containing partitioning directories
           val df = spark
@@ -674,7 +677,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         1.5.toFloat,
         4.5,
         new java.math.BigDecimal(new BigInteger("212500"), 5),
-        new java.math.BigDecimal(2.125),
+        new java.math.BigDecimal("2.125"),
         java.sql.Date.valueOf("2015-05-23"),
         new Timestamp(0),
         "This is a string, /[]?=:",
@@ -1017,6 +1020,38 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         val df = Seq((1L, 2.0)).toDF("a", "b")
         df.write.parquet(s"$path/a=1")
         checkAnswer(spark.read.parquet(s"$path"), Seq(Row(1, 2.0)))
+      }
+    }
+  }
+
+  test("SPARK-21463: MetadataLogFileIndex should respect userSpecifiedSchema for partition cols") {
+    withTempDir { tempDir =>
+      val output = new File(tempDir, "output").toString
+      val checkpoint = new File(tempDir, "chkpoint").toString
+      try {
+        val stream = MemoryStream[(String, Int)]
+        val df = stream.toDS().toDF("time", "value")
+        val sq = df.writeStream
+          .option("checkpointLocation", checkpoint)
+          .format("parquet")
+          .partitionBy("time")
+          .start(output)
+
+        stream.addData(("2017-01-01-00", 1), ("2017-01-01-01", 2))
+        sq.processAllAvailable()
+
+        val schema = new StructType()
+          .add("time", StringType)
+          .add("value", IntegerType)
+        val readBack = spark.read.schema(schema).parquet(output)
+        assert(readBack.schema.toSet === schema.toSet)
+
+        checkAnswer(
+          readBack,
+          Seq(Row("2017-01-01-00", 1), Row("2017-01-01-01", 2))
+        )
+      } finally {
+        spark.streams.active.foreach(_.stop())
       }
     }
   }

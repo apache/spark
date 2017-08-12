@@ -78,7 +78,7 @@ trait Encoder[T] extends Serializable {
   def schema: StructType
 
   /**
-   * A ClassTag that can be used to construct and Array to contain a collection of `T`.
+   * A ClassTag that can be used to construct an Array to contain a collection of `T`.
    */
   def clsTag: ClassTag[T]
 }

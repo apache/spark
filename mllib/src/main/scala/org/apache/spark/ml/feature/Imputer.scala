@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
 private[feature] trait ImputerParams extends Params with HasInputCols {
 
   /**
-   * The imputation strategy.
+   * The imputation strategy. Currently only "mean" and "median" are supported.
    * If "mean", then replace missing values using the mean value of the feature.
    * If "median", then replace missing values using the approximate median value of the feature.
    * Default: mean
@@ -93,16 +93,17 @@ private[feature] trait ImputerParams extends Params with HasInputCols {
 /**
  * :: Experimental ::
  * Imputation estimator for completing missing values, either using the mean or the median
- * of the column in which the missing values are located. The input column should be of
- * DoubleType or FloatType. Currently Imputer does not support categorical features yet
+ * of the columns in which the missing values are located. The input columns should be of
+ * DoubleType or FloatType. Currently Imputer does not support categorical features
  * (SPARK-15041) and possibly creates incorrect values for a categorical feature.
  *
  * Note that the mean/median value is computed after filtering out missing values.
- * All Null values in the input column are treated as missing, and so are also imputed. For
+ * All Null values in the input columns are treated as missing, and so are also imputed. For
  * computing median, DataFrameStatFunctions.approxQuantile is used with a relative error of 0.001.
  */
 @Experimental
-class Imputer @Since("2.2.0")(override val uid: String)
+@Since("2.2.0")
+class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
   extends Estimator[ImputerModel] with ImputerParams with DefaultParamsWritable {
 
   @Since("2.2.0")
@@ -165,8 +166,8 @@ class Imputer @Since("2.2.0")(override val uid: String)
 object Imputer extends DefaultParamsReadable[Imputer] {
 
   /** strategy names that Imputer currently supports. */
-  private[ml] val mean = "mean"
-  private[ml] val median = "median"
+  private[feature] val mean = "mean"
+  private[feature] val median = "median"
 
   @Since("2.2.0")
   override def load(path: String): Imputer = super.load(path)
@@ -176,13 +177,14 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  * :: Experimental ::
  * Model fitted by [[Imputer]].
  *
- * @param surrogateDF a DataFrame contains inputCols and their corresponding surrogates, which are
- *                    used to replace the missing values in the input DataFrame.
+ * @param surrogateDF a DataFrame containing inputCols and their corresponding surrogates,
+ *                    which are used to replace the missing values in the input DataFrame.
  */
 @Experimental
-class ImputerModel private[ml](
-    override val uid: String,
-    val surrogateDF: DataFrame)
+@Since("2.2.0")
+class ImputerModel private[ml] (
+    @Since("2.2.0") override val uid: String,
+    @Since("2.2.0") val surrogateDF: DataFrame)
   extends Model[ImputerModel] with ImputerParams with MLWritable {
 
   import ImputerModel._

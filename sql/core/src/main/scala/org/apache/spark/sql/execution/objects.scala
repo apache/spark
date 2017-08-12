@@ -31,11 +31,10 @@ import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.logical.FunctionUtils
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.plans.logical.LogicalKeyedState
-import org.apache.spark.sql.execution.streaming.KeyedStateImpl
+import org.apache.spark.sql.catalyst.plans.logical.LogicalGroupState
+import org.apache.spark.sql.execution.streaming.GroupStateImpl
+import org.apache.spark.sql.streaming.GroupStateTimeout
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
-
 
 /**
  * Physical version of `ObjectProducer`.
@@ -355,14 +354,17 @@ case class MapGroupsExec(
 
 object MapGroupsExec {
   def apply(
-      func: (Any, Iterator[Any], LogicalKeyedState[Any]) => TraversableOnce[Any],
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => TraversableOnce[Any],
       keyDeserializer: Expression,
       valueDeserializer: Expression,
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       outputObjAttr: Attribute,
+      timeoutConf: GroupStateTimeout,
       child: SparkPlan): MapGroupsExec = {
-    val f = (key: Any, values: Iterator[Any]) => func(key, values, new KeyedStateImpl[Any](None))
+    val f = (key: Any, values: Iterator[Any]) => {
+      func(key, values, GroupStateImpl.createForBatch(timeoutConf))
+    }
     new MapGroupsExec(f, keyDeserializer, valueDeserializer,
       groupingAttributes, dataAttributes, outputObjAttr, child)
   }
@@ -399,8 +401,7 @@ case class FlatMapGroupsInRExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val isSerializedRData =
-      if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
+    val isSerializedRData = outputSchema == SERIALIZED_R_DATA_SCHEMA
     val serializerForR = if (!isSerializedRData) {
       SerializationFormats.ROW
     } else {

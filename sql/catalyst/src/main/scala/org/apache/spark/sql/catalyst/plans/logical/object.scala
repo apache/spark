@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.streaming.OutputMode
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode }
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -41,7 +41,10 @@ object CatalystSerde {
   }
 
   def generateObjAttr[T : Encoder]: Attribute = {
-    AttributeReference("obj", encoderFor[T].deserializer.dataType, nullable = false)()
+    val enc = encoderFor[T]
+    val dataType = enc.deserializer.dataType
+    val nullable = !enc.clsTag.runtimeClass.isPrimitive
+    AttributeReference("obj", dataType, nullable)()
   }
 }
 
@@ -351,17 +354,25 @@ case class MapGroups(
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
 /** Internal class representing State */
-trait LogicalKeyedState[S]
+trait LogicalGroupState[S]
+
+/** Types of timeouts used in FlatMapGroupsWithState */
+case object NoTimeout extends GroupStateTimeout
+case object ProcessingTimeTimeout extends GroupStateTimeout
+case object EventTimeTimeout extends GroupStateTimeout
 
 /** Factory for constructing new `MapGroupsWithState` nodes. */
 object FlatMapGroupsWithState {
   def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
-      func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       outputMode: OutputMode,
       isMapGroupsWithState: Boolean,
+      timeout: GroupStateTimeout,
       child: LogicalPlan): LogicalPlan = {
+    val encoder = encoderFor[S]
+
     val mapped = new FlatMapGroupsWithState(
       func,
       UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
@@ -369,11 +380,11 @@ object FlatMapGroupsWithState {
       groupingAttributes,
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
-      encoderFor[S].resolveAndBind().deserializer,
-      encoderFor[S].namedExpressions,
+      encoder.asInstanceOf[ExpressionEncoder[Any]],
       outputMode,
-      child,
-      isMapGroupsWithState)
+      isMapGroupsWithState,
+      timeout,
+      child)
     CatalystSerde.serialize[U](mapped)
   }
 }
@@ -384,28 +395,29 @@ object FlatMapGroupsWithState {
  * Func is invoked with an object representation of the grouping key an iterator containing the
  * object representation of all the rows with that key.
  *
+ * @param func function called on each group
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
  * @param outputObjAttr used to define the output object
- * @param stateDeserializer used to deserialize state before calling `func`
- * @param stateSerializer used to serialize updated state after calling `func`
+ * @param stateEncoder used to serialize/deserialize state before calling `func`
  * @param outputMode the output mode of `func`
  * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
+ * @param timeout used to timeout groups that have not received data in a while
  */
 case class FlatMapGroupsWithState(
-    func: (Any, Iterator[Any], LogicalKeyedState[Any]) => Iterator[Any],
+    func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    stateDeserializer: Expression,
-    stateSerializer: Seq[NamedExpression],
+    stateEncoder: ExpressionEncoder[Any],
     outputMode: OutputMode,
-    child: LogicalPlan,
-    isMapGroupsWithState: Boolean = false) extends UnaryNode with ObjectProducer {
+    isMapGroupsWithState: Boolean = false,
+    timeout: GroupStateTimeout,
+    child: LogicalPlan) extends UnaryNode with ObjectProducer {
 
   if (isMapGroupsWithState) {
     assert(outputMode == OutputMode.Update)

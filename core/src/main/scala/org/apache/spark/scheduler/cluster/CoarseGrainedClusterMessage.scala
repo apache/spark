@@ -40,7 +40,7 @@ private[spark] object CoarseGrainedClusterMessages {
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
+  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean, reason: String)
     extends CoarseGrainedClusterMessage
 
   case class KillExecutorsOnHost(host: String)
@@ -83,6 +83,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case object StopExecutors extends CoarseGrainedClusterMessage
 
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
+    extends CoarseGrainedClusterMessage
+
+  case class RemoveWorker(workerId: String, host: String, message: String)
     extends CoarseGrainedClusterMessage
 
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage

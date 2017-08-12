@@ -33,13 +33,16 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
   private val supportedLogTypes = Set("stderr", "stdout")
   private val defaultBytes = 100 * 1024
 
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def renderLog(request: HttpServletRequest): String = {
-    val appId = Option(request.getParameter("appId"))
-    val executorId = Option(request.getParameter("executorId"))
-    val driverId = Option(request.getParameter("driverId"))
-    val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val appId = Option(UIUtils.stripXSS(request.getParameter("appId")))
+    val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))
+    val driverId = Option(UIUtils.stripXSS(request.getParameter("driverId")))
+    val logType = UIUtils.stripXSS(request.getParameter("logType"))
+    val offset = Option(UIUtils.stripXSS(request.getParameter("offset"))).map(_.toLong)
+    val byteLength =
+      Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val logDir = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>
@@ -55,13 +58,16 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
     pre + logText
   }
 
+  // stripXSS is called first to remove suspicious characters used in XSS attacks
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appId = Option(request.getParameter("appId"))
-    val executorId = Option(request.getParameter("executorId"))
-    val driverId = Option(request.getParameter("driverId"))
-    val logType = request.getParameter("logType")
-    val offset = Option(request.getParameter("offset")).map(_.toLong)
-    val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
+    val appId = Option(UIUtils.stripXSS(request.getParameter("appId")))
+    val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))
+    val driverId = Option(UIUtils.stripXSS(request.getParameter("driverId")))
+    val logType = UIUtils.stripXSS(request.getParameter("logType"))
+    val offset = Option(UIUtils.stripXSS(request.getParameter("offset"))).map(_.toLong)
+    val byteLength =
+      Option(UIUtils.stripXSS(request.getParameter("byteLength"))).map(_.toInt)
+      .getOrElse(defaultBytes)
 
     val (logDir, params, pageName) = (appId, executorId, driverId) match {
       case (Some(a), Some(e), None) =>

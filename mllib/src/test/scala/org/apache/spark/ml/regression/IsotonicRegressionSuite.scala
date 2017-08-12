@@ -93,8 +93,7 @@ class IsotonicRegressionSuite
 
     val model = ir.fit(dataset)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(ir, model)
 
     model.transform(dataset)
       .select("label", "features", "prediction", "weight")

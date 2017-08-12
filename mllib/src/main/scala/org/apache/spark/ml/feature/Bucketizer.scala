@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Model[Bucketizer] with HasInputCol with HasOutputCol with DefaultParamsWritable {
+  extends Model[Bucketizer] with HasHandleInvalid with HasInputCol with HasOutputCol
+    with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
@@ -84,16 +85,11 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * Default: "error"
    * @group param
    */
-  // TODO: SPARK-18619 Make Bucketizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
-    "invalid entries. Options are skip (filter out rows with invalid values), " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
-
-  /** @group getParam */
-  @Since("2.1.0")
-  def getHandleInvalid: String = $(handleInvalid)
 
   /** @group setParam */
   @Since("2.1.0")
@@ -114,9 +110,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
     val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
       Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
-    }
+    }.withName("bucketizer")
 
-    val newCol = bucketizer(filteredDataset($(inputCol)))
+    val newCol = bucketizer(filteredDataset($(inputCol)).cast(DoubleType))
     val newField = prepOutputField(filteredDataset.schema)
     filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
   }
@@ -130,7 +126,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(inputCol))
     SchemaUtils.appendColumn(schema, prepOutputField(schema))
   }
 

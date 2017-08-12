@@ -127,7 +127,7 @@ def _load_from_socket(port, serializer):
         af, socktype, proto, canonname, sa = res
         sock = socket.socket(af, socktype, proto)
         try:
-            sock.settimeout(3)
+            sock.settimeout(15)
             sock.connect(sa)
         except socket.error:
             sock.close()
@@ -608,7 +608,7 @@ class RDD(object):
         sort records by their keys.
 
         >>> rdd = sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)])
-        >>> rdd2 = rdd.repartitionAndSortWithinPartitions(2, lambda x: x % 2, 2)
+        >>> rdd2 = rdd.repartitionAndSortWithinPartitions(2, lambda x: x % 2, True)
         >>> rdd2.glom().collect()
         [[(0, 5), (0, 8), (2, 6)], [(1, 3), (3, 8), (3, 8)]]
         """
@@ -627,7 +627,6 @@ class RDD(object):
     def sortByKey(self, ascending=True, numPartitions=None, keyfunc=lambda x: x):
         """
         Sorts this RDD, which is assumed to consist of (key, value) pairs.
-        # noqa
 
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
         >>> sc.parallelize(tmp).sortByKey().first()
@@ -1804,17 +1803,31 @@ class RDD(object):
               a one-element list)
             - C{mergeValue}, to merge a V into a C (e.g., adds it to the end of
               a list)
-            - C{mergeCombiners}, to combine two C's into a single one.
+            - C{mergeCombiners}, to combine two C's into a single one (e.g., merges
+              the lists)
+
+        To avoid memory allocation, both mergeValue and mergeCombiners are allowed to
+        modify and return their first argument instead of creating a new C.
 
         In addition, users can control the partitioning of the output RDD.
 
         .. note:: V and C can be different -- for example, one might group an RDD of type
             (Int, Int) into an RDD of type (Int, List[Int]).
 
-        >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
-        >>> def add(a, b): return a + str(b)
-        >>> sorted(x.combineByKey(str, add, add).collect())
-        [('a', '11'), ('b', '1')]
+        >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 2)])
+        >>> def to_list(a):
+        ...     return [a]
+        ...
+        >>> def append(a, b):
+        ...     a.append(b)
+        ...     return a
+        ...
+        >>> def extend(a, b):
+        ...     a.extend(b)
+        ...     return a
+        ...
+        >>> sorted(x.combineByKey(to_list, append, extend).collect())
+        [('a', [1, 2]), ('b', [1])]
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()

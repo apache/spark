@@ -227,7 +227,7 @@ setMethod("cacheRDD",
 #'
 #' Persist this RDD with the specified storage level. For details of the
 #' supported storage levels, refer to
-#'\url{http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence}.
+#'\url{http://spark.apache.org/docs/latest/rdd-programming-guide.html#rdd-persistence}.
 #'
 #' @param x The RDD to persist
 #' @param newLevel The new storage level to be assigned
@@ -291,7 +291,7 @@ setMethod("unpersistRDD",
 #' @rdname checkpoint-methods
 #' @aliases checkpoint,RDD-method
 #' @noRd
-setMethod("checkpoint",
+setMethod("checkpointRDD",
           signature(x = "RDD"),
           function(x) {
             jrdd <- getJRDD(x)

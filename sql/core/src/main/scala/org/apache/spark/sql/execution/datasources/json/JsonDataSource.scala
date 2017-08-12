@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
+import java.io.InputStream
+
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
 import com.google.common.io.ByteStreams
 import org.apache.hadoop.conf.Configuration
@@ -31,7 +33,7 @@ import org.apache.spark.rdd.{BinaryFileRDD, RDD}
 import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
-import org.apache.spark.sql.execution.datasources.{CodecStreams, DataSource, HadoopFileLinesReader, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
@@ -49,16 +51,15 @@ abstract class JsonDataSource extends Serializable {
   def readFile(
     conf: Configuration,
     file: PartitionedFile,
-    parser: JacksonParser): Iterator[InternalRow]
+    parser: JacksonParser,
+    schema: StructType): Iterator[InternalRow]
 
   final def inferSchema(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
-      val jsonSchema = infer(sparkSession, inputPaths, parsedOptions)
-      checkConstraints(jsonSchema)
-      Some(jsonSchema)
+      Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
       None
     }
@@ -68,23 +69,12 @@ abstract class JsonDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType
-
-  /** Constraints to be imposed on schema to be stored. */
-  private def checkConstraints(schema: StructType): Unit = {
-    if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
-      val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-        s"cannot save to JSON format")
-    }
-  }
 }
 
 object JsonDataSource {
   def apply(options: JSONOptions): JsonDataSource = {
-    if (options.wholeFile) {
-      WholeFileJsonDataSource
+    if (options.multiLine) {
+      MultiLineJsonDataSource
     } else {
       TextInputJsonDataSource
     }
@@ -127,10 +117,16 @@ object TextInputJsonDataSource extends JsonDataSource {
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: JacksonParser): Iterator[InternalRow] = {
+      parser: JacksonParser,
+      schema: StructType): Iterator[InternalRow] = {
     val linesReader = new HadoopFileLinesReader(file, conf)
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => linesReader.close()))
-    linesReader.flatMap(parser.parse(_, CreateJacksonParser.text, textToUTF8String))
+    val safeParser = new FailureSafeParser[Text](
+      input => parser.parse(input, CreateJacksonParser.text, textToUTF8String),
+      parser.options.parseMode,
+      schema,
+      parser.options.columnNameOfCorruptRecord)
+    linesReader.flatMap(safeParser.parse)
   }
 
   private def textToUTF8String(value: Text): UTF8String = {
@@ -138,7 +134,7 @@ object TextInputJsonDataSource extends JsonDataSource {
   }
 }
 
-object WholeFileJsonDataSource extends JsonDataSource {
+object MultiLineJsonDataSource extends JsonDataSource {
   override val isSplitable: Boolean = {
     false
   }
@@ -180,7 +176,8 @@ object WholeFileJsonDataSource extends JsonDataSource {
   override def readFile(
       conf: Configuration,
       file: PartitionedFile,
-      parser: JacksonParser): Iterator[InternalRow] = {
+      parser: JacksonParser,
+      schema: StructType): Iterator[InternalRow] = {
     def partitionedFileString(ignored: Any): UTF8String = {
       Utils.tryWithResource {
         CodecStreams.createInputStreamWithCloseResource(conf, file.filePath)
@@ -189,9 +186,13 @@ object WholeFileJsonDataSource extends JsonDataSource {
       }
     }
 
-    parser.parse(
-      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath),
-      CreateJacksonParser.inputStream,
-      partitionedFileString).toIterator
+    val safeParser = new FailureSafeParser[InputStream](
+      input => parser.parse(input, CreateJacksonParser.inputStream, partitionedFileString),
+      parser.options.parseMode,
+      schema,
+      parser.options.columnNameOfCorruptRecord)
+
+    safeParser.parse(
+      CodecStreams.createInputStreamWithCloseResource(conf, file.filePath))
   }
 }

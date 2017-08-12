@@ -70,7 +70,13 @@ private[spark] object AllRDDResource {
           address = status.blockManagerId.hostPort,
           memoryUsed = status.memUsedByRdd(rddId),
           memoryRemaining = status.memRemaining,
-          diskUsed = status.diskUsedByRdd(rddId)
+          diskUsed = status.diskUsedByRdd(rddId),
+          onHeapMemoryUsed = Some(
+            if (!rddInfo.storageLevel.useOffHeap) status.memUsedByRdd(rddId) else 0L),
+          offHeapMemoryUsed = Some(
+            if (rddInfo.storageLevel.useOffHeap) status.memUsedByRdd(rddId) else 0L),
+          onHeapMemoryRemaining = status.onHeapMemRemaining,
+          offHeapMemoryRemaining = status.offHeapMemRemaining
         ) } )
     } else {
       None

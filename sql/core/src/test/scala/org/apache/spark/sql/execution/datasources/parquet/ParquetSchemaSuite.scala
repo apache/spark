@@ -53,11 +53,13 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      int64AsTimestampMillis: Boolean = false): Unit = {
     val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      writeLegacyParquetFormat = writeLegacyParquetFormat)
+      writeLegacyParquetFormat = writeLegacyParquetFormat,
+      writeTimestampInMillis = int64AsTimestampMillis)
 
     test(s"sql <= parquet: $testName") {
       val actual = converter.convert(MessageTypeParser.parseMessageType(parquetSchema))
@@ -77,11 +79,13 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      int64AsTimestampMillis: Boolean = false): Unit = {
     val converter = new ParquetSchemaConverter(
       assumeBinaryIsString = binaryAsString,
       assumeInt96IsTimestamp = int96AsTimestamp,
-      writeLegacyParquetFormat = writeLegacyParquetFormat)
+      writeLegacyParquetFormat = writeLegacyParquetFormat,
+      writeTimestampInMillis = int64AsTimestampMillis)
 
     test(s"sql => parquet: $testName") {
       val actual = converter.convert(sqlSchema)
@@ -97,7 +101,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema: String,
       binaryAsString: Boolean,
       int96AsTimestamp: Boolean,
-      writeLegacyParquetFormat: Boolean): Unit = {
+      writeLegacyParquetFormat: Boolean,
+      int64AsTimestampMillis: Boolean = false): Unit = {
 
     testCatalystToParquet(
       testName,
@@ -105,7 +110,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      writeLegacyParquetFormat)
+      writeLegacyParquetFormat,
+      int64AsTimestampMillis)
 
     testParquetToCatalyst(
       testName,
@@ -113,7 +119,8 @@ abstract class ParquetSchemaTest extends ParquetTest with SharedSQLContext {
       parquetSchema,
       binaryAsString,
       int96AsTimestamp,
-      writeLegacyParquetFormat)
+      writeLegacyParquetFormat,
+      int64AsTimestampMillis)
   }
 }
 
@@ -964,6 +971,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     binaryAsString = true,
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
+
+  testSchema(
+    "Timestamp written and read as INT64 with TIMESTAMP_MILLIS",
+    StructType(Seq(StructField("f1", TimestampType))),
+    """message root {
+      |  optional INT64 f1 (TIMESTAMP_MILLIS);
+      |}
+    """.stripMargin,
+    binaryAsString = true,
+    int96AsTimestamp = false,
+    writeLegacyParquetFormat = true,
+    int64AsTimestampMillis = true)
 
   private def testSchemaClipping(
       testName: String,

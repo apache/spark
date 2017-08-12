@@ -33,7 +33,8 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
   /** Executor details for a particular application */
   def render(request: HttpServletRequest): Seq[Node] = {
-    val appId = request.getParameter("appId")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val appId = UIUtils.stripXSS(request.getParameter("appId"))
     val state = master.askSync[MasterStateResponse](RequestMasterState)
     val app = state.activeApps.find(_.id == appId)
       .getOrElse(state.completedApps.find(_.id == appId).orNull)
@@ -83,7 +84,7 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
               <strong>Executor Memory:</strong>
               {Utils.megabytesToString(app.desc.memoryPerExecutorMB)}
             </li>
-            <li><strong>Submit Date:</strong> {app.submitDate}</li>
+            <li><strong>Submit Date:</strong> {UIUtils.formatDate(app.submitDate)}</li>
             <li><strong>State:</strong> {app.state}</li>
             {
               if (!app.isFinished) {
@@ -99,11 +100,11 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
 
       <div class="row-fluid"> <!-- Executors -->
         <div class="span12">
-          <h4> Executor Summary </h4>
+          <h4> Executor Summary ({allExecutors.length}) </h4>
           {executorsTable}
           {
             if (removedExecutors.nonEmpty) {
-              <h4> Removed Executors </h4> ++
+              <h4> Removed Executors ({removedExecutors.length}) </h4> ++
               removedExecutorsTable
             }
           }

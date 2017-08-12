@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import java.net.URI
+import java.util.Locale
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.util.Shell
@@ -25,6 +26,7 @@ import org.apache.hadoop.util.Shell
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, InterpretedPredicate}
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -125,6 +127,50 @@ object ExternalCatalogUtils {
     }
     escapePathName(col) + "=" + partitionString
   }
+
+  def prunePartitionsByFilter(
+      catalogTable: CatalogTable,
+      inputPartitions: Seq[CatalogTablePartition],
+      predicates: Seq[Expression],
+      defaultTimeZoneId: String): Seq[CatalogTablePartition] = {
+    if (predicates.isEmpty) {
+      inputPartitions
+    } else {
+      val partitionSchema = catalogTable.partitionSchema
+      val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+      val nonPartitionPruningPredicates = predicates.filterNot {
+        _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+      }
+      if (nonPartitionPruningPredicates.nonEmpty) {
+        throw new AnalysisException("Expected only partition pruning predicates: " +
+          nonPartitionPruningPredicates)
+      }
+
+      val boundPredicate =
+        InterpretedPredicate.create(predicates.reduce(And).transform {
+          case att: AttributeReference =>
+            val index = partitionSchema.indexWhere(_.name == att.name)
+            BoundReference(index, partitionSchema(index).dataType, nullable = true)
+        })
+
+      inputPartitions.filter { p =>
+        boundPredicate.eval(p.toRow(partitionSchema, defaultTimeZoneId))
+      }
+    }
+  }
+
+  /**
+   * Returns true if `spec1` is a partial partition spec w.r.t. `spec2`, e.g. PARTITION (a=1) is a
+   * partial partition spec w.r.t. PARTITION (a=1,b=2).
+   */
+  def isPartialPartitionSpec(
+      spec1: TablePartitionSpec,
+      spec2: TablePartitionSpec): Boolean = {
+    spec1.forall {
+      case (partitionColumn, value) => spec2(partitionColumn) == value
+    }
+  }
 }
 
 object CatalogUtils {
@@ -134,8 +180,10 @@ object CatalogUtils {
    */
   def maskCredentials(options: Map[String, String]): Map[String, String] = {
     options.map {
-      case (key, _) if key.toLowerCase == "password" => (key, "###")
-      case (key, value) if key.toLowerCase == "url" && value.toLowerCase.contains("password") =>
+      case (key, _) if key.toLowerCase(Locale.ROOT) == "password" => (key, "###")
+      case (key, value)
+        if key.toLowerCase(Locale.ROOT) == "url" &&
+          value.toLowerCase(Locale.ROOT).contains("password") =>
         (key, "###")
       case o => o
     }

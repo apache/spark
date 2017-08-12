@@ -50,16 +50,16 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "tags", "sketch"
+    "tags", "sketch", "kvstore"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
-    streamingKinesisAsl, dockerIntegrationTests) =
+    streamingKinesisAsl, dockerIntegrationTests, hadoopCloud) =
     Seq("mesos", "yarn", "ganglia-lgpl", "streaming-kinesis-asl",
-      "docker-integration-tests").map(ProjectRef(buildLocation, _))
+      "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -87,19 +87,11 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    Properties.envOrNone("SBT_MAVEN_PROFILES") match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
-
-    if (System.getProperty("scala-2.10") == "") {
-      // To activate scala-2.10 profile, replace empty property value to non-empty value
-      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
-      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
-      System.setProperty("scala-2.10", "true")
-    }
-    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -234,13 +226,12 @@ object SparkBuild extends PomBuild {
     },
 
     javacJVMVersion := "1.8",
-    // SBT Scala 2.10 build still doesn't support Java 8, because scalac 2.10 doesn't, but,
-    // it also doesn't touch Java 8 code and it's OK to emit Java 7 bytecode in this case
-    scalacJVMVersion := (if (System.getProperty("scala-2.10") == "true") "1.7" else "1.8"),
+    scalacJVMVersion := "1.8",
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value
+      "-source", javacJVMVersion.value,
+      "-Xlint:unchecked"
     ),
     // This -target option cannot be set in the Compile configuration scope since `javadoc` doesn't
     // play nicely with it; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629 for
@@ -310,7 +301,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, tags, sqlKafka010
+      unsafe, tags, sqlKafka010, kvstore
     ).contains(x)
   }
 
@@ -477,7 +468,6 @@ object OldDeps {
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
-    scalaVersion := "2.10.5",
     libraryDependencies := allPreviousArtifactKeys.value.flatten
   )
 }
@@ -600,7 +590,7 @@ object PySparkAssembly {
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
       zipRecursive(src, zipFile)
-      Seq[File]()
+      Seq.empty[File]
     }).value
   )
 
@@ -756,13 +746,7 @@ object CopyDependencies {
 object TestSettings {
   import BuildCommons._
 
-  private val scalaBinaryVersion =
-    if (System.getProperty("scala-2.10") == "true") {
-      "2.10"
-    } else {
-      "2.11"
-    }
-
+  private val scalaBinaryVersion = "2.11"
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -827,7 +811,7 @@ object TestSettings {
           require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
         }
       }
-      Seq[File]()
+      Seq.empty[File]
     }).value,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc

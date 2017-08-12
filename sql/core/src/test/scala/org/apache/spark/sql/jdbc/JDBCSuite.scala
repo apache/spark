@@ -18,13 +18,13 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.util.{Calendar, GregorianCalendar, Properties}
 
 import org.h2.jdbc.JdbcSQLException
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -96,6 +96,15 @@ class JDBCSuite extends SparkFunSuite
         |         partitionColumn 'THEID', lowerBound '1', upperBound '4', numPartitions '3')
        """.stripMargin.replaceAll("\n", " "))
 
+    sql(
+      s"""
+        |CREATE OR REPLACE TEMPORARY VIEW partsoverflow
+        |USING org.apache.spark.sql.jdbc
+        |OPTIONS (url '$url', dbtable 'TEST.PEOPLE', user 'testUser', password 'testPass',
+        |         partitionColumn 'THEID', lowerBound '-9223372036854775808',
+        |         upperBound '9223372036854775807', numPartitions '3')
+       """.stripMargin.replaceAll("\n", " "))
+
     conn.prepareStatement("create table test.inttypes (a INT, b BOOLEAN, c TINYINT, "
       + "d SMALLINT, e BIGINT)").executeUpdate()
     conn.prepareStatement("insert into test.inttypes values (1, false, 3, 4, 1234567890123)"
@@ -141,6 +150,15 @@ class JDBCSuite extends SparkFunSuite
         |OPTIONS (url '$url', dbtable 'TEST.TIMETYPES', user 'testUser', password 'testPass')
        """.stripMargin.replaceAll("\n", " "))
 
+    conn.prepareStatement("CREATE TABLE test.timezone (tz TIMESTAMP WITH TIME ZONE) " +
+      "AS SELECT '1999-01-08 04:05:06.543543543 GMT-08:00'")
+      .executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement("CREATE TABLE test.array (ar ARRAY) " +
+      "AS SELECT '(1, 2, 3)'")
+      .executeUpdate()
+    conn.commit()
 
     conn.prepareStatement("create table test.flttypes (a DOUBLE, b REAL, c DECIMAL(38, 18))"
         ).executeUpdate()
@@ -367,6 +385,12 @@ class JDBCSuite extends SparkFunSuite
     assert(ids(2) === 3)
   }
 
+  test("overflow of partition bound difference does not give negative stride") {
+    val df = sql("SELECT * FROM partsoverflow")
+    checkNumPartitions(df, expectedNumPartitions = 3)
+    assert(df.collect().length == 3)
+  }
+
   test("Register JDBC query with renamed fields") {
     // Regression test for bug SPARK-7345
     sql(
@@ -395,6 +419,28 @@ class JDBCSuite extends SparkFunSuite
       spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", properties).collect()
     }.getMessage
     assert(e.contains("Invalid value `-1` for parameter `fetchsize`"))
+  }
+
+  test("Missing partition columns") {
+    withView("tempPeople") {
+      val e = intercept[IllegalArgumentException] {
+        sql(
+          s"""
+             |CREATE OR REPLACE TEMPORARY VIEW tempPeople
+             |USING org.apache.spark.sql.jdbc
+             |OPTIONS (
+             |  url 'jdbc:h2:mem:testdb0;user=testUser;password=testPass',
+             |  dbtable 'TEST.PEOPLE',
+             |  lowerBound '0',
+             |  upperBound '52',
+             |  numPartitions '53',
+             |  fetchSize '10000' )
+           """.stripMargin.replaceAll("\n", " "))
+      }.getMessage
+      assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+        "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+        "'numPartitions'"))
+    }
   }
 
   test("Basic API with FetchSize") {
@@ -704,6 +750,15 @@ class JDBCSuite extends SparkFunSuite
     val db2Dialect = JdbcDialects.get("jdbc:db2://127.0.0.1/db")
     assert(db2Dialect.getJDBCType(StringType).map(_.databaseTypeDefinition).get == "CLOB")
     assert(db2Dialect.getJDBCType(BooleanType).map(_.databaseTypeDefinition).get == "CHAR(1)")
+    assert(db2Dialect.getJDBCType(ShortType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    assert(db2Dialect.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
+    // test db2 dialect mappings on read
+    assert(db2Dialect.getCatalystType(java.sql.Types.REAL, "REAL", 1, null) == Option(FloatType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "DECFLOAT", 1, null) ==
+      Option(DecimalType(38, 18)))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "XML", 1, null) == Option(StringType))
+    assert(db2Dialect.getCatalystType(java.sql.Types.OTHER, "TIMESTAMP WITH TIME ZONE", 1, null) ==
+      Option(TimestampType))
   }
 
   test("PostgresDialect type mapping") {
@@ -806,10 +861,6 @@ class JDBCSuite extends SparkFunSuite
         sql(s"DESC FORMATTED $tableName").collect().foreach { r =>
           assert(!r.toString().contains(password))
         }
-
-        sql(s"DESC EXTENDED $tableName").collect().foreach { r =>
-          assert(!r.toString().contains(password))
-        }
       }
     }
   }
@@ -869,7 +920,7 @@ class JDBCSuite extends SparkFunSuite
 
   test("SPARK-16387: Reserved SQL words are not escaped by JDBC writer") {
     val df = spark.createDataset(Seq("a", "b", "c")).toDF("order")
-    val schema = JdbcUtils.schemaString(df.schema, "jdbc:mysql://localhost:3306/temp")
+    val schema = JdbcUtils.schemaString(df, "jdbc:mysql://localhost:3306/temp")
     assert(schema.contains("`order` TEXT"))
   }
 
@@ -917,10 +968,33 @@ class JDBCSuite extends SparkFunSuite
     assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 
+  test("SPARK-15648: teradataDialect StringType data mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(teradataDialect.getJDBCType(StringType).
+      map(_.databaseTypeDefinition).get == "VARCHAR(255)")
+  }
+
+  test("SPARK-15648: teradataDialect BooleanType data mapping") {
+    val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
+    assert(teradataDialect.getJDBCType(BooleanType).
+      map(_.databaseTypeDefinition).get == "CHAR(1)")
+  }
+
   test("Checking metrics correctness with JDBC") {
     val foobarCnt = spark.table("foobar").count()
     val res = InputOutputMetricsHelper.run(sql("SELECT * FROM foobar").toDF())
     assert(res === (foobarCnt, 0L, foobarCnt) :: Nil)
+  }
+
+  test("unsupported types") {
+    var e = intercept[SparkException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.TIMEZONE", new Properties()).collect()
+    }.getMessage
+    assert(e.contains("java.lang.UnsupportedOperationException: unimplemented"))
+    e = intercept[SQLException] {
+      spark.read.jdbc(urlWithUserAndPass, "TEST.ARRAY", new Properties()).collect()
+    }.getMessage
+    assert(e.contains("Unsupported type ARRAY"))
   }
 
   test("SPARK-19318: Connection properties keys should be case-sensitive.") {

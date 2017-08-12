@@ -156,12 +156,34 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(Seq(Row(1, "a"), Row(2, null), Row(null, null))))
   }
 
-  test("to_json") {
+  test("from_json uses DDL strings for defining a schema - java") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", new java.util.HashMap[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("from_json uses DDL strings for defining a schema - scala") {
+    val df = Seq("""{"a": 1, "b": "haa"}""").toDS()
+    checkAnswer(
+      df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
+      Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("to_json - struct") {
     val df = Seq(Tuple1(Tuple1(1))).toDF("a")
 
     checkAnswer(
       df.select(to_json($"a")),
       Row("""{"_1":1}""") :: Nil)
+  }
+
+  test("to_json - array") {
+    val df = Seq(Tuple1(Tuple1(1) :: Nil)).toDF("a")
+
+    checkAnswer(
+      df.select(to_json($"a")),
+      Row("""[{"_1":1}]""") :: Nil)
   }
 
   test("to_json with option") {
@@ -184,7 +206,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       "Unable to convert column a of type calendarinterval to JSON."))
   }
 
-  test("roundtrip in to_json and from_json") {
+  test("roundtrip in to_json and from_json - struct") {
     val dfOne = Seq(Tuple1(Tuple1(1)), Tuple1(null)).toDF("struct")
     val schemaOne = dfOne.schema(0).dataType.asInstanceOf[StructType]
     val readBackOne = dfOne.select(to_json($"struct").as("json"))
@@ -195,6 +217,20 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val schemaTwo = new StructType().add("a", IntegerType)
     val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("struct"))
       .select(to_json($"struct").as("json"))
+    checkAnswer(dfTwo, readBackTwo)
+  }
+
+  test("roundtrip in to_json and from_json - array") {
+    val dfOne = Seq(Tuple1(Tuple1(1) :: Nil), Tuple1(null :: Nil)).toDF("array")
+    val schemaOne = dfOne.schema(0).dataType
+    val readBackOne = dfOne.select(to_json($"array").as("json"))
+      .select(from_json($"json", schemaOne).as("array"))
+    checkAnswer(dfOne, readBackOne)
+
+    val dfTwo = Seq(Some("""[{"a":1}]"""), None).toDF("json")
+    val schemaTwo = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
+    val readBackTwo = dfTwo.select(from_json($"json", schemaTwo).as("array"))
+      .select(to_json($"array").as("json"))
     checkAnswer(dfTwo, readBackTwo)
   }
 
@@ -245,7 +281,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     val errMsg2 = intercept[AnalysisException] {
       df3.selectExpr("""from_json(value, 'time InvalidType')""")
     }
-    assert(errMsg2.getMessage.contains("DataType invalidtype() is not supported"))
+    assert(errMsg2.getMessage.contains("DataType invalidtype is not supported"))
     val errMsg3 = intercept[AnalysisException] {
       df3.selectExpr("from_json(value, 'time Timestamp', named_struct('a', 1))")
     }

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import java.lang.{Double => JDouble, Long => JLong}
 import java.math.{BigDecimal => JBigDecimal}
-import java.util.TimeZone
+import java.util.{Locale, TimeZone}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 // TODO: We should tighten up visibility of the classes here once we clean up Hive coupling.
 
@@ -94,7 +95,7 @@ object PartitioningUtils {
       typeInference: Boolean,
       basePaths: Set[Path],
       timeZoneId: String): PartitionSpec = {
-    parsePartitions(paths, typeInference, basePaths, TimeZone.getTimeZone(timeZoneId))
+    parsePartitions(paths, typeInference, basePaths, DateTimeUtils.getTimeZone(timeZoneId))
   }
 
   private[datasources] def parsePartitions(
@@ -194,7 +195,7 @@ object PartitioningUtils {
     while (!finished) {
       // Sometimes (e.g., when speculative task is enabled), temporary directories may be left
       // uncleaned. Here we simply ignore them.
-      if (currentPath.getName.toLowerCase == "_temporary") {
+      if (currentPath.getName.toLowerCase(Locale.ROOT) == "_temporary") {
         return (None, None)
       }
 
@@ -243,7 +244,7 @@ object PartitioningUtils {
     if (equalSignIndex == -1) {
       None
     } else {
-      val columnName = columnSpec.take(equalSignIndex)
+      val columnName = unescapePathName(columnSpec.take(equalSignIndex))
       assert(columnName.nonEmpty, s"Empty partition column name in '$columnSpec'")
 
       val rawColumnValue = columnSpec.drop(equalSignIndex + 1)
@@ -301,13 +302,8 @@ object PartitioningUtils {
       normalizedKey -> value
     }
 
-    if (normalizedPartSpec.map(_._1).distinct.length != normalizedPartSpec.length) {
-      val duplicateColumns = normalizedPartSpec.map(_._1).groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Found duplicated columns in partition specification: " +
-        duplicateColumns.mkString(", "))
-    }
+    SchemaUtils.checkColumnNameDuplication(
+      normalizedPartSpec.map(_._1), "in the partition schema", resolver)
 
     normalizedPartSpec.toMap
   }

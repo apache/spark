@@ -117,7 +117,8 @@ case class ObjectHashAggregateExec(
               newMutableProjection(expressions, inputSchema, subexpressionEliminationEnabled),
             child.output,
             iter,
-            fallbackCountThreshold)
+            fallbackCountThreshold,
+            numOutputRows)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())

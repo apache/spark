@@ -215,7 +215,7 @@ private[spark] class PythonRunner(
 
           case e: Exception if context.isInterrupted =>
             logDebug("Exception thrown after task interruption", e)
-            throw new TaskKilledException
+            throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
           case e: Exception if env.isStopped =>
             logDebug("Exception thrown after context is stopped", e)
@@ -683,7 +683,7 @@ private[spark] object PythonRDD extends Logging {
    * Create a socket server and a background thread to serve the data in `items`,
    *
    * The socket server can only accept one connection, or close if no connection
-   * in 3 seconds.
+   * in 15 seconds.
    *
    * Once a connection comes in, it tries to serialize all the data in `items`
    * and send them into this connection.
@@ -692,8 +692,8 @@ private[spark] object PythonRDD extends Logging {
    */
   def serveIterator[T](items: Iterator[T], threadName: String): Int = {
     val serverSocket = new ServerSocket(0, 1, InetAddress.getByName("localhost"))
-    // Close the socket if no connection in 3 seconds
-    serverSocket.setSoTimeout(3000)
+    // Close the socket if no connection in 15 seconds
+    serverSocket.setSoTimeout(15000)
 
     new Thread(threadName) {
       setDaemon(true)
@@ -879,7 +879,7 @@ private[spark] class PythonAccumulatorV2(
     private val serverPort: Int)
   extends CollectionAccumulator[Array[Byte]] {
 
-  Utils.checkHost(serverHost, "Expected hostname")
+  Utils.checkHost(serverHost)
 
   val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 
@@ -974,6 +974,7 @@ private[spark] class PythonBroadcast(@transient var path: String) extends Serial
         }
       }
     }
+    super.finalize()
   }
 }
 // scalastyle:on no.finalize

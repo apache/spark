@@ -96,7 +96,10 @@ class BucketedRandomProjectionLSHModel private[ml](
   }
 
   @Since("2.1.0")
-  override def copy(extra: ParamMap): this.type = defaultCopy(extra)
+  override def copy(extra: ParamMap): BucketedRandomProjectionLSHModel = {
+    val copied = new BucketedRandomProjectionLSHModel(uid, randUnitVectors).setParent(parent)
+    copyValues(copied, extra)
+  }
 
   @Since("2.1.0")
   override def write: MLWriter = {

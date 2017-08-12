@@ -34,9 +34,9 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
     listener.synchronized {
       val activeStages = listener.activeStages.values.toSeq
       val pendingStages = listener.pendingStages.values.toSeq
-      val completedStages = listener.completedStages.reverse.toSeq
+      val completedStages = listener.completedStages.reverse
       val numCompletedStages = listener.numCompletedStages
-      val failedStages = listener.failedStages.reverse.toSeq
+      val failedStages = listener.failedStages.reverse
       val numFailedStages = listener.numFailedStages
       val subPath = "stages"
 
@@ -115,7 +115,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
           if (sc.isDefined && isFairScheduler) {
             <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
           } else {
-            Seq[Node]()
+            Seq.empty[Node]
           }
         }
       if (shouldShowActiveStages) {

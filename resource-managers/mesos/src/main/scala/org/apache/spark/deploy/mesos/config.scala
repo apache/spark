@@ -56,4 +56,18 @@ package object config {
       .stringConf
       .createOptional
 
+  private [spark] val DRIVER_LABELS =
+    ConfigBuilder("spark.mesos.driver.labels")
+      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs.  Key-value " +
+        "pairs should be separated by a colon, and commas used to list more than one." +
+        "Ex. key:value,key2:value2")
+      .stringConf
+      .createOptional
+
+  private [spark] val DRIVER_FAILOVER_TIMEOUT =
+    ConfigBuilder("spark.mesos.driver.failoverTimeout")
+      .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
+          "during a temporary disconnection, before tearing down all the executors.")
+      .doubleConf
+      .createWithDefault(0.0)
 }

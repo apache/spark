@@ -23,6 +23,7 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
+import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
 import scala.Tuple3;
@@ -118,7 +119,7 @@ public class JavaDatasetSuite implements Serializable {
     Dataset<String> parMapped = ds.mapPartitions((MapPartitionsFunction<String, String>) it -> {
       List<String> ls = new LinkedList<>();
       while (it.hasNext()) {
-        ls.add(it.next().toUpperCase(Locale.ENGLISH));
+        ls.add(it.next().toUpperCase(Locale.ROOT));
       }
       return ls.iterator();
     }, Encoders.STRING());
@@ -208,7 +209,8 @@ public class JavaDatasetSuite implements Serializable {
         },
       OutputMode.Append(),
       Encoders.LONG(),
-      Encoders.STRING());
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout());
 
     Assert.assertEquals(asSet("1a", "3foobar"), toSet(flatMapped2.collectAsList()));
 
@@ -1377,5 +1379,85 @@ public class JavaDatasetSuite implements Serializable {
   public void testCircularReferenceBean3() {
     CircularReference4Bean bean = new CircularReference4Bean();
     spark.createDataset(Arrays.asList(bean), Encoders.bean(CircularReference4Bean.class));
+  }
+
+  @Test(expected = RuntimeException.class)
+  public void testNullInTopLevelBean() {
+    NestedSmallBean bean = new NestedSmallBean();
+    // We cannot set null in top-level bean
+    spark.createDataset(Arrays.asList(bean, null), Encoders.bean(NestedSmallBean.class));
+  }
+
+  @Test
+  public void testSerializeNull() {
+    NestedSmallBean bean = new NestedSmallBean();
+    Encoder<NestedSmallBean> encoder = Encoders.bean(NestedSmallBean.class);
+    List<NestedSmallBean> beans = Arrays.asList(bean);
+    Dataset<NestedSmallBean> ds1 = spark.createDataset(beans, encoder);
+    Assert.assertEquals(beans, ds1.collectAsList());
+    Dataset<NestedSmallBean> ds2 =
+      ds1.map((MapFunction<NestedSmallBean, NestedSmallBean>) b -> b, encoder);
+    Assert.assertEquals(beans, ds2.collectAsList());
+  }
+
+  @Test
+  public void testSpecificLists() {
+    SpecificListsBean bean = new SpecificListsBean();
+    ArrayList<Integer> arrayList = new ArrayList<>();
+    arrayList.add(1);
+    bean.setArrayList(arrayList);
+    LinkedList<Integer> linkedList = new LinkedList<>();
+    linkedList.add(1);
+    bean.setLinkedList(linkedList);
+    bean.setList(Collections.singletonList(1));
+    List<SpecificListsBean> beans = Collections.singletonList(bean);
+    Dataset<SpecificListsBean> dataset =
+      spark.createDataset(beans, Encoders.bean(SpecificListsBean.class));
+    Assert.assertEquals(beans, dataset.collectAsList());
+  }
+
+  public static class SpecificListsBean implements Serializable {
+    private ArrayList<Integer> arrayList;
+    private LinkedList<Integer> linkedList;
+    private List<Integer> list;
+
+    public ArrayList<Integer> getArrayList() {
+      return arrayList;
+    }
+
+    public void setArrayList(ArrayList<Integer> arrayList) {
+      this.arrayList = arrayList;
+    }
+
+    public LinkedList<Integer> getLinkedList() {
+      return linkedList;
+    }
+
+    public void setLinkedList(LinkedList<Integer> linkedList) {
+      this.linkedList = linkedList;
+    }
+
+    public List<Integer> getList() {
+      return list;
+    }
+
+    public void setList(List<Integer> list) {
+      this.list = list;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) return true;
+      if (o == null || getClass() != o.getClass()) return false;
+      SpecificListsBean that = (SpecificListsBean) o;
+      return Objects.equal(arrayList, that.arrayList) &&
+        Objects.equal(linkedList, that.linkedList) &&
+        Objects.equal(list, that.list);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hashCode(arrayList, linkedList, list);
+    }
   }
 }

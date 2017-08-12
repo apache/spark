@@ -126,7 +126,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       .toDF().createOrReplaceTempView("sizeTst")
     spark.catalog.cacheTable("sizeTst")
     assert(
-      spark.table("sizeTst").queryExecution.analyzed.stats(sqlConf).sizeInBytes >
+      spark.table("sizeTst").queryExecution.analyzed.stats.sizeInBytes >
         spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
   }
 
@@ -412,6 +412,21 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       val partitionedAttrs =
         inMemoryScan.outputPartitioning.asInstanceOf[HashPartitioning].references
       assert(partitionedAttrs.subsetOf(inMemoryScan.outputSet))
+    }
+  }
+
+  test("SPARK-20356: pruned InMemoryTableScanExec should have correct ordering and partitioning") {
+    withSQLConf("spark.sql.shuffle.partitions" -> "200") {
+      val df1 = Seq(("a", 1), ("b", 1), ("c", 2)).toDF("item", "group")
+      val df2 = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("item", "id")
+      val df3 = df1.join(df2, Seq("item")).select($"id", $"group".as("item")).distinct()
+
+      df3.unpersist()
+      val agg_without_cache = df3.groupBy($"item").count()
+
+      df3.cache()
+      val agg_with_cache = df3.groupBy($"item").count()
+      checkAnswer(agg_without_cache, agg_with_cache)
     }
   }
 }

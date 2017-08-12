@@ -204,20 +204,19 @@ object JavaTypeInference {
     typeToken.getRawType match {
       case c if !inferExternalType(c).isInstanceOf[ObjectType] => getPath
 
-      case c if c == classOf[java.lang.Short] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Integer] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Long] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Double] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Byte] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Float] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
-      case c if c == classOf[java.lang.Boolean] =>
-        NewInstance(c, getPath :: Nil, ObjectType(c))
+      case c if c == classOf[java.lang.Short] ||
+                c == classOf[java.lang.Integer] ||
+                c == classOf[java.lang.Long] ||
+                c == classOf[java.lang.Double] ||
+                c == classOf[java.lang.Float] ||
+                c == classOf[java.lang.Byte] ||
+                c == classOf[java.lang.Boolean] =>
+        StaticInvoke(
+          c,
+          ObjectType(c),
+          "valueOf",
+          getPath :: Nil,
+          returnNullable = false)
 
       case c if c == classOf[java.sql.Date] =>
         StaticInvoke(
@@ -225,7 +224,7 @@ object JavaTypeInference {
           ObjectType(c),
           "toJavaDate",
           getPath :: Nil,
-          propagateNull = true)
+          returnNullable = false)
 
       case c if c == classOf[java.sql.Timestamp] =>
         StaticInvoke(
@@ -233,7 +232,7 @@ object JavaTypeInference {
           ObjectType(c),
           "toJavaTimestamp",
           getPath :: Nil,
-          propagateNull = true)
+          returnNullable = false)
 
       case c if c == classOf[java.lang.String] =>
         Invoke(getPath, "toString", ObjectType(classOf[String]))
@@ -268,16 +267,11 @@ object JavaTypeInference {
 
       case c if listType.isAssignableFrom(typeToken) =>
         val et = elementType(typeToken)
-        val array =
-          Invoke(
-            MapObjects(
-              p => deserializerFor(et, Some(p)),
-              getPath,
-              inferDataType(et)._1),
-            "array",
-            ObjectType(classOf[Array[Any]]))
-
-        StaticInvoke(classOf[java.util.Arrays], ObjectType(c), "asList", array :: Nil)
+        MapObjects(
+          p => deserializerFor(et, Some(p)),
+          getPath,
+          inferDataType(et)._1,
+          customCollectionCls = Some(c))
 
       case _ if mapType.isAssignableFrom(typeToken) =>
         val (keyType, valueType) = mapKeyValueType(typeToken)
@@ -306,7 +300,8 @@ object JavaTypeInference {
           ArrayBasedMapData.getClass,
           ObjectType(classOf[JMap[_, _]]),
           "toJavaMap",
-          keyData :: valueData :: Nil)
+          keyData :: valueData :: Nil,
+          returnNullable = false)
 
       case other =>
         val properties = getJavaBeanReadableAndWritableProperties(other)
@@ -343,7 +338,11 @@ object JavaTypeInference {
    */
   def serializerFor(beanClass: Class[_]): CreateNamedStruct = {
     val inputObject = BoundReference(0, ObjectType(beanClass), nullable = true)
-    serializerFor(inputObject, TypeToken.of(beanClass)).asInstanceOf[CreateNamedStruct]
+    val nullSafeInput = AssertNotNull(inputObject, Seq("top level input bean"))
+    serializerFor(nullSafeInput, TypeToken.of(beanClass)) match {
+      case expressions.If(_, _, s: CreateNamedStruct) => s
+      case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
+    }
   }
 
   private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
@@ -369,28 +368,32 @@ object JavaTypeInference {
             classOf[UTF8String],
             StringType,
             "fromString",
-            inputObject :: Nil)
+            inputObject :: Nil,
+            returnNullable = false)
 
         case c if c == classOf[java.sql.Timestamp] =>
           StaticInvoke(
             DateTimeUtils.getClass,
             TimestampType,
             "fromJavaTimestamp",
-            inputObject :: Nil)
+            inputObject :: Nil,
+            returnNullable = false)
 
         case c if c == classOf[java.sql.Date] =>
           StaticInvoke(
             DateTimeUtils.getClass,
             DateType,
             "fromJavaDate",
-            inputObject :: Nil)
+            inputObject :: Nil,
+            returnNullable = false)
 
         case c if c == classOf[java.math.BigDecimal] =>
           StaticInvoke(
             Decimal.getClass,
             DecimalType.SYSTEM_DEFAULT,
             "apply",
-            inputObject :: Nil)
+            inputObject :: Nil,
+            returnNullable = false)
 
         case c if c == classOf[java.lang.Boolean] =>
           Invoke(inputObject, "booleanValue", BooleanType)
@@ -420,6 +423,7 @@ object JavaTypeInference {
             inputObject,
             ObjectType(keyType.getRawType),
             serializerFor(_, keyType),
+            keyNullable = true,
             ObjectType(valueType.getRawType),
             serializerFor(_, valueType),
             valueNullable = true
@@ -427,7 +431,7 @@ object JavaTypeInference {
 
         case other =>
           val properties = getJavaBeanReadableAndWritableProperties(other)
-          CreateNamedStruct(properties.flatMap { p =>
+          val nonNullOutput = CreateNamedStruct(properties.flatMap { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
             val fieldValue = Invoke(
@@ -436,6 +440,9 @@ object JavaTypeInference {
               inferExternalType(fieldType.getRawType))
             expressions.Literal(fieldName) :: serializerFor(fieldValue, fieldType) :: Nil
           })
+
+          val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
+          expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
       }
     }
   }

@@ -15,16 +15,21 @@
 # limitations under the License.
 #
 
+import json
 import sys
+import os
+import time
 import uuid
 import warnings
 
 if sys.version > '3':
     basestring = str
     unicode = str
+    long = int
 
 from pyspark import SparkContext, since
 from pyspark.ml.common import inherit_doc
+from pyspark.sql import SparkSession
 
 
 def _jvm():
@@ -61,31 +66,85 @@ class Identifiable(object):
 
 
 @inherit_doc
-class MLWriter(object):
+class BaseReadWrite(object):
+    """
+    Base class for MLWriter and MLReader. Stores information about the SparkContext
+    and SparkSession.
+
+    .. versionadded:: 2.3.0
+    """
+
+    def __init__(self):
+        self._sparkSession = None
+
+    def context(self, sqlContext):
+        """
+        Sets the Spark SQLContext to use for saving/loading.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
+        """
+        raise NotImplementedError("Read/Write is not yet implemented for type: %s" % type(self))
+
+    def session(self, sparkSession):
+        """
+        Sets the Spark Session to use for saving/loading.
+        """
+        self._sparkSession = sparkSession
+        return self
+
+    @property
+    def sparkSession(self):
+        """
+        Returns the user-specified Spark Session or the default.
+        """
+        if self._sparkSession is None:
+            self._sparkSession = SparkSession.builder.getOrCreate()
+        return self._sparkSession
+
+    @property
+    def sc(self):
+        """
+        Returns the underlying `SparkContext`.
+        """
+        return self.sparkSession.sparkContext
+
+
+@inherit_doc
+class MLWriter(BaseReadWrite):
     """
     Utility class that can save ML instances.
 
     .. versionadded:: 2.0.0
     """
 
+    def __init__(self):
+        super(MLWriter, self).__init__()
+        self.shouldOverwrite = False
+
+    def _handleOverwrite(self, path):
+        from pyspark.ml.wrapper import JavaWrapper
+
+        _java_obj = JavaWrapper._new_java_obj("org.apache.spark.ml.util.FileSystemOverwrite")
+        wrapper = JavaWrapper(_java_obj)
+        wrapper._call_java("handleOverwrite", path, True, self.sc._jsc.sc())
+
     def save(self, path):
         """Save the ML instance to the input path."""
+        if self.shouldOverwrite:
+            self._handleOverwrite(path)
+        self.saveImpl(path)
+
+    def saveImpl(self, path):
+        """
+        save() handles overwriting and then calls this method.  Subclasses should override this
+        method to implement the actual saving of the instance.
+        """
         raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
 
     def overwrite(self):
         """Overwrites if the output path already exists."""
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
-
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for saving.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
-        """
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
-
-    def session(self, sparkSession):
-        """Sets the Spark Session to use for saving."""
-        raise NotImplementedError("MLWriter is not yet implemented for type: %s" % type(self))
+        self.shouldOverwrite = True
+        return self
 
 
 @inherit_doc
@@ -113,9 +172,10 @@ class JavaMLWriter(MLWriter):
     def context(self, sqlContext):
         """
         Sets the SQL context to use for saving.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        warnings.warn("Deprecated in 2.1 and will be removed in 2.2, use session instead.")
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jwrite.context(sqlContext._ssql_ctx)
         return self
 
@@ -138,7 +198,7 @@ class MLWritable(object):
         raise NotImplementedError("MLWritable is not yet implemented for type: %r" % type(self))
 
     def save(self, path):
-        """Save this ML instance to the given path, a shortcut of `write().save(path)`."""
+        """Save this ML instance to the given path, a shortcut of 'write().save(path)'."""
         self.write().save(path)
 
 
@@ -154,26 +214,18 @@ class JavaMLWritable(MLWritable):
 
 
 @inherit_doc
-class MLReader(object):
+class MLReader(BaseReadWrite):
     """
     Utility class that can load ML instances.
 
     .. versionadded:: 2.0.0
     """
 
+    def __init__(self):
+        super(MLReader, self).__init__()
+
     def load(self, path):
         """Load the ML instance from the input path."""
-        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
-
-    def context(self, sqlContext):
-        """
-        Sets the SQL context to use for loading.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
-        """
-        raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
-
-    def session(self, sparkSession):
-        """Sets the Spark Session to use for loading."""
         raise NotImplementedError("MLReader is not yet implemented for type: %s" % type(self))
 
 
@@ -184,6 +236,7 @@ class JavaMLReader(MLReader):
     """
 
     def __init__(self, clazz):
+        super(JavaMLReader, self).__init__()
         self._clazz = clazz
         self._jread = self._load_java_obj(clazz).read()
 
@@ -200,9 +253,10 @@ class JavaMLReader(MLReader):
     def context(self, sqlContext):
         """
         Sets the SQL context to use for loading.
-        .. note:: Deprecated in 2.1 and will be removed in 2.2, use session instead.
+
+        .. note:: Deprecated in 2.1 and will be removed in 3.0, use session instead.
         """
-        warnings.warn("Deprecated in 2.1 and will be removed in 2.2, use session instead.")
+        warnings.warn("Deprecated in 2.1 and will be removed in 3.0, use session instead.")
         self._jread.context(sqlContext._ssql_ctx)
         return self
 
@@ -279,3 +333,201 @@ class JavaPredictionModel():
         Returns the number of features the model was trained on. If unknown, returns -1
         """
         return self._call_java("numFeatures")
+
+
+@inherit_doc
+class DefaultParamsWritable(MLWritable):
+    """
+    .. note:: DeveloperApi
+
+    Helper trait for making simple :py:class:`Params` types writable.  If a :py:class:`Params`
+    class stores all data as :py:class:`Param` values, then extending this trait will provide
+    a default implementation of writing saved instances of the class.
+    This only handles simple :py:class:`Param` types; e.g., it will not handle
+    :py:class:`Dataset`. See :py:class:`DefaultParamsReadable`, the counterpart to this trait.
+
+    .. versionadded:: 2.3.0
+    """
+
+    def write(self):
+        """Returns a DefaultParamsWriter instance for this class."""
+        from pyspark.ml.param import Params
+
+        if isinstance(self, Params):
+            return DefaultParamsWriter(self)
+        else:
+            raise TypeError("Cannot use DefautParamsWritable with type %s because it does not " +
+                            " extend Params.", type(self))
+
+
+@inherit_doc
+class DefaultParamsWriter(MLWriter):
+    """
+    .. note:: DeveloperApi
+
+    Specialization of :py:class:`MLWriter` for :py:class:`Params` types
+
+    Class for writing Estimators and Transformers whose parameters are JSON-serializable.
+
+    .. versionadded:: 2.3.0
+    """
+
+    def __init__(self, instance):
+        super(DefaultParamsWriter, self).__init__()
+        self.instance = instance
+
+    def saveImpl(self, path):
+        DefaultParamsWriter.saveMetadata(self.instance, path, self.sc)
+
+    @staticmethod
+    def saveMetadata(instance, path, sc, extraMetadata=None, paramMap=None):
+        """
+        Saves metadata + Params to: path + "/metadata"
+        - class
+        - timestamp
+        - sparkVersion
+        - uid
+        - paramMap
+        - (optionally, extra metadata)
+        :param extraMetadata:  Extra metadata to be saved at same level as uid, paramMap, etc.
+        :param paramMap:  If given, this is saved in the "paramMap" field.
+        """
+        metadataPath = os.path.join(path, "metadata")
+        metadataJson = DefaultParamsWriter._get_metadata_to_save(instance,
+                                                                 sc,
+                                                                 extraMetadata,
+                                                                 paramMap)
+        sc.parallelize([metadataJson], 1).saveAsTextFile(metadataPath)
+
+    @staticmethod
+    def _get_metadata_to_save(instance, sc, extraMetadata=None, paramMap=None):
+        """
+        Helper for :py:meth:`DefaultParamsWriter.saveMetadata` which extracts the JSON to save.
+        This is useful for ensemble models which need to save metadata for many sub-models.
+
+        .. note:: :py:meth:`DefaultParamsWriter.saveMetadata` for details on what this includes.
+        """
+        uid = instance.uid
+        cls = instance.__module__ + '.' + instance.__class__.__name__
+        params = instance.extractParamMap()
+        jsonParams = {}
+        if paramMap is not None:
+            jsonParams = paramMap
+        else:
+            for p in params:
+                jsonParams[p.name] = params[p]
+        basicMetadata = {"class": cls, "timestamp": long(round(time.time() * 1000)),
+                         "sparkVersion": sc.version, "uid": uid, "paramMap": jsonParams}
+        if extraMetadata is not None:
+            basicMetadata.update(extraMetadata)
+        return json.dumps(basicMetadata, separators=[',',  ':'])
+
+
+@inherit_doc
+class DefaultParamsReadable(MLReadable):
+    """
+    .. note:: DeveloperApi
+
+    Helper trait for making simple :py:class:`Params` types readable.
+    If a :py:class:`Params` class stores all data as :py:class:`Param` values,
+    then extending this trait will provide a default implementation of reading saved
+    instances of the class. This only handles simple :py:class:`Param` types;
+    e.g., it will not handle :py:class:`Dataset`. See :py:class:`DefaultParamsWritable`,
+    the counterpart to this trait.
+
+    .. versionadded:: 2.3.0
+    """
+
+    @classmethod
+    def read(cls):
+        """Returns a DefaultParamsReader instance for this class."""
+        return DefaultParamsReader(cls)
+
+
+@inherit_doc
+class DefaultParamsReader(MLReader):
+    """
+    .. note:: DeveloperApi
+
+    Specialization of :py:class:`MLReader` for :py:class:`Params` types
+
+    Default :py:class:`MLReader` implementation for transformers and estimators that
+    contain basic (json-serializable) params and no data. This will not handle
+    more complex params or types with data (e.g., models with coefficients).
+
+    .. versionadded:: 2.3.0
+    """
+
+    def __init__(self, cls):
+        super(DefaultParamsReader, self).__init__()
+        self.cls = cls
+
+    @staticmethod
+    def __get_class(clazz):
+        """
+        Loads Python class from its name.
+        """
+        parts = clazz.split('.')
+        module = ".".join(parts[:-1])
+        m = __import__(module)
+        for comp in parts[1:]:
+            m = getattr(m, comp)
+        return m
+
+    def load(self, path):
+        metadata = DefaultParamsReader.loadMetadata(path, self.sc)
+        py_type = DefaultParamsReader.__get_class(metadata['class'])
+        instance = py_type()
+        instance._resetUid(metadata['uid'])
+        DefaultParamsReader.getAndSetParams(instance, metadata)
+        return instance
+
+    @staticmethod
+    def loadMetadata(path, sc, expectedClassName=""):
+        """
+        Load metadata saved using :py:meth:`DefaultParamsWriter.saveMetadata`
+
+        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
+        """
+        metadataPath = os.path.join(path, "metadata")
+        metadataStr = sc.textFile(metadataPath, 1).first()
+        loadedVals = DefaultParamsReader._parseMetaData(metadataStr, expectedClassName)
+        return loadedVals
+
+    @staticmethod
+    def _parseMetaData(metadataStr, expectedClassName=""):
+        """
+        Parse metadata JSON string produced by :py:meth`DefaultParamsWriter._get_metadata_to_save`.
+        This is a helper function for :py:meth:`DefaultParamsReader.loadMetadata`.
+
+        :param metadataStr:  JSON string of metadata
+        :param expectedClassName:  If non empty, this is checked against the loaded metadata.
+        """
+        metadata = json.loads(metadataStr)
+        className = metadata['class']
+        if len(expectedClassName) > 0:
+            assert className == expectedClassName, "Error loading metadata: Expected " + \
+                "class name {} but found class name {}".format(expectedClassName, className)
+        return metadata
+
+    @staticmethod
+    def getAndSetParams(instance, metadata):
+        """
+        Extract Params from metadata, and set them in the instance.
+        """
+        for paramName in metadata['paramMap']:
+            param = instance.getParam(paramName)
+            paramValue = metadata['paramMap'][paramName]
+            instance.set(param, paramValue)
+
+    @staticmethod
+    def loadParamsInstance(path, sc):
+        """
+        Load a :py:class:`Params` instance from the given path, and return it.
+        This assumes the instance inherits from :py:class:`MLReadable`.
+        """
+        metadata = DefaultParamsReader.loadMetadata(path, sc)
+        pythonClassName = metadata['class'].replace("org.apache.spark", "pyspark")
+        py_type = DefaultParamsReader.__get_class(pythonClassName)
+        instance = py_type.load(path)
+        return instance

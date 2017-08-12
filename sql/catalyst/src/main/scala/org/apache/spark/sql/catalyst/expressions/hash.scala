@@ -44,7 +44,7 @@ import org.apache.spark.unsafe.Platform
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark');
        8cde774d6f7333752ed72cacddb05126
@@ -78,7 +78,7 @@ case class Md5(child: Expression) extends UnaryExpression with ImplicitCastInput
     _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of `expr`.
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark', 256);
        529bc3b07127ecb7e53a4dcf1991d9152c24537d919178022b2c42657f79a26b
@@ -151,7 +151,7 @@ case class Sha2(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the `expr`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark');
        85f5955f4b27a9a4c2aab6ffe5d7189fc298b92c
@@ -178,7 +178,7 @@ case class Sha1(child: Expression) extends UnaryExpression with ImplicitCastInpu
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the `expr` as a bigint.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark');
        1557323817
@@ -247,8 +247,9 @@ abstract class HashExpression[E] extends Expression {
   override def nullable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children.isEmpty) {
-      TypeCheckResult.TypeCheckFailure("function hash requires at least one argument")
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
     } else {
       TypeCheckResult.TypeCheckSuccess
     }
@@ -521,10 +522,10 @@ abstract class InterpretedHashFunction {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
-        -1321691492
+       -1321691492
   """)
 case class Murmur3Hash(children: Seq[Expression], seed: Int) extends HashExpression[Int] {
   def this(arguments: Seq[Expression]) = this(arguments, 42)

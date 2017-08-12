@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
+
 import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
@@ -50,7 +52,7 @@ class SparkSqlParser(conf: SQLConf) extends AbstractSqlParser {
 /**
  * Builder that converts an ANTLR ParseTree into a LogicalPlan/Expression/TableIdentifier.
  */
-class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
+class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   import org.apache.spark.sql.catalyst.parser.ParserUtils._
 
   /**
@@ -103,7 +105,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
     }
     if (ctx.identifier != null) {
-      if (ctx.identifier.getText.toLowerCase != "noscan") {
+      if (ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
         throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
       }
       AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
@@ -228,11 +230,25 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[RefreshTable]] logical plan.
+   * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
-    val resourcePath = remainder(ctx.REFRESH.getSymbol).trim
-    RefreshResource(resourcePath)
+    val path = if (ctx.STRING != null) string(ctx.STRING) else extractUnquotedResourcePath(ctx)
+    RefreshResource(path)
+  }
+
+  private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
+    val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
+    validate(
+      unquotedPath != null && !unquotedPath.isEmpty,
+      "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
+      ctx)
+    val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
+    validate(
+      !forbiddenSymbols.exists(unquotedPath.contains(_)),
+      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
+      ctx)
+    unquotedPath
   }
 
   /**
@@ -288,7 +304,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         codegen = ctx.CODEGEN != null,
         cost = ctx.COST != null)
     } else {
-      ExplainCommand(OneRowRelation)
+      ExplainCommand(OneRowRelation())
     }
   }
 
@@ -322,8 +338,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       DescribeTableCommand(
         visitTableIdentifier(ctx.tableIdentifier),
         partitionSpec,
-        ctx.EXTENDED != null,
-        ctx.FORMATTED != null)
+        ctx.EXTENDED != null || ctx.FORMATTED != null)
     }
   }
 
@@ -564,7 +579,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     } else if (value.STRING != null) {
       string(value.STRING)
     } else if (value.booleanValue != null) {
-      value.getText.toLowerCase
+      value.getText.toLowerCase(Locale.ROOT)
     } else {
       value.getText
     }
@@ -648,7 +663,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
     import ctx._
-    val (user, system) = Option(ctx.identifier).map(_.getText.toLowerCase) match {
+    val (user, system) = Option(ctx.identifier).map(_.getText.toLowerCase(Locale.ROOT)) match {
       case None | Some("all") => (true, true)
       case Some("system") => (false, true)
       case Some("user") => (true, false)
@@ -672,13 +687,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * For example:
    * {{{
-   *   CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
-   *    [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
    * }}}
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
     val resources = ctx.resource.asScala.map { resource =>
-      val resourceType = resource.identifier.getText.toLowerCase
+      val resourceType = resource.identifier.getText.toLowerCase(Locale.ROOT)
       resourceType match {
         case "jar" | "file" | "archive" =>
           FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
@@ -694,7 +709,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       functionIdentifier.funcName,
       string(ctx.className),
       resources,
-      ctx.TEMPORARY != null)
+      ctx.TEMPORARY != null,
+      ctx.EXISTS != null,
+      ctx.REPLACE != null)
   }
 
   /**
@@ -739,6 +756,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       visitTableIdentifier(ctx.from),
       visitTableIdentifier(ctx.to),
       ctx.VIEW != null)
+  }
+
+  /**
+   * Create a [[AlterTableAddColumnsCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE table1
+   *   ADD COLUMNS (col_name data_type [COMMENT col_comment], ...);
+   * }}}
+   */
+  override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
+    AlterTableAddColumnsCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      visitColTypeList(ctx.columns)
+    )
   }
 
   /**
@@ -944,7 +977,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         .flatMap(_.orderedIdentifier.asScala)
         .map { orderedIdCtx =>
           Option(orderedIdCtx.ordering).map(_.getText).foreach { dir =>
-            if (dir.toLowerCase != "asc") {
+            if (dir.toLowerCase(Locale.ROOT) != "asc") {
               operationNotAllowed(s"Column ordering must be ASC, was '$dir'", ctx)
             }
           }
@@ -997,13 +1030,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val mayebePaths = remainder(ctx.identifier).trim
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
-        ctx.identifier.getText.toLowerCase match {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "file" => AddFileCommand(mayebePaths)
           case "jar" => AddJarCommand(mayebePaths)
           case other => operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.LIST =>
-        ctx.identifier.getText.toLowerCase match {
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "files" | "file" =>
             if (mayebePaths.length > 0) {
               ListFilesCommand(mayebePaths.split("\\s+"))
@@ -1055,13 +1088,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.skewSpec != null) {
       operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)
     }
-    if (ctx.bucketSpec != null) {
-      operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
-    }
+
     val dataCols = Option(ctx.columns).map(visitColTypeList).getOrElse(Nil)
     val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
     val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
+    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
     // to include the partition columns here explicitly
@@ -1102,6 +1134,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       tableType = tableType,
       storage = storage,
       schema = schema,
+      bucketSpec = bucketSpec,
       provider = Some(DDLUtils.HIVE_PROVIDER),
       partitionColumnNames = partitionCols.map(_.name),
       properties = properties,
@@ -1290,7 +1323,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (_, ffTable: TableFileFormatContext) => // OK
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
-        ffGeneric.identifier.getText.toLowerCase match {
+        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case ("sequencefile" | "textfile" | "rcfile") => // OK
           case fmt =>
             operationNotAllowed(
@@ -1298,7 +1331,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
               parentCtx)
         }
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
-        ffGeneric.identifier.getText.toLowerCase match {
+        ffGeneric.identifier.getText.toLowerCase(Locale.ROOT) match {
           case "textfile" => // OK
           case fmt => operationNotAllowed(
             s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)

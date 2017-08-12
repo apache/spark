@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import java.io._
 import java.net.URI
 import java.nio.charset.StandardCharsets
+import java.util.EnumSet
+import java.util.Locale
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -27,6 +29,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FSDataOutputStream, Path}
 import org.apache.hadoop.fs.permission.FsPermission
+import org.apache.hadoop.hdfs.DFSOutputStream
+import org.apache.hadoop.hdfs.client.HdfsDataOutputStream.SyncFlag
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
@@ -95,8 +99,8 @@ private[spark] class EventLoggingListener(
     }
 
     val workingPath = logPath + IN_PROGRESS
-    val uri = new URI(workingPath)
     val path = new Path(workingPath)
+    val uri = path.toUri
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
@@ -118,7 +122,7 @@ private[spark] class EventLoggingListener(
       val cstream = compressionCodec.map(_.compressedOutputStream(dstream)).getOrElse(dstream)
       val bstream = new BufferedOutputStream(cstream, outputBufferSize)
 
-      EventLoggingListener.initEventLog(bstream)
+      EventLoggingListener.initEventLog(bstream, testing, loggedEvents)
       fileSystem.setPermission(path, LOG_FILE_PERMISSIONS)
       writer = Some(new PrintWriter(bstream))
       logInfo("Logging events to %s".format(logPath))
@@ -137,7 +141,10 @@ private[spark] class EventLoggingListener(
     // scalastyle:on println
     if (flushLogger) {
       writer.foreach(_.flush())
-      hadoopDataStream.foreach(_.hflush())
+      hadoopDataStream.foreach(ds => ds.getWrappedStream match {
+        case wrapped: DFSOutputStream => wrapped.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH))
+        case _ => ds.hflush()
+      })
     }
     if (testing) {
       loggedEvents += eventJson
@@ -251,11 +258,17 @@ private[spark] class EventLoggingListener(
 
   private[spark] def redactEvent(
       event: SparkListenerEnvironmentUpdate): SparkListenerEnvironmentUpdate = {
-    // "Spark Properties" entry will always exist because the map is always populated with it.
-    val redactedProps = Utils.redact(sparkConf, event.environmentDetails("Spark Properties"))
-    val redactedEnvironmentDetails = event.environmentDetails +
-      ("Spark Properties" -> redactedProps)
-    SparkListenerEnvironmentUpdate(redactedEnvironmentDetails)
+    // environmentDetails maps a string descriptor to a set of properties
+    // Similar to:
+    // "JVM Information" -> jvmInformation,
+    // "Spark Properties" -> sparkProperties,
+    // ...
+    // where jvmInformation, sparkProperties, etc. are sequence of tuples.
+    // We go through the various  of properties and redact sensitive information from them.
+    val redactedProps = event.environmentDetails.map{ case (name, props) =>
+      name -> Utils.redact(sparkConf, props)
+    }
+    SparkListenerEnvironmentUpdate(redactedProps)
   }
 
 }
@@ -276,10 +289,17 @@ private[spark] object EventLoggingListener extends Logging {
    *
    * @param logStream Raw output stream to the event log file.
    */
-  def initEventLog(logStream: OutputStream): Unit = {
+  def initEventLog(
+      logStream: OutputStream,
+      testing: Boolean,
+      loggedEvents: ArrayBuffer[JValue]): Unit = {
     val metadata = SparkListenerLogStart(SPARK_VERSION)
-    val metadataJson = compact(JsonProtocol.logStartToJson(metadata)) + "\n"
+    val eventJson = JsonProtocol.logStartToJson(metadata)
+    val metadataJson = compact(eventJson) + "\n"
     logStream.write(metadataJson.getBytes(StandardCharsets.UTF_8))
+    if (testing && loggedEvents != null) {
+      loggedEvents += eventJson
+    }
   }
 
   /**
@@ -306,7 +326,7 @@ private[spark] object EventLoggingListener extends Logging {
       appId: String,
       appAttemptId: Option[String],
       compressionCodecName: Option[String] = None): String = {
-    val base = logBaseDir.toString.stripSuffix("/") + "/" + sanitize(appId)
+    val base = new Path(logBaseDir).toString.stripSuffix("/") + "/" + sanitize(appId)
     val codec = compressionCodecName.map("." + _).getOrElse("")
     if (appAttemptId.isDefined) {
       base + "_" + sanitize(appAttemptId.get) + codec
@@ -316,7 +336,7 @@ private[spark] object EventLoggingListener extends Logging {
   }
 
   private def sanitize(str: String): String = {
-    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase
+    str.replaceAll("[ :/]", "-").replaceAll("[.${}'\"]", "_").toLowerCase(Locale.ROOT)
   }
 
   /**

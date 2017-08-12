@@ -34,7 +34,7 @@ case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode {
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -42,7 +42,9 @@ case class InMemoryTableScanExec(
   override def output: Seq[Attribute] = attributes
 
   private def updateAttribute(expr: Expression): Expression = {
-    val attrMap = AttributeMap(relation.child.output.zip(output))
+    // attributes can be pruned so using relation's output.
+    // E.g., relation.output is [id, item] but this scan's output can be [item] only.
+    val attrMap = AttributeMap(relation.child.output.zip(relation.output))
     expr.transform {
       case attr: Attribute => attrMap.getOrElse(attr, attr)
     }

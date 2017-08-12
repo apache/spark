@@ -44,7 +44,7 @@ private[hive] case class HiveSimpleUDF(
     name: String, funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with CodegenFallback with Logging {
 
-  override def deterministic: Boolean = isUDFDeterministic
+  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 
@@ -123,7 +123,7 @@ private[hive] case class HiveGenericUDF(
 
   override def nullable: Boolean = true
 
-  override def deterministic: Boolean = isUDFDeterministic
+  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def foldable: Boolean =
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
