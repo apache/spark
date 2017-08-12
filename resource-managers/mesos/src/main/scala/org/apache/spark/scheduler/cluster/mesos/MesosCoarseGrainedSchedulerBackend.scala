@@ -53,11 +53,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     sc: SparkContext,
     master: String,
     securityManager: SecurityManager)
-  extends CoarseGrainedSchedulerBackend(
-    scheduler,
-    sc.env.rpcEnv)
-    with org.apache.mesos.Scheduler
-    with MesosSchedulerUtils {
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
+    with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
   this.hadoopDelegationTokenManager = Some(new HadoopDelegationTokenManager(
     sc.conf, sc.hadoopConfiguration))
