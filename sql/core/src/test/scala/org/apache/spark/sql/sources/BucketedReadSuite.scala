@@ -92,7 +92,7 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       val strategy = DataSourceStrategy(spark.sessionState.conf)
       val bucketedDataFrame = spark.table("bucketed_table").select("i", "j", "k")
-      val BucketSpec(numBuckets, bucketColumnNames, _) = bucketSpec
+      val BucketSpec(numBuckets, bucketColumnNames, _, _) = bucketSpec
       // Limit: bucket pruning only works when the bucket column has one and only one column
       assert(bucketColumnNames.length == 1)
       val bucketColumnIndex = bucketedDataFrame.schema.fieldIndex(bucketColumnNames.head)

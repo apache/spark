@@ -49,7 +49,8 @@ case object AllTuples extends Distribution
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+case class ClusteredDistribution(clustering: Seq[Expression], clustersOpt: Option[Int] = None,
+                                 useHiveHash: Boolean = false) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
@@ -234,7 +235,8 @@ case object SinglePartition extends Partitioning {
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int,
+                            useHiveHash: Boolean = false)
   extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[Expression] = expressions
@@ -243,7 +245,8 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
+    case ClusteredDistribution(requiredClustering, clustersOpt, clusteredByHiveHash)
+      if (clustersOpt.forall(_ == numPartitions) && clusteredByHiveHash == useHiveHash) =>
       expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
@@ -260,9 +263,15 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
-   * than numPartitions) based on hashing expressions.
+   * than numPartitions) based on hashing expressions. `HiveHash` will be returned when
+   * `useHiveHash` is true. This is for compatibility when insert data into Hive bucket table.
    */
-  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+  def partitionIdExpression: Expression =
+    if (useHiveHash) {
+      Pmod(new HiveHash(expressions), Literal(numPartitions))
+    } else {
+      Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+    }
 }
 
 /**
@@ -289,7 +298,8 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
+    case ClusteredDistribution(requiredClustering, clustersOpt, _)
+      if clustersOpt.forall(_  == numPartitions) =>
       ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }

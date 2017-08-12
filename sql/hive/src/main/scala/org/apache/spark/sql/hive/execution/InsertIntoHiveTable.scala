@@ -35,8 +35,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{CommandUtils, DataWritingCommand}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
@@ -226,6 +227,27 @@ case class InsertIntoHiveTable(
     new Path(getStagingDir(path, hadoopConf, stagingDir), "-ext-10000") // Hive uses 10000
   }
 
+  val partitionColumnNames = table.partitionColumnNames
+
+  override def requiredDestribution: Option[Seq[Distribution]] = table.bucketSpec match {
+    case Some(bucketSpec) =>
+      val numDynamicPartitions = partition.values.count(_.isEmpty)
+      val partitionAttributes = partitionColumnNames.map { name =>
+        query.resolve(name :: Nil, conf.resolver).getOrElse {
+          throw new AnalysisException(
+            s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+        }.asInstanceOf[Attribute]
+      }
+      val allColumns = query.output
+      val partitionSet = AttributeSet(partitionAttributes)
+      val dataColumns = allColumns.filterNot(partitionSet.contains)
+      val bucketColumns = table.bucketSpec.get
+        .bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      Some(Seq(ClusteredDistribution(partitionAttributes ++ bucketColumns,
+        Option(bucketSpec.numBuckets), useHiveHash = true)))
+    case None => super.requiredDestribution
+  }
+
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
@@ -279,16 +301,12 @@ case class InsertIntoHiveTable(
       case (key, None) => key -> ""
     }
 
-    // All partition column names in the format of "<column name 1>/<column name 2>/..."
-    val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
-    val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
-
     // By this time, the partition map must match the table's partition columns
     if (partitionColumnNames.toSet != partition.keySet) {
       throw new SparkException(
         s"""Requested partitioning does not match the ${table.identifier.table} table:
            |Requested partitions: ${partition.keys.mkString(",")}
-           |Table partitions: ${table.partitionColumnNames.mkString(",")}""".stripMargin)
+           |Table partitions: ${partitionColumnNames.mkString(",")}""".stripMargin)
     }
 
     // Validate partition spec if there exist any dynamic partitions
@@ -311,30 +329,10 @@ case class InsertIntoHiveTable(
       }
     }
 
-    table.bucketSpec match {
-      case Some(bucketSpec) =>
-        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
-        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
-        // set to false
-        val enforceBucketingConfig = "hive.enforce.bucketing"
-        val enforceSortingConfig = "hive.enforce.sorting"
-
-        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
-          "currently does NOT populate bucketed output which is compatible with Hive."
-
-        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
-          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
-          throw new AnalysisException(message)
-        } else {
-          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
-            s"$enforceSortingConfig are set to false.")
-        }
-      case _ => // do nothing since table has no bucketing
-    }
-
+    val jobId = java.util.UUID.randomUUID().toString
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
-      jobId = java.util.UUID.randomUUID().toString,
+      jobId = jobId,
       outputPath = tmpLocation.toString)
 
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
@@ -352,9 +350,9 @@ case class InsertIntoHiveTable(
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
-      bucketSpec = None,
+      bucketSpec = table.bucketSpec,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = Map.empty)
+      options = Map("jobId" -> jobId))
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {

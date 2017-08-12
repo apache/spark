@@ -52,4 +52,12 @@ class PartitioningSuite extends SparkFunSuite {
     assert(partitioningA.guarantees(partitioningA))
     assert(partitioningA.compatibleWith(partitioningA))
   }
+
+  test("HashPartitioning compatibility should be sensitive to whether Hive hash is used.") {
+    val expressions = Seq(Literal(2), Literal(3))
+    val partitioningA = HashPartitioning(expressions, 100, useHiveHash = false)
+    val partitioningB = HashPartitioning(expressions, 100, useHiveHash = true)
+    assert(!partitioningA.compatibleWith(partitioningB))
+    assert(!partitioningA.guarantees(partitioningB))
+  }
 }

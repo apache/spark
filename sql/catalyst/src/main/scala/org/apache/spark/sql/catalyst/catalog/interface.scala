@@ -155,11 +155,13 @@ case class CatalogTablePartition(
  * @param numBuckets number of buckets.
  * @param bucketColumnNames the names of the columns that used to generate the bucket id.
  * @param sortColumnNames the names of the columns that used to sort data in each bucket.
+ * @param isHiveBucket if the spec is for Hive bucket table.
  */
 case class BucketSpec(
     numBuckets: Int,
     bucketColumnNames: Seq[String],
-    sortColumnNames: Seq[String]) {
+    sortColumnNames: Seq[String],
+    isHiveBucket: Boolean = false) {
   if (numBuckets <= 0 || numBuckets >= 100000) {
     throw new AnalysisException(
       s"Number of buckets should be greater than 0 but less than 100000. Got `$numBuckets`")
@@ -172,7 +174,12 @@ case class BucketSpec(
     } else {
       ""
     }
-    s"$numBuckets buckets, $bucketString$sortString"
+    val isHiveBucketString = if (isHiveBucket) {
+      ", it is hive bucket."
+    } else {
+      ", it is not hive bucket."
+    }
+    s"$numBuckets buckets, $bucketString$sortString$isHiveBucketString"
   }
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {

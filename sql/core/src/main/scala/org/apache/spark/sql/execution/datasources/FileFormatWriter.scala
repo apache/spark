@@ -22,14 +22,14 @@ import java.util.{Date, UUID}
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
+import org.apache.spark.internal.io.{FileCommitProtocol, HadoopMRTaskCommitStatus, SparkHadoopWriterUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
@@ -66,6 +66,7 @@ object FileFormatWriter extends Logging {
       val allColumns: Seq[Attribute],
       val dataColumns: Seq[Attribute],
       val partitionColumns: Seq[Attribute],
+      val numBuckets: Option[Int],
       val bucketIdExpression: Option[Expression],
       val path: String,
       val customPartitionLocations: Map[TablePartitionSpec, String],
@@ -126,7 +127,7 @@ object FileFormatWriter extends Logging {
       // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
       // guarantee the data distribution is same between shuffle and bucketed data source, which
       // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+      HashPartitioning(bucketColumns, spec.numBuckets, spec.isHiveBucket).partitionIdExpression
     }
     val sortColumns = bucketSpec.toSeq.flatMap {
       spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -145,6 +146,7 @@ object FileFormatWriter extends Logging {
       allColumns = allColumns,
       dataColumns = dataColumns,
       partitionColumns = partitionColumns,
+      numBuckets = bucketSpec.map(_.numBuckets),
       bucketIdExpression = bucketIdExpression,
       path = outputSpec.outputPath,
       customPartitionLocations = outputSpec.customPartitionLocations,
@@ -170,6 +172,12 @@ object FileFormatWriter extends Logging {
 
     SQLExecution.checkSQLExecutionId(sparkSession)
 
+    bucketSpec match {
+      case Some(spec) if spec.isHiveBucket =>
+        job.getConfiguration.setBoolean("spark.sql.bucket.fileNameWithPartitionId", false)
+      case _ => // no-op
+
+    }
     // This call shouldn't be put into the `try` block below because it only initializes and
     // prepares the job, any exception thrown from here shouldn't cause abortJob() to be called.
     committer.setupJob(job)
@@ -184,6 +192,8 @@ object FileFormatWriter extends Logging {
           child = plan).execute()
       }
       val ret = new Array[WriteTaskResult](rdd.partitions.length)
+      val updatedPartitions = mutable.HashSet[String]()
+      val taskCommittedPaths = mutable.HashSet[String]()
       sparkSession.sparkContext.runJob(
         rdd,
         (taskContext: TaskContext, iter: Iterator[InternalRow]) => {
@@ -198,9 +208,21 @@ object FileFormatWriter extends Logging {
         0 until rdd.partitions.length,
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
+          if (bucketSpec.nonEmpty && res.commitMsg.obj.isInstanceOf[HadoopMRTaskCommitStatus]) {
+            updatedPartitions ++= res.summary.updatedPartitions
+            taskCommittedPaths ++=
+              res.commitMsg.obj.asInstanceOf[HadoopMRTaskCommitStatus].commitPaths
+          }
           ret(index) = res
         })
 
+      bucketSpec match {
+        case Some(spec) if spec.isHiveBucket =>
+          // Create a new file for each Hive empty bucket.
+          fillWithEmptyBucketFiles(committer, caseInsensitiveOptions.get("jobId").get,
+            job, description, updatedPartitions.toSet, taskCommittedPaths.toSet)
+        case _ => // no-op
+      }
       val commitMsgs = ret.map(_.commitMsg)
 
       committer.commitJob(job, commitMsgs)
@@ -276,6 +298,38 @@ object FileFormatWriter extends Logging {
         throw e
       case t: Throwable =>
         throw new SparkException("Task failed while writing rows.", t)
+    }
+  }
+
+  private def fillWithEmptyBucketFiles(committer: FileCommitProtocol,
+                                       jobId: String,
+                                       job: Job,
+                                       desc: FileFormatWriter.WriteJobDescription,
+                                       updatedPartitions: Set[String],
+                                       baseDirs: Set[String]): Unit = {
+    val fileSystem = FileSystem.get(job.getConfiguration)
+    updatedPartitions.foreach { updatedPartition =>
+      val bucketIds = baseDirs.flatMap { baseDir =>
+        val partitionAbsDir = new Path(baseDir, updatedPartition)
+        if (fileSystem.exists(partitionAbsDir)) {
+          // Return bucket ids.
+          fileSystem.listStatus(partitionAbsDir)
+            .flatMap( status => BucketingUtils.getBucketId(status.getPath.getName))
+        } else {
+          Nil
+        }
+      }
+      val missingBucketIds = (0 until desc.numBuckets.get).toSet -- bucketIds
+      missingBucketIds.foreach { bucketId =>
+        baseDirs.find(dir => fileSystem.exists(new Path(dir, updatedPartition))) match {
+          case Some(dir) =>
+            val partitionAbsDir = new Path(dir, updatedPartition)
+            val extension = s"${BucketingUtils.bucketIdToString(bucketId)}.c000"
+            FileSystem.get(job.getConfiguration).createNewFile(
+              new Path(partitionAbsDir, f"part-$jobId$extension"))
+          case None => // no-op
+        }
+      }
     }
   }
 

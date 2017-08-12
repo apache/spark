@@ -80,6 +80,31 @@ class DistributionSuite extends SparkFunSuite {
       false)
 
     checkSatisfied(
+      HashPartitioning(Seq('a, 'b), 10),
+      ClusteredDistribution(Seq('a, 'b), Some(10)),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b), 10),
+      ClusteredDistribution(Seq('a, 'b), Some(5)),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b), 10, useHiveHash = true),
+      ClusteredDistribution(Seq('a, 'b), Some(10), useHiveHash = true),
+      true)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b), 10, useHiveHash = false),
+      ClusteredDistribution(Seq('a, 'b), Some(10), useHiveHash = true),
+      false)
+
+    checkSatisfied(
+      HashPartitioning(Seq('a, 'b), 10, useHiveHash = true),
+      ClusteredDistribution(Seq('a, 'b), Some(10), useHiveHash = false),
+      false)
+
+    checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
       AllTuples,
       false)

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -50,6 +51,8 @@ trait RunnableCommand extends logical.Command {
   def run(sparkSession: SparkSession): Seq[Row] = {
     throw new NotImplementedError
   }
+
+  def requiredDestribution: Option[Seq[Distribution]] = None
 }
 
 /**
@@ -96,6 +99,11 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+  }
+
+  /** Specifies any partition requirements on the input data for this operator. */
+  override def requiredChildDistribution: Seq[Distribution] = {
+    cmd.requiredDestribution.getOrElse(super.requiredChildDistribution)
   }
 }
 

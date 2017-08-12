@@ -427,12 +427,13 @@ class TreeNodeSuite extends SparkFunSuite {
 
     // Converts BucketSpec to JSON
     assertJSON(
-      BucketSpec(1, Seq("bucket"), Seq("sort")),
+      BucketSpec(1, Seq("bucket"), Seq("sort"), true),
       JObject(
         "product-class" -> classOf[BucketSpec].getName,
         "numBuckets" -> 1,
         "bucketColumnNames" -> "[bucket]",
-        "sortColumnNames" -> "[sort]"))
+        "sortColumnNames" -> "[sort]",
+        "isHiveBucket" -> true))
 
     // Converts WindowFrame to JSON
     assertJSON(
