@@ -578,7 +578,7 @@ object SQLConf {
       "When the generated function exceeds this threshold, " +
       "the whole-stage codegen is deactivated for this subtree of the current query plan.")
     .intConf
-    .createWithDefault(1500)
+    .createWithDefault(Int.MaxValue)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
