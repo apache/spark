@@ -15,12 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+
+import org.apache.spark.annotation.Private;
 
 /**
  * Tags a field to be indexed when storing an object.
@@ -46,6 +48,7 @@ import java.lang.annotation.Target;
  * of those values.
  * </p>
  */
+@Private
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.FIELD, ElementType.METHOD})
 public @interface KVIndex {

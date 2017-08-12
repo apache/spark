@@ -564,6 +564,14 @@ object SQLConf {
     .intConf
     .createWithDefault(20)
 
+  val CODEGEN_LOGGING_MAX_LINES = buildConf("spark.sql.codegen.logging.maxLines")
+    .internal()
+    .doc("The maximum number of codegen lines to log when errors occur. Use -1 for unlimited.")
+    .intConf
+    .checkValue(maxLines => maxLines >= -1, "The maximum must be a positive integer, 0 to " +
+      "disable logging or -1 to apply no limit.")
+    .createWithDefault(1000)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -836,24 +844,47 @@ object SQLConf {
       .stringConf
       .createWithDefaultFunction(() => TimeZone.getDefault.getID)
 
+  val WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.windowExec.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of rows guaranteed to be held in memory by the window operator")
+      .intConf
+      .createWithDefault(4096)
+
   val WINDOW_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.windowExec.buffer.spill.threshold")
       .internal()
-      .doc("Threshold for number of rows buffered in window operator")
+      .doc("Threshold for number of rows to be spilled by window operator")
       .intConf
-      .createWithDefault(4096)
+      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+
+  val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of rows guaranteed to be held in memory by the sort merge " +
+        "join operator")
+      .intConf
+      .createWithDefault(Int.MaxValue)
 
   val SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.spill.threshold")
       .internal()
-      .doc("Threshold for number of rows buffered in sort merge join operator")
+      .doc("Threshold for number of rows to be spilled by sort merge join operator")
       .intConf
-      .createWithDefault(Int.MaxValue)
+      .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
+
+  val CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.cartesianProductExec.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of rows guaranteed to be held in memory by the cartesian " +
+        "product operator")
+      .intConf
+      .createWithDefault(4096)
 
   val CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD =
     buildConf("spark.sql.cartesianProductExec.buffer.spill.threshold")
       .internal()
-      .doc("Threshold for number of rows buffered in cartesian product operator")
+      .doc("Threshold for number of rows to be spilled by cartesian product operator")
       .intConf
       .createWithDefault(UnsafeExternalSorter.DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD.toInt)
 
@@ -1004,6 +1035,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
+  def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
+
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
 
@@ -1127,10 +1160,18 @@ class SQLConf extends Serializable with Logging {
 
   def joinReorderDPStarFilter: Boolean = getConf(SQLConf.JOIN_REORDER_DP_STAR_FILTER)
 
+  def windowExecBufferInMemoryThreshold: Int = getConf(WINDOW_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
+
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def sortMergeJoinExecBufferInMemoryThreshold: Int =
+    getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def sortMergeJoinExecBufferSpillThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD)
+
+  def cartesianProductExecBufferInMemoryThreshold: Int =
+    getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
   def cartesianProductExecBufferSpillThreshold: Int =
     getConf(CARTESIAN_PRODUCT_EXEC_BUFFER_SPILL_THRESHOLD)
@@ -1218,10 +1259,12 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    val entry = sqlConfEntries.get(key)
-    if (entry != null && defaultValue != "<undefined>") {
-      // Only verify configs in the SQLConf object
-      entry.valueConverter(defaultValue)
+    if (defaultValue != null && defaultValue != "<undefined>") {
+      val entry = sqlConfEntries.get(key)
+      if (entry != null) {
+        // Only verify configs in the SQLConf object
+        entry.valueConverter(defaultValue)
+      }
     }
     Option(settings.get(key)).getOrElse(defaultValue)
   }

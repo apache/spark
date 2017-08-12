@@ -152,8 +152,10 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       sc, checkpointDirPath.toString, originalRDD.partitioner)
     if (newRDD.partitions.length != originalRDD.partitions.length) {
       throw new SparkException(
-        s"Checkpoint RDD $newRDD(${newRDD.partitions.length}) has different " +
-          s"number of partitions from original RDD $originalRDD(${originalRDD.partitions.length})")
+        "Checkpoint RDD has a different number of partitions from original RDD. Original " +
+          s"RDD [ID: ${originalRDD.id}, num of partitions: ${originalRDD.partitions.length}]; " +
+          s"Checkpoint RDD [ID: ${newRDD.id}, num of partitions: " +
+          s"${newRDD.partitions.length}].")
     }
     newRDD
   }

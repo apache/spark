@@ -21,7 +21,7 @@ import java.io._
 import java.util.Locale
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-import net.jpountz.lz4.LZ4BlockOutputStream
+import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 import org.xerial.snappy.{Snappy, SnappyInputStream, SnappyOutputStream}
 
 import org.apache.spark.SparkConf
@@ -115,7 +115,10 @@ class LZ4CompressionCodec(conf: SparkConf) extends CompressionCodec {
     new LZ4BlockOutputStream(s, blockSize)
   }
 
-  override def compressedInputStream(s: InputStream): InputStream = new LZ4BlockInputStream(s)
+  override def compressedInputStream(s: InputStream): InputStream = {
+    val disableConcatenationOfByteStream = false
+    new LZ4BlockInputStream(s, disableConcatenationOfByteStream)
+  }
 }
 
 

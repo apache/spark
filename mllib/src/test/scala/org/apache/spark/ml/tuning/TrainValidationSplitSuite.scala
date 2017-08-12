@@ -209,7 +209,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(paramMaps)
       .setSeed(42L)
 
-    ValidatorParamsSuiteHelpers.testFileMove(tvs)
+    ValidatorParamsSuiteHelpers.testFileMove(tvs, tempDir)
   }
 
   test("read/write: TrainValidationSplitModel") {

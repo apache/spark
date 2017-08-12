@@ -15,10 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.util.Iterator;
 import java.util.List;
+
+import org.apache.spark.annotation.Private;
 
 /**
  * An iterator for KVStore.
@@ -28,6 +30,7 @@ import java.util.List;
  * explicitly close iterators after they're used.
  * </p>
  */
+@Private
 public interface KVStoreIterator<T> extends Iterator<T>, AutoCloseable {
 
   /**
