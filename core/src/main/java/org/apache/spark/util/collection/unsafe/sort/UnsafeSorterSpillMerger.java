@@ -27,22 +27,18 @@ final class UnsafeSorterSpillMerger {
   private final PriorityQueue<UnsafeSorterIterator> priorityQueue;
 
   UnsafeSorterSpillMerger(
-      final RecordComparator recordComparator,
-      final PrefixComparator prefixComparator,
-      final int numSpills) {
-    final Comparator<UnsafeSorterIterator> comparator = new Comparator<UnsafeSorterIterator>() {
-
-      @Override
-      public int compare(UnsafeSorterIterator left, UnsafeSorterIterator right) {
-        final int prefixComparisonResult =
-          prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
-        if (prefixComparisonResult == 0) {
-          return recordComparator.compare(
-            left.getBaseObject(), left.getBaseOffset(),
-            right.getBaseObject(), right.getBaseOffset());
-        } else {
-          return prefixComparisonResult;
-        }
+      RecordComparator recordComparator,
+      PrefixComparator prefixComparator,
+      int numSpills) {
+    Comparator<UnsafeSorterIterator> comparator = (left, right) -> {
+      int prefixComparisonResult =
+        prefixComparator.compare(left.getKeyPrefix(), right.getKeyPrefix());
+      if (prefixComparisonResult == 0) {
+        return recordComparator.compare(
+          left.getBaseObject(), left.getBaseOffset(),
+          right.getBaseObject(), right.getBaseOffset());
+      } else {
+        return prefixComparisonResult;
       }
     };
     priorityQueue = new PriorityQueue<>(numSpills, comparator);

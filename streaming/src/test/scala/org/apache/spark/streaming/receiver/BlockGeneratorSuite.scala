@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.reflectiveCalls
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._
@@ -90,7 +89,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs (data1)
     assert(listener.onAddDataCalled === false) // should be called only with addDataWithCallback()
 
-    // Verify addDataWithCallback() add data+metadata and and callbacks are called correctly
+    // Verify addDataWithCallback() add data+metadata and callbacks are called correctly
     val data2 = 11 to 20
     val metadata2 = data2.map { _.toString }
     data2.zip(metadata2).foreach { case (d, m) => blockGenerator.addDataWithCallback(d, m) }
@@ -103,7 +102,7 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
       listener.pushedData.asScala.toSeq should contain theSameElementsInOrderAs combined
     }
 
-    // Verify addMultipleDataWithCallback() add data+metadata and and callbacks are called correctly
+    // Verify addMultipleDataWithCallback() add data+metadata and callbacks are called correctly
     val data3 = 21 to 30
     val metadata3 = "metadata"
     blockGenerator.addMultipleDataWithCallback(data3.iterator, metadata3)
@@ -202,21 +201,17 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("block push errors are reported") {
     val listener = new TestBlockGeneratorListener {
-      @volatile var errorReported = false
       override def onPushBlock(
           blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
         throw new SparkException("test")
       }
-      override def onError(message: String, throwable: Throwable): Unit = {
-        errorReported = true
-      }
     }
     blockGenerator = new BlockGenerator(listener, 0, conf)
     blockGenerator.start()
-    assert(listener.errorReported === false)
+    assert(listener.onErrorCalled === false)
     blockGenerator.addData(1)
     eventually(timeout(1 second), interval(10 milliseconds)) {
-      assert(listener.errorReported === true)
+      assert(listener.onErrorCalled === true)
     }
     blockGenerator.stop()
   }
@@ -243,12 +238,15 @@ class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
     @volatile var onGenerateBlockCalled = false
     @volatile var onAddDataCalled = false
     @volatile var onPushBlockCalled = false
+    @volatile var onErrorCalled = false
 
     override def onPushBlock(blockId: StreamBlockId, arrayBuffer: mutable.ArrayBuffer[_]): Unit = {
       pushedData.addAll(arrayBuffer.asJava)
       onPushBlockCalled = true
     }
-    override def onError(message: String, throwable: Throwable): Unit = {}
+    override def onError(message: String, throwable: Throwable): Unit = {
+      onErrorCalled = true
+    }
     override def onGenerateBlock(blockId: StreamBlockId): Unit = {
       onGenerateBlockCalled = true
     }

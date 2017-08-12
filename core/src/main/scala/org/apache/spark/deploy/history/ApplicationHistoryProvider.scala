@@ -19,6 +19,8 @@ package org.apache.spark.deploy.history
 
 import java.util.zip.ZipOutputStream
 
+import scala.xml.Node
+
 import org.apache.spark.SparkException
 import org.apache.spark.ui.SparkUI
 
@@ -28,7 +30,8 @@ private[spark] case class ApplicationAttemptInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    completed: Boolean = false)
+    completed: Boolean = false,
+    appSparkVersion: String)
 
 private[spark] case class ApplicationHistoryInfo(
     id: String,
@@ -73,11 +76,35 @@ private[history] case class LoadedAppUI(
 private[history] abstract class ApplicationHistoryProvider {
 
   /**
+   * Returns the count of application event logs that the provider is currently still processing.
+   * History Server UI can use this to indicate to a user that the application listing on the UI
+   * can be expected to list additional known applications once the processing of these
+   * application event logs completes.
+   *
+   * A History Provider that does not have a notion of count of event logs that may be pending
+   * for processing need not override this method.
+   *
+   * @return Count of application event logs that are currently under process
+   */
+  def getEventLogsUnderProcess(): Int = {
+    0
+  }
+
+  /**
+   * Returns the time the history provider last updated the application history information
+   *
+   * @return 0 if this is undefined or unsupported, otherwise the last updated time in millis
+   */
+  def getLastUpdatedTime(): Long = {
+    0
+  }
+
+  /**
    * Returns a list of applications available for the history server to show.
    *
    * @return List of all know applications.
    */
-  def getListing(): Iterable[ApplicationHistoryInfo]
+  def getListing(): Iterator[ApplicationHistoryInfo]
 
   /**
    * Returns the Spark UI for a specific application.
@@ -109,4 +136,13 @@ private[history] abstract class ApplicationHistoryProvider {
   @throws(classOf[SparkException])
   def writeEventLogs(appId: String, attemptId: Option[String], zipStream: ZipOutputStream): Unit
 
+  /**
+   * @return the [[ApplicationHistoryInfo]] for the appId if it exists.
+   */
+  def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo]
+
+  /**
+   * @return html text to display when the application list is empty
+   */
+  def getEmptyListingHtml(): Seq[Node] = Seq.empty
 }

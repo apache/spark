@@ -33,8 +33,8 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
   }
 
   protected def assertEquivalent(e1: Expression, e2: Expression): Unit = {
-    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation).analyze
-    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation).analyze)
+    val correctAnswer = Project(Alias(e2, "out")() :: Nil, OneRowRelation()).analyze
+    val actual = Optimize.execute(Project(Alias(e1, "out")() :: Nil, OneRowRelation()).analyze)
     comparePlans(actual, correctAnswer)
   }
 
@@ -88,6 +88,16 @@ class SimplifyConditionalSuite extends PlanTest with PredicateHelper {
     // Make sure this doesn't trigger if there is a non-foldable branch before the true branch
     assertEquivalent(
       CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None),
-      CaseWhen(normalBranch :: trueBranch :: normalBranch :: Nil, None))
+      CaseWhen(normalBranch :: trueBranch :: Nil, None))
+  }
+
+  test("simplify CaseWhen, prune branches following a definite true") {
+    assertEquivalent(
+      CaseWhen(normalBranch :: unreachableBranch ::
+        unreachableBranch :: nullBranch ::
+        trueBranch :: normalBranch ::
+        Nil,
+        None),
+      CaseWhen(normalBranch :: trueBranch :: Nil, None))
   }
 }

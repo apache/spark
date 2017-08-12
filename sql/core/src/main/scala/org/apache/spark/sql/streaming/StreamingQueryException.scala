@@ -17,39 +17,30 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{Offset, StreamExecution}
+import org.apache.spark.annotation.InterfaceStability
 
 /**
- * :: Experimental ::
  * Exception that stopped a [[StreamingQuery]]. Use `cause` get the actual exception
  * that caused the failure.
- * @param query      Query that caused the exception
  * @param message     Message of this exception
  * @param cause       Internal cause of this exception
- * @param startOffset Starting offset (if known) of the range of data in which exception occurred
- * @param endOffset   Ending offset (if known) of the range of data in exception occurred
+ * @param startOffset Starting offset in json of the range of data in which exception occurred
+ * @param endOffset   Ending offset in json of the range of data in exception occurred
  * @since 2.0.0
  */
-@Experimental
+@InterfaceStability.Evolving
 class StreamingQueryException private[sql](
-    @transient val query: StreamingQuery,
+    private val queryDebugString: String,
     val message: String,
     val cause: Throwable,
-    val startOffset: Option[Offset] = None,
-    val endOffset: Option[Offset] = None)
+    val startOffset: String,
+    val endOffset: String)
   extends Exception(message, cause) {
 
   /** Time when the exception occurred */
   val time: Long = System.currentTimeMillis
 
-  override def toString(): String = {
-    val causeStr =
-      s"${cause.getMessage} ${cause.getStackTrace.take(10).mkString("", "\n|\t", "\n")}"
-    s"""
-       |$causeStr
-       |
-       |${query.asInstanceOf[StreamExecution].toDebugString}
-       """.stripMargin
-  }
+  override def toString(): String =
+    s"""${classOf[StreamingQueryException].getName}: ${cause.getMessage}
+       |$queryDebugString""".stripMargin
 }

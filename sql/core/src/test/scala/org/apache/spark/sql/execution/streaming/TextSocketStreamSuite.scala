@@ -148,11 +148,50 @@ class TextSocketStreamSuite extends StreamTest with SharedSQLContext with Before
     }
   }
 
+  test("user-specified schema given") {
+    val provider = new TextSocketSourceProvider
+    val userSpecifiedSchema = StructType(
+      StructField("name", StringType) ::
+      StructField("area", StringType) :: Nil)
+    val exception = intercept[AnalysisException] {
+      provider.sourceSchema(
+        sqlContext, Some(userSpecifiedSchema),
+        "",
+        Map("host" -> "localhost", "port" -> "1234"))
+    }
+    assert(exception.getMessage.contains(
+      "socket source does not support a user-specified schema"))
+  }
+
   test("no server up") {
     val provider = new TextSocketSourceProvider
     val parameters = Map("host" -> "localhost", "port" -> "0")
     intercept[IOException] {
       source = provider.createSource(sqlContext, "", None, "", parameters)
+    }
+  }
+
+  test("input row metrics") {
+    serverThread = new ServerThread()
+    serverThread.start()
+
+    val provider = new TextSocketSourceProvider
+    val parameters = Map("host" -> "localhost", "port" -> serverThread.port.toString)
+    source = provider.createSource(sqlContext, "", None, "", parameters)
+
+    failAfter(streamingTimeout) {
+      serverThread.enqueue("hello")
+      while (source.getOffset.isEmpty) {
+        Thread.sleep(10)
+      }
+      val batch = source.getBatch(None, source.getOffset.get).as[String]
+      batch.collect()
+      val numRowsMetric =
+        batch.queryExecution.executedPlan.collectLeaves().head.metrics.get("numOutputRows")
+      assert(numRowsMetric.nonEmpty)
+      assert(numRowsMetric.get.value === 1)
+      source.stop()
+      source = null
     }
   }
 

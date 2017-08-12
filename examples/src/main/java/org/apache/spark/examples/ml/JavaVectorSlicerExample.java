@@ -20,9 +20,8 @@ package org.apache.spark.examples.ml;
 import org.apache.spark.sql.SparkSession;
 
 // $example on$
+import java.util.Arrays;
 import java.util.List;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.ml.attribute.Attribute;
 import org.apache.spark.ml.attribute.AttributeGroup;
@@ -43,14 +42,14 @@ public class JavaVectorSlicerExample {
       .getOrCreate();
 
     // $example on$
-    Attribute[] attrs = new Attribute[]{
+    Attribute[] attrs = {
       NumericAttribute.defaultAttr().withName("f1"),
       NumericAttribute.defaultAttr().withName("f2"),
       NumericAttribute.defaultAttr().withName("f3")
     };
     AttributeGroup group = new AttributeGroup("userFeatures", attrs);
 
-    List<Row> data = Lists.newArrayList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
     );

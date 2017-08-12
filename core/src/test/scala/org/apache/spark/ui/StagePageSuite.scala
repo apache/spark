@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui
 
+import java.util.Locale
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -35,26 +36,16 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
 
   private val peakExecutionMemory = 10
 
-  test("peak execution memory only displayed if unsafe is enabled") {
-    val unsafeConf = "spark.sql.unsafe.enabled"
-    val conf = new SparkConf(false).set(unsafeConf, "true")
-    val html = renderStagePage(conf).toString().toLowerCase
+  test("peak execution memory should displayed") {
+    val conf = new SparkConf(false)
+    val html = renderStagePage(conf).toString().toLowerCase(Locale.ROOT)
     val targetString = "peak execution memory"
     assert(html.contains(targetString))
-    // Disable unsafe and make sure it's not there
-    val conf2 = new SparkConf(false).set(unsafeConf, "false")
-    val html2 = renderStagePage(conf2).toString().toLowerCase
-    assert(!html2.contains(targetString))
-    // Avoid setting anything; it should be displayed by default
-    val conf3 = new SparkConf(false)
-    val html3 = renderStagePage(conf3).toString().toLowerCase
-    assert(html3.contains(targetString))
   }
 
   test("SPARK-10543: peak execution memory should be per-task rather than cumulative") {
-    val unsafeConf = "spark.sql.unsafe.enabled"
-    val conf = new SparkConf(false).set(unsafeConf, "true")
-    val html = renderStagePage(conf).toString().toLowerCase
+    val conf = new SparkConf(false)
+    val html = renderStagePage(conf).toString().toLowerCase(Locale.ROOT)
     // verify min/25/50/75/max show task value not cumulative values
     assert(html.contains(s"<td>$peakExecutionMemory.0 b</td>" * 5))
   }
@@ -87,7 +78,7 @@ class StagePageSuite extends SparkFunSuite with LocalSparkContext {
         val taskInfo = new TaskInfo(taskId, taskId, 0, 0, "0", "localhost", TaskLocality.ANY, false)
         jobListener.onStageSubmitted(SparkListenerStageSubmitted(stageInfo))
         jobListener.onTaskStart(SparkListenerTaskStart(0, 0, taskInfo))
-        taskInfo.markFinished(TaskState.FINISHED)
+        taskInfo.markFinished(TaskState.FINISHED, System.currentTimeMillis())
         val taskMetrics = TaskMetrics.empty
         taskMetrics.incPeakExecutionMemory(peakExecutionMemory)
         jobListener.onTaskEnd(

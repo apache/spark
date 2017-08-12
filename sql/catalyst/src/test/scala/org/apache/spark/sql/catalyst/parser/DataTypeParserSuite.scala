@@ -30,7 +30,7 @@ class DataTypeParserSuite extends SparkFunSuite {
     }
   }
 
-  def intercept(sql: String): Unit =
+  def intercept(sql: String): ParseException =
     intercept[ParseException](CatalystSqlParser.parseDataType(sql))
 
   def unsupported(dataTypeString: String): Unit = {
@@ -116,6 +116,12 @@ class DataTypeParserSuite extends SparkFunSuite {
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
+  unsupported("struct<x int, y string>")
+
+  test("Do not print empty parentheses for no params") {
+    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
+    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+  }
 
   // DataType parser accepts certain reserved keywords.
   checkDataType(
@@ -125,16 +131,11 @@ class DataTypeParserSuite extends SparkFunSuite {
         StructField("DATE", BooleanType, true) :: Nil)
   )
 
-  // Define struct columns without ':'
-  checkDataType(
-    "struct<x int, y string>",
-    (new StructType).add("x", IntegerType).add("y", StringType))
-
-  checkDataType(
-    "struct<`x``y` int>",
-    (new StructType).add("x`y", IntegerType))
-
   // Use SQL keywords.
   checkDataType("struct<end: long, select: int, from: string>",
     (new StructType).add("end", LongType).add("select", IntegerType).add("from", StringType))
+
+  // DataType parser accepts comments.
+  checkDataType("Struct<x: INT, y: STRING COMMENT 'test'>",
+    (new StructType).add("x", IntegerType).add("y", StringType, true, "test"))
 }

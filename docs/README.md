@@ -19,8 +19,8 @@ installed. Also install the following libraries:
     $ sudo gem install jekyll jekyll-redirect-from pygments.rb
     $ sudo pip install Pygments
     # Following is needed only for generating API docs
-    $ sudo pip install sphinx
-    $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "roxygen2", "testthat"), repos="http://cran.stat.ucla.edu/")'
+    $ sudo pip install sphinx pypandoc
+    $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "roxygen2", "testthat", "rmarkdown"), repos="http://cran.stat.ucla.edu/")'
 ```
 (Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0)
 
@@ -68,5 +68,6 @@ jekyll plugin to run `build/sbt unidoc` before building the site so if you haven
 may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the
 PySpark docs using [Sphinx](http://sphinx-doc.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Python, R API docs, run `SKIP_API=1
-jekyll`.
+NOTE: To skip the step of building and copying over the Scala, Python, R and SQL API docs, run `SKIP_API=1
+jekyll`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
+to skip a single step of the corresponding language.

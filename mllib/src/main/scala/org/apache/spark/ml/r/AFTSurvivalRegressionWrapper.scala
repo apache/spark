@@ -82,11 +82,16 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
   }
 
 
-  def fit(formula: String, data: DataFrame): AFTSurvivalRegressionWrapper = {
+  def fit(
+      formula: String,
+      data: DataFrame,
+      aggregationDepth: Int,
+      stringIndexerOrderType: String): AFTSurvivalRegressionWrapper = {
 
     val (rewritedFormula, censorCol) = formulaRewrite(formula)
 
     val rFormula = new RFormula().setFormula(rewritedFormula)
+      .setStringIndexerOrderType(stringIndexerOrderType)
     RWrapperUtils.checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 
@@ -99,6 +104,8 @@ private[r] object AFTSurvivalRegressionWrapper extends MLReadable[AFTSurvivalReg
     val aft = new AFTSurvivalRegression()
       .setCensorCol(censorCol)
       .setFitIntercept(rFormula.hasIntercept)
+      .setFeaturesCol(rFormula.getFeaturesCol)
+      .setAggregationDepth(aggregationDepth)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, aft))

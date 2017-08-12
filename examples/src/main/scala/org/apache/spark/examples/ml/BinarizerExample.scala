@@ -21,7 +21,7 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.feature.Binarizer
 // $example off$
-import org.apache.spark.sql.{SparkSession}
+import org.apache.spark.sql.SparkSession
 
 object BinarizerExample {
   def main(args: Array[String]): Unit = {

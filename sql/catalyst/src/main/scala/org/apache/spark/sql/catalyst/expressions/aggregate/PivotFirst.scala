@@ -30,7 +30,7 @@ object PivotFirst {
 
   // Currently UnsafeRow does not support the generic update method (throws
   // UnsupportedOperationException), so we need to explicitly support each DataType.
-  private val updateFunction: PartialFunction[DataType, (MutableRow, Int, Any) => Unit] = {
+  private val updateFunction: PartialFunction[DataType, (InternalRow, Int, Any) => Unit] = {
     case DoubleType =>
       (row, offset, value) => row.setDouble(offset, value.asInstanceOf[Double])
     case IntegerType =>
@@ -77,8 +77,6 @@ case class PivotFirst(
 
   override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
 
-  override lazy val inputTypes: Seq[AbstractDataType] = children.map(_.dataType)
-
   override val nullable: Boolean = false
 
   val valueDataType = valueColumn.dataType
@@ -89,23 +87,21 @@ case class PivotFirst(
 
   val indexSize = pivotIndex.size
 
-  private val updateRow: (MutableRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
+  private val updateRow: (InternalRow, Int, Any) => Unit = PivotFirst.updateFunction(valueDataType)
 
-  override def update(mutableAggBuffer: MutableRow, inputRow: InternalRow): Unit = {
+  override def update(mutableAggBuffer: InternalRow, inputRow: InternalRow): Unit = {
     val pivotColValue = pivotColumn.eval(inputRow)
-    if (pivotColValue != null) {
-      // We ignore rows whose pivot column value is not in the list of pivot column values.
-      val index = pivotIndex.getOrElse(pivotColValue, -1)
-      if (index >= 0) {
-        val value = valueColumn.eval(inputRow)
-        if (value != null) {
-          updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
-        }
+    // We ignore rows whose pivot column value is not in the list of pivot column values.
+    val index = pivotIndex.getOrElse(pivotColValue, -1)
+    if (index >= 0) {
+      val value = valueColumn.eval(inputRow)
+      if (value != null) {
+        updateRow(mutableAggBuffer, mutableAggBufferOffset + index, value)
       }
     }
   }
 
-  override def merge(mutableAggBuffer: MutableRow, inputAggBuffer: InternalRow): Unit = {
+  override def merge(mutableAggBuffer: InternalRow, inputAggBuffer: InternalRow): Unit = {
     for (i <- 0 until indexSize) {
       if (!inputAggBuffer.isNullAt(inputAggBufferOffset + i)) {
         val value = inputAggBuffer.get(inputAggBufferOffset + i, valueDataType)
@@ -114,7 +110,7 @@ case class PivotFirst(
     }
   }
 
-  override def initialize(mutableAggBuffer: MutableRow): Unit = valueDataType match {
+  override def initialize(mutableAggBuffer: InternalRow): Unit = valueDataType match {
     case d: DecimalType =>
       // Per doc of setDecimal we need to do this instead of setNullAt for DecimalType.
       for (i <- 0 until indexSize) {
@@ -142,7 +138,9 @@ case class PivotFirst(
 
 
   override val aggBufferAttributes: Seq[AttributeReference] =
-    pivotIndex.toList.sortBy(_._2).map(kv => AttributeReference(kv._1.toString, valueDataType)())
+    pivotIndex.toList.sortBy(_._2).map { kv =>
+      AttributeReference(Option(kv._1).getOrElse("null").toString, valueDataType)()
+    }
 
   override val aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 

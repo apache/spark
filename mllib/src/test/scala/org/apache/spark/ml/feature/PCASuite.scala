@@ -29,6 +29,8 @@ import org.apache.spark.sql.Row
 
 class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+
   test("params") {
     ParamsSuite.checkParams(new PCA)
     val mat = Matrices.dense(2, 2, Array(0.0, 1.0, 2.0, 3.0)).asInstanceOf[DenseMatrix]
@@ -50,18 +52,18 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val pc = mat.computePrincipalComponents(3)
     val expected = mat.multiply(pc).rows.map(_.asML)
 
-    val df = spark.createDataFrame(dataRDD.zip(expected)).toDF("features", "expected")
+    val df = dataRDD.zip(expected).toDF("features", "expected")
 
     val pca = new PCA()
       .setInputCol("features")
       .setOutputCol("pca_features")
       .setK(3)
-      .fit(df)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(pca)
+    val pcaModel = pca.fit(df)
 
-    pca.transform(df).select("pca_features", "expected").collect().foreach {
+    MLTestingUtils.checkCopyAndUids(pca, pcaModel)
+
+    pcaModel.transform(df).select("pca_features", "expected").collect().foreach {
       case Row(x: Vector, y: Vector) =>
         assert(x ~== y absTol 1e-5, "Transformed vector is different with expected vector.")
     }

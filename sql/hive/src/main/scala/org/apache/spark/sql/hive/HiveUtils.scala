@@ -21,10 +21,11 @@ import java.io.File
 import java.net.{URL, URLClassLoader}
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
+import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
@@ -35,12 +36,15 @@ import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.client._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
+import org.apache.spark.sql.internal.StaticSQLConf.{CATALOG_IMPLEMENTATION, WAREHOUSE_PATH}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -55,18 +59,18 @@ private[spark] object HiveUtils extends Logging {
   /** The version of hive used internally by Spark SQL. */
   val hiveExecutionVersion: String = "1.2.1"
 
-  val HIVE_METASTORE_VERSION = SQLConfigBuilder("spark.sql.hive.metastore.version")
+  val HIVE_METASTORE_VERSION = buildConf("spark.sql.hive.metastore.version")
     .doc("Version of the Hive metastore. Available options are " +
         s"<code>0.12.0</code> through <code>$hiveExecutionVersion</code>.")
     .stringConf
     .createWithDefault(hiveExecutionVersion)
 
-  val HIVE_EXECUTION_VERSION = SQLConfigBuilder("spark.sql.hive.version")
+  val HIVE_EXECUTION_VERSION = buildConf("spark.sql.hive.version")
     .doc("Version of Hive used internally by Spark SQL.")
     .stringConf
     .createWithDefault(hiveExecutionVersion)
 
-  val HIVE_METASTORE_JARS = SQLConfigBuilder("spark.sql.hive.metastore.jars")
+  val HIVE_METASTORE_JARS = buildConf("spark.sql.hive.metastore.jars")
     .doc(s"""
       | Location of the jars that should be used to instantiate the HiveMetastoreClient.
       | This property can be one of three options: "
@@ -82,28 +86,28 @@ private[spark] object HiveUtils extends Logging {
     .stringConf
     .createWithDefault("builtin")
 
-  val CONVERT_METASTORE_PARQUET = SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet")
-    .doc("When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of " +
-      "the built in support.")
+  val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
+    .doc("When set to true, the built-in Parquet reader and writer are used to process " +
+      "parquet tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(true)
 
   val CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING =
-    SQLConfigBuilder("spark.sql.hive.convertMetastoreParquet.mergeSchema")
+    buildConf("spark.sql.hive.convertMetastoreParquet.mergeSchema")
       .doc("When true, also tries to merge possibly different but compatible Parquet schemas in " +
         "different Parquet data files. This configuration is only effective " +
         "when \"spark.sql.hive.convertMetastoreParquet\" is true.")
       .booleanConf
       .createWithDefault(false)
 
-  val CONVERT_METASTORE_ORC = SQLConfigBuilder("spark.sql.hive.convertMetastoreOrc")
+  val CONVERT_METASTORE_ORC = buildConf("spark.sql.hive.convertMetastoreOrc")
     .internal()
-    .doc("When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of " +
-      "the built in support.")
+    .doc("When set to true, the built-in ORC reader and writer are used to process " +
+      "ORC tables created by using the HiveQL syntax, instead of Hive serde.")
     .booleanConf
     .createWithDefault(false)
 
-  val HIVE_METASTORE_SHARED_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.sharedPrefixes")
+  val HIVE_METASTORE_SHARED_PREFIXES = buildConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +
       "that is shared between Spark SQL and a specific version of Hive. An example of classes " +
       "that should be shared is JDBC drivers that are needed to talk to the metastore. Other " +
@@ -116,7 +120,7 @@ private[spark] object HiveUtils extends Logging {
   private def jdbcPrefixes = Seq(
     "com.mysql.jdbc", "org.postgresql", "com.microsoft.sqlserver", "oracle.jdbc")
 
-  val HIVE_METASTORE_BARRIER_PREFIXES = SQLConfigBuilder("spark.sql.hive.metastore.barrierPrefixes")
+  val HIVE_METASTORE_BARRIER_PREFIXES = buildConf("spark.sql.hive.metastore.barrierPrefixes")
     .doc("A comma separated list of class prefixes that should explicitly be reloaded for each " +
       "version of Hive that Spark SQL is communicating with. For example, Hive UDFs that are " +
       "declared in a prefix that typically would be shared (i.e. <code>org.apache.spark.*</code>).")
@@ -124,7 +128,7 @@ private[spark] object HiveUtils extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
-  val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
+  val HIVE_THRIFT_SERVER_ASYNC = buildConf("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
     .booleanConf
     .createWithDefault(true)
@@ -242,7 +246,7 @@ private[spark] object HiveUtils extends Logging {
     val loader = new IsolatedClientLoader(
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = conf,
-      execJars = Seq(),
+      execJars = Seq.empty,
       hadoopConf = hadoopConf,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
@@ -336,7 +340,7 @@ private[spark] object HiveUtils extends Logging {
               logWarning(s"Hive jar path '$path' does not exist.")
               Nil
             } else {
-              files.filter(_.getName.toLowerCase.endsWith(".jar"))
+              files.filter(_.getName.toLowerCase(Locale.ROOT).endsWith(".jar"))
             }
           case path =>
             new File(path) :: Nil
@@ -374,7 +378,7 @@ private[spark] object HiveUtils extends Logging {
         propMap.put(confvar.varname, confvar.getDefaultExpr())
       }
     }
-    propMap.put(SQLConf.WAREHOUSE_PATH.key, localMetastore.toURI.toString)
+    propMap.put(WAREHOUSE_PATH.key, localMetastore.toURI.toString)
     propMap.put(HiveConf.ConfVars.METASTORECONNECTURLKEY.varname,
       s"jdbc:derby:${withInMemoryMode};databaseName=${localMetastore.getAbsolutePath};create=true")
     propMap.put("datanucleus.rdbms.datastoreAdapterClassName",
@@ -394,6 +398,20 @@ private[spark] object HiveUtils extends Logging {
     // hive.metastore.uris is not set.
     propMap.put(ConfVars.METASTOREURIS.varname, "")
 
+    // The execution client will generate garbage events, therefore the listeners that are generated
+    // for the execution clients are useless. In order to not output garbage, we don't generate
+    // these listeners.
+    propMap.put(ConfVars.METASTORE_PRE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_EVENT_LISTENERS.varname, "")
+    propMap.put(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname, "")
+
+    // SPARK-21451: Spark will gather all `spark.hadoop.*` properties from a `SparkConf` to a
+    // Hadoop Configuration internally, as long as it happens after SparkContext initialized.
+    // Some instances such as `CliSessionState` used in `SparkSQLCliDriver` may also rely on these
+    // Configuration. But it happens before SparkContext initialized, we need to take them from
+    // system properties in the form of regular hadoop configurations.
+    SparkHadoopUtil.get.appendSparkHadoopConfigs(sys.props.toMap, propMap)
+
     propMap.toMap
   }
 
@@ -404,7 +422,7 @@ private[spark] object HiveUtils extends Logging {
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -427,7 +445,7 @@ private[spark] object HiveUtils extends Logging {
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
       struct.toSeq.zip(fields).map {
-        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        case (v, t) => s""""${t.name}":${toHiveStructString((v, t.dataType))}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
       seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -440,5 +458,23 @@ private[spark] object HiveUtils extends Logging {
     case (s: String, StringType) => "\"" + s + "\""
     case (decimal, DecimalType()) => decimal.toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
+  }
+
+  /**
+   * Infers the schema for Hive serde tables and returns the CatalogTable with the inferred schema.
+   * When the tables are data source tables or the schema already exists, returns the original
+   * CatalogTable.
+   */
+  def inferSchema(table: CatalogTable): CatalogTable = {
+    if (DDLUtils.isDatasourceTable(table) || table.dataSchema.nonEmpty) {
+      table
+    } else {
+      val hiveTable = HiveClientImpl.toHiveTable(table)
+      // Note: Hive separates partition columns and the schema, but for us the
+      // partition columns are part of the schema
+      val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
+      val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
+      table.copy(schema = StructType(dataCols ++ partCols))
+    }
   }
 }

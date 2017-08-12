@@ -36,7 +36,7 @@ WITH ss AS
     sum(cr_net_loss) AS profit_loss
   FROM catalog_returns, date_dim
   WHERE cr_returned_date_sk = d_date_sk
-    AND d_date BETWEEN cast('2000-08-03]' AS DATE) AND
+    AND d_date BETWEEN cast('2000-08-03' AS DATE) AND
   (cast('2000-08-03' AS DATE) + INTERVAL 30 days)),
     ws AS
   (SELECT

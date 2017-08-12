@@ -120,16 +120,20 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("CreateArray") {
     val intSeq = Seq(5, 10, 15, 20, 25)
     val longSeq = intSeq.map(_.toLong)
+    val byteSeq = intSeq.map(_.toByte)
     val strSeq = intSeq.map(_.toString)
     checkEvaluation(CreateArray(intSeq.map(Literal(_))), intSeq, EmptyRow)
     checkEvaluation(CreateArray(longSeq.map(Literal(_))), longSeq, EmptyRow)
+    checkEvaluation(CreateArray(byteSeq.map(Literal(_))), byteSeq, EmptyRow)
     checkEvaluation(CreateArray(strSeq.map(Literal(_))), strSeq, EmptyRow)
 
     val intWithNull = intSeq.map(Literal(_)) :+ Literal.create(null, IntegerType)
     val longWithNull = longSeq.map(Literal(_)) :+ Literal.create(null, LongType)
+    val byteWithNull = byteSeq.map(Literal(_)) :+ Literal.create(null, ByteType)
     val strWithNull = strSeq.map(Literal(_)) :+ Literal.create(null, StringType)
     checkEvaluation(CreateArray(intWithNull), intSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(longWithNull), longSeq :+ null, EmptyRow)
+    checkEvaluation(CreateArray(byteWithNull), byteSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(strWithNull), strSeq :+ null, EmptyRow)
     checkEvaluation(CreateArray(Literal.create(null, IntegerType) :: Nil), null :: Nil)
   }
@@ -243,11 +247,13 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val b = AttributeReference("b", IntegerType)()
     checkMetadata(CreateStruct(Seq(a, b)))
     checkMetadata(CreateNamedStruct(Seq("a", a, "b", b)))
-    checkMetadata(CreateStructUnsafe(Seq(a, b)))
     checkMetadata(CreateNamedStructUnsafe(Seq("a", a, "b", b)))
   }
 
   test("StringToMap") {
+    val expectedDataType = MapType(StringType, StringType, valueContainsNull = true)
+    assert(new StringToMap("").dataType === expectedDataType)
+
     val s0 = Literal("a:1,b:2,c:3")
     val m0 = Map("a" -> "1", "b" -> "2", "c" -> "3")
     checkEvaluation(new StringToMap(s0), m0)
@@ -267,6 +273,10 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     val s4 = Literal("a:1_b:2_c:3")
     val m4 = Map("a" -> "1", "b" -> "2", "c" -> "3")
     checkEvaluation(new StringToMap(s4, Literal("_")), m4)
+
+    val s5 = Literal("a")
+    val m5 = Map("a" -> null)
+    checkEvaluation(new StringToMap(s5), m5)
 
     // arguments checking
     assert(new StringToMap(Literal("a:1,b:2,c:3")).checkInputDataTypes().isSuccess)

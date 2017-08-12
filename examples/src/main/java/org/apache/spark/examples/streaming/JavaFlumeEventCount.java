@@ -18,7 +18,6 @@
 package org.apache.spark.examples.streaming;
 
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.*;
 import org.apache.spark.streaming.flume.FlumeUtils;
@@ -62,12 +61,7 @@ public final class JavaFlumeEventCount {
 
     flumeStream.count();
 
-    flumeStream.count().map(new Function<Long, String>() {
-      @Override
-      public String call(Long in) {
-        return "Received " + in + " flume events.";
-      }
-    }).print();
+    flumeStream.count().map(in -> "Received " + in + " flume events.").print();
 
     ssc.start();
     ssc.awaitTermination();

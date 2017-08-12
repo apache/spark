@@ -18,17 +18,22 @@
 package org.apache.spark.sql.hive.orc
 
 import java.nio.charset.StandardCharsets
+import java.sql.Timestamp
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
+import org.apache.spark.sql.catalyst.catalog.CatalogRelation
+import org.apache.spark.sql.execution.datasources.{LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -87,6 +92,16 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       checkAnswer(
         read.orc(file),
         data.toDF().collect())
+    }
+  }
+
+  test("Read/write UserDefinedType") {
+    withTempPath { path =>
+      val data = Seq((1, new UDT.MyDenseVector(Array(0.25, 2.25, 4.25))))
+      val udtDF = data.toDF("id", "vectors")
+      udtDF.write.orc(path.getAbsolutePath)
+      val readBack = spark.read.schema(udtDF.schema).orc(path.getAbsolutePath)
+      checkAnswer(udtDF, readBack)
     }
   }
 
@@ -270,7 +285,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val queryOutput = selfJoin.queryExecution.analyzed.output
 
       assertResult(4, "Field count mismatches")(queryOutput.size)
-      assertResult(2, "Duplicated expression ID in query plan:\n $selfJoin") {
+      assertResult(2, s"Duplicated expression ID in query plan:\n $selfJoin") {
         queryOutput.filter(_.name == "_1").map(_.exprId).size
       }
 
@@ -279,7 +294,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("nested data - struct with array field") {
-    val data = (1 to 10).map(i => Tuple1((i, Seq("val_$i"))))
+    val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withOrcTable(data, "t") {
       checkAnswer(sql("SELECT `_1`.`_2`[0] FROM t"), data.map {
         case Tuple1((_, Seq(string))) => Row(string)
@@ -288,7 +303,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("nested data - array of struct") {
-    val data = (1 to 10).map(i => Tuple1(Seq(i -> "val_$i")))
+    val data = (1 to 10).map(i => Tuple1(Seq(i -> s"val_$i")))
     withOrcTable(data, "t") {
       checkAnswer(sql("SELECT `_1`[0].`_2` FROM t"), data.map {
         case Tuple1(Seq((_, string))) => Row(string)
@@ -337,7 +352,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           spark.sql(
             s"""CREATE TABLE empty_orc(key INT, value STRING)
                |STORED AS ORC
-               |LOCATION '$path'
+               |LOCATION '${dir.toURI}'
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
@@ -438,7 +453,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 s"""
                    |CREATE TABLE dummy_orc(key INT, value STRING)
                    |STORED AS ORC
-                   |LOCATION '$path'
+                   |LOCATION '${dir.toURI}'
                  """.stripMargin)
 
               spark.sql(
@@ -460,7 +475,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                 }
               } else {
                 queryExecution.analyzed.collectFirst {
-                  case _: MetastoreRelation => ()
+                  case _: CatalogRelation => ()
                 }.getOrElse {
                   fail(s"Expecting no conversion from orc to data sources, " +
                     s"but got:\n$queryExecution")
@@ -468,6 +483,28 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
               }
             }
           }
+        }
+      }
+    }
+  }
+
+  test("converted ORC table supports resolving mixed case field") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+      withTable("dummy_orc") {
+        withTempPath { dir =>
+          val df = spark.range(5).selectExpr("id", "id as valueField", "id as partitionValue")
+          df.write
+            .partitionBy("partitionValue")
+            .mode("overwrite")
+            .orc(dir.getAbsolutePath)
+
+          spark.sql(s"""
+            |create external table dummy_orc (id long, valueField long)
+            |partitioned by (partitionValue int)
+            |stored as orc
+            |location "${dir.toURI}"""".stripMargin)
+          spark.sql(s"msck repair table dummy_orc")
+          checkAnswer(spark.sql("select * from dummy_orc"), df)
         }
       }
     }
@@ -500,6 +537,40 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
+  test("Support for pushing down filters for decimal types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(i => Tuple1(BigDecimal.valueOf(i)))
+      withTempPath { file =>
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        val df = spark.read.orc(file.getCanonicalPath).where("a == 2")
+        val actual = stripSparkFilter(df).count()
+
+        assert(actual < 10)
+      }
+    }
+  }
+
+  test("Support for pushing down filters for timestamp types") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val timeString = "2015-08-20 14:57:00"
+      val data = (0 until 10).map { i =>
+        val milliseconds = Timestamp.valueOf(timeString).getTime + i * 3600
+        Tuple1(new Timestamp(milliseconds))
+      }
+      withTempPath { file =>
+        // It needs to repartition data so that we can have several ORC files
+        // in order to skip stripes in ORC.
+        createDataFrame(data).toDF("a").repartition(10).write.orc(file.getCanonicalPath)
+        val df = spark.read.orc(file.getCanonicalPath).where(s"a == '$timeString'")
+        val actual = stripSparkFilter(df).count()
+
+        assert(actual < 10)
+      }
+    }
+  }
+
   test("column nullability and comment - write and then read") {
     val schema = (new StructType)
       .add("cl1", IntegerType, nullable = false, comment = "test")
@@ -520,4 +591,33 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       assert(spark.table(tableName).schema == schema.copy(fields = expectedFields))
     }
   }
+
+  test("Empty schema does not read data from ORC file") {
+    val data = Seq((1, 1), (2, 2))
+    withOrcFile(data) { path =>
+      val requestedSchema = StructType(Nil)
+      val conf = new Configuration()
+      val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
+      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
+      val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
+      assert(maybeOrcReader.isDefined)
+      val orcRecordReader = new SparkOrcNewRecordReader(
+        maybeOrcReader.get, conf, 0, maybeOrcReader.get.getContentLength)
+
+      val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
+      try {
+        assert(recordsIterator.next().toString == "{null, null}")
+      } finally {
+        recordsIterator.close()
+      }
+    }
+  }
+
+   test("read from multiple orc input paths") {
+     val path1 = Utils.createTempDir()
+     val path2 = Utils.createTempDir()
+     makeOrcFile((1 to 10).map(Tuple1.apply), path1)
+     makeOrcFile((1 to 10).map(Tuple1.apply), path2)
+     assertResult(20)(read.orc(path1.getCanonicalPath, path2.getCanonicalPath).count())
+   }
 }

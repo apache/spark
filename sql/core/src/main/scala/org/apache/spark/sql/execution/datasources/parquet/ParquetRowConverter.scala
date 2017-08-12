@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.parquet.column.Dictionary
 import org.apache.parquet.io.api.{Binary, Converter, GroupConverter, PrimitiveConverter}
-import org.apache.parquet.schema.{GroupType, MessageType, Type}
+import org.apache.parquet.schema.{GroupType, MessageType, OriginalType, Type}
 import org.apache.parquet.schema.OriginalType.{INT_32, LIST, UTF8}
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{BINARY, DOUBLE, FIXED_LEN_BYTE_ARRAY, INT32, INT64}
 
@@ -40,7 +40,7 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * A [[ParentContainerUpdater]] is used by a Parquet converter to set converted values to some
  * corresponding parent container. For example, a converter for a `StructType` field may set
- * converted values to a [[MutableRow]]; or a converter for array elements may append converted
+ * converted values to a [[InternalRow]]; or a converter for array elements may append converted
  * values to an [[ArrayBuffer]].
  */
 private[parquet] trait ParentContainerUpdater {
@@ -155,7 +155,7 @@ private[parquet] class ParquetRowConverter(
    * Updater used together with field converters within a [[ParquetRowConverter]].  It propagates
    * converted filed values to the `ordinal`-th cell in `currentRow`.
    */
-  private final class RowUpdater(row: MutableRow, ordinal: Int) extends ParentContainerUpdater {
+  private final class RowUpdater(row: InternalRow, ordinal: Int) extends ParentContainerUpdater {
     override def set(value: Any): Unit = row(ordinal) = value
     override def setBoolean(value: Boolean): Unit = row.setBoolean(ordinal, value)
     override def setByte(value: Byte): Unit = row.setByte(ordinal, value)
@@ -166,7 +166,7 @@ private[parquet] class ParquetRowConverter(
     override def setFloat(value: Float): Unit = row.setFloat(ordinal, value)
   }
 
-  private val currentRow = new SpecificMutableRow(catalystType.map(_.dataType))
+  private val currentRow = new SpecificInternalRow(catalystType.map(_.dataType))
 
   private val unsafeProjection = UnsafeProjection.create(catalystType)
 
@@ -251,6 +251,13 @@ private[parquet] class ParquetRowConverter(
 
       case StringType =>
         new ParquetStringConverter(updater)
+
+      case TimestampType if parquetType.getOriginalType == OriginalType.TIMESTAMP_MILLIS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            updater.setLong(DateTimeUtils.fromMillis(value))
+          }
+        }
 
       case TimestampType =>
         // TODO Implements `TIMESTAMP_MICROS` once parquet-mr has that.

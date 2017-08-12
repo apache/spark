@@ -144,7 +144,7 @@ object WriteInputFormatTestDataGenerator {
 
     // Create test data for ArrayWritable
     val data = Seq(
-      (1, Array()),
+      (1, Array.empty[Double]),
       (2, Array(3.0, 4.0, 5.0)),
       (3, Array(4.0, 5.0, 6.0))
     )

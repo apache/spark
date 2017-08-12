@@ -111,8 +111,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskMemoryManager,
       1024, // initial capacity,
-      PAGE_SIZE_BYTES,
-      false // disable perf metrics
+      PAGE_SIZE_BYTES
     )
     assert(!map.iterator().next())
     map.free()
@@ -125,13 +124,13 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskMemoryManager,
       1024, // initial capacity
-      PAGE_SIZE_BYTES,
-      false // disable perf metrics
+      PAGE_SIZE_BYTES
     )
     val groupKey = InternalRow(UTF8String.fromString("cats"))
+    val row = map.getAggregationBuffer(groupKey)
 
     // Looking up a key stores a zero-entry in the map (like Python Counters or DefaultDicts)
-    assert(map.getAggregationBuffer(groupKey) != null)
+    assert(row != null)
     val iter = map.iterator()
     assert(iter.next())
     iter.getKey.getString(0) should be ("cats")
@@ -140,7 +139,7 @@ class UnsafeFixedWidthAggregationMapSuite
 
     // Modifications to rows retrieved from the map should update the values in the map
     iter.getValue.setInt(0, 42)
-    map.getAggregationBuffer(groupKey).getInt(0) should be (42)
+    row.getInt(0) should be (42)
 
     map.free()
   }
@@ -152,8 +151,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskMemoryManager,
       128, // initial capacity
-      PAGE_SIZE_BYTES,
-      false // disable perf metrics
+      PAGE_SIZE_BYTES
     )
     val rand = new Random(42)
     val groupKeys: Set[String] = Seq.fill(512)(rand.nextString(1024)).toSet
@@ -178,8 +176,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskMemoryManager,
       128, // initial capacity
-      PAGE_SIZE_BYTES,
-      false // disable perf metrics
+      PAGE_SIZE_BYTES
     )
 
     val keys = randomStrings(1024).take(512)
@@ -226,8 +223,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskMemoryManager,
       128, // initial capacity
-      PAGE_SIZE_BYTES,
-      false // disable perf metrics
+      PAGE_SIZE_BYTES
     )
     val sorter = map.destructAndCreateExternalSorter()
 
@@ -267,8 +263,7 @@ class UnsafeFixedWidthAggregationMapSuite
       StructType(Nil),
       taskMemoryManager,
       128, // initial capacity
-      PAGE_SIZE_BYTES,
-      false // disable perf metrics
+      PAGE_SIZE_BYTES
     )
     (1 to 10).foreach { i =>
       val buf = map.getAggregationBuffer(UnsafeRow.createFromByteArray(0, 0))
@@ -312,8 +307,7 @@ class UnsafeFixedWidthAggregationMapSuite
       groupKeySchema,
       taskMemoryManager,
       128, // initial capacity
-      pageSize,
-      false // disable perf metrics
+      pageSize
     )
 
     val rand = new Random(42)
@@ -342,4 +336,43 @@ class UnsafeFixedWidthAggregationMapSuite
     }
   }
 
+  testWithMemoryLeakDetection("convert to external sorter after fail to grow (SPARK-19500)") {
+    val pageSize = 4096000
+    val map = new UnsafeFixedWidthAggregationMap(
+      emptyAggregationBuffer,
+      aggBufferSchema,
+      groupKeySchema,
+      taskMemoryManager,
+      128, // initial capacity
+      pageSize
+    )
+
+    val rand = new Random(42)
+    for (i <- 1 to 63) {
+      val str = rand.nextString(1024)
+      val buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+      buf.setInt(0, str.length)
+    }
+    // Simulate running out of space
+    memoryManager.limit(0)
+    var str = rand.nextString(1024)
+    var buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+    assert(buf != null)
+    str = rand.nextString(1024)
+    buf = map.getAggregationBuffer(InternalRow(UTF8String.fromString(str)))
+    assert(buf == null)
+
+    // Convert the map into a sorter. This used to fail before the fix for SPARK-10474
+    // because we would try to acquire space for the in-memory sorter pointer array before
+    // actually releasing the pages despite having spilled all of them.
+    var sorter: UnsafeKVExternalSorter = null
+    try {
+      sorter = map.destructAndCreateExternalSorter()
+      map.free()
+    } finally {
+      if (sorter != null) {
+        sorter.cleanupResources()
+      }
+    }
+  }
 }

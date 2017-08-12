@@ -28,7 +28,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -91,11 +91,15 @@ sealed trait Matrix extends Serializable {
   @Since("1.2.0")
   def copy: Matrix
 
-  /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
+  /**
+   * Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data.
+   */
   @Since("1.3.0")
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
+  /**
+   * Convenience method for `Matrix`-`DenseMatrix` multiplication.
+   */
   @Since("1.2.0")
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
@@ -103,13 +107,17 @@ sealed trait Matrix extends Serializable {
     C
   }
 
-  /** Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility. */
+  /**
+   * Convenience method for `Matrix`-`DenseVector` multiplication. For binary compatibility.
+   */
   @Since("1.2.0")
   def multiply(y: DenseVector): DenseVector = {
     multiply(y.asInstanceOf[Vector])
   }
 
-  /** Convenience method for `Matrix`-`Vector` multiplication. */
+  /**
+   * Convenience method for `Matrix`-`Vector` multiplication.
+   */
   @Since("1.4.0")
   def multiply(y: Vector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
@@ -189,7 +197,7 @@ private[spark] class MatrixUDT extends UserDefinedType[Matrix] {
   }
 
   override def serialize(obj: Matrix): InternalRow = {
-    val row = new GenericMutableRow(7)
+    val row = new GenericInternalRow(7)
     obj match {
       case sm: SparseMatrix =>
         row.setByte(0, 0)
@@ -789,7 +797,7 @@ object SparseMatrix {
     var prevRow = -1
     var prevVal = 0.0
     // Append a dummy entry to include the last one at the end of the loop.
-    (sortedEntries.view :+ (numRows, numCols, 1.0)).foreach { case (i, j, v) =>
+    (sortedEntries.view :+ ((numRows, numCols, 1.0))).foreach { case (i, j, v) =>
       if (v != 0) {
         if (i == prevRow && j == prevCol) {
           prevVal += v
@@ -984,7 +992,16 @@ object Matrices {
         new DenseMatrix(dm.rows, dm.cols, dm.data, dm.isTranspose)
       case sm: BSM[Double] =>
         // There is no isTranspose flag for sparse matrices in Breeze
-        new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
+        val nsm = if (sm.rowIndices.length > sm.activeSize) {
+          // This sparse matrix has trailing zeros.
+          // Remove them by compacting the matrix.
+          val csm = sm.copy
+          csm.compact()
+          csm
+        } else {
+          sm
+        }
+        new SparseMatrix(nsm.rows, nsm.cols, nsm.colPtrs, nsm.rowIndices, nsm.data)
       case _ =>
         throw new UnsupportedOperationException(
           s"Do not support conversion from type ${breeze.getClass.getName}.")
@@ -1128,7 +1145,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i, j + startCol, v))
+                data += Tuple3(i, j + startCol, v)
               }
             }
             startCol += nCols
@@ -1198,7 +1215,7 @@ object Matrices {
             val data = new ArrayBuffer[(Int, Int, Double)]()
             dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
-                data.append((i + startRow, j, v))
+                data += Tuple3(i + startRow, j, v)
               }
             }
             startRow += nRows

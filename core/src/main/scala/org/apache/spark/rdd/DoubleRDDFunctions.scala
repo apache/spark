@@ -152,13 +152,13 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
 
   /**
    * Compute a histogram using the provided buckets. The buckets are all open
-   * to the right except for the last which is closed
+   * to the right except for the last which is closed.
    *  e.g. for the array
    *  [1, 10, 20, 50] the buckets are [1, 10) [10, 20) [20, 50]
-   *  e.g 1<=x<10 , 10<=x<20, 20<=x<=50
+   *  e.g {@code <=x<10, 10<=x<20, 20<=x<=50}
    *  And on the input of 1 and 50 we would have a histogram of 1, 0, 1
    *
-   * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
+   * @note If your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
    * from an O(log n) insertion to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.

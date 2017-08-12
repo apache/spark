@@ -30,96 +30,117 @@ import org.apache.spark.scheduler.*;
  */
 public class SparkFirehoseListener implements SparkListenerInterface {
 
-    public void onEvent(SparkListenerEvent event) { }
+  public void onEvent(SparkListenerEvent event) { }
 
-    @Override
-    public final void onStageCompleted(SparkListenerStageCompleted stageCompleted) {
-        onEvent(stageCompleted);
-    }
+  @Override
+  public final void onStageCompleted(SparkListenerStageCompleted stageCompleted) {
+    onEvent(stageCompleted);
+  }
 
-    @Override
-    public final void onStageSubmitted(SparkListenerStageSubmitted stageSubmitted) {
-        onEvent(stageSubmitted);
-    }
+  @Override
+  public final void onStageSubmitted(SparkListenerStageSubmitted stageSubmitted) {
+    onEvent(stageSubmitted);
+  }
 
-    @Override
-    public final void onTaskStart(SparkListenerTaskStart taskStart) {
-        onEvent(taskStart);
-    }
+  @Override
+  public final void onTaskStart(SparkListenerTaskStart taskStart) {
+    onEvent(taskStart);
+  }
 
-    @Override
-    public final void onTaskGettingResult(SparkListenerTaskGettingResult taskGettingResult) {
-        onEvent(taskGettingResult);
-    }
+  @Override
+  public final void onTaskGettingResult(SparkListenerTaskGettingResult taskGettingResult) {
+    onEvent(taskGettingResult);
+  }
 
-    @Override
-    public final void onTaskEnd(SparkListenerTaskEnd taskEnd) {
-        onEvent(taskEnd);
-    }
+  @Override
+  public final void onTaskEnd(SparkListenerTaskEnd taskEnd) {
+    onEvent(taskEnd);
+  }
 
-    @Override
-    public final void onJobStart(SparkListenerJobStart jobStart) {
-        onEvent(jobStart);
-    }
+  @Override
+  public final void onJobStart(SparkListenerJobStart jobStart) {
+    onEvent(jobStart);
+  }
 
-    @Override
-    public final void onJobEnd(SparkListenerJobEnd jobEnd) {
-        onEvent(jobEnd);
-    }
+  @Override
+  public final void onJobEnd(SparkListenerJobEnd jobEnd) {
+    onEvent(jobEnd);
+  }
 
-    @Override
-    public final void onEnvironmentUpdate(SparkListenerEnvironmentUpdate environmentUpdate) {
-        onEvent(environmentUpdate);
-    }
+  @Override
+  public final void onEnvironmentUpdate(SparkListenerEnvironmentUpdate environmentUpdate) {
+    onEvent(environmentUpdate);
+  }
 
-    @Override
-    public final void onBlockManagerAdded(SparkListenerBlockManagerAdded blockManagerAdded) {
-        onEvent(blockManagerAdded);
-    }
+  @Override
+  public final void onBlockManagerAdded(SparkListenerBlockManagerAdded blockManagerAdded) {
+    onEvent(blockManagerAdded);
+  }
 
-    @Override
-    public final void onBlockManagerRemoved(SparkListenerBlockManagerRemoved blockManagerRemoved) {
-        onEvent(blockManagerRemoved);
-    }
+  @Override
+  public final void onBlockManagerRemoved(SparkListenerBlockManagerRemoved blockManagerRemoved) {
+    onEvent(blockManagerRemoved);
+  }
 
-    @Override
-    public final void onUnpersistRDD(SparkListenerUnpersistRDD unpersistRDD) {
-        onEvent(unpersistRDD);
-    }
+  @Override
+  public final void onUnpersistRDD(SparkListenerUnpersistRDD unpersistRDD) {
+    onEvent(unpersistRDD);
+  }
 
-    @Override
-    public final void onApplicationStart(SparkListenerApplicationStart applicationStart) {
-        onEvent(applicationStart);
-    }
+  @Override
+  public final void onApplicationStart(SparkListenerApplicationStart applicationStart) {
+    onEvent(applicationStart);
+  }
 
-    @Override
-    public final void onApplicationEnd(SparkListenerApplicationEnd applicationEnd) {
-        onEvent(applicationEnd);
-    }
+  @Override
+  public final void onApplicationEnd(SparkListenerApplicationEnd applicationEnd) {
+    onEvent(applicationEnd);
+  }
 
-    @Override
-    public final void onExecutorMetricsUpdate(
-            SparkListenerExecutorMetricsUpdate executorMetricsUpdate) {
-        onEvent(executorMetricsUpdate);
-    }
+  @Override
+  public final void onExecutorMetricsUpdate(
+      SparkListenerExecutorMetricsUpdate executorMetricsUpdate) {
+    onEvent(executorMetricsUpdate);
+  }
 
-    @Override
-    public final void onExecutorAdded(SparkListenerExecutorAdded executorAdded) {
-        onEvent(executorAdded);
-    }
+  @Override
+  public final void onExecutorAdded(SparkListenerExecutorAdded executorAdded) {
+    onEvent(executorAdded);
+  }
 
-    @Override
-    public final void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) {
-        onEvent(executorRemoved);
-    }
+  @Override
+  public final void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) {
+    onEvent(executorRemoved);
+  }
 
-    @Override
-    public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) {
-        onEvent(blockUpdated);
-    }
+  @Override
+  public final void onExecutorBlacklisted(SparkListenerExecutorBlacklisted executorBlacklisted) {
+    onEvent(executorBlacklisted);
+  }
 
-    @Override
-    public void onOtherEvent(SparkListenerEvent event) {
-        onEvent(event);
-    }
+  @Override
+  public final void onExecutorUnblacklisted(
+      SparkListenerExecutorUnblacklisted executorUnblacklisted) {
+    onEvent(executorUnblacklisted);
+  }
+
+  @Override
+  public final void onNodeBlacklisted(SparkListenerNodeBlacklisted nodeBlacklisted) {
+    onEvent(nodeBlacklisted);
+  }
+
+  @Override
+  public final void onNodeUnblacklisted(SparkListenerNodeUnblacklisted nodeUnblacklisted) {
+    onEvent(nodeUnblacklisted);
+  }
+
+  @Override
+  public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) {
+    onEvent(blockUpdated);
+  }
+
+  @Override
+  public void onOtherEvent(SparkListenerEvent event) {
+    onEvent(event);
+  }
 }

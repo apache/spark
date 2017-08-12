@@ -155,33 +155,22 @@ Next, we discuss how to use this approach in your streaming application.
 	</div>
 	<div data-lang="java" markdown="1">
 		// Hold a reference to the current offset ranges, so it can be used downstream
-		final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
+		AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference<>();
 
-		directKafkaStream.transformToPair(
-		  new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
-		    @Override
-		    public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) throws Exception {
-		      OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
-		      offsetRanges.set(offsets);
-		      return rdd;
-		    }
-		  }
-		).map(
+		directKafkaStream.transformToPair(rdd -> {
+      OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+      offsetRanges.set(offsets);
+      return rdd;
+		}).map(
 		  ...
-		).foreachRDD(
-		  new Function<JavaPairRDD<String, String>, Void>() {
-		    @Override
-		    public Void call(JavaPairRDD<String, String> rdd) throws IOException {
-		      for (OffsetRange o : offsetRanges.get()) {
-		        System.out.println(
-		          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
-		        );
-		      }
-		      ...
-		      return null;
-		    }
-		  }
-		);
+		).foreachRDD(rdd -> {
+      for (OffsetRange o : offsetRanges.get()) {
+        System.out.println(
+          o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
+        );
+      }
+      ...
+		});
 	</div>
 	<div data-lang="python" markdown="1">
 		offsetRanges = []

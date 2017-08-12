@@ -17,21 +17,31 @@
 # limitations under the License.
 #
 
-# Script to create API docs for SparkR
-# This requires `devtools` and `knitr` to be installed on the machine.
+# Script to create API docs and vignettes for SparkR
+# This requires `devtools`, `knitr` and `rmarkdown` to be installed on the machine.
 
-# After running this script the html docs can be found in 
+# After running this script the html docs can be found in
 # $SPARK_HOME/R/pkg/html
+# The vignettes can be found in
+# $SPARK_HOME/R/pkg/vignettes/sparkr_vignettes.html
 
 set -o pipefail
 set -e
 
 # Figure out where the script is
-export FWDIR="$(cd "`dirname "$0"`"; pwd)"
-pushd $FWDIR
+export FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
+export SPARK_HOME="$(cd "`dirname "${BASH_SOURCE[0]}"`"/..; pwd)"
+
+# Required for setting SPARK_SCALA_VERSION
+. "${SPARK_HOME}/bin/load-spark-env.sh"
+
+echo "Using Scala $SPARK_SCALA_VERSION"
+
+pushd "$FWDIR" > /dev/null
+. "$FWDIR/find-r.sh"
 
 # Install the package (this will also generate the Rd files)
-./install-dev.sh
+. "$FWDIR/install-dev.sh"
 
 # Now create HTML files
 
@@ -39,7 +49,7 @@ pushd $FWDIR
 mkdir -p pkg/html
 pushd pkg/html
 
-Rscript -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
+"$R_SCRIPT_PATH/Rscript" -e 'libDir <- "../../lib"; library(SparkR, lib.loc=libDir); library(knitr); knit_rd("SparkR", links = tools::findHTMLlinks(paste(libDir, "SparkR", sep="/")))'
 
 popd
 

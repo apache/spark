@@ -19,9 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.SQLExecution
 
 case class CacheTableCommand(
     tableIdent: TableIdentifier,
@@ -30,9 +31,7 @@ case class CacheTableCommand(
   require(plan.isEmpty || tableIdent.database.isEmpty,
     "Database name is not allowed in CACHE TABLE AS SELECT")
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = {
-    plan.toSeq
-  }
+  override def innerChildren: Seq[QueryPlan[_]] = plan.toSeq
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
@@ -47,19 +46,22 @@ case class CacheTableCommand(
 
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 
-case class UncacheTableCommand(tableIdent: TableIdentifier) extends RunnableCommand {
+case class UncacheTableCommand(
+    tableIdent: TableIdentifier,
+    ifExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.uncacheTable(tableIdent.quotedString)
+    val tableId = tableIdent.quotedString
+    try {
+      sparkSession.catalog.uncacheTable(tableId)
+    } catch {
+      case _: NoSuchTableException if ifExists => // don't throw
+    }
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }
 
 /**
@@ -71,6 +73,4 @@ case object ClearCacheCommand extends RunnableCommand {
     sparkSession.catalog.clearCache()
     Seq.empty[Row]
   }
-
-  override def output: Seq[Attribute] = Seq.empty
 }

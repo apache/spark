@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -34,7 +35,7 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
        |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
        |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
        """.stripMargin)
-    sql(s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt")}' INTO TABLE sales")
+    sql(s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/sales.txt").toURI}' INTO TABLE sales")
   }
 
   // table sales is not a cache table, and will be clear after reset
@@ -47,4 +48,16 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
   createQueryTest("Read with AvroSerDe", "SELECT * FROM episodes")
 
   createQueryTest("Read Partitioned with AvroSerDe", "SELECT * FROM episodes_part")
+
+  test("Checking metrics correctness") {
+    import TestHive._
+
+    val episodesCnt = sql("select * from episodes").count()
+    val episodesRes = InputOutputMetricsHelper.run(sql("select * from episodes").toDF())
+    assert(episodesRes === (episodesCnt, 0L, episodesCnt) :: Nil)
+
+    val serdeinsCnt = sql("select * from serdeins").count()
+    val serdeinsRes = InputOutputMetricsHelper.run(sql("select * from serdeins").toDF())
+    assert(serdeinsRes === (serdeinsCnt, 0L, serdeinsCnt) :: Nil)
+  }
 }

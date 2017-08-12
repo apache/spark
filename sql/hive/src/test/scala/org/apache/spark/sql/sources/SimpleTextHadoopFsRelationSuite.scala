@@ -19,7 +19,7 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.types._
 
@@ -45,12 +45,9 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield s"$i,val_$i,$p1")
           .saveAsTextFile(partitionDir.toString)

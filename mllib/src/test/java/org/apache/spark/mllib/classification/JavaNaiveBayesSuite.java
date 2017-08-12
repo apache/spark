@@ -25,7 +25,6 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
@@ -42,7 +41,7 @@ public class JavaNaiveBayesSuite extends SharedSparkSession {
     new LabeledPoint(2, Vectors.dense(0.0, 0.0, 2.0))
   );
 
-  private int validatePrediction(List<LabeledPoint> points, NaiveBayesModel model) {
+  private static int validatePrediction(List<LabeledPoint> points, NaiveBayesModel model) {
     int correct = 0;
     for (LabeledPoint p : points) {
       if (model.predict(p.features()) == p.label()) {
@@ -80,12 +79,7 @@ public class JavaNaiveBayesSuite extends SharedSparkSession {
   public void testPredictJavaRDD() {
     JavaRDD<LabeledPoint> examples = jsc.parallelize(POINTS, 2).cache();
     NaiveBayesModel model = NaiveBayes.train(examples.rdd());
-    JavaRDD<Vector> vectors = examples.map(new Function<LabeledPoint, Vector>() {
-      @Override
-      public Vector call(LabeledPoint v) throws Exception {
-        return v.features();
-      }
-    });
+    JavaRDD<Vector> vectors = examples.map(LabeledPoint::features);
     JavaRDD<Double> predictions = model.predict(vectors);
     // Should be able to get the first prediction.
     predictions.first();

@@ -421,9 +421,6 @@ Copyright (c) 2011, Terrence Parr.
 This product includes/uses ASM (http://asm.ow2.org/),
 Copyright (c) 2000-2007 INRIA, France Telecom.
 
-This product includes/uses org.json (http://www.json.org/java/index.html),
-Copyright (c) 2002 JSON.org
-
 This product includes/uses JLine (http://jline.sourceforge.net/),
 Copyright (c) 2002-2006, Marc Prud'hommeaux <mwp1@cornell.edu>.
 

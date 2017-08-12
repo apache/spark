@@ -17,17 +17,14 @@
 
 package org.apache.spark.sql.expressions
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.ScalaUDF
 import org.apache.spark.sql.Column
-import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.DataType
 
 /**
- * A user-defined function. To create one, use the `udf` functions in [[functions]].
- * Note that the user-defined functions must be deterministic. Due to optimization,
- * duplicate invocations may be eliminated or the function may even be invoked more times than
- * it is present in the query.
+ * A user-defined function. To create one, use the `udf` functions in `functions`.
+ *
  * As an example:
  * {{{
  *   // Defined a UDF that returns true or false based on some numeric score.
@@ -39,13 +36,93 @@ import org.apache.spark.sql.types.DataType
  *
  * @since 1.3.0
  */
-@Experimental
+@InterfaceStability.Stable
 case class UserDefinedFunction protected[sql] (
     f: AnyRef,
     dataType: DataType,
     inputTypes: Option[Seq[DataType]]) {
 
+  private var _nameOption: Option[String] = None
+  private var _nullable: Boolean = true
+  private var _deterministic: Boolean = true
+
+  /**
+   * Returns true when the UDF can return a nullable value.
+   *
+   * @since 2.3.0
+   */
+  def nullable: Boolean = _nullable
+
+  /**
+   * Returns true iff the UDF is deterministic, i.e. the UDF produces the same output given the same
+   * input.
+   *
+   * @since 2.3.0
+   */
+  def deterministic: Boolean = _deterministic
+
+  /**
+   * Returns an expression that invokes the UDF, using the given arguments.
+   *
+   * @since 1.3.0
+   */
   def apply(exprs: Column*): Column = {
-    Column(ScalaUDF(f, dataType, exprs.map(_.expr), inputTypes.getOrElse(Nil)))
+    Column(ScalaUDF(
+      f,
+      dataType,
+      exprs.map(_.expr),
+      inputTypes.getOrElse(Nil),
+      udfName = _nameOption,
+      nullable = _nullable,
+      udfDeterministic = _deterministic))
+  }
+
+  private def copyAll(): UserDefinedFunction = {
+    val udf = copy()
+    udf._nameOption = _nameOption
+    udf._nullable = _nullable
+    udf._deterministic = _deterministic
+    udf
+  }
+
+  /**
+   * Updates UserDefinedFunction with a given name.
+   *
+   * @since 2.3.0
+   */
+  def withName(name: String): UserDefinedFunction = {
+    val udf = copyAll()
+    udf._nameOption = Option(name)
+    udf
+  }
+
+  /**
+   * Updates UserDefinedFunction to non-nullable.
+   *
+   * @since 2.3.0
+   */
+  def asNonNullabe(): UserDefinedFunction = {
+    if (!nullable) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._nullable = false
+      udf
+    }
+  }
+
+  /**
+   * Updates UserDefinedFunction to nondeterministic.
+   *
+   * @since 2.3.0
+   */
+  def asNondeterministic(): UserDefinedFunction = {
+    if (!_deterministic) {
+      this
+    } else {
+      val udf = copyAll()
+      udf._deterministic = false
+      udf
+    }
   }
 }

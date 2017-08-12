@@ -40,7 +40,7 @@ private[spark] abstract class Regressor[
 /**
  * :: DeveloperApi ::
  *
- * Model produced by a [[Regressor]].
+ * Model produced by a `Regressor`.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
  * @tparam M  Concrete Model type.

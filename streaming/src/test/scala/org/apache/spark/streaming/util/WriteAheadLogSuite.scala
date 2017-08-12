@@ -139,6 +139,9 @@ abstract class CommonWriteAheadLogTests(
         assert(getLogFilesInDirectory(testDir).size < logFiles.size)
       }
     }
+    writeAheadLog.close()
+    // Make sure it is idempotent.
+    writeAheadLog.close()
   }
 
   test(testPrefix + "handling file errors while reading rotating logs") {

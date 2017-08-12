@@ -1,7 +1,7 @@
 set hive.exec.infer.bucket.sort=true;
 set hive.merge.mapfiles=false;
 set hive.merge.mapredfiles=false;
-set mapred.reduce.tasks=2;
+set mapreduce.job.reduces=2;
 
 CREATE TABLE test_table (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING);
 

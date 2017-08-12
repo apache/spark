@@ -31,7 +31,8 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val poolName = Option(request.getParameter("poolname")).map { poolname =>
+      // stripXSS is called first to remove suspicious characters used in XSS attacks
+      val poolName = Option(UIUtils.stripXSS(request.getParameter("poolname"))).map { poolname =>
         UIUtils.decodeURLParameter(poolname)
       }.getOrElse {
         throw new IllegalArgumentException(s"Missing poolname parameter")
@@ -40,11 +41,11 @@ private[ui] class PoolPage(parent: StagesTab) extends WebUIPage("pool") {
       val poolToActiveStages = listener.poolToActiveStages
       val activeStages = poolToActiveStages.get(poolName) match {
         case Some(s) => s.values.toSeq
-        case None => Seq[StageInfo]()
+        case None => Seq.empty[StageInfo]
       }
       val shouldShowActiveStages = activeStages.nonEmpty
       val activeStagesTable =
-        new StageTableBase(request, activeStages, "activeStage", parent.basePath, "stages/pool",
+        new StageTableBase(request, activeStages, "", "activeStage", parent.basePath, "stages/pool",
           parent.progressListener, parent.isFairScheduler, parent.killEnabled,
           isFailedStage = false)
 

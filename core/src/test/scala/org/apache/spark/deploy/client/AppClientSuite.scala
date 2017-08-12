@@ -171,7 +171,7 @@ class AppClientSuite
 
   /** Get the Master state */
   private def getMasterState: MasterStateResponse = {
-    master.self.askWithRetry[MasterStateResponse](RequestMasterState)
+    master.self.askSync[MasterStateResponse](RequestMasterState)
   }
 
   /** Get the applications that are active from Master */
@@ -210,9 +210,12 @@ class AppClientSuite
       execAddedList.add(id)
     }
 
-    def executorRemoved(id: String, message: String, exitStatus: Option[Int]): Unit = {
+    def executorRemoved(
+        id: String, message: String, exitStatus: Option[Int], workerLost: Boolean): Unit = {
       execRemovedList.add(id)
     }
+
+    def workerRemoved(workerId: String, host: String, message: String): Unit = {}
   }
 
   /** Create AppClient and supporting objects */

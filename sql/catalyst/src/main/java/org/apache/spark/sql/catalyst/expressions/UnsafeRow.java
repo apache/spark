@@ -31,6 +31,7 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
 
+import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
@@ -58,7 +59,7 @@ import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
  *
  * Instances of `UnsafeRow` act as pointers to row data stored in this format.
  */
-public final class UnsafeRow extends MutableRow implements Externalizable, KryoSerializable {
+public final class UnsafeRow extends InternalRow implements Externalizable, KryoSerializable {
 
   //////////////////////////////////////////////////////////////////////////////
   // Static methods
@@ -166,6 +167,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
+    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
@@ -182,6 +184,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   }
 
   public void setTotalSize(int sizeInBytes) {
+    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.sizeInBytes = sizeInBytes;
   }
 
@@ -195,7 +198,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
     assertIndexIsValid(i);
     BitSetMethods.set(baseObject, baseOffset, i);
     // To preserve row equality, zero out the value when setting the column to null.
-    // Since this row does does not currently support updates to variable-length values, we don't
+    // Since this row does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     Platform.putLong(baseObject, getFieldOffset(i), 0);
   }
@@ -549,7 +552,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
     if (baseObject instanceof byte[]) {
-      int offsetInByteArray = (int) (Platform.BYTE_ARRAY_OFFSET - baseOffset);
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
       out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;

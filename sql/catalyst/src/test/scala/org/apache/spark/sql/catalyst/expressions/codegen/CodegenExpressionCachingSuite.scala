@@ -31,19 +31,22 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
     // Use an Add to wrap two of them together in case we only initialize the top level expressions.
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = UnsafeProjection.create(Seq(expr))
+    instance.initialize(0)
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
   test("GenerateMutableProjection should initialize expressions") {
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GenerateMutableProjection.generate(Seq(expr))
+    instance.initialize(0)
     assert(instance.apply(null).getBoolean(0) === false)
   }
 
   test("GeneratePredicate should initialize expressions") {
     val expr = And(NondeterministicExpression(), NondeterministicExpression())
     val instance = GeneratePredicate.generate(expr)
-    assert(instance.apply(null) === false)
+    instance.initialize(0)
+    assert(instance.eval(null) === false)
   }
 
   test("GenerateUnsafeProjection should not share expression instances") {
@@ -73,13 +76,13 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
   test("GeneratePredicate should not share expression instances") {
     val expr1 = MutableExpression()
     val instance1 = GeneratePredicate.generate(expr1)
-    assert(instance1.apply(null) === false)
+    assert(instance1.eval(null) === false)
 
     val expr2 = MutableExpression()
     expr2.mutableState = true
     val instance2 = GeneratePredicate.generate(expr2)
-    assert(instance1.apply(null) === false)
-    assert(instance2.apply(null) === true)
+    assert(instance1.eval(null) === false)
+    assert(instance2.eval(null) === true)
   }
 
 }
@@ -89,7 +92,7 @@ class CodegenExpressionCachingSuite extends SparkFunSuite {
  */
 case class NondeterministicExpression()
   extends LeafExpression with Nondeterministic with CodegenFallback {
-  override protected def initInternal(): Unit = { }
+  override protected def initializeInternal(partitionIndex: Int): Unit = {}
   override protected def evalInternal(input: InternalRow): Any = false
   override def nullable: Boolean = false
   override def dataType: DataType = BooleanType

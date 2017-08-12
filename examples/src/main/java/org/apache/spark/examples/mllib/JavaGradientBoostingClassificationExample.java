@@ -27,8 +27,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.tree.GradientBoostedTrees;
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy;
@@ -61,24 +59,13 @@ public class JavaGradientBoostingClassificationExample {
     Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     boostingStrategy.treeStrategy().setCategoricalFeaturesInfo(categoricalFeaturesInfo);
 
-    final GradientBoostedTreesModel model =
-      GradientBoostedTrees.train(trainingData, boostingStrategy);
+    GradientBoostedTreesModel model = GradientBoostedTrees.train(trainingData, boostingStrategy);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
-      testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-        @Override
-        public Tuple2<Double, Double> call(LabeledPoint p) {
-          return new Tuple2<>(model.predict(p.features()), p.label());
-        }
-      });
-    Double testErr =
-      1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-        @Override
-        public Boolean call(Tuple2<Double, Double> pl) {
-          return !pl._1().equals(pl._2());
-        }
-      }).count() / testData.count();
+      testData.mapToPair(p -> new Tuple2<>(model.predict(p.features()), p.label()));
+    double testErr =
+      predictionAndLabel.filter(pl -> !pl._1().equals(pl._2())).count() / (double) testData.count();
     System.out.println("Test Error: " + testErr);
     System.out.println("Learned classification GBT model:\n" + model.toDebugString());
 

@@ -21,13 +21,15 @@ import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.{Await, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
 import org.scalatest.Assertions.AssertionsHelper
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
@@ -93,12 +95,12 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   }
 
   /**
-   * A map from partition -> results for all tasks of a job when you call this test framework's
+   * A map from partition to results for all tasks of a job when you call this test framework's
    * [[submit]] method.  Two important considerations:
    *
    * 1. If there is a job failure, results may or may not be empty.  If any tasks succeed before
    * the job has failed, they will get included in `results`.  Instead, check for job failure by
-   * checking [[failure]].  (Also see [[assertDataStructuresEmpty()]])
+   * checking [[failure]]. (Also see `assertDataStructuresEmpty()`)
    *
    * 2. This only gets cleared between tests.  So you'll need to do special handling if you submit
    * more than one job in one test.
@@ -157,8 +159,16 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       }
       // When a job fails, we terminate before waiting for all the task end events to come in,
       // so there might still be a running task set.  So we only check these conditions
-      // when the job succeeds
-      assert(taskScheduler.runningTaskSets.isEmpty)
+      // when the job succeeds.
+      // When the final task of a taskset completes, we post
+      // the event to the DAGScheduler event loop before we finish processing in the taskscheduler
+      // thread.  It's possible the DAGScheduler thread processes the event, finishes the job,
+      // and notifies the job waiter before our original thread in the task scheduler finishes
+      // handling the event and marks the taskset as complete.  So its ok if we need to wait a
+      // *little* bit longer for the original taskscheduler thread to finish up to deal w/ the race.
+      eventually(timeout(1 second), interval(10 millis)) {
+        assert(taskScheduler.runningTaskSets.isEmpty)
+      }
       assert(!backend.hasTasks)
     } else {
       assert(failure != null)
@@ -250,7 +260,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
    */
   def awaitJobTermination(jobFuture: Future[_], duration: Duration): Unit = {
     try {
-      Await.ready(jobFuture, duration)
+      ThreadUtils.awaitReady(jobFuture, duration)
     } catch {
       case te: TimeoutException if backendException.get() != null =>
         val msg = raw"""
@@ -366,13 +376,13 @@ private[spark] abstract class MockBackend(
    */
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
 
-  private def generateOffers(): Seq[WorkerOffer] = {
+  private def generateOffers(): IndexedSeq[WorkerOffer] = {
     executorIdToExecutor.values.filter { exec =>
       exec.freeCores > 0
     }.map { exec =>
       WorkerOffer(executorId = exec.executorId, host = exec.host,
         cores = exec.freeCores)
-    }.toSeq
+    }.toIndexedSeq
   }
 
   /**
@@ -381,18 +391,17 @@ private[spark] abstract class MockBackend(
    * scheduling.
    */
   override def reviveOffers(): Unit = {
-    val offers: Seq[WorkerOffer] = generateOffers()
-    val newTaskDescriptions = taskScheduler.resourceOffers(offers).flatten
-    // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
-    // tests from introducing a race if they need it
-    val newTasks = taskScheduler.synchronized {
-      newTaskDescriptions.map { taskDescription =>
+    // Need a lock on the entire scheduler to protect freeCores -- otherwise, multiple threads
+    // may make offers at the same time, though they are using the same set of freeCores.
+    taskScheduler.synchronized {
+      val newTaskDescriptions = taskScheduler.resourceOffers(generateOffers()).flatten
+      // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
+      // tests from introducing a race if they need it.
+      val newTasks = newTaskDescriptions.map { taskDescription =>
         val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
         val task = taskSet.tasks(taskDescription.index)
         (taskDescription, task)
       }
-    }
-    synchronized {
       newTasks.foreach { case (taskDescription, _) =>
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
@@ -401,7 +410,8 @@ private[spark] abstract class MockBackend(
     }
   }
 
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+  override def killTask(
+      taskId: Long, executorId: String, interruptThread: Boolean, reason: String): Unit = {
     // We have to implement this b/c of SPARK-15385.
     // Its OK for this to be a no-op, because even if a backend does implement killTask,
     // it really can only be "best-effort" in any case, and the scheduler should be robust to that.
@@ -543,10 +553,10 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    */
   testScheduler("multi-stage job") {
 
-    def stageToOutputParts(stageId: Int): Int = {
-      stageId match {
+    def shuffleIdToOutputParts(shuffleId: Int): Int = {
+      shuffleId match {
         case 0 => 10
-        case 2 => 20
+        case 1 => 20
         case _ => 30
       }
     }
@@ -567,11 +577,12 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
         // b/c the stage numbering is non-deterministic, so stage number alone doesn't tell
         // us what to check
       }
-
       (task.stageId, task.stageAttemptId, task.partitionId) match {
         case (stage, 0, _) if stage < 4 =>
+          val shuffleId =
+            scheduler.stageIdToStage(stage).asInstanceOf[ShuffleMapStage].shuffleDep.shuffleId
           backend.taskSuccess(taskDescription,
-            DAGSchedulerSuite.makeMapStatus("hostA", stageToOutputParts(stage)))
+            DAGSchedulerSuite.makeMapStatus("hostA", shuffleIdToOutputParts(shuffleId)))
         case (4, 0, partition) =>
           backend.taskSuccess(taskDescription, 4321 + partition)
       }
@@ -621,9 +632,9 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
+    assertDataStructuresEmpty()
     assert(results === (0 until 10).map { idx => idx -> (42 + idx) }.toMap)
     assert(stageToAttempts === Map(0 -> Set(0, 1), 1 -> Set(0, 1)))
-    assertDataStructuresEmpty()
   }
 
   testScheduler("job failure after 4 attempts") {
@@ -635,7 +646,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
-      failure.getMessage.contains("test task failure")
+      assert(failure.getMessage.contains("test task failure"))
     }
     assertDataStructuresEmpty(noFailure = false)
   }

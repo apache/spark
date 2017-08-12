@@ -304,7 +304,7 @@ class StreamingContext(object):
         Create an input stream from an queue of RDDs or list. In each batch,
         it will process either one or all of the RDDs returned by the queue.
 
-        NOTE: changes to the queue after the stream is created will not be recognized.
+        .. note:: Changes to the queue after the stream is created will not be recognized.
 
         @param rdds:       Queue of RDDs
         @param oneAtATime: pick one rdd each time or pick all of them once.

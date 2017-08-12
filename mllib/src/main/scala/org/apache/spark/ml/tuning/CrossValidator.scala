@@ -40,7 +40,7 @@ import org.apache.spark.sql.types.StructType
  */
 private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
-   * Param for number of folds for cross validation.  Must be >= 2.
+   * Param for number of folds for cross validation.  Must be &gt;= 2.
    * Default: 3
    *
    * @group param
@@ -101,6 +101,11 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
     val metrics = new Array[Double](epm.length)
+
+    val instr = Instrumentation.create(this, dataset)
+    instr.logParams(numFolds, seed)
+    logTuningParams(instr)
+
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
@@ -127,6 +132,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     logInfo(s"Best set of parameters:\n${epm(bestIndex)}")
     logInfo(s"Best cross-validation metric: $bestMetric.")
     val bestModel = est.fit(dataset, epm(bestIndex)).asInstanceOf[Model[_]]
+    instr.logSuccess(bestModel)
     copyValues(new CrossValidatorModel(uid, bestModel, metrics).setParent(this))
   }
 
@@ -198,7 +204,7 @@ object CrossValidator extends MLReadable[CrossValidator] {
  *
  * @param bestModel The best model selected from k-fold cross validation.
  * @param avgMetrics Average cross-validation metrics for each paramMap in
- *                   [[CrossValidator.estimatorParamMaps]], in the corresponding order.
+ *                   `CrossValidator.estimatorParamMaps`, in the corresponding order.
  */
 @Since("1.2.0")
 class CrossValidatorModel private[ml] (

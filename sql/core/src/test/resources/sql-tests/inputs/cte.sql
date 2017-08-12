@@ -12,3 +12,18 @@ WITH s1 AS (SELECT 1 FROM s2), s2 AS (SELECT 1 FROM s1) SELECT * FROM s1, s2;
 
 -- WITH clause should reference the previous CTE
 WITH t1 AS (SELECT * FROM t2), t2 AS (SELECT 2 FROM t1) SELECT * FROM t1 cross join t2;
+
+-- SPARK-18609 CTE with self-join
+WITH CTE1 AS (
+  SELECT b.id AS id
+  FROM   T2 a
+         CROSS JOIN (SELECT id AS id FROM T2) b
+)
+SELECT t1.id AS c1,
+       t2.id AS c2
+FROM   CTE1 t1
+       CROSS JOIN CTE1 t2;
+
+-- Clean up
+DROP VIEW IF EXISTS t;
+DROP VIEW IF EXISTS t2;

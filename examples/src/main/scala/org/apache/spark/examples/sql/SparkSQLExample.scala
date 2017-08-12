@@ -16,10 +16,6 @@
  */
 package org.apache.spark.examples.sql
 
-// $example on:schema_inferring$
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.Encoder
-// $example off:schema_inferring$
 import org.apache.spark.sql.Row
 // $example on:init_session$
 import org.apache.spark.sql.SparkSession
@@ -33,8 +29,6 @@ import org.apache.spark.sql.types._
 object SparkSQLExample {
 
   // $example on:create_ds$
-  // Note: Case classes in Scala 2.10 can support only up to 22 fields. To work around this limit,
-  // you can use custom classes that implement the Product interface
   case class Person(name: String, age: Long)
   // $example off:create_ds$
 
@@ -135,6 +129,31 @@ object SparkSQLExample {
     // |  19| Justin|
     // +----+-------+
     // $example off:run_sql$
+
+    // $example on:global_temp_view$
+    // Register the DataFrame as a global temporary view
+    df.createGlobalTempView("people")
+
+    // Global temporary view is tied to a system preserved database `global_temp`
+    spark.sql("SELECT * FROM global_temp.people").show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+
+    // Global temporary view is cross-session
+    spark.newSession().sql("SELECT * FROM global_temp.people").show()
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+    // $example off:global_temp_view$
   }
 
   private def runDatasetCreationExample(spark: SparkSession): Unit = {
