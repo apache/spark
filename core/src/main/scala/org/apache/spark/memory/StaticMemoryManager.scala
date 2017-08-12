@@ -17,6 +17,7 @@
 
 package org.apache.spark.memory
 
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.SparkConf
 import org.apache.spark.storage.BlockId
 
@@ -129,12 +130,12 @@ private[spark] object StaticMemoryManager {
         s"be at least $MIN_MEMORY_BYTES. Please increase heap size using the --driver-memory " +
         s"option or spark.driver.memory in Spark configuration.")
     }
-    if (conf.contains("spark.executor.memory")) {
-      val executorMemory = conf.getSizeAsBytes("spark.executor.memory")
+    if (conf.contains(SparkLauncher.EXECUTOR_MEMORY)) {
+      val executorMemory = conf.getSizeAsBytes(SparkLauncher.EXECUTOR_MEMORY)
       if (executorMemory < MIN_MEMORY_BYTES) {
         throw new IllegalArgumentException(s"Executor memory $executorMemory must be at least " +
           s"$MIN_MEMORY_BYTES. Please increase executor memory using the " +
-          s"--executor-memory option or spark.executor.memory in Spark configuration.")
+          s"--executor-memory option or ${SparkLauncher.EXECUTOR_MEMORY} in Spark configuration.")
       }
     }
     val memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2)

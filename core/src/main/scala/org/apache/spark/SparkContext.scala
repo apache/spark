@@ -342,7 +342,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
   private def warnSparkMem(value: String): String = {
     logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
-      "deprecated, please use spark.executor.memory instead.")
+      s"deprecated, please use ${SparkLauncher.EXECUTOR_MEMORY} instead.")
     value
   }
 

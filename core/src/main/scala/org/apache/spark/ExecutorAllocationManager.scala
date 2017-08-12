@@ -27,6 +27,7 @@ import com.codahale.metrics.{Gauge, MetricRegistry}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{DYN_ALLOCATION_MAX_EXECUTORS, DYN_ALLOCATION_MIN_EXECUTORS}
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
@@ -115,7 +116,7 @@ private[spark] class ExecutorAllocationManager(
   // allocation is only supported for YARN and the default number of cores per executor in YARN is
   // 1, but it might need to be attained differently for different cluster managers
   private val tasksPerExecutor =
-    conf.getInt("spark.executor.cores", 1) / conf.getInt("spark.task.cpus", 1)
+    conf.getInt(SparkLauncher.EXECUTOR_CORES, 1) / conf.getInt("spark.task.cpus", 1)
 
   validateSettings()
 
@@ -201,7 +202,8 @@ private[spark] class ExecutorAllocationManager(
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutor == 0) {
-      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
+      throw new SparkException(s"${SparkLauncher.EXECUTOR_CORES} must not be " +
+        "less than spark.task.cpus.")
     }
   }
 

@@ -491,9 +491,9 @@ object SparkSubmit extends CommandLineUtils {
 
       // Other options
       OptionAssigner(args.executorCores, STANDALONE | YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.cores"),
+        sysProp = SparkLauncher.EXECUTOR_CORES),
       OptionAssigner(args.executorMemory, STANDALONE | MESOS | YARN, ALL_DEPLOY_MODES,
-        sysProp = "spark.executor.memory"),
+        sysProp = SparkLauncher.EXECUTOR_MEMORY),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
       OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
