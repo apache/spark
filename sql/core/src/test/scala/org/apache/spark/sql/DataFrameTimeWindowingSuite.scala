@@ -43,6 +43,22 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     )
   }
 
+  test("SPARK-21590: tumbling window using negative start time") {
+    val df = Seq(
+      ("2016-03-27 19:39:30", 1, "a"),
+      ("2016-03-27 19:39:25", 2, "a")).toDF("time", "value", "id")
+
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
+      Seq(
+        Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 2)
+      )
+    )
+  }
+
   test("tumbling window groupBy statement") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),
@@ -66,6 +82,20 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
     checkAnswer(
       df.groupBy(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"id")
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select("counts"),
+      Seq(Row(1), Row(1), Row(1)))
+  }
+
+  test("SPARK-21590: tumbling window groupBy statement with negative startTime") {
+    val df = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"), $"id")
         .agg(count("*").as("counts"))
         .orderBy($"window.start".asc)
         .select("counts"),
@@ -300,6 +330,21 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
       checkAnswer(
         spark.sql(
           s"""select window(time, "10 seconds", 10000000, "5 seconds"), value from $table""")
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
+        Seq(
+          Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 1),
+          Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 4),
+          Row("2016-03-27 19:39:55", "2016-03-27 19:40:05", 2)
+        )
+      )
+    }
+  }
+
+  test("SPARK-21590: time window in SQL with three expressions including negative start time") {
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql(
+          s"""select window(time, "10 seconds", 10000000, "-5 seconds"), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(
           Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 1),
