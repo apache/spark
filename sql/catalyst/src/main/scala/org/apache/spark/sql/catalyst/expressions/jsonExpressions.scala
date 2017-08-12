@@ -361,8 +361,10 @@ case class JsonTuple(children: Seq[Expression])
   // the fields to query are the remaining children
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
-  // eagerly evaluate any foldable the field names
+  // e.g., trim(null) will raise NPE in asInstanceOf[UTF8String].toString
   private val nullFieldName = "__NullFieldName"
+
+  // eagerly evaluate any foldable the field names
   @transient private lazy val foldableFieldNames: IndexedSeq[String] = {
     fieldExpressions.map {
       case expr if expr.foldable =>
