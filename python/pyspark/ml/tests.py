@@ -45,7 +45,7 @@ from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
 
 from pyspark import keyword_only, SparkContext
-from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
+from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, UnaryTransformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
@@ -62,10 +62,12 @@ from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegres
     LinearRegression
 from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.tuning import *
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
+from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -119,6 +121,36 @@ class MockTransformer(Transformer, HasFake):
         self.dataset_index = dataset.index
         dataset.index += 1
         return dataset
+
+
+class MockUnaryTransformer(UnaryTransformer):
+
+    shift = Param(Params._dummy(), "shift", "The amount by which to shift " +
+                  "data in a DataFrame",
+                  typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, shiftVal=1):
+        super(MockUnaryTransformer, self).__init__()
+        self._setDefault(shift=1)
+        self._set(shift=shiftVal)
+
+    def getShift(self):
+        return self.getOrDefault(self.shift)
+
+    def setShift(self, shift):
+        self._set(shift=shift)
+
+    def createTransformFunc(self):
+        shiftVal = self.getShift()
+        return lambda x: x + shiftVal
+
+    def outputDataType(self):
+        return DoubleType()
+
+    def validateInputType(self, inputType):
+        if inputType != DoubleType():
+            raise TypeError("Bad input type: {}. ".format(inputType) +
+                            "Requires Integer.")
 
 
 class MockEstimator(Estimator, HasFake):
@@ -345,6 +377,12 @@ class ParamTests(PySparkTestCase):
         self.assertFalse(testParams.isDefined(inputCol))
         with self.assertRaises(KeyError):
             testParams.getInputCol()
+
+        otherParam = Param(Params._dummy(), "otherParam", "Parameter used to test that " +
+                           "set raises an error for a non-member parameter.",
+                           typeConverter=TypeConverters.toString)
+        with self.assertRaises(ValueError):
+            testParams.set(otherParam, "value")
 
         # Since the default is normally random, set it to a known number for debug str
         testParams._setDefault(seed=41)
@@ -1158,6 +1196,33 @@ class PersistenceTest(SparkSessionTestCase):
         except OSError:
             pass
 
+    def test_default_read_write(self):
+        temp_path = tempfile.mkdtemp()
+
+        lr = LogisticRegression()
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+        writer = DefaultParamsWriter(lr)
+
+        savePath = temp_path + "/lr"
+        writer.save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr2 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
+
+        # test overwrite
+        lr.setThreshold(.8)
+        writer.overwrite().save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr3 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr3.uid)
+        self.assertEqual(lr.extractParamMap(), lr3.extractParamMap())
+
 
 class LDATest(SparkSessionTestCase):
 
@@ -1408,6 +1473,20 @@ class OneVsRestTests(SparkSessionTestCase):
                                         modelPar2.models[i].coefficients.toArray(), atol=1E-4))
             self.assertTrue(np.allclose(model.intercept, modelPar2.models[i].intercept, atol=1E-4))
 
+    def test_support_for_weightCol(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8), 1.0),
+                                         (1.0, Vectors.sparse(2, [], []), 1.0),
+                                         (2.0, Vectors.dense(0.5, 0.5), 1.0)],
+                                        ["label", "features", "weight"])
+        # classifier inherits hasWeightCol
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr, weightCol="weight")
+        self.assertIsNotNone(ovr.fit(df))
+        # classifier doesn't inherit hasWeightCol
+        dt = DecisionTreeClassifier()
+        ovr2 = OneVsRest(classifier=dt, weightCol="weight")
+        self.assertIsNotNone(ovr2.fit(df))
+
 
 class HashingTFTest(SparkSessionTestCase):
 
@@ -1457,6 +1536,43 @@ class GeneralizedLinearRegressionTest(SparkSessionTestCase):
         self.assertTrue(np.allclose(model.coefficients.toArray(), [0.664647, -0.3192581],
                                     atol=1E-4))
         self.assertTrue(np.isclose(model.intercept, -1.561613, atol=1E-4))
+
+
+class LogisticRegressionTest(SparkSessionTestCase):
+
+    def test_binomial_logistic_regression_with_bound(self):
+
+        df = self.spark.createDataFrame(
+            [(1.0, 1.0, Vectors.dense(0.0, 5.0)),
+             (0.0, 2.0, Vectors.dense(1.0, 2.0)),
+             (1.0, 3.0, Vectors.dense(2.0, 1.0)),
+             (0.0, 4.0, Vectors.dense(3.0, 3.0)), ], ["label", "weight", "features"])
+
+        lor = LogisticRegression(regParam=0.01, weightCol="weight",
+                                 lowerBoundsOnCoefficients=Matrices.dense(1, 2, [-1.0, -1.0]),
+                                 upperBoundsOnIntercepts=Vectors.dense(0.0))
+        model = lor.fit(df)
+        self.assertTrue(
+            np.allclose(model.coefficients.toArray(), [-0.2944, -0.0484], atol=1E-4))
+        self.assertTrue(np.isclose(model.intercept, 0.0, atol=1E-4))
+
+    def test_multinomial_logistic_regression_with_bound(self):
+
+        data_path = "data/mllib/sample_multiclass_classification_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        lor = LogisticRegression(regParam=0.01,
+                                 lowerBoundsOnCoefficients=Matrices.dense(3, 4, range(12)),
+                                 upperBoundsOnIntercepts=Vectors.dense(0.0, 0.0, 0.0))
+        model = lor.fit(df)
+        expected = [[4.593, 4.5516, 9.0099, 12.2904],
+                    [1.0, 8.1093, 7.0, 10.0],
+                    [3.041, 5.0, 8.0, 11.0]]
+        for i in range(0, len(expected)):
+            self.assertTrue(
+                np.allclose(model.coefficientMatrix.toArray()[i], expected[i], atol=1E-4))
+        self.assertTrue(
+            np.allclose(model.interceptVector.toArray(), [-0.9057, -1.1392, -0.0033], atol=1E-4))
 
 
 class FPGrowthTests(SparkSessionTestCase):
@@ -1969,6 +2085,35 @@ class ChiSquareTestTests(SparkSessionTestCase):
         fieldNames = set(field.name for field in res.schema.fields)
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
+
+
+class UnaryTransformerTests(SparkSessionTestCase):
+
+    def test_unary_transformer_validate_input_type(self):
+        shiftVal = 3
+        transformer = MockUnaryTransformer(shiftVal=shiftVal)\
+            .setInputCol("input").setOutputCol("output")
+
+        # should not raise any errors
+        transformer.validateInputType(DoubleType())
+
+        with self.assertRaises(TypeError):
+            # passing the wrong input type should raise an error
+            transformer.validateInputType(IntegerType())
+
+    def test_unary_transformer_transform(self):
+        shiftVal = 3
+        transformer = MockUnaryTransformer(shiftVal=shiftVal)\
+            .setInputCol("input").setOutputCol("output")
+
+        df = self.spark.range(0, 10).toDF('input')
+        df = df.withColumn("input", df.input.cast(dataType="double"))
+
+        transformed_df = transformer.transform(df)
+        results = transformed_df.select("input", "output").collect()
+
+        for res in results:
+            self.assertEqual(res.input + shiftVal, res.output)
 
 
 if __name__ == "__main__":

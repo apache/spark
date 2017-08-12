@@ -33,4 +33,13 @@ class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton 
       assert(conf(ConfVars.METASTORE_END_FUNCTION_LISTENERS.varname) === "")
     }
   }
+
+  test("newTemporaryConfiguration respect spark.hadoop.foo=bar in SparkConf") {
+    sys.props.put("spark.hadoop.foo", "bar")
+    Seq(true, false) foreach { useInMemoryDerby =>
+      val hiveConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby)
+      assert(!hiveConf.contains("spark.hadoop.foo"))
+      assert(hiveConf("foo") === "bar")
+    }
+  }
 }

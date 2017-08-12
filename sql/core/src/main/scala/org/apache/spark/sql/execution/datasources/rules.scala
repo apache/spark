@@ -479,7 +479,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
       case InsertIntoTable(t, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
-          t == OneRowRelation ||
+          t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 

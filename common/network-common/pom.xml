@@ -126,7 +126,7 @@
         <artifactId>maven-jar-plugin</artifactId>
         <executions>
           <execution>
-            <id>test-jar-on-test-compile</id>
+            <id>prepare-test-jar</id>
             <phase>test-compile</phase>
             <goals>
               <goal>test-jar</goal>
