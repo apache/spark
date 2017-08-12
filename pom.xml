@@ -510,7 +510,7 @@
         <groupId>org.slf4j</groupId>
         <artifactId>jcl-over-slf4j</artifactId>
         <version>${slf4j.version}</version>
-        <scope>runtime</scope>
+        <!-- runtime scope is appropriate, but causes SBT build problems -->
       </dependency>
       <dependency>
         <groupId>log4j</groupId>
@@ -1972,14 +1972,12 @@
             </execution>
             <execution>
               <id>scala-compile-first</id>
-              <phase>process-resources</phase>
               <goals>
                 <goal>compile</goal>
               </goals>
             </execution>
             <execution>
               <id>scala-test-compile-first</id>
-              <phase>process-test-resources</phase>
               <goals>
                 <goal>testCompile</goal>
               </goals>
@@ -2024,12 +2022,8 @@
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
-            <encoding>UTF-8</encoding>
-            <maxmem>1024m</maxmem>
-            <fork>true</fork>
-            <compilerArgs>
-              <arg>-Xlint:all,-serial,-path</arg>
-            </compilerArgs>
+            <skipMain>true</skipMain> <!-- skip compile -->
+            <skip>true</skip> <!-- skip testCompile -->
           </configuration>
         </plugin>
         <plugin>
