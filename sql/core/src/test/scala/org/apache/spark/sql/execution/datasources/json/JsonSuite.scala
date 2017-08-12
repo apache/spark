@@ -2034,4 +2034,13 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       }
     }
   }
+
+  test("SPARK-21677: json_tuple throws NullPointException when column is null as string type") {
+    checkAnswer(sql(
+      """
+        |SELECT json_tuple('{"a" : 1, "b" : 2}'
+        |, cast(NULL AS STRING), 'b'
+        |, cast(NULL AS STRING), 'a')
+      """.stripMargin), Row(null, "2", null, "1"))
+  }
 }
