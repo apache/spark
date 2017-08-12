@@ -29,7 +29,7 @@ import scala.io.Source
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
@@ -248,6 +248,51 @@ class SparkSubmitSuite
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.ui.enabled") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
+  }
+
+  test("handles YARN cluster mode with remote jars") {
+    val hadoopConf = new Configuration()
+    // Set hdfs implementation to local file system for testing.
+    hadoopConf.set("fs.hdfs.impl", "org.apache.spark.deploy.TestFileSystem")
+    // Disable file system impl cache to make sure the test file system is picked up.
+    hadoopConf.set("fs.hdfs.impl.disable.cache", "true")
+    val theJarFile = File.createTempFile("thejar", ".jar")
+    theJarFile.deleteOnExit()
+    var clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      s"hdfs://${theJarFile.getAbsolutePath}")
+    var appArgs = new SparkSubmitArguments(clArgs)
+    val (_, classpath, _, _) = prepareSubmitEnvironment(appArgs, hadoopConf)
+
+    // In yarn cluster mode, also adding remote jars to classpath
+    classpath(0) should endWith regex ("thejar.*.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
+
+    val oneJarFile = File.createTempFile("onejar", ".jar")
+    oneJarFile.deleteOnExit()
+    clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--class", "org.SomeClass",
+      "--jars", s"hdfs://${oneJarFile.getAbsolutePath}" + ",two.jar,three.jar",
+      "--driver-memory", "4g",
+      "thejar.jar")
+    appArgs = new SparkSubmitArguments(clArgs)
+    val (_, classpath1, _, _) = prepareSubmitEnvironment(appArgs, hadoopConf)
+
+    // In yarn cluster mode, also adding remote jars to classpath
+    classpath1(0) should endWith ("thejar.jar")
+    classpath1(1) should endWith regex ("one.*.jar")
+    classpath1(2) should endWith ("two.jar")
+    classpath1(3) should endWith ("three.jar")
   }
 
   test("handles YARN client mode") {
@@ -966,5 +1011,9 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
   override def copyToLocalFile(src: Path, dst: Path): Unit = {
     // Ignore the scheme for testing.
     super.copyToLocalFile(new Path(src.toUri.getPath), dst)
+  }
+
+  override def globStatus(pathPattern: Path): Array[FileStatus] = {
+    Array(new FileStatus(0L, false, 0, 0L, 0L, pathPattern))
   }
 }

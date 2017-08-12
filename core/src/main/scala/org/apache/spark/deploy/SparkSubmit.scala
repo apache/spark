@@ -217,8 +217,10 @@ object SparkSubmit extends CommandLineUtils {
    *   (4) the main class for the child
    * Exposed for testing.
    */
-  private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
-      : (Seq[String], Seq[String], Map[String, String], String) = {
+  private[deploy] def prepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      hadoopConf: HadoopConfiguration = new HadoopConfiguration())
+  : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
@@ -319,8 +321,7 @@ object SparkSubmit extends CommandLineUtils {
         RPackageUtils.checkAndBuildRPackage(args.jars, printStream, args.verbose)
       }
     }
-
-    val hadoopConf = new HadoopConfiguration()
+    
     val targetDir = DependencyUtils.createTempDir()
 
     // Resolve glob path for different resources.
@@ -338,6 +339,19 @@ object SparkSubmit extends CommandLineUtils {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
       args.pyFiles = Option(args.pyFiles).map {
+        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
+      }.orNull
+    }
+
+    // In yarn cluster mode, download remote jars and primary resource to local,
+    // these jars will be added to classpath of YARN client to get tokens.
+    if (isYarnCluster) {
+      if (isUserJar(args.primaryResource)) {
+        args.primaryResource = Option(args.primaryResource).map {
+          downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
+        }.orNull
+      }
+      args.jars = Option(args.jars).map {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
     }
