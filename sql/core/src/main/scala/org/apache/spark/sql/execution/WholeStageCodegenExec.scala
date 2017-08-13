@@ -152,8 +152,10 @@ trait CodegenSupport extends SparkPlan {
 
     // Under certain conditions, we can put the logic to consume the rows of this operator into
     // another function. So we can prevent a generated function too long to be optimized by JIT.
+    val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val consumeFunc =
-      if (row == null && outputVars.nonEmpty && parent.usedInputs.size == inputVars.size) {
+      if (row == null && outputVars.nonEmpty && requireAllOutput) {
+        parentConsumeInSeparateFunc = true
         constructDoConsumeFunction(ctx, inputVars)
       } else {
         parent.doConsume(ctx, inputVars, rowVar)
@@ -163,6 +165,34 @@ trait CodegenSupport extends SparkPlan {
        |$evaluated
        |$consumeFunc
      """.stripMargin
+  }
+
+  /**
+   * To prevent concatenated function growing too long to be optimized by JIT. We decide to separate
+   * the consume function of each `CodegenSupport` operator into a function to call in runtime. When
+   * it is happened, we set this variable to `true`.
+   */
+  private var parentConsumeInSeparateFunc: Boolean = false
+
+  /**
+   * Returning true means we have at least one consume logic from child operator or this operator is
+   * separated in a function. If this is `true`, parent operator shouldn't use `continue` statement,
+   * because its generated codes aren't enclosed in main while-loop.
+   */
+  protected def isConsumeInSeparateFunc: Boolean = {
+    val codegenChildren = children.map(_.asInstanceOf[CodegenSupport])
+    codegenChildren.exists(_.parentConsumeInSeparateFunc) ||
+      codegenChildren.exists(_.isConsumeInSeparateFunc)
+  }
+
+  protected def effectiveContinueStatement: String = if (isConsumeInSeparateFunc) {
+    // When the separated consume logic in parent operators needs to do continue for outer loop,
+    // we consider if this plan's consume or any child's consume logic is separated in functions.
+    // If yes, we can't simply do continue. Instead, we return `true`.
+    "return true;";
+  } else {
+    // In the end of this separated consume function chain, we can do continue as usual.
+    "continue;"
   }
 
   /**
@@ -178,12 +208,16 @@ trait CodegenSupport extends SparkPlan {
     val doConsume = ctx.freshName("doConsume")
     val doConsumeFuncName = ctx.addNewFunction(doConsume,
       s"""
-         | private void $doConsume($arguList) throws java.io.IOException {
+         | private boolean $doConsume($arguList) throws java.io.IOException {
          |   ${parent.doConsume(ctx, inputVarsInFunc, rowVar)}
+         |   return false;
          | }
        """.stripMargin)
 
-    s"$doConsumeFuncName($callingParams);"
+    s"""
+       | boolean continueForLoop = $doConsumeFuncName($callingParams);
+       | if (continueForLoop) $effectiveContinueStatement;
+     """.stripMargin
   }
 
   /**
@@ -302,6 +336,8 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.execute() :: Nil
   }
+
+  override protected def isConsumeInSeparateFunc: Boolean = false
 
   override def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")

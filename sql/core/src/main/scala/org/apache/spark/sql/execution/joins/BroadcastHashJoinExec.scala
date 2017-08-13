@@ -206,10 +206,10 @@ case class BroadcastHashJoinExec(
       s"""
          |$eval
          |${ev.code}
-         |if ($skipRow) continue;
+         |if ($skipRow) $effectiveContinueStatement
        """.stripMargin
     } else if (anti) {
-      "continue;"
+      effectiveContinueStatement
     } else {
       ""
     }
@@ -235,7 +235,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) continue;
+         |if ($matched == null) $effectiveContinueStatement
          |$checkCondition
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
@@ -250,7 +250,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
+         |if ($matches == null) $effectiveContinueStatement
          |while ($matches.hasNext()) {
          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
          |  $checkCondition
@@ -351,7 +351,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) continue;
+         |if ($matched == null) $effectiveContinueStatement
          |$checkCondition
          |$numOutput.add(1);
          |${consume(ctx, input)}
@@ -365,14 +365,14 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
+         |if ($matches == null) $effectiveContinueStatement
          |boolean $found = false;
          |while (!$found && $matches.hasNext()) {
          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
          |  $checkCondition
          |  $found = true;
          |}
-         |if (!$found) continue;
+         |if (!$found) $effectiveContinueStatement
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
@@ -424,7 +424,7 @@ case class BroadcastHashJoinExec(
          |      $checkCondition
          |      $found = true;
          |    }
-         |    if ($found) continue;
+         |    if ($found) $effectiveContinueStatement
          |  }
          |}
          |$numOutput.add(1);
