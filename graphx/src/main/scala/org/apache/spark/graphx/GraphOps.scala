@@ -232,6 +232,28 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+    * Reduce the graph by mapping vertices ids, reducing vertices with same new id,delete internal
+    * edges and attach external edges to the new vertex
+    *
+    * @param verticesIdMap     : map to new vertex ids. If vertex id if not in map it is not mapped
+    * @param reductionFunction : function to reduce vertices with same new id
+    */
+
+
+  def reduceVertices(verticesIdMap: RDD[(VertexId, VertexId)], reductionFunction: (VD, VD) => VD):
+  Graph[VD, ED] = {
+
+    val gVerticesId1 = graph.outerJoinVertices(verticesIdMap)((id, value, optId1) =>
+      (optId1.getOrElse(id), value))
+    val reducedVertices = gVerticesId1.vertices.map(x =>
+      (x._2._1, x._2._2)).reduceByKey(reductionFunction)
+    val gReducedEdges0 = gVerticesId1.mapTriplets(t => (t.srcAttr._1, t.dstAttr._1, t.attr))
+    val reducedEdges = gReducedEdges0.edges.filter(x => x.attr._1 != x.attr._2).map(x =>
+      Edge(x.attr._1, x.attr._2, x.attr._3))
+    Graph(reducedVertices, reducedEdges)
+  }
+
+  /**
    * Filter the graph by computing some values to filter on, and applying the predicates.
    *
    * @param preprocess a function to compute new vertex and edge data before filtering
