@@ -183,16 +183,7 @@ trait CodegenSupport extends SparkPlan {
          | }
        """.stripMargin)
 
-    if (isShouldStopRequired) {
-      // Because the processing logic is enclosed in a function, `shouldStop` call in the function
-      // don't be affect outside loop, we need to check it and stop the loop.
-      s"""
-         | $doConsumeFuncName($callingParams);
-         | if (shouldStop()) return;
-       """.stripMargin
-    } else {
-      s"$doConsumeFuncName($callingParams);"
-    }
+    s"$doConsumeFuncName($callingParams);"
   }
 
   /**
