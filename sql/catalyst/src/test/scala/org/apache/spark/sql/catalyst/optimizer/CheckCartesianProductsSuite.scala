@@ -39,56 +39,44 @@ class CheckCartesianProductsSuite extends PlanTest {
 
   val joinTypesWithRequiredCondition = Seq(Inner, LeftOuter, RightOuter, FullOuter)
   val joinTypesWithoutRequiredCondition = Seq(LeftSemi, LeftAnti, ExistenceJoin('exists))
-  var originalConfCrossJoinsEnabled = false
 
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    originalConfCrossJoinsEnabled = conf.crossJoinEnabled
-    conf.setConf(CROSS_JOINS_ENABLED, false)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      conf.setConf(CROSS_JOINS_ENABLED, originalConfCrossJoinsEnabled)
-    } finally {
-      super.afterAll()
-    }
-  }
-
-  test("CheckCartesianProducts doesn't throw an exception if cartesian products are enabled)") {
-    try {
-      conf.setConf(CROSS_JOINS_ENABLED, true)
+  test("CheckCartesianProducts doesn't throw an exception if cross joins are enabled)") {
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "true") {
       noException should be thrownBy {
         for (joinType <- joinTypesWithRequiredCondition ++ joinTypesWithoutRequiredCondition) {
           performCartesianProductCheck(joinType)
         }
       }
-    } finally {
-      conf.setConf(CROSS_JOINS_ENABLED, false)
     }
   }
 
   test("CheckCartesianProducts throws an exception for join types that require a join condition") {
-    for (joinType <- joinTypesWithRequiredCondition) {
-      val thrownException = the [AnalysisException] thrownBy {
-        performCartesianProductCheck(joinType)
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+      for (joinType <- joinTypesWithRequiredCondition) {
+        val thrownException = the [AnalysisException] thrownBy {
+          performCartesianProductCheck(joinType)
+        }
+        assert(thrownException.message.contains("Detected cartesian product"))
       }
-      assert(thrownException.message.contains("Detected cartesian product"))
     }
   }
 
   test("CheckCartesianProducts doesn't throw an exception if a join condition is present") {
-    for (joinType <- joinTypesWithRequiredCondition) {
-      noException should be thrownBy {
-        performCartesianProductCheck(joinType, Some('a === 'd))
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+      for (joinType <- joinTypesWithRequiredCondition) {
+        noException should be thrownBy {
+          performCartesianProductCheck(joinType, Some('a === 'd))
+        }
       }
     }
   }
 
   test("CheckCartesianProducts doesn't throw an exception if join types don't require conditions") {
-    for (joinType <- joinTypesWithoutRequiredCondition) {
-      noException should be thrownBy {
-        performCartesianProductCheck(joinType)
+    withSQLConf(CROSS_JOINS_ENABLED.key -> "false") {
+      for (joinType <- joinTypesWithoutRequiredCondition) {
+        noException should be thrownBy {
+          performCartesianProductCheck(joinType)
+        }
       }
     }
   }
