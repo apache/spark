@@ -53,6 +53,22 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("reduceVertices") {
+    withSpark { sc =>
+      val users = sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+        (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
+      val relationships = sc.parallelize(Array(Edge(3L, 7L, "collab"), Edge(5L, 3L, "advisor"),
+        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi")))
+      val g = Graph(users, relationships)
+
+      val reduceMap = sc.parallelize(Seq((7L, 5L)))
+      val reduceG = g.reduceVertices(reduceMap, (x, y) => x)
+
+      assert(reduceG.numVertices == 3)
+      assert(reduceG.edges.collect.contains(Edge(5L, 7L, "pi")) == false)
+    }
+  }
+
   test("removeSelfEdges") {
     withSpark { sc =>
       val edgeArray = Array((1 -> 2), (2 -> 3), (3 -> 3), (4 -> 3), (1 -> 1))
@@ -68,7 +84,7 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test ("filter") {
+  test("filter") {
     withSpark { sc =>
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x: VertexId, x)))
@@ -77,7 +93,7 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
       val filteredGraph = graph.filter(
         graph => {
           val degrees: VertexRDD[Int] = graph.outDegrees
-          graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
+          graph.outerJoinVertices(degrees) { (vid, data, deg) => deg.getOrElse(0) }
         },
         vpred = (vid: VertexId, deg: Int) => deg > 0
       ).cache()
@@ -91,7 +107,7 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test ("convertToCanonicalEdges") {
+  test("convertToCanonicalEdges") {
     withSpark { sc =>
       val vertices =
         sc.parallelize(Seq[(VertexId, String)]((1, "one"), (2, "two"), (3, "three")), 2)
@@ -202,8 +218,12 @@ class GraphOpsSuite extends SparkFunSuite with LocalSparkContext {
         case (vid, edges) =>
           val s = edges.toSet
           val edgeIds = s.map(e => if (vid != e.srcId) e.srcId else e.dstId)
-          if (vid == 0) { assert(edgeIds.contains(1)) }
-          else if (vid == 49) { assert(edgeIds.contains(48)) }
+          if (vid == 0) {
+            assert(edgeIds.contains(1))
+          }
+          else if (vid == 49) {
+            assert(edgeIds.contains(48))
+          }
           else {
             assert(edgeIds.contains(vid + 1))
             assert(edgeIds.contains(vid - 1))
