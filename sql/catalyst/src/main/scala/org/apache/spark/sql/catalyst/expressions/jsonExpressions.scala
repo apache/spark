@@ -361,7 +361,7 @@ case class JsonTuple(children: Seq[Expression])
   // the fields to query are the remaining children
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
-  // toString on null will throw NullPointerException so that return a very unlikely column name
+  // a field name given with constant null will be replaced with this pseudo field name
   private val nullFieldName = "__NullFieldName"
 
   // eagerly evaluate any foldable the field names
