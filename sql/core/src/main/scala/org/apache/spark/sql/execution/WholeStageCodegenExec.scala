@@ -149,11 +149,71 @@ trait CodegenSupport extends SparkPlan {
 
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
+
+    // Under certain conditions, we can put the logic to consume the rows of this operator into
+    // another function. So we can prevent a generated function too long to be optimized by JIT.
+    val consumeFunc =
+      if (row == null && outputVars.nonEmpty && parent.usedInputs.size == inputVars.size) {
+        constructDoConsumeFunction(ctx, inputVars)
+      } else {
+        parent.doConsume(ctx, inputVars, rowVar)
+      }
     s"""
        |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated
-       |${parent.doConsume(ctx, inputVars, rowVar)}
+       |$consumeFunc
      """.stripMargin
+  }
+
+  /**
+   * To prevent concatenated function growing too long to be optimized by JIT. We separate the
+   * consume function of each `CodegenSupport` operator into a function to call.
+   */
+  protected def constructDoConsumeFunction(
+      ctx: CodegenContext,
+      inputVars: Seq[ExprCode]): String = {
+    val (callingParams, arguList, inputVarsInFunc) =
+      constructConsumeParameters(ctx, output, inputVars)
+    val rowVar = ExprCode("", "false", "unsafeRow")
+    val doConsume = ctx.freshName("doConsume")
+    val doConsumeFuncName = ctx.addNewFunction(doConsume,
+      s"""
+         | private void $doConsume($arguList) throws java.io.IOException {
+         |   ${parent.doConsume(ctx, inputVarsInFunc, rowVar)}
+         | }
+       """.stripMargin)
+
+    if (isShouldStopRequired) {
+      // Because the processing logic is enclosed in a function, `shouldStop` call in the function
+      // don't be affect outside loop, we need to check it and stop the loop.
+      s"""
+         | $doConsumeFuncName($callingParams);
+         | if (shouldStop()) return;
+       """.stripMargin
+    } else {
+      s"$doConsumeFuncName($callingParams);"
+    }
+  }
+
+  /**
+   * Returns source code for calling consume function and the argument list of the consume function
+   * and also the `ExprCode` for the argument list.
+   */
+  protected def constructConsumeParameters(
+      ctx: CodegenContext,
+      attributes: Seq[Attribute],
+      variables: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
+    val params = variables.zipWithIndex.map { case (ev, i) =>
+      val callingParam = ev.value + ", " + ev.isNull
+      val arguName = ctx.freshName(s"expr_$i")
+      val arguIsNull = ctx.freshName(s"exprIsNull_$i")
+      (callingParam,
+        ctx.javaType(attributes(i).dataType) + " " + arguName + ", boolean " + arguIsNull,
+        ExprCode("", arguIsNull, arguName))
+    }.unzip3
+    (params._1.mkString(", "),
+      params._2.mkString(", "),
+      params._3)
   }
 
   /**
