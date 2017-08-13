@@ -152,6 +152,12 @@ trait CodegenSupport extends SparkPlan {
 
     // Under certain conditions, we can put the logic to consume the rows of this operator into
     // another function. So we can prevent a generated function too long to be optimized by JIT.
+    // The conditions:
+    // 1. The parent uses all variables in output. we can't defer variable evaluation when consume
+    //    in another function.
+    // 2. The output variables are not empty. If it's empty, we don't bother to do that.
+    // 3. We don't use row variable. The construction of row uses deferred variable evaluation. We
+    //    can't do it.
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val consumeFunc =
       if (row == null && outputVars.nonEmpty && requireAllOutput) {
