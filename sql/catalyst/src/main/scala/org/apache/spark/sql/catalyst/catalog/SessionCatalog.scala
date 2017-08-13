@@ -1115,7 +1115,6 @@ class SessionCatalog(
           Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
         if (clsForUDAF.isAssignableFrom(clazz)) {
           val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-          // val ctor = classOf[Integer].getConstructor(classOf[Int])
           cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
             .newInstance(children, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
             .asInstanceOf[Expression]
