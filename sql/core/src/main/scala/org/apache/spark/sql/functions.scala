@@ -2331,15 +2331,16 @@ object functions {
    * @group string_funcs
    * @since 1.5.0
    */
-  def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr)}
+  def ltrim(e: Column): Column = withExpr {StringTrimLeft(e.expr) }
 
   /**
    * Trim the specified character string from left end for the specified string column.
    * @group string_funcs
    * @since 2.3.0
    */
-  def ltrim(e: Column, trimString: String): Column =
-    withExpr { StringTrimLeft(e.expr, Literal(trimString))}
+  def ltrim(e: Column, trimString: String): Column = withExpr {
+    StringTrimLeft(e.expr, Literal(trimString))
+  }
 
   /**
    * Extract a specific group matched by a Java regex, from the specified string column.
@@ -2423,8 +2424,9 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def rtrim(e: Column, trimString: String): Column =
-    withExpr { StringTrimRight(e.expr, Literal(trimString))}
+  def rtrim(e: Column, trimString: String): Column = withExpr {
+    StringTrimRight(e.expr, Literal(trimString))
+  }
 
   /**
    * Returns the soundex code for the specified expression.
@@ -2498,8 +2500,9 @@ object functions {
    * @group string_funcs
    * @since 2.3.0
    */
-  def trim(e: Column, trimString: String): Column =
-    withExpr { StringTrim(e.expr, Literal(trimString))}
+  def trim(e: Column, trimString: String): Column = withExpr {
+    StringTrim(e.expr, Literal(trimString))
+  }
 
   /**
    * Converts a string column to upper case.

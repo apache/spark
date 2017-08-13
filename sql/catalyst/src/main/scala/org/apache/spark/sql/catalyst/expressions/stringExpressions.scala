@@ -546,7 +546,7 @@ object StringTrim {
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
     _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing trimString from `str`
   """,
-  extended = """
+  examples = """
     Arguments:
       str - a string expression
       trimString - the trim string
@@ -642,7 +642,7 @@ object StringTrimLeft {
     _FUNC_(str) - Removes the leading space characters from `str`.
     _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
-  extended = """
+  examples = """
     Arguments:
       str - a string expression
       trimStr - the trim string
@@ -737,7 +737,7 @@ object StringTrimRight {
     _FUNC_(str) - Removes the trailing space characters from `str`.
     _FUNC_(trimStr, str) - Removes the trailing string which contains the character from the trim string from the `str`
   """,
-  extended = """
+  examples = """
     Arguments:
       str - a string expression
       trimStr - the trim string
