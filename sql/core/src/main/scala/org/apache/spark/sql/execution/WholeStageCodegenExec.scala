@@ -222,7 +222,7 @@ trait CodegenSupport extends SparkPlan {
 
     s"""
        | boolean continueForLoop = $doConsumeFuncName($callingParams);
-       | if (continueForLoop) $effectiveContinueStatement;
+       | if (continueForLoop) $effectiveContinueStatement
      """.stripMargin
   }
 
