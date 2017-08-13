@@ -177,6 +177,8 @@ case class SortExec(
      """.stripMargin.trim
   }
 
+  override protected def effectiveContinueStatement: String = "continue;"
+
   protected override val shouldStopRequired = false
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
