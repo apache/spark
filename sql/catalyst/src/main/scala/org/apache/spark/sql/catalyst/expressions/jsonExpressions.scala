@@ -608,6 +608,10 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
+      > SELECT _FUNC_(map('a',named_struct('b',1)));
+       {"a":{"b":1}}
+      > SELECT _FUNC_(map(named_struct('a',1),named_struct('b',2)));
+       {"[1]":{"b":2}}
   """)
 // scalastyle:on line.size.limit
 case class StructsToJson(
