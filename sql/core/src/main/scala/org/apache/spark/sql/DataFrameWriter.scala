@@ -71,9 +71,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
       case "ignore" => SaveMode.Ignore
-      case "error" | "default" => SaveMode.ErrorIfExists
+      case "error" | "errorifexists" | "default" => SaveMode.ErrorIfExists
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error'.")
+        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error', 'errorifexists'.")
     }
     this
   }

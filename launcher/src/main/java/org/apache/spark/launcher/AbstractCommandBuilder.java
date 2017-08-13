@@ -245,6 +245,9 @@ abstract class AbstractCommandBuilder {
 
   String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
+    if (path == null && "1".equals(getenv("SPARK_TESTING"))) {
+      path = System.getProperty("spark.test.home");
+    }
     checkState(path != null,
       "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;
@@ -288,24 +291,14 @@ abstract class AbstractCommandBuilder {
     }
 
     if (propsFile.isFile()) {
-      FileInputStream fd = null;
-      try {
-        fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
+      try (InputStreamReader isr = new InputStreamReader(
+          new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
+        props.load(isr);
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
-      } finally {
-        if (fd != null) {
-          try {
-            fd.close();
-          } catch (IOException e) {
-            // Ignore.
-          }
-        }
       }
     }
-
     return props;
   }
 
