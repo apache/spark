@@ -1154,17 +1154,19 @@ class SessionCatalog(
       overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
     val func = funcDefinition.identifier
-    val className = funcDefinition.className
     if (functionRegistry.functionExists(func) && !overrideIfExists) {
       throw new AnalysisException(s"Function $func already exists")
     }
-    if (!Utils.classIsLoadable(className)) {
-      throw new AnalysisException(s"Can not load class '$className' when registering " +
-        s"the function '$func', please make sure it is on the classpath")
-    }
-    val info = new ExpressionInfo(className, func.database.orNull, func.funcName)
+    val info = new ExpressionInfo(funcDefinition.className, func.database.orNull, func.funcName)
     val builder =
-      functionBuilder.getOrElse(makeFunctionBuilder(func.unquotedString, className))
+      functionBuilder.getOrElse {
+        val className = funcDefinition.className
+        if (!Utils.classIsLoadable(className)) {
+          throw new AnalysisException(s"Can not load class '$className' when registering " +
+            s"the function '$func', please make sure it is on the classpath")
+        }
+        makeFunctionBuilder(func.unquotedString, className)
+      }
     functionRegistry.registerFunction(func, info, builder)
   }
 

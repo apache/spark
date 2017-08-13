@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, _}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
@@ -325,11 +325,6 @@ case class ScalaUDAF(
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
   extends ImperativeAggregate with NonSQLExpression with Logging with ImplicitCastInputTypes {
-
-  if (children.length != udaf.inputSchema.length) {
-    throw new AnalysisException(s"Invalid number of arguments for the function " +
-      s"Expected: ${udaf.inputSchema.length}; Found: ${children.length}")
-  }
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
