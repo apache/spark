@@ -1446,6 +1446,7 @@ class TaskInstance(Base):
 
                 Stats.incr('operator_successes_{}'.format(
                     self.task.__class__.__name__), 1, 1)
+                Stats.incr('ti_successes')
             self.state = State.SUCCESS
         except AirflowSkipException:
             self.state = State.SKIPPED
@@ -1486,6 +1487,7 @@ class TaskInstance(Base):
         self.end_date = datetime.now()
         self.set_duration()
         Stats.incr('operator_failures_{}'.format(task.__class__.__name__), 1, 1)
+        Stats.incr('ti_failures')
         if not test_mode:
             session.add(Log(State.FAILED, self))
 
@@ -3829,7 +3831,12 @@ class Variable(Base):
                 raise AirflowException(
                     "Can't decrypt _val for key={}, FERNET_KEY configuration \
                     missing".format(self.key))
-            return fernet.decrypt(bytes(self._val, 'utf-8')).decode()
+            try:
+                return fernet.decrypt(bytes(self._val, 'utf-8')).decode()
+            except:
+                raise AirflowException(
+                    "Can't decrypt _val for key={}, invalid token or value"
+                    .format(self.key))
         else:
             return self._val
 
