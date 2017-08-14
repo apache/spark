@@ -155,9 +155,9 @@ sealed trait Vector extends Serializable {
    * Converts this vector to a sparse vector with all explicit zeros removed when the size is known.
    * This method is used to avoid re-computing the number of non-zero elements when it is
    * already known. This method should only be called after computing the number of non-zero
-   * elements via [[numNonZeros]]. e.g.
+   * elements via [[numNonzeros]]. e.g.
    * {{{
-   *   val nnz = this.numNonZeros
+   *   val nnz = numNonzeros
    *   val sv = toSparse(nnz)
    * }}}
    *
