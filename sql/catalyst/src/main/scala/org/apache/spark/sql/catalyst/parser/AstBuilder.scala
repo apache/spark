@@ -191,7 +191,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     var namedExpressions = Option(Option(ctx.namedExpressionSeq).toSeq
       .flatMap(_.namedExpression.asScala).map(typedVisit[NamedExpression]))
 
-    if (namedExpressions.get.asInstanceOf[List[Any]].isEmpty) {
+    if (namedExpressions.isDefined && namedExpressions.get.asInstanceOf[List[Any]].isEmpty) {
       namedExpressions = None
     }
 
