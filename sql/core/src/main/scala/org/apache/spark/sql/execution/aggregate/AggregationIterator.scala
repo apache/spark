@@ -218,6 +218,7 @@ abstract class AggregationIterator(
 
       val resultProjection =
         UnsafeProjection.create(resultExpressions, groupingAttributes ++ aggregateAttributes)
+      resultProjection.initialize(partIndex)
 
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
         // Generate results for all expression-based aggregate functions.
@@ -230,13 +231,13 @@ abstract class AggregationIterator(
             allImperativeAggregateFunctions(i).eval(currentBuffer))
           i += 1
         }
-        resultProjection.initialize(partIndex)
         resultProjection(joinedRow(currentGroupingKey, aggregateResult))
       }
     } else if (modes.contains(Partial) || modes.contains(PartialMerge)) {
       val resultProjection = UnsafeProjection.create(
         groupingAttributes ++ bufferAttributes,
         groupingAttributes ++ bufferAttributes)
+      resultProjection.initialize(partIndex)
 
       // TypedImperativeAggregate stores generic object in aggregation buffer, and requires
       // calling serialization before shuffling. See [[TypedImperativeAggregate]] for more info.
@@ -253,14 +254,13 @@ abstract class AggregationIterator(
           typedImperativeAggregates(i).serializeAggregateBufferInPlace(currentBuffer)
           i += 1
         }
-        resultProjection.initialize(partIndex)
         resultProjection(joinedRow(currentGroupingKey, currentBuffer))
       }
     } else {
       // Grouping-only: we only output values based on grouping expressions.
       val resultProjection = UnsafeProjection.create(resultExpressions, groupingAttributes)
+      resultProjection.initialize(partIndex)
       (currentGroupingKey: UnsafeRow, currentBuffer: InternalRow) => {
-        resultProjection.initialize(partIndex)
         resultProjection(currentGroupingKey)
       }
     }

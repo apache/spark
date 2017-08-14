@@ -464,24 +464,24 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
-          assert(hashAggPlan.find(p =>
-            p.isInstanceOf[WholeStageCodegenExec] &&
-              p.asInstanceOf[WholeStageCodegenExec].child
-                .isInstanceOf[HashAggregateExec]).isDefined)
+          assert(hashAggPlan.find {
+            case WholeStageCodegenExec(_: HashAggregateExec) => true
+            case _ => false
+          }.isDefined)
         } else {
           assert(hashAggPlan.isInstanceOf[HashAggregateExec])
         }
         hashAggDF.collect()
 
         // ObjectHashAggregate and SortAggregate test cases
-        val objHashOrSort_AggDF = df.groupBy("x").agg(c, collect_list("y"))
-        val objHashOrSort_Plan = objHashOrSort_AggDF.queryExecution.executedPlan
+        val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
+        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
         if (useObjectHashAgg) {
-          assert(objHashOrSort_Plan.isInstanceOf[ObjectHashAggregateExec])
+          assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
         } else {
-          assert(objHashOrSort_Plan.isInstanceOf[SortAggregateExec])
+          assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
         }
-        objHashOrSort_AggDF.collect()
+        objHashAggOrSortAggDF.collect()
       }
     }
   }
@@ -491,7 +491,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     Seq(
       monotonically_increasing_id(), spark_partition_id(),
       rand(Random.nextLong()), randn(Random.nextLong())
-    ).foreach(assertNoExceptions(_))
+    ).foreach(assertNoExceptions)
   }
 
   test("SPARK-21281 use string types by default if array and map have no argument") {
