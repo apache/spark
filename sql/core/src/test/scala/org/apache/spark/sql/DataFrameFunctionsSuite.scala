@@ -473,7 +473,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         }
         hashAggDF.collect()
 
-        // ObjectHashAggregate and SortAggregate test cases
+        // ObjectHashAggregate and SortAggregate test case
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
         val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
         if (useObjectHashAgg) {
