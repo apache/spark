@@ -28,8 +28,8 @@ import org.apache.spark.sql.types._
 
 object ArrowWriter {
 
-  def create(schema: StructType): ArrowWriter = {
-    val arrowSchema = ArrowUtils.toArrowSchema(schema)
+  def create(schema: StructType, timeZoneId: Option[String]): ArrowWriter = {
+    val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
     val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     create(root)
   }
