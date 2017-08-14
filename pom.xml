@@ -2358,7 +2358,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraScalaTestArgs}</argLine>
+            <argLine>-ea -Xmx3g -XX:ReservedCodeCacheSize=${CodeCacheSize} ${extraScalaTestArgs}</argLine>
             <stderr/>
             <environmentVariables>
               <!--
