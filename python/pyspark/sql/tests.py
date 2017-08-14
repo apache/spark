@@ -2507,6 +2507,35 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
 
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas_timezone_aware(self):
+        import pandas as pd
+        ts = datetime.datetime(1970, 1, 1)
+        pdf = pd.DataFrame.from_records([[ts]], columns=['ts'])
+
+        self.spark.conf.set('spark.sql.session.timeZone', 'America/Los_Angeles')
+
+        schema = StructType().add("ts", TimestampType())
+        df = self.spark.createDataFrame([(ts,)], schema)
+
+        pdf_naive = df.toPandas()
+        self.assertEqual(pdf_naive['ts'][0].tzinfo, None)
+        self.assertTrue(pdf_naive.equals(pdf))
+
+        self.spark.conf.set('spark.sql.execution.pandas.timeZoneAware', 'true')
+
+        pdf_pst = df.toPandas()
+        self.assertEqual(pdf_pst['ts'][0].tzinfo.zone, 'America/Los_Angeles')
+        self.assertFalse(pdf_pst.equals(pdf))
+
+        pdf_pst_naive = pdf_pst.copy()
+        pdf_pst_naive['ts'] = pdf_pst_naive['ts'].apply(
+            lambda ts: ts.tz_convert('tzlocal()').tz_localize(None))
+        self.assertTrue(pdf_pst_naive.equals(pdf))
+
+        self.spark.conf.unset('spark.sql.execution.pandas.timeZoneAware')
+        self.spark.conf.unset('spark.sql.session.timeZone')
+
     def test_create_dataframe_from_array_of_long(self):
         import array
         data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]

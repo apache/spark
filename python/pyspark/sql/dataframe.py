@@ -1760,6 +1760,15 @@ class DataFrame(object):
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)
+
+            if self.sql_ctx.getConf("spark.sql.execution.pandas.timeZoneAware", "false").lower() \
+                    == "true":
+                timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+                for field in self.schema:
+                    if type(field.dataType) == TimestampType:
+                        pdf[field.name] = pdf[field.name].apply(
+                            lambda ts: ts.tz_localize('tzlocal()').tz_convert(timezone))
+
             return pdf
 
     def _collectAsArrow(self):

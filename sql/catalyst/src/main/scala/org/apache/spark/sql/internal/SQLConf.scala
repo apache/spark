@@ -912,6 +912,14 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val PANDAS_TIMEZONE_AWARE =
+    buildConf("spark.sql.execution.pandas.timeZoneAware")
+      .internal()
+      .doc("When true, make Pandas DataFrame with timezone-aware timestamp type when converting " +
+        "by pyspark.sql.DataFrame.toPandas. The session local timezone is used for the timezone.")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
