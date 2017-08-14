@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.net.URL
+import java.net.{InetAddress, URL}
 
 import scala.collection.mutable
 import scala.io.Source
@@ -53,7 +53,7 @@ class LogUrlsStandaloneSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("verify that log urls reflect SPARK_PUBLIC_DNS (SPARK-6175)") {
-    val SPARK_PUBLIC_DNS = "public_dns"
+    val SPARK_PUBLIC_DNS = InetAddress.getLocalHost.getHostName.toUpperCase
     val conf = new SparkConfWithEnv(Map("SPARK_PUBLIC_DNS" -> SPARK_PUBLIC_DNS)).set(
       "spark.extraListeners", classOf[SaveExecutorInfo].getName)
     sc = new SparkContext("local-cluster[2,1,1024]", "test", conf)
