@@ -24,6 +24,8 @@ import scala.util.Random
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -450,15 +452,36 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   private def assertNoExceptions(c: Column): Unit = {
-    for ((wholeStage, useObjectHashAgg) <- Seq((true, false), (false, false), (false, true))) {
+    for ((wholeStage, useObjectHashAgg) <-
+         Seq((true, true), (true, false), (false, true), (false, false))) {
       withSQLConf(
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
         (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
-        // HashAggregate
-        df.groupBy("x").agg(c, sum("y")).collect()
-        // ObjectHashAggregate and SortAggregate
-        df.groupBy("x").agg(c, collect_list("y")).collect()
+
+        // HashAggregate test case
+        val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        val hashAggPlan = hashAggDF.queryExecution.executedPlan
+        if (wholeStage) {
+          assert(hashAggPlan.find(p =>
+            p.isInstanceOf[WholeStageCodegenExec] &&
+              p.asInstanceOf[WholeStageCodegenExec].child
+                .isInstanceOf[HashAggregateExec]).isDefined)
+        } else {
+          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+        }
+        hashAggDF.collect()
+
+        // ObjectHashAggregate and SortAggregate test cases
+        val objHashOrSort_AggDF = df.groupBy("x").agg(c, collect_list("y"))
+        val objHashOrSort_Plan = objHashOrSort_AggDF.queryExecution.executedPlan
+        if (useObjectHashAgg) {
+          assert(objHashOrSort_Plan.isInstanceOf[ObjectHashAggregateExec])
+        } else {
+          assert(objHashOrSort_Plan.isInstanceOf[SortAggregateExec])
+        }
+        objHashOrSort_AggDF.collect()
       }
     }
   }
