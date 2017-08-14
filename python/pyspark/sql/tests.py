@@ -1220,6 +1220,13 @@ class SQLTests(ReusedPySparkTestCase):
         rndn2 = df.select('key', functions.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_string_functions(self):
+        from pyspark.sql.functions import col, lit
+        df = self.spark.createDataFrame([['nick']], schema=['name'])
+        self.assertRaises(TypeError, lambda: df.select(col('name').substr(0, lit(1))))
+        if sys.version_info.major == 2:
+            self.assertRaises(TypeError, lambda: df.select(col('name').substr(long(0), long(1))))
+
     def test_array_contains_function(self):
         from pyspark.sql.functions import array_contains
 
