@@ -137,9 +137,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val meta = db.getMetadata(classOf[KVStoreMetadata])
 
       if (meta == null) {
-        db.setMetadata(new KVStoreMetadata(CURRENT_VERSION, logDir.toString()))
+        db.setMetadata(new KVStoreMetadata(CURRENT_LISTING_VERSION, logDir.toString()))
         db
-      } else if (meta.version != CURRENT_VERSION || !logDir.toString().equals(meta.logDir)) {
+      } else if (meta.version != CURRENT_LISTING_VERSION ||
+          !logDir.toString().equals(meta.logDir)) {
         logInfo("Detected mismatched config in existing DB, deleting...")
         db.close()
         Utils.deleteRecursively(dbPath)
@@ -505,7 +506,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
 
-      // Iterate descending over all applications whose oldest attempt is older than the maxAge.
+      // Iterate descending over all applications whose oldest attempt happended before maxTime.
       iterator = Some(listing.view(classOf[ApplicationInfoWrapper])
         .index("oldestAttempt")
         .reverse()
@@ -672,7 +673,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     val attempts = oldApp.attempts.filter(_.info.attemptId != attempt.info.attemptId) ++
       List(attempt)
-    val oldestAttempt = attempts.map(_.info.lastUpdated.getTime()).min
 
     val newAppInfo = new ApplicationInfoWrapper(
       app.info,
@@ -699,7 +699,8 @@ private[history] object FsHistoryProvider {
 
   private val LOG_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerLogStart\""
 
-  private val CURRENT_VERSION = 1L
+  /** Current version of the data written to the listing database. */
+  private val CURRENT_LISTING_VERSION = 1L
 }
 
 /**

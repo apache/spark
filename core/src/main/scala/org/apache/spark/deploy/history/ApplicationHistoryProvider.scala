@@ -76,14 +76,6 @@ private[history] case class LoadedAppUI(
 private[history] abstract class ApplicationHistoryProvider {
 
   /**
-   * The number of applications available for listing. Separate method in case it's cheaper
-   * to get a count than to calculate the whole listing.
-   *
-   * @return The number of available applications.
-   */
-  def getAppCount(): Int = getListing().size
-
-  /**
    * Returns the count of application event logs that the provider is currently still processing.
    * History Server UI can use this to indicate to a user that the application listing on the UI
    * can be expected to list additional known applications once the processing of these
