@@ -187,9 +187,15 @@ case class BroadcastHashJoinExec(
   private def getJoinCondition(
       ctx: CodegenContext,
       input: Seq[ExprCode],
+      uniqueKeyCodePath: Boolean,
       anti: Boolean = false): (String, String, Seq[ExprCode]) = {
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
+    val continueStatement = if (uniqueKeyCodePath) {
+      effectiveContinueStatement
+    } else {
+      "continue;"
+    }
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
@@ -206,10 +212,10 @@ case class BroadcastHashJoinExec(
       s"""
          |$eval
          |${ev.code}
-         |if ($skipRow) $effectiveContinueStatement
+         |if ($skipRow) $continueStatement
        """.stripMargin
-    } else if (anti) {
-      effectiveContinueStatement
+    } else if (anti && uniqueKeyCodePath) {
+      continueStatement
     } else {
       ""
     }
@@ -221,15 +227,16 @@ case class BroadcastHashJoinExec(
    */
   private def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val uniqueKeyCodePath = broadcastRelation.value.keyIsUnique
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input, uniqueKeyCodePath)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val resultVars = buildSide match {
       case BuildLeft => buildVars ++ input
       case BuildRight => input ++ buildVars
     }
-    if (broadcastRelation.value.keyIsUnique) {
+    if (uniqueKeyCodePath) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -342,10 +349,11 @@ case class BroadcastHashJoinExec(
    */
   private def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val uniqueKeyCodePath = broadcastRelation.value.keyIsUnique
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, uniqueKeyCodePath)
     val numOutput = metricTerm(ctx, "numOutputRows")
-    if (broadcastRelation.value.keyIsUnique) {
+    if (uniqueKeyCodePath) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -386,7 +394,7 @@ case class BroadcastHashJoinExec(
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val uniqueKeyCodePath = broadcastRelation.value.keyIsUnique
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input, uniqueKeyCodePath)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, uniqueKeyCodePath, true)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (uniqueKeyCodePath) {
