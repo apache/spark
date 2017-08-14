@@ -65,7 +65,7 @@ private[spark] object BLAS extends Serializable with Logging {
    */
   private def axpy(a: Double, x: DenseVector, y: DenseVector): Unit = {
     val n = x.size
-    f2jBLAS.daxpy(n, a, x.values, 1, y.values, 1)
+    nativeBLAS.daxpy(n, a, x.values, 1, y.values, 1)
   }
 
   /**
@@ -125,7 +125,7 @@ private[spark] object BLAS extends Serializable with Logging {
    */
   private def dot(x: DenseVector, y: DenseVector): Double = {
     val n = x.size
-    f2jBLAS.ddot(n, x.values, 1, y.values, 1)
+    nativeBLAS.ddot(n, x.values, 1, y.values, 1)
   }
 
   /**
@@ -222,7 +222,7 @@ private[spark] object BLAS extends Serializable with Logging {
       case sx: SparseVector =>
         f2jBLAS.dscal(sx.values.length, a, sx.values, 1)
       case dx: DenseVector =>
-        f2jBLAS.dscal(dx.values.length, a, dx.values, 1)
+        nativeBLAS.dscal(dx.values.length, a, dx.values, 1)
       case _ =>
         throw new IllegalArgumentException(s"scal doesn't support vector type ${x.getClass}.")
     }
