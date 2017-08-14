@@ -359,22 +359,14 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val jsonExpr: Expression = children.head
 
   // the fields to query are the remaining children
-  @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
-
-  // a field name given with constant null will be replaced with this pseudo field name
-  private val nullFieldName = "__NullFieldName"
+  @transient private lazy val fieldExpressions: Array[Expression] = children.tail.toArray
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: IndexedSeq[String] = {
+  @transient private lazy val foldableFieldNames: Array[Option[String]] = {
     fieldExpressions.map {
-      case expr if expr.foldable =>
-        if (expr.eval() == null) {
-          nullFieldName
-        } else {
-          expr.eval().asInstanceOf[UTF8String].toString
-        }
+      case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
       case _ => null
-    }.toIndexedSeq
+    }
   }
 
   // and count the number of foldable fields, we'll use this later to optimize evaluation
@@ -425,7 +417,7 @@ case class JsonTuple(children: Seq[Expression])
     val fieldNames = if (constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
-      foldableFieldNames
+      foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
       fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
@@ -434,7 +426,7 @@ case class JsonTuple(children: Seq[Expression])
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
         case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
-        case (fieldName, _) => fieldName
+        case (fieldName, _) => fieldName.orNull
       }
     }
 
