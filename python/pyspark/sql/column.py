@@ -413,7 +413,7 @@ class Column(object):
                     startPos_t=type(startPos),
                     length_t=type(length),
                 ))
-        if isinstance(startPos, (int, long)):
+        if isinstance(startPos, int):
             jc = self._jc.substr(startPos, length)
         elif isinstance(startPos, Column):
             jc = self._jc.substr(startPos._jc, length._jc)
