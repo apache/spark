@@ -543,12 +543,30 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("create view - duplicate column names in the view definition") {
-    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"CREATE VIEW t AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
-        }.getMessage
-        assert(errMsg.contains("Found duplicate column(s) in the view definition"))
+    Seq("VIEW", "TEMPORARY VIEW", "GLOBAL TEMPORARY VIEW"). foreach { case viewType =>
+      Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          val errMsg = intercept[AnalysisException] {
+            sql(s"CREATE $viewType t AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
+          }.getMessage
+          assert(errMsg.contains("Found duplicate column(s) in the view definition"))
+        }
+      }
+    }
+  }
+
+  test("alter view - duplicate column names in the new view definition") {
+    Seq("VIEW", "TEMPORARY VIEW", "GLOBAL TEMPORARY VIEW"). foreach { case viewType =>
+      Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+          sql(s"CREATE $viewType t AS SELECT * FROM VALUES (1, 1) AS t(c0, c1)")
+          val viewName = if (viewType == "GLOBAL TEMPORARY VIEW") "global_temp.t" else "t"
+          val errMsg = intercept[AnalysisException] {
+            sql(s"ALTER VIEW $viewName AS SELECT * FROM VALUES (1, 1) AS t($c0, $c1)")
+          }.getMessage
+          assert(errMsg.contains("Found duplicate column(s) in the view definition"))
+          sql(s"DROP VIEW $viewName")
+        }
       }
     }
   }
