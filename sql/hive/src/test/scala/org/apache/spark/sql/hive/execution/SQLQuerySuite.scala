@@ -20,10 +20,10 @@ package org.apache.spark.sql.hive.execution
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.util.Locale
+import java.util.{Locale, Set}
 
 import com.google.common.io.Files
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.sql._
@@ -156,69 +156,71 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-6851: Self-joined converted parquet tables") {
-    val orders = Seq(
-      Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
-      Order(3, "Swift", "MTB", 285, "2015-01-17", "John S", "Redwood City", "CA", 20151),
-      Order(4, "Atlas", "Hybrid", 303, "2015-01-23", "Jones S", "San Mateo", "CA", 20151),
-      Order(7, "Next", "MTB", 356, "2015-01-04", "Jane D", "Daly City", "CA", 20151),
-      Order(10, "Next", "YFlikr", 187, "2015-01-09", "John D", "Fremont", "CA", 20151),
-      Order(11, "Swift", "YFlikr", 187, "2015-01-23", "John D", "Hayward", "CA", 20151),
-      Order(2, "Next", "Hybrid", 324, "2015-02-03", "Jane D", "Daly City", "CA", 20152),
-      Order(5, "Next", "Street", 187, "2015-02-08", "John D", "Fremont", "CA", 20152),
-      Order(6, "Atlas", "Street", 154, "2015-02-09", "John D", "Pacifica", "CA", 20152),
-      Order(8, "Swift", "Hybrid", 485, "2015-02-19", "John S", "Redwood City", "CA", 20152),
-      Order(9, "Atlas", "Split", 303, "2015-02-28", "Jones S", "San Mateo", "CA", 20152))
+    withTable("orders", "orderupdates") {
+      val orders = Seq(
+        Order(1, "Atlas", "MTB", 234, "2015-01-07", "John D", "Pacifica", "CA", 20151),
+        Order(3, "Swift", "MTB", 285, "2015-01-17", "John S", "Redwood City", "CA", 20151),
+        Order(4, "Atlas", "Hybrid", 303, "2015-01-23", "Jones S", "San Mateo", "CA", 20151),
+        Order(7, "Next", "MTB", 356, "2015-01-04", "Jane D", "Daly City", "CA", 20151),
+        Order(10, "Next", "YFlikr", 187, "2015-01-09", "John D", "Fremont", "CA", 20151),
+        Order(11, "Swift", "YFlikr", 187, "2015-01-23", "John D", "Hayward", "CA", 20151),
+        Order(2, "Next", "Hybrid", 324, "2015-02-03", "Jane D", "Daly City", "CA", 20152),
+        Order(5, "Next", "Street", 187, "2015-02-08", "John D", "Fremont", "CA", 20152),
+        Order(6, "Atlas", "Street", 154, "2015-02-09", "John D", "Pacifica", "CA", 20152),
+        Order(8, "Swift", "Hybrid", 485, "2015-02-19", "John S", "Redwood City", "CA", 20152),
+        Order(9, "Atlas", "Split", 303, "2015-02-28", "Jones S", "San Mateo", "CA", 20152))
 
-    val orderUpdates = Seq(
-      Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
-      Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
+      val orderUpdates = Seq(
+        Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
+        Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
 
-    orders.toDF.createOrReplaceTempView("orders1")
-    orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
+      orders.toDF.createOrReplaceTempView("orders1")
+      orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
 
-    sql(
-      """CREATE TABLE orders(
-        |  id INT,
-        |  make String,
-        |  type String,
-        |  price INT,
-        |  pdate String,
-        |  customer String,
-        |  city String)
-        |PARTITIONED BY (state STRING, month INT)
-        |STORED AS PARQUET
-      """.stripMargin)
-
-    sql(
-      """CREATE TABLE orderupdates(
-        |  id INT,
-        |  make String,
-        |  type String,
-        |  price INT,
-        |  pdate String,
-        |  customer String,
-        |  city String)
-        |PARTITIONED BY (state STRING, month INT)
-        |STORED AS PARQUET
-      """.stripMargin)
-
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
-    sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
-
-    checkAnswer(
       sql(
-        """
-          |select orders.state, orders.month
-          |from orders
-          |join (
-          |  select distinct orders.state,orders.month
-          |  from orders
-          |  join orderupdates
-          |    on orderupdates.id = orders.id) ao
-          |  on ao.state = orders.state and ao.month = orders.month
-        """.stripMargin),
-      (1 to 6).map(_ => Row("CA", 20151)))
+        """CREATE TABLE orders(
+          |  id INT,
+          |  make String,
+          |  type String,
+          |  price INT,
+          |  pdate String,
+          |  customer String,
+          |  city String)
+          |PARTITIONED BY (state STRING, month INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql(
+        """CREATE TABLE orderupdates(
+          |  id INT,
+          |  make String,
+          |  type String,
+          |  price INT,
+          |  pdate String,
+          |  customer String,
+          |  city String)
+          |PARTITIONED BY (state STRING, month INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
+      sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
+
+      checkAnswer(
+        sql(
+          """
+            |select orders.state, orders.month
+            |from orders
+            |join (
+            |  select distinct orders.state,orders.month
+            |  from orders
+            |  join orderupdates
+            |    on orderupdates.id = orders.id) ao
+            |  on ao.state = orders.state and ao.month = orders.month
+          """.stripMargin),
+        (1 to 6).map(_ => Row("CA", 20151)))
+    }
   }
 
   test("show functions") {
@@ -389,21 +391,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with WITH clause") {
-    val df = Seq((1, 1)).toDF("c1", "c2")
-    df.createOrReplaceTempView("table1")
+    withTable("with_table1") {
+      withTempView("table1") {
+        val df = Seq((1, 1)).toDF("c1", "c2")
+        df.createOrReplaceTempView("table1")
 
-    sql(
-      """
-        |CREATE TABLE with_table1 AS
-        |WITH T AS (
-        |  SELECT *
-        |  FROM table1
-        |)
-        |SELECT *
-        |FROM T
-      """.stripMargin)
-    val query = sql("SELECT * FROM with_table1")
-    checkAnswer(query, Row(1, 1) :: Nil)
+        sql(
+          """
+            |CREATE TABLE with_table1 AS
+            |WITH T AS (
+            |  SELECT *
+            |  FROM table1
+            |)
+            |SELECT *
+            |FROM T
+          """.stripMargin)
+        val query = sql("SELECT * FROM with_table1")
+        checkAnswer(query, Row(1, 1) :: Nil)
+      }
+    }
   }
 
   test("explode nested Field") {
@@ -685,6 +691,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
         sql("SELECT key, value FROM src ORDER BY key, value"))
     }
+    sql("DROP TABLE ctas1")
+    sql("DROP TABLE ctas2")
+    sql("DROP TABLE ctas3")
+    sql("DROP TABLE ctas4")
+    sql("DROP TABLE ctas5")
   }
 
   test("specifying the column list for CTAS") {
@@ -756,40 +767,46 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
-      .toDF().createOrReplaceTempView("nested")
-    checkAnswer(
-      sql("SELECT f1.f2.f3 FROM nested"),
-      Row(1))
+    withTable("test_ctas_1234") {
+      sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+        .toDF().createOrReplaceTempView("nested")
+      checkAnswer(
+        sql("SELECT f1.f2.f3 FROM nested"),
+        Row(1))
 
-    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
-    checkAnswer(
-      sql("SELECT * FROM test_ctas_1234"),
-      sql("SELECT * FROM nested").collect().toSeq)
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
+      checkAnswer(
+        sql("SELECT * FROM test_ctas_1234"),
+        sql("SELECT * FROM nested").collect().toSeq)
 
-    intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      intercept[AnalysisException] {
+        sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      }
     }
   }
 
   test("test CTAS") {
-    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
-    checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
-      sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    withTable("test_ctas_123") {
+      sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
+      checkAnswer(
+        sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
+        sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    }
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-    sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test1")
-    sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
-    checkAnswer(
-      table("test"),
-      sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    withTable("test", "test1", "test2") {
+      val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
+      sql("CREATE TABLE test1 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test1")
+      sql("CREATE TABLE test2 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      checkAnswer(
+        table("test"),
+        sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    }
   }
 
   test("SPARK-3708 Backticks aren't handled correctly is aliases") {
@@ -2019,6 +2036,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(table.filter($"p" === "'").select($"a"), Row(2))
       checkAnswer(table.filter($"p" === "\"").select($"a"), Row(3))
       checkAnswer(table.filter($"p" === "p1\" and q=\"q1").select($"a"), Row(4))
+    }
+  }
+
+  test("SPARK-21721: Clear FileSystem deleterOnExit cache if path is successfully removed") {
+    withTable("test1") {
+      val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
+      deleteOnExitField.setAccessible(true)
+
+      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+      val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
+
+      val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
+      sql("CREATE TABLE test1 (key INT, value STRING)")
+      val pathSizeToDeleteOnExit = setOfPath.size()
+
+      (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto("test1"))
+
+      assert(setOfPath.size() == pathSizeToDeleteOnExit)
     }
   }
 }
