@@ -547,6 +547,8 @@ case class SortMergeJoinExec(
     }
   }
 
+  override protected def isConsumeInSeparateFunc: Boolean = false
+
   override def doProduce(ctx: CodegenContext): String = {
     ctx.copyResult = true
     val leftInput = ctx.freshName("leftInput")

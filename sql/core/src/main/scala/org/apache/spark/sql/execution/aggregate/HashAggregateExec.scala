@@ -163,7 +163,7 @@ case class HashAggregateExec(
   // The variables used as aggregation buffer. Only used for aggregation without keys.
   private var bufVars: Seq[ExprCode] = _
 
-  override protected def effectiveContinueStatement: String = "continue;"
+  override protected def isConsumeInSeparateFunc: Boolean = false
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.freshName("initAgg")

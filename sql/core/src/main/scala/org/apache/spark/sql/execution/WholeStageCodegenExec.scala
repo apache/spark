@@ -199,6 +199,10 @@ trait CodegenSupport extends SparkPlan {
    *     ... // logic of Op2Exec to consume rows.
    *   }
    * For now, `isConsumeInSeparateFunc` of Op2Exec will be `true`.
+   *
+   * Notice for some operators like `HashAggregateExec`, it doesn't chain previous consume functions
+   * but begins with its produce framework. We should override `isConsumeInSeparateFunc` to return
+   * `false`.
    */
   protected def isConsumeInSeparateFunc: Boolean = {
     val codegenChildren = children.map(_.asInstanceOf[CodegenSupport])
