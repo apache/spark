@@ -184,6 +184,21 @@ trait CodegenSupport extends SparkPlan {
    * Returning true means we have at least one consume logic from child operator or this operator is
    * separated in a function. If this is `true`, parent operator shouldn't use `continue` statement,
    * because its generated codes aren't enclosed in main while-loop.
+   *
+   * For example, we have generated codes for a query plan like:
+   *   Op1Exec
+   *     Op2Exec
+   *       Op3Exec
+   *
+   * If we put the consume code of Op2Exec into a separated function, the generated codes are like:
+   *   while (...) {
+   *     ... // logic of Op3Exec.
+   *     Op2Exec_doConsume(...);
+   *   }
+   *   private boolean Op2Exec_doConsume(...) {
+   *     ... // logic of Op2Exec to consume rows.
+   *   }
+   * For now, `isConsumeInSeparateFunc` of Op2Exec will be `true`.
    */
   protected def isConsumeInSeparateFunc: Boolean = {
     val codegenChildren = children.map(_.asInstanceOf[CodegenSupport])
@@ -191,6 +206,32 @@ trait CodegenSupport extends SparkPlan {
       codegenChildren.exists(_.isConsumeInSeparateFunc)
   }
 
+  /**
+   * Returning true means we have at least one consume logic from child operator or this operator is
+   * separated in a function. If this is `true`, parent operator shouldn't use `continue` statement,
+   * because its generated codes aren't enclosed in main while-loop.
+   *
+   * We use the same example in `isConsumeInSeparateFunc`'s comment:
+   *   while (...) {
+   *     ...       // logic of Op3Exec.
+   *     Op2Exec_doConsume(...);
+   *   }
+   *   private boolean Op2Exec_doConsume(...) {
+   *     ...       // logic of Op2Exec to consume rows.
+   *     continue; // Wrong. We can't use continue with the while-loop.
+   *   }
+   *
+   * Instead, we do something like:
+   *   while (...) {
+   *     ...          // logic of Op3Exec.
+   *     boolean continueForLoop = Op2Exec_doConsume(...);
+   *     if (continueForLoop) continue;
+   *   }
+   *   private boolean Op2Exec_doConsume(...) {
+   *     ...          // logic of Op2Exec to consume rows.
+   *     return true; // When we need to do continue, we return true.
+   *   }
+   */
   protected def effectiveContinueStatement: String = if (isConsumeInSeparateFunc) {
     // When the separated consume logic in parent operators needs to do continue for outer loop,
     // we consider if this plan's consume or any child's consume logic is separated in functions.
