@@ -425,9 +425,8 @@ case class InsertIntoHiveTable(
     try {
       createdTempDir.foreach { path =>
         val fs = path.getFileSystem(hadoopConf)
-        fs.delete(path, true)
-        // If we successfully delete the staging directory, remove it from FileSystem's cache.
-        if (!fs.exists(path)) {
+        if (fs.delete(path, true)) {
+          // If we successfully delete the staging directory, remove it from FileSystem's cache.
           fs.cancelDeleteOnExit(path)
         }
       }
