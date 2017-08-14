@@ -1763,11 +1763,13 @@ class DataFrame(object):
 
             if self.sql_ctx.getConf("spark.sql.execution.pandas.timeZoneAware", "false").lower() \
                     == "true":
+                from dateutil import tz
+                tzlocal = tz.tzlocal()
                 timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
                 for field in self.schema:
                     if type(field.dataType) == TimestampType:
                         pdf[field.name] = pdf[field.name].apply(
-                            lambda ts: ts.tz_localize('tzlocal()').tz_convert(timezone))
+                            lambda ts: ts.tz_localize(tzlocal).tz_convert(timezone))
 
             return pdf
 

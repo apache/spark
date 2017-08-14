@@ -2510,6 +2510,8 @@ class SQLTests(ReusedPySparkTestCase):
     @unittest.skipIf(not _have_pandas, "Pandas not installed")
     def test_to_pandas_timezone_aware(self):
         import pandas as pd
+        from dateutil import tz
+        tzlocal = tz.tzlocal()
         ts = datetime.datetime(1970, 1, 1)
         pdf = pd.DataFrame.from_records([[ts]], columns=['ts'])
 
@@ -2530,7 +2532,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         pdf_pst_naive = pdf_pst.copy()
         pdf_pst_naive['ts'] = pdf_pst_naive['ts'].apply(
-            lambda ts: ts.tz_convert('tzlocal()').tz_localize(None))
+            lambda ts: ts.tz_convert(tzlocal).tz_localize(None))
         self.assertTrue(pdf_pst_naive.equals(pdf))
 
         self.spark.conf.unset('spark.sql.execution.pandas.timeZoneAware')
