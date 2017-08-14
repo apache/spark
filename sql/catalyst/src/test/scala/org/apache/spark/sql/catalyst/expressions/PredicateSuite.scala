@@ -24,7 +24,8 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.encoders.ExamplePointUDT
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
 
 
@@ -219,28 +220,33 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   private case class MyStruct(a: Long, b: String)
   private case class MyStruct2(a: MyStruct, b: Array[Int])
+  private val udt = new ExamplePointUDT
 
   private val smallValues =
     Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
       new Timestamp(1), "a", 1f, 1d, 0f, 0d, false, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
-      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))))
+      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
+      Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val largeValues =
     Seq(2.toByte, 2.toShort, 2, 2L, Decimal(2), Array(2.toByte), new Date(2000, 1, 2),
       new Timestamp(2), "b", 2f, 2d, Float.NaN, Double.NaN, true, Array(2L, 1L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(2L, "b")),
-      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 2))))
+      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 2))),
+      Literal.create(ArrayData.toArrayData(Array(1.0, 3.0)), udt))
 
   private val equalValues1 =
     Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
       new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
-      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))))
+      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
+      Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
   private val equalValues2 =
     Seq(1.toByte, 1.toShort, 1, 1L, Decimal(1), Array(1.toByte), new Date(2000, 1, 1),
       new Timestamp(1), "a", 1f, 1d, Float.NaN, Double.NaN, true, Array(1L, 2L))
       .map(Literal(_)) ++ Seq(Literal.create(MyStruct(1L, "b")),
-      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))))
+      Literal.create(MyStruct2(MyStruct(1L, "a"), Array(1, 1))),
+      Literal.create(ArrayData.toArrayData(Array(1.0, 2.0)), udt))
 
   test("BinaryComparison consistency check") {
     DataTypeTestUtils.ordered.foreach { dt =>
@@ -303,11 +309,13 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     // Use -1 (default value for codegen) which can trigger some weird bugs, e.g. SPARK-14757
     val normalInt = Literal(-1)
     val nullInt = NonFoldableLiteral.create(null, IntegerType)
+    val nullNullType = Literal.create(null, NullType)
 
     def nullTest(op: (Expression, Expression) => Expression): Unit = {
       checkEvaluation(op(normalInt, nullInt), null)
       checkEvaluation(op(nullInt, normalInt), null)
       checkEvaluation(op(nullInt, nullInt), null)
+      checkEvaluation(op(nullNullType, nullNullType), null)
     }
 
     nullTest(LessThan)
@@ -319,6 +327,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(EqualNullSafe(normalInt, nullInt), false)
     checkEvaluation(EqualNullSafe(nullInt, normalInt), false)
     checkEvaluation(EqualNullSafe(nullInt, nullInt), true)
+    checkEvaluation(EqualNullSafe(nullNullType, nullNullType), true)
   }
 
   test("EqualTo on complex type") {
