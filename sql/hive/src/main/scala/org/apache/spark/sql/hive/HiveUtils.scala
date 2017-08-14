@@ -24,8 +24,8 @@ import java.sql.Timestamp
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.HashMap
 import scala.collection.JavaConverters._
+import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration

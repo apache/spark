@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import scala.collection.generic.Growable
 import scala.collection.mutable
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
