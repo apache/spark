@@ -448,9 +448,11 @@ private[state] class HDFSBackedStateStoreProvider(
 
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {
     val fileToWrite = snapshotFile(version)
+    val tempFile =
+      new Path(fileToWrite.getParent, s"${fileToWrite.getName}.temp-${Random.nextLong}")
     var output: DataOutputStream = null
     Utils.tryWithSafeFinally {
-      output = compressStream(fs.create(fileToWrite, false))
+      output = compressStream(fs.create(tempFile, false))
       val iter = map.entrySet().iterator()
       while(iter.hasNext) {
         val entry = iter.next()
@@ -464,6 +466,12 @@ private[state] class HDFSBackedStateStoreProvider(
       output.writeInt(-1)
     } {
       if (output != null) output.close()
+    }
+    if (fs.exists(fileToWrite)) {
+      // Skip rename if the file is alreayd created.
+      fs.delete(tempFile, true)
+    } else if (!fs.rename(tempFile, fileToWrite)) {
+      throw new IOException(s"Failed to rename $tempFile to $fileToWrite")
     }
     logInfo(s"Written snapshot file for version $version of $this at $fileToWrite")
   }
