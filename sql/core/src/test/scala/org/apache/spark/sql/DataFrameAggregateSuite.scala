@@ -28,7 +28,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 
-
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
 class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
@@ -563,22 +562,6 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
   }
 
-  test("SPARK-21580 ints in aggregation expressions are taken as group-by ordinal.") {
-    checkAnswer(
-      testData2.groupBy(lit(3), lit(4)).agg(lit(6), lit(7), sum("b")),
-      Seq(Row(3, 4, 6, 7, 9)))
-    checkAnswer(
-      testData2.groupBy(lit(3), lit(4)).agg(lit(6), 'b, sum("b")),
-      Seq(Row(3, 4, 6, 1, 3), Row(3, 4, 6, 2, 6)))
-
-    checkAnswer(
-      spark.sql("SELECT 3, 4, SUM(b) FROM testData2 GROUP BY 1, 2"),
-      Seq(Row(3, 4, 9)))
-    checkAnswer(
-      spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
-      Seq(Row(3, 4, 9)))
-  }
-
   private def assertNoExceptions(c: Column): Unit = {
     for ((wholeStage, useObjectHashAgg) <-
          Seq((true, true), (true, false), (false, true), (false, false))) {
@@ -620,5 +603,21 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       monotonically_increasing_id(), spark_partition_id(),
       rand(Random.nextLong()), randn(Random.nextLong())
     ).foreach(assertNoExceptions)
+  }
+
+  test("SPARK-21580 ints in aggregation expressions are taken as group-by ordinal.") {
+    checkAnswer(
+      testData2.groupBy(lit(3), lit(4)).agg(lit(6), lit(7), sum("b")),
+      Seq(Row(3, 4, 6, 7, 9)))
+    checkAnswer(
+      testData2.groupBy(lit(3), lit(4)).agg(lit(6), 'b, sum("b")),
+      Seq(Row(3, 4, 6, 1, 3), Row(3, 4, 6, 2, 6)))
+
+    checkAnswer(
+      spark.sql("SELECT 3, 4, SUM(b) FROM testData2 GROUP BY 1, 2"),
+      Seq(Row(3, 4, 9)))
+    checkAnswer(
+      spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
+      Seq(Row(3, 4, 9)))
   }
 }
