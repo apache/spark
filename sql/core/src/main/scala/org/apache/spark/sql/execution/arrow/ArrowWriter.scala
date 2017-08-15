@@ -21,6 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
+import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
@@ -55,7 +56,11 @@ object ArrowWriter {
       case (StringType, vector: NullableVarCharVector) => new StringWriter(vector)
       case (BinaryType, vector: NullableVarBinaryVector) => new BinaryWriter(vector)
       case (DateType, vector: NullableDateDayVector) => new DateWriter(vector)
-      case (TimestampType, vector: NullableTimeStampMicroTZVector) => new TimestampWriter(vector)
+      case (TimestampType, vector: NullableTimeStampMicroTZVector)
+        // TODO: Should be able to access timezone from vector
+        if field.getType.isInstanceOf[ArrowType.Timestamp] &&
+          field.getType.asInstanceOf[ArrowType.Timestamp].getTimezone != null =>
+        new TimestampWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)

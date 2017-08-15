@@ -51,6 +51,8 @@ class ArrowWriterSuite extends SparkFunSuite {
             case DoubleType => reader.getDouble(rowId)
             case StringType => reader.getUTF8String(rowId)
             case BinaryType => reader.getBinary(rowId)
+            case DateType => reader.getInt(rowId)
+            case TimestampType => reader.getLong(rowId)
           }
           assert(value === datum)
       }
@@ -66,6 +68,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(DoubleType, Seq(1.0d, 2.0d, null, 4.0d))
     check(StringType, Seq("a", "b", null, "d").map(UTF8String.fromString))
     check(BinaryType, Seq("a".getBytes(), "b".getBytes(), null, "d".getBytes()))
+    check(DateType, Seq(0, 1, 2, null, 4))
+    check(TimestampType, Seq(0L, 3.6e9.toLong, null, 8.64e10.toLong), Some("America/Los_Angeles"))
   }
 
   test("get multiple") {
@@ -88,6 +92,8 @@ class ArrowWriterSuite extends SparkFunSuite {
         case LongType => reader.getLongs(0, data.size)
         case FloatType => reader.getFloats(0, data.size)
         case DoubleType => reader.getDoubles(0, data.size)
+        case DateType => reader.getInts(0, data.size)
+        case TimestampType => reader.getLongs(0, data.size)
       }
       assert(values === data)
 
@@ -100,6 +106,8 @@ class ArrowWriterSuite extends SparkFunSuite {
     check(LongType, (0 until 10).map(_.toLong))
     check(FloatType, (0 until 10).map(_.toFloat))
     check(DoubleType, (0 until 10).map(_.toDouble))
+    check(DateType, (0 until 10))
+    check(TimestampType, (0 until 10).map(_ * 4.32e10.toLong), Some("America/Los_Angeles"))
   }
 
   test("array") {
