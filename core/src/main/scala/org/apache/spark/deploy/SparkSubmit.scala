@@ -20,19 +20,15 @@ package org.apache.spark.deploy
 import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
-import java.security.{KeyStore, PrivilegedExceptionAction}
-import java.security.cert.X509Certificate
+import java.security.PrivilegedExceptionAction
 import java.text.ParseException
-import javax.net.ssl._
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
-import com.google.common.io.ByteStreams
 import org.apache.commons.lang3.StringUtils
-import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.ivy.Ivy
@@ -69,7 +65,9 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends CommandLineUtils {
+object SparkSubmit extends CommandLineUtils with Logging {
+
+  import DependencyUtils._
 
   // Cluster managers
   private val YARN = 1
@@ -113,6 +111,10 @@ object SparkSubmit extends CommandLineUtils {
   // scalastyle:on println
 
   override def main(args: Array[String]): Unit = {
+    // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
+    // be reset before the application starts.
+    val uninitLog = initializeLogIfNecessary(true, silent = true)
+
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
       // scalastyle:off println
@@ -120,7 +122,7 @@ object SparkSubmit extends CommandLineUtils {
       // scalastyle:on println
     }
     appArgs.action match {
-      case SparkSubmitAction.SUBMIT => submit(appArgs)
+      case SparkSubmitAction.SUBMIT => submit(appArgs, uninitLog)
       case SparkSubmitAction.KILL => kill(appArgs)
       case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
     }
@@ -153,7 +155,7 @@ object SparkSubmit extends CommandLineUtils {
    * main class.
    */
   @tailrec
-  private def submit(args: SparkSubmitArguments): Unit = {
+  private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
@@ -185,11 +187,16 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-     // In standalone cluster mode, there are two submission gateways:
-     //   (1) The traditional RPC gateway using o.a.s.deploy.Client as a wrapper
-     //   (2) The new REST-based gateway introduced in Spark 1.3
-     // The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
-     // to use the legacy gateway if the master endpoint turns out to be not a REST server.
+    // Let the main class re-initialize the logging system once it starts.
+    if (uninitLog) {
+      Logging.uninitialize()
+    }
+
+    // In standalone cluster mode, there are two submission gateways:
+    //   (1) The traditional RPC gateway using o.a.s.deploy.Client as a wrapper
+    //   (2) The new REST-based gateway introduced in Spark 1.3
+    // The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
+    // to use the legacy gateway if the master endpoint turns out to be not a REST server.
     if (args.isStandaloneCluster && args.useRest) {
       try {
         // scalastyle:off println
@@ -202,7 +209,7 @@ object SparkSubmit extends CommandLineUtils {
           printWarning(s"Master endpoint ${args.master} was not a REST server. " +
             "Falling back to legacy submission gateway instead.")
           args.useRest = false
-          submit(args)
+          submit(args, false)
       }
     // In all other modes, just run the main class as prepared
     } else {
@@ -322,8 +329,10 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-    val hadoopConf = new HadoopConfiguration()
-    val targetDir = DependencyUtils.createTempDir()
+    val sparkConf = new SparkConf(false)
+    args.sparkProperties.foreach { case (k, v) => sparkConf.set(k, v) }
+    val hadoopConf = SparkHadoopUtil.newConfiguration(sparkConf)
+    val targetDir = Utils.createTempDir()
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -333,14 +342,16 @@ object SparkSubmit extends CommandLineUtils {
 
     // In client mode, download remote files.
     if (deployMode == CLIENT) {
+      val secMgr = new SecurityManager(sparkConf)
+
       args.primaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
+        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
       args.jars = Option(args.jars).map {
-        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
       args.pyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
     }
 
@@ -845,136 +856,6 @@ object SparkSubmit extends CommandLineUtils {
     if (merged == "") null else merged
   }
 
-  /**
-   * Download a list of remote files to temp local files. If the file is local, the original file
-   * will be returned.
-   * @param fileList A comma separated file list.
-   * @param targetDir A temporary directory for which downloaded files
-   * @param sparkProperties Spark properties
-   * @return A comma separated local files list.
-   */
-  private[deploy] def downloadFileList(
-      fileList: String,
-      targetDir: File,
-      sparkProperties: Map[String, String],
-      hadoopConf: HadoopConfiguration): String = {
-    require(fileList != null, "fileList cannot be null.")
-    fileList.split(",")
-      .map(downloadFile(_, targetDir, sparkProperties, hadoopConf))
-      .mkString(",")
-  }
-
-  /**
-   * Download a file from the remote to a local temporary directory. If the input path points to
-   * a local path, returns it with no operation.
-   * @param path A file path from where the files will be downloaded.
-   * @param targetDir A temporary directory for which downloaded files
-   * @param sparkProperties Spark properties
-   * @return A comma separated local files list.
-   */
-  private[deploy] def downloadFile(
-      path: String,
-      targetDir: File,
-      sparkProperties: Map[String, String],
-      hadoopConf: HadoopConfiguration): String = {
-    require(path != null, "path cannot be null.")
-    val uri = Utils.resolveURI(path)
-    uri.getScheme match {
-      case "file" | "local" => path
-      case "http" | "https" | "ftp" =>
-        val uc = uri.toURL.openConnection()
-        uc match {
-          case https: HttpsURLConnection =>
-            val trustStore = sparkProperties.get("spark.ssl.fs.trustStore")
-              .orElse(sparkProperties.get("spark.ssl.trustStore"))
-            val trustStorePwd = sparkProperties.get("spark.ssl.fs.trustStorePassword")
-              .orElse(sparkProperties.get("spark.ssl.trustStorePassword"))
-              .map(_.toCharArray)
-              .orNull
-            val protocol = sparkProperties.get("spark.ssl.fs.protocol")
-              .orElse(sparkProperties.get("spark.ssl.protocol"))
-            if (protocol.isEmpty) {
-              printErrorAndExit("spark ssl protocol is required when enabling SSL connection.")
-            }
-
-            val trustStoreManagers = trustStore.map { t =>
-              var input: InputStream = null
-              try {
-                input = new FileInputStream(new File(t))
-                val ks = KeyStore.getInstance(KeyStore.getDefaultType)
-                ks.load(input, trustStorePwd)
-                val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
-                tmf.init(ks)
-                tmf.getTrustManagers
-              } finally {
-                if (input != null) {
-                  input.close()
-                  input = null
-                }
-              }
-            }.getOrElse {
-              Array({
-                new X509TrustManager {
-                  override def getAcceptedIssuers: Array[X509Certificate] = null
-                  override def checkClientTrusted(
-                      x509Certificates: Array[X509Certificate], s: String) {}
-                  override def checkServerTrusted(
-                      x509Certificates: Array[X509Certificate], s: String) {}
-                }: TrustManager
-              })
-            }
-            val sslContext = SSLContext.getInstance(protocol.get)
-            sslContext.init(null, trustStoreManagers, null)
-            https.setSSLSocketFactory(sslContext.getSocketFactory)
-            https.setHostnameVerifier(new HostnameVerifier {
-              override def verify(s: String, sslSession: SSLSession): Boolean = false
-            })
-
-          case _ =>
-        }
-
-        uc.setConnectTimeout(60 * 1000)
-        uc.setReadTimeout(60 * 1000)
-        uc.connect()
-        val in = uc.getInputStream
-        val fileName = new Path(uri).getName
-        val tempFile = new File(targetDir, fileName)
-        val out = new FileOutputStream(tempFile)
-        // scalastyle:off println
-        printStream.println(s"Downloading ${uri.toString} to ${tempFile.getAbsolutePath}.")
-        // scalastyle:on println
-        try {
-          ByteStreams.copy(in, out)
-        } finally {
-          in.close()
-          out.close()
-        }
-        tempFile.toURI.toString
-      case _ =>
-        val fs = FileSystem.get(uri, hadoopConf)
-        val tmpFile = new File(targetDir, new Path(uri).getName)
-        // scalastyle:off println
-        printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
-        // scalastyle:on println
-        fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
-        tmpFile.toURI.toString
-    }
-  }
-
-  private[deploy] def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
-    require(paths != null, "paths cannot be null.")
-    paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
-      val uri = Utils.resolveURI(path)
-      uri.getScheme match {
-        case "local" | "http" | "https" | "ftp" => Array(path)
-        case _ =>
-          val fs = FileSystem.get(uri, hadoopConf)
-          Option(fs.globStatus(new Path(uri))).map { status =>
-            status.filter(_.isFile).map(_.getPath.toUri.toString)
-          }.getOrElse(Array(path))
-      }
-    }.mkString(",")
-  }
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */

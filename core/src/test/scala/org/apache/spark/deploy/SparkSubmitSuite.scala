@@ -29,7 +29,7 @@ import scala.io.Source
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
@@ -793,13 +793,16 @@ class SparkSubmitSuite
   }
 
   test("downloadFile - invalid url") {
+    val sparkConf = new SparkConf(false)
     intercept[IOException] {
-      SparkSubmit.downloadFile(
-        "abc:/my/file", Utils.createTempDir(), mutable.Map.empty, new Configuration())
+      DependencyUtils.downloadFile(
+        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration(),
+        new SecurityManager(sparkConf))
     }
   }
 
   test("downloadFile - file doesn't exist") {
+    val sparkConf = new SparkConf(false)
     val hadoopConf = new Configuration()
     val tmpDir = Utils.createTempDir()
     // Set s3a implementation to local file system for testing.
@@ -807,19 +810,23 @@ class SparkSubmitSuite
     // Disable file system impl cache to make sure the test file system is picked up.
     hadoopConf.set("fs.s3a.impl.disable.cache", "true")
     intercept[FileNotFoundException] {
-      SparkSubmit.downloadFile("s3a:/no/such/file", tmpDir, mutable.Map.empty, hadoopConf)
+      DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf,
+        new SecurityManager(sparkConf))
     }
   }
 
   test("downloadFile does not download local file") {
+    val sparkConf = new SparkConf(false)
+    val secMgr = new SecurityManager(sparkConf)
     // empty path is considered as local file.
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    assert(SparkSubmit.downloadFile("", tmpDir, mutable.Map.empty, new Configuration()) === "")
-    assert(SparkSubmit.downloadFile("/local/file", tmpDir, mutable.Map.empty,
-      new Configuration()) === "/local/file")
+    assert(DependencyUtils.downloadFile("", tmpDir, sparkConf, new Configuration(), secMgr) === "")
+    assert(DependencyUtils.downloadFile("/local/file", tmpDir, sparkConf, new Configuration(),
+      secMgr) === "/local/file")
   }
 
   test("download one file to local") {
+    val sparkConf = new SparkConf(false)
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
@@ -831,13 +838,14 @@ class SparkSubmitSuite
     // Disable file system impl cache to make sure the test file system is picked up.
     hadoopConf.set("fs.s3a.impl.disable.cache", "true")
     val sourcePath = s"s3a://${jarFile.getAbsolutePath}"
-    val outputPath =
-      SparkSubmit.downloadFile(sourcePath, tmpDir, mutable.Map.empty, hadoopConf)
+    val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf,
+      new SecurityManager(sparkConf))
     checkDownloadedFile(sourcePath, outputPath)
     deleteTempOutputFile(outputPath)
   }
 
   test("download list of files to local") {
+    val sparkConf = new SparkConf(false)
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
@@ -849,8 +857,10 @@ class SparkSubmitSuite
     // Disable file system impl cache to make sure the test file system is picked up.
     hadoopConf.set("fs.s3a.impl.disable.cache", "true")
     val sourcePaths = Seq("/local/file", s"s3a://${jarFile.getAbsolutePath}")
-    val outputPaths = SparkSubmit.downloadFileList(
-      sourcePaths.mkString(","), tmpDir, mutable.Map.empty, hadoopConf).split(",")
+    val outputPaths = DependencyUtils
+      .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf,
+        new SecurityManager(sparkConf))
+      .split(",")
 
     assert(outputPaths.length === sourcePaths.length)
     sourcePaths.zip(outputPaths).foreach { case (sourcePath, outputPath) =>
@@ -963,8 +973,18 @@ object UserClasspathFirstTest {
 }
 
 class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
-  override def copyToLocalFile(src: Path, dst: Path): Unit = {
+  private def local(path: Path): Path = {
     // Ignore the scheme for testing.
-    super.copyToLocalFile(new Path(src.toUri.getPath), dst)
+    new Path(path.toUri.getPath)
   }
+
+  override def isFile(path: Path): Boolean = super.isFile(local(path))
+
+  override def listStatus(path: Path): Array[FileStatus] = super.listStatus(local(path))
+
+  override def copyToLocalFile(src: Path, dst: Path): Unit = {
+    super.copyToLocalFile(local(src), dst)
+  }
+
+  override def open(path: Path): FSDataInputStream = super.open(local(path))
 }

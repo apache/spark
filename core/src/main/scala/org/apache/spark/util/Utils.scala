@@ -449,7 +449,7 @@ private[spark] object Utils extends Logging {
       securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean) {
+      useCache: Boolean): File = {
     val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
@@ -498,6 +498,8 @@ private[spark] object Utils extends Logging {
     if (isWindows) {
       FileUtil.chmod(targetFile.getAbsolutePath, "u+r")
     }
+
+    targetFile
   }
 
   /**
