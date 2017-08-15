@@ -68,9 +68,11 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
    * Default: "id"
    * @group param
    */
+  @Since("2.3.0")
   val idCol = new Param[String](this, "id", "column name for ids.")
 
   /** @group getParam */
+  @Since("2.3.0")
   def getIdCol: String = $(idCol)
 
   /**
@@ -78,9 +80,11 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
    * Default: "neighbor"
    * @group param
    */
+  @Since("2.3.0")
   val neighborCol = new Param[String](this, "neighbor", "column name for neighbors.")
 
   /** @group getParam */
+  @Since("2.3.0")
   def getNeighborCol: String = $(neighborCol)
 
   /**
