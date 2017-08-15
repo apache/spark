@@ -1174,4 +1174,25 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         }
       }
   }
+
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
+    val exception = intercept[SparkException] {
+      spark.read.schema("a DOUBLE")
+        .option("mode", "FAILFAST")
+        .csv(Seq("10u12").toDS())
+        .collect()
+    }
+    assert(exception.getMessage.contains("""input string: "10u12""""))
+
+    val count = spark.read.schema("a FLOAT")
+      .option("mode", "DROPMALFORMED")
+      .csv(Seq("10u12").toDS())
+      .count()
+    assert(count == 0)
+
+    val results = spark.read.schema("a FLOAT")
+      .option("mode", "PERMISSIVE")
+      .csv(Seq("10u12").toDS())
+    checkAnswer(results, Row(null))
+  }
 }

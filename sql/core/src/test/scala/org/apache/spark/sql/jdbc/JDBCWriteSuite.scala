@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
@@ -324,8 +324,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("partitionColumn", "foo")
         .save()
     }.getMessage
-    assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
-      " and 'numPartitions' are required."))
+    assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+      "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+      "'numPartitions'"))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
@@ -479,7 +480,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains(
-        "Found duplicate column(s) in createTableColumnTypes option value: name, NaMe"))
+        "Found duplicate column(s) in the createTableColumnTypes option value: `name`"))
     }
   }
 

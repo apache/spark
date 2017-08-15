@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -188,19 +188,6 @@ class SessionCatalog(
     }
   }
 
-  private def checkDuplication(fields: Seq[StructField]): Unit = {
-    val columnNames = if (conf.caseSensitiveAnalysis) {
-      fields.map(_.name)
-    } else {
-      fields.map(_.name.toLowerCase)
-    }
-    if (columnNames.distinct.length != columnNames.length) {
-      val duplicateColumns = columnNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => x
-      }
-      throw new AnalysisException(s"Found duplicate column(s): ${duplicateColumns.mkString(", ")}")
-    }
-  }
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -353,7 +340,6 @@ class SessionCatalog(
     val tableIdentifier = TableIdentifier(table, Some(db))
     requireDbExists(db)
     requireTableExists(tableIdentifier)
-    checkDuplication(newSchema)
 
     val catalogTable = externalCatalog.getTable(db, table)
     val oldSchema = catalogTable.schema
@@ -401,27 +387,16 @@ class SessionCatalog(
 
   /**
    * Retrieve the metadata of an existing permanent table/view. If no database is specified,
-   * assume the table/view is in the current database. If the specified table/view is not found
-   * in the database then a [[NoSuchTableException]] is thrown.
+   * assume the table/view is in the current database.
    */
+  @throws[NoSuchDatabaseException]
+  @throws[NoSuchTableException]
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.getTable(db, table)
-  }
-
-  /**
-   * Retrieve the metadata of an existing metastore table.
-   * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then return None if it doesn't exist.
-   */
-  def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
-    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(name.table)
-    requireDbExists(db)
-    externalCatalog.getTableOption(db, table)
   }
 
   /**
@@ -703,12 +678,7 @@ class SessionCatalog(
             child = parser.parsePlan(viewText))
           SubqueryAlias(table, child)
         } else {
-          val tableRelation = CatalogRelation(
-            metadata,
-            // we assume all the columns are nullable.
-            metadata.dataSchema.asNullable.toAttributes,
-            metadata.partitionSchema.asNullable.toAttributes)
-          SubqueryAlias(table, tableRelation)
+          SubqueryAlias(table, UnresolvedCatalogRelation(metadata))
         }
       } else {
         SubqueryAlias(table, tempTables(table))
@@ -1051,6 +1021,29 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
+      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+    }
+  }
+
+  /**
+   * overwirte a metastore function in the database specified in `funcDefinition`..
+   * If no database is specified, assume the function is in the current database.
+   */
+  def alterFunction(funcDefinition: CatalogFunction): Unit = {
+    val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val newFuncDefinition = funcDefinition.copy(identifier = identifier)
+    if (functionExists(identifier)) {
+      if (functionRegistry.functionExists(identifier)) {
+        // If we have loaded this function into the FunctionRegistry,
+        // also drop it from there.
+        // For a permanent function, because we loaded it to the FunctionRegistry
+        // when it's first used, we also need to drop it from the FunctionRegistry.
+        functionRegistry.dropFunction(identifier)
+      }
+      externalCatalog.alterFunction(db, newFuncDefinition)
+    } else {
       throw new NoSuchFunctionException(db = db, func = identifier.toString)
     }
   }

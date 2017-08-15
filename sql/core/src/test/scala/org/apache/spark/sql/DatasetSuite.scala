@@ -21,8 +21,9 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
-import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec, SortExec}
+import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -32,6 +33,16 @@ import org.apache.spark.sql.types._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
 case class TestDataPoint2(x: Int, s: String)
+
+object TestForTypeAlias {
+  type TwoInt = (Int, Int)
+  type ThreeInt = (TwoInt, Int)
+  type SeqOfTwoInt = Seq[TwoInt]
+
+  def tupleTypeAlias: TwoInt = (1, 1)
+  def nestedTupleTypeAlias: ThreeInt = ((1, 1), 2)
+  def seqOfTupleTypeAlias: SeqOfTwoInt = Seq((1, 1), (2, 2))
+}
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -244,6 +255,85 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("a", ClassData("a", 1)), ("b", ClassData("b", 2)), ("c", ClassData("c", 3)))
   }
 
+  test("REGEX column specification") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      var e = intercept[AnalysisException] {
+        ds.select(expr("`(_1)?+.+`").as[Int])
+      }.getMessage
+      assert(e.contains("cannot resolve '`(_1)?+.+`'"))
+
+      e = intercept[AnalysisException] {
+        ds.select(expr("`(_1|_2)`").as[Int])
+      }.getMessage
+      assert(e.contains("cannot resolve '`(_1|_2)`'"))
+
+      e = intercept[AnalysisException] {
+        ds.select(ds("`(_1)?+.+`"))
+      }.getMessage
+      assert(e.contains("Cannot resolve column name \"`(_1)?+.+`\""))
+
+      e = intercept[AnalysisException] {
+        ds.select(ds("`(_1|_2)`"))
+      }.getMessage
+      assert(e.contains("Cannot resolve column name \"`(_1|_2)`\""))
+    }
+
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
+      checkDataset(
+        ds.select(ds.col("_2")).as[Int],
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(ds.colRegex("`(_1)?+.+`")).as[Int],
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(ds("`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.alias("g")
+          .select(ds("g.`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.select(ds("`(_1)?+.+`"))
+          .select(expr("_2").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.alias("g")
+          .select(ds("g.`(_1)?+.+`"))
+          .select(expr("_2").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.select(expr("`(_1)?+.+`").as[Int]),
+        1, 2, 3)
+      val m = ds.select(expr("`(_1|_2)`"))
+
+      checkDataset(
+        ds.select(expr("`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+
+      checkDataset(
+        ds.alias("g")
+          .select(expr("g.`(_1)?+.+`").as[Int]),
+        1, 2, 3)
+
+      checkDataset(
+        ds.alias("g")
+          .select(expr("g.`(_1|_2)`"))
+          .select(expr("named_struct('a', _1, 'b', _2)").as[ClassData]),
+        ClassData("a", 1), ClassData("b", 2), ClassData("c", 3))
+    }
+  }
+
   test("filter") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     checkDataset(
@@ -280,7 +370,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("reduce") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == ("sum", 6))
+    assert(ds.reduce((a, b) => ("sum", a._2 + b._2)) == (("sum", 6)))
   }
 
   test("joinWith, flat schema") {
@@ -319,6 +409,21 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ds1.joinWith(ds2, $"a._2" === $"b._2").as("ab").joinWith(ds3, $"ab._1._2" === $"c._2"),
       ((("a", 1), ("a", 1)), ("a", 1)),
       ((("b", 2), ("b", 2)), ("b", 2)))
+  }
+
+  test("joinWith join types") {
+    val ds1 = Seq(1, 2, 3).toDS().as("a")
+    val ds2 = Seq(1, 2).toDS().as("b")
+
+    val e1 = intercept[AnalysisException] {
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_semi")
+    }.getMessage
+    assert(e1.contains("Invalid join type in joinWith: " + LeftSemi.sql))
+
+    val e2 = intercept[AnalysisException] {
+      ds1.joinWith(ds2, $"a.value" === $"b.value", "left_anti")
+    }.getMessage
+    assert(e2.contains("Invalid join type in joinWith: " + LeftAnti.sql))
   }
 
   test("groupBy function, keys") {
@@ -705,7 +810,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-14000: case class with tuple type field") {
     checkDataset(
       Seq(TupleClass((1, "a"))).toDS(),
-      TupleClass(1, "a")
+      TupleClass((1, "a"))
     )
   }
 
@@ -1208,6 +1313,33 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       checkAnswer(rlike1, rlike2)
       assert(rlike3.count() == 0)
     }
+  }
+
+  test("SPARK-21538: Attribute resolution inconsistency in Dataset API") {
+    val df = spark.range(3).withColumnRenamed("id", "x")
+    val expected = Row(0) :: Row(1) :: Row (2) :: Nil
+    checkAnswer(df.sort("id"), expected)
+    checkAnswer(df.sort(col("id")), expected)
+    checkAnswer(df.sort($"id"), expected)
+    checkAnswer(df.sort('id), expected)
+    checkAnswer(df.orderBy("id"), expected)
+    checkAnswer(df.orderBy(col("id")), expected)
+    checkAnswer(df.orderBy($"id"), expected)
+    checkAnswer(df.orderBy('id), expected)
+  }
+
+  test("SPARK-21567: Dataset should work with type alias") {
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.tupleTypeAlias)),
+      ("", (1, 1)))
+
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.nestedTupleTypeAlias)),
+      ("", ((1, 1), 2)))
+
+    checkDataset(
+      Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
+      ("", Seq((1, 1), (2, 2))))
   }
 }
 

@@ -263,6 +263,7 @@ class StreamExecution(
     try {
       sparkSession.sparkContext.setJobGroup(runId.toString, getBatchDescriptionString,
         interruptOnCancel = true)
+      sparkSession.sparkContext.setLocalProperty(StreamExecution.QUERY_ID_KEY, id.toString)
       if (sparkSession.sessionState.conf.streamingMetricsEnabled) {
         sparkSession.sparkContext.env.metricsSystem.registerSource(streamMetrics)
       }
@@ -357,7 +358,11 @@ class StreamExecution(
         if (!NonFatal(e)) {
           throw e
         }
-    } finally {
+    } finally microBatchThread.runUninterruptibly {
+      // The whole `finally` block must run inside `runUninterruptibly` to avoid being interrupted
+      // when a query is stopped by the user. We need to make sure the following codes finish
+      // otherwise it may throw `InterruptedException` to `UncaughtExceptionHandler` (SPARK-21248).
+
       // Release latches to unblock the user codes since exception can happen in any place and we
       // may not get a chance to release them
       startLatch.countDown()
@@ -433,7 +438,10 @@ class StreamExecution(
         availableOffsets = nextOffsets.toStreamProgress(sources)
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
-        offsetLog.get(latestBatchId - 1).foreach { secondLatestBatchId =>
+        if (latestBatchId != 0) {
+          val secondLatestBatchId = offsetLog.get(latestBatchId - 1).getOrElse {
+            throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
+          }
           committedOffsets = secondLatestBatchId.toStreamProgress(sources)
         }
 
@@ -560,10 +568,14 @@ class StreamExecution(
 
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from the previous batch.
-        val prevBatchOff = offsetLog.get(currentBatchId - 1)
-        if (prevBatchOff.isDefined) {
-          prevBatchOff.get.toStreamProgress(sources).foreach {
-            case (src, off) => src.commit(off)
+        if (currentBatchId != 0) {
+          val prevBatchOff = offsetLog.get(currentBatchId - 1)
+          if (prevBatchOff.isDefined) {
+            prevBatchOff.get.toStreamProgress(sources).foreach {
+              case (src, off) => src.commit(off)
+            }
+          } else {
+            throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
           }
         }
 
@@ -604,7 +616,7 @@ class StreamExecution(
     }
 
     // A list of attributes that will need to be updated.
-    var replacements = new ArrayBuffer[(Attribute, Attribute)]
+    val replacements = new ArrayBuffer[(Attribute, Attribute)]
     // Replace sources in the logical plan with data that has arrived since the last batch.
     val withNewSources = logicalPlan transform {
       case StreamingExecutionRelation(source, output) =>
@@ -623,7 +635,8 @@ class StreamExecution(
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
-      case a: Attribute if replacementMap.contains(a) => replacementMap(a)
+      case a: Attribute if replacementMap.contains(a) =>
+        replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType)
@@ -838,6 +851,9 @@ class StreamExecution(
   }
 }
 
+object StreamExecution {
+  val QUERY_ID_KEY = "sql.streaming.queryId"
+}
 
 /**
  * A special thread to run the stream query. Some codes require to run in the StreamExecutionThread

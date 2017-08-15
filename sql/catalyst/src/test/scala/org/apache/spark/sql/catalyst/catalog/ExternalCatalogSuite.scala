@@ -448,6 +448,18 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     assert(catalog.listPartitions("db2", "tbl2", Some(Map("a" -> "unknown"))).isEmpty)
   }
 
+  test("SPARK-21457: list partitions with special chars") {
+    val catalog = newBasicCatalog()
+    assert(catalog.listPartitions("db2", "tbl1").isEmpty)
+
+    val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "i+j"), storageFormat)
+    val part2 = CatalogTablePartition(Map("a" -> "1", "b" -> "i.j"), storageFormat)
+    catalog.createPartitions("db2", "tbl1", Seq(part1, part2), ignoreIfExists = false)
+
+    assert(catalog.listPartitions("db2", "tbl1", Some(part1.spec)).map(_.spec) == Seq(part1.spec))
+    assert(catalog.listPartitions("db2", "tbl1", Some(part2.spec)).map(_.spec) == Seq(part2.spec))
+  }
+
   test("list partitions by filter") {
     val tz = TimeZone.getDefault.getID
     val catalog = newBasicCatalog()
@@ -752,6 +764,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
+  test("alter function") {
+    val catalog = newBasicCatalog()
+    assert(catalog.getFunction("db2", "func1").className == funcClass)
+    val myNewFunc = catalog.getFunction("db2", "func1").copy(className = newFuncClass)
+    catalog.alterFunction("db2", myNewFunc)
+    assert(catalog.getFunction("db2", "func1").className == newFuncClass)
+  }
+
   test("list functions") {
     val catalog = newBasicCatalog()
     catalog.createFunction("db2", newFunc("func2"))
@@ -916,6 +936,7 @@ abstract class CatalogTestUtils {
   lazy val partWithEmptyValue =
     CatalogTablePartition(Map("a" -> "3", "b" -> ""), storageFormat)
   lazy val funcClass = "org.apache.spark.myFunc"
+  lazy val newFuncClass = "org.apache.spark.myNewFunc"
 
   /**
    * Creates a basic catalog, with the following structure:

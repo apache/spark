@@ -95,6 +95,13 @@ in the `spark-defaults.conf` file. A few configuration keys have been renamed si
 versions of Spark; in such cases, the older key names are still accepted, but take lower
 precedence than any instance of the newer key.
 
+Spark properties mainly can be divided into two kinds: one is related to deploy, like
+"spark.driver.memory", "spark.executor.instances", this kind of properties may not be affected when
+setting programmatically through `SparkConf` in runtime, or the behavior is depending on which
+cluster manager and deploy mode you choose, so it would be suggested to set through configuration
+file or `spark-submit` command line options; another is mainly related to Spark runtime control,
+like "spark.task.maxFailures", this kind of properties can be set in either way.
+
 ## Viewing Spark Properties
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
@@ -422,21 +429,21 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.files</code></td>
   <td></td>
   <td>
-    Comma-separated list of files to be placed in the working directory of each executor.
+    Comma-separated list of files to be placed in the working directory of each executor. Globs are allowed.
   </td>
 </tr>
 <tr>
   <td><code>spark.submit.pyFiles</code></td>
   <td></td>
   <td>
-    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
+    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps. Globs are allowed.
   </td>
 </tr>
 <tr>
   <td><code>spark.jars</code></td>
   <td></td>
   <td>
-    Comma-separated list of local jars to include on the driver and executor classpaths.
+    Comma-separated list of jars to include on the driver and executor classpaths. Globs are allowed.
   </td>
 </tr>
 <tr>
@@ -529,6 +536,27 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.reducer.maxBlocksInFlightPerAddress</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote blocks being fetched per reduce task from a
+    given host port. When a large number of blocks are being requested from a given address in a
+    single fetch or simultaneously, this could crash the serving executor or Node Manager. This
+    is especially useful to reduce the load on the Node Manager when external shuffle is enabled.
+    You can mitigate this issue by setting it to a lower value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td>Long.MaxValue</td>
+  <td>
+    The blocks of a shuffle request will be fetched to disk when size of the request is above
+    this threshold. This is to avoid a giant request takes too much memory. We can enable this
+    config by setting a specific value(e.g. 200m). Note that this config can be enabled only when
+    the shuffle shuffle service is newer than Spark-2.2 or the shuffle service is disabled.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.compress</code></td>
   <td>true</td>
   <td>
@@ -603,6 +631,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>1024</td>
   <td>
     Max number of entries to keep in the index cache of the shuffle service.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
+  <td>Long.MAX_VALUE</td>
+  <td>
+    The max number of chunks allowed to be transferred at the same time on shuffle service.
+    Note that new incoming connections will be closed when the max number is hit. The client will
+    retry according to the shuffle retry configs (see <code>spark.shuffle.io.maxRetries</code> and
+    <code>spark.shuffle.io.retryWait</code>), if those limits are reached the task will fail with
+    fetch failure.
   </td>
 </tr>
 <tr>
@@ -725,7 +764,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedJobs</code></td>
   <td>1000</td>
   <td>
-    How many jobs the Spark UI and status APIs remember before garbage collecting. 
+    How many jobs the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -733,7 +772,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedStages</code></td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI and status APIs remember before garbage collecting. 
+    How many stages the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -741,7 +780,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.ui.retainedTasks</code></td>
   <td>100000</td>
   <td>
-    How many tasks the Spark UI and status APIs remember before garbage collecting. 
+    How many tasks the Spark UI and status APIs remember before garbage collecting.
     This is a target maximum, and fewer elements may be retained in some circumstances.
   </td>
 </tr>
@@ -1044,7 +1083,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.replication.proactive<code></td>
+  <td><code>spark.storage.replication.proactive</code></td>
   <td>false</td>
   <td>
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
@@ -1390,6 +1429,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.scheduler.listenerbus.eventqueue.capacity</code></td>
+  <td>10000</td>
+  <td>
+    Capacity for event queue in Spark listener bus, must be greater than 0. Consider increasing
+    value (e.g. 20000) if listener events are dropped. Increasing this value may result in the
+    driver using more memory.
+  </td>
+</tr>
+<tr>
   <td><code>spark.blacklist.enabled</code></td>
   <td>
     false
@@ -1475,8 +1523,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.blacklist.application.fetchFailure.enabled</code></td>
   <td>false</td>
   <td>
-    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch 
-    failure happenes. If external shuffle service is enabled, then the whole node will be 
+    (Experimental) If set to "true", Spark will blacklist the executor immediately when a fetch
+    failure happenes. If external shuffle service is enabled, then the whole node will be
     blacklisted.
   </td>
 </tr>
@@ -2309,5 +2357,37 @@ The location of these configuration files varies across Hadoop versions, but
 a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/conf/spark-env.sh`
 to a location containing the configuration files.
+
+# Custom Hadoop/Hive Configuration
+
+If your Spark application is interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
+configuration files in Spark's classpath.
+
+Multiple running applications might require different Hadoop/Hive client side configurations.
+You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive-site.xml` in
+Spark's classpath for each application. In a Spark cluster running on YARN, these configuration
+files are set cluster-wide, and cannot safely be changed by the application.
+
+The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
+
+In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
+instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+
+{% highlight scala %}
+val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
+val sc = new SparkContext(conf)
+{% endhighlight %}
+
+Also, you can modify or add configurations at runtime:
+{% highlight bash %}
+./bin/spark-submit \ 
+  --name "My app" \ 
+  --master local[4] \  
+  --conf spark.eventLog.enabled=false \ 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
+  --conf spark.hadoop.abc.def=xyz \ 
+  myApp.jar
+{% endhighlight %}

@@ -31,8 +31,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait PlanTest extends SparkFunSuite with PredicateHelper {
 
-  // TODO(gatorsmile): remove this from PlanTest and all the analyzer/optimizer rules
-  protected val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)
+  // TODO(gatorsmile): remove this from PlanTest and all the analyzer rules
+  protected def conf = SQLConf.get
 
   /**
    * Since attribute references are given globally unique ids during analysis,
@@ -116,7 +116,7 @@ trait PlanTest extends SparkFunSuite with PredicateHelper {
 
   /** Fails the test if the two expressions do not match */
   protected def compareExpressions(e1: Expression, e2: Expression): Unit = {
-    comparePlans(Filter(e1, OneRowRelation), Filter(e2, OneRowRelation), checkAnalysis = false)
+    comparePlans(Filter(e1, OneRowRelation()), Filter(e2, OneRowRelation()), checkAnalysis = false)
   }
 
   /** Fails the test if the join order in the two plans do not match */

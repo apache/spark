@@ -76,6 +76,8 @@ setClass("IsotonicRegressionModel", representation(jobj = "jobj"))
 #'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
+#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.glm,SparkDataFrame,formula-method
 #' @return \code{spark.glm} returns a fitted generalized linear model.
@@ -127,7 +129,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, family = gaussian, tol = 1e-6, maxIter = 25, weightCol = NULL,
                    regParam = 0.0, var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
-                                              "alphabetDesc", "alphabetAsc")) {
+                                              "alphabetDesc", "alphabetAsc"),
+                   offsetCol = NULL) {
 
             stringIndexerOrderType <- match.arg(stringIndexerOrderType)
             if (is.character(family)) {
@@ -159,12 +162,19 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
               weightCol <- as.character(weightCol)
             }
 
+            if (!is.null(offsetCol)) {
+              offsetCol <- as.character(offsetCol)
+              if (nchar(offsetCol) == 0) {
+                offsetCol <- NULL
+              }
+            }
+
             # For known families, Gamma is upper-cased
             jobj <- callJStatic("org.apache.spark.ml.r.GeneralizedLinearRegressionWrapper",
                                 "fit", formula, data@sdf, tolower(family$family), family$link,
                                 tol, as.integer(maxIter), weightCol, regParam,
                                 as.double(var.power), as.double(link.power),
-                                stringIndexerOrderType)
+                                stringIndexerOrderType, offsetCol)
             new("GeneralizedLinearRegressionModel", jobj = jobj)
           })
 
@@ -192,6 +202,8 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
 #'                               "frequencyDesc", "frequencyAsc", "alphabetDesc", and "alphabetAsc".
 #'                               The default value is "frequencyDesc". When the ordering is set to
 #'                               "alphabetDesc", this drops the same category as R when encoding strings.
+#' @param offsetCol the offset column name. If this is not set or empty, we treat all instance offsets
+#'                  as 0.0. The feature specified as offset has a constant coefficient of 1.0.
 #' @return \code{glm} returns a fitted generalized linear model.
 #' @rdname glm
 #' @export
@@ -209,10 +221,12 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
           function(formula, family = gaussian, data, epsilon = 1e-6, maxit = 25, weightCol = NULL,
                    var.power = 0.0, link.power = 1.0 - var.power,
                    stringIndexerOrderType = c("frequencyDesc", "frequencyAsc",
-                                              "alphabetDesc", "alphabetAsc")) {
+                                              "alphabetDesc", "alphabetAsc"),
+                   offsetCol = NULL) {
             spark.glm(data, formula, family, tol = epsilon, maxIter = maxit, weightCol = weightCol,
                       var.power = var.power, link.power = link.power,
-                      stringIndexerOrderType = stringIndexerOrderType)
+                      stringIndexerOrderType = stringIndexerOrderType,
+                      offsetCol = offsetCol)
           })
 
 #  Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
