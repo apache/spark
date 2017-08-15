@@ -68,9 +68,9 @@ public class NettyMemoryMetricsSuite {
     Assert.assertNotEquals(serverMetrics.getMetrics().size(), 0);
 
     Map<String, Metric> serverMetricMap = serverMetrics.getMetrics();
-    serverMetricMap.forEach((name, metric) -> {
-      Assert.assertTrue(name.startsWith("shuffle-server"));
-      });
+    serverMetricMap.forEach((name, metric) ->
+      Assert.assertTrue(name.startsWith("shuffle-server"))
+    );
 
     MetricSet clientMetrics = clientFactory.getAllMetrics();
     Assert.assertNotNull(clientMetrics);
@@ -78,9 +78,9 @@ public class NettyMemoryMetricsSuite {
     Assert.assertNotEquals(clientMetrics.getMetrics().size(), 0);
 
     Map<String, Metric> clientMetricMap = clientMetrics.getMetrics();
-    clientMetricMap.forEach((name, metrics) -> {
-      Assert.assertTrue(name.startsWith("shuffle-client"));
-    });
+    clientMetricMap.forEach((name, metrics) ->
+      Assert.assertTrue(name.startsWith("shuffle-client"))
+    );
 
     String chunkMetricName = "numChunkLists";
     // Assert at least one directArena's numChunkLists metric exists.

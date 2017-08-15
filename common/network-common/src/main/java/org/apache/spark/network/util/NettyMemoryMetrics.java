@@ -18,6 +18,7 @@
 package org.apache.spark.network.util;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.*;
 
 import com.codahale.metrics.Gauge;
@@ -82,6 +83,11 @@ public class NettyMemoryMetrics implements MetricSet {
 
   private void registerArenaMetric(PoolArenaMetric arenaMetric, String arenaName) {
     for (Method m : PoolArenaMetric.class.getDeclaredMethods()) {
+      if (!Modifier.isPublic(m.getModifiers())) {
+        // Ignore non-public methods.
+        continue;
+      }
+
       Class<?> returnType = m.getReturnType();
       String metricName = MetricRegistry.name(metricPrefix, arenaName, m.getName());
       if (returnType.equals(int.class)) {

@@ -55,7 +55,7 @@ import org.apache.spark.network.util.*;
  * TransportClients will be reused whenever possible. Prior to completing the creation of a new
  * TransportClient, all given {@link TransportClientBootstrap}s will be run.
  */
-  public class TransportClientFactory implements Closeable {
+public class TransportClientFactory implements Closeable {
 
   /** A simple data structure to track the pool of clients between two peer nodes. */
   private static class ClientPool {
