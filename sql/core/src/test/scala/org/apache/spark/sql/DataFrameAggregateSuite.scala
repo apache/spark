@@ -571,7 +571,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
         val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
 
-        // HashAggregate test case
+        // test case for HashAggregate
         val hashAggDF = df.groupBy("x").agg(c, sum("y"))
         val hashAggPlan = hashAggDF.queryExecution.executedPlan
         if (wholeStage) {
@@ -584,7 +584,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
         }
         hashAggDF.collect()
 
-        // ObjectHashAggregate and SortAggregate test case
+        // test case for ObjectHashAggregate and SortAggregate
         val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
         val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
         if (useObjectHashAgg) {
