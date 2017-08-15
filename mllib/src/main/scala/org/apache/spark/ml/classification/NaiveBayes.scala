@@ -241,7 +241,7 @@ class NaiveBayes @Since("1.5.0") (
       // will cause numerical errors. To address this, we artificially
       // boost the variance by epsilon, a small fraction of the standard
       // deviation of the largest dimension.
-      // Refer to scikit-learn's implement
+      // Refer to scikit-learn's implementation
       // [https://github.com/scikit-learn/scikit-learn/blob/master/sklearn/naive_bayes.py#L337]
       // and discussion [https://github.com/scikit-learn/scikit-learn/pull/5349] for detail.
       var epsilon = Double.MinValue
