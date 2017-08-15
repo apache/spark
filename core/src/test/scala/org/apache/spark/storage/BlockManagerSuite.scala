@@ -1438,7 +1438,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         case (a, b) =>
           a != null &&
             b != null &&
-            a.asInstanceOf[Array[Byte]].seq == b.asInstanceOf[Array[Byte]].seq
+            a.asInstanceOf[Array[Byte]].seq === b.asInstanceOf[Array[Byte]].seq
       })
     }
     val getResult = store.get(RDDBlockId(42, 0))
@@ -1448,7 +1448,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
         case (a, b) =>
           a != null &&
             b != null &&
-            a.asInstanceOf[Array[Byte]].seq == b.asInstanceOf[Array[Byte]].seq
+            a.asInstanceOf[Array[Byte]].seq === b.asInstanceOf[Array[Byte]].seq
       })
     }
     val getBlockRes = store.getBlockData(RDDBlockId(42, 0))
@@ -1464,7 +1464,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
             case (a, b) =>
               a != null &&
                 b != null &&
-                a.asInstanceOf[Array[Byte]].seq == b.asInstanceOf[Array[Byte]].seq
+                a.asInstanceOf[Array[Byte]].seq === b.asInstanceOf[Array[Byte]].seq
           })
         }
       } finally {

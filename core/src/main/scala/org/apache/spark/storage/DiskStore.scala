@@ -180,9 +180,9 @@ private class DiskBlockData(
   }
 
   override def toByteBuffer(): ByteBuffer = {
-    require( blockSize < Int.MaxValue
-      , s"can't create a byte buffer of size $blockSize"
-        + s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
+    require(blockSize < Int.MaxValue,
+      s"can't create a byte buffer of size $blockSize" +
+      s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
     Utils.tryWithResource(open()) { channel =>
       if (blockSize < minMemoryMapBytes) {
         // For small files, directly read rather than memory map.
