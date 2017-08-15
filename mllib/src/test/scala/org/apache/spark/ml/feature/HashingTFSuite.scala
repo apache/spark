@@ -76,11 +76,11 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setInputCol("words")
       .setOutputCol("features")
       .setNumFeatures(n)
-    hashingTF.transform(df)
-    assert(hashingTF.indexOf("a") === 70)
-    assert(hashingTF.indexOf("b") === 61)
-    assert(hashingTF.indexOf("c") === 22)
-    assert(hashingTF.indexOf("d") === 94)
+    val mLlibHashingTF = new MLlibHashingTF(n)
+    assert(hashingTF.indexOf("a") === mLlibHashingTF.indexOf("a"))
+    assert(hashingTF.indexOf("b") === mLlibHashingTF.indexOf("b"))
+    assert(hashingTF.indexOf("c") === mLlibHashingTF.indexOf("c"))
+    assert(hashingTF.indexOf("d") === mLlibHashingTF.indexOf("d"))
   }
 
   test("read/write") {
