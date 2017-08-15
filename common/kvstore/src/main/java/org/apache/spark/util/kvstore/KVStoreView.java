@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import com.google.common.base.Preconditions;
+
+import org.apache.spark.annotation.Private;
 
 /**
  * A configurable view that allows iterating over values in a {@link KVStore}.
@@ -33,6 +35,7 @@ import com.google.common.base.Preconditions;
  * to be closed explicitly unless all elements are read.
  * </p>
  */
+@Private
 public abstract class KVStoreView<T> implements Iterable<T> {
 
   final Class<T> type;

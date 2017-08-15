@@ -59,6 +59,7 @@ object TypeCoercion {
       PropagateTypes ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
+      WindowFrameCoercion ::
       Nil
 
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
@@ -803,6 +804,31 @@ object TypeCoercion {
         case _ => null
       }
       Option(ret)
+    }
+  }
+
+  /**
+   * Cast WindowFrame boundaries to the type they operate upon.
+   */
+  object WindowFrameCoercion extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
+      case s @ WindowSpecDefinition(_, Seq(order), SpecifiedWindowFrame(RangeFrame, lower, upper))
+          if order.resolved =>
+        s.copy(frameSpecification = SpecifiedWindowFrame(
+          RangeFrame,
+          createBoundaryCast(lower, order.dataType),
+          createBoundaryCast(upper, order.dataType)))
+    }
+
+    private def createBoundaryCast(boundary: Expression, dt: DataType): Expression = {
+      (boundary, dt) match {
+        case (e: SpecialFrameBoundary, _) => e
+        case (e, _: DateType) => e
+        case (e, _: TimestampType) => e
+        case (e: Expression, t) if e.dataType != t && Cast.canCast(e.dataType, t) =>
+          Cast(e, t)
+        case _ => boundary
+      }
     }
   }
 }

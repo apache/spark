@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
-import java.io.IOException;
+public class InMemoryIteratorSuite extends DBIteratorSuite {
 
-/**
- * Exception thrown when the store implementation is not compatible with the underlying data.
- */
-public class UnsupportedStoreVersionException extends IOException {
+  @Override
+  protected KVStore createStore() {
+    return new InMemoryStore();
+  }
 
 }

@@ -270,4 +270,15 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
   }
+
+  test("SPARK-21588 SQLContext.getConf(key, null) should return null") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, null))
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, "<undefined>"))
+    }
+
+    assert(spark.conf.getOption("spark.sql.nonexistent").isEmpty)
+    assert(null == spark.conf.get("spark.sql.nonexistent", null))
+    assert("<undefined>" == spark.conf.get("spark.sql.nonexistent", "<undefined>"))
+  }
 }

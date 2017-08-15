@@ -164,7 +164,7 @@ object Cast {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
        10

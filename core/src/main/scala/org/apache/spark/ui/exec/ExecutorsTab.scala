@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.{LinkedHashMap, ListBuffer}
 
-import org.apache.spark.{ExceptionFailure, Resubmitted, SparkConf, SparkContext}
+import org.apache.spark.{Resubmitted, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -131,17 +131,17 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     if (info != null) {
       val eid = info.executorId
       val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
-      taskEnd.reason match {
-        case Resubmitted =>
-          // Note: For resubmitted tasks, we continue to use the metrics that belong to the
-          // first attempt of this task. This may not be 100% accurate because the first attempt
-          // could have failed half-way through. The correct fix would be to keep track of the
-          // metrics added by each attempt, but this is much more complicated.
-          return
-        case _: ExceptionFailure =>
-          taskSummary.tasksFailed += 1
-        case _ =>
-          taskSummary.tasksComplete += 1
+      // Note: For resubmitted tasks, we continue to use the metrics that belong to the
+      // first attempt of this task. This may not be 100% accurate because the first attempt
+      // could have failed half-way through. The correct fix would be to keep track of the
+      // metrics added by each attempt, but this is much more complicated.
+      if (taskEnd.reason == Resubmitted) {
+        return
+      }
+      if (info.successful) {
+        taskSummary.tasksComplete += 1
+      } else {
+        taskSummary.tasksFailed += 1
       }
       if (taskSummary.tasksActive >= 1) {
         taskSummary.tasksActive -= 1
