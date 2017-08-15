@@ -55,8 +55,8 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
    * @group param
    */
   final val modelType: Param[String] = new Param[String](this, "modelType", "The model type " +
-    "which is a string (case-sensitive). Supported options: multinomial (default) and bernoulli.",
-    ParamValidators.inArray[String](NaiveBayes.supportedModelTypes))
+    "which is a string (case-sensitive). Supported options: multinomial (default), bernoulli " +
+    "and gaussian.", ParamValidators.inArray[String](NaiveBayes.supportedModelTypes))
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
@@ -73,7 +73,11 @@ private[classification] trait NaiveBayesParams extends PredictorParams with HasW
  * binary (0/1) data, it can also be used as Bernoulli NB
  * (see <a href="http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html">
  * here</a>).
- * The input feature values must be nonnegative.
+ * And it also supports Gaussian NB
+ * (see <a href="https://en.wikipedia.org/wiki/Naive_Bayes_classifier#Gaussian_naive_Bayes">
+ * here</a>)
+ * which can handle continuous data.
+ * The input feature values for Multinomial NB and Bernoulli NB must be nonnegative.
  */
 // scalastyle:on line.size.limit
 @Since("1.5.0")
@@ -98,7 +102,7 @@ class NaiveBayes @Since("1.5.0") (
 
   /**
    * Set the model type using a string (case-sensitive).
-   * Supported options: "multinomial" and "bernoulli".
+   * Supported options: "multinomial", "bernoulli" and "gaussian".
    * Default is "multinomial"
    * @group setParam
    */
