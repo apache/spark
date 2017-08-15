@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, Statistics}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.streaming.OutputMode
@@ -85,8 +85,9 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
   }
 
   def addData(data: TraversableOnce[A]): Offset = {
-    import sqlContext.implicits._
-    val ds = data.toVector.toDS()
+    val encoded = data.toVector.map(d => encoder.toRow(d).copy())
+    val plan = new LocalRelation(schema.toAttributes, encoded, isStreaming = true)
+    val ds = Dataset[A](sqlContext.sparkSession, plan)
     logDebug(s"Adding ds: $ds")
     this.synchronized {
       currentOffset = currentOffset + 1

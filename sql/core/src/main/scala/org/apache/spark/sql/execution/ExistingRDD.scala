@@ -125,7 +125,8 @@ case class LogicalRDD(
     output: Seq[Attribute],
     rdd: RDD[InternalRow],
     outputPartitioning: Partitioning = UnknownPartitioning(0),
-    outputOrdering: Seq[SortOrder] = Nil)(session: SparkSession)
+    outputOrdering: Seq[SortOrder] = Nil,
+    override val isStreaming: Boolean = false)(session: SparkSession)
   extends LeafNode with MultiInstanceRelation {
 
   override protected final def otherCopyArgs: Seq[AnyRef] = session :: Nil
@@ -150,11 +151,12 @@ case class LogicalRDD(
       output.map(rewrite),
       rdd,
       rewrittenPartitioning,
-      rewrittenOrdering
+      rewrittenOrdering,
+      isStreaming
     )(session).asInstanceOf[this.type]
   }
 
-  override protected def stringArgs: Iterator[Any] = Iterator(output)
+  override protected def stringArgs: Iterator[Any] = Iterator(output, isStreaming)
 
   override def computeStats(): Statistics = Statistics(
     // TODO: Instead of returning a default value here, find a way to return a meaningful size

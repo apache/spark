@@ -43,7 +43,9 @@ object LocalRelation {
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+case class LocalRelation(output: Seq[Attribute],
+                         data: Seq[InternalRow] = Nil,
+                         override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.

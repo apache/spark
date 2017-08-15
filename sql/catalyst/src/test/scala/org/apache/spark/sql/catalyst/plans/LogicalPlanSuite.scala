@@ -75,7 +75,7 @@ class LogicalPlanSuite extends SparkFunSuite {
     val relation = LocalRelation(AttributeReference("a", IntegerType, nullable = true)())
     val incrementalRelation = new LocalRelation(
       Seq(AttributeReference("a", IntegerType, nullable = true)())) {
-      override def isStreaming(): Boolean = true
+      override val isStreaming: Boolean = true
     }
 
     case class TestBinaryRelation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
