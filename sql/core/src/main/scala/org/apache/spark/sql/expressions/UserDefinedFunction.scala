@@ -101,7 +101,7 @@ case class UserDefinedFunction protected[sql] (
    *
    * @since 2.3.0
    */
-  def asNonNullabe(): UserDefinedFunction = {
+  def asNonNullable(): UserDefinedFunction = {
     if (!nullable) {
       this
     } else {
