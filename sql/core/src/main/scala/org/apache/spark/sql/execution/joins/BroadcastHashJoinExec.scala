@@ -204,7 +204,7 @@ case class BroadcastHashJoinExec(
       ctx.currentVars = input ++ buildVars
       val ev =
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = if (!anti) {
+      val skipRow = if (!(anti && uniqueKeyCodePath)) {
         s"${ev.isNull} || !${ev.value}"
       } else {
         s"!${ev.isNull} && ${ev.value}"
