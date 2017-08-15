@@ -47,14 +47,14 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
       """
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    val dir = Utils.createDirectory(tempDir.getCanonicalPath, "data")
+    val dir = Utils.createTempDir()
     val succ = new File(dir, "_SUCCESS")
     val file0 = new File(dir, "part-00000")
     val file1 = new File(dir, "part-00001")
     Files.write("", succ, StandardCharsets.UTF_8)
     Files.write(lines0, file0, StandardCharsets.UTF_8)
     Files.write(lines1, file1, StandardCharsets.UTF_8)
-    path = dir.toURI.toString
+    path = dir.getPath
   }
 
   override def afterAll(): Unit = {
@@ -111,8 +111,8 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data and read it again") {
     val df = spark.read.format("libsvm").load(path)
-    val tempDir2 = new File(tempDir, "read_write_test")
-    val writePath = tempDir2.toURI.toString
+    val writePath = Utils.createTempDir().getPath
+
     // TODO: Remove requirement to coalesce by supporting multiple reads.
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writePath)
 
@@ -120,7 +120,6 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
-    Utils.deleteRecursively(tempDir2)
   }
 
   test("write libsvm data failed due to invalid schema") {
@@ -141,8 +140,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
     val df = spark.sqlContext.createDataFrame(rawData, struct)
 
-    val tempDir2 = new File(tempDir, "read_write_test_2")
-    val writePath = tempDir2.toURI.toString
+    val writePath = Utils.createTempDir().getPath
 
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writePath)
 
@@ -150,7 +148,6 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(3, Seq((0, 2.0), (1, 3.0))))
-    Utils.deleteRecursively(tempDir2)
   }
 
   test("select features from libsvm relation") {
