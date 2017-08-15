@@ -769,9 +769,10 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   test("Write data to a bucketed table with static partition") {
     val numBuckets = 8
     val tableName = "bucketizedTable"
+    val sourceTableName = "sourceTable"
 
     withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
-      withTable(tableName) {
+      withTable(tableName, sourceTableName) {
         sql(s"""
               |CREATE TABLE $tableName (key int, value string)
               |PARTITIONED BY(part1 STRING, part2 STRING)
@@ -780,8 +781,15 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
               |""".stripMargin)
 
         (0 until 100)
-          .map(i => (i, i.toString, "val1", "val2")).toDF("key", "value", "part1", "part2")
-          .write.mode(SaveMode.Overwrite).insertInto(tableName)
+          .map(i => (i, i.toString))
+          .toDF("key", "value")
+          .createOrReplaceTempView(sourceTableName)
+
+        sql(s"""
+              |INSERT OVERWRITE TABLE $tableName PARTITION(part1="val1", part2="val2")
+              |SELECT key, value
+              |FROM $sourceTableName
+              |""".stripMargin)
 
         val dir = spark.sessionState.catalog.getPartition(
           spark.sessionState.sqlParser.parseTableIdentifier(tableName),
@@ -811,14 +819,101 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           .toDF("key", "value", "part1", "part2")
           .write.mode(SaveMode.Overwrite).insertInto(tableName)
 
-        val identifier = spark.sessionState.sqlParser.parseTableIdentifier(tableName)
         (0 until 2).zip(0 until 3).foreach { case (part1, part2) =>
           val dir = spark.sessionState.catalog.getPartition(
-            identifier, Map("part1" -> part1.toString, "part2" -> part2.toString)
+            spark.sessionState.sqlParser.parseTableIdentifier(tableName),
+            Map("part1" -> part1.toString, "part2" -> part2.toString)
           ).location
 
           validateBucketingAndSorting(numBuckets, dir)
         }
+      }
+    }
+  }
+
+  test("Write data to a bucketed table with dynamic partitions (along with static partitions)") {
+    val numBuckets = 8
+    val tableName = "bucketizedTable"
+    val sourceTableName = "sourceTable"
+    val part1StaticValue = "0"
+
+    withSQLConf("hive.exec.dynamic.partition.mode" -> "nonstrict") {
+      withTable(tableName, sourceTableName) {
+        sql(s"""
+               |CREATE TABLE $tableName (key int, value string)
+               |PARTITIONED BY(part1 STRING, part2 STRING)
+               |CLUSTERED BY (key) SORTED BY (key ASC) into $numBuckets buckets
+               |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+               |""".stripMargin)
+
+        (0 until 100)
+          .map(i => (i, i.toString, (i % 3).toString))
+          .toDF("key", "value", "part")
+          .createOrReplaceTempView(sourceTableName)
+
+        sql(s"""
+               |INSERT OVERWRITE TABLE $tableName PARTITION(part1="$part1StaticValue", part2)
+               |SELECT key, value, part
+               |FROM $sourceTableName
+               |""".stripMargin)
+
+        (0 until 3).foreach { case part2 =>
+          val dir = spark.sessionState.catalog.getPartition(
+            spark.sessionState.sqlParser.parseTableIdentifier(tableName),
+            Map("part1" -> part1StaticValue, "part2" -> part2.toString)
+          ).location
+
+          validateBucketingAndSorting(numBuckets, dir)
+        }
+      }
+    }
+  }
+
+  test("Appends to bucketed table should NOT be allowed as it breaks bucketing guarantee") {
+    val numBuckets = 8
+    val tableName = "nonPartitionedBucketed"
+
+    withTable(tableName) {
+      sql(s"""
+             |CREATE TABLE $tableName (key int, value string)
+             |CLUSTERED BY (key) SORTED BY (key ASC) into $numBuckets buckets
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+             |""".stripMargin)
+
+      val df = (0 until 100).map(i => (i, i.toString)).toDF("key", "value")
+      val e = intercept[SparkException] {
+        df.write.mode(SaveMode.Append).insertInto(tableName)
+      }
+      assert(e.getMessage.contains("Appending data to hive bucketed table is not allowed"))
+    }
+  }
+
+  test("Fail the query if number of files produced != number of buckets") {
+    val numBuckets = 8
+    val tableName = "nonPartitionedBucketed"
+
+    withTable(tableName) {
+      sql(s"""
+             |CREATE TABLE $tableName (key int, value string)
+             |CLUSTERED BY (key) SORTED BY (key ASC) into $numBuckets buckets
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+             |""".stripMargin)
+
+      val df = (0 until (numBuckets / 2)).map(i => (i, i.toString)).toDF("key", "value")
+      val e = intercept[SparkException] {
+        df.write.mode(SaveMode.Overwrite).insertInto(tableName)
+      }
+      assert(e.getMessage.contains("Potentially missing bucketed output files"))
+    }
+  }
+
+  test("SPARK-20594: hive.exec.stagingdir was deleted by Hive") {
+    // Set hive.exec.stagingdir under the table directory without start with ".".
+    withSQLConf("hive.exec.stagingdir" -> "./test") {
+      withTable("test_table") {
+        sql("CREATE TABLE test_table (key int)")
+        sql("INSERT OVERWRITE TABLE test_table SELECT 1")
+        checkAnswer(sql("SELECT * FROM test_table"), Row(1))
       }
     }
   }
