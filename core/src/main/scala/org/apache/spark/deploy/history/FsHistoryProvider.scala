@@ -56,11 +56,10 @@ import org.apache.spark.util.kvstore._
  *
  * - New attempts are detected in [[checkForLogs]]: the log dir is scanned, and any
  * entries in the log dir whose modification time is greater than the last scan time
- * are considered new or updated. These are replayed to create a new [[FsApplicationAttemptInfo]]
- * entry and update or create a matching [[FsApplicationHistoryInfo]] element in the list
- * of applications.
+ * are considered new or updated. These are replayed to create a new attempt info entry
+ * and update or create a matching application info element in the list of applications.
  * - Updated attempts are also found in [[checkForLogs]] -- if the attempt's log file has grown, the
- * [[FsApplicationAttemptInfo]] is replaced by another one with a larger log size.
+ * attempt is replaced by another one with a larger log size.
  * - When [[updateProbe()]] is invoked to check if a loaded [[SparkUI]]
  * instance is out of date, the log size of the cached instance is checked against the app last
  * loaded by [[checkForLogs]].
@@ -137,10 +136,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val meta = db.getMetadata(classOf[KVStoreMetadata])
 
       if (meta == null) {
-        db.setMetadata(new KVStoreMetadata(CURRENT_LISTING_VERSION, logDir.toString()))
+        db.setMetadata(new KVStoreMetadata(CURRENT_LISTING_VERSION, logDir))
         db
-      } else if (meta.version != CURRENT_LISTING_VERSION ||
-          !logDir.toString().equals(meta.logDir)) {
+      } else if (meta.version != CURRENT_LISTING_VERSION || !logDir.equals(meta.logDir)) {
         logInfo("Detected mismatched config in existing DB, deleting...")
         db.close()
         Utils.deleteRecursively(dbPath)

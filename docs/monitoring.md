@@ -222,9 +222,11 @@ The history server can be configured as follows:
   </tr>
   <tr>
     <td>spark.history.store.path</td>
-    <td>/var/lib/spark-history</td>
+    <td>(none)</td>
     <td>
-        Local directory where history server will cache application history data.
+        Local directory where to cache application history data. If set, the history
+        server will store application data on disk instead of keeping it in memory. The data
+        written to disk will be re-used in the event of a history server restart.
     </td>
   </tr>
 </table>
