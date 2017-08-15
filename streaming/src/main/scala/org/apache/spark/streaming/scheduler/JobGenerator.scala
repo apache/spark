@@ -147,6 +147,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for jobs to be processed and checkpoints to be written")
+      graph.close()
     } else {
       logInfo("Stopping JobGenerator immediately")
       // Stop timer and graph immediately, ignore unprocessed data and pending jobs

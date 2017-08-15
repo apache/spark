@@ -65,6 +65,12 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
+  def close(): Unit = {
+    this.synchronized {
+      inputStreams.par.foreach(_.close())
+    }
+  }
+
   def setContext(ssc: StreamingContext) {
     this.synchronized {
       outputStreams.foreach(_.setContext(ssc))

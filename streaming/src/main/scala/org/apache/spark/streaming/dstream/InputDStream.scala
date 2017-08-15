@@ -113,4 +113,12 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
 
   /** Method called to stop receiving data. Subclasses must implement this method. */
   def stop(): Unit
+
+  /**
+   * Method called to close this InputDStream after all batches processed.
+   * If necessary, subclasses implements this method.
+   */
+  def close(): Unit = {
+    // Nothing to do in default.
+  }
 }

@@ -253,6 +253,13 @@ private[spark] class DirectKafkaInputDStream[K, V](
 
   override def stop(): Unit = this.synchronized {
     if (kc != null) {
+      kc.pause(currentOffsets.keySet.asJavaCollection)
+    }
+  }
+
+  override def close(): Unit = this.synchronized {
+    if (kc != null) {
+      commitAll(sync = true)
       kc.close()
     }
   }
@@ -278,7 +285,7 @@ private[spark] class DirectKafkaInputDStream[K, V](
     commitQueue.addAll(ju.Arrays.asList(offsetRanges: _*))
   }
 
-  protected def commitAll(): Unit = {
+  protected def commitAll(sync: Boolean = false): Unit = {
     val m = new ju.HashMap[TopicPartition, OffsetAndMetadata]()
     var osr = commitQueue.poll()
     while (null != osr) {
@@ -289,7 +296,12 @@ private[spark] class DirectKafkaInputDStream[K, V](
       osr = commitQueue.poll()
     }
     if (!m.isEmpty) {
-      consumer.commitAsync(m, commitCallback.get)
+      if (sync) {
+        // wait for committing offset completely. (work around for KAFKA-3703)
+        consumer.commitSync(m)
+      } else {
+        consumer.commitAsync(m, commitCallback.get)
+      }
     }
   }
 

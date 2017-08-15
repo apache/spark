@@ -19,7 +19,7 @@ package org.apache.spark.streaming.kafka010
 
 import java.io.File
 import java.lang.{ Long => JLong }
-import java.util.{ Arrays, HashMap => JHashMap, Map => JMap }
+import java.util.{ Arrays, HashMap => JHashMap, LinkedList => JLinkedList, Map => JMap }
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -617,6 +617,80 @@ class DirectKafkaStreamSuite
     ssc.stop()
   }
 
+  test("offset commit when graceful shutdown") {
+    val topic = "offset_graceful_shutdown"
+    kafkaTestUtils.createTopic(topic)
+
+    // Send Messages for this test
+    kafkaTestUtils.sendMessages(topic, (1 to 100).map { _.toString }.toArray)
+
+    def createKafkaDirectStream(
+        ssc: StreamingContext,
+        kafkaParams: JHashMap[String, Object]
+      ): Unit = {
+      val kafkaStream = withClue("Error creating direct stream") {
+        KafkaUtils.createDirectStream[String, String](
+          ssc,
+          preferredHosts,
+          ConsumerStrategies.Subscribe[String, String](List(topic), kafkaParams.asScala)
+        )
+      }
+
+      kafkaStream.map { input =>
+        input.offset
+      }.foreachRDD { rdd =>
+        rdd.collect.foreach { input =>
+          DirectKafkaStreamSuite.list.add(input)
+        }
+      }
+
+      // commit offset manually
+      kafkaStream.foreachRDD { rdd =>
+        val offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+        kafkaStream.asInstanceOf[CanCommitOffsets].commitAsync(offsetRanges)
+      }
+    }
+
+    def runStreaming(ssc: StreamingContext): Unit = {
+      ssc.start()
+
+      // Wait for processing a few batches of Spark Streaming
+      Thread.sleep(5 * 1000)
+
+      // graceful shutdown
+      ssc.stop(true, true)
+    }
+
+    val kafkaParams = getKafkaParams(
+      "enable.auto.commit" -> "false",
+      "auto.offset.reset" -> "earliest"
+    )
+
+    val conf = sparkConf.clone
+    // Limit number of records processing in each batches for doing easily this test,
+    // because some records should be processed in the last bach before graceful shutdown.
+    conf.set("spark.streaming.backpressure.enabled", "true")
+        .set("spark.streaming.kafka.maxRatePerPartition", "1")
+        .set("spark.streaming.backpressure.pid.minRate", "1")
+
+    ssc = new StreamingContext(conf, Milliseconds(1 * 1000))
+    createKafkaDirectStream(ssc, kafkaParams)
+    runStreaming(ssc)
+
+    Thread.sleep(5 * 1000)
+
+    // Re-start Spark Streaming Processing
+    ssc = new StreamingContext(conf, Milliseconds(1 * 1000))
+    createKafkaDirectStream(ssc, kafkaParams)
+    runStreaming(ssc)
+
+    val processedOffset = DirectKafkaStreamSuite.list.toArray()
+    assert(
+      processedOffset.length == processedOffset.distinct.length,
+      "Some records processed more than once before and after graceful shutdown of Spark Streaming"
+    )
+  }
+
   /** Get the generated offset ranges from the DirectKafkaStream */
   private def getOffsetRanges[K, V](
       kafkaStream: DStream[ConsumerRecord[K, V]]): Seq[(Time, Array[OffsetRange])] = {
@@ -668,6 +742,9 @@ class DirectKafkaStreamSuite
 
 object DirectKafkaStreamSuite {
   val total = new AtomicLong(-1L)
+
+  // For "offset commit when graceful shutdown"
+  val list = new JLinkedList[Long]()
 
   class InputInfoCollector extends StreamingListener {
     val numRecordsSubmitted = new AtomicLong(0L)
