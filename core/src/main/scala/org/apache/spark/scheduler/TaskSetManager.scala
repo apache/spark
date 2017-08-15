@@ -56,6 +56,10 @@ private[spark] class TaskSetManager(
 
   private val conf = sched.sc.conf
 
+  // SPARK-21563 make a copy of the jars/files so they are consistent across the TaskSet
+  private val addedJars = HashMap[String, Long](sched.sc.addedJars.toSeq: _*)
+  private val addedFiles = HashMap[String, Long](sched.sc.addedFiles.toSeq: _*)
+
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
@@ -504,8 +508,8 @@ private[spark] class TaskSetManager(
           execId,
           taskName,
           index,
-          sched.sc.addedFiles,
-          sched.sc.addedJars,
+          addedFiles,
+          addedJars,
           task.localProperties,
           serializedTask)
       }

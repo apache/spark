@@ -53,7 +53,8 @@ trait TimeZoneAwareExpression extends Expression {
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current date at the start of query evaluation.")
+  usage = "_FUNC_() - Returns the current date at the start of query evaluation.",
+  since = "1.5.0")
 case class CurrentDate(timeZoneId: Option[String] = None)
   extends LeafExpression with TimeZoneAwareExpression with CodegenFallback {
 
@@ -81,7 +82,8 @@ case class CurrentDate(timeZoneId: Option[String] = None)
  * There is no code generation since this expression should get constant folded by the optimizer.
  */
 @ExpressionDescription(
-  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.")
+  usage = "_FUNC_() - Returns the current timestamp at the start of query evaluation.",
+  since = "1.5.0")
 case class CurrentTimestamp() extends LeafExpression with CodegenFallback {
   override def foldable: Boolean = true
   override def nullable: Boolean = false
@@ -141,7 +143,8 @@ case class CurrentBatchTimestamp(
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-31
-  """)
+  """,
+  since = "1.5.0")
 case class DateAdd(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -174,7 +177,8 @@ case class DateAdd(startDate: Expression, days: Expression)
     Examples:
       > SELECT _FUNC_('2016-07-30', 1);
        2016-07-29
-  """)
+  """,
+  since = "1.5.0")
 case class DateSub(startDate: Expression, days: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
   override def left: Expression = startDate
@@ -203,7 +207,8 @@ case class DateSub(startDate: Expression, days: Expression)
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        12
-  """)
+  """,
+  since = "1.5.0")
 case class Hour(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -233,7 +238,8 @@ case class Hour(child: Expression, timeZoneId: Option[String] = None)
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        58
-  """)
+  """,
+  since = "1.5.0")
 case class Minute(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -263,7 +269,8 @@ case class Minute(child: Expression, timeZoneId: Option[String] = None)
     Examples:
       > SELECT _FUNC_('2009-07-30 12:58:59');
        59
-  """)
+  """,
+  since = "1.5.0")
 case class Second(child: Expression, timeZoneId: Option[String] = None)
   extends UnaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -293,7 +300,8 @@ case class Second(child: Expression, timeZoneId: Option[String] = None)
     Examples:
       > SELECT _FUNC_('2016-04-09');
        100
-  """)
+  """,
+  since = "1.5.0")
 case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -316,7 +324,8 @@ case class DayOfYear(child: Expression) extends UnaryExpression with ImplicitCas
     Examples:
       > SELECT _FUNC_('2016-07-30');
        2016
-  """)
+  """,
+  since = "1.5.0")
 case class Year(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -339,7 +348,8 @@ case class Year(child: Expression) extends UnaryExpression with ImplicitCastInpu
     Examples:
       > SELECT _FUNC_('2016-08-31');
        3
-  """)
+  """,
+  since = "1.5.0")
 case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -362,7 +372,8 @@ case class Quarter(child: Expression) extends UnaryExpression with ImplicitCastI
     Examples:
       > SELECT _FUNC_('2016-07-30');
        7
-  """)
+  """,
+  since = "1.5.0")
 case class Month(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -385,7 +396,8 @@ case class Month(child: Expression) extends UnaryExpression with ImplicitCastInp
     Examples:
       > SELECT _FUNC_('2009-07-30');
        30
-  """)
+  """,
+  since = "1.5.0")
 case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType)
@@ -409,7 +421,8 @@ case class DayOfMonth(child: Expression) extends UnaryExpression with ImplicitCa
     Examples:
       > SELECT _FUNC_('2009-07-30');
        5
-  """)
+  """,
+  since = "2.3.0")
 // scalastyle:on line.size.limit
 case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -447,7 +460,8 @@ case class DayOfWeek(child: Expression) extends UnaryExpression with ImplicitCas
     Examples:
       > SELECT _FUNC_('2008-02-20');
        8
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCastInputTypes {
 
@@ -493,7 +507,8 @@ case class WeekOfYear(child: Expression) extends UnaryExpression with ImplicitCa
     Examples:
       > SELECT _FUNC_('2016-04-08', 'y');
        2016
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -534,7 +549,8 @@ case class DateFormatClass(left: Expression, right: Expression, timeZoneId: Opti
     Examples:
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
-  """)
+  """,
+  since = "1.6.0")
 case class ToUnixTimestamp(
     timeExp: Expression,
     format: Expression,
@@ -574,7 +590,8 @@ case class ToUnixTimestamp(
        1476884637
       > SELECT _FUNC_('2016-04-08', 'yyyy-MM-dd');
        1460041200
-  """)
+  """,
+  since = "1.5.0")
 case class UnixTimestamp(timeExp: Expression, format: Expression, timeZoneId: Option[String] = None)
   extends UnixTime {
 
@@ -724,7 +741,8 @@ abstract class UnixTime
     Examples:
       > SELECT _FUNC_(0, 'yyyy-MM-dd HH:mm:ss');
        1970-01-01 00:00:00
-  """)
+  """,
+  since = "1.5.0")
 case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
 
@@ -833,7 +851,8 @@ case class FromUnixTime(sec: Expression, format: Expression, timeZoneId: Option[
     Examples:
       > SELECT _FUNC_('2009-01-12');
        2009-01-31
-  """)
+  """,
+  since = "1.5.0")
 case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitCastInputTypes {
   override def child: Expression = startDate
 
@@ -867,7 +886,8 @@ case class LastDay(startDate: Expression) extends UnaryExpression with ImplicitC
     Examples:
       > SELECT _FUNC_('2015-01-14', 'TU');
        2015-01-20
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class NextDay(startDate: Expression, dayOfWeek: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -968,7 +988,8 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
     Examples:
       > SELECT from_utc_timestamp('2016-08-31', 'Asia/Seoul');
        2016-08-31 09:00:00
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class FromUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1061,7 +1082,8 @@ case class TimeSub(start: Expression, interval: Expression, timeZoneId: Option[S
     Examples:
       > SELECT _FUNC_('2016-08-31', 1);
        2016-09-30
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class AddMonths(startDate: Expression, numMonths: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1097,7 +1119,8 @@ case class AddMonths(startDate: Expression, numMonths: Expression)
     Examples:
       > SELECT _FUNC_('1997-02-28 10:30:00', '1996-10-30');
        3.94959677
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Option[String] = None)
   extends BinaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes {
@@ -1140,7 +1163,8 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
     Examples:
       > SELECT _FUNC_('2016-08-31', 'Asia/Seoul');
        2016-08-30 15:00:00
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class ToUTCTimestamp(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1203,7 +1227,8 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
        2009-07-30
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31
-  """)
+  """,
+  since = "1.5.0")
 case class ParseToDate(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
@@ -1244,7 +1269,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
        2016-12-31 00:12:00
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00
-  """)
+  """,
+  since = "2.2.0")
 case class ParseToTimestamp(left: Expression, format: Option[Expression], child: Expression)
   extends RuntimeReplaceable {
 
@@ -1279,7 +1305,8 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
        2009-02-01
       > SELECT _FUNC_('2015-10-27', 'YEAR');
        2015-01-01
-  """)
+  """,
+  since = "1.5.0")
 // scalastyle:on line.size.limit
 case class TruncDate(date: Expression, format: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
@@ -1359,7 +1386,8 @@ case class TruncDate(date: Expression, format: Expression)
 
       > SELECT _FUNC_('2009-07-30', '2009-07-31');
        -1
-  """)
+  """,
+  since = "1.5.0")
 case class DateDiff(endDate: Expression, startDate: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 

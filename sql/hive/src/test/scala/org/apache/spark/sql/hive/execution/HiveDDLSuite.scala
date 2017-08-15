@@ -90,6 +90,7 @@ class HiveCatalogedDDLSuite extends DDLSuite with TestHiveSingleton with BeforeA
       provider = if (isDataSource) Some("parquet") else Some("hive"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
+      createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
   }
 

@@ -390,6 +390,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val bucketSpec = table.bucketSpec
 
     val properties = new mutable.HashMap[String, String]
+
+    properties.put(CREATED_SPARK_VERSION, table.createVersion)
+
     // Serialized JSON schema string may be too long to be stored into a single metastore table
     // property. In this case, we split the JSON string and store each part as a separate table
     // property.
@@ -594,7 +597,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Set the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is.
       val propsFromOldTable = oldTableDef.properties.filter { case (k, v) =>
-        k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX)
+        k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX) ||
+          k.startsWith(CREATED_SPARK_VERSION)
       }
       val newTableProps = propsFromOldTable ++ tableDefinition.properties + partitionProviderProp
       val newDef = tableDefinition.copy(
@@ -665,10 +669,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     restoreTableMetadata(getRawTable(db, table))
   }
 
-  override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
-    client.getTableOption(db, table).map(restoreTableMetadata)
-  }
-
   /**
    * Restores table metadata from the table properties. This method is kind of a opposite version
    * of [[createTable]].
@@ -699,6 +699,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case Some(provider) =>
         table = restoreDataSourceTable(table, provider)
     }
+
+    // Restore version info
+    val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "2.2 or prior")
 
     // Restore Spark's statistics from information in Metastore.
     val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
@@ -735,6 +738,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     // Get the original table properties as defined by the user.
     table.copy(
+      createVersion = version,
       properties = table.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
   }
 
@@ -1207,6 +1211,8 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
   val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
+
+  val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
 
   /**
    * Returns the fully qualified name used in table properties for a particular column stat.
