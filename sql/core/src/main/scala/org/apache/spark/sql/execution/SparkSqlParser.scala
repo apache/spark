@@ -304,7 +304,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         codegen = ctx.CODEGEN != null,
         cost = ctx.COST != null)
     } else {
-      ExplainCommand(OneRowRelation)
+      ExplainCommand(OneRowRelation())
     }
   }
 

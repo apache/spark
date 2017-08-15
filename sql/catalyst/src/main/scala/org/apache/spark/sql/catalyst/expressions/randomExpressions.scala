@@ -60,7 +60,7 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Nondeterm
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) uniformly distributed values in [0, 1).",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        0.9629742951434543
@@ -95,7 +95,7 @@ object Rand {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_([seed]) - Returns a random value with independent and identically distributed (i.i.d.) values drawn from the standard normal distribution.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_();
        -0.3254147983080288

@@ -480,7 +480,8 @@ class TreeNodeSuite extends SparkFunSuite {
         CatalogTableType.MANAGED,
         CatalogStorageFormat.empty,
         StructType(StructField("a", IntegerType, true) :: Nil),
-        createTime = 0L),
+        createTime = 0L,
+        createVersion = "2.x"),
 
       JObject(
         "product-class" -> classOf[CatalogTable].getName,
@@ -509,6 +510,7 @@ class TreeNodeSuite extends SparkFunSuite {
         "owner" -> "",
         "createTime" -> 0,
         "lastAccessTime" -> -1,
+        "createVersion" -> "2.x",
         "tracksPartitionsInCatalog" -> false,
         "properties" -> JNull,
         "unsupportedFeatures" -> List.empty[String],

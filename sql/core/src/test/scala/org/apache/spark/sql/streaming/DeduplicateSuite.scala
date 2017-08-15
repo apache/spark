@@ -268,4 +268,17 @@ class DeduplicateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
       CheckLastBatch(7)
     )
   }
+
+  test("SPARK-21546: dropDuplicates should ignore watermark when it's not a key") {
+    val input = MemoryStream[(Int, Int)]
+    val df = input.toDS.toDF("id", "time")
+      .withColumn("time", $"time".cast("timestamp"))
+      .withWatermark("time", "1 second")
+      .dropDuplicates("id")
+      .select($"id", $"time".cast("long"))
+    testStream(df)(
+      AddData(input, 1 -> 1, 1 -> 2, 2 -> 2),
+      CheckLastBatch(1 -> 1, 2 -> 2)
+    )
+  }
 }

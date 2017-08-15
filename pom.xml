@@ -158,7 +158,8 @@
     <scala.version>2.11.8</scala.version>
     <scala.binary.version>2.11</scala.binary.version>
     <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
-    <fasterxml.jackson.version>2.6.5</fasterxml.jackson.version>
+    <fasterxml.jackson.version>2.6.7</fasterxml.jackson.version>
+    <fasterxml.jackson.databind.version>2.6.7.1</fasterxml.jackson.databind.version>
     <snappy.version>1.1.2.6</snappy.version>
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
@@ -530,9 +531,9 @@
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>
-        <groupId>net.jpountz.lz4</groupId>
-        <artifactId>lz4</artifactId>
-        <version>1.3.0</version>
+        <groupId>org.lz4</groupId>
+        <artifactId>lz4-java</artifactId>
+        <version>1.4.0</version>
       </dependency>
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
@@ -615,7 +616,7 @@
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
         <artifactId>jackson-databind</artifactId>
-        <version>${fasterxml.jackson.version}</version>
+        <version>${fasterxml.jackson.databind.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
@@ -627,13 +628,18 @@
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
-        <version>${fasterxml.jackson.version}</version>
+        <version>${fasterxml.jackson.databind.version}</version>
         <exclusions>
           <exclusion>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.module</groupId>
+        <artifactId>jackson-module-paranamer</artifactId>
+        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
@@ -678,7 +684,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>0.13.1</version>
+        <version>0.13.2</version>
         <exclusions>
           <!-- This is included as a compile-scoped dependency by jtransforms, which is
                a dependency of breeze. -->
@@ -2020,6 +2026,8 @@
           <artifactId>maven-compiler-plugin</artifactId>
           <version>3.6.1</version>
           <configuration>
+            <source>${java.version}</source>
+            <target>${java.version}</target>
             <skipMain>true</skipMain> <!-- skip compile -->
             <skip>true</skip> <!-- skip testCompile -->
           </configuration>
