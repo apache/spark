@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.r
 
-import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 
 /** JVM object ID wrapper */
 private[r] case class JVMObjectId(id: String) {
