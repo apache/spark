@@ -40,19 +40,19 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
    * The number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   final val k = new IntParam(this, "k", "The number of clusters to create. " +
     "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def getK: Int = $(k)
 
   /**
    * Param for the initialization algorithm. This can be either "random" to use a random vector
    * as vertex properties, or "degree" to use normalized sum similarities. Default: random.
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   final val initMode = {
     val allowedParams = ParamValidators.inArray(Array("random", "degree"))
     new Param[String](this, "initMode", "The initialization algorithm. " +
@@ -60,7 +60,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   }
 
   /** @group expertGetParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def getInitMode: String = $(initMode)
 
   /**
@@ -105,10 +105,10 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
  *
  * @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)</a>
  */
-@Since("2.2.0")
+@Since("2.3.0")
 @Experimental
 class PowerIterationClustering private[clustering] (
-    @Since("2.2.0") override val uid: String)
+    @Since("2.3.0") override val uid: String)
   extends Transformer with PowerIterationClusteringParams with DefaultParamsWritable {
 
   setDefault(
@@ -119,34 +119,34 @@ class PowerIterationClustering private[clustering] (
     weightCol -> "weight",
     neighborCol -> "neighbor")
 
-  @Since("2.2.0")
+  @Since("2.3.0")
   override def copy(extra: ParamMap): PowerIterationClustering = defaultCopy(extra)
 
-  @Since("2.2.0")
+  @Since("2.3.0")
   def this() = this(Identifiable.randomUID("PowerIterationClustering"))
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setK(value: Int): this.type = set(k, value)
 
   /** @group expertSetParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setInitMode(value: String): this.type = set(initMode, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setIdCol(value: String): this.type = set(idCol, value)
 
   /**
@@ -155,7 +155,7 @@ class PowerIterationClustering private[clustering] (
    *
    * @group setParam
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
@@ -164,13 +164,13 @@ class PowerIterationClustering private[clustering] (
    *
    * @group setParam
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setNeighborCol(value: String): this.type = set(neighborCol, value)
 
-  @Since("2.2.0")
+  @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val sparkSession = dataset.sparkSession
-
+/*
     val rdd: RDD[(Long, Long, Double)] =
       dataset.select(col($(idCol)), col($(neighborCol)), col($(weightCol))).rdd.map {
         case Row(id: Long, nbr: Vector, weight: Vector) => (id, nbr, weight)
@@ -179,6 +179,15 @@ class PowerIterationClustering private[clustering] (
           "The length of neighbor list must be equal to the the length of the weight list.")
         val ids = Array.fill(nbr.size)(id)
         ids.zip(nbr.toArray).zip(weight.toArray)}.map {case ((i, j), k) => (i, j.toLong, k)}
+*/
+    val rdd: RDD[(Long, Long, Double)] =
+      dataset.select(col($(idCol)), col($(neighborCol)), col($(weightCol))).rdd.flatMap {
+        case Row(id: Long, nbr: Vector, weight: Vector) =>
+        require(nbr.size == weight.size,
+          "The length of neighbor list must be equal to the the length of the weight list.")
+        val ids = Array.fill(nbr.size)(id)
+        for (i <- 0 until ids.size) yield (ids(i), nbr(i).toLong, weight(i))}
+
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -196,7 +205,7 @@ class PowerIterationClustering private[clustering] (
     dataset.join(result, "id")
   }
 
-  @Since("2.2.0")
+  @Since("2.3.0")
   override def transformSchema(schema: StructType): StructType = {
     validateSchema(schema)
     schema
@@ -204,10 +213,10 @@ class PowerIterationClustering private[clustering] (
 
 }
 
-@Since("2.2.0")
+@Since("2.3.0")
 object PowerIterationClustering extends DefaultParamsReadable[PowerIterationClustering] {
 
-  @Since("2.2.0")
+  @Since("2.3.0")
   override def load(path: String): PowerIterationClustering = super.load(path)
 }
 
