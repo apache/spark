@@ -47,6 +47,8 @@ private[spark] class DiskStore(
     securityManager: SecurityManager) extends Logging {
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+  private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
+    s"${Int.MaxValue}b")
   private val blockSizes = new ConcurrentHashMap[String, Long]()
 
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId.name)
@@ -108,7 +110,7 @@ private[spark] class DiskStore(
         new EncryptedBlockData(file, blockSize, conf, key)
 
       case _ =>
-        new DiskBlockData(conf, file, blockSize)
+        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
     }
   }
 
@@ -148,11 +150,10 @@ private[spark] class DiskStore(
 }
 
 private class DiskBlockData(
-    conf: SparkConf,
+    minMemoryMapBytes : Long,
+    maxMemoryMapBytes : Long,
     file: File,
     blockSize: Long) extends BlockData {
-
-  private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
 
   override def toInputStream(): InputStream = new FileInputStream(file)
 
@@ -168,7 +169,7 @@ private class DiskBlockData(
       var remaining = blockSize
       val chunks = new ListBuffer[ByteBuffer]()
       while (remaining > 0) {
-        val chunkSize = math.min(remaining, Int.MaxValue)
+        val chunkSize = math.min(remaining, maxMemoryMapBytes)
         val chunk = allocator(chunkSize.toInt)
         remaining -= chunkSize
         JavaUtils.readFully(channel, chunk)
@@ -180,7 +181,10 @@ private class DiskBlockData(
   }
 
   override def toByteBuffer(): ByteBuffer = {
-    require(blockSize < Int.MaxValue,
+    // I chose to leave to original error message here
+    // since users are unfamiliar with the configureation key
+    // controling maxMemoryMapBytes for tests
+    require(blockSize < maxMemoryMapBytes,
       s"can't create a byte buffer of size $blockSize" +
       s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
     Utils.tryWithResource(open()) { channel =>

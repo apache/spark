@@ -94,17 +94,16 @@ class DiskStoreSuite extends SparkFunSuite {
 
   test("blocks larger than 2gb") {
     val conf = new SparkConf()
+      .set("spark.storage.memoryMapLimitForTests", "10k" )
     val diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
     val diskStore = new DiskStore(conf, diskBlockManager, new SecurityManager(conf))
 
-    val mb = 1024 * 1024
-    val gb = 1024L * mb
 
     val blockId = BlockId("rdd_1_2")
     diskStore.put(blockId) { chan =>
-      val arr = new Array[Byte](mb)
+      val arr = new Array[Byte](1024)
       for {
-        _ <- 0 until 3072
+        _ <- 0 until 20
       } {
         val buf = ByteBuffer.wrap(arr)
         while (buf.hasRemaining()) {
@@ -114,7 +113,22 @@ class DiskStoreSuite extends SparkFunSuite {
     }
 
     val blockData = diskStore.getBytes(blockId)
-    assert(blockData.size == 3 * gb)
+    assert(blockData.size == 20 * 1024)
+
+    val chunkedByteBuffer = blockData.toChunkedByteBuffer(ByteBuffer.allocate)
+    val chunks = chunkedByteBuffer.chunks
+    assert(chunks.size === 2)
+    for( chunk <- chunks ) {
+      assert(chunk.limit === 10 * 1024)
+    }
+
+    val e = intercept[IllegalArgumentException]{
+      blockData.toByteBuffer()
+    }
+
+    assert(e.getMessage ==
+      s"requirement failed: can't create a byte buffer of size ${blockData.size}" +
+      s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
   }
 
   test("block data encryption") {
