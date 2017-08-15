@@ -134,6 +134,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val spark = dataset.sparkSession
 
+    val casted = dataset.select($(inputCols).map(col(_).cast("double")): _*)
+
     val cols = $(inputCols).map { inputCol =>
       when(col(inputCol).equalTo($(missingValue)), null)
         .when(col(inputCol).isNaN, null)
@@ -143,7 +145,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 
     val results = $(strategy) match {
       case Imputer.mean =>
-        val row = dataset.select(cols.map(avg): _*).head()
+        val row = casted.select(cols.map(avg): _*).head()
         Array.range(0, $(inputCols).length).map { i =>
           if (row.isNullAt(i)) {
             Double.NaN
@@ -153,7 +155,7 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         }
 
       case Imputer.median =>
-        dataset.select(cols: _*).stat.approxQuantile($(inputCols), Array(0.5), 0.001)
+        casted.select(cols: _*).stat.approxQuantile($(inputCols), Array(0.5), 0.001)
           .map { array =>
             if (array.isEmpty) {
               Double.NaN
