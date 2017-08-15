@@ -44,15 +44,17 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       normL2: Seq[Double],
       normL1: Seq[Double])
 
-  // The input is expected to be either a sparse vector, a dense vector or an array of doubles
-  // (which will be converted to a dense vector)
-  // The expected is the list of all the known metrics.
-  //
-  // The tests take an list of input vectors and a list of all the summary values that
-  // are expected for this input. They currently test against some fixed subset of the
-  // metrics, but should be made fuzzy in the future.
-
+  /**
+   * The input is expected to be either a sparse vector, a dense vector or an array of doubles
+   * (which will be converted to a dense vector)
+   * The expected is the list of all the known metrics.
+   *
+   * The tests take an list of input vectors and a list of all the summary values that
+   * are expected for this input. They currently test against some fixed subset of the
+   * metrics, but should be made fuzzy in the future.
+   */
   private def testExample(name: String, input: Seq[Any], exp: ExpectedMetrics): Unit = {
+
     def inputVec: Seq[Vector] = input.map {
       case x: Array[Double @unchecked] => Vectors.dense(x)
       case x: Seq[Double @unchecked] => Vectors.dense(x.toArray)
@@ -60,90 +62,90 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       case x => throw new Exception(x.toString)
     }
 
-    val s = {
-      val s2 = new MultivariateOnlineSummarizer
-      inputVec.foreach(v => s2.add(OldVectors.fromML(v)))
-      s2
+    val summarizer = {
+      val _summarizer = new MultivariateOnlineSummarizer
+      inputVec.foreach(v => _summarizer.add(OldVectors.fromML(v)))
+      _summarizer
     }
 
     // Because the Spark context is reset between tests, we cannot hold a reference onto it.
-    def wrapped() = {
-      val df = sc.parallelize(inputVec).map(Tuple1.apply).toDF("features")
-      val c = df.col("features")
-      (df, c)
+    def wrappedInit() = {
+      val df = inputVec.map(Tuple1.apply).toDF("features")
+      val col = df.col("features")
+      (df, col)
     }
 
     registerTest(s"$name - mean only") {
-      val (df, c) = wrapped()
-      compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), s.mean))
+      val (df, c) = wrappedInit()
+      compare(df.select(metrics("mean").summary(c), mean(c)), Seq(Row(exp.mean), summarizer.mean))
     }
 
     registerTest(s"$name - mean only (direct)") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(mean(c)), Seq(exp.mean))
     }
 
     registerTest(s"$name - variance only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("variance").summary(c), variance(c)),
-        Seq(Row(exp.variance), s.variance))
+        Seq(Row(exp.variance), summarizer.variance))
     }
 
     registerTest(s"$name - variance only (direct)") {
-      val (df, c) = wrapped()
-      compare(df.select(variance(c)), Seq(s.variance))
+      val (df, c) = wrappedInit()
+      compare(df.select(variance(c)), Seq(summarizer.variance))
     }
 
     registerTest(s"$name - count only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("count").summary(c), count(c)),
         Seq(Row(exp.count), exp.count))
     }
 
     registerTest(s"$name - count only (direct)") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(count(c)),
         Seq(exp.count))
     }
 
     registerTest(s"$name - numNonZeros only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
         Seq(Row(exp.numNonZeros), exp.numNonZeros))
     }
 
     registerTest(s"$name - numNonZeros only (direct)") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(numNonZeros(c)),
         Seq(exp.numNonZeros))
     }
 
     registerTest(s"$name - min only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("min").summary(c), min(c)),
         Seq(Row(exp.min), exp.min))
     }
 
     registerTest(s"$name - max only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("max").summary(c), max(c)),
         Seq(Row(exp.max), exp.max))
     }
 
     registerTest(s"$name - normL1 only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("normL1").summary(c), normL1(c)),
         Seq(Row(exp.normL1), exp.normL1))
     }
 
     registerTest(s"$name - normL2 only") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(metrics("normL2").summary(c), normL2(c)),
         Seq(Row(exp.normL2), exp.normL2))
     }
 
     registerTest(s"$name - all metrics at once") {
-      val (df, c) = wrapped()
+      val (df, c) = wrappedInit()
       compare(df.select(
         metrics("mean", "variance", "count", "numNonZeros").summary(c),
         mean(c), variance(c), count(c), numNonZeros(c)),
@@ -153,8 +155,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   private def denseData(input: Seq[Seq[Double]]): DataFrame = {
-    val data = input.map(_.toArray).map(Vectors.dense).map(Tuple1.apply)
-    sc.parallelize(data).toDF("features")
+    input.map(_.toArray).map(Vectors.dense).map(Tuple1.apply).toDF("features")
   }
 
   private def compare(df: DataFrame, exp: Seq[Any]): Unit = {
@@ -203,11 +204,7 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         throw new TestFailedException(Some(s"Failure with hint $hint"), Some(tfe), 1)
     }
   }
-/*
-  private def b(x: Array[Double]): Vector = Vectors.dense(x)
 
-  private def l(x: Array[Long]): Vector = b(x.map(_.toDouble))
-*/
   test("debugging test") {
     val df = denseData(Nil)
     val c = df.col("features")
@@ -234,19 +231,17 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     compare(res, Seq(Row(0L), 0L))
   }
 
-  {
-    val x = Seq(0.0, 1.0, 2.0)
-    testExample("single element", Seq(x), ExpectedMetrics(
-      mean = x,
-      variance = Seq(0.0, 0.0, 0.0),
-      count = 1,
-      numNonZeros = Seq(0, 1, 1),
-      max = x,
-      min = x,
-      normL1 = x,
-      normL2 = x
-    ))
-  }
+  val singleElem = Seq(0.0, 1.0, 2.0)
+  testExample("single element", Seq(singleElem), ExpectedMetrics(
+    mean = singleElem,
+    variance = Seq(0.0, 0.0, 0.0),
+    count = 1,
+    numNonZeros = Seq(0, 1, 1),
+    max = singleElem,
+    min = singleElem,
+    normL1 = singleElem,
+    normL2 = singleElem
+  ))
 
   testExample("two elements", Seq(Seq(0.0, 1.0, 2.0), Seq(0.0, -1.0, -2.0)), ExpectedMetrics(
     mean = Seq(0.0, 0.0, 0.0),
@@ -271,7 +266,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       min = Seq(-1.0, -3, 0.0),
       normL1 = Seq(4.0, 3.0, 6.0),
       normL2 = Seq(math.sqrt(10), 3, 6.0)
-  ))
+    )
+  )
 
   test("summarizer buffer basic error handing") {
     val summarizer = new SummarizerBuffer
@@ -339,15 +335,10 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .add(Vectors.dense(3.0, -3.0, 0.0))
 
     assert(summarizer.mean ~== Vectors.dense(1.0, -1.5, 3.0) absTol 1E-5, "mean mismatch")
-
     assert(summarizer.min ~== Vectors.dense(-1.0, -3, 0.0) absTol 1E-5, "min mismatch")
-
     assert(summarizer.max ~== Vectors.dense(3.0, 0.0, 6.0) absTol 1E-5, "max mismatch")
-
     assert(summarizer.numNonzeros ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
-
     assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
-
     assert(summarizer.count === 2)
   }
 
@@ -357,15 +348,10 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       .add(Vectors.sparse(3, Seq((0, 3.0), (1, -3.0))))
 
     assert(summarizer.mean ~== Vectors.dense(1.0, -1.5, 3.0) absTol 1E-5, "mean mismatch")
-
     assert(summarizer.min ~== Vectors.dense(-1.0, -3, 0.0) absTol 1E-5, "min mismatch")
-
     assert(summarizer.max ~== Vectors.dense(3.0, 0.0, 6.0) absTol 1E-5, "max mismatch")
-
     assert(summarizer.numNonzeros ~== Vectors.dense(2, 1, 1) absTol 1E-5, "numNonzeros mismatch")
-
     assert(summarizer.variance ~== Vectors.dense(8.0, 4.5, 18.0) absTol 1E-5, "variance mismatch")
-
     assert(summarizer.count === 2)
   }
 
@@ -382,11 +368,8 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense(0.583333333333, -0.416666666666, -0.183333333333) absTol 1E-5, "mean mismatch")
 
     assert(summarizer.min ~== Vectors.dense(-2.0, -5.1, -3) absTol 1E-5, "min mismatch")
-
     assert(summarizer.max ~== Vectors.dense(3.8, 2.3, 1.9) absTol 1E-5, "max mismatch")
-
     assert(summarizer.numNonzeros ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
-
     assert(summarizer.variance ~==
       Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
       "variance mismatch")
@@ -411,15 +394,11 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense(0.583333333333, -0.416666666666, -0.183333333333) absTol 1E-5, "mean mismatch")
 
     assert(summarizer.min ~== Vectors.dense(-2.0, -5.1, -3) absTol 1E-5, "min mismatch")
-
     assert(summarizer.max ~== Vectors.dense(3.8, 2.3, 1.9) absTol 1E-5, "max mismatch")
-
     assert(summarizer.numNonzeros ~== Vectors.dense(3, 5, 2) absTol 1E-5, "numNonzeros mismatch")
-
     assert(summarizer.variance ~==
       Vectors.dense(3.857666666666, 7.0456666666666, 2.48166666666666) absTol 1E-5,
       "variance mismatch")
-
     assert(summarizer.count === 6)
   }
 
@@ -438,23 +417,14 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer3.count === 0)
 
     assert(summarizer1.mean ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "mean mismatch")
-
     assert(summarizer2.mean ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "mean mismatch")
-
     assert(summarizer1.min ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "min mismatch")
-
     assert(summarizer2.min ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "min mismatch")
-
     assert(summarizer1.max ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "max mismatch")
-
     assert(summarizer2.max ~== Vectors.dense(0.0, -1.0, -3.0) absTol 1E-5, "max mismatch")
-
     assert(summarizer1.numNonzeros ~== Vectors.dense(0, 1, 1) absTol 1E-5, "numNonzeros mismatch")
-
     assert(summarizer2.numNonzeros ~== Vectors.dense(0, 1, 1) absTol 1E-5, "numNonzeros mismatch")
-
     assert(summarizer1.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
-
     assert(summarizer2.variance ~== Vectors.dense(0, 0, 0) absTol 1E-5, "variance mismatch")
   }
 
@@ -521,9 +491,20 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 
-  // TODO: this test should not be committed. It is here to isolate some performance hotspots.
   ignore("performance test") {
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.12
+    MacBook Pro (15-inch, 2016) CPU 2.9 GHz Intel Core i7
+    Use 2 partitions. tries out times= 20, warm up times = 10
 
+    The unit of test results is records/milliseconds (higher is better)
+
+    Vector size/records number:     1/1E7    10/1E6   100/1E6   1E3/1E5   1E4/1E4
+    -----------------------------------------------------------------------------
+    DataFrame                       15149      7441      2118       224        21
+    RDD from DataFrame               4992      4440      2328       320        33
+    Raw RDD                         53931     20683      3966       528        53
+    */
     import scala.util.Random
     val rand = new Random()
 
@@ -532,17 +513,18 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
 
     val numPartitions = 2
-    // scalastyle:off println
     for ( (n, dim) <- Seq(
       (10000000, 1), (1000000, 10), (1000000, 100), (100000, 1000), (10000, 10000))
     ) {
       val rdd1 = sc.parallelize(1 to n, numPartitions).map { idx =>
         OldVectors.dense(genArr(dim))
       }
-      println(s"----------n=${n}, dim=${dim}, partition=${rdd1.getNumPartitions}--------------")
+      // scalastyle:off println
+      println(s"records number = $n, vector size = $dim, partition = ${rdd1.getNumPartitions}")
+      // scalastyle:on println
 
-      val trieouts = 20
-      val warm_up_times = 10
+      val numOfTry = 20
+      val numOfWarmUp = 10
       rdd1.cache()
       rdd1.count()
       val rdd2 = sc.parallelize(1 to n, numPartitions).map { idx =>
@@ -559,61 +541,42 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         val min = f(l.max)
         val max = f(l.min)
         val med = f(l.sorted.drop(l.size / 2).head)
-
+        // scalastyle:off println
         println(s"$name = [$min ~ $med ~ $max] records / milli")
+        // scalastyle:on println
       }
 
-      var times_df: List[Long] = Nil
+      var timeDF: List[Long] = Nil
       val x = df.select(
         metrics("mean", "variance", "count", "numNonZeros", "max", "min", "normL1",
           "normL2").summary($"features"))
-      // x.explain(true)
-      for (i <- 1 to trieouts) {
-        // println(s"df try ${i}")
-        val t21 = System.nanoTime()
+      for (i <- 1 to numOfTry) {
+        val start = System.nanoTime()
         x.head()
-        val t22 = System.nanoTime()
-        val dt = t22 - t21
-        if (i > warm_up_times) times_df ::= dt
+        val end = System.nanoTime()
+        if (i > numOfWarmUp) timeDF ::= (end - start)
       }
 
-      var times_rdd: List[Long] = Nil
-      for (i <- 1 to trieouts) {
-        // println(s"rdd try ${i}")
-        val t21 = System.nanoTime()
+      var timeRDD: List[Long] = Nil
+      for (i <- 1 to numOfTry) {
+        val start = System.nanoTime()
         Statistics.colStats(rdd1)
-        val t22 = System.nanoTime()
-        if (i > warm_up_times) times_rdd ::= (t22 - t21)
+        val end = System.nanoTime()
+        if (i > numOfWarmUp) timeRDD ::= (end - start)
       }
 
-      /*
-      var times_df_variance: List[Long] = Nil
-      for (i <- 1 to trieouts) {
-        // println(s"df var try ${i}")
-        val t21 = System.nanoTime()
-        x1.head()
-        val t22 = System.nanoTime()
-        if (i > warm_up_times) times_df_variance ::= (t22 - t21)
-      }
-      */
-
-      var times_rdd_from_df: List[Long] = Nil
+      var timeRDDFromDF: List[Long] = Nil
       val rddFromDf = df.rdd.map { case Row(v: Vector) => OldVectors.fromML(v) }
-      for (i <- 1 to trieouts) {
-        // println(s"rdd try ${i}")
-        val t21 = System.nanoTime()
+      for (i <- 1 to numOfTry) {
+        val start = System.nanoTime()
         Statistics.colStats(rddFromDf)
-        val t22 = System.nanoTime()
-        if (i > warm_up_times) times_rdd_from_df ::= (t22 - t21)
+        val end = System.nanoTime()
+        if (i > numOfWarmUp) timeRDDFromDF ::= (end - start)
       }
 
-      print("Dataframes", times_df)
-      print("RDD", times_rdd)
-      // print("Dataframes (variance only)", times_df_variance)
-      print("RDD from df", times_rdd_from_df)
+      print("DataFrame : ", timeDF)
+      print("RDD :", timeRDD)
+      print("RDD from DataFrame : ", timeRDDFromDF)
     }
-
   }
-
-
 }
