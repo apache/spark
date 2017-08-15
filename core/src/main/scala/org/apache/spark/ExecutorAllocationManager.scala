@@ -92,6 +92,7 @@ private[spark] class ExecutorAllocationManager(
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
   private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
   private val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
+  private var maxConcurrentTasks = Int.MaxValue
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
@@ -262,7 +263,8 @@ private[spark] class ExecutorAllocationManager(
    * and pending tasks, rounded up.
    */
   private def maxNumExecutorsNeeded(): Int = {
-    val numRunningOrPendingTasks = listener.totalPendingTasks + listener.totalRunningTasks
+    val numRunningOrPendingTasks = Math.min(listener.totalPendingTasks + listener.totalRunningTasks,
+      maxConcurrentTasks)
     (numRunningOrPendingTasks + tasksPerExecutor - 1) / tasksPerExecutor
   }
 
@@ -313,7 +315,7 @@ private[spark] class ExecutorAllocationManager(
       // Do not change our target while we are still initializing,
       // Otherwise the first job may have to ramp up unnecessarily
       0
-    } else if (maxNeeded < numExecutorsTarget) {
+    } else if (maxNeeded <= numExecutorsTarget) {
       // The target number exceeds the number we actually need, so stop adding new
       // executors and inform the cluster manager to cancel the extra pending requests
       val oldNumExecutorsTarget = numExecutorsTarget
@@ -591,6 +593,21 @@ private[spark] class ExecutorAllocationManager(
     // maintain the executor placement hints for each stage Id used by resource framework to better
     // place the executors.
     private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
+
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+      val jobGroupId = if (jobStart.properties != null) {
+        jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
+      } else {
+        ""
+      }
+      val maxConcurrentTasks = conf.getInt(s"spark.job.$jobGroupId.maxConcurrentTasks",
+        Int.MaxValue)
+
+      logInfo(s"Setting maximum concurrent tasks for group: ${jobGroupId} to $maxConcurrentTasks")
+      allocationManager.synchronized {
+        allocationManager.maxConcurrentTasks = maxConcurrentTasks
+      }
+    }
 
     override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = {
       initializing = false

@@ -1436,6 +1436,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.job.[userJobGroup].maxConcurrentTasks</code></td>
+  <td>Int.MAX_VALUE</td>
+  <td>
+    Maximum number of tasks to run concurrently in a given job group. This is especially useful
+    to avoid DoS while accessing an external service for ex: a database from multiple executors
+    simultaneously. You can set the job group by calling the <code>setJobGroup</code> method on
+    <code>sc</sc>.
+  </td>
+</tr>
+<tr>
   <td><code>spark.blacklist.enabled</code></td>
   <td>
     false

@@ -188,6 +188,125 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 10)
   }
 
+  test("add executors capped by max concurrent tasks for a job group with single core executors") {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.job.group1.maxConcurrentTasks", "2")
+      .set("spark.job.group2.maxConcurrentTasks", "5")
+    val sc = new SparkContext(conf)
+    contexts += sc
+    sc.setJobGroup("group1", "", false)
+
+    val manager = sc.executorAllocationManager.get
+    val stage0 = createStageInfo(0, 10)
+    // Submit the job and stage start/submit events
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq{stage0}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
+
+    // Verify that we're capped at number of max concurrent tasks in the stage
+    assert(maxNumExecutorsNeeded(manager) === 2)
+
+    // Submit another stage in the same job
+    val stage1 = createStageInfo(1, 10)
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage1))
+    assert(maxNumExecutorsNeeded(manager) === 2)
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage0))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage1))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(0, 10, JobSucceeded))
+
+    // Submit a new job in the same job group
+    val stage2 = createStageInfo(2, 20)
+    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq{stage2}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage2))
+    assert(maxNumExecutorsNeeded(manager) === 2)
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage2))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(1, 10, JobSucceeded))
+
+    // Set another jobGroup
+    sc.setJobGroup("group2", "", false)
+
+    val stage3 = createStageInfo(3, 20)
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage3}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage3))
+    assert(maxNumExecutorsNeeded(manager) === 5)
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage3))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(2, 10, JobSucceeded))
+
+    // Clear jobGroup
+    sc.clearJobGroup()
+
+    val stage4 = createStageInfo(4, 50)
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage4}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage4))
+    assert(maxNumExecutorsNeeded(manager) === 50)
+  }
+
+  test("add executors capped by max concurrent tasks for a job group with multi cores executors") {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.job.group1.maxConcurrentTasks", "2")
+      .set("spark.job.group2.maxConcurrentTasks", "5")
+      .set("spark.executor.cores", "3")
+    val sc = new SparkContext(conf)
+    contexts += sc
+    sc.setJobGroup("group1", "", false)
+
+    val manager = sc.executorAllocationManager.get
+    val stage0 = createStageInfo(0, 10)
+    // Submit the job and stage start/submit events
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq{stage0}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
+
+    // Verify that we're capped at number of max concurrent tasks in the stage
+    assert(maxNumExecutorsNeeded(manager) === 1)
+
+    // Submit another stage in the same job
+    val stage1 = createStageInfo(1, 10)
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage1))
+    assert(maxNumExecutorsNeeded(manager) === 1)
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage0))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage1))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(0, 10, JobSucceeded))
+
+    // Submit a new job in the same job group
+    val stage2 = createStageInfo(2, 20)
+    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq{stage2}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage2))
+    assert(maxNumExecutorsNeeded(manager) === 1)
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage2))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(1, 10, JobSucceeded))
+
+    // Set another jobGroup
+    sc.setJobGroup("group2", "", false)
+
+    val stage3 = createStageInfo(3, 20)
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage3}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage3))
+    assert(maxNumExecutorsNeeded(manager) === 2)
+
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage3))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(2, 10, JobSucceeded))
+
+    // Clear jobGroup
+    sc.clearJobGroup()
+
+    val stage4 = createStageInfo(4, 50)
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage4}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage4))
+    assert(maxNumExecutorsNeeded(manager) === 17)
+  }
+
   test("cancel pending executors when no longer needed") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
