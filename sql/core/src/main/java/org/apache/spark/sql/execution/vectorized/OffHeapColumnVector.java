@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
 /**
  * Column data backed using offheap memory.
  */
-public final class OffHeapColumnVector extends ColumnVector {
+public final class OffHeapColumnVector extends MutableColumnVector {
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
@@ -40,8 +39,43 @@ public final class OffHeapColumnVector extends ColumnVector {
   private long lengthData;
   private long offsetData;
 
-  protected OffHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.OFF_HEAP);
+  public OffHeapColumnVector(int capacity, DataType type) {
+    super(capacity, type);
+
+    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+        || DecimalType.isByteArrayDecimalType(type)) {
+      DataType childType;
+      int childCapacity = capacity;
+      if (type instanceof ArrayType) {
+        childType = ((ArrayType)type).elementType();
+      } else {
+        childType = DataTypes.ByteType;
+        childCapacity *= DEFAULT_ARRAY_LENGTH;
+      }
+      this.childColumns = new ColumnVector[1];
+      this.childColumns[0] = new OffHeapColumnVector(childCapacity, childType);
+      this.resultArray = new ColumnVector.Array(this.childColumns[0]);
+      this.resultStruct = null;
+    } else if (type instanceof StructType) {
+      StructType st = (StructType)type;
+      this.childColumns = new ColumnVector[st.fields().length];
+      for (int i = 0; i < childColumns.length; ++i) {
+        this.childColumns[i] = new OffHeapColumnVector(capacity, st.fields()[i].dataType());
+      }
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else if (type instanceof CalendarIntervalType) {
+      // Two columns. Months as int. Microseconds as Long.
+      this.childColumns = new ColumnVector[2];
+      this.childColumns[0] = new OffHeapColumnVector(capacity, DataTypes.IntegerType);
+      this.childColumns[1] = new OffHeapColumnVector(capacity, DataTypes.LongType);
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else {
+      this.childColumns = null;
+      this.resultArray = null;
+      this.resultStruct = null;
+    }
 
     nulls = 0;
     data = 0;
@@ -489,6 +523,22 @@ public final class OffHeapColumnVector extends ColumnVector {
         null, data + array.offset, array.tmpByteArray, Platform.BYTE_ARRAY_OFFSET, array.length);
     array.byteArray = array.tmpByteArray;
     array.byteArrayOffset = 0;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  @Override
+  public OffHeapColumnVector reserveDictionaryIds(int capacity) {
+    OffHeapColumnVector dictionaryIds = (OffHeapColumnVector) this.dictionaryIds;
+    if (dictionaryIds == null) {
+      dictionaryIds = new OffHeapColumnVector(capacity, DataTypes.IntegerType);
+      this.dictionaryIds = dictionaryIds;
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
   }
 
   // Split out the slow path.

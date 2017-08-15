@@ -41,6 +41,7 @@ import static org.apache.spark.sql.types.DataTypes.LongType;
  */
 public class AggregateHashMap {
 
+  private OnHeapColumnVector[] columnVectors;
   private ColumnarBatch batch;
   private int[] buckets;
   private int numBuckets;
@@ -62,7 +63,11 @@ public class AggregateHashMap {
 
     this.maxSteps = maxSteps;
     numBuckets = (int) (capacity / loadFactor);
-    batch = ColumnarBatch.allocate(schema, MemoryMode.ON_HEAP, capacity);
+    columnVectors = new OnHeapColumnVector[schema.fields().length];
+    for (int i = 0; i < schema.fields().length; i++) {
+      columnVectors[i] = new OnHeapColumnVector(capacity, schema.fields()[i].dataType());
+    }
+    batch = new ColumnarBatch(schema, columnVectors, capacity);
     buckets = new int[numBuckets];
     Arrays.fill(buckets, -1);
   }
@@ -74,8 +79,8 @@ public class AggregateHashMap {
   public ColumnarBatch.Row findOrInsert(long key) {
     int idx = find(key);
     if (idx != -1 && buckets[idx] == -1) {
-      batch.column(0).putLong(numRows, key);
-      batch.column(1).putLong(numRows, 0);
+      columnVectors[0].putLong(numRows, key);
+      columnVectors[1].putLong(numRows, 0);
       buckets[idx] = numRows++;
     }
     return batch.getRow(buckets[idx]);
@@ -105,6 +110,6 @@ public class AggregateHashMap {
   }
 
   private boolean equals(int idx, long key1) {
-    return batch.column(0).getLong(buckets[idx]) == key1;
+    return columnVectors[0].getLong(buckets[idx]) == key1;
   }
 }

@@ -29,7 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * A column vector backed by Apache Arrow.
  */
-public final class ArrowColumnVector extends ReadOnlyColumnVector {
+public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
   private final int valueCount;
@@ -56,6 +56,10 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   @Override
   public long valuesNativeAddress() {
     throw new RuntimeException("Cannot get native address for arrow column");
+  }
+
+  @Override
+  public void reset() {
   }
 
   @Override
@@ -275,8 +279,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   }
 
   public ArrowColumnVector(ValueVector vector) {
-    super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()),
-      MemoryMode.OFF_HEAP);
+    super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()));
 
     if (vector instanceof NullableBitVector) {
       accessor = new BooleanAccessor((NullableBitVector) vector);

@@ -20,7 +20,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -28,7 +27,7 @@ import org.apache.spark.unsafe.Platform;
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
  * and a java array for the values.
  */
-public final class OnHeapColumnVector extends ColumnVector {
+public final class OnHeapColumnVector extends MutableColumnVector {
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
@@ -51,8 +50,44 @@ public final class OnHeapColumnVector extends ColumnVector {
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
-  protected OnHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.ON_HEAP);
+  public OnHeapColumnVector(int capacity, DataType type) {
+    super(capacity, type);
+
+    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+        || DecimalType.isByteArrayDecimalType(type)) {
+      DataType childType;
+      int childCapacity = capacity;
+      if (type instanceof ArrayType) {
+        childType = ((ArrayType)type).elementType();
+      } else {
+        childType = DataTypes.ByteType;
+        childCapacity *= DEFAULT_ARRAY_LENGTH;
+      }
+      this.childColumns = new ColumnVector[1];
+      this.childColumns[0] = new OnHeapColumnVector(childCapacity, childType);
+      this.resultArray = new ColumnVector.Array(this.childColumns[0]);
+      this.resultStruct = null;
+    } else if (type instanceof StructType) {
+      StructType st = (StructType)type;
+      this.childColumns = new ColumnVector[st.fields().length];
+      for (int i = 0; i < childColumns.length; ++i) {
+        this.childColumns[i] = new OnHeapColumnVector(capacity, st.fields()[i].dataType());
+      }
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else if (type instanceof CalendarIntervalType) {
+      // Two columns. Months as int. Microseconds as Long.
+      this.childColumns = new ColumnVector[2];
+      this.childColumns[0] = new OnHeapColumnVector(capacity, DataTypes.IntegerType);
+      this.childColumns[1] = new OnHeapColumnVector(capacity, DataTypes.LongType);
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else {
+      this.childColumns = null;
+      this.resultArray = null;
+      this.resultStruct = null;
+    }
+
     reserveInternal(capacity);
     reset();
   }
@@ -459,6 +494,22 @@ public final class OnHeapColumnVector extends ColumnVector {
     arrayOffsets[rowId] = result;
     arrayLengths[rowId] = length;
     return result;
+  }
+
+  /**
+   * Reserve a integer column for ids of dictionary.
+   */
+  @Override
+  public OnHeapColumnVector reserveDictionaryIds(int capacity) {
+    OnHeapColumnVector dictionaryIds = (OnHeapColumnVector) this.dictionaryIds;
+    if (dictionaryIds == null) {
+      dictionaryIds = new OnHeapColumnVector(capacity, DataTypes.IntegerType);
+      this.dictionaryIds = dictionaryIds;
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
   }
 
   // Spilt this function out since it is the slow path.
