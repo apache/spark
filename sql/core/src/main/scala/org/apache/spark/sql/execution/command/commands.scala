@@ -44,8 +44,9 @@ trait RunnableCommand extends logical.Command {
   // `ExecutedCommand` during query planning.
   lazy val metrics: Map[String, SQLMetric] = Map.empty
 
-  def requiredDistribution: Seq[Distribution] =
-    Seq.fill(children.size)(UnspecifiedDistribution)
+  def requiredDistribution: Seq[Distribution] = Seq.fill(children.size)(UnspecifiedDistribution)
+
+  def requiredOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     throw new NotImplementedError
@@ -99,6 +100,8 @@ case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) e
   override def executeTake(limit: Int): Array[InternalRow] = sideEffectResult.take(limit).toArray
 
   override def requiredChildDistribution: Seq[Distribution] = cmd.requiredDistribution
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = cmd.requiredOrdering
 
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)

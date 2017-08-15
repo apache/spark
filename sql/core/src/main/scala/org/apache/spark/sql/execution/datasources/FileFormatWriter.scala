@@ -33,13 +33,12 @@ import org.apache.spark.internal.io.{FileCommitProtocol, SparkHadoopWriterUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, ExternalCatalogUtils}
-import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, _}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
+import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, _}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -107,7 +106,7 @@ object FileFormatWriter extends Logging {
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
-      bucketSpec: Option[BucketSpec],
+      bucketIdExpression: Option[Expression],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String])
     : Set[String] = {
@@ -120,17 +119,6 @@ object FileFormatWriter extends Logging {
     val allColumns = plan.output
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
-
-    val bucketIdExpression = bucketSpec.map { spec =>
-      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
-      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
-      // guarantee the data distribution is same between shuffle and bucketed data source, which
-      // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets, classOf[HiveHash]).partitionIdExpression
-    }
-    val sortColumns = bucketSpec.toSeq.flatMap {
-      spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
-    }
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
@@ -155,19 +143,6 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
-    // We should first sort by partition columns, then bucket id, and finally sorting columns.
-    val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
-    // the sort order doesn't matter
-    val actualOrdering = plan.outputOrdering.map(_.child)
-    val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
-      false
-    } else {
-      requiredOrdering.zip(actualOrdering).forall {
-        case (requiredOrder, childOutputOrder) =>
-          requiredOrder.semanticEquals(childOutputOrder)
-      }
-    }
-
     SQLExecution.checkSQLExecutionId(sparkSession)
 
     // This call shouldn't be put into the `try` block below because it only initializes and
@@ -175,14 +150,7 @@ object FileFormatWriter extends Logging {
     committer.setupJob(job)
 
     try {
-      val rdd = if (orderingMatched) {
-        plan.execute()
-      } else {
-        SortExec(
-          requiredOrdering.map(SortOrder(_, Ascending)),
-          global = false,
-          child = plan).execute()
-      }
+      val rdd = plan.execute()
       val ret = new Array[WriteTaskResult](rdd.partitions.length)
       sparkSession.sparkContext.runJob(
         rdd,
@@ -195,7 +163,7 @@ object FileFormatWriter extends Logging {
             committer,
             iterator = iter)
         },
-        0 until rdd.partitions.length,
+        rdd.partitions.indices,
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
