@@ -149,8 +149,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
       combOp = { case (sum1, sum2) => sum1.merge(sum2) }
     )
 
-    val emptyCols = ($(inputCols) zip summary.counts).filter(_._2 == 0).map(_._1)
-    if(emptyCols.nonEmpty) {
+    val emptyCols = $(inputCols).zip(summary.counts).filter(_._2 == 0).map(_._1)
+    if (emptyCols.nonEmpty) {
       throw new SparkException(s"surrogate cannot be computed. " +
         s"All the values in ${emptyCols.mkString(",")} are Null, Nan or " +
         s"missingValue(${$(missingValue)})")
