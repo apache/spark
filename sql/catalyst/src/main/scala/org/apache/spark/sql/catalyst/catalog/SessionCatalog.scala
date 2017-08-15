@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, 
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 
 object SessionCatalog {
   val DEFAULT_DATABASE = "default"
@@ -480,14 +481,19 @@ class SessionCatalog(
       name: TableIdentifier,
       viewDefinition: LogicalPlan): Boolean = synchronized {
     val viewName = formatTableName(name.table)
+    val viewColumnNames = viewDefinition.schema.fieldNames
     if (name.database.isEmpty) {
       if (tempTables.contains(viewName)) {
+        SchemaUtils.checkColumnNameDuplication(
+          viewColumnNames, "in the view definition", conf.resolver)
         createTempView(viewName, viewDefinition, overrideIfExists = true)
         true
       } else {
         false
       }
     } else if (formatDatabaseName(name.database.get) == globalTempViewManager.database) {
+      SchemaUtils.checkColumnNameDuplication(
+        viewColumnNames, "in the view definition", conf.resolver)
       globalTempViewManager.update(viewName, viewDefinition)
     } else {
       false
