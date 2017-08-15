@@ -359,15 +359,15 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val jsonExpr: Expression = children.head
 
   // the fields to query are the remaining children
-  @transient private lazy val fieldExpressions: Array[Expression] = children.tail.toArray
+  @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: Array[Option[String]] = {
+  @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
     fieldExpressions.map {
       case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
       case _ => null
     }
-  }
+  }.toIndexedSeq
 
   // and count the number of foldable fields, we'll use this later to optimize evaluation
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
@@ -430,6 +430,7 @@ case class JsonTuple(children: Seq[Expression])
       }
     }
 
+    // Array[String]
     val row = Array.ofDim[Any](fieldNames.length)
 
     // start reading through the token stream, looking for any requested field names
