@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.expressions.Window
@@ -26,7 +28,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.test.SQLTestData.DecimalData
 import org.apache.spark.sql.types.{Decimal, DecimalType}
 
-import scala.util.Random
 
 case class Fact(date: Int, hour: Int, minute: Int, room_name: String, temp: Double)
 
