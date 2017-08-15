@@ -83,8 +83,8 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
-  test("strong dataset test") {
-    val layers = Array[Int](4, 5, 5, 2)
+  test("Predicted class probabilities: calibration on toy dataset") {
+    val layers = Array[Int](4, 5, 2)
 
     val strongDataset = Seq(
       (Vectors.dense(1, 2, 3, 4), 0d, Vectors.dense(1d, 0d)),
@@ -100,9 +100,6 @@ class MultilayerPerceptronClassifierSuite
       .setSolver("l-bfgs")
     val model = trainer.fit(strongDataset)
     val result = model.transform(strongDataset)
-    model.setProbabilityCol("probability")
-    MLTestingUtils.checkCopyAndUids(trainer, model)
-    // result.select("probability").show(false)
     result.select("probability", "expectedProbability").collect().foreach {
       case Row(p: Vector, e: Vector) =>
         assert(p ~== e absTol 1e-3)
@@ -121,9 +118,10 @@ class MultilayerPerceptronClassifierSuite
     model.setProbabilityCol("probability")
     val result = model.transform(dataset)
     val features2prob = udf { features: Vector => model.mlpModel.predict(features) }
-    val cmpVec = udf { (v1: Vector, v2: Vector) => v1 ~== v2 relTol 1e-3 }
-    assert(result.select(cmpVec(features2prob(col("features")), col("probability")))
-      .rdd.map(_.getBoolean(0)).reduce(_ && _))
+    result.select(features2prob(col("features")), col("probability")).collect().foreach {
+      case Row(p1: Vector, p2: Vector) =>
+        assert(p1 ~== p2 absTol 1e-3)
+    }
   }
 
   test("Test setWeights by training restart") {

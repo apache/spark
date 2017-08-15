@@ -361,18 +361,17 @@ private[ann] trait TopologyModel extends Serializable {
    * Forward propagation
    *
    * @param data input data
-   * @param includeLastLayer include last layer when computing. In MultilayerPerceptronClassifier,
-   *                         The last layer is always softmax, add the includeLastLayer parameter,
-   *                         when true the forward computing will contains last layer, otherwise
-   *                         not. The parameter is used when we need rawPrediction, the last layer
-   *                         softmax should discard.
+   * @param includeLastLayer Include the last layer in the output. In
+   *                         MultilayerPerceptronClassifier, the last layer is always softmax;
+   *                         the last layer of outputs is needed for class predictions, but not
+   *                         for rawPrediction.
    *
    * @return array of outputs for each of the layers
    */
   def forward(data: BDM[Double], includeLastLayer: Boolean): Array[BDM[Double]]
 
   /**
-   * Prediction of the model
+   * Prediction of the model. See {@link ProbabilisticClassificationModel}
    *
    * @param data input data
    * @return prediction
@@ -380,7 +379,7 @@ private[ann] trait TopologyModel extends Serializable {
   def predict(data: Vector): Vector
 
   /**
-   * Raw prediction of the model
+   * Raw prediction of the model. See {@link ProbabilisticClassificationModel}
    *
    * @param data input data
    * @return raw prediction
@@ -388,12 +387,12 @@ private[ann] trait TopologyModel extends Serializable {
   def predictRaw(data: Vector): Vector
 
   /**
-   * Probability of the model
+   * Probability of the model. See {@link ProbabilisticClassificationModel}
    *
-   * @param data input data
+   * @param rawPrediction raw prediction vector
    * @return probability
    */
-  def raw2ProbabilityInPlace(data: Vector): Vector
+  def raw2ProbabilityInPlace(rawPrediction: Vector): Vector
 
   /**
    * Computes gradient for the network
@@ -555,8 +554,7 @@ private[ml] class FeedForwardModel private(
   }
 
   override def predictRaw(data: Vector): Vector = {
-    val size = data.size
-    val result = forward(new BDM[Double](size, 1, data.toArray), false)
+    val result = forward(new BDM[Double](data.size, 1, data.toArray), false)
     Vectors.dense(result(result.length - 2).toArray)
   }
 
