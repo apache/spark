@@ -18,8 +18,8 @@
 package org.apache.spark.ml.clustering
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
