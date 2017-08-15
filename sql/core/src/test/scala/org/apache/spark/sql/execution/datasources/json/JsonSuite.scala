@@ -2042,5 +2042,17 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         |, cast(NULL AS STRING), 'b'
         |, cast(NULL AS STRING), 'a')
       """.stripMargin), Row(null, "2", null, "1"))
+
+    // mixes constant field name and non constant one
+    withTempView("jsonTable") {
+      Seq(("""{"a": 1, "b": 2}""", "a", "b"))
+        .toDF("jsonField", "a", "b")
+        .createOrReplaceTempView("jsonTable")
+
+      checkAnswer(
+        sql("""SELECT json_tuple(jsonField, b, cast(NULL AS STRING), 'a') FROM jsonTable"""),
+        Row("2", null, "1")
+      )
+    }
   }
 }
