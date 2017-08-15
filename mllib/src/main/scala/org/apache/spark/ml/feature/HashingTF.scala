@@ -40,8 +40,6 @@ import org.apache.spark.sql.types.{ArrayType, StructType}
 class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
-  private[this] var hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
-
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("hashingTF"))
 
@@ -76,6 +74,8 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
 
   setDefault(numFeatures -> (1 << 18), binary -> false)
 
+  private[this] var hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
+
   /** @group getParam */
   @Since("1.2.0")
   def getNumFeatures: Int = $(numFeatures)
@@ -83,8 +83,9 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("1.2.0")
   def setNumFeatures(value: Int): this.type = {
+    val t = set(numFeatures, value)
     hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
-    set(numFeatures, value)
+    t
   }
 
   /** @group getParam */
@@ -94,8 +95,9 @@ class HashingTF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   /** @group setParam */
   @Since("2.0.0")
   def setBinary(value: Boolean): this.type = {
-    hashingTF.setBinary(value)
-    set(binary, value)
+    val t = set(binary, value)
+    hashingTF.setBinary($(binary))
+    t
   }
 
   /**
