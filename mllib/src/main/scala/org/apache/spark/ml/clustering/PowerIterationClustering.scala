@@ -170,16 +170,6 @@ class PowerIterationClustering private[clustering] (
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val sparkSession = dataset.sparkSession
-/*
-    val rdd: RDD[(Long, Long, Double)] =
-      dataset.select(col($(idCol)), col($(neighborCol)), col($(weightCol))).rdd.map {
-        case Row(id: Long, nbr: Vector, weight: Vector) => (id, nbr, weight)
-    }.flatMap{ case (id, nbr, weight) =>
-        require(nbr.size == weight.size,
-          "The length of neighbor list must be equal to the the length of the weight list.")
-        val ids = Array.fill(nbr.size)(id)
-        ids.zip(nbr.toArray).zip(weight.toArray)}.map {case ((i, j), k) => (i, j.toLong, k)}
-*/
     val rdd: RDD[(Long, Long, Double)] =
       dataset.select(col($(idCol)), col($(neighborCol)), col($(weightCol))).rdd.flatMap {
         case Row(id: Long, nbr: Vector, weight: Vector) =>
@@ -187,7 +177,6 @@ class PowerIterationClustering private[clustering] (
           "The length of neighbor list must be equal to the the length of the weight list.")
         val ids = Array.fill(nbr.size)(id)
         for (i <- 0 until ids.size) yield (ids(i), nbr(i).toLong, weight(i))}
-
     val algorithm = new MLlibPowerIterationClustering()
       .setK($(k))
       .setInitializationMode($(initMode))
