@@ -20,12 +20,12 @@ package org.apache.spark.sql
 import scala.collection.mutable.ListBuffer
 import scala.language.existentials
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 
 class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._

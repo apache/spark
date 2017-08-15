@@ -26,8 +26,8 @@ import io.netty.channel.FileRegion
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, JavaUtils}
 import org.apache.spark.security.CryptoStreamUtils
-import org.apache.spark.util.io.ChunkedByteBuffer
 import org.apache.spark.util.Utils
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class DiskStoreSuite extends SparkFunSuite {
 

@@ -27,11 +27,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
-import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
