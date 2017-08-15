@@ -30,7 +30,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.catalog.CatalogRelation
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution._
@@ -50,7 +50,7 @@ import org.apache.spark.util.Utils
 private[hive]
 case class HiveTableScanExec(
     requestedAttributes: Seq[Attribute],
-    relation: CatalogRelation,
+    relation: HiveTableRelation,
     partitionPruningPred: Seq[Expression])(
     @transient private val sparkSession: SparkSession)
   extends LeafExecNode {
@@ -205,7 +205,7 @@ case class HiveTableScanExec(
     val input: AttributeSeq = relation.output
     HiveTableScanExec(
       requestedAttributes.map(QueryPlan.normalizeExprId(_, input)),
-      relation.canonicalized.asInstanceOf[CatalogRelation],
+      relation.canonicalized,
       QueryPlan.normalizePredicates(partitionPruningPred, input))(sparkSession)
   }
 
