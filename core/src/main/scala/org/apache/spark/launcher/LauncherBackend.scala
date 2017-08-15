@@ -19,7 +19,7 @@ package org.apache.spark.launcher
 
 import java.net.{InetAddress, Socket}
 
-import org.apache.spark.SPARK_VERSION
+import org.apache.spark.{SPARK_VERSION, SparkConf}
 import org.apache.spark.launcher.LauncherProtocol._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -36,9 +36,14 @@ private[spark] abstract class LauncherBackend {
   private var lastState: SparkAppHandle.State = _
   @volatile private var _isConnected = false
 
+  protected def conf: SparkConf
+
   def connect(): Unit = {
-    val port = sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT).map(_.toInt)
-    val secret = sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET)
+    val port = conf.getOption(LauncherProtocol.CONF_LAUNCHER_PORT)
+      .orElse(sys.env.get(LauncherProtocol.ENV_LAUNCHER_PORT))
+      .map(_.toInt)
+    val secret = conf.getOption(LauncherProtocol.CONF_LAUNCHER_SECRET)
+      .orElse(sys.env.get(LauncherProtocol.ENV_LAUNCHER_SECRET))
     if (port != None && secret != None) {
       val s = new Socket(InetAddress.getLoopbackAddress(), port.get)
       connection = new BackendConnection(s)

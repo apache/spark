@@ -26,6 +26,7 @@ import java.net.Socket;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
@@ -88,31 +89,21 @@ class LauncherServer implements Closeable {
 
   private static volatile LauncherServer serverInstance;
 
-  /**
-   * Creates a handle for an app to be launched. This method will start a server if one hasn't been
-   * started yet. The server is shared for multiple handles, and once all handles are disposed of,
-   * the server is shut down.
-   */
-  static synchronized ChildProcAppHandle newAppHandle() throws IOException {
+  static synchronized LauncherServer getOrCreateServer() throws IOException {
     LauncherServer server = serverInstance != null ? serverInstance : new LauncherServer();
     server.ref();
     serverInstance = server;
-
-    String secret = server.createSecret();
-    while (server.pending.containsKey(secret)) {
-      secret = server.createSecret();
-    }
-
-    return server.newAppHandle(secret);
+    return server;
   }
 
-  static LauncherServer getServerInstance() {
+  // For testing.
+  static synchronized LauncherServer getServer() {
     return serverInstance;
   }
 
   private final AtomicLong refCount;
   private final AtomicLong threadIds;
-  private final ConcurrentMap<String, ChildProcAppHandle> pending;
+  private final ConcurrentMap<String, AbstractAppHandle> pending;
   private final List<ServerConnection> clients;
   private final ServerSocket server;
   private final Thread serverThread;
@@ -149,14 +140,13 @@ class LauncherServer implements Closeable {
   }
 
   /**
-   * Creates a new app handle. The handle will wait for an incoming connection for a configurable
-   * amount of time, and if one doesn't arrive, it will transition to an error state.
+   * Registers a handle with the server, and returns the secret the child app needs to connect
+   * back.
    */
-  ChildProcAppHandle newAppHandle(String secret) {
-    ChildProcAppHandle handle = new ChildProcAppHandle(secret, this);
-    ChildProcAppHandle existing = pending.putIfAbsent(secret, handle);
-    CommandBuilderUtils.checkState(existing == null, "Multiple handles with the same secret.");
-    return handle;
+  synchronized String registerHandle(AbstractAppHandle handle) {
+    String secret = createSecret();
+    pending.put(secret, handle);
+    return secret;
   }
 
   @Override
@@ -210,8 +200,13 @@ class LauncherServer implements Closeable {
    * Removes the client handle from the pending list (in case it's still there), and unrefs
    * the server.
    */
-  void unregister(ChildProcAppHandle handle) {
-    pending.remove(handle.getSecret());
+  void unregister(AbstractAppHandle handle) {
+    for (Map.Entry<String, AbstractAppHandle> e : pending.entrySet()) {
+      if (e.getValue().equals(handle)) {
+        pending.remove(e.getKey());
+        break;
+      }
+    }
     unref();
   }
 
@@ -260,24 +255,30 @@ class LauncherServer implements Closeable {
   }
 
   private String createSecret() {
-    byte[] secret = new byte[128];
-    RND.nextBytes(secret);
+    while (true) {
+      byte[] secret = new byte[128];
+      RND.nextBytes(secret);
 
-    StringBuilder sb = new StringBuilder();
-    for (byte b : secret) {
-      int ival = b >= 0 ? b : Byte.MAX_VALUE - b;
-      if (ival < 0x10) {
-        sb.append("0");
+      StringBuilder sb = new StringBuilder();
+      for (byte b : secret) {
+        int ival = b >= 0 ? b : Byte.MAX_VALUE - b;
+        if (ival < 0x10) {
+          sb.append("0");
+        }
+        sb.append(Integer.toHexString(ival));
       }
-      sb.append(Integer.toHexString(ival));
+
+      String secretStr = sb.toString();
+      if (!pending.containsKey(secretStr)) {
+        return secretStr;
+      }
     }
-    return sb.toString();
   }
 
   private class ServerConnection extends LauncherConnection {
 
     private TimerTask timeout;
-    private ChildProcAppHandle handle;
+    private AbstractAppHandle handle;
 
     ServerConnection(Socket socket, TimerTask timeout) throws IOException {
       super(socket);
@@ -291,7 +292,7 @@ class LauncherServer implements Closeable {
           timeout.cancel();
           timeout = null;
           Hello hello = (Hello) msg;
-          ChildProcAppHandle handle = pending.remove(hello.secret);
+          AbstractAppHandle handle = pending.remove(hello.secret);
           if (handle != null) {
             handle.setConnection(this);
             handle.setState(SparkAppHandle.State.CONNECTED);

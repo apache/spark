@@ -24,7 +24,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
@@ -215,21 +214,6 @@ public class ChildProcAppHandleSuite extends BaseSuite {
       .startApplication();
     waitFor(handle);
     assertEquals(SparkAppHandle.State.FAILED, handle.getState());
-  }
-
-  private void waitFor(SparkAppHandle handle) throws Exception {
-    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-    try {
-      while (!handle.getState().isFinal()) {
-        assertTrue("Timed out waiting for handle to transition to final state.",
-          System.nanoTime() < deadline);
-        TimeUnit.MILLISECONDS.sleep(10);
-      }
-    } finally {
-      if (!handle.getState().isFinal()) {
-        handle.kill();
-      }
-    }
   }
 
   private static class TestSparkLauncher extends SparkLauncher {

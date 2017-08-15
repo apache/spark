@@ -49,6 +49,15 @@
  * </pre>
  *
  * <p>
+ * Applications can also be launched in-process by using
+ * {@link org.apache.spark.launcher.InProcessLauncher} instead. Launching applications in-process
+ * is only recommended in cluster mode, since Spark cannot run multiple client-mode applications
+ * concurrently in the same process. The in-process launcher requires the necessary Spark
+ * dependencies (such as spark-core and cluster manager-specific modules) to be present in the
+ * caller thread's class loader.
+ * </p>
+ *
+ * <p>
  * It's also possible to launch a raw child process, using the
  * {@link org.apache.spark.launcher.SparkLauncher#launch()} method:
  * </p>
