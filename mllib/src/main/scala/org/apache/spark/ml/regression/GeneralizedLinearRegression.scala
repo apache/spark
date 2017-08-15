@@ -423,7 +423,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       val optimizer = new IterativelyReweightedLeastSquares(initialModel,
         familyAndLink.reweightFunc, $(fitIntercept), $(regParam), $(maxIter), $(tol))
 
-      val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+      val handlePersistence = dataset.storageLevel == StorageLevel.NONE
       if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
       val irlsModel = optimizer.fit(instances)

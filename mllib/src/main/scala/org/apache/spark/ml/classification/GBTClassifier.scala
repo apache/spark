@@ -166,14 +166,14 @@ class GBTClassifier @Since("1.4.0") (
         s" numClasses=$numClasses, but thresholds has length ${$(thresholds).length}")
     }
 
-    val instr = Instrumentation.create(this, oldDataset)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, predictionCol, impurity, lossType,
       maxDepth, maxBins, maxIter, maxMemoryInMB, minInfoGain, minInstancesPerNode,
       seed, stepSize, subsamplingRate, cacheNodeIds, checkpointInterval)
     instr.logNumFeatures(numFeatures)
     instr.logNumClasses(numClasses)
 
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (baseLearners, learnerWeights) = GradientBoostedTrees.run(oldDataset, boostingStrategy,

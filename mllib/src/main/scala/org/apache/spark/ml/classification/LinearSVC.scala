@@ -172,10 +172,10 @@ class LinearSVC @Since("2.2.0") (
           Instance(label, weight, features)
       }
 
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(regParam, maxIter, fitIntercept, tol, standardization, threshold,
       aggregationDepth)
 

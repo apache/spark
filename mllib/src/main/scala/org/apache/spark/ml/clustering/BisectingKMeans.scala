@@ -256,10 +256,10 @@ class BisectingKMeans @Since("2.0.0") (
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
-    val instr = Instrumentation.create(this, rdd)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)
 
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) rdd.persist(StorageLevel.MEMORY_AND_DISK)
 
     val bkm = new MLlibBisectingKMeans()

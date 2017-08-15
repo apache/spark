@@ -911,7 +911,7 @@ class LDA @Since("1.6.0") (
     // TODO: persist here, or in old LDA?
     val oldData = LDA.getOldDataset(dataset, $(featuresCol))
 
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) oldData.persist(StorageLevel.MEMORY_AND_DISK)
 
     val oldModel = oldLDA.run(oldData)
