@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.vectorized
 
-import java.nio.charset.StandardCharsets
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable

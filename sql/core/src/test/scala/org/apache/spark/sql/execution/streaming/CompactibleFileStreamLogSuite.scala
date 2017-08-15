@@ -21,8 +21,8 @@ import java.io._
 import java.nio.charset.StandardCharsets._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.execution.streaming.FakeFileSystem._
 import org.apache.spark.sql.test.SharedSQLContext
 
 class CompactibleFileStreamLogSuite extends SparkFunSuite with SharedSQLContext {
