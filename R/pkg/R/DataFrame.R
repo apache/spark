@@ -2953,7 +2953,7 @@ setMethod("saveAsTable",
 #' describe(df, "col1")
 #' describe(df, "col1", "col2")
 #' }
-#' @seealso Ues \code{\link{summary}} for expanded statistics and control over which statistics to compute.
+#' @seealso See \link{summary} for expanded statistics and control over which statistics to compute.
 #' @note describe(SparkDataFrame, character) since 1.4.0
 setMethod("describe",
           signature(x = "SparkDataFrame", col = "character"),
@@ -2989,11 +2989,13 @@ setMethod("describe",
 #' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
 #' This function is meant for exploratory data analysis, as we make no guarantee about the
 #' backward compatibility of the schema of the resulting Dataset. If you want to
-#' programmatically compute summary statistics, use the `agg` function instead.
+#' programmatically compute summary statistics, use the \code{agg} function instead.
 #'
 #'
 #' @param object a SparkDataFrame to be summarized.
 #' @param ... (optional) statistics to be computed for all columns.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
@@ -3008,8 +3010,8 @@ setMethod("describe",
 #' summary(select(df, "age", "height"))
 #' }
 #' @note summary(SparkDataFrame) since 1.5.0
-#' @note The statistics provided by \code{summary} were change in 2.3.0 use \code{\link{describe}} for previous defaults.
-#' @seealso \code{\link{describe}}
+#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for previous defaults.
+#' @seealso \link{describe}
 setMethod("summary",
           signature(object = "SparkDataFrame"),
           function(object, ...) {
