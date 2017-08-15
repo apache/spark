@@ -137,7 +137,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
     val cols = $(inputCols).map { inputCol =>
       when(col(inputCol).equalTo($(missingValue)), null)
         .when(col(inputCol).isNaN, null)
-        .otherwise(col(inputCol).cast("double"))
+        .otherwise(col(inputCol))
+        .cast("double")
         .as(inputCol)
     }
 
