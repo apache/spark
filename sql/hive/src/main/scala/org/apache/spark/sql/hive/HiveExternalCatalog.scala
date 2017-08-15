@@ -32,8 +32,7 @@ import org.apache.thrift.TException
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.ConfigEntry
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
@@ -44,7 +43,7 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.types.{DataType, StructType}
 
@@ -258,20 +257,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
-  /**
-   * Retrieve a configuration value for the current active session, if any.
-   */
-  private def currentSessionConf[T](entry: ConfigEntry[T]): T = {
-    SparkSession.getActiveSession.orElse(SparkSession.getDefaultSession).map { session =>
-      session.conf.get(entry)
-    }.getOrElse {
-      // If there's no active session, try to read from the SparkConf object instead. Normally
-      // there should be an active session, but unit tests invoke methods on the catalog directly,
-      // so that might not be true in some cases.
-      conf.get(entry)
-    }
-  }
-
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
     // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
     val provider = table.provider.get
@@ -356,12 +341,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       case _ if table.bucketSpec.nonEmpty =>
         val message =
           s"Persisting bucketed data source table $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
-        (None, message)
-
-      case _ if currentSessionConf(SQLConf.CASE_SENSITIVE) =>
-        val message =
-          s"Persisting case sensitive data source table $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. "
         (None, message)
 
