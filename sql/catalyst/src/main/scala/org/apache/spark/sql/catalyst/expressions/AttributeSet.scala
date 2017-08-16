@@ -125,7 +125,7 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
     // We need to keep a deterministic output order for `baseSet` because this affects a variable
     // order in generated code (e.g., `GenerateColumnAccessor`).
     // See SPARK-18394 for details.
-    baseSet.map(_.a).toArray.sortBy { a => (a.name, a.exprId.id) }
+    baseSet.map(_.a).toSeq.sortBy { a => (a.name, a.exprId.id) }
   }
 
   override def toString: String = "{" + baseSet.map(_.a).mkString(", ") + "}"
