@@ -34,7 +34,9 @@ class BisectingKMeansSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
+    dataset.persist()
     sparseDataset = KMeansSuite.generateSparseData(spark, 10, 1000, 42)
+    sparseDataset.persist()
   }
 
   test("default parameters") {
