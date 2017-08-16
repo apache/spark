@@ -304,11 +304,12 @@ case class InsertIntoHiveTable(
       val files =
         fs.listStatus(outputPath)
           .filterNot(_.getPath.getName == "_SUCCESS")
-          .sortBy(_.getPath.getName)
+          .map(_.getPath.getName)
+          .sortBy(_.toString)
 
       var expectedBucketId = 0
       files.foreach { case file =>
-        getBucketIdFromFilename(file.getPath.getName) match {
+        getBucketIdFromFilename(file) match {
           case Some(id) if id == expectedBucketId =>
             expectedBucketId += 1
           case Some(_) =>
@@ -319,7 +320,7 @@ case class InsertIntoHiveTable(
           case None =>
             throw new SparkException(
               s"Invalid file found in temporary bucketed output location. Aborting job. " +
-                s"Output location : $outputPath, bad file : ${file.getPath.getName}")
+                s"Output location : $outputPath, bad file : $file")
         }
       }
 
