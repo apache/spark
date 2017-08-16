@@ -33,7 +33,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
-import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -256,11 +255,8 @@ class BisectingKMeans @Since("2.0.0") (
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
-    val instr = Instrumentation.create(this, dataset)
+    val instr = Instrumentation.create(this, rdd)
     instr.logParams(featuresCol, predictionCol, k, maxIter, seed, minDivisibleClusterSize)
-
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) rdd.persist(StorageLevel.MEMORY_AND_DISK)
 
     val bkm = new MLlibBisectingKMeans()
       .setK($(k))
@@ -269,9 +265,6 @@ class BisectingKMeans @Since("2.0.0") (
       .setSeed($(seed))
     val parentModel = bkm.run(rdd)
     val model = copyValues(new BisectingKMeansModel(uid, parentModel).setParent(this))
-
-    if (handlePersistence) rdd.unpersist()
-
     val summary = new BisectingKMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
     model.setSummary(Some(summary))
