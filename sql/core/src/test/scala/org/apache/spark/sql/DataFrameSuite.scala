@@ -2029,4 +2029,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
+
+  test("SPARK-21746: nondeterministic expressions correctly for filter predicates") {
+    withTempPath { path =>
+      val p = path.getAbsolutePath
+      Seq(1 -> "a").toDF("a", "b").write.partitionBy("a").parquet(p)
+      val df = spark.read.parquet(p)
+      checkAnswer(df.filter(rand(10) <= 1.0).select($"a"), Row(1))
+    }
+  }
 }

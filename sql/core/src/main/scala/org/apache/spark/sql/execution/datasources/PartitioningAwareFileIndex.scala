@@ -175,6 +175,7 @@ abstract class PartitioningAwareFileIndex(
           val index = partitionColumns.indexWhere(a.name == _.name)
           BoundReference(index, partitionColumns(index).dataType, nullable = true)
       })
+      boundPredicate.initialize(0)
 
       val selected = partitions.filter {
         case PartitionPath(values, _) => boundPredicate.eval(values)
