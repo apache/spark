@@ -506,14 +506,14 @@ abstract class SessionCatalogSuite extends PlanTest {
       catalog.setCurrentDatabase("db2")
       // If we explicitly specify the database, we'll look up the relation in that database
       assert(catalog.lookupRelation(TableIdentifier("tbl1", Some("db2"))).children.head
-        .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
+        .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
       // Otherwise, we'll first look up a temporary table with the same name
       assert(catalog.lookupRelation(TableIdentifier("tbl1"))
         == SubqueryAlias("tbl1", tempTable1))
       // Then, if that does not exist, look up the relation in the current database
       catalog.dropTable(TableIdentifier("tbl1"), ignoreIfNotExists = false, purge = false)
       assert(catalog.lookupRelation(TableIdentifier("tbl1")).children.head
-        .asInstanceOf[CatalogRelation].tableMeta == metastoreTable1)
+        .asInstanceOf[UnresolvedCatalogRelation].tableMeta == metastoreTable1)
     }
   }
 
