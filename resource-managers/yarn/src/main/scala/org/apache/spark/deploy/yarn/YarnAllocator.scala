@@ -22,9 +22,9 @@ import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
-import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.yarn.api.records._
