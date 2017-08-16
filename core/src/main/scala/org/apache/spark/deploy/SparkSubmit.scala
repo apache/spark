@@ -345,6 +345,31 @@ object SparkSubmit extends CommandLineUtils {
       }.orNull
     }
 
+    if (clusterManager == YARN) {
+      def isNoneFsFileExist(paths: String): Boolean = {
+        Option(paths).exists { p =>
+          p.split(",").map(_.trim).filter(_.nonEmpty).exists { path =>
+            val url = Utils.resolveURI(path)
+            url.getScheme match {
+              case "http" | "https" | "ftp" => true
+              case _ => false
+            }
+          }
+        }
+      }
+
+      // Spark on YARN doesn't support upload remote resources from http, https or ftp server
+      // directly to distributed cache, so print a warning and exit the process.
+      if (isNoneFsFileExist(args.jars) ||
+        isNoneFsFileExist(args.files) ||
+        isNoneFsFileExist(args.primaryResource) ||
+        isNoneFsFileExist(args.pyFiles) ||
+        isNoneFsFileExist(args.archives)) {
+        printErrorAndExit(
+          "Spark on YARN doesn't support resources on remote http, https or ftp server.")
+      }
+    }
+
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
       if (args.primaryResource == PYSPARK_SHELL) {
@@ -463,6 +488,7 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
+      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.pyFiles"),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
@@ -563,10 +589,6 @@ object SparkSubmit extends CommandLineUtils {
     if (clusterManager == YARN) {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
-      }
-
-      if (args.pyFiles != null) {
-        sysProps("spark.yarn.dist.pyFiles") = args.pyFiles
       }
     }
 
