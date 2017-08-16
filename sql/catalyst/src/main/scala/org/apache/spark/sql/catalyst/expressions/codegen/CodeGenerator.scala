@@ -39,6 +39,7 @@ import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
@@ -302,29 +303,20 @@ class CodegenContext {
   }
 
   /**
-   * Instantiates all nested, private sub-classes as objects to the `OuterClass`
+   * Declares all function code. If the added functions are too many, split them into nested
+   * sub-classes to avoid hitting Java compiler constant pool limitation.
    */
-  private[sql] def initNestedClasses(): String = {
+  def declareAddedFunctions(): String = {
+    val inlinedFunctions = classFunctions(outerClassName).values
+
     // Nested, private sub-classes have no mutable state (though they do reference the outer class'
     // mutable state), so we declare and initialize them inline to the OuterClass.
-    classes.filter(_._1 != outerClassName).map {
+    val initNestedClasses = classes.filter(_._1 != outerClassName).map {
       case (className, classInstance) =>
         s"private $className $classInstance = new $className();"
-    }.mkString("\n")
-  }
+    }
 
-  /**
-   * Declares all function code that should be inlined to the `OuterClass`.
-   */
-  private[sql] def declareAddedFunctions(): String = {
-    classFunctions(outerClassName).values.mkString("\n")
-  }
-
-  /**
-   * Declares all nested, private sub-classes and the function code that should be inlined to them.
-   */
-  private[sql] def declareNestedClasses(): String = {
-    classFunctions.filterKeys(_ != outerClassName).map {
+    val declareNestedClasses = classFunctions.filterKeys(_ != outerClassName).map {
       case (className, functions) =>
         s"""
            |private class $className {
@@ -332,7 +324,9 @@ class CodegenContext {
            |}
            """.stripMargin
     }
-  }.mkString("\n")
+
+    (inlinedFunctions ++ initNestedClasses ++ declareNestedClasses).mkString("\n")
+  }
 
   final val JAVA_BOOLEAN = "boolean"
   final val JAVA_BYTE = "byte"
@@ -1044,12 +1038,10 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    lazy val formatted = CodeFormatter.format(code)
-
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
       evaluator.setDebuggingInformation(true, true, false)
-      s"\n$formatted"
+      s"\n${CodeFormatter.format(code)}"
     })
 
     try {
@@ -1057,12 +1049,16 @@ object CodeGenerator extends Logging {
       recordCompilationStats(evaluator)
     } catch {
       case e: JaninoRuntimeException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new JaninoRuntimeException(msg, e)
       case e: CompileException =>
-        val msg = s"failed to compile: $e\n$formatted"
+        val msg = s"failed to compile: $e"
         logError(msg, e)
+        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
+        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
         throw new CompileException(msg, e.getLocation)
     }
     evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]

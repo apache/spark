@@ -23,7 +23,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.mockito.Matchers.{any, anyInt, anyString}
-import org.mockito.Mockito.{mock, never, spy, verify, when}
+import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
@@ -32,7 +32,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock}
+import org.apache.spark.util.{AccumulatorV2, ManualClock, Utils}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -1170,6 +1170,80 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
 
     assert(blacklistTracker.isNodeBlacklisted("host1"))
+  }
+
+  test("update blacklist before adding pending task to avoid race condition") {
+    // When a task fails, it should apply the blacklist policy prior to
+    // retrying the task otherwise there's a race condition where run on
+    // the same executor that it was intended to be black listed from.
+    val conf = new SparkConf().
+      set(config.BLACKLIST_ENABLED, true)
+
+    // Create a task with two executors.
+    sc = new SparkContext("local", "test", conf)
+    val exec = "executor1"
+    val host = "host1"
+    val exec2 = "executor2"
+    val host2 = "host2"
+    sched = new FakeTaskScheduler(sc, (exec, host), (exec2, host2))
+    val taskSet = FakeTask.createTaskSet(1)
+
+    val clock = new ManualClock
+    val mockListenerBus = mock(classOf[LiveListenerBus])
+    val blacklistTracker = new BlacklistTracker(mockListenerBus, conf, None, clock)
+    val taskSetManager = new TaskSetManager(sched, taskSet, 1, Some(blacklistTracker))
+    val taskSetManagerSpy = spy(taskSetManager)
+
+    val taskDesc = taskSetManagerSpy.resourceOffer(exec, host, TaskLocality.ANY)
+
+    // Assert the task has been black listed on the executor it was last executed on.
+    when(taskSetManagerSpy.addPendingTask(anyInt())).thenAnswer(
+      new Answer[Unit] {
+        override def answer(invocationOnMock: InvocationOnMock): Unit = {
+          val task = invocationOnMock.getArgumentAt(0, classOf[Int])
+          assert(taskSetManager.taskSetBlacklistHelperOpt.get.
+            isExecutorBlacklistedForTask(exec, task))
+        }
+      }
+    )
+
+    // Simulate a fake exception
+    val e = new ExceptionFailure("a", "b", Array(), "c", None)
+    taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
+
+    verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt())
+  }
+
+  test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
+    sc = new SparkContext("local", "test")
+    val addedJarsPreTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    assert(addedJarsPreTaskSet.size === 0)
+
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet1 = FakeTask.createTaskSet(3)
+    val manager1 = new TaskSetManager(sched, taskSet1, MAX_TASK_FAILURES, clock = new ManualClock)
+
+    // all tasks from the first taskset have the same jars
+    val taskOption1 = manager1.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption1.get.addedJars === addedJarsPreTaskSet)
+    val taskOption2 = manager1.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption2.get.addedJars === addedJarsPreTaskSet)
+
+    // even with a jar added mid-TaskSet
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    sc.addJar(jarPath.toString)
+    val addedJarsMidTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)
+    val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF)
+    // which should have the old version of the jars list
+    assert(taskOption3.get.addedJars === addedJarsPreTaskSet)
+
+    // and then the jar does appear in the next TaskSet
+    val taskSet2 = FakeTask.createTaskSet(1)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, clock = new ManualClock)
+
+    val taskOption4 = manager2.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
   }
 
   private def createTaskResult(

@@ -436,21 +436,22 @@ class TreeNodeSuite extends SparkFunSuite {
         "bucketColumnNames" -> "[bucket]",
         "sortColumnNames" -> "[sort]"))
 
-    // Converts FrameBoundary to JSON
-    assertJSON(
-      ValueFollowing(3),
-      JObject(
-        "product-class" -> classOf[ValueFollowing].getName,
-        "value" -> 3))
-
     // Converts WindowFrame to JSON
     assertJSON(
-      SpecifiedWindowFrame(RowFrame, UnboundedFollowing, CurrentRow),
-      JObject(
-        "product-class" -> classOf[SpecifiedWindowFrame].getName,
-        "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
-        "frameStart" -> JObject("object" -> JString(UnboundedFollowing.getClass.getName)),
-        "frameEnd" -> JObject("object" -> JString(CurrentRow.getClass.getName))))
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow),
+      List(
+        JObject(
+          "class" -> classOf[SpecifiedWindowFrame].getName,
+          "num-children" -> 2,
+          "frameType" -> JObject("object" -> JString(RowFrame.getClass.getName)),
+          "lower" -> 0,
+          "upper" -> 1),
+        JObject(
+          "class" -> UnboundedPreceding.getClass.getName,
+          "num-children" -> 0),
+        JObject(
+          "class" -> CurrentRow.getClass.getName,
+          "num-children" -> 0)))
 
     // Converts Partitioning to JSON
     assertJSON(
@@ -479,7 +480,8 @@ class TreeNodeSuite extends SparkFunSuite {
         CatalogTableType.MANAGED,
         CatalogStorageFormat.empty,
         StructType(StructField("a", IntegerType, true) :: Nil),
-        createTime = 0L),
+        createTime = 0L,
+        createVersion = "2.x"),
 
       JObject(
         "product-class" -> classOf[CatalogTable].getName,
@@ -508,6 +510,7 @@ class TreeNodeSuite extends SparkFunSuite {
         "owner" -> "",
         "createTime" -> 0,
         "lastAccessTime" -> -1,
+        "createVersion" -> "2.x",
         "tracksPartitionsInCatalog" -> false,
         "properties" -> JNull,
         "unsupportedFeatures" -> List.empty[String],

@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{InputStream, IOException}
+import java.io.{EOFException, InputStream, IOException}
 
 import scala.io.Source
 
@@ -107,6 +107,7 @@ private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
         }
       }
     } catch {
+      case _: EOFException if maybeTruncated =>
       case ioe: IOException =>
         throw ioe
       case e: Exception =>

@@ -123,7 +123,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           serialize(metadata, output)
           return Some(tempPath)
         } finally {
-          IOUtils.closeQuietly(output)
+          output.close()
         }
       } catch {
         case e: FileAlreadyExistsException =>
@@ -211,13 +211,17 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
   }
 
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
+    assert(startId.isEmpty || endId.isEmpty || startId.get <= endId.get)
     val files = fileManager.list(metadataPath, batchFilesFilter)
     val batchIds = files
       .map(f => pathToBatchId(f.getPath))
       .filter { batchId =>
         (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
-    }
-    batchIds.sorted.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
+    }.sorted
+
+    verifyBatchIds(batchIds, startId, endId)
+
+    batchIds.map(batchId => (batchId, get(batchId))).filter(_._2.isDefined).map {
       case (batchId, metadataOption) =>
         (batchId, metadataOption.get)
     }
@@ -434,6 +438,53 @@ object HDFSMetadataLog {
       } catch {
         case e: FileNotFoundException =>
           // ignore if file has already been deleted
+      }
+    }
+  }
+
+  /**
+   * Verify if batchIds are continuous and between `startId` and `endId`.
+   *
+   * @param batchIds the sorted ids to verify.
+   * @param startId the start id. If it's set, batchIds should start with this id.
+   * @param endId the start id. If it's set, batchIds should end with this id.
+   */
+  def verifyBatchIds(batchIds: Seq[Long], startId: Option[Long], endId: Option[Long]): Unit = {
+    // Verify that we can get all batches between `startId` and `endId`.
+    if (startId.isDefined || endId.isDefined) {
+      if (batchIds.isEmpty) {
+        throw new IllegalStateException(s"batch ${startId.orElse(endId).get} doesn't exist")
+      }
+      if (startId.isDefined) {
+        val minBatchId = batchIds.head
+        assert(minBatchId >= startId.get)
+        if (minBatchId != startId.get) {
+          val missingBatchIds = startId.get to minBatchId
+          throw new IllegalStateException(
+            s"batches (${missingBatchIds.mkString(", ")}) don't exist " +
+              s"(startId: $startId, endId: $endId)")
+        }
+      }
+
+      if (endId.isDefined) {
+        val maxBatchId = batchIds.last
+        assert(maxBatchId <= endId.get)
+        if (maxBatchId != endId.get) {
+          val missingBatchIds = maxBatchId to endId.get
+          throw new IllegalStateException(
+            s"batches (${missingBatchIds.mkString(", ")}) don't  exist " +
+              s"(startId: $startId, endId: $endId)")
+        }
+      }
+    }
+
+    if (batchIds.nonEmpty) {
+      val minBatchId = batchIds.head
+      val maxBatchId = batchIds.last
+      val missingBatchIds = (minBatchId to maxBatchId).toSet -- batchIds
+      if (missingBatchIds.nonEmpty) {
+        throw new IllegalStateException(s"batches (${missingBatchIds.mkString(", ")}) " +
+          s"don't exist (startId: $startId, endId: $endId)")
       }
     }
   }

@@ -64,7 +64,8 @@ private[sql] object JDBCRelation extends Logging {
       s"bound. Lower bound: $lowerBound; Upper bound: $upperBound")
 
     val numPartitions =
-      if ((upperBound - lowerBound) >= partitioning.numPartitions) {
+      if ((upperBound - lowerBound) >= partitioning.numPartitions || /* check for overflow */
+          (upperBound - lowerBound) < 0) {
         partitioning.numPartitions
       } else {
         logWarning("The number of partitions is reduced because the specified number of " +
@@ -80,7 +81,7 @@ private[sql] object JDBCRelation extends Logging {
     val column = partitioning.column
     var i: Int = 0
     var currentValue: Long = lowerBound
-    var ans = new ArrayBuffer[Partition]()
+    val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lBound = if (i != 0) s"$column >= $currentValue" else null
       currentValue += stride

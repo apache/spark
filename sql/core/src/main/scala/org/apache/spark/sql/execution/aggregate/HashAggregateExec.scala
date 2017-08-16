@@ -96,7 +96,7 @@ case class HashAggregateExec(
     val spillSize = longMetric("spillSize")
     val avgHashProbe = longMetric("avgHashProbe")
 
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
@@ -106,6 +106,7 @@ case class HashAggregateExec(
       } else {
         val aggregationIterator =
           new TungstenAggregationIterator(
+            partIndex,
             groupingExpressions,
             aggregateExpressions,
             aggregateAttributes,

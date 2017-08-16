@@ -126,7 +126,8 @@ statement
         tableIdentifier ('(' colTypeList ')')? tableProvider
         (OPTIONS tablePropertyList)?                                   #createTempViewUsing
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
-    | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
+    | CREATE (OR REPLACE)? TEMPORARY? FUNCTION (IF NOT EXISTS)?
+        qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? qualifiedName              #dropFunction
     | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
@@ -472,11 +473,11 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? tableAlias                   #tableName
-    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?  #aliasedQuery
-    | '(' relation ')' sample? (AS? strictIdentifier)?     #aliasedRelation
-    | inlineTable                                          #inlineTableDefault2
-    | functionTable                                        #tableValuedFunction
+    : tableIdentifier sample? tableAlias      #tableName
+    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    | '(' relation ')' sample? tableAlias     #aliasedRelation
+    | inlineTable                             #inlineTableDefault2
+    | functionTable                           #tableValuedFunction
     ;
 
 inlineTable
