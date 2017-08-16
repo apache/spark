@@ -127,7 +127,7 @@ class DiskStoreSuite extends SparkFunSuite {
 
     assert(e.getMessage ===
       s"requirement failed: can't create a byte buffer of size ${blockData.size}" +
-      s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
+      " since it exceeds 10.0 KB.")
   }
 
   test("block data encryption") {

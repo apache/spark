@@ -48,7 +48,7 @@ private[spark] class DiskStore(
 
   private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
   private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
-    s"${Int.MaxValue}b")
+    Int.MaxValue.toString)
   private val blockSizes = new ConcurrentHashMap[String, Long]()
 
   def getSize(blockId: BlockId): Long = blockSizes.get(blockId.name)
@@ -150,8 +150,8 @@ private[spark] class DiskStore(
 }
 
 private class DiskBlockData(
-    minMemoryMapBytes : Long,
-    maxMemoryMapBytes : Long,
+    minMemoryMapBytes: Long,
+    maxMemoryMapBytes: Long,
     file: File,
     blockSize: Long) extends BlockData {
 
@@ -181,12 +181,9 @@ private class DiskBlockData(
   }
 
   override def toByteBuffer(): ByteBuffer = {
-    // I chose to leave to original error message here
-    // since users are unfamiliar with the configureation key
-    // controling maxMemoryMapBytes for tests
     require(blockSize < maxMemoryMapBytes,
       s"can't create a byte buffer of size $blockSize" +
-      s" since it exceeds Int.MaxValue ${Int.MaxValue}.")
+      s" since it exceeds ${Utils.bytesToString(maxMemoryMapBytes)}.")
     Utils.tryWithResource(open()) { channel =>
       if (blockSize < minMemoryMapBytes) {
         // For small files, directly read rather than memory map.
