@@ -468,9 +468,9 @@ private[spark] class ApplicationMaster(
       override val rpcEnv: RpcEnv, driverRef: RpcEndpointRef, securityManager: SecurityManager)
     extends RpcEndpoint with Logging {
 
-    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
-
-    }
+//    override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
+//
+//    }
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {

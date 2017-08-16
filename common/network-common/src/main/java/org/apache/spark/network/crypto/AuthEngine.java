@@ -39,10 +39,13 @@ import org.apache.commons.crypto.cipher.CryptoCipher;
 import org.apache.commons.crypto.cipher.CryptoCipherFactory;
 import org.apache.commons.crypto.random.CryptoRandom;
 import org.apache.commons.crypto.random.CryptoRandomFactory;
+import org.apache.hadoop.yarn.security.client.ClientToAMTokenIdentifier;
+import org.apache.hadoop.yarn.security.client.ClientToAMTokenSecretManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.sasl.SparkSaslServer;
 
 /**
  * A helper class for abstracting authentication and key negotiation details. This is used by
@@ -54,11 +57,13 @@ class AuthEngine implements Closeable {
   private static final BigInteger ONE = new BigInteger(new byte[] { 0x1 });
 
   private final byte[] appId;
+  private final byte[] user;
   private final char[] secret;
   private final TransportConf conf;
   private final Properties cryptoConf;
   private final CryptoRandom random;
 
+  private String clientUser;
   private byte[] authNonce;
 
   @VisibleForTesting
@@ -69,11 +74,23 @@ class AuthEngine implements Closeable {
   private CryptoCipher decryptor;
 
   AuthEngine(String appId, String secret, TransportConf conf) throws GeneralSecurityException {
+    this(appId,"",secret, conf);
+  }
+
+  AuthEngine(String appId, String user, String secret, TransportConf conf) throws GeneralSecurityException {
     this.appId = appId.getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
     this.secret = secret.toCharArray();
+    this.user = user.getBytes();
     this.random = CryptoRandomFactory.getCryptoRandom(cryptoConf);
+  }
+
+  /**
+   * Returns the user name of the client.
+   */
+  public String getClientUserName() {
+    return clientUser;
   }
 
   /**
@@ -84,11 +101,12 @@ class AuthEngine implements Closeable {
   ClientChallenge challenge() throws GeneralSecurityException, IOException {
     this.authNonce = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
     SecretKeySpec authKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
-      authNonce, conf.encryptionKeyLength());
+      authNonce, conf.encryptionKeyLength(), secret);
     initializeForAuth(conf.cipherTransformation(), authNonce, authKey);
 
     this.challenge = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
     return new ClientChallenge(new String(appId, UTF_8),
+      new String(user, UTF_8),
       conf.keyFactoryAlgorithm(),
       conf.keyFactoryIterations(),
       conf.cipherTransformation(),
@@ -107,8 +125,22 @@ class AuthEngine implements Closeable {
   ServerResponse respond(ClientChallenge clientChallenge)
     throws GeneralSecurityException, IOException {
 
-    SecretKeySpec authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-      clientChallenge.nonce, clientChallenge.keyLength);
+    SecretKeySpec authKey;
+    if (conf.isConnectionUsingTokens()) {
+      //Create Secret Key
+      ClientToAMTokenSecretManager secretManager = new ClientToAMTokenSecretManager(null,
+        SparkSaslServer.decodeMasterKey(new String(secret)));
+      ClientToAMTokenIdentifier identifier = SparkSaslServer.getIdentifier(clientChallenge.user);
+      clientUser = identifier.getUser().getShortUserName();
+
+      authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations, clientChallenge.nonce,
+       clientChallenge.keyLength, SparkSaslServer.getClientToAMSecretKey(identifier, secretManager));
+    } else {
+      clientUser = clientChallenge.user;
+      authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
+              clientChallenge.nonce, clientChallenge.keyLength, secret);
+    }
+
     initializeForAuth(clientChallenge.cipher, clientChallenge.nonce, authKey);
 
     byte[] challenge = validateChallenge(clientChallenge.nonce, clientChallenge.challenge);
@@ -118,7 +150,7 @@ class AuthEngine implements Closeable {
     byte[] outputIv = randomBytes(conf.ivLength());
 
     SecretKeySpec sessionKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-      sessionNonce, clientChallenge.keyLength);
+      sessionNonce, clientChallenge.keyLength, secret);
     this.sessionCipher = new TransportCipher(cryptoConf, clientChallenge.cipher, sessionKey,
       inputIv, outputIv);
 
@@ -142,7 +174,7 @@ class AuthEngine implements Closeable {
     byte[] outputIv = decrypt(serverResponse.outputIv);
 
     SecretKeySpec sessionKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
-      nonce, conf.encryptionKeyLength());
+      nonce, conf.encryptionKeyLength(), secret);
     this.sessionCipher = new TransportCipher(cryptoConf, conf.cipherTransformation(), sessionKey,
       inputIv, outputIv);
   }
@@ -178,7 +210,7 @@ class AuthEngine implements Closeable {
 
   @VisibleForTesting
   byte[] challenge(byte[] appId, byte[] nonce, byte[] challenge) throws GeneralSecurityException {
-    return encrypt(Bytes.concat(appId, nonce, challenge));
+    return encrypt(Bytes.concat(appId, user, nonce, challenge));
   }
 
   @VisibleForTesting
@@ -225,11 +257,11 @@ class AuthEngine implements Closeable {
     return Arrays.copyOfRange(challenge, appId.length + nonce.length, challenge.length);
   }
 
-  private SecretKeySpec generateKey(String kdf, int iterations, byte[] salt, int keyLength)
+  private SecretKeySpec generateKey(String kdf, int iterations, byte[] salt, int keyLength, char[] password)
     throws GeneralSecurityException {
 
     SecretKeyFactory factory = SecretKeyFactory.getInstance(kdf);
-    PBEKeySpec spec = new PBEKeySpec(secret, salt, iterations, keyLength);
+    PBEKeySpec spec = new PBEKeySpec(password, salt, iterations, keyLength);
 
     long start = System.nanoTime();
     SecretKey key = factory.generateSecret(spec);

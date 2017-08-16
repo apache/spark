@@ -225,7 +225,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   }
 
   /** Creates an ClientToAMTokenIdentifier from the encoded Base-64 String */
-  private static ClientToAMTokenIdentifier getIdentifier(String id) throws InvalidToken {
+  public static ClientToAMTokenIdentifier getIdentifier(String id) throws InvalidToken {
     byte[] tokenId = byteBufToByte(Base64.decode(
       Unpooled.wrappedBuffer(id.getBytes(StandardCharsets.UTF_8))));
 
@@ -240,7 +240,7 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   }
 
   /** Returns an Base64-encoded secretKey created from the Identifier and the secretmanager */
-  private char[] getClientToAMSecretKey(ClientToAMTokenIdentifier tokenid,
+  public static char[] getClientToAMSecretKey(ClientToAMTokenIdentifier tokenid,
                                         ClientToAMTokenSecretManager secretManager) throws InvalidToken {
     byte[] password =  secretManager.retrievePassword(tokenid);
     return Base64.encode(Unpooled.wrappedBuffer(password)).toString(StandardCharsets.UTF_8)

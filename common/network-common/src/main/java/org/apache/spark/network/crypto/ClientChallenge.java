@@ -35,6 +35,7 @@ public class ClientChallenge implements Encodable {
   private static final byte TAG_BYTE = (byte) 0xFA;
 
   public final String appId;
+  public final String user;
   public final String kdf;
   public final int iterations;
   public final String cipher;
@@ -43,7 +44,18 @@ public class ClientChallenge implements Encodable {
   public final byte[] challenge;
 
   public ClientChallenge(
+          String appId,
+          String kdf,
+          int iterations,
+          String cipher,
+          int keyLength,
+          byte[] nonce,
+          byte[] challenge) {
+    this(appId, "", kdf, iterations, cipher, keyLength, nonce, challenge);
+  }
+  public ClientChallenge(
       String appId,
+      String user,
       String kdf,
       int iterations,
       String cipher,
@@ -51,6 +63,7 @@ public class ClientChallenge implements Encodable {
       byte[] nonce,
       byte[] challenge) {
     this.appId = appId;
+    this.user = user;
     this.kdf = kdf;
     this.iterations = iterations;
     this.cipher = cipher;
@@ -89,6 +102,7 @@ public class ClientChallenge implements Encodable {
     }
 
     return new ClientChallenge(
+      Encoders.Strings.decode(buf),
       Encoders.Strings.decode(buf),
       Encoders.Strings.decode(buf),
       buf.readInt(),
