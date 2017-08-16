@@ -368,8 +368,6 @@ private[spark] class TaskSetManager(
           return Some((index, TaskLocality.ANY))
         }
       }
-
-      sched.dagScheduler.extraExecutorNeeded()
     }
 
     None

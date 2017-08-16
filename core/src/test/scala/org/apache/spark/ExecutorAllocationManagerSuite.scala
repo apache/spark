@@ -185,8 +185,6 @@ class ExecutorAllocationManagerSuite
     // Verify that running a task once we're at our limit doesn't blow things up
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(0, 1, "executor-1")))
     assert(addExecutors(manager) === 0)
-    sc.listenerBus.postToAll(SparkListenerExtraExecutorNeeded())
-    assert(numExecutorsToAdd(manager) === 1)
     assert(numExecutorsTarget(manager) === 10)
   }
 

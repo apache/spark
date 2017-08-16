@@ -288,13 +288,6 @@ class DAGScheduler(
     eventProcessLoop.post(SpeculativeTaskSubmitted(task))
   }
 
-  /**
-   * Called by the TaskSetManager when it decides an extra executor is needed (See SPARK-19326)
-   */
-  def extraExecutorNeeded(): Unit = {
-    eventProcessLoop.post(ExtraExecutorNeeded)
-  }
-
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
@@ -828,10 +821,6 @@ class DAGScheduler(
 
   private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
     listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId))
-  }
-
-  private[scheduler] def handleExtraExecutorNeeded(): Unit = {
-    listenerBus.post(SparkListenerExtraExecutorNeeded())
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -1802,9 +1791,6 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case SpeculativeTaskSubmitted(task) =>
       dagScheduler.handleSpeculativeTaskSubmitted(task)
-
-    case ExtraExecutorNeeded =>
-      dagScheduler.handleExtraExecutorNeeded()
 
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)

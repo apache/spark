@@ -302,11 +302,6 @@ private[spark] trait SparkListenerInterface {
   def onSpeculativeTaskSubmitted(speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit
 
   /**
-   * Called when an extra executor is needed
-   */
-  def onExtraExecutorNeeded(): Unit
-
-  /**
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent): Unit
@@ -372,8 +367,6 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onSpeculativeTaskSubmitted(
       speculativeTask: SparkListenerSpeculativeTaskSubmitted): Unit = { }
-
-  override def onExtraExecutorNeeded(): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
 }

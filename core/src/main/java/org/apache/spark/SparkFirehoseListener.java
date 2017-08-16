@@ -145,10 +145,6 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   }
 
   @Override
-  public void onExtraExecutorNeeded() {
-  }
-
-  @Override
   public void onOtherEvent(SparkListenerEvent event) {
     onEvent(event);
   }

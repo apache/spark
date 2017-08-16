@@ -373,8 +373,14 @@ private[spark] class ExecutorAllocationManager(
     // If our target has not changed, do not send a message
     // to the cluster manager and reset our exponential growth
     if (delta == 0) {
-      numExecutorsToAdd = 1
-      return 0
+      // Check if there is any speculative jobs pending
+      if (listener.pendingTasks == 0 && listener.pendingSpeculativeTasks > 0) {
+        numExecutorsTarget =
+          math.max(math.min(maxNumExecutorsNeeded + 1, maxNumExecutors), minNumExecutors)
+      } else {
+        numExecutorsToAdd = 1
+        return 0
+      }
     }
 
     val addRequestAcknowledged = try {
@@ -582,18 +588,6 @@ private[spark] class ExecutorAllocationManager(
   }
 
   /**
-   * Callback invoked when an extra executor is needed (See SPARK-19326)
-   */
-  private def onExtraExecutorNeeded(): Unit = synchronized {
-    val maxNeeded = math.max(math.min(maxNumExecutorsNeeded + 1, maxNumExecutors), minNumExecutors)
-    val addRequestAcknowledged = testing ||
-      client.requestTotalExecutors(maxNeeded, localityAwareTasks, hostToLocalTaskCount)
-    if (addRequestAcknowledged) {
-      logInfo(s"Requesting one new executor because speculative tasks are backlogged")
-    }
-  }
-
-  /**
    * A listener that notifies the given allocation manager of when to add and remove executors.
    *
    * This class is intentionally conservative in its assumptions about the relative ordering
@@ -762,26 +756,26 @@ private[spark] class ExecutorAllocationManager(
       }
     }
 
-    override def onExtraExecutorNeeded(): Unit = {
-      allocationManager.onExtraExecutorNeeded
-    }
-
     /**
      * An estimate of the total number of pending tasks remaining for currently running stages. Does
      * not account for tasks which may have failed and been resubmitted.
      *
      * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
-    def totalPendingTasks(): Int = {
-      val pendTasks = stageIdToNumTasks.map { case (stageId, numTasks) =>
+    def pendingTasks(): Int = {
+      stageIdToNumTasks.map { case (stageId, numTasks) =>
         numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
       }.sum
+    }
 
-      val pendSpeculativeTasks = stageIdToNumSpeculativeTasks.map { case (stageId, numTasks) =>
+    def pendingSpeculativeTasks(): Int = {
+      stageIdToNumSpeculativeTasks.map { case (stageId, numTasks) =>
         numTasks - stageIdToSpeculativeTaskIndices.get(stageId).map(_.size).getOrElse(0)
       }.sum
+    }
 
-      pendTasks + pendSpeculativeTasks
+    def totalPendingTasks(): Int = {
+      pendingTasks + pendingSpeculativeTasks
     }
 
     /**
