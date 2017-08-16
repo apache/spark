@@ -474,6 +474,10 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   private def supportCodegen(plan: SparkPlan): Boolean = plan match {
+    // Do not enable whole stage codegen for a single limit.
+    case limit: BaseLimitExec if !limit.child.isInstanceOf[CodegenSupport] ||
+        !limit.child.asInstanceOf[CodegenSupport].supportCodegen =>
+      false
     case plan: CodegenSupport if plan.supportCodegen =>
       val willFallback = plan.expressions.exists(_.find(e => !supportCodegen(e)).isDefined)
       // the generated code will be huge if there are too many columns
