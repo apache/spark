@@ -20,3 +20,9 @@ select from_json('{"a":1}', 'a InvalidType');
 select from_json('{"a":1}', 'a INT', named_struct('mode', 'PERMISSIVE'));
 select from_json('{"a":1}', 'a INT', map('mode', 1));
 select from_json();
+-- json_tuple
+describe function json_tuple;
+describe function extended json_tuple;
+select json_tuple('{"a" : 1, "b" : 2}', cast(NULL AS STRING), 'b', cast(NULL AS STRING), 'a')
+create temporary view jsonTable(jsonField, a, b) as select * from values '{"a": 1, "b": 2}', 'a', 'b';
+SELECT json_tuple(jsonField, b, cast(NULL AS STRING), 'a') FROM jsonTable
