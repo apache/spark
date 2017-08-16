@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.physical
 
 import scala.language.existentials
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -109,7 +108,7 @@ case class ClusteredDistribution(
  */
 case class HashClusteredDistribution(
     expressions: Seq[Expression],
-    requiredNumPartitions: Option[Int],
+    requiredNumPartitions: Option[Int] = None,
     hashingFunctionClass: Class[_ <: HashExpression[Int]] = classOf[Murmur3Hash])
   extends Distribution {
 
@@ -231,8 +230,8 @@ case class HashPartitioning(
     super.satisfies(required) || {
       required match {
         case h: HashClusteredDistribution =>
+          h.hashingFunctionClass == hashingFunctionClass &&
           (h.requiredNumPartitions.isEmpty || h.requiredNumPartitions.get == numPartitions) &&
-            h.hashingFunctionClass == hashingFunctionClass &&
             expressions.length == h.expressions.length &&
             expressions.zip(h.expressions).forall { case (l, r) => l.semanticEquals(r) }
 

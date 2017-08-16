@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.exchange
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -145,6 +146,16 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
+    val distinctNumPartitionsExpected =
+      requiredChildDistributions.flatMap(_.requiredNumPartitions).distinct
+
+    val numPreShufflePartitions =
+      if (distinctNumPartitionsExpected.isEmpty || distinctNumPartitionsExpected.size > 1) {
+        defaultNumPreShufflePartitions
+      } else {
+        distinctNumPartitionsExpected.head
+      }
+
     // Ensure that the operator's children satisfy their output distribution requirements.
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
@@ -153,7 +164,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
-          .getOrElse(defaultNumPreShufflePartitions)
+          .getOrElse(numPreShufflePartitions)
         ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
     }
 
@@ -262,14 +273,44 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     }
   }
 
+  private def adjustHashingFunctionAndNumPartitions(
+      plan: SparkPlan,
+      requiredNumPartitions: Option[Int],
+      hashingFunctionClass: Class[_ <: HashExpression[Int]]):
+  (Option[Int], Class[_ <: HashExpression[Int]]) = {
+
+    val childHashPartitionings = plan.children.map(_.outputPartitioning)
+      .filter(_.isInstanceOf[HashPartitioning])
+      .map(_.asInstanceOf[HashPartitioning])
+
+    val distinctRequiredNumPartitions = childHashPartitionings.map(_.numPartitions).distinct
+    val newRequiredNumPartitions =
+      if (distinctRequiredNumPartitions.nonEmpty && distinctRequiredNumPartitions.size == 1) {
+        Some(distinctRequiredNumPartitions.head)
+      } else {
+        requiredNumPartitions
+      }
+
+    val distinctHashingFunctions = childHashPartitionings.map(_.hashingFunctionClass).distinct
+    val newHashingFunctionClass =
+      if (distinctHashingFunctions.nonEmpty && distinctHashingFunctions.size == 1) {
+        distinctHashingFunctions.head
+      } else {
+        hashingFunctionClass
+      }
+
+    (newRequiredNumPartitions, newHashingFunctionClass)
+  }
+
   /**
+   * TODO(tejasp) update the doc as per new edits
    * When the physical operators are created for JOIN, the ordering of join keys is based on order
    * in which the join keys appear in the user query. That might not match with the output
    * partitioning of the join node's children (thus leading to extra sort / shuffle being
    * introduced). This rule will change the ordering of the join keys to match with the
    * partitioning of the join nodes' children.
    */
-  private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
+  private def adjustJoinRequirements(plan: SparkPlan): SparkPlan = {
     plan.transformUp {
       case BroadcastHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left,
         right) =>
@@ -278,16 +319,25 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         BroadcastHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
           left, right)
 
-      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) =>
-        val (reorderedLeftKeys, reorderedRightKeys) =
-          reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
-          left, right)
+      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right,
+      requiredNumPartitions, hashingFunctionClass) =>
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
-        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition, left, right)
+        val (newRequiredNumPartitions, newHashingFunctionClass) =
+          adjustHashingFunctionAndNumPartitions(plan, requiredNumPartitions, hashingFunctionClass)
+        ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
+          left, right, newRequiredNumPartitions, newHashingFunctionClass)
+
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right,
+      requiredNumPartitions, hashingFunctionClass) =>
+
+        val (reorderedLeftKeys, reorderedRightKeys) =
+          reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
+        val (newRequiredNumPartitions, newHashingFunctionClass) =
+          adjustHashingFunctionAndNumPartitions(plan, requiredNumPartitions, hashingFunctionClass)
+        SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
+          left, right, newRequiredNumPartitions, newHashingFunctionClass)
     }
   }
 
@@ -299,6 +349,6 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         case _ => operator
       }
     case operator: SparkPlan =>
-      ensureDistributionAndOrdering(reorderJoinPredicates(operator))
+      ensureDistributionAndOrdering(adjustJoinRequirements(operator))
   }
 }

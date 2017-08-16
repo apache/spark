@@ -34,6 +34,8 @@ import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning,
+UnknownPartitioning}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
@@ -178,16 +180,25 @@ case class HiveTableScanExec(
     prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveQlTable))
   }
 
+  @transient private lazy val prunedPartitions = prunePartitions(rawPartitions)
+
   protected override def doExecute(): RDD[InternalRow] = {
+    val bucketSpec = if (sparkSession.sessionState.conf.bucketingEnabled) {
+      relation.tableMeta.bucketSpec
+    } else {
+      None
+    }
+
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // with multiple partitions.
     val rdd = if (!relation.isPartitioned) {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForTable(hiveQlTable)
+        hadoopReader.makeRDDForTable(hiveQlTable, bucketSpec)
       }
     } else {
       Utils.withDummyCallSite(sqlContext.sparkContext) {
-        hadoopReader.makeRDDForPartitionedTable(prunePartitions(rawPartitions))
+        hadoopReader.makeRDDForPartitionedTable(
+          prunePartitions(rawPartitions), bucketSpec)
       }
     }
     val numOutputRows = longMetric("numOutputRows")
@@ -200,6 +211,67 @@ case class HiveTableScanExec(
         numOutputRows += 1
         proj(r)
       }
+    }
+  }
+
+  /**
+   * How is `outputPartitioning` determined ?
+   * -----------------------------------------
+   * `HashPartitioning` would be used when ALL these criteria's match:
+   *
+   * - Table is bucketed
+   * - Bucketing is enabled
+   * - ALL the bucketing columns are being read from the table
+   * - In case of partitioned tables, if multiple partitions of the table are read, then they all
+   *   should have same properties (eg. serde, input format class).
+   *
+   * How is `outputOrdering` determined ?
+   * -----------------------------------------
+   * Sort ordering would be used when ALL these criteria's match:
+   *
+   * 1. `HashPartitioning` is being used
+   * 2. A prefix (or all) of the sort columns are being read from the table.
+   * 3. Table is non-partitioned OR only single partition of the table is read.
+   *    In case of partitioned tables, if multiple partitions of the table are read, then the sort
+   *    ordering is not used because the effect RDD partition for the bucket would comprise of
+   *    multiple files. Even though the files are individually sorted, the RDD partition as a whole
+   *    is NOT sorted.
+   *
+   * Sort ordering would be over the prefix subset of `sort columns` being read from the table.
+   * eg.
+   * Assume (col0, col2, col3) are the columns read from the table
+   * If sort columns are (col0, col1), then sort ordering would be considered as (col0)
+   * If sort columns are (col1, col0), then sort ordering would be empty as per rule #2 above
+   */
+  override val (outputPartitioning, outputOrdering): (Partitioning, Seq[SortOrder]) = {
+    relation.tableMeta.bucketSpec match {
+      case Some(spec) if sparkSession.sessionState.conf.bucketingEnabled =>
+        def toAttribute(colName: String) = relation.dataCols.find(_.name == colName)
+
+        val bucketColumns = spec.bucketColumnNames.flatMap(toAttribute)
+        val isMultiplePartitionScan = relation.isPartitioned && prunedPartitions.size > 1
+        val allPropertiesSame = !isMultiplePartitionScan ||
+          (prunedPartitions.map(_.getDeserializer.getClass).distinct.size == 1 &&
+            prunedPartitions.map(_.getInputFormatClass.getClass).distinct.size == 1 &&
+            prunedPartitions.map(_.getBucketCount).distinct.size == 1 &&
+            prunedPartitions.map(_.getBucketCols).distinct.size == 1 &&
+            prunedPartitions.map(_.getSortCols).distinct.size == 1)
+
+        if (bucketColumns.size == spec.bucketColumnNames.size && allPropertiesSame) {
+          val partitioning = HashPartitioning(bucketColumns, spec.numBuckets, classOf[HiveHash])
+          val sortColumns = spec.sortColumnNames.map(toAttribute).takeWhile(_.isDefined).map(_.get)
+
+          val sortOrder = if (sortColumns.nonEmpty && !isMultiplePartitionScan) {
+            sortColumns.map(SortOrder(_, Ascending))
+          } else {
+            Nil
+          }
+          (partitioning, sortOrder)
+        } else {
+          (UnknownPartitioning(0), Nil)
+        }
+      case _ =>
+        (UnknownPartitioning(0), Nil)
     }
   }
 

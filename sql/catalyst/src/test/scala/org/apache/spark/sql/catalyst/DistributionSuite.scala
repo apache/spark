@@ -82,22 +82,22 @@ class DistributionSuite extends SparkFunSuite {
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c), Some(10), Some(classOf[Murmur3Hash])),
+      HashClusteredDistribution(Seq('a, 'b, 'c), Some(10), classOf[Murmur3Hash]),
       true)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c), Some(12), Some(classOf[Murmur3Hash])),
+      HashClusteredDistribution(Seq('a, 'b, 'c), Some(12), classOf[Murmur3Hash]),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('d, 'e), Some(10), Some(classOf[Murmur3Hash])),
+      HashClusteredDistribution(Seq('d, 'e), Some(10), classOf[Murmur3Hash]),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c), Some(10), Some(classOf[HiveHash])),
+      HashClusteredDistribution(Seq('a, 'b, 'c), Some(10), classOf[HiveHash]),
       false)
 
     checkSatisfied(
@@ -145,36 +145,6 @@ class DistributionSuite extends SparkFunSuite {
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc, 'd.desc)),
       true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('a, 'b, 'c), Some(10), None),
-      true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('c, 'b, 'a), Some(10), None),
-      true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('b, 'c, 'a, 'd), Some(10), None),
-      true)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('b, 'c, 'a, 'd), Some(10), Some(classOf[Murmur3Hash])),
-      false)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('b, 'c, 'a, 'd), Some(12), Some(classOf[Murmur3Hash])),
-      false)
-
-    checkSatisfied(
-      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      ClusteredDistribution(Seq('b, 'c, 'a, 'd), Some(10), Some(classOf[HiveHash])),
-      false)
 
     // Cases which need an exchange between two data properties.
     // TODO: We can have an optimization to first sort the dataset

@@ -123,6 +123,24 @@ private[spark] class CoalescedRDD[T: ClassTag](
     partition.asInstanceOf[CoalescedRDDPartition].preferredLocation.toSeq
   }
 }
+/**
+ * Coalesce the partitions of a parent RDD into fewer partitions, so that each partition of
+ * this RDD computes one or more of the parent ones. Every i'th partition of the parent RDD is
+ * mapped to (i % targetPartitions)'th partition of the output RDD
+ */
+private[spark] class RoundRobinPartitionCoalescer() extends PartitionCoalescer with Serializable {
+  def coalesce(targetPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
+    val partitionGroups = ArrayBuffer[PartitionGroup]()
+    for (_ <- 0 until targetPartitions) {
+      partitionGroups += new PartitionGroup(None)
+    }
+
+    for ((p, i) <- parent.partitions.zipWithIndex) {
+      partitionGroups(i % targetPartitions).partitions += p
+    }
+    partitionGroups.toArray
+  }
+}
 
 /**
  * Coalesce the partitions of a parent RDD (`prev`) into fewer partitions, so that each partition of

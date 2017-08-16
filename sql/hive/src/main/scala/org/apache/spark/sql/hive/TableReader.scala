@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.exec.Utilities
+import org.apache.hadoop.hive.ql.io.BucketizedSparkInputFormat
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.Deserializer
@@ -36,10 +37,11 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, RDD, UnionRDD}
+import org.apache.spark.rdd._
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.CastSupport
+import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -50,9 +52,11 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
  * A trait for subclasses that handle table scans.
  */
 private[hive] sealed trait TableReader {
-  def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow]
+  def makeRDDForTable(hiveTable: HiveTable, bucketSpec: Option[BucketSpec]): RDD[InternalRow]
 
-  def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow]
+  def makeRDDForPartitionedTable(
+      partitions: Seq[HivePartition],
+      bucketSpec: Option[BucketSpec]): RDD[InternalRow]
 }
 
 
@@ -90,11 +94,14 @@ class HadoopTableReader(
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
-  override def makeRDDForTable(hiveTable: HiveTable): RDD[InternalRow] =
+  override def makeRDDForTable(
+      hiveTable: HiveTable,
+      bucketSpec: Option[BucketSpec]): RDD[InternalRow] =
     makeRDDForTable(
       hiveTable,
       Utils.classForName(tableDesc.getSerdeClassName).asInstanceOf[Class[Deserializer]],
-      filterOpt = None)
+      filterOpt = None,
+      bucketSpec)
 
   /**
    * Creates a Hadoop RDD to read data from the target table's data directory. Returns a transformed
@@ -104,11 +111,14 @@ class HadoopTableReader(
    * @param deserializerClass Class of the SerDe used to deserialize Writables read from Hadoop.
    * @param filterOpt If defined, then the filter is used to reject files contained in the data
    *                  directory being read. If None, then all files are accepted.
+   * @param bucketSpec If the table is bucketed and the read operation should reflect that, then
+   *                   this is used to ensure that the RDD respects bucketing
    */
   def makeRDDForTable(
       hiveTable: HiveTable,
       deserializerClass: Class[_ <: Deserializer],
-      filterOpt: Option[PathFilter]): RDD[InternalRow] = {
+      filterOpt: Option[PathFilter],
+      bucketSpec: Option[BucketSpec]): RDD[InternalRow] = {
 
     assert(!hiveTable.isPartitioned, """makeRDDForTable() cannot be called on a partitioned table,
       since input formats may differ across partitions. Use makeRDDForTablePartitions() instead.""")
@@ -121,10 +131,14 @@ class HadoopTableReader(
     val tablePath = hiveTable.getPath
     val inputPathStr = applyFilterIfNeeded(tablePath, filterOpt)
 
-    // logDebug("Table input: %s".format(tablePath))
-    val ifc = hiveTable.getInputFormatClass
-      .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
-    val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc)
+    val (minSplits, ifc) = bucketSpec match {
+      case Some(spec) => (spec.numBuckets, classOf[BucketizedSparkInputFormat[_, _]]
+        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]])
+      case None => (_minSplitsPerRDD, hiveTable.getInputFormatClass
+        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]])
+    }
+
+    val hadoopRDD = createHadoopRdd(localTableDesc, inputPathStr, ifc, minSplits)
 
     val attrsWithIndex = attributes.zipWithIndex
     val mutableRow = new SpecificInternalRow(attributes.map(_.dataType))
@@ -139,10 +153,12 @@ class HadoopTableReader(
     deserializedHadoopRDD
   }
 
-  override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
+  override def makeRDDForPartitionedTable(
+      partitions: Seq[HivePartition],
+      bucketSpec: Option[BucketSpec]): RDD[InternalRow] = {
     val partitionToDeserializer = partitions.map(part =>
       (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
-    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
+    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None, bucketSpec)
   }
 
   /**
@@ -154,10 +170,12 @@ class HadoopTableReader(
    *     class to use to deserialize input Writables from the corresponding partition.
    * @param filterOpt If defined, then the filter is used to reject files contained in the data
    *     subdirectory of each partition being read. If None, then all files are accepted.
+   * @param bucketSpec If defined, this is the bucketing specification for the table
    */
   def makeRDDForPartitionedTable(
       partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
-      filterOpt: Option[PathFilter]): RDD[InternalRow] = {
+      filterOpt: Option[PathFilter],
+      bucketSpec: Option[BucketSpec]): RDD[InternalRow] = {
 
     // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
     def verifyPartitionPath(
@@ -201,8 +219,14 @@ class HadoopTableReader(
       val partDesc = Utilities.getPartitionDesc(partition)
       val partPath = partition.getDataLocation
       val inputPathStr = applyFilterIfNeeded(partPath, filterOpt)
-      val ifc = partDesc.getInputFileFormatClass
-        .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
+
+      val (minSplits, ifc) = bucketSpec match {
+        case Some(spec) => (spec.numBuckets, classOf[BucketizedSparkInputFormat[_, _]]
+          .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]])
+        case None => (_minSplitsPerRDD, partDesc.getInputFileFormatClass
+          .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]])
+      }
+
       // Get partition field info
       val partSpec = partDesc.getPartSpec
       val partProps = partDesc.getProperties
@@ -242,7 +266,7 @@ class HadoopTableReader(
 
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
-      createHadoopRdd(localTableDesc, inputPathStr, ifc).mapPartitions { iter =>
+      createHadoopRdd(localTableDesc, inputPathStr, ifc, minSplits).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
@@ -266,10 +290,20 @@ class HadoopTableReader(
     }.toSeq
 
     // Even if we don't use any partitions, we still need an empty RDD
-    if (hivePartitionRDDs.size == 0) {
+    if (hivePartitionRDDs.isEmpty) {
       new EmptyRDD[InternalRow](sparkSession.sparkContext)
     } else {
-      new UnionRDD(hivePartitionRDDs(0).context, hivePartitionRDDs)
+      val union = new UnionRDD(hivePartitionRDDs.head.context, hivePartitionRDDs)
+
+      bucketSpec match {
+        case Some(spec) if partitionToDeserializer.size > 1 =>
+          // If there are multiple Hive partitions of this table are read, the union RDD would
+          // have (num_partitions * num_buckets) partitions. Coalesce the union RDD in such a way
+          // that RDD partition for i-th bucket for each partition falls in one coalesced RDD
+          // partition.
+          new CoalescedRDD(union, spec.numBuckets, Some(new RoundRobinPartitionCoalescer))
+        case _ => union
+      }
     }
   }
 
@@ -294,7 +328,8 @@ class HadoopTableReader(
   private def createHadoopRdd(
     tableDesc: TableDesc,
     path: String,
-    inputFormatClass: Class[InputFormat[Writable, Writable]]): RDD[Writable] = {
+    inputFormatClass: Class[InputFormat[Writable, Writable]],
+    minSplits: Int): RDD[Writable] = {
 
     val initializeJobConfFunc = HadoopTableReader.initializeLocalJobConfFunc(path, tableDesc) _
 
@@ -305,7 +340,7 @@ class HadoopTableReader(
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      _minSplitsPerRDD)
+      minSplits)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
