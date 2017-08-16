@@ -75,8 +75,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           // Normally wrapping child with `LocalLimitExec` here is a no-op, because
           // `CollectLimitExec.executeCollect` will call `LogicalLimitExec.executeTake`, which
           // calls `child.executeTake`. If child supports whole stage codegen, adding this
-          // `LocalLimitExec` can break the input consuming loop inside whole stage codegen and
-          // trigger the resource releasing work, after we consume `limit` rows.
+          // `LocalLimitExec` can stop the processing of whole stage codegen and trigger the
+          // resource releasing work, after we consume `limit` rows.
           execution.CollectLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
         case other => planLater(other) :: Nil
       }
