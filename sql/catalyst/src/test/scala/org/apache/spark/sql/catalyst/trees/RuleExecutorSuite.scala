@@ -59,14 +59,10 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity checker") {
     object WithSIChecker extends RuleExecutor[Expression] {
-      override protected def planChecker: Option[Expression => Boolean] = Some(
-        (expr: Expression) => {
-          expr match {
-            case IntegerLiteral(_) => true
-            case _ => false
-          }
-        }
-      )
+      override protected def planChecker(expr: Expression): Boolean = expr match {
+        case IntegerLiteral(_) => true
+        case _ => false
+      }
       val batches = Batch("once", Once, DecrementLiterals) :: Nil
     }
 

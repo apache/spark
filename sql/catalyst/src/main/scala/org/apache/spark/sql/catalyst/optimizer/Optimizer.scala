@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
@@ -39,9 +40,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
   // still resolved after the execution of each rule.
-  override protected def planChecker: Option[LogicalPlan => Boolean] = Some(
-    (plan: LogicalPlan) => plan.resolved
-  )
+  override protected def planChecker(plan: LogicalPlan): Boolean = {
+    Utils.isTesting && plan.resolved
+  }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
