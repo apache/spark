@@ -37,6 +37,12 @@ import org.apache.spark.sql.types._
 abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
 
+  // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
+  // still resolved after the execution of each rule.
+  override protected def planChecker: Option[LogicalPlan => Boolean] = Some(
+    (plan: LogicalPlan) => plan.resolved
+  )
+
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
