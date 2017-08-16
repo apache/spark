@@ -1415,7 +1415,7 @@ class LogisticRegressionSuite
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
-  test("test SPARK-21681") {
+  test("multinomial logistic regression with zero variance (SPARK-21681)") {
     val sqlContext = multinomialDatasetWithZeroVar.sqlContext
     import sqlContext.implicits._
     val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
