@@ -84,7 +84,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
     // test for Cast expression in HiveTableScanExec
     checkAnswer(sql("select value from table_with_timestamp_partition " +
-      "where ts = '2010-01-02 00:00:00.000'"), Row(1))
+      "where ts = '2010-01-02 00:00:00.000'"), Row(2))
 
     sql("DROP TABLE IF EXISTS table_with_timestamp_partition")
   }
