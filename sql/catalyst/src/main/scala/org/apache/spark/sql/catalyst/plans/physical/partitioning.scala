@@ -32,7 +32,10 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
  *    about how tuples are distributed within a single partition.
  */
-sealed trait Distribution
+sealed trait Distribution {
+  /** If defined, then represents how many partitions are expected by the distribution */
+  def numPartitions: Option[Int] = None
+}
 
 /**
  * Represents a distribution where no promises are made about co-location of data.
@@ -63,6 +66,8 @@ case class ClusteredDistribution(
       "a single partition.")
   require(numClusters.isEmpty || numClusters.get > 0,
     "Number of cluster (if set) should only be a positive integer")
+
+  override def numPartitions: Option[Int] = numClusters
 }
 
 /**

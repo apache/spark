@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.exchange
 
+import scala.language.existentials
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -47,12 +49,40 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
    */
   private def createPartitioning(
       requiredDistribution: Distribution,
-      numPartitions: Int): Partitioning = {
+      numPartitions: Int,
+      childPartitionings: Seq[Partitioning] = Seq()): Partitioning = {
     requiredDistribution match {
       case AllTuples => SinglePartition
+
       case ClusteredDistribution(clustering, numClusters, hashingFunctionClass) =>
-        HashPartitioning(clustering, numClusters.getOrElse(numPartitions),
-          hashingFunctionClass.getOrElse(classOf[Murmur3Hash]))
+        assert(numClusters.isEmpty || numPartitions == numClusters.get)
+
+        hashingFunctionClass match {
+          case Some(clazz) =>
+            HashPartitioning(clustering, numPartitions, clazz)
+          case None =>
+            val distinctChildHashingFunctions = childPartitionings.map {
+              case HashPartitioning(_, _, hashingFunction) => hashingFunction
+              case _ => classOf[Murmur3Hash]
+            }.distinct
+
+            // If all the children use the same hashing function, then use it. Else fallback to the
+            // default hashing function (ie. Murmur3Hash). This might not be the most optimal thing
+            // to do. eg. In case of join, if left child is hashed using HiveHash and the right one
+            // using Murmur3Hash, this would shuffle the left relation. If the left relation is
+            // larger than the right relation, the cost of shuffling it will be high. Instead more
+            // optimal thing to do would be to shuffle the right relation using HiveHash so that
+            // at the join side both the children are shuffled using the same hashing function.
+            // Using Murmur3Hash might turn out better if there are downstream operator's needing
+            // data partitioned over Murmur3Hash which cannot be estimated at this point.
+            val targetHashingClass = if (distinctChildHashingFunctions.length == 1) {
+              distinctChildHashingFunctions.head
+            } else {
+              classOf[Murmur3Hash]
+            }
+            HashPartitioning(clustering, numPartitions, targetHashingClass)
+        }
+
       case OrderedDistribution(ordering) => RangePartitioning(ordering, numPartitions)
       case dist => sys.error(s"Do not know how to satisfy distribution $dist")
     }
@@ -137,8 +167,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
             //
             // It will be great to introduce a new Partitioning to represent the post-shuffle
             // partitions when one post-shuffle partition includes multiple pre-shuffle partitions.
-            val targetPartitioning =
-              createPartitioning(distribution, defaultNumPreShufflePartitions)
+            val numPartitions = distribution.numPartitions.getOrElse(defaultNumPreShufflePartitions)
+            val targetPartitioning = createPartitioning(distribution, numPartitions)
             assert(targetPartitioning.isInstanceOf[HashPartitioning])
             ShuffleExchange(targetPartitioning, child, Some(coordinator))
         }
@@ -157,6 +187,15 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
     assert(requiredChildDistributions.length == children.length)
     assert(requiredChildOrderings.length == children.length)
 
+    // We don't expect an operator to expect different number of partitions across its children
+    val distinctNumPartitonsExpected = requiredChildDistributions.flatMap(_.numPartitions).distinct
+    assert(distinctNumPartitonsExpected.size <= 1)
+    val numPreShufflePartitions = if (distinctNumPartitonsExpected.isEmpty) {
+      defaultNumPreShufflePartitions
+    } else {
+      distinctNumPartitonsExpected.head
+    }
+
     // Ensure that the operator's children satisfy their output distribution requirements:
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
@@ -164,7 +203,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       case (child, BroadcastDistribution(mode)) =>
         BroadcastExchangeExec(mode, child)
       case (child, distribution) =>
-        ShuffleExchange(createPartitioning(distribution, defaultNumPreShufflePartitions), child)
+        ShuffleExchange(createPartitioning(distribution, numPreShufflePartitions), child)
     }
 
     // If the operator has multiple children and specifies child output distributions (e.g. join),
@@ -181,11 +220,18 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       // First check if the existing partitions of the children all match. This means they are
       // partitioned by the same partitioning into the same number of partitions. In that case,
       // don't try to make them match `defaultPartitions`, just use the existing partitioning.
-      val maxChildrenNumPartitions = children.map(_.outputPartitioning.numPartitions).max
-      val useExistingPartitioning = children.zip(requiredChildDistributions).forall {
-        case (child, distribution) =>
-          child.outputPartitioning.guarantees(
-            createPartitioning(distribution, maxChildrenNumPartitions))
+      val childPartitionings = children.map(_.outputPartitioning)
+      val maxChildrenNumPartitions = childPartitionings.map(_.numPartitions).max
+      val useExistingPartitioning = childPartitionings.zip(requiredChildDistributions).forall {
+        case (childPartitioning, distribution) =>
+          distribution.numPartitions match {
+            case Some(expectedPartitions) if expectedPartitions != maxChildrenNumPartitions =>
+              false
+            case None =>
+              val targetPartitioning =
+                createPartitioning(distribution, maxChildrenNumPartitions, childPartitionings)
+              childPartitioning.guarantees(targetPartitioning)
+          }
       }
 
       children = if (useExistingPartitioning) {
@@ -196,21 +242,32 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
         // Now, we will determine the number of partitions that will be used by created
         // partitioning schemes.
         val numPartitions = {
-          // Let's see if we need to shuffle all child's outputs when we use
-          // maxChildrenNumPartitions.
-          val shufflesAllChildren = children.zip(requiredChildDistributions).forall {
-            case (child, distribution) =>
-              !child.outputPartitioning.guarantees(
-                createPartitioning(distribution, maxChildrenNumPartitions))
+          if (distinctNumPartitonsExpected.nonEmpty) {
+            distinctNumPartitonsExpected.head
+          } else {
+            // Let's see if we need to shuffle all child's outputs when we use
+            // maxChildrenNumPartitions.
+            val shufflesAllChildren = children.zip(requiredChildDistributions).forall {
+              case (child, distribution) =>
+                distribution.numPartitions match {
+                  case Some(expectedPartitions) if expectedPartitions != maxChildrenNumPartitions =>
+                    true
+                  case None =>
+                    val targetPartitioning =
+                      createPartitioning(distribution, maxChildrenNumPartitions, childPartitionings)
+                    !child.outputPartitioning.guarantees(targetPartitioning)
+                }
+            }
+            // If we need to shuffle all children, we use numPreShufflePartitions as the
+            // number of partitions. Otherwise, we use maxChildrenNumPartitions.
+            if (shufflesAllChildren) numPreShufflePartitions else maxChildrenNumPartitions
           }
-          // If we need to shuffle all children, we use defaultNumPreShufflePartitions as the
-          // number of partitions. Otherwise, we use maxChildrenNumPartitions.
-          if (shufflesAllChildren) defaultNumPreShufflePartitions else maxChildrenNumPartitions
         }
 
         children.zip(requiredChildDistributions).map {
           case (child, distribution) =>
-            val targetPartitioning = createPartitioning(distribution, numPartitions)
+            val targetPartitioning =
+              createPartitioning(distribution, numPartitions, childPartitionings)
             if (child.outputPartitioning.guarantees(targetPartitioning)) {
               child
             } else {
