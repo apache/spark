@@ -17,18 +17,18 @@
 
 package org.apache.spark.broadcast
 
+import java.io.File
 import java.util.Locale
 
 import scala.util.Random
-
 import org.scalatest.Assertions
-
 import org.apache.spark._
 import org.apache.spark.io.SnappyCompressionCodec
 import org.apache.spark.rdd.RDD
 import org.apache.spark.security.EncryptionFunSuite
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.storage._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 // Dummy class that creates a broadcast variable but doesn't use it
@@ -48,6 +48,46 @@ class DummyBroadcastClass(rdd: RDD[Int]) extends Serializable {
 }
 
 class BroadcastSuite extends SparkFunSuite with LocalSparkContext with EncryptionFunSuite {
+
+  test("Creating TorrentBroadcast failed with bad disk") {
+    val torrentConf = new SparkConf()
+      .set("spark.broadcast.factory", "org.apache.spark.broadcast.TorrentBroadcastFactory")
+    val tmp = System.getProperty("java.io.tmpdir")
+    val badDisk = tmp + "/BAD_DISK"
+    // Only use one disk
+    torrentConf.set("spark.local.dir", badDisk)
+    sc = new SparkContext("local", "test", torrentConf)
+    val list = List[Int](1, 2, 3, 4)
+    // delete this dir to simulate  a bad disk
+    Utils.deleteRecursively(new File(badDisk))
+    try {
+      sc.broadcast(list)
+      assert(false, "Won't be here")
+    } catch {
+      case e: SparkException =>
+        assert(true)
+    }
+  }
+
+  test("Creating TorrentBroadcast success with bad disks and good disks") {
+    val torrentConf = new SparkConf()
+      .set("spark.broadcast.factory", "org.apache.spark.broadcast.TorrentBroadcastFactory")
+    val tmp = System.getProperty("java.io.tmpdir")
+    val badDisk = tmp + "/BAD_DISK"
+    torrentConf.set("spark.local.dir", s"${tmp}/GOOD_DISK1,${tmp}/GOOD_DISK2,${badDisk}")
+    val list = List[Int](1, 2, 3, 4)
+    sc = new SparkContext("local", "test", torrentConf)
+    // delete this dir to simulate  a bad disk
+    Utils.deleteRecursively(new File(badDisk))
+    try {
+      val broadcast = sc.broadcast(list)
+      val results = sc.parallelize(1 to 2).map(x => (x, broadcast.value.sum))
+      assert(results.collect().toSet === Set((1, 10), (2, 10)))
+    } catch {
+      case e: SparkException =>
+        assert(false, "Won't be here")
+    }
+  }
 
   test("Using TorrentBroadcast locally") {
     sc = new SparkContext("local", "test")
