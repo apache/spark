@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
-import org.apache.spark.sql.execution.SQLExecution
 
 
 /**
@@ -40,10 +39,10 @@ case class AnalyzeTableCommand(
     }
     val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
 
-    val oldTotalSize = tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(0L)
+    val oldTotalSize = tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(-1L)
     val oldRowCount = tableMeta.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
     var newStats: Option[CatalogStatistics] = None
-    if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
+    if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
       newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
     }
     // We only set rowCount when noscan is false, because otherwise:

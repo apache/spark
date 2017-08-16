@@ -59,9 +59,7 @@ abstract class JsonDataSource extends Serializable {
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): Option[StructType] = {
     if (inputPaths.nonEmpty) {
-      val jsonSchema = infer(sparkSession, inputPaths, parsedOptions)
-      checkConstraints(jsonSchema)
-      Some(jsonSchema)
+      Some(infer(sparkSession, inputPaths, parsedOptions))
     } else {
       None
     }
@@ -71,17 +69,6 @@ abstract class JsonDataSource extends Serializable {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       parsedOptions: JSONOptions): StructType
-
-  /** Constraints to be imposed on schema to be stored. */
-  private def checkConstraints(schema: StructType): Unit = {
-    if (schema.fieldNames.length != schema.fieldNames.distinct.length) {
-      val duplicateColumns = schema.fieldNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }.mkString(", ")
-      throw new AnalysisException(s"Duplicate column(s) : $duplicateColumns found, " +
-        s"cannot save to JSON format")
-    }
-  }
 }
 
 object JsonDataSource {

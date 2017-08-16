@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -1275,7 +1276,7 @@ object functions {
    */
   def expr(expr: String): Column = {
     val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
-      new SparkSqlParser
+      new SparkSqlParser(new SQLConf)
     }
     Column(parser.parseExpression(expr))
   }
@@ -1321,7 +1322,8 @@ object functions {
   def asin(columnName: String): Column = asin(Column(columnName))
 
   /**
-   * Computes the tangent inverse of the given value.
+   * Computes the tangent inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1329,7 +1331,8 @@ object functions {
   def atan(e: Column): Column = withExpr { Atan(e.expr) }
 
   /**
-   * Computes the tangent inverse of the given column.
+   * Computes the tangent inverse of the given column; the returned angle is in the range
+   * -pi/2 through pi/2
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1338,7 +1341,7 @@ object functions {
 
   /**
    * Returns the angle theta from the conversion of rectangular coordinates (x, y) to
-   * polar coordinates (r, theta).
+   * polar coordinates (r, theta). Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1470,7 +1473,7 @@ object functions {
   }
 
   /**
-   * Computes the cosine of the given value.
+   * Computes the cosine of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1565,10 +1568,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def greatest(exprs: Column*): Column = withExpr {
-    require(exprs.length > 1, "greatest requires at least 2 arguments.")
-    Greatest(exprs.map(_.expr))
-  }
+  def greatest(exprs: Column*): Column = withExpr { Greatest(exprs.map(_.expr)) }
 
   /**
    * Returns the greatest value of the list of column names, skipping null values.
@@ -1672,10 +1672,7 @@ object functions {
    * @since 1.5.0
    */
   @scala.annotation.varargs
-  def least(exprs: Column*): Column = withExpr {
-    require(exprs.length > 1, "least requires at least 2 arguments.")
-    Least(exprs.map(_.expr))
-  }
+  def least(exprs: Column*): Column = withExpr { Least(exprs.map(_.expr)) }
 
   /**
    * Returns the least value of the list of column names, skipping null values.
@@ -1943,7 +1940,7 @@ object functions {
   def signum(columnName: String): Column = signum(Column(columnName))
 
   /**
-   * Computes the sine of the given value.
+   * Computes the sine of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -1975,7 +1972,7 @@ object functions {
   def sinh(columnName: String): Column = sinh(Column(columnName))
 
   /**
-   * Computes the tangent of the given value.
+   * Computes the tangent of the given value. Units in radians.
    *
    * @group math_funcs
    * @since 1.4.0
@@ -2117,7 +2114,7 @@ object functions {
    * Calculates the hash code of given columns, and returns the result as an int column.
    *
    * @group misc_funcs
-   * @since 2.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
   def hash(cols: Column*): Column = withExpr {
@@ -3077,9 +3074,8 @@ object functions {
    * string.
    *
    * @param e a string column containing JSON data.
-   * @param schema the schema to use when parsing the json string as a json string. In Spark 2.1,
-   *               the user-provided schema has to be in JSON format. Since Spark 2.2, the DDL
-   *               format is also supported for the schema.
+   * @param schema the schema to use when parsing the json string as a json string, it could be a
+   *               JSON format string or a DDL-formatted string.
    *
    * @group collection_funcs
    * @since 2.3.0

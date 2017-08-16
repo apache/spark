@@ -58,8 +58,8 @@ private[spark] object TestUtils {
   def createJarWithClasses(
       classNames: Seq[String],
       toStringValue: String = "",
-      classNamesWithBase: Seq[(String, String)] = Seq(),
-      classpathUrls: Seq[URL] = Seq()): URL = {
+      classNamesWithBase: Seq[(String, String)] = Seq.empty,
+      classpathUrls: Seq[URL] = Seq.empty): URL = {
     val tempDir = Utils.createTempDir()
     val files1 = for (name <- classNames) yield {
       createCompiledClass(name, tempDir, toStringValue, classpathUrls = classpathUrls)
@@ -137,7 +137,7 @@ private[spark] object TestUtils {
     val options = if (classpathUrls.nonEmpty) {
       Seq("-classpath", classpathUrls.map { _.getFile }.mkString(File.pathSeparator))
     } else {
-      Seq()
+      Seq.empty
     }
     compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
 
@@ -160,7 +160,7 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq()): File = {
+      classpathUrls: Seq[URL] = Seq.empty): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
     val sourceFile = new JavaSourceFromString(className,
       "public class " + className + extendsText + " implements java.io.Serializable {" +

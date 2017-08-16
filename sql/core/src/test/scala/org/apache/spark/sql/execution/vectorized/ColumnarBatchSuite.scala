@@ -709,6 +709,55 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }}
   }
 
+  test("toArray for primitive types") {
+    // (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: Nil).foreach { memMode => {
+      val len = 4
+
+      val columnBool = ColumnVector.allocate(len, new ArrayType(BooleanType, false), memMode)
+      val boolArray = Array(false, true, false, true)
+      boolArray.zipWithIndex.map { case (v, i) => columnBool.arrayData.putBoolean(i, v) }
+      columnBool.putArray(0, 0, len)
+      assert(columnBool.getArray(0).toBooleanArray === boolArray)
+
+      val columnByte = ColumnVector.allocate(len, new ArrayType(ByteType, false), memMode)
+      val byteArray = Array[Byte](0, 1, 2, 3)
+      byteArray.zipWithIndex.map { case (v, i) => columnByte.arrayData.putByte(i, v) }
+      columnByte.putArray(0, 0, len)
+      assert(columnByte.getArray(0).toByteArray === byteArray)
+
+      val columnShort = ColumnVector.allocate(len, new ArrayType(ShortType, false), memMode)
+      val shortArray = Array[Short](0, 1, 2, 3)
+      shortArray.zipWithIndex.map { case (v, i) => columnShort.arrayData.putShort(i, v) }
+      columnShort.putArray(0, 0, len)
+      assert(columnShort.getArray(0).toShortArray === shortArray)
+
+      val columnInt = ColumnVector.allocate(len, new ArrayType(IntegerType, false), memMode)
+      val intArray = Array(0, 1, 2, 3)
+      intArray.zipWithIndex.map { case (v, i) => columnInt.arrayData.putInt(i, v) }
+      columnInt.putArray(0, 0, len)
+      assert(columnInt.getArray(0).toIntArray === intArray)
+
+      val columnLong = ColumnVector.allocate(len, new ArrayType(LongType, false), memMode)
+      val longArray = Array[Long](0, 1, 2, 3)
+      longArray.zipWithIndex.map { case (v, i) => columnLong.arrayData.putLong(i, v) }
+      columnLong.putArray(0, 0, len)
+      assert(columnLong.getArray(0).toLongArray === longArray)
+
+      val columnFloat = ColumnVector.allocate(len, new ArrayType(FloatType, false), memMode)
+      val floatArray = Array(0.0F, 1.1F, 2.2F, 3.3F)
+      floatArray.zipWithIndex.map { case (v, i) => columnFloat.arrayData.putFloat(i, v) }
+      columnFloat.putArray(0, 0, len)
+      assert(columnFloat.getArray(0).toFloatArray === floatArray)
+
+      val columnDouble = ColumnVector.allocate(len, new ArrayType(DoubleType, false), memMode)
+      val doubleArray = Array(0.0, 1.1, 2.2, 3.3)
+      doubleArray.zipWithIndex.map { case (v, i) => columnDouble.arrayData.putDouble(i, v) }
+      columnDouble.putArray(0, 0, len)
+      assert(columnDouble.getArray(0).toDoubleArray === doubleArray)
+    }}
+  }
+
   test("Struct Column") {
     (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
       val schema = new StructType().add("int", IntegerType).add("double", DoubleType)
