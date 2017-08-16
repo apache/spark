@@ -762,7 +762,7 @@ class SparkSubmitSuite
       (Set(jar1.toURI.toString, jar2.toURI.toString))
     sysProps("spark.yarn.dist.files").split(",").toSet should be
       (Set(file1.toURI.toString, file2.toURI.toString))
-    sysProps("spark.submit.pyFiles").split(",").toSet should be
+    sysProps("spark.yarn.dist.pyFiles").split(",").toSet should be
       (Set(pyFile1.getAbsolutePath, pyFile2.getAbsolutePath))
     sysProps("spark.yarn.dist.archives").split(",").toSet should be
       (Set(archive1.toURI.toString, archive2.toURI.toString))
