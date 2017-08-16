@@ -262,13 +262,16 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
  * @param rank rank of the matrix factorization model
  * @param userFactors a DataFrame that stores user factors in two columns: `id` and `features`
  * @param itemFactors a DataFrame that stores item factors in two columns: `id` and `features`
+ * @param blockSize number of records for each block, adjust this parameter to improve
+ *                  the efficiency of cartesian product
  */
 @Since("1.3.0")
 class ALSModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.4.0") val rank: Int,
     @transient val userFactors: DataFrame,
-    @transient val itemFactors: DataFrame)
+    @transient val itemFactors: DataFrame,
+    @Since("2.2.0") var blockSize: Int = 4096)
   extends Model[ALSModel] with ALSModelParams with MLWritable {
 
   /** @group setParam */
@@ -282,6 +285,13 @@ class ALSModel private[ml] (
   /** @group setParam */
   @Since("1.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
+  /** @group setParam */
+  @Since("2.2.0")
+  def setBlockSize(blockSize: Int): this.type = {
+    this.blockSize = blockSize
+    this
+  }
 
   /** @group expertSetParam */
   @Since("2.2.0")
@@ -341,7 +351,7 @@ class ALSModel private[ml] (
    */
   @Since("2.2.0")
   def recommendForAllUsers(numItems: Int): DataFrame = {
-    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems)
+    recommendForAll(userFactors, itemFactors, $(userCol), $(itemCol), numItems, blockSize)
   }
 
   /**
@@ -352,7 +362,7 @@ class ALSModel private[ml] (
    */
   @Since("2.2.0")
   def recommendForAllItems(numUsers: Int): DataFrame = {
-    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers)
+    recommendForAll(itemFactors, userFactors, $(itemCol), $(userCol), numUsers, blockSize)
   }
 
   /**
@@ -375,6 +385,7 @@ class ALSModel private[ml] (
    * @param srcOutputColumn name of the column for the source ID in the output DataFrame
    * @param dstOutputColumn name of the column for the destination ID in the output DataFrame
    * @param num max number of recommendations for each record
+   * @param blockSize number of records for each block
    * @return a DataFrame of (srcOutputColumn: Int, recommendations), where recommendations are
    *         stored as an array of (dstOutputColumn: Int, rating: Float) Rows.
    */
@@ -383,11 +394,12 @@ class ALSModel private[ml] (
       dstFactors: DataFrame,
       srcOutputColumn: String,
       dstOutputColumn: String,
-      num: Int): DataFrame = {
+      num: Int,
+      blockSize: Int = 4096): DataFrame = {
     import srcFactors.sparkSession.implicits._
 
-    val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])])
-    val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])])
+    val srcFactorsBlocked = blockify(srcFactors.as[(Int, Array[Float])], blockSize)
+    val dstFactorsBlocked = blockify(dstFactors.as[(Int, Array[Float])], blockSize)
     val ratings = srcFactorsBlocked.crossJoin(dstFactorsBlocked)
       .as[(Seq[(Int, Array[Float])], Seq[(Int, Array[Float])])]
       .flatMap { case (srcIter, dstIter) =>
@@ -425,7 +437,6 @@ class ALSModel private[ml] (
 
   /**
    * Blockifies factors to improve the efficiency of cross join
-   * TODO: SPARK-20443 - expose blockSize as a param?
    */
   private def blockify(
       factors: Dataset[(Int, Array[Float])],

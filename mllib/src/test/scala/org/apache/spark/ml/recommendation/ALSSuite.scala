@@ -731,7 +731,7 @@ class ALSSuite
     Seq(2, 4, 6).foreach { k =>
       val n = math.min(k, numItems).toInt
       val expectedUpToN = expected.mapValues(_.slice(0, n))
-      val topItems = model.recommendForAllUsers(k)
+      val topItems = model.setBlockSize(2048).recommendForAllUsers(k)
       assert(topItems.count() == numUsers)
       assert(topItems.columns.contains("user"))
       checkRecommendations(topItems, expectedUpToN, "item")
@@ -752,7 +752,7 @@ class ALSSuite
     Seq(2, 3, 4).foreach { k =>
       val n = math.min(k, numUsers).toInt
       val expectedUpToN = expected.mapValues(_.slice(0, n))
-      val topUsers = getALSModel.recommendForAllItems(k)
+      val topUsers = getALSModel.setBlockSize(2048).recommendForAllItems(k)
       assert(topUsers.count() == numItems)
       assert(topUsers.columns.contains("item"))
       checkRecommendations(topUsers, expectedUpToN, "user")
