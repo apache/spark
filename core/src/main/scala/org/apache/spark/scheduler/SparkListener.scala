@@ -56,9 +56,6 @@ case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListe
 case class SparkListenerSpeculativeTaskSubmitted(stageId: Int) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExtraExecutorNeeded() extends SparkListenerEvent
-
-@DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
     stageAttemptId: Int,
