@@ -410,7 +410,10 @@ private[spark] class ExecutorAllocationManager(
     executors.foreach { executorIdToBeRemoved =>
       if (newExecutorTotal - 1 < minNumExecutors) {
         logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
-          s"$newExecutorTotal executor(s) left (limit $minNumExecutors)")
+          s"$newExecutorTotal executor(s) left (minimum number of executor limit $minNumExecutors)")
+      } else if (newExecutorTotal - 1 < numExecutorsTarget) {
+        logDebug(s"Not removing idle executor $executorIdToBeRemoved because there are only " +
+          s"$newExecutorTotal executor(s) left (number of executor target $numExecutorsTarget)")
       } else if (canBeKilled(executorIdToBeRemoved)) {
         executorIdsToBeRemoved += executorIdToBeRemoved
         newExecutorTotal -= 1
