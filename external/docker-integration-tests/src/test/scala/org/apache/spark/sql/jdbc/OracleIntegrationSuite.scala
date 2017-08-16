@@ -21,7 +21,7 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 import java.math.BigDecimal
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -79,9 +79,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.commit()
 
     conn.prepareStatement(
-      "CREATE TABLE custom_column_types (id NUMBER, n1 number(1), n2 number(1))").executeUpdate()
+      "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 number(1), n2 number(1))").executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO custom_column_types values(12312321321321312312312312123, 1, 0)").executeUpdate()
+      "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)").executeUpdate()
     conn.commit()
 
     sql(
@@ -276,11 +276,12 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(row.getTimestamp(1).equals(timestampVal))
   }
 
-  test("SPARK-20427/SPARK-20921: read table use custom schema") {
+  test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
 
+    val props = new Properties()
     // default will throw IllegalArgumentException
     val e = intercept[org.apache.spark.SparkException] {
-      spark.read.jdbc(jdbcUrl, "custom_column_types", new Properties()).collect()
+      spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", props).collect()
     }
     assert(e.getMessage.contains(
       "requirement failed: Decimal precision 39 exceeds max precision 38"))
@@ -291,9 +292,36 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       StructField("N1", IntegerType, true),
       StructField("N2", BooleanType, true)))
 
-    val dfRead = spark.read.schema(schema).jdbc(jdbcUrl, "custom_column_types", new Properties())
-    val rows = dfRead.collect()
+    val dfRead = spark.read.schema(schema).jdbc(jdbcUrl, "tableWithCustomSchema", props)
+    verify(dfRead)
 
+    // throw exception if custom schema field names does not match table column names
+    val wrongSchema = StructType(Seq(
+      StructField("ID", DecimalType(DecimalType.MAX_PRECISION, 0)),
+      StructField("N2", BooleanType, true)))
+
+    intercept[IllegalArgumentException] {
+      spark.read.schema(wrongSchema).jdbc(jdbcUrl, "tableWithCustomSchema", props).count()
+    }.getMessage.contains("Field ID,N2 does not match ID,N1,N2.")
+  }
+
+  test("SPARK-20427/SPARK-20921: read table use custom schema by DDL-like") {
+    sql(
+      s"""
+         |CREATE TEMPORARY VIEW tableWithCustomSchema (
+         |  ID decimal(38, 0),
+         |  N1 int,
+         |  N2 boolean
+         |)
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', dbTable 'tableWithCustomSchema')
+      """.stripMargin.replaceAll("\n", " "))
+
+    verify(sql("select * from tableWithCustomSchema"))
+  }
+
+  def verify(df: DataFrame): Unit = {
+    val rows = df.collect()
     // verify the data type inserted
     val types = rows(0).toSeq.map(x => x.getClass.toString)
     assert(types(0).equals("class java.math.BigDecimal"))
@@ -305,14 +333,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
     assert(values.getBoolean(2).equals(false))
-
-    // throw exception if custom schema field names does not match table column names
-    val wrongSchema = StructType(Seq(
-      StructField("ID", DecimalType(DecimalType.MAX_PRECISION, 0)),
-      StructField("N2", BooleanType, true)))
-
-    intercept[IllegalArgumentException] {
-      spark.read.schema(wrongSchema).jdbc(jdbcUrl, "CUSTOM_COLUMN_TYPES", new Properties()).count()
-    }.getMessage.contains("Field ID,N2 does not match ID,N1,N2.")
   }
+
 }

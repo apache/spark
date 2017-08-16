@@ -23,7 +23,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
-import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -111,17 +110,18 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
+  // This is resolved by names, only check the column names.
   override val schema: StructType = {
     val schema = JDBCRDD.resolveTable(jdbcOptions)
     val customSchema = jdbcOptions.customSchema
     if (customSchema.isDefined) {
-      val schemaFieldNames = schema.fieldNames.mkString(",")
-      val customSchemaFieldNames = customSchema.get.fieldNames.mkString(",")
-      if(schemaFieldNames.equals(customSchemaFieldNames)) {
+      val fieldNames = schema.fieldNames.mkString(",")
+      val customFieldNames = customSchema.get.fieldNames.mkString(",")
+      if ((sqlContext.conf.caseSensitiveAnalysis && fieldNames.equals(customFieldNames)) ||
+        fieldNames.toLowerCase.equals(customFieldNames.toLowerCase)) {
         customSchema.get
       } else {
-        throw new IllegalArgumentException(
-          s"Field ${customSchemaFieldNames} does not match ${schemaFieldNames}.")
+        throw new IllegalArgumentException(s"Field $customFieldNames does not match $fieldNames.")
       }
     } else {
       schema

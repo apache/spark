@@ -270,7 +270,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
-    assertNoSpecifiedSchema("jdbc")
+    if (userSpecifiedSchema.isDefined) {
+      this.extraOptions += (JDBCOptions.JDBC_CUSTOM_SCHEMA -> userSpecifiedSchema.get.json)
+    }
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
     val options = new JDBCOptions(url, table, params)
