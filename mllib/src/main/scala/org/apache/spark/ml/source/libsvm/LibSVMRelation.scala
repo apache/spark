@@ -72,12 +72,12 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
 
   override def toString: String = "LibSVM"
 
-  private def verifySchema(dataSchema: StructType): Unit = {
+  private def verifySchema(dataSchema: StructType, forWriting: Boolean): Unit = {
     if (
       dataSchema.size != 2 ||
         !dataSchema(0).dataType.sameType(DataTypes.DoubleType) ||
         !dataSchema(1).dataType.sameType(new VectorUDT()) ||
-        !(dataSchema(1).metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt > 0)
+        !(forWriting || dataSchema(1).metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt > 0)
     ) {
       throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
     }
@@ -119,7 +119,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    verifySchema(dataSchema)
+    verifySchema(dataSchema, true)
     new OutputWriterFactory {
       override def newInstance(
           path: String,
@@ -142,7 +142,7 @@ private[libsvm] class LibSVMFileFormat extends TextBasedFileFormat with DataSour
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    verifySchema(dataSchema)
+    verifySchema(dataSchema, false)
     val numFeatures = dataSchema("features").metadata.getLong(LibSVMOptions.NUM_FEATURES).toInt
     assert(numFeatures > 0)
 
