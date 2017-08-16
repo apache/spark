@@ -249,9 +249,7 @@ class OrcSourceSuite extends OrcSuite {
         StructField("a", IntegerType, nullable = true),
         StructField("b", StringType, nullable = true)))
     assertResult(
-      """leaf-0 = (LESS_THAN a 10)
-        |expr = leaf-0
-      """.stripMargin.trim
+      "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
     ) {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
@@ -261,9 +259,7 @@ class OrcSourceSuite extends OrcSuite {
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
     assertResult(
-      """leaf-0 = (LESS_THAN a 10)
-        |expr = leaf-0
-      """.stripMargin.trim
+      "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
     ) {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),

@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.orc
 
 import java.util.Locale
 
+import org.apache.orc.OrcConf
+
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.internal.SQLConf
 
@@ -42,7 +44,7 @@ private[orc] class OrcOptions(
   val compressionCodec: String = {
     // `compression`, `orc.compress`, and `spark.sql.orc.compression.codec` are
     // in order of precedence from highest to lowest.
-    val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
+    val orcCompressionConf = parameters.get(OrcConf.COMPRESS.getAttribute)
     val codecName = parameters
       .get("compression")
       .orElse(orcCompressionConf)
@@ -65,4 +67,11 @@ private[orc] object OrcOptions {
     "snappy" -> "SNAPPY",
     "zlib" -> "ZLIB",
     "lzo" -> "LZO")
+
+  val extensionsForCompressionCodecNames = Map(
+    "NONE" -> "",
+    "UNCOMPRESSED" -> "",
+    "SNAPPY" -> ".snappy",
+    "ZLIB" -> ".zlib",
+    "LZO" -> ".lzo")
 }
