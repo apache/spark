@@ -22,8 +22,8 @@ import scala.collection.mutable.{ArrayBuffer, Stack}
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -134,7 +134,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def collectGroupingExpressions(plan: LogicalPlan): ExpressionSet = plan match {
     case Aggregate(groupingExpressions, aggregateExpressions, child) =>
       ExpressionSet.apply(groupingExpressions)
-    case _ => ExpressionSet(Seq())
+    case _ => ExpressionSet(Seq.empty)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {

@@ -1167,7 +1167,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2.0)))
+    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2)))
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -1333,7 +1333,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.ofRows(spark, OneRowRelation).createOrReplaceTempView("one_row")
+      Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1971,7 +1971,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
     val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
-    checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
+    checkAnswer(df, Row(BigDecimal(0)) :: Nil)
   }
 
   test("SPARK-19893: cannot run set operations with map type") {
@@ -2022,5 +2022,11 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val df2 = df.as("t2")
       assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
     }
+  }
+
+  test("order-by ordinal.") {
+    checkAnswer(
+      testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
+      Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
 }

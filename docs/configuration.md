@@ -536,6 +536,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.reducer.maxBlocksInFlightPerAddress</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote blocks being fetched per reduce task from a
+    given host port. When a large number of blocks are being requested from a given address in a
+    single fetch or simultaneously, this could crash the serving executor or Node Manager. This
+    is especially useful to reduce the load on the Node Manager when external shuffle is enabled.
+    You can mitigate this issue by setting it to a lower value.
+  </td>
+</tr>
+<tr>
   <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
   <td>Long.MaxValue</td>
   <td>
@@ -620,6 +631,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>1024</td>
   <td>
     Max number of entries to keep in the index cache of the shuffle service.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.maxChunksBeingTransferred</code></td>
+  <td>Long.MAX_VALUE</td>
+  <td>
+    The max number of chunks allowed to be transferred at the same time on shuffle service.
+    Note that new incoming connections will be closed when the max number is hit. The client will
+    retry according to the shuffle retry configs (see <code>spark.shuffle.io.maxRetries</code> and
+    <code>spark.shuffle.io.retryWait</code>), if those limits are reached the task will fail with
+    fetch failure.
   </td>
 </tr>
 <tr>
@@ -1061,7 +1083,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.replication.proactive<code></td>
+  <td><code>spark.storage.replication.proactive</code></td>
   <td>false</td>
   <td>
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
@@ -2335,5 +2357,37 @@ The location of these configuration files varies across Hadoop versions, but
 a common location is inside of `/etc/hadoop/conf`. Some tools create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/spark-env.sh`
+To make these files visible to Spark, set `HADOOP_CONF_DIR` in `$SPARK_HOME/conf/spark-env.sh`
 to a location containing the configuration files.
+
+# Custom Hadoop/Hive Configuration
+
+If your Spark application is interacting with Hadoop, Hive, or both, there are probably Hadoop/Hive
+configuration files in Spark's classpath.
+
+Multiple running applications might require different Hadoop/Hive client side configurations.
+You can copy and modify `hdfs-site.xml`, `core-site.xml`, `yarn-site.xml`, `hive-site.xml` in
+Spark's classpath for each application. In a Spark cluster running on YARN, these configuration
+files are set cluster-wide, and cannot safely be changed by the application.
+
+The better choice is to use spark hadoop properties in the form of `spark.hadoop.*`. 
+They can be considered as same as normal spark properties which can be set in `$SPARK_HOME/conf/spark-defalut.conf`
+
+In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
+instance, Spark allows you to simply create an empty conf and set spark/spark hadoop properties.
+
+{% highlight scala %}
+val conf = new SparkConf().set("spark.hadoop.abc.def","xyz")
+val sc = new SparkContext(conf)
+{% endhighlight %}
+
+Also, you can modify or add configurations at runtime:
+{% highlight bash %}
+./bin/spark-submit \ 
+  --name "My app" \ 
+  --master local[4] \  
+  --conf spark.eventLog.enabled=false \ 
+  --conf "spark.executor.extraJavaOptions=-XX:+PrintGCDetails -XX:+PrintGCTimeStamps" \ 
+  --conf spark.hadoop.abc.def=xyz \ 
+  myApp.jar
+{% endhighlight %}

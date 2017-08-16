@@ -22,8 +22,8 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps

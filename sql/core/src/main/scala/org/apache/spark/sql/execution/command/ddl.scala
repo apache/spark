@@ -671,11 +671,11 @@ case class AlterTableRecoverPartitionsCommand(
         } else {
           logWarning(
             s"expected partition column ${partitionNames.head}, but got ${ps(0)}, ignoring it")
-          Seq()
+          Seq.empty
         }
       } else {
         logWarning(s"ignore ${new Path(path, name)}")
-        Seq()
+        Seq.empty
       }
     }
   }

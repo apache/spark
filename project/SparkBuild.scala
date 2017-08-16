@@ -30,7 +30,7 @@ import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
-import org.scalastyle.sbt.ScalastylePlugin._
+import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
 
 import spray.revolver.RevolverPlugin._
@@ -116,7 +116,7 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
     .settings(
-      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.8.0"
+      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.9.0"
     )
 
   lazy val scalaStyleOnCompile = taskKey[Unit]("scalaStyleOnCompile")
@@ -230,7 +230,8 @@ object SparkBuild extends PomBuild {
 
     javacOptions in Compile ++= Seq(
       "-encoding", "UTF-8",
-      "-source", javacJVMVersion.value
+      "-source", javacJVMVersion.value,
+      "-Xlint:unchecked"
     ),
     // This -target option cannot be set in the Compile configuration scope since `javadoc` doesn't
     // play nicely with it; see https://github.com/sbt/sbt/issues/355#issuecomment-3817629 for
@@ -589,7 +590,7 @@ object PySparkAssembly {
       val zipFile = new File(BuildCommons.sparkHome , "python/lib/pyspark.zip")
       zipFile.delete()
       zipRecursive(src, zipFile)
-      Seq[File]()
+      Seq.empty[File]
     }).value
   )
 
@@ -810,7 +811,7 @@ object TestSettings {
           require(d.mkdir() || d.isDirectory(), s"Failed to create directory $d")
         }
       }
-      Seq[File]()
+      Seq.empty[File]
     }).value,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
     // Remove certain packages from Scaladoc

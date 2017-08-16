@@ -190,8 +190,8 @@
       <artifactId>snappy-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>net.jpountz.lz4</groupId>
-      <artifactId>lz4</artifactId>
+      <groupId>org.lz4</groupId>
+      <artifactId>lz4-java</artifactId>
     </dependency>
     <dependency>
       <groupId>org.roaringbitmap</groupId>
@@ -429,6 +429,7 @@
           <!-- When using SPARK_PREPEND_CLASSES Spark classes compiled locally don't use
                shaded deps. So here we store jars in their original form which are added
                when the classpath is computed. -->
+          <!-- See similar execution in mllib/pom.xml -->
           <execution>
             <id>copy-dependencies</id>
             <phase>package</phase>

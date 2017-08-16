@@ -80,7 +80,7 @@ object DecimalPrecision extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     // fix decimal precision for expressions
-    case q => q.transformExpressions(
+    case q => q.transformExpressionsUp(
       decimalAndDecimal.orElse(integralAndDecimalLiteral).orElse(nondecimalAndDecimal))
   }
 

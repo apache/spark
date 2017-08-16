@@ -110,6 +110,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
+      Int.MaxValue,
       true)
 
     // 3 local blocks fetched in initialization
@@ -187,6 +188,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
+      Int.MaxValue,
       true)
 
     verify(blocks(ShuffleBlockId(0, 0, 0)), times(0)).release()
@@ -254,6 +256,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
+      Int.MaxValue,
       true)
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -317,6 +320,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blocksByAddress,
       (_, in) => new LimitedInputStream(in, 100),
       48 * 1024 * 1024,
+      Int.MaxValue,
       Int.MaxValue,
       Int.MaxValue,
       true)
@@ -400,6 +404,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       48 * 1024 * 1024,
       Int.MaxValue,
       Int.MaxValue,
+      Int.MaxValue,
       false)
 
     // Continue only after the mock calls onBlockFetchFailure
@@ -457,6 +462,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         (_, in) => in,
         maxBytesInFlight = Int.MaxValue,
         maxReqsInFlight = Int.MaxValue,
+        maxBlocksInFlightPerAddress = Int.MaxValue,
         maxReqSizeShuffleToMem = 200,
         detectCorrupt = true)
     }

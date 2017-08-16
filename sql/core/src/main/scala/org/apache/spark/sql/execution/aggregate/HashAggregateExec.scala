@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.TaskContext
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -96,7 +96,7 @@ case class HashAggregateExec(
     val spillSize = longMetric("spillSize")
     val avgHashProbe = longMetric("avgHashProbe")
 
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
@@ -106,6 +106,7 @@ case class HashAggregateExec(
       } else {
         val aggregationIterator =
           new TungstenAggregationIterator(
+            partIndex,
             groupingExpressions,
             aggregateExpressions,
             aggregateAttributes,
