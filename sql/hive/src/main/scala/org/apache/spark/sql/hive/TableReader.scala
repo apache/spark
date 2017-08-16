@@ -41,6 +41,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -227,7 +228,8 @@ class HadoopTableReader(
       def fillPartitionKeys(rawPartValues: Array[String], row: InternalRow): Unit = {
         partitionKeyAttrs.foreach { case (attr, ordinal) =>
           val partOrdinal = partitionKeys.indexOf(attr)
-          row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType).eval(null)
+          row(ordinal) = Cast(Literal(rawPartValues(partOrdinal)), attr.dataType,
+            Option(SQLConf.get.sessionLocalTimeZone)).eval(null)
         }
       }
 

@@ -68,4 +68,25 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       sql("DROP TABLE IF EXISTS createAndInsertTest")
     }
   }
+
+  test("SPARK-21739: Cast expression should initialize timezoneId " +
+    "when it is called statically to convert something into TimestampType") {
+    // create table for test
+    sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED by (ts timestamp)")
+    sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
+      "partition (ts = '2010-01-01 00:00:00.000') VALUES (1)")
+    sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
+      "partition (ts = '2010-01-02 00:00:00.000') VALUES (2)")
+
+    // test for Cast expression in TableReader
+    checkAnswer(sql("select value from table_with_timestamp_partition"),
+      Seq(Row(1), Row(2)))
+
+    // test for Cast expression in HiveTableScanExec
+    checkAnswer(sql("select value from table_with_timestamp_partition " +
+      "where ts='2010-01-02 00:00:00.000'"), Row(1))
+
+    sql("DROP TABLE IF EXISTS table_with_timestamp_partition")
+  }
+
 }
