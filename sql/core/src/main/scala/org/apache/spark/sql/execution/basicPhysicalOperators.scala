@@ -149,7 +149,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       s"""
          |$evaluated
          |${ev.code}
-         |if (${nullCheck}!${ev.value}) $effectiveContinueStatement
+         |if (${nullCheck}!${ev.value}) $continueStatementInDoConsume
        """.stripMargin
     }
 
@@ -317,7 +317,7 @@ case class SampleExec(
          """.stripMargin.trim)
 
       s"""
-         | if ($sampler.sample() == 0) $effectiveContinueStatement
+         | if ($sampler.sample() == 0) $continueStatementInDoConsume
          | $numOutput.add(1);
          | ${consume(ctx, input)}
        """.stripMargin.trim

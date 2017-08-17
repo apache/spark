@@ -547,7 +547,7 @@ case class SortMergeJoinExec(
     }
   }
 
-  override protected def isConsumeInSeparateFunc: Boolean = false
+  override protected def doConsumeInChainOfFunc: Boolean = false
 
   override def doProduce(ctx: CodegenContext): String = {
     ctx.copyResult = true

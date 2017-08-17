@@ -89,7 +89,7 @@ case class ExpandExec(
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
 
-  override protected def isConsumeInSeparateFunc: Boolean = false
+  override protected def doConsumeInChainOfFunc: Boolean = false
 
   protected override def doProduce(ctx: CodegenContext): String = {
     child.asInstanceOf[CodegenSupport].produce(ctx, this)

@@ -192,7 +192,7 @@ case class BroadcastHashJoinExec(
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val continueStatement = if (uniqueKeyCodePath) {
-      effectiveContinueStatement
+      continueStatementInDoConsume
     } else {
       "continue;"
     }
@@ -242,7 +242,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) $effectiveContinueStatement
+         |if ($matched == null) $continueStatementInDoConsume
          |$checkCondition
          |$numOutput.add(1);
          |${consume(ctx, resultVars)}
@@ -257,7 +257,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) $effectiveContinueStatement
+         |if ($matches == null) $continueStatementInDoConsume
          |while ($matches.hasNext()) {
          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
          |  $checkCondition
@@ -359,7 +359,7 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) $effectiveContinueStatement
+         |if ($matched == null) $continueStatementInDoConsume
          |$checkCondition
          |$numOutput.add(1);
          |${consume(ctx, input)}
@@ -373,14 +373,14 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) $effectiveContinueStatement
+         |if ($matches == null) $continueStatementInDoConsume
          |boolean $found = false;
          |while (!$found && $matches.hasNext()) {
          |  UnsafeRow $matched = (UnsafeRow) $matches.next();
          |  $checkCondition
          |  $found = true;
          |}
-         |if (!$found) $effectiveContinueStatement
+         |if (!$found) $continueStatementInDoConsume
          |$numOutput.add(1);
          |${consume(ctx, input)}
        """.stripMargin
@@ -432,7 +432,7 @@ case class BroadcastHashJoinExec(
          |      $checkCondition
          |      $found = true;
          |    }
-         |    if ($found) $effectiveContinueStatement
+         |    if ($found) $continueStatementInDoConsume
          |  }
          |}
          |$numOutput.add(1);

@@ -177,7 +177,7 @@ case class SortExec(
      """.stripMargin.trim
   }
 
-  override protected def isConsumeInSeparateFunc: Boolean = false
+  override protected def doConsumeInChainOfFunc: Boolean = false
 
   protected override val shouldStopRequired = false
 

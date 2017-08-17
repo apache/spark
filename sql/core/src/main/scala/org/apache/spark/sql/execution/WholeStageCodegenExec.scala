@@ -161,7 +161,6 @@ trait CodegenSupport extends SparkPlan {
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val consumeFunc =
       if (row == null && outputVars.nonEmpty && requireAllOutput) {
-        parentConsumeInSeparateFunc = true
         constructDoConsumeFunction(ctx, inputVars)
       } else {
         parent.doConsume(ctx, inputVars, rowVar)
@@ -174,16 +173,16 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-   * To prevent concatenated function growing too long to be optimized by JIT. We decide to separate
-   * the consume function of each `CodegenSupport` operator into a function to call in runtime. When
-   * it is happened, we set this variable to `true`.
+   * To prevent concatenated function growing too long to be optimized by JIT. Instead of inlining,
+   * we may put the consume logic of parent operator into a function and set this flag to `true`.
+   * The parent operator can know if its consume logic is inlined or in separated function.
    */
-  private var parentConsumeInSeparateFunc: Boolean = false
+  private var doConsumeInFunc: Boolean = false
 
   /**
    * Returning true means we have at least one consume logic from child operator or this operator is
-   * separated in a function. If this is `true`, parent operator shouldn't use `continue` statement,
-   * because its generated codes aren't enclosed in main while-loop.
+   * separated in a function. If this is `true`, this operator shouldn't use `continue` statement to
+   * continue on next row, because its generated codes aren't enclosed in main while-loop.
    *
    * For example, we have generated codes for a query plan like:
    *   Op1Exec
@@ -198,24 +197,21 @@ trait CodegenSupport extends SparkPlan {
    *   private boolean Op2Exec_doConsume(...) {
    *     ... // logic of Op2Exec to consume rows.
    *   }
-   * For now, `isConsumeInSeparateFunc` of Op2Exec will be `true`.
+   * For now, `doConsumeInChainOfFunc` of Op2Exec will be `true`.
    *
    * Notice for some operators like `HashAggregateExec`, it doesn't chain previous consume functions
-   * but begins with its produce framework. We should override `isConsumeInSeparateFunc` to return
+   * but begins with its produce framework. We should override `doConsumeInChainOfFunc` to return
    * `false`.
    */
-  protected def isConsumeInSeparateFunc: Boolean = {
+  protected def doConsumeInChainOfFunc: Boolean = {
     val codegenChildren = children.map(_.asInstanceOf[CodegenSupport])
-    codegenChildren.exists(_.parentConsumeInSeparateFunc) ||
-      codegenChildren.exists(_.isConsumeInSeparateFunc)
+    doConsumeInFunc || codegenChildren.exists(_.doConsumeInChainOfFunc)
   }
 
   /**
-   * Returning true means we have at least one consume logic from child operator or this operator is
-   * separated in a function. If this is `true`, parent operator shouldn't use `continue` statement,
-   * because its generated codes aren't enclosed in main while-loop.
+   * The actual java statement this operator should use if there is a need to continue on next row
+   * in its `doConsume` codes.
    *
-   * We use the same example in `isConsumeInSeparateFunc`'s comment:
    *   while (...) {
    *     ...       // logic of Op3Exec.
    *     Op2Exec_doConsume(...);
@@ -224,6 +220,7 @@ trait CodegenSupport extends SparkPlan {
    *     ...       // logic of Op2Exec to consume rows.
    *     continue; // Wrong. We can't use continue with the while-loop.
    *   }
+   * In above code, we can't use `continue` in `Op2Exec_doConsume`.
    *
    * Instead, we do something like:
    *   while (...) {
@@ -236,25 +233,22 @@ trait CodegenSupport extends SparkPlan {
    *     return true; // When we need to do continue, we return true.
    *   }
    */
-  protected def effectiveContinueStatement: String = if (isConsumeInSeparateFunc) {
-    // When the separated consume logic in parent operators needs to do continue for outer loop,
-    // we consider if this plan's consume or any child's consume logic is separated in functions.
-    // If yes, we can't simply do continue. Instead, we return `true`.
+  protected def continueStatementInDoConsume: String = if (doConsumeInChainOfFunc) {
     "return true;";
   } else {
-    // In the end of this separated consume function chain, we can do continue as usual.
     "continue;"
   }
 
   /**
-   * To prevent concatenated function growing too long to be optimized by JIT. We separate the
-   * consume function of each `CodegenSupport` operator into a function to call.
+   * To prevent concatenated function growing too long to be optimized by JIT. We can separate the
+   * parent's `doConsume` codes of a `CodegenSupport` operator into a function to call.
    */
   protected def constructDoConsumeFunction(
       ctx: CodegenContext,
       inputVars: Seq[ExprCode]): String = {
     val (callingParams, arguList, inputVarsInFunc) =
       constructConsumeParameters(ctx, output, inputVars)
+    parent.doConsumeInFunc = true
     val rowVar = ExprCode("", "false", "unsafeRow")
     val doConsume = ctx.freshName("doConsume")
     val doConsumeFuncName = ctx.addNewFunction(doConsume,
@@ -267,7 +261,7 @@ trait CodegenSupport extends SparkPlan {
 
     s"""
        | boolean continueForLoop = $doConsumeFuncName($callingParams);
-       | if (continueForLoop) $effectiveContinueStatement
+       | if (continueForLoop) $continueStatementInDoConsume
      """.stripMargin
   }
 
@@ -388,7 +382,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
     child.execute() :: Nil
   }
 
-  override protected def isConsumeInSeparateFunc: Boolean = false
+  override protected def doConsumeInChainOfFunc: Boolean = false
 
   override def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
