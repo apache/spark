@@ -941,6 +941,13 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Get the local machine's FQDN.
+   */
+  def localCanonicalHostName(): String = {
+    customHostname.getOrElse(localIpAddress.getCanonicalHostName)
+  }
+
+  /**
    * Get the local machine's hostname.
    */
   def localHostName(): String = {
