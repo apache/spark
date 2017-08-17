@@ -149,13 +149,21 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         // SPARK-21759:
         // It is possibly that the subquery plan has more output than value expressions, because
         // the condition expressions in `ListQuery` might use part of subquery plan's output.
-        // For example, in the following query plan, the condition of `ListQuery` uses value#207
-        // from the subquery query. For now the size of output of subquery is 2, the size of value
-        // is 1.
-        //
-        //   Filter key#201 IN (list#200 [(value#207 = min(value)#204)])
-        //   :  +- Project [key#206, value#207]
-        //   :     +- Filter (value#207 > val_9)
+        // For example, in the following query plan, the condition of `ListQuery` uses d#3.
+        // from the subquery query. For now the size of output of subquery is 2(c#2, d#3), the
+        // size of value is 1 (a#0).
+        // Query:
+        //   SELECT t1.a FROM t1
+        //   WHERE
+        //   t1.a IN (SELECT t2.c
+        //           FROM t2
+        //           WHERE t1.b < t2.d);
+        // Query Plan:
+        //   Project [a#0]
+        //   +- Filter a#0 IN (list#4 [(b#1 < d#3)])
+        //      :  +- Project [c#2, d#3]
+        //      :     +- LocalRelation <empty>, [c#2, d#3]
+        //      +- LocalRelation <empty>, [a#0, b#1]
 
         // Take the subset of output which are not going to match with value expressions and also
         // not used in condition expressions, if any.
