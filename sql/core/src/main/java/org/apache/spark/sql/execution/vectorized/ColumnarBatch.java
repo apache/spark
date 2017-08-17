@@ -293,73 +293,69 @@ public final class ColumnarBatch {
 
     @Override
     public void setNullAt(int ordinal) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNull(rowId);
+      getColumnAsMutable(ordinal).putNull(rowId);
     }
 
     @Override
     public void setBoolean(int ordinal, boolean value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putBoolean(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putBoolean(rowId, value);
     }
 
     @Override
     public void setByte(int ordinal, byte value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putByte(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putByte(rowId, value);
     }
 
     @Override
     public void setShort(int ordinal, short value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putShort(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putShort(rowId, value);
     }
 
     @Override
     public void setInt(int ordinal, int value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putInt(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putInt(rowId, value);
     }
 
     @Override
     public void setLong(int ordinal, long value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putLong(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putLong(rowId, value);
     }
 
     @Override
     public void setFloat(int ordinal, float value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putFloat(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putFloat(rowId, value);
     }
 
     @Override
     public void setDouble(int ordinal, double value) {
-      assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putDouble(rowId, value);
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putDouble(rowId, value);
     }
 
     @Override
     public void setDecimal(int ordinal, Decimal value, int precision) {
+      MutableColumnVector column = getColumnAsMutable(ordinal);
+      column.putNotNull(rowId);
+      column.putDecimal(rowId, value, precision);
+    }
+
+    private MutableColumnVector getColumnAsMutable(int ordinal) {
       assert (columns[ordinal] instanceof MutableColumnVector);
       assert (!columns[ordinal].isConstant);
-      ((MutableColumnVector) columns[ordinal]).putNotNull(rowId);
-      ((MutableColumnVector) columns[ordinal]).putDecimal(rowId, value, precision);
+      return (MutableColumnVector) columns[ordinal];
     }
   }
 
