@@ -79,7 +79,8 @@ class AttributeSetSuite extends SparkFunSuite {
     assert(aSet == AttributeSet(aUpper :: Nil))
   }
 
-  test("SPARK-18394 keep a deterministic output order along with attribute names") {
+  test("SPARK-18394 keep a deterministic output order along with attribute names and exprIds") {
+    // Checks a simple case
     val attrSeqA = {
       val attr1 = AttributeReference("c1", IntegerType)(exprId = ExprId(1098))
       val attr2 = AttributeReference("c2", IntegerType)(exprId = ExprId(107))
@@ -107,5 +108,14 @@ class AttributeSetSuite extends SparkFunSuite {
     }
 
     assert(attrSeqA === attrSeqB)
+
+    // Checks the same column names having different exprIds
+    val attr1 = AttributeReference("c", IntegerType)(exprId = ExprId(1098))
+    val attr2 = AttributeReference("c", IntegerType)(exprId = ExprId(107))
+    val attrSetA = AttributeSet(attr1 :: attr2 :: Nil)
+    val attr3 = AttributeReference("c", IntegerType)(exprId = ExprId(389))
+    val attrSetB = AttributeSet(attr3 :: Nil)
+
+    assert((attrSetA ++ attrSetB).toSeq === attr2 :: attr3 :: attr1 :: Nil)
   }
 }
