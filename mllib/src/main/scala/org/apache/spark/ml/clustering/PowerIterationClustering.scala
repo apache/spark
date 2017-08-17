@@ -107,7 +107,8 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
  * Note that we implement [[PowerIterationClustering]] as a transformer. The [[transform]] is an
  * expensive operation, because it uses PIC algorithm to cluster the whole input dataset.
  *
- * @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering Spectral clustering (Wikipedia)</a>
+ * @see <a href=http://en.wikipedia.org/wiki/Spectral_clustering>
+ * Spectral clustering (Wikipedia)</a>
  */
 @Since("2.3.0")
 @Experimental
