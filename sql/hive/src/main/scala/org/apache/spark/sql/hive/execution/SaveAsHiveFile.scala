@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
@@ -31,6 +33,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
   protected def saveAsHiveFile(sparkSession: SparkSession,
                                plan: SparkPlan,
+                               hadoopConf: Configuration,
                                fileSinkConf: FileSinkDesc,
                                outputLocation: String,
                                partitionAttributes: Seq[Attribute] = Nil,
@@ -38,7 +41,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
                                options: Map[String, String] = Map.empty): Unit = {
 
     val sessionState = sparkSession.sessionState
-    val hadoopConf = sessionState.newHadoopConf()
 
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
     if (isCompressed) {

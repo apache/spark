@@ -325,6 +325,7 @@ case class InsertIntoHiveTable(
     saveAsHiveFile(
       sparkSession = sparkSession,
       plan = children.head,
+      hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = tmpLocation.toString,
       partitionAttributes = partitionAttributes)

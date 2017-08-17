@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.File
 import java.net.URI
 import java.util.Properties
 
 import scala.language.existentials
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.HiveSerDe
-import org.apache.spark.util.{SerializableJobConf, Utils}
+import org.apache.spark.util.Utils
 
 
 case class InsertIntoDirCommand(path: String,
@@ -75,8 +75,9 @@ case class InsertIntoDirCommand(path: String,
         properties = Map())
     }
 
+    val pathUri = if (isLocal) Utils.resolveURI(path) else new URI(path)
     val storage = CatalogStorageFormat(
-      locationUri = Some(new URI(path)),
+      locationUri = Some(pathUri),
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
@@ -96,31 +97,38 @@ case class InsertIntoDirCommand(path: String,
       properties
     )
 
-    val targetPath = new Path(path)
-    val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
-      targetPath.toString, tableDesc, false)
-
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val jobConf = new JobConf(hadoopConf)
-    jobConf.set("mapreduce.fileoutputcommitter.marksuccessfuljobs", "false")
-    val jobConfSer = new SerializableJobConf(jobConf)
 
-    FileSystem.get(jobConf).delete(targetPath, true)
+    val targetPath = new Path(path)
+    val writeToPath =
+      if (isLocal) {
+        val localFileSystem = FileSystem.getLocal(jobConf)
+        val localPath = localFileSystem.makeQualified(targetPath)
+        if (localFileSystem.exists(localPath)) {
+          localFileSystem.delete(localPath, true)
+        }
+        localPath
+      } else {
+        val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
+        val dfs = qualifiedPath.getFileSystem(jobConf)
+        if (dfs.exists(qualifiedPath)) {
+          dfs.delete(qualifiedPath, true)
+        } else {
+          dfs.mkdirs(qualifiedPath.getParent)
+        }
+        qualifiedPath
+      }
+
+    val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
+      writeToPath.toString, tableDesc, false)
 
     saveAsHiveFile(
       sparkSession = sparkSession,
       plan = children.head,
+      hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
       outputLocation = path)
-
-//    val outputPath = FileOutputFormat.getOutputPath(jobConf)
-//    if( isLocal ) {
-//      Utils.deleteRecursively(new File(path))
-//      outputPath.getFileSystem(hadoopConf).copyToLocalFile(true, outputPath, targetPath)
-//      log.info(s"Copied results from ${outputPath} to local dir ${path}")
-//    } else {
-//      log.info(s"Results available at path ${outputPath}")
-//    }
 
     Seq.empty[Row]
   }
