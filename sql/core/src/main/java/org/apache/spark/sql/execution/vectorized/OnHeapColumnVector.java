@@ -32,6 +32,28 @@ public final class OnHeapColumnVector extends MutableColumnVector {
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
+  /**
+   * Allocates columns to store elements of each field of the schema on heap.
+   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
+   * in number of elements, not number of bytes.
+   */
+  public static OnHeapColumnVector[] allocateColumns(int capacity, StructType schema) {
+    return allocateColumns(capacity, schema.fields());
+  }
+
+  /**
+   * Allocates columns to store elements of each field on heap.
+   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
+   * in number of elements, not number of bytes.
+   */
+  public static OnHeapColumnVector[] allocateColumns(int capacity, StructField[] fields) {
+    OnHeapColumnVector[] vectors = new OnHeapColumnVector[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+    }
+    return vectors;
+  }
+
   // The data stored in these arrays need to maintain binary compatible. We can
   // directly pass this buffer to external components.
 

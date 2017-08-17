@@ -91,12 +91,8 @@ class VectorizedHashMapGenerator(
        |    $generatedAggBufferSchema
        |
        |  public $generatedClassName() {
-       |    batchVectors = new org.apache.spark.sql.execution.vectorized
-       |      .OnHeapColumnVector[schema.fields().length];
-       |    for (int i = 0; i < schema.fields().length; i++) {
-       |      batchVectors[i] = new org.apache.spark.sql.execution.vectorized.OnHeapColumnVector(
-       |        capacity, schema.fields()[i].dataType());
-       |    }
+       |    batchVectors = org.apache.spark.sql.execution.vectorized
+       |      .OnHeapColumnVector.allocateColumns(capacity, schema);
        |    batch = new org.apache.spark.sql.execution.vectorized.ColumnarBatch(
        |      schema, batchVectors, capacity);
        |

@@ -199,13 +199,11 @@ public class ColumnVectorUtils {
   public static ColumnarBatch toBatch(
       StructType schema, MemoryMode memMode, Iterator<Row> row) {
     int capacity = ColumnarBatch.DEFAULT_BATCH_SIZE;
-    MutableColumnVector[] columnVectors = new MutableColumnVector[schema.fields().length];
-    for (int i = 0; i < schema.fields().length; i++) {
-      if (memMode == MemoryMode.OFF_HEAP) {
-        columnVectors[i] = new OffHeapColumnVector(capacity, schema.fields()[i].dataType());
-      } else {
-        columnVectors[i] = new OnHeapColumnVector(capacity, schema.fields()[i].dataType());
-      }
+    MutableColumnVector[] columnVectors;
+    if (memMode == MemoryMode.OFF_HEAP) {
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, schema);
+    } else {
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
     }
 
     int n = 0;

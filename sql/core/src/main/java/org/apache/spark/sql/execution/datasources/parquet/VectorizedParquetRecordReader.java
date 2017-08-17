@@ -178,14 +178,10 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     }
 
     int capacity = ColumnarBatch.DEFAULT_BATCH_SIZE;
-    columnVectors = new MutableColumnVector[batchSchema.fields().length];
-    for (int i = 0; i < batchSchema.fields().length; i++) {
-      StructField field = batchSchema.fields()[i];
-      if (memMode == MemoryMode.OFF_HEAP) {
-        columnVectors[i] = new OffHeapColumnVector(capacity, field.dataType());
-      } else {
-        columnVectors[i] = new OnHeapColumnVector(capacity, field.dataType());
-      }
+    if (memMode == MemoryMode.OFF_HEAP) {
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, batchSchema);
+    } else {
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, batchSchema);
     }
     columnarBatch = new ColumnarBatch(batchSchema, columnVectors, capacity);
     if (partitionColumns != null) {
