@@ -140,25 +140,58 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   require(list != null, "list should not be null")
   override def checkInputDataTypes(): TypeCheckResult = {
     list match {
-      case ListQuery(sub, _, _) :: Nil =>
+      case (l @ ListQuery(sub, children, _)) :: Nil =>
         val valExprs = value match {
           case cns: CreateNamedStruct => cns.valExprs
           case expr => Seq(expr)
         }
-        if (valExprs.length != sub.output.length) {
-          TypeCheckResult.TypeCheckFailure(
+
+        // SPARK-21759:
+        // It is possibly that the subquery plan has more output than value expressions, because
+        // the condition expressions in `ListQuery` might use part of subquery plan's output.
+        // For example, in the following query plan, the condition of `ListQuery` uses value#207
+        // from the subquery query. For now the size of output of subquery is 2, the size of value
+        // is 1.
+        //
+        //   Filter key#201 IN (list#200 [(value#207 = min(value)#204)])
+        //   :  +- Project [key#206, value#207]
+        //   :     +- Filter (value#207 > val_9)
+
+        // Take the subset of output which are not going to match with value expressions and also
+        // not used in condition expressions, if any.
+        val subqueryOutputNotInCondition = sub.output.drop(valExprs.length).filter { attr =>
+          l.children.forall { c =>
+            !c.references.contains(attr)
+          }
+        }
+
+        val basicErrorMessage =
+          s"""
+             |The number of columns in the left hand side of an IN subquery does not match the
+             |number of columns in the output of subquery.
+             |#columns in left hand side: ${valExprs.length}.
+             |#columns in right hand side: ${sub.output.length}.
+             |Left side columns:
+             |[${valExprs.map(_.sql).mkString(", ")}].
+             |Right side columns:
+             |[${sub.output.map(_.sql).mkString(", ")}].
+           """.stripMargin
+
+        if (valExprs.length > sub.output.length) {
+          TypeCheckResult.TypeCheckFailure(basicErrorMessage)
+        } else if (subqueryOutputNotInCondition.nonEmpty) {
+          val finalErrorMessage = basicErrorMessage +
             s"""
-               |The number of columns in the left hand side of an IN subquery does not match the
-               |number of columns in the output of subquery.
-               |#columns in left hand side: ${valExprs.length}.
-               |#columns in right hand side: ${sub.output.length}.
-               |Left side columns:
-               |[${valExprs.map(_.sql).mkString(", ")}].
-               |Right side columns:
-               |[${sub.output.map(_.sql).mkString(", ")}].
-             """.stripMargin)
+               | The additional output in subquery aren't used in the condition of subquery.
+               | Additional output:
+               | [${subqueryOutputNotInCondition.map(_.sql).mkString(", ")}].
+               | Condition:
+               | [${children.map(_.sql).mkString(", ")}].
+               | ${l.references}
+             """.stripMargin
+          TypeCheckResult.TypeCheckFailure(finalErrorMessage)
         } else {
-          val mismatchedColumns = valExprs.zip(sub.output).flatMap {
+          val mismatchedColumns = valExprs.zip(sub.output.take(valExprs.length)).flatMap {
             case (l, r) if l.dataType != r.dataType =>
               s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
             case _ => None
