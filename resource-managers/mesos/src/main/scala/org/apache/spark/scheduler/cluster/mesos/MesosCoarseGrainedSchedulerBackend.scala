@@ -57,10 +57,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
     with org.apache.mesos.Scheduler with MesosSchedulerUtils {
 
-  this.hadoopDelegationTokenManager = Some(new HadoopDelegationTokenManager(
-    sc.conf, sc.hadoopConfiguration))
-
-  this.hadoopDelegationCreds = getHadoopDelegationCreds()
+  override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
+    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2

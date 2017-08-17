@@ -100,10 +100,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   @volatile protected var currentExecutorIdCounter = 0
 
   // hadoop token manager used by some sub-classes (e.g. Mesos)
-  protected var hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
+  def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
   // Hadoop delegation tokens to be sent to the executors.
-  protected var hadoopDelegationCreds: Option[Array[Byte]] = None
+  val hadoopDelegationCreds: Option[Array[Byte]] = getHadoopDelegationCreds()
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
