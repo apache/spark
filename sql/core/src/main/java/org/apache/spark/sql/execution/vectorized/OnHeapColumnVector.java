@@ -52,42 +52,7 @@ public final class OnHeapColumnVector extends MutableColumnVector {
 
   public OnHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
-
-    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
-        || DecimalType.isByteArrayDecimalType(type)) {
-      DataType childType;
-      int childCapacity = capacity;
-      if (type instanceof ArrayType) {
-        childType = ((ArrayType)type).elementType();
-      } else {
-        childType = DataTypes.ByteType;
-        childCapacity *= DEFAULT_ARRAY_LENGTH;
-      }
-      this.childColumns = new ColumnVector[1];
-      this.childColumns[0] = new OnHeapColumnVector(childCapacity, childType);
-      this.resultArray = new ColumnVector.Array(this.childColumns[0]);
-      this.resultStruct = null;
-    } else if (type instanceof StructType) {
-      StructType st = (StructType)type;
-      this.childColumns = new ColumnVector[st.fields().length];
-      for (int i = 0; i < childColumns.length; ++i) {
-        this.childColumns[i] = new OnHeapColumnVector(capacity, st.fields()[i].dataType());
-      }
-      this.resultArray = null;
-      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
-    } else if (type instanceof CalendarIntervalType) {
-      // Two columns. Months as int. Microseconds as Long.
-      this.childColumns = new ColumnVector[2];
-      this.childColumns[0] = new OnHeapColumnVector(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = new OnHeapColumnVector(capacity, DataTypes.LongType);
-      this.resultArray = null;
-      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
-    } else {
-      this.childColumns = null;
-      this.resultArray = null;
-      this.resultStruct = null;
-    }
-
+    initialize();
     reserveInternal(capacity);
     reset();
   }
@@ -579,5 +544,10 @@ public final class OnHeapColumnVector extends MutableColumnVector {
     nulls = newNulls;
 
     capacity = newCapacity;
+  }
+
+  @Override
+  protected OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+    return new OnHeapColumnVector(capacity, type);
   }
 }

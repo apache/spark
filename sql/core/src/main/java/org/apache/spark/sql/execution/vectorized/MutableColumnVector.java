@@ -584,6 +584,51 @@ public abstract class MutableColumnVector extends ColumnVector {
   }
 
   /**
+   * Reserve a new column.
+   */
+  protected abstract MutableColumnVector reserveNewColumn(int capacity, DataType type);
+
+  /**
+   * Initialize child columns.
+   */
+  protected void initialize() {
+    if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
+        || DecimalType.isByteArrayDecimalType(type)) {
+      DataType childType;
+      int childCapacity = capacity;
+      if (type instanceof ArrayType) {
+        childType = ((ArrayType)type).elementType();
+      } else {
+        childType = DataTypes.ByteType;
+        childCapacity *= DEFAULT_ARRAY_LENGTH;
+      }
+      this.childColumns = new ColumnVector[1];
+      this.childColumns[0] = reserveNewColumn(childCapacity, childType);
+      this.resultArray = new ColumnVector.Array(this.childColumns[0]);
+      this.resultStruct = null;
+    } else if (type instanceof StructType) {
+      StructType st = (StructType)type;
+      this.childColumns = new ColumnVector[st.fields().length];
+      for (int i = 0; i < childColumns.length; ++i) {
+        this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
+      }
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else if (type instanceof CalendarIntervalType) {
+      // Two columns. Months as int. Microseconds as Long.
+      this.childColumns = new ColumnVector[2];
+      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.resultArray = null;
+      this.resultStruct = new ColumnarBatch.Row(this.childColumns);
+    } else {
+      this.childColumns = null;
+      this.resultArray = null;
+      this.resultStruct = null;
+    }
+  }
+
+  /**
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
