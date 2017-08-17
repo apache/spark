@@ -47,8 +47,8 @@ private[shared] object SharedParamsCodeGen {
         Some("\"probability\"")),
       ParamDesc[String]("varianceCol", "Column name for the biased sample variance of prediction"),
       ParamDesc[Double]("threshold",
-        "threshold in binary classification prediction, in range [0, 1]", Some("0.5"),
-        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
+        "threshold in binary classification prediction, in range [0, 1]",
+        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false, finalFields = false),
       ParamDesc[Array[Double]]("thresholds", "Thresholds in multi-class classification" +
         " to adjust the probability of predicting each class." +
         " Array must have length equal to the number of classes, with values > 0" +
@@ -77,7 +77,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
-        " 0)", isValid = "ParamValidators.gt(0)"),
+        " 0)", isValid = "ParamValidators.gt(0)", finalFields = false),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),

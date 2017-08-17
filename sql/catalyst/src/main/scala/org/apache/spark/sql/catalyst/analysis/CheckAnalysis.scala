@@ -19,8 +19,8 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -108,11 +108,9 @@ trait CheckAnalysis extends PredicateHelper {
           case w @ WindowExpression(AggregateExpression(_, _, true, _), _) =>
             failAnalysis(s"Distinct window functions are not supported: $w")
 
-          case w @ WindowExpression(_: OffsetWindowFunction, WindowSpecDefinition(_, order,
-               SpecifiedWindowFrame(frame,
-                 FrameBoundary(l),
-                 FrameBoundary(h))))
-             if order.isEmpty || frame != RowFrame || l != h =>
+          case w @ WindowExpression(_: OffsetWindowFunction,
+            WindowSpecDefinition(_, order, frame: SpecifiedWindowFrame))
+             if order.isEmpty || !frame.isOffset =>
             failAnalysis("An offset window function can only be evaluated in an ordered " +
               s"row-based window frame with a single offset: $w")
 
@@ -121,14 +119,9 @@ trait CheckAnalysis extends PredicateHelper {
             // function.
             e match {
               case _: AggregateExpression | _: OffsetWindowFunction | _: AggregateWindowFunction =>
+                w
               case _ =>
                 failAnalysis(s"Expression '$e' not supported within a window function.")
-            }
-            // Make sure the window specification is valid.
-            s.validate match {
-              case Some(m) =>
-                failAnalysis(s"Window specification $s is not valid because $m")
-              case None => w
             }
 
           case s: SubqueryExpression =>

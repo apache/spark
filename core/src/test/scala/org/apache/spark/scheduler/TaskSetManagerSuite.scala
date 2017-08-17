@@ -28,11 +28,11 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
 import org.apache.spark._
-import org.apache.spark.internal.config
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock}
+import org.apache.spark.util.{AccumulatorV2, ManualClock, Utils}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -1212,6 +1212,38 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     taskSetManagerSpy.handleFailedTask(taskDesc.get.taskId, TaskState.FAILED, e)
 
     verify(taskSetManagerSpy, times(1)).addPendingTask(anyInt())
+  }
+
+  test("SPARK-21563 context's added jars shouldn't change mid-TaskSet") {
+    sc = new SparkContext("local", "test")
+    val addedJarsPreTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    assert(addedJarsPreTaskSet.size === 0)
+
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet1 = FakeTask.createTaskSet(3)
+    val manager1 = new TaskSetManager(sched, taskSet1, MAX_TASK_FAILURES, clock = new ManualClock)
+
+    // all tasks from the first taskset have the same jars
+    val taskOption1 = manager1.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption1.get.addedJars === addedJarsPreTaskSet)
+    val taskOption2 = manager1.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption2.get.addedJars === addedJarsPreTaskSet)
+
+    // even with a jar added mid-TaskSet
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    sc.addJar(jarPath.toString)
+    val addedJarsMidTaskSet = Map[String, Long](sc.addedJars.toSeq: _*)
+    assert(addedJarsPreTaskSet !== addedJarsMidTaskSet)
+    val taskOption3 = manager1.resourceOffer("exec1", "host1", NO_PREF)
+    // which should have the old version of the jars list
+    assert(taskOption3.get.addedJars === addedJarsPreTaskSet)
+
+    // and then the jar does appear in the next TaskSet
+    val taskSet2 = FakeTask.createTaskSet(1)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, clock = new ManualClock)
+
+    val taskOption4 = manager2.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption4.get.addedJars === addedJarsMidTaskSet)
   }
 
   private def createTaskResult(

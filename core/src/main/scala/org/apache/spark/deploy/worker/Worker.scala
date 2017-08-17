@@ -156,6 +156,8 @@ private[deploy] class Worker(
   private val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   private val workerSource = new WorkerSource(this)
 
+  val reverseProxy = conf.getBoolean("spark.ui.reverseProxy", false)
+
   private var registerMasterFutures: Array[JFuture[_]] = null
   private var registrationRetryTimer: Option[JScheduledFuture[_]] = None
 
@@ -226,7 +228,7 @@ private[deploy] class Worker(
     masterAddressToConnect = Some(masterAddress)
     master = Some(masterRef)
     connected = true
-    if (conf.getBoolean("spark.ui.reverseProxy", false)) {
+    if (reverseProxy) {
       logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
     }
     // Cancel any outstanding re-registration attempts because we found a new master

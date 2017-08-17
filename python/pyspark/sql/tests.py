@@ -1220,6 +1220,18 @@ class SQLTests(ReusedPySparkTestCase):
         rndn2 = df.select('key', functions.randn(0)).collect()
         self.assertEqual(sorted(rndn1), sorted(rndn2))
 
+    def test_string_functions(self):
+        from pyspark.sql.functions import col, lit
+        df = self.spark.createDataFrame([['nick']], schema=['name'])
+        self.assertRaisesRegexp(
+            TypeError,
+            "must be the same type",
+            lambda: df.select(col('name').substr(0, lit(1))))
+        if sys.version_info.major == 2:
+            self.assertRaises(
+                TypeError,
+                lambda: df.select(col('name').substr(long(0), long(1))))
+
     def test_array_contains_function(self):
         from pyspark.sql.functions import array_contains
 
@@ -1241,26 +1253,29 @@ class SQLTests(ReusedPySparkTestCase):
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1.fieldNames(), struct2.names)
         self.assertEqual(struct1, struct2)
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1.fieldNames(), struct2.names)
         self.assertNotEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True),
                               StructField("f2", StringType(), True, None)])
+        self.assertEqual(struct1.fieldNames(), struct2.names)
         self.assertEqual(struct1, struct2)
 
         struct1 = (StructType().add(StructField("f1", StringType(), True))
                    .add(StructField("f2", StringType(), True, None)))
         struct2 = StructType([StructField("f1", StringType(), True)])
+        self.assertNotEqual(struct1.fieldNames(), struct2.names)
         self.assertNotEqual(struct1, struct2)
 
         # Catch exception raised during improper construction
-        with self.assertRaises(ValueError):
-            struct1 = StructType().add("name")
+        self.assertRaises(ValueError, lambda: StructType().add("name"))
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         for field in struct1:
@@ -1273,12 +1288,9 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertIs(struct1["f1"], struct1.fields[0])
         self.assertIs(struct1[0], struct1.fields[0])
         self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
-        with self.assertRaises(KeyError):
-            not_a_field = struct1["f9"]
-        with self.assertRaises(IndexError):
-            not_a_field = struct1[9]
-        with self.assertRaises(TypeError):
-            not_a_field = struct1[9.9]
+        self.assertRaises(KeyError, lambda: struct1["f9"])
+        self.assertRaises(IndexError, lambda: struct1[9])
+        self.assertRaises(TypeError, lambda: struct1[9.9])
 
     def test_parse_datatype_string(self):
         from pyspark.sql.types import _all_atomic_types, _parse_datatype_string
@@ -1963,6 +1975,21 @@ class SQLTests(ReusedPySparkTestCase):
                .selectExpr("name = 'Bob'", 'age <= 15')
                .replace(False, True).first())
         self.assertTupleEqual(row, (True, True))
+
+        # replace list while value is not given (default to None)
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace(["Alice", "Bob"]).first()
+        self.assertTupleEqual(row, (None, 10, 80.0))
+
+        # replace string with None and then drop None rows
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace(u'Alice', None).dropna()
+        self.assertEqual(row.count(), 0)
+
+        # replace with number and None
+        row = self.spark.createDataFrame(
+            [(u'Alice', 10, 80.0)], schema).replace([10, 80], [20, None]).first()
+        self.assertTupleEqual(row, (u'Alice', 20, None))
 
         # should fail if subset is not list, tuple or None
         with self.assertRaises(ValueError):
@@ -3018,8 +3045,8 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
     def test_unsupported_datatype(self):
-        schema = StructType([StructField("array", ArrayType(IntegerType(), False), True)])
-        df = self.spark.createDataFrame([([1, 2, 3],)], schema=schema)
+        schema = StructType([StructField("dt", DateType(), True)])
+        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: df.toPandas())
 

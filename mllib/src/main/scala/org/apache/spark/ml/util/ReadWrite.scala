@@ -96,21 +96,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   @Since("1.6.0")
   @throws[IOException]("If the input path already exists but overwrite is not enabled.")
   def save(path: String): Unit = {
-    val hadoopConf = sc.hadoopConfiguration
-    val outputPath = new Path(path)
-    val fs = outputPath.getFileSystem(hadoopConf)
-    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    if (fs.exists(qualifiedOutputPath)) {
-      if (shouldOverwrite) {
-        logInfo(s"Path $path already exists. It will be overwritten.")
-        // TODO: Revert back to the original content if save is not successful.
-        fs.delete(qualifiedOutputPath, true)
-      } else {
-        throw new IOException(s"Path $path already exists. To overwrite it, " +
-          s"please use write.overwrite().save(path) for Scala and use " +
-          s"write().overwrite().save(path) for Java and Python.")
-      }
-    }
+    new FileSystemOverwrite().handleOverwrite(path, shouldOverwrite, sc)
     saveImpl(path)
   }
 
@@ -469,5 +455,26 @@ private[ml] object MetaAlgorithmReadWrite {
     }
     val subStageMaps = subStages.flatMap(getUidMapImpl)
     List((instance.uid, instance)) ++ subStageMaps
+  }
+}
+
+private[ml] class FileSystemOverwrite extends Logging {
+
+  def handleOverwrite(path: String, shouldOverwrite: Boolean, sc: SparkContext): Unit = {
+    val hadoopConf = sc.hadoopConfiguration
+    val outputPath = new Path(path)
+    val fs = outputPath.getFileSystem(hadoopConf)
+    val qualifiedOutputPath = outputPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    if (fs.exists(qualifiedOutputPath)) {
+      if (shouldOverwrite) {
+        logInfo(s"Path $path already exists. It will be overwritten.")
+        // TODO: Revert back to the original content if save is not successful.
+        fs.delete(qualifiedOutputPath, true)
+      } else {
+        throw new IOException(s"Path $path already exists. To overwrite it, " +
+          s"please use write.overwrite().save(path) for Scala and use " +
+          s"write().overwrite().save(path) for Java and Python.")
+      }
+    }
   }
 }
