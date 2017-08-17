@@ -884,7 +884,7 @@ class LogisticRegression @Since("1.2.0") (
       numClasses, isMultinomial))
 
     val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val logRegSummary = if (numClasses <= 2) {
+    val logRegSummary = if (!isMultinomial) {
       new BinaryLogisticRegressionTrainingSummaryImpl(
         summaryModel.transform(dataset),
         probabilityColName,
@@ -1384,45 +1384,50 @@ sealed trait LogisticRegressionSummary extends Serializable {
         .rdd.map { case Row(prediction: Double, label: Double) => (prediction, label) })
   }
 
-  /** Returns true positive rate for each label. */
+  /** Returns true positive rate for each label (category). */
   @Since("2.3.0")
   def truePositiveRateByLabel: Array[Double] = recallByLabel
 
-  /** Returns false positive rate for each label. */
+  /** Returns false positive rate for each label (category). */
   @Since("2.3.0")
   def falsePositiveRateByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.falsePositiveRate(label))
   }
 
-  /** Returns precision for each label. */
+  /** Returns precision for each label (category). */
   @Since("2.3.0")
   def precisionByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.precision(label))
   }
 
-  /** Returns recall for each label. */
+  /** Returns recall for each label (category). */
   @Since("2.3.0")
   def recallByLabel: Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.recall(label))
   }
 
-  /**
-   * Returns f-measure for each label.
-   */
+  /** Returns f-measure for each label (category). */
   @Since("2.3.0")
   def fMeasureByLabel(beta: Double): Array[Double] = {
     multiclassMetrics.labels.map(label => multiclassMetrics.fMeasure(label, beta))
   }
 
-  /** Returns f1-measure for each label. */
+  /** Returns f1-measure for each label (category). */
   @Since("2.3.0")
   def fMeasureByLabel: Array[Double] = fMeasureByLabel(1.0)
 
-  /** Returns accuracy. */
+  /**
+   * Returns accuracy.
+   * (equals to the total number of correctly classified instances
+   * out of the total number of instances.)
+   */
   @Since("2.3.0")
   def accuracy: Double = multiclassMetrics.accuracy
 
-  /** Returns weighted true positive rate. */
+  /**
+   * Returns weighted true positive rate.
+   * (equals to precision, recall and f-measure)
+   */
   @Since("2.3.0")
   def weightedTruePositiveRate: Double = weightedRecall
 
@@ -1430,7 +1435,10 @@ sealed trait LogisticRegressionSummary extends Serializable {
   @Since("2.3.0")
   def weightedFalsePositiveRate: Double = multiclassMetrics.weightedFalsePositiveRate
 
-  /** Returns weighted averaged recall. */
+  /**
+   * Returns weighted averaged recall.
+   * (equals to precision, recall and f-measure)
+   */
   @Since("2.3.0")
   def weightedRecall: Double = multiclassMetrics.weightedRecall
 
@@ -1438,9 +1446,7 @@ sealed trait LogisticRegressionSummary extends Serializable {
   @Since("2.3.0")
   def weightedPrecision: Double = multiclassMetrics.weightedPrecision
 
-  /**
-   * Returns weighted averaged f-measure.
-   */
+  /** Returns weighted averaged f-measure. */
   @Since("2.3.0")
   def weightedFMeasure(beta: Double): Double = multiclassMetrics.weightedFMeasure(beta)
 
@@ -1456,12 +1462,12 @@ sealed trait LogisticRegressionSummary extends Serializable {
  */
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
-  @Since("1.5.0")
   /** objective function (scaled loss + regularization) at each iteration. */
+  @Since("1.5.0")
   def objectiveHistory: Array[Double]
 
-  @Since("1.5.0")
   /** Number of training iterations. */
+  @Since("1.5.0")
   def totalIterations: Int = objectiveHistory.length
 
 }
