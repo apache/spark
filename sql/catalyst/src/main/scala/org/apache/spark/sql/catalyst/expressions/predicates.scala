@@ -174,20 +174,18 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
              |Left side columns:
              |[${valExprs.map(_.sql).mkString(", ")}].
              |Right side columns:
-             |[${sub.output.map(_.sql).mkString(", ")}].
-           """.stripMargin
+             |[${sub.output.map(_.sql).mkString(", ")}].""".stripMargin
 
         if (valExprs.length > sub.output.length) {
           TypeCheckResult.TypeCheckFailure(basicErrorMessage)
         } else if (subqueryOutputNotInCondition.nonEmpty) {
           val finalErrorMessage = basicErrorMessage +
             s"""
-               | The additional output in subquery aren't used in the condition of subquery.
-               | Additional output:
-               | [${subqueryOutputNotInCondition.map(_.sql).mkString(", ")}].
-               | Condition:
-               | [${children.map(_.sql).mkString(", ")}].
-             """.stripMargin
+               |The additional output in subquery aren't used in the condition of subquery.
+               |Additional output:
+               |[${subqueryOutputNotInCondition.map(_.sql).mkString(", ")}].
+               |Condition:
+               |[${children.map(_.sql).mkString(", ")}].""".stripMargin
           TypeCheckResult.TypeCheckFailure(finalErrorMessage)
         } else {
           val mismatchedColumns = valExprs.zip(sub.output.take(valExprs.length)).flatMap {

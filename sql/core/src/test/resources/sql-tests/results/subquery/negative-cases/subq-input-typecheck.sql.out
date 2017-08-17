@@ -81,7 +81,11 @@ Left side columns:
 [t1.`t1a`].
 Right side columns:
 [t2.`t2a`, t2.`t2b`].
-             ;
+The additional output in subquery aren't used in the condition of subquery.
+Additional output:
+[t2.`t2b`].
+Condition:
+[t1.`t1a`].;
 
 
 -- !query 6
@@ -102,5 +106,4 @@ number of columns in the output of subquery.
 Left side columns:
 [t1.`t1a`, t1.`t1b`].
 Right side columns:
-[t2.`t2a`].
-             ;
+[t2.`t2a`].;
