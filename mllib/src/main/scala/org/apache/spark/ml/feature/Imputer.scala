@@ -144,6 +144,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
 
     val results = $(strategy) match {
       case Imputer.mean =>
+        // Function avg will ignore null automatically.
+        // For a column only containing null, avg will return null.
         val row = dataset.select(cols.map(avg): _*).head()
         Array.range(0, $(inputCols).length).map { i =>
           if (row.isNullAt(i)) {
@@ -154,6 +156,8 @@ class Imputer @Since("2.2.0") (@Since("2.2.0") override val uid: String)
         }
 
       case Imputer.median =>
+        // Function approxQuantile will ignore null automatically.
+        // For a column only containing null, approxQuantile will return an empty array.
         dataset.select(cols: _*).stat.approxQuantile($(inputCols), Array(0.5), 0.001)
           .map { array =>
             if (array.isEmpty) {
