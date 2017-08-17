@@ -45,6 +45,7 @@ object LocalRelation {
 
 case class LocalRelation(output: Seq[Attribute],
                          data: Seq[InternalRow] = Nil,
+                         // Indicates whether this relation came from a streaming source.
                          override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
