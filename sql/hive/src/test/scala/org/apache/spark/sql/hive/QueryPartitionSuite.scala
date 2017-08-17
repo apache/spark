@@ -94,5 +94,4 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
         "where ts = '2010-01-02 00:00:00.000'"), Row(2))
     }
   }
-
 }
