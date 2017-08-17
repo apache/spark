@@ -28,6 +28,7 @@ import org.apache.spark.scheduler.{FakeTask, FakeTaskScheduler, HostTaskLocation
 
 class KubernetesTaskSetManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
+  SparkContext.clearActiveContext()
   val sc = new SparkContext("local", "test")
   val sched = new FakeTaskScheduler(sc,
     ("execA", "10.0.0.1"), ("execB", "10.0.0.2"), ("execC", "10.0.0.3"))

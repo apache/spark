@@ -16,8 +16,6 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
-import java.net.InetAddress
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.deploy.kubernetes.config._
@@ -27,7 +25,7 @@ private[spark] class KubernetesTaskSetManager(
     sched: TaskSchedulerImpl,
     taskSet: TaskSet,
     maxTaskFailures: Int,
-    inetAddressUtil: InetAddressUtil = new InetAddressUtil)
+    inetAddressUtil: InetAddressUtil = InetAddressUtilImpl)
   extends TaskSetManager(sched, taskSet, maxTaskFailures) {
 
   private val conf = sched.sc.conf
@@ -83,12 +81,3 @@ private[spark] class KubernetesTaskSetManager(
   }
 }
 
-// To support mocks in unit tests.
-private[kubernetes] class InetAddressUtil {
-
-  // NOTE: This does issue a network call to DNS. Caching is done internally by the InetAddress
-  // class for both hits and misses.
-  def getFullHostName(ipAddress: String): String = {
-    InetAddress.getByName(ipAddress).getCanonicalHostName
-  }
-}

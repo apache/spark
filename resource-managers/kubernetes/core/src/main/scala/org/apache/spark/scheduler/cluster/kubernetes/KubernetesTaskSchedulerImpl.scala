@@ -16,12 +16,59 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, TaskSet, TaskSetManager}
+import org.apache.spark.util.Utils
 import org.apache.spark.SparkContext
-import org.apache.spark.scheduler.{TaskSchedulerImpl, TaskSet, TaskSetManager}
 
-private[spark] class KubernetesTaskSchedulerImpl(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+private[spark] class KubernetesTaskSchedulerImpl(
+    sc: SparkContext,
+    rackResolverUtil: RackResolverUtil,
+    inetAddressUtil: InetAddressUtil = InetAddressUtilImpl) extends TaskSchedulerImpl(sc) {
 
+  var kubernetesSchedulerBackend: KubernetesClusterSchedulerBackend = null
+
+  def this(sc: SparkContext) = this(sc, new RackResolverUtilImpl(sc.hadoopConfiguration))
+
+  override def initialize(backend: SchedulerBackend): Unit = {
+    super.initialize(backend)
+    kubernetesSchedulerBackend = this.backend.asInstanceOf[KubernetesClusterSchedulerBackend]
+  }
   override def createTaskSetManager(taskSet: TaskSet, maxTaskFailures: Int): TaskSetManager = {
     new KubernetesTaskSetManager(this, taskSet, maxTaskFailures)
+  }
+
+  override def getRackForHost(hostPort: String): Option[String] = {
+    if (!rackResolverUtil.isConfigured) {
+      // Only calls resolver when it is configured to avoid sending DNS queries for cluster nodes.
+      // See InetAddressUtil for details.
+      None
+    } else {
+      getRackForDatanodeOrExecutor(hostPort)
+    }
+  }
+
+  private def getRackForDatanodeOrExecutor(hostPort: String): Option[String] = {
+    val host = Utils.parseHostPort(hostPort)._1
+    val executorPod = kubernetesSchedulerBackend.getExecutorPodByIP(host)
+    val hadoopConfiguration = sc.hadoopConfiguration
+    executorPod.map(
+        pod => {
+          val clusterNodeName = pod.getSpec.getNodeName
+          val rackByNodeName = rackResolverUtil.resolveRack(hadoopConfiguration, clusterNodeName)
+          rackByNodeName.orElse({
+            val clusterNodeIP = pod.getStatus.getHostIP
+            val rackByNodeIP = rackResolverUtil.resolveRack(hadoopConfiguration, clusterNodeIP)
+            rackByNodeIP.orElse({
+              if (conf.get(KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED)) {
+                val clusterNodeFullName = inetAddressUtil.getFullHostName(clusterNodeIP)
+                rackResolverUtil.resolveRack(hadoopConfiguration, clusterNodeFullName)
+              } else {
+                Option.empty
+              }
+            })
+          })
+        }
+      ).getOrElse(rackResolverUtil.resolveRack(hadoopConfiguration, host))
   }
 }
