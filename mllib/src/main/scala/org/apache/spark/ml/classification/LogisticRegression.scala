@@ -884,7 +884,7 @@ class LogisticRegression @Since("1.2.0") (
       numClasses, isMultinomial))
 
     val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val logRegSummary = if (!isMultinomial) {
+    val logRegSummary = if (!isMultinomial || (isMultinomial && numClasses <= 2)) {
       new BinaryLogisticRegressionTrainingSummaryImpl(
         summaryModel.transform(dataset),
         probabilityColName,
