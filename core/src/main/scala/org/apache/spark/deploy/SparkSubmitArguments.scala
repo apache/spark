@@ -30,6 +30,7 @@ import scala.io.Source
 import scala.util.Try
 
 import org.apache.spark.deploy.SparkSubmitAction._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.launcher.SparkSubmitArgumentsParser
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.util.Utils
@@ -170,11 +171,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orElse(sparkProperties.get("spark.driver.cores"))
       .orNull
     executorMemory = Option(executorMemory)
-      .orElse(sparkProperties.get("spark.executor.memory"))
+      .orElse(sparkProperties.get(SparkLauncher.EXECUTOR_MEMORY))
       .orElse(env.get("SPARK_EXECUTOR_MEMORY"))
       .orNull
     executorCores = Option(executorCores)
-      .orElse(sparkProperties.get("spark.executor.cores"))
+      .orElse(sparkProperties.get(SparkLauncher.EXECUTOR_CORES))
       .orElse(env.get("SPARK_EXECUTOR_CORES"))
       .orNull
     totalExecutorCores = Option(totalExecutorCores)

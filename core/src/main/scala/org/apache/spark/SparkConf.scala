@@ -26,6 +26,7 @@ import org.apache.avro.{Schema, SchemaNormalization}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 
@@ -485,7 +486,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
       if (javaOpts.contains("-Xmx")) {
         val msg = s"$executorOptsKey is not allowed to specify max heap memory settings " +
-          s"(was '$javaOpts'). Use spark.executor.memory instead."
+          s"(was '$javaOpts'). Use ${SparkLauncher.EXECUTOR_MEMORY} instead."
         throw new Exception(msg)
       }
     }
@@ -548,9 +549,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
       }
     }
 
-    if (contains("spark.cores.max") && contains("spark.executor.cores")) {
+    if (contains("spark.cores.max") && contains(SparkLauncher.EXECUTOR_CORES)) {
       val totalCores = getInt("spark.cores.max", 1)
-      val executorCores = getInt("spark.executor.cores", 1)
+      val executorCores = getInt(SparkLauncher.EXECUTOR_CORES, 1)
       val leftCores = totalCores % executorCores
       if (leftCores != 0) {
         logWarning(s"Total executor cores: ${totalCores} is not " +
