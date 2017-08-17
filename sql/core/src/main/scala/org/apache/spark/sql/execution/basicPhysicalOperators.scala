@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import java.nio.ByteBuffer
+import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -154,6 +154,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
     val originBuffer = mockGetByteBuffer(0)
 
+    originBuffer.order(ByteOrder.nativeOrder())
+
     while(iter.hasNext) {
       loadRowToBuffer(iter.next, originBuffer)
       // FPGA needs this 16 whatever bytes
@@ -170,6 +172,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   def toInternalRow(buffer: ByteBuffer): Iterator[InternalRow] = {
     var rowCount = FPGARowNumber
+
+    buffer.order(ByteOrder.nativeOrder())
 
     new Iterator[InternalRow] {
 
