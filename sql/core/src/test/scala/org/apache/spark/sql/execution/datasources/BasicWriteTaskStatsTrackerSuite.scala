@@ -56,9 +56,13 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
       tracker: BasicWriteTaskStatsTracker,
       files: Int,
       bytes: Int): Unit = {
-    val stats = tracker.getFinalStats().asInstanceOf[BasicWriteTaskStats]
+    val stats = finalStatus(tracker)
     assert(files === stats.numFiles, "Wrong number of files")
     assert(bytes === stats.numBytes, "Wrong byte count of file size")
+  }
+
+  private def finalStatus(tracker: BasicWriteTaskStatsTracker): BasicWriteTaskStats = {
+    tracker.getFinalStats().asInstanceOf[BasicWriteTaskStats]
   }
 
   test("No files in run") {
@@ -71,6 +75,22 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(missing.toString)
     assertStats(tracker, 1, 0)
+  }
+
+  test("Empty filename is forwarded") {
+    val tracker = new BasicWriteTaskStatsTracker(conf)
+    tracker.newFile("")
+    intercept[IllegalArgumentException] {
+      finalStatus(tracker)
+    }
+  }
+
+  test("Null filename is only picked up in final status") {
+    val tracker = new BasicWriteTaskStatsTracker(conf)
+    tracker.newFile(null)
+    intercept[IllegalArgumentException] {
+      finalStatus(tracker)
+    }
   }
 
   test("0 byte file") {
@@ -98,11 +118,10 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
       assertStats(tracker, 1, 0)
       stream.write(data1)
       stream.flush()
-      // file should exist, but size undefined
-      val stats = tracker.getFinalStats().asInstanceOf[BasicWriteTaskStats]
-      assert(1 === stats.numFiles, "Wrong number of files")
-    } finally
+      assert(1 === finalStatus(tracker).numFiles, "Wrong number of files")
+    } finally {
       stream.close()
+    }
   }
 
   test("Two files") {
@@ -167,8 +186,9 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val stream = localfs.create(file, true)
     try {
       stream.write(data)
-    } finally
-    stream.close()
+    } finally {
+      stream.close()
+    }
     data.length
   }
 
