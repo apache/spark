@@ -109,10 +109,12 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       SchemaUtils.checkNumericType(schema, $(censorCol))
       SchemaUtils.checkNumericType(schema, $(labelCol))
     }
-    if (hasQuantilesCol) {
+
+    val temp_schema = if (hasQuantilesCol) {
       SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
-    }
-    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
+    } else schema
+
+    SchemaUtils.appendColumn(temp_schema, $(predictionCol), DoubleType)
   }
 }
 
