@@ -440,6 +440,45 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("analyze partial partition specifications") {
+
+    val tableName = "analyzeTable_part"
+
+    def assertAnalysisException(partitionSpec: String): Unit = {
+      val message = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName $partitionSpec COMPUTE STATISTICS")
+      }.getMessage
+      assert(message.contains("The list of partition columns with values " +
+        s"in partition specification for table '${tableName.toLowerCase}' in database 'default' " +
+        "is not a prefix of the list of partition columns defined in the table schema"))
+    }
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (key STRING, value STRING)
+           |PARTITIONED BY (a STRING, b INT, c STRING)
+         """.stripMargin)
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (a='a1', b=10, c='c1') SELECT * FROM src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (a='a1') COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (a='a1', b=10) COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (A='a1', b=10) COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (b=10, a='a1') COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (b=10, A='a1') COMPUTE STATISTICS")
+
+      assertAnalysisException("PARTITION (b=10)")
+      assertAnalysisException("PARTITION (a, b=10)")
+      assertAnalysisException("PARTITION (b=10, c='c1')")
+      assertAnalysisException("PARTITION (a, b=10, c='c1')")
+      assertAnalysisException("PARTITION (c='c1')")
+      assertAnalysisException("PARTITION (a, b, c='c1')")
+      assertAnalysisException("PARTITION (a='a1', c='c1')")
+      assertAnalysisException("PARTITION (a='a1', b, c='c1')")
+    }
+  }
+
   test("analyze non-existent partition") {
 
     def assertAnalysisException(analyzeCommand: String, errorMessage: String): Unit = {
