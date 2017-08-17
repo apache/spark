@@ -383,6 +383,8 @@ private[ann] trait TopologyModel extends Serializable {
    *
    * @param data input data
    * @return raw prediction
+   *
+   * Note: This interface is only used for classification Model.
    */
   def predictRaw(data: Vector): Vector
 
@@ -391,6 +393,8 @@ private[ann] trait TopologyModel extends Serializable {
    *
    * @param rawPrediction raw prediction vector
    * @return probability
+   *
+   * Note: This interface is only used for classification Model.
    */
   def raw2ProbabilityInPlace(rawPrediction: Vector): Vector
 
