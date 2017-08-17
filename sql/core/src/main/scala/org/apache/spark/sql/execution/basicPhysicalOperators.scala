@@ -45,7 +45,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   var FPGARowNumber = 0
 
-  val CMCCInputSchema = Array(1, 2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(24)(1)
+  val CMCCInputSchema = Array(2, 3, 3, 3, 1, 3, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(23)(1)
   val CMCCOutputSchema = Array(2, 3, 3, 3, 1, 1, 3, 1, 2, 3, 2, 3, 3) ++ Array.fill(156)(1)
   val testOutputSchema = CMCCOutputSchema
 
@@ -105,7 +105,6 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
       // Convert ByteBuffer => InternalRows
       val resIter = toInternalRow(outputBuffer).toArray
-
       mockReturnByteBuffer(originBuffer)
 
       resIter.toIterator
@@ -120,6 +119,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     // efficient?
     var index = 0
     CMCCInputSchema.foreach { colType =>
+      // There are 2 fields(TIME_ID: index = 0, INNET_DATE: index = 36) which're not used in CMCC
+      // query, and optimization will prune the 2 fields by not reading them
+      if (index == 0 || index == 35)
+        buffer.putInt(0)
       if (colType == 1) {
         buffer.putInt(row.getInt(index))
       } else if (colType == 2) {
@@ -150,6 +153,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
     val originBuffer = mockGetByteBuffer(0)
+
     while(iter.hasNext) {
       loadRowToBuffer(iter.next, originBuffer)
       // FPGA needs this 16 whatever bytes
@@ -166,6 +170,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
   def toInternalRow(buffer: ByteBuffer): Iterator[InternalRow] = {
     var rowCount = FPGARowNumber
+
     new Iterator[InternalRow] {
 
       val numFields = testOutputSchema.length
@@ -175,8 +180,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val row: UnsafeRow = new UnsafeRow(numFields)
       val holder: BufferHolder = new BufferHolder(row, 0)
       val rowWriter = new UnsafeRowWriter(holder, numFields)
-      val tmpBuffer = new Array[Byte](30)
 
+      val tmpBuffer = new Array[Byte](30)
 
       override def next(): InternalRow = {
 
@@ -184,11 +189,19 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
         var stringIndex = 0
         var index = 0
+
         testOutputSchema.foreach { colType =>
           if (colType == 1) {
             rowWriter.write(index, buffer.getInt)
+
+//            buffer.position(buffer.position() - 4)
+//            log.warn(s" ${index}:Int = " + buffer.getInt)
           } else if (colType == 2) {
             rowWriter.write(index, buffer.getLong)
+
+//            buffer.position(buffer.position()- 8)
+//            log.warn(s" ${index}:Long = " + buffer.getLong)
+       
           } else {
 //            val byteArray = buffer.array()
 //            rowWriter.write(index, byteArray, buffer.position(), CMCCOutputCharLength(stringIndex))
@@ -197,13 +210,20 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
             buffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex))
             rowWriter.write(index, tmpBuffer)
             stringIndex += 1
+       
+//            buffer.position(buffer.position() - CMCCOutputCharLength(stringIndex - 1))
+//            buffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex - 1))
+//            log.warn(s" ${index}: " + UTF8String.fromBytes(tmpBuffer))
           }
+
           index = index + 1
         }
+
         // For FPGA aligning issue
 //        readBytesFromBuffer(32, buffer)
         buffer.position(buffer.position() + 32)
         rowCount -= 1
+
         row.setTotalSize(holder.totalSize())
         row
       }
