@@ -37,7 +37,6 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType}
 import org.apache.spark.util.Utils
 
@@ -105,7 +104,8 @@ case class HiveTableScanExec(
     hadoopConf)
 
   private def castFromString(value: String, dataType: DataType) = {
-    Cast(Literal(value), dataType, Option(SQLConf.get.sessionLocalTimeZone)).eval(null)
+    Cast(Literal(value), dataType,
+      Option(sparkSession.sessionState.conf.sessionLocalTimeZone)).eval(null)
   }
 
   private def addColumnMetadataToConf(hiveConf: Configuration): Unit = {
