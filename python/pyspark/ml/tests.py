@@ -455,6 +455,14 @@ class ParamTests(PySparkTestCase):
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
         )
 
+    def test_preserve_set_state(self):
+        model = Binarizer()
+        self.assertFalse(model.isSet("threshold"))
+        model._transfer_params_to_java()
+        model._transfer_params_from_java()
+        self.assertFalse(model.isSet("threshold"),
+                         "Params not explicitly set should remain unset after transform")
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
