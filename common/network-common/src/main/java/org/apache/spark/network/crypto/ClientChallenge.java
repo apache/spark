@@ -76,6 +76,7 @@ public class ClientChallenge implements Encodable {
   public int encodedLength() {
     return 1 + 4 + 4 +
       Encoders.Strings.encodedLength(appId) +
+      Encoders.Strings.encodedLength(user) +
       Encoders.Strings.encodedLength(kdf) +
       Encoders.Strings.encodedLength(cipher) +
       Encoders.ByteArrays.encodedLength(nonce) +
@@ -86,6 +87,7 @@ public class ClientChallenge implements Encodable {
   public void encode(ByteBuf buf) {
     buf.writeByte(TAG_BYTE);
     Encoders.Strings.encode(buf, appId);
+    Encoders.Strings.encode(buf, user);
     Encoders.Strings.encode(buf, kdf);
     buf.writeInt(iterations);
     Encoders.Strings.encode(buf, cipher);
