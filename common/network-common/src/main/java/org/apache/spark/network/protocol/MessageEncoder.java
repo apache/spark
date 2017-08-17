@@ -29,6 +29,52 @@ import org.slf4j.LoggerFactory;
 /**
  * Encoder used by the server side to encode server-to-client responses.
  * This encoder is stateless so it is safe to be shared by multiple threads.
+ * <p></p>
+ * The following is the wire format that RPC message used, it is a typical
+ * header+payload structure, while the header contains body length which will
+ * be an indication for {@link org.apache.spark.network.util.TransportFrameDecoder}
+ * to build a complete message out of byte array for downstream {@link ChannelHandler}
+ * to use.
+ * <p></p>
+ * The underlying network I/O handles {@link MessageWithHeader} to transport message
+ * between peers. Below shows how RPC message looks like. The header is
+ * {@link MessageWithHeader#header}
+ * and the body is {@link MessageWithHeader#body}.
+ * <pre>
+ * Byte/      0       |       1       |       2       |       3       |
+ *     /              |               |               |               |
+ *     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+ *     +---------------+---------------+---------------+---------------+
+ *     0/ Header                                                       /
+ *     /                                                               /
+ *     /                                                               /
+ *     /                                                               /
+ *     +---------------+---------------+---------------+---------------+
+ *     /  Body (a.k.a payload)                                         /
+ *     +---------------+---------------+---------------+---------------+
+ * </pre>
+ * The detailed header wire format is shown as below. Header consists of
+ * <ul>
+ *     <li>1. frame length: the total byte size of header+payload,
+ *     the length is an Integer value, which means maximum frame size would
+ *     be 16MB</li>
+ *     <li>2. message type: which subclass of {@link Message} are wrapped,
+ *     the length is {@link Message.Type#encodedLength()}</li>
+ *     <li>3. encoded message: some {@link Message} may provide additional
+ *     information and being included in the header</li>
+ * </ul>
+ * <pre>
+ * Byte/      0        |       1       |       2       |       3       |
+ *     /               |               |               |               |
+ *     |0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|0 1 2 3 4 5 6 7|
+ *     +---------------+---------------+---------------+---------------+
+ *    0| frame length                                                  |
+ *     +---------------+---------------+---------------+---------------+
+ *    4| message type  |                                               |
+ *     +---------------+       encoded message                         |
+ *     |                                                               |
+ *     +---------------+---------------+---------------+---------------+
+ * </pre>
  */
 @ChannelHandler.Sharable
 public final class MessageEncoder extends MessageToMessageEncoder<Message> {
