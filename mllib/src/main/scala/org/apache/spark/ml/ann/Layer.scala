@@ -373,20 +373,20 @@ private[ann] trait TopologyModel extends Serializable {
   /**
    * Prediction of the model. See {@link ProbabilisticClassificationModel}
    *
-   * @param data input data
+   * @param features input features
    * @return prediction
    */
-  def predict(data: Vector): Vector
+  def predict(features: Vector): Vector
 
   /**
    * Raw prediction of the model. See {@link ProbabilisticClassificationModel}
    *
-   * @param data input data
+   * @param features input features
    * @return raw prediction
    *
    * Note: This interface is only used for classification Model.
    */
-  def predictRaw(data: Vector): Vector
+  def predictRaw(features: Vector): Vector
 
   /**
    * Probability of the model. See {@link ProbabilisticClassificationModel}
