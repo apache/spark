@@ -699,6 +699,8 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: Decimal support of Avro Hive serde") {
       val tableName = "tab1"
+      // TODO: add the other logical types. For details, see the link:
+      // https://avro.apache.org/docs/1.8.1/spec.html#Logical+Types
       val avroSchema =
         """{
           |  "name": "test_record",
