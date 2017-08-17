@@ -80,12 +80,7 @@ public abstract class MutableColumnVector extends ColumnVector {
         "(requested = " + requiredCapacity + " bytes). As a workaround, you can disable the " +
         "vectorized reader by setting " + SQLConf.PARQUET_VECTORIZED_READER_ENABLED().key() +
         " to false.";
-
-    if (cause != null) {
-      throw new RuntimeException(message, cause);
-    } else {
-      throw new RuntimeException(message);
-    }
+    throw new RuntimeException(message, cause);
   }
 
   /**
