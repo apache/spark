@@ -33,14 +33,8 @@ class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String)
   extends HadoopMapReduceCommitProtocol(jobId, path) with Serializable with Logging {
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    val clazz = context.getConfiguration
-      .getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
+    var committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
 
-<<<<<<< HEAD
-    if (clazz != null) {
-      logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
-
-=======
     val configuration = context.getConfiguration
     val clazz =
       configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
@@ -48,7 +42,6 @@ class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String)
     if (clazz != null) {
       logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
 
->>>>>>> origin/master
       // Every output format based on org.apache.hadoop.mapreduce.lib.output.OutputFormat
       // has an associated output committer. To override this output committer,
       // we will first try to use the output committer set in SQLConf.OUTPUT_COMMITTER_CLASS.
@@ -58,25 +51,15 @@ class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String)
         // The specified output committer is a FileOutputCommitter.
         // So, we will use the FileOutputCommitter-specified constructor.
         val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-<<<<<<< HEAD
-        ctor.newInstance(new Path(path), context)
-=======
         committer = ctor.newInstance(new Path(path), context)
->>>>>>> origin/master
       } else {
         // The specified output committer is just an OutputCommitter.
         // So, we will use the no-argument constructor.
         val ctor = clazz.getDeclaredConstructor()
-<<<<<<< HEAD
-        ctor.newInstance()
-=======
         committer = ctor.newInstance()
->>>>>>> origin/master
       }
-    } else {
-      val committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
-      logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
-      committer
     }
+    logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
+    committer
   }
 }

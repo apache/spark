@@ -304,11 +304,8 @@ object SparkSubmit extends CommandLineUtils {
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
-<<<<<<< HEAD
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
-=======
     val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
->>>>>>> origin/master
 
     if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files

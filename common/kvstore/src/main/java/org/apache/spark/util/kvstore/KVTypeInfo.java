@@ -17,20 +17,16 @@
 
 package org.apache.spark.util.kvstore;
 
-import com.google.common.base.Preconditions;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Stream;
 
-<<<<<<< HEAD:common/kvstore/src/main/java/org/apache/spark/kvstore/KVTypeInfo.java
-=======
 import com.google.common.base.Preconditions;
 
 import org.apache.spark.annotation.Private;
 
->>>>>>> origin/master:common/kvstore/src/main/java/org/apache/spark/util/kvstore/KVTypeInfo.java
 /**
  * Wrapper around types managed in a KVStore, providing easy access to their indexed fields.
  */
