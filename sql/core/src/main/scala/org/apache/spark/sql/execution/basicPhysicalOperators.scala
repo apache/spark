@@ -114,8 +114,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   def loadRowToBuffer(row: InternalRow, buffer: ByteBuffer): Unit = {
     // Index to infer string length using CMCCCharLength
     var stringIndex = 0
-    // Another way to implement index: use a var index, and increase every time, which is more
-    // efficient?
+    // Use a var index, and increase every time, this is more efficient than zipWithIndex
     var index = 0
     CMCCInputSchema.foreach { colType =>
       // There are 2 fields(TIME_ID: index = 0, INNET_DATE: index = 36) which're not used in CMCC
@@ -197,27 +196,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
         testOutputSchema.foreach { colType =>
           if (colType == 1) {
             rowWriter.write(index, targetBuffer.getInt)
-
-//            buffer.position(buffer.position() - 4)
-//            log.warn(s" ${index}:Int = " + buffer.getInt)
           } else if (colType == 2) {
             rowWriter.write(index, targetBuffer.getLong)
-
-//            buffer.position(buffer.position()- 8)
-//            log.warn(s" ${index}:Long = " + buffer.getLong)
-       
           } else {
-//            val byteArray = buffer.array()
-//            rowWriter.write(index, byteArray, buffer.position(), CMCCOutputCharLength(stringIndex))
-//            buffer.position(buffer.position() + CMCCOutputCharLength(stringIndex))
-//            stringIndex += 1
             targetBuffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex))
             rowWriter.write(index, tmpBuffer)
             stringIndex += 1
-       
-//            buffer.position(buffer.position() - CMCCOutputCharLength(stringIndex - 1))
-//            buffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex - 1))
-//            log.warn(s" ${index}: " + UTF8String.fromBytes(tmpBuffer))
           }
 
           index = index + 1
