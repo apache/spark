@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -33,7 +34,13 @@ private[spark] class BroadcastManager(
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
-  private val maxRetries = conf.getInt("spark.broadcast.maxRetries", 3)
+  private val maxRetries = {
+    if (Utils.getConfiguredLocalDirs(conf).length > 1) {
+      conf.getInt("spark.broadcast.maxRetries", 3)
+    } else {
+      1
+    }
+  }
 
   initialize()
 
