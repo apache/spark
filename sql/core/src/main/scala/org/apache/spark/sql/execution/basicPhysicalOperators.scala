@@ -103,11 +103,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       // FPGA Calculation
       val outputBuffer = mockFPGA(originBuffer)
 
-      // Convert ByteBuffer => InternalRows
-      val resIter = toInternalRow(outputBuffer).toArray
-      mockReturnByteBuffer(originBuffer)
+      // Convert ByteBuffer => InternalRows, pass the originBuffer to release the buffer memory after use
+      val resIter = toInternalRow(outputBuffer, originBuffer)
 
-      resIter.toIterator
+      resIter
 
     }
   }
@@ -120,7 +119,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     var index = 0
     CMCCInputSchema.foreach { colType =>
       // There are 2 fields(TIME_ID: index = 0, INNET_DATE: index = 36) which're not used in CMCC
-      // query, and optimization will prune the 2 fields by not reading them
+      // query, and optimization will prune the 2 fields by not reading them, so that we should add
+      // the two rows manually
       if (index == 0 || index == 35)
         buffer.putInt(0)
       if (colType == 1) {
@@ -170,10 +170,10 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     originBuffer
   }
 
-  def toInternalRow(buffer: ByteBuffer): Iterator[InternalRow] = {
+  def toInternalRow(targetBuffer: ByteBuffer, originBufferShouldReturn: ByteBuffer): Iterator[InternalRow] = {
     var rowCount = FPGARowNumber
 
-    buffer.order(ByteOrder.nativeOrder())
+    targetBuffer.order(ByteOrder.nativeOrder())
 
     new Iterator[InternalRow] {
 
@@ -196,12 +196,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
         testOutputSchema.foreach { colType =>
           if (colType == 1) {
-            rowWriter.write(index, buffer.getInt)
+            rowWriter.write(index, targetBuffer.getInt)
 
 //            buffer.position(buffer.position() - 4)
 //            log.warn(s" ${index}:Int = " + buffer.getInt)
           } else if (colType == 2) {
-            rowWriter.write(index, buffer.getLong)
+            rowWriter.write(index, targetBuffer.getLong)
 
 //            buffer.position(buffer.position()- 8)
 //            log.warn(s" ${index}:Long = " + buffer.getLong)
@@ -211,7 +211,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 //            rowWriter.write(index, byteArray, buffer.position(), CMCCOutputCharLength(stringIndex))
 //            buffer.position(buffer.position() + CMCCOutputCharLength(stringIndex))
 //            stringIndex += 1
-            buffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex))
+            targetBuffer.get(tmpBuffer, 0, CMCCOutputCharLength(stringIndex))
             rowWriter.write(index, tmpBuffer)
             stringIndex += 1
        
@@ -225,8 +225,12 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
         // For FPGA aligning issue
 //        readBytesFromBuffer(32, buffer)
-        buffer.position(buffer.position() + 32)
+        targetBuffer.position(targetBuffer.position() + 32)
         rowCount -= 1
+
+        // The release memory process has to be put here
+        if (rowCount == 0)
+          mockReturnByteBuffer(originBufferShouldReturn)
 
         row.setTotalSize(holder.totalSize())
         row
