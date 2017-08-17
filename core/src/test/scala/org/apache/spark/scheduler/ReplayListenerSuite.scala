@@ -154,6 +154,8 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    */
   private def testApplicationReplay(codecName: Option[String] = None) {
     val logDir = new File(testDir.getAbsolutePath, "test-replay")
+    // Here, it creates `Path` from the URI instead of the absolute path for the explicit file
+    // scheme so that the string representation of this `Path` has leading file scheme correctly.
     val logDirPath = new Path(logDir.toURI)
     fileSystem.mkdirs(logDirPath)
 
