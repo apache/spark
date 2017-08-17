@@ -22,7 +22,6 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
@@ -58,13 +57,6 @@ public class HadoopSecurityUtils {
     return Base64.encode(Unpooled.wrappedBuffer(password)).toString(StandardCharsets.UTF_8)
             .toCharArray();
   }
-//
-//  /** Decode a base64-encoded indentifier as a String. */
-//  public static String decodeIdentifier(String identifier) {
-//    Preconditions.checkNotNull(identifier, "User cannot be null if SASL is enabled");
-//    return Base64.decode(Unpooled.wrappedBuffer(identifier.getBytes(StandardCharsets.UTF_8)))
-//            .toString(StandardCharsets.UTF_8);
-//  }
 
   /** Decode a base64-encoded MasterKey as a byte[] array. */
   public static byte[] decodeMasterKey(String masterKey) {
@@ -72,12 +64,10 @@ public class HadoopSecurityUtils {
     return byteBufToByte(masterKeyByteBuf);
   }
 
-
   /** Convert an ByteBuf to a byte[] array. */
   private static byte[] byteBufToByte(ByteBuf byteBuf) {
     byte[] byteArray = new byte[byteBuf.readableBytes()];
     byteBuf.readBytes(byteArray);
     return byteArray;
   }
-
 }

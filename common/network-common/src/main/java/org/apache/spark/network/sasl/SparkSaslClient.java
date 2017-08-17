@@ -35,9 +35,10 @@ import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.TransportConf;
+
 import static org.apache.spark.network.sasl.SparkSaslServer.*;
 
-import org.apache.spark.network.util.TransportConf;
 
 /**
  * A SASL Client for Spark which simply keeps track of the state of a single SASL session, from the

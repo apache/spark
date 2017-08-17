@@ -127,25 +127,21 @@ class AuthEngine implements Closeable {
    */
   ServerResponse respond(ClientChallenge clientChallenge)
     throws GeneralSecurityException, IOException {
-
     SecretKeySpec authKey;
     if (conf.isConnectionUsingTokens()) {
-      // Create a Secret from client's token identifier and AM's master key.
+      // Create a secret from client's token identifier and AM's master key.
       ClientToAMTokenSecretManager secretManager = new ClientToAMTokenSecretManager(null,
         decodeMasterKey(new String(secret)));
       ClientToAMTokenIdentifier identifier = getIdentifier(clientChallenge.user);
-      clientUser = identifier.getUser().getShortUserName();
-
-      // Set the secret used for the
       secret = getClientToAMSecretKey(identifier, secretManager);
+
+      clientUser = identifier.getUser().getShortUserName();
     } else {
       clientUser = clientChallenge.user;
     }
 
-      authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations, clientChallenge.nonce,
-       clientChallenge.keyLength);
-//      authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-//              clientChallenge.nonce, clientChallenge.keyLength, secret);
+    authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations, clientChallenge.nonce,
+      clientChallenge.keyLength);
 
     initializeForAuth(clientChallenge.cipher, clientChallenge.nonce, authKey);
 
@@ -156,7 +152,7 @@ class AuthEngine implements Closeable {
     byte[] outputIv = randomBytes(conf.ivLength());
 
     SecretKeySpec sessionKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-            sessionNonce, clientChallenge.keyLength);
+      sessionNonce, clientChallenge.keyLength);
 
     this.sessionCipher = new TransportCipher(cryptoConf, clientChallenge.cipher, sessionKey,
       inputIv, outputIv);
