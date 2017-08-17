@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.FileNotFoundException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -44,7 +47,7 @@ case class BasicWriteTaskStats(
  * @param hadoopConf
  */
 class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
-  extends WriteTaskStatsTracker {
+  extends WriteTaskStatsTracker with Logging {
 
   private[this] var numPartitions: Int = 0
   private[this] var numFiles: Int = 0
@@ -57,7 +60,14 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   private def getFileSize(filePath: String): Long = {
     val path = new Path(filePath)
     val fs = path.getFileSystem(hadoopConf)
-    fs.getFileStatus(path).getLen()
+    try {
+      fs.getFileStatus(path).getLen()
+    } catch {
+      case e: FileNotFoundException =>
+        // may arise against eventually consistent object stores
+        logInfo(s"File $path is not yet visible", e)
+        0
+    }
   }
 
 
