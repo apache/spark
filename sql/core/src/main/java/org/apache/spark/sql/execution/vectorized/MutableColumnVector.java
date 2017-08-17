@@ -573,7 +573,17 @@ public abstract class MutableColumnVector extends ColumnVector {
   /**
    * Reserve a integer column for ids of dictionary.
    */
-  public abstract MutableColumnVector reserveDictionaryIds(int capacity);
+  public MutableColumnVector reserveDictionaryIds(int capacity) {
+    MutableColumnVector dictionaryIds = (MutableColumnVector) this.dictionaryIds;
+    if (dictionaryIds == null) {
+      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
+      this.dictionaryIds = dictionaryIds;
+    } else {
+      dictionaryIds.reset();
+      dictionaryIds.reserve(capacity);
+    }
+    return dictionaryIds;
+  }
 
   /**
    * Returns the underlying integer column for ids of dictionary.

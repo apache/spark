@@ -461,22 +461,6 @@ public final class OnHeapColumnVector extends MutableColumnVector {
     return result;
   }
 
-  /**
-   * Reserve a integer column for ids of dictionary.
-   */
-  @Override
-  public OnHeapColumnVector reserveDictionaryIds(int capacity) {
-    OnHeapColumnVector dictionaryIds = (OnHeapColumnVector) this.dictionaryIds;
-    if (dictionaryIds == null) {
-      dictionaryIds = new OnHeapColumnVector(capacity, DataTypes.IntegerType);
-      this.dictionaryIds = dictionaryIds;
-    } else {
-      dictionaryIds.reset();
-      dictionaryIds.reserve(capacity);
-    }
-    return dictionaryIds;
-  }
-
   // Spilt this function out since it is the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {

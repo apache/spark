@@ -492,22 +492,6 @@ public final class OffHeapColumnVector extends MutableColumnVector {
     array.byteArrayOffset = 0;
   }
 
-  /**
-   * Reserve a integer column for ids of dictionary.
-   */
-  @Override
-  public OffHeapColumnVector reserveDictionaryIds(int capacity) {
-    OffHeapColumnVector dictionaryIds = (OffHeapColumnVector) this.dictionaryIds;
-    if (dictionaryIds == null) {
-      dictionaryIds = new OffHeapColumnVector(capacity, DataTypes.IntegerType);
-      this.dictionaryIds = dictionaryIds;
-    } else {
-      dictionaryIds.reset();
-      dictionaryIds.reserve(capacity);
-    }
-    return dictionaryIds;
-  }
-
   // Split out the slow path.
   @Override
   protected void reserveInternal(int newCapacity) {
