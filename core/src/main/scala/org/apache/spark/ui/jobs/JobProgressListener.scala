@@ -374,6 +374,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         case kill: TaskKilled =>
           execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
             kill.reason, execSummary.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
+        case commitDenied: TaskCommitDenied =>
+          execSummary.reasonToNumKilled = execSummary.reasonToNumKilled.updated(
+            commitDenied.toErrorString, execSummary.reasonToNumKilled.getOrElse(
+              commitDenied.toErrorString, 0) + 1)
         case _ =>
           execSummary.failedTasks += 1
       }
@@ -390,6 +394,11 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
             stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
               kill.reason, stageData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
             Some(kill.toErrorString)
+          case commitDenied: TaskCommitDenied =>
+            stageData.reasonToNumKilled = stageData.reasonToNumKilled.updated(
+              commitDenied.toErrorString, stageData.reasonToNumKilled.getOrElse(
+                commitDenied.toErrorString, 0) + 1)
+            Some(commitDenied.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
@@ -428,6 +437,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           case kill: TaskKilled =>
             jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
               kill.reason, jobData.reasonToNumKilled.getOrElse(kill.reason, 0) + 1)
+          case commitDenied: TaskCommitDenied =>
+            jobData.reasonToNumKilled = jobData.reasonToNumKilled.updated(
+              commitDenied.toErrorString, jobData.reasonToNumKilled.getOrElse(
+                commitDenied.toErrorString, 0) + 1)
           case _ =>
             jobData.numFailedTasks += 1
         }

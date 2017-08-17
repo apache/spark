@@ -221,6 +221,12 @@
       </properties>
     </profile>
     <profile>
+      <id>orc-provided</id>
+      <properties>
+        <orc.deps.scope>provided</orc.deps.scope>
+      </properties>
+    </profile>
+    <profile>
       <id>parquet-provided</id>
       <properties>
         <parquet.deps.scope>provided</parquet.deps.scope>
