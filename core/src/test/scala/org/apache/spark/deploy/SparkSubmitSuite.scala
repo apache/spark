@@ -831,7 +831,7 @@ class SparkSubmitSuite
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
-    val sourcePath = s"s3a://${jarFile.getAbsolutePath}"
+    val sourcePath = s"s3a://${jarFile.toURI.getPath}"
     val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf,
       new SecurityManager(sparkConf))
     checkDownloadedFile(sourcePath, outputPath)
@@ -847,7 +847,7 @@ class SparkSubmitSuite
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
-    val sourcePaths = Seq("/local/file", s"s3a://${jarFile.getAbsolutePath}")
+    val sourcePaths = Seq("/local/file", s"s3a://${jarFile.toURI.getPath}")
     val outputPaths = DependencyUtils
       .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf,
         new SecurityManager(sparkConf))
