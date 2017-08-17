@@ -22,9 +22,6 @@ import java.io.File
 import scala.util.Random
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
-import org.apache.parquet.hadoop.ParquetOutputCommitter
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
@@ -850,29 +847,5 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       val readBack = reader.load(childDir)
       checkAnswer(df, readBack)
     }
-  }
-}
-
-// This class is used to test SPARK-8578. We should not use any custom output committer when
-// we actually append data to an existing dir.
-class AlwaysFailOutputCommitter(
-    outputPath: Path,
-    context: TaskAttemptContext)
-  extends FileOutputCommitter(outputPath, context) {
-
-  override def commitJob(context: JobContext): Unit = {
-    sys.error("Intentional job commitment failure for testing purpose.")
-  }
-}
-
-// This class is used to test SPARK-8578. We should not use any custom output committer when
-// we actually append data to an existing dir.
-class AlwaysFailParquetOutputCommitter(
-    outputPath: Path,
-    context: TaskAttemptContext)
-  extends ParquetOutputCommitter(outputPath, context) {
-
-  override def commitJob(context: JobContext): Unit = {
-    sys.error("Intentional job commitment failure for testing purpose.")
   }
 }

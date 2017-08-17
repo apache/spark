@@ -24,7 +24,6 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * User-defined function.
- * Note that the user-defined functions must be deterministic.
  * @param function  The user defined scala function to run.
  *                  Note that if you use primitive parameters, you are not able to check if it is
  *                  null or not, and the UDF will return null for you if the primitive input is
@@ -35,8 +34,10 @@ import org.apache.spark.sql.types.DataType
  *                    not want to perform coercion, simply use "Nil". Note that it would've been
  *                    better to use Option of Seq[DataType] so we can use "None" as the case for no
  *                    type coercion. However, that would require more refactoring of the codebase.
- * @param udfName   The user-specified name of this UDF.
+ * @param udfName  The user-specified name of this UDF.
  * @param nullable  True if the UDF can return null value.
+ * @param udfDeterministic  True if the UDF is deterministic. Deterministic UDF returns same result
+ *                          each time it is invoked with a particular input.
  */
 case class ScalaUDF(
     function: AnyRef,
@@ -44,8 +45,11 @@ case class ScalaUDF(
     children: Seq[Expression],
     inputTypes: Seq[DataType] = Nil,
     udfName: Option[String] = None,
-    nullable: Boolean = true)
+    nullable: Boolean = true,
+    udfDeterministic: Boolean = true)
   extends Expression with ImplicitCastInputTypes with NonSQLExpression {
+
+  override def deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 
   override def toString: String =
     s"${udfName.map(name => s"UDF:$name").getOrElse("UDF")}(${children.mkString(", ")})"

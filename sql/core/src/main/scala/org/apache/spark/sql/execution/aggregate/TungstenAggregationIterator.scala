@@ -60,6 +60,8 @@ import org.apache.spark.unsafe.KVIterator
  *  - Part 8: A utility function used to generate a result when there is no
  *            input and there is no grouping expression.
  *
+ * @param partIndex
+ *   index of the partition
  * @param groupingExpressions
  *   expressions for grouping keys
  * @param aggregateExpressions
@@ -77,6 +79,7 @@ import org.apache.spark.unsafe.KVIterator
  *   the iterator containing input [[UnsafeRow]]s.
  */
 class TungstenAggregationIterator(
+    partIndex: Int,
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
     aggregateAttributes: Seq[Attribute],
@@ -91,6 +94,7 @@ class TungstenAggregationIterator(
     spillSize: SQLMetric,
     avgHashProbe: SQLMetric)
   extends AggregationIterator(
+    partIndex,
     groupingExpressions,
     originalInputAttributes,
     aggregateExpressions,

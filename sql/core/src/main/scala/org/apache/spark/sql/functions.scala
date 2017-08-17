@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, ResolvedHint}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -777,6 +778,32 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
   // Window functions
   //////////////////////////////////////////////////////////////////////////////////////////////
+  /**
+   * Window function: returns the special frame boundary that represents the first row in the
+   * window partition.
+   *
+   * @group window_funcs
+   * @since 2.3.0
+   */
+  def unboundedPreceding(): Column = Column(UnboundedPreceding)
+
+  /**
+   * Window function: returns the special frame boundary that represents the last row in the
+   * window partition.
+   *
+   * @group window_funcs
+   * @since 2.3.0
+   */
+  def unboundedFollowing(): Column = Column(UnboundedFollowing)
+
+  /**
+   * Window function: returns the special frame boundary that represents the current row in the
+   * window partition.
+   *
+   * @group window_funcs
+   * @since 2.3.0
+   */
+  def currentRow(): Column = Column(CurrentRow)
 
   /**
    * Window function: returns the cumulative distribution of values within a window partition,
@@ -2408,6 +2435,8 @@ object functions {
    * returns the slice of byte array that starts at `pos` in byte and is of length `len`
    * when str is Binary type
    *
+   * @note The position is not zero based, but 1 based index.
+   *
    * @group string_funcs
    * @since 1.5.0
    */
@@ -3185,8 +3214,10 @@ object functions {
     val inputTypes = (1 to x).foldRight("Nil")((i, s) => {s"ScalaReflection.schemaFor(typeTag[A$i]).dataType :: $s"})
     println(s"""
     /**
-     * Defines a user-defined function of ${x} arguments as user-defined function (UDF).
-     * The data types are automatically inferred based on the function's signature.
+     * Defines a deterministic user-defined function of ${x} arguments as user-defined
+     * function (UDF). The data types are automatically inferred based on the function's
+     * signature. To change a UDF to nondeterministic, call the API
+     * `UserDefinedFunction.asNondeterministic()`.
      *
      * @group udf_funcs
      * @since 1.3.0
@@ -3194,15 +3225,18 @@ object functions {
     def udf[$typeTags](f: Function$x[$types]): UserDefinedFunction = {
       val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
       val inputTypes = Try($inputTypes).toOption
-      UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+      val udf = UserDefinedFunction(f, dataType, inputTypes)
+      if (nullable) udf else udf.asNonNullable()
     }""")
   }
 
   */
 
   /**
-   * Defines a user-defined function of 0 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 0 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3210,12 +3244,15 @@ object functions {
   def udf[RT: TypeTag](f: Function0[RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 1 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 1 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3223,12 +3260,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag](f: Function1[A1, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 2 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 2 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3236,12 +3276,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag](f: Function2[A1, A2, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 3 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 3 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3249,12 +3292,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag](f: Function3[A1, A2, A3, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 4 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 4 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3262,12 +3308,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag](f: Function4[A1, A2, A3, A4, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 5 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 5 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3275,12 +3324,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag](f: Function5[A1, A2, A3, A4, A5, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 6 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 6 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3288,12 +3340,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag](f: Function6[A1, A2, A3, A4, A5, A6, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 7 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 7 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3301,12 +3356,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag](f: Function7[A1, A2, A3, A4, A5, A6, A7, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 8 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 8 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3314,12 +3372,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag](f: Function8[A1, A2, A3, A4, A5, A6, A7, A8, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 9 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 9 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3327,12 +3388,15 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag](f: Function9[A1, A2, A3, A4, A5, A6, A7, A8, A9, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
-   * Defines a user-defined function of 10 arguments as user-defined function (UDF).
-   * The data types are automatically inferred based on the function's signature.
+   * Defines a deterministic user-defined function of 10 arguments as user-defined
+   * function (UDF). The data types are automatically inferred based on the function's
+   * signature. To change a UDF to nondeterministic, call the API
+   * `UserDefinedFunction.asNondeterministic()`.
    *
    * @group udf_funcs
    * @since 1.3.0
@@ -3340,15 +3404,17 @@ object functions {
   def udf[RT: TypeTag, A1: TypeTag, A2: TypeTag, A3: TypeTag, A4: TypeTag, A5: TypeTag, A6: TypeTag, A7: TypeTag, A8: TypeTag, A9: TypeTag, A10: TypeTag](f: Function10[A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, RT]): UserDefinedFunction = {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: ScalaReflection.schemaFor(typeTag[A10]).dataType :: Nil).toOption
-    UserDefinedFunction(f, dataType, inputTypes).withNullability(nullable)
+    val udf = UserDefinedFunction(f, dataType, inputTypes)
+    if (nullable) udf else udf.asNonNullable()
   }
 
   // scalastyle:on parameter.number
   // scalastyle:on line.size.limit
 
   /**
-   * Defines a user-defined function (UDF) using a Scala closure. For this variant, the caller must
-   * specify the output data type, and there is no automatic input type coercion.
+   * Defines a deterministic user-defined function (UDF) using a Scala closure. For this variant,
+   * the caller must specify the output data type, and there is no automatic input type coercion.
+   * To change a UDF to nondeterministic, call the API `UserDefinedFunction.asNondeterministic()`.
    *
    * @param f  A closure in Scala
    * @param dataType  The output data type of the UDF

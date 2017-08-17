@@ -231,7 +231,7 @@ class ParquetFileFormat
 
         val needMerged: Seq[FileStatus] =
           if (mergeRespectSummaries) {
-            Seq()
+            Seq.empty
           } else {
             filesByType.data
           }

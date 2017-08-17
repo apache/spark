@@ -20,7 +20,6 @@ package org.apache.spark.deploy
 import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
-import java.nio.file.Files
 import java.security.{KeyStore, PrivilegedExceptionAction}
 import java.security.cert.X509Certificate
 import java.text.ParseException
@@ -31,7 +30,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -306,29 +304,17 @@ object SparkSubmit extends CommandLineUtils {
     }
     val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     val isMesosCluster = clusterManager == MESOS && deployMode == CLUSTER
+<<<<<<< HEAD
     val isKubernetesCluster = clusterManager == KUBERNETES && deployMode == CLUSTER
+=======
+    val isStandAloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
+>>>>>>> origin/master
 
-    if (!isMesosCluster) {
+    if (!isMesosCluster && !isStandAloneCluster) {
       // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
       // too for packages that include Python code
-      val exclusions: Seq[String] =
-      if (!StringUtils.isBlank(args.packagesExclusions)) {
-        args.packagesExclusions.split(",")
-      } else {
-        Nil
-      }
-
-      // Create the IvySettings, either load from file or build defaults
-      val ivySettings = args.sparkProperties.get("spark.jars.ivySettings").map { ivySettingsFile =>
-        SparkSubmitUtils.loadIvySettings(ivySettingsFile, Option(args.repositories),
-          Option(args.ivyRepoPath))
-      }.getOrElse {
-        SparkSubmitUtils.buildIvySettings(Option(args.repositories), Option(args.ivyRepoPath))
-      }
-
-      val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-        ivySettings, exclusions = exclusions)
-
+      val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
+        args.packagesExclusions, args.packages, args.repositories, args.ivyRepoPath)
 
       if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
         args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
@@ -345,14 +331,7 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     val hadoopConf = new HadoopConfiguration()
-    val targetDir = Files.createTempDirectory("tmp").toFile
-    // scalastyle:off runtimeaddshutdownhook
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run(): Unit = {
-        FileUtils.deleteQuietly(targetDir)
-      }
-    })
-    // scalastyle:on runtimeaddshutdownhook
+    val targetDir = DependencyUtils.createTempDir()
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -479,11 +458,13 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.driverExtraLibraryPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.driver.extraLibraryPath"),
 
-      // Mesos only - propagate attributes for dependency resolution at the driver side
-      OptionAssigner(args.packages, MESOS, CLUSTER, sysProp = "spark.jars.packages"),
-      OptionAssigner(args.repositories, MESOS, CLUSTER, sysProp = "spark.jars.repositories"),
-      OptionAssigner(args.ivyRepoPath, MESOS, CLUSTER, sysProp = "spark.jars.ivy"),
-      OptionAssigner(args.packagesExclusions, MESOS, CLUSTER, sysProp = "spark.jars.excludes"),
+      // Propagate attributes for dependency resolution at the driver side
+      OptionAssigner(args.packages, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars.packages"),
+      OptionAssigner(args.repositories, STANDALONE | MESOS, CLUSTER,
+        sysProp = "spark.jars.repositories"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE | MESOS, CLUSTER, sysProp = "spark.jars.ivy"),
+      OptionAssigner(args.packagesExclusions, STANDALONE | MESOS,
+        CLUSTER, sysProp = "spark.jars.excludes"),
 
       // Yarn only
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
@@ -592,18 +573,13 @@ object SparkSubmit extends CommandLineUtils {
     if (clusterManager == YARN || clusterManager == LOCAL) {
       if (args.principal != null) {
         require(args.keytab != null, "Keytab must be specified when principal is specified")
-        if (!new File(args.keytab).exists()) {
-          throw new SparkException(s"Keytab file: ${args.keytab} does not exist")
-        } else {
-          // Add keytab and principal configurations in sysProps to make them available
-          // for later use; e.g. in spark sql, the isolated class loader used to talk
-          // to HiveMetastore will use these settings. They will be set as Java system
-          // properties and then loaded by SparkConf
-          sysProps.put("spark.yarn.keytab", args.keytab)
-          sysProps.put("spark.yarn.principal", args.principal)
-
-          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
-        }
+        SparkHadoopUtil.get.loginUserFromKeytab(args.principal, args.keytab)
+        // Add keytab and principal configurations in sysProps to make them available
+        // for later use; e.g. in spark sql, the isolated class loader used to talk
+        // to HiveMetastore will use these settings. They will be set as Java system
+        // properties and then loaded by SparkConf
+        sysProps.put("spark.yarn.keytab", args.keytab)
+        sysProps.put("spark.yarn.principal", args.principal)
       }
     }
 
@@ -807,7 +783,7 @@ object SparkSubmit extends CommandLineUtils {
     }
   }
 
-  private def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
+  private[deploy] def addJarToClasspath(localJar: String, loader: MutableURLClassLoader) {
     val uri = Utils.resolveURI(localJar)
     uri.getScheme match {
       case "file" | "local" =>
@@ -872,7 +848,7 @@ object SparkSubmit extends CommandLineUtils {
    * Merge a sequence of comma-separated file lists, some of which may be null to indicate
    * no files, into a single comma-separated string.
    */
-  private def mergeFileLists(lists: String*): String = {
+  private[deploy] def mergeFileLists(lists: String*): String = {
     val merged = lists.filterNot(StringUtils.isBlank)
                       .flatMap(_.split(","))
                       .mkString(",")
@@ -995,7 +971,7 @@ object SparkSubmit extends CommandLineUtils {
     }
   }
 
-  private def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
+  private[deploy] def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
     require(paths != null, "paths cannot be null.")
     paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
       val uri = Utils.resolveURI(path)

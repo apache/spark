@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr, ...) - Returns an array with the given elements.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1, 2, 3);
        [1,2,3]
@@ -157,7 +157,7 @@ private [sql] object GenArrayData {
  */
 @ExpressionDescription(
   usage = "_FUNC_(key0, value0, key1, value1, ...) - Creates a map with the given key/value pairs.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1.0, '2', 3.0, '4');
        {1.0:"2",3.0:"4"}
@@ -264,6 +264,9 @@ object CreateStruct extends FunctionBuilder {
       null,
       "struct",
       "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.",
+      "",
+      "",
+      "",
       "")
     ("struct", (info, this))
   }
@@ -336,7 +339,7 @@ trait CreateNamedStructLike extends Expression {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_("a", 1, "b", 2, "c", 3);
        {"a":1,"b":2,"c":3}
@@ -393,7 +396,7 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends CreateName
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(text[, pairDelim[, keyValueDelim]]) - Creates a map after splitting the text into key/value pairs using delimiters. Default delimiters are ',' for `pairDelim` and ':' for `keyValueDelim`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('a:1,b:2,c:3', ',', ':');
        map("a":"1","b":"2","c":"3")

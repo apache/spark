@@ -22,19 +22,19 @@ import java.util.concurrent.CountDownLatch
 import org.apache.commons.lang3.RandomStringUtils
 import org.mockito.Mockito._
 import org.scalactic.TolerantNumerics
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.mock.MockitoSugar
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.{BlockingSource, MockSourceProvider, StreamManualClock}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ManualClock
 
 
@@ -610,6 +610,33 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
       )
 
       assert(calledStop, "Did not call stop on source for stopped stream")
+    }
+  }
+
+  test("get the query id in source") {
+    @volatile var queryId: String = null
+    val source = new Source {
+      override def stop(): Unit = {}
+      override def getOffset: Option[Offset] = {
+        queryId = spark.sparkContext.getLocalProperty(StreamExecution.QUERY_ID_KEY)
+        None
+      }
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = spark.emptyDataFrame
+      override def schema: StructType = MockSourceProvider.fakeSchema
+    }
+
+    MockSourceProvider.withMockSources(source) {
+      val df = spark.readStream
+        .format("org.apache.spark.sql.streaming.util.MockSourceProvider")
+        .load()
+      testStream(df)(
+        AssertOnQuery { sq =>
+          sq.processAllAvailable()
+          assert(sq.id.toString === queryId)
+          assert(sq.runId.toString !== queryId)
+          true
+        }
+      )
     }
   }
 

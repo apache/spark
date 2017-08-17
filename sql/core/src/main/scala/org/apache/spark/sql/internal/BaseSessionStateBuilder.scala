@@ -168,6 +168,7 @@ abstract class BaseSessionStateBuilder(
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
       PreWriteCheck +:
+        PreReadCheck +:
         HiveOnlyCheck +:
         customCheckRules
   }
@@ -286,14 +287,14 @@ abstract class BaseSessionStateBuilder(
       experimentalMethods,
       functionRegistry,
       udfRegistration,
-      catalog,
+      () => catalog,
       sqlParser,
-      analyzer,
-      optimizer,
+      () => analyzer,
+      () => optimizer,
       planner,
       streamingQueryManager,
       listenerManager,
-      resourceLoader,
+      () => resourceLoader,
       createQueryExecution,
       createClone)
   }

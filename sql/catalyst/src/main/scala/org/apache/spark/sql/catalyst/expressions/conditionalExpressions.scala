@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
        a
