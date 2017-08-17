@@ -1065,8 +1065,11 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
       taskLocalityPreferences = taskLocalityPreferences)
   }
 
-  private def createTaskInfo(taskId: Int, taskIndex: Int, executorId: String,
-                             speculative: Boolean = false): TaskInfo = {
+  private def createTaskInfo(
+      taskId: Int,
+      taskIndex: Int,
+      executorId: String,
+      speculative: Boolean = false): TaskInfo = {
     new TaskInfo(taskId, taskIndex, 0, 0, executorId, "", TaskLocality.ANY, speculative)
   }
 
