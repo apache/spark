@@ -35,7 +35,12 @@ private[spark] trait RpcCallContext {
   def sendFailure(e: Throwable): Unit
 
   /**
-   * The sender of this message.
+   * The sender's address of this message.
    */
   def senderAddress: RpcAddress
+
+  /**
+   * The sender's User Name of this message.
+   */
+  def senderUserName: String
 }

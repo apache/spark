@@ -18,19 +18,25 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{File, FileOutputStream, IOException, OutputStreamWriter}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, InetSocketAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.PrivilegedExceptionAction
 import java.util.{Locale, Properties, UUID}
+import java.util.concurrent.TimeoutException
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
+import scala.concurrent.ExecutionContext
+import scala.util.control.Breaks._
 import scala.util.control.NonFatal
 
+import com.google.common.base.Charsets.UTF_8
 import com.google.common.base.Objects
 import com.google.common.io.Files
+import io.netty.buffer.Unpooled
+import io.netty.handler.codec.base64.Base64
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -45,7 +51,7 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.exceptions.ApplicationNotFoundException
-import org.apache.hadoop.yarn.util.Records
+import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -54,7 +60,8 @@ import org.apache.spark.deploy.yarn.security.YARNHadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
-import org.apache.spark.util.{CallerContext, Utils}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
+import org.apache.spark.util.{CallerContext, SparkExitCode, ThreadUtils, Utils}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -1147,6 +1154,43 @@ private[spark] class Client(
         throw new SparkException(s"The final status of application $appId is undefined")
       }
     }
+  }
+
+  private def setupAMConnection(
+      appId: ApplicationId,
+      securityManager: SecurityManager): RpcEndpointRef = {
+    val report = getApplicationReport(appId)
+    val state = report.getYarnApplicationState
+    if (report.getHost() == null || "".equals(report.getHost())) {
+      throw new SparkException(s"AM for $appId not assigned or dont have view ACL for it")
+    }
+    if ( state != YarnApplicationState.RUNNING) {
+      throw new SparkException(s"Application $appId needs to be in RUNNING")
+    }
+
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val serviceAddr = new InetSocketAddress(report.getHost(), report.getRpcPort())
+
+      val clientToAMToken = report.getClientToAMToken
+      val token = ConverterUtils.convertFromYarn(clientToAMToken, serviceAddr)
+
+      // Fetch Identifier, secretkey from the report, encode it  and Set it in the Security Manager
+      val userName = token.getIdentifier
+      var userstring = Base64.encode(Unpooled.wrappedBuffer(userName)).toString(UTF_8);
+      securityManager.setSaslUser(userstring)
+      val secretkey = token.getPassword
+      var secretkeystring = Base64.encode(Unpooled.wrappedBuffer(secretkey)).toString(UTF_8);
+      securityManager.setSecretKey(secretkeystring)
+    }
+
+    sparkConf.set("spark.rpc.connectionUsingTokens", "true")
+    val rpcEnv =
+      RpcEnv.create("yarnDriverClient", Utils.localHostName(), 0, sparkConf, securityManager)
+    val AMHostPort = RpcAddress(report.getHost, report.getRpcPort)
+    val AMEndpoint = rpcEnv.setupEndpointRef(AMHostPort,
+      ApplicationMaster.ENDPOINT_NAME)
+
+    AMEndpoint
   }
 
   private def findPySparkArchives(): Seq[String] = {
