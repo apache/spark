@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
@@ -357,6 +357,18 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = query :: Nil
   override def output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
+}
+
+case class InsertIntoDir(
+    path: String,
+    isLocal: Boolean,
+    rowStorage: CatalogStorageFormat,
+    fileStorage: CatalogStorageFormat,
+    child: LogicalPlan)
+  extends LogicalPlan {
+
+  override def children: Seq[LogicalPlan] = child :: Nil
+  override def output: Seq[Attribute] = Seq.empty
 }
 
 /**

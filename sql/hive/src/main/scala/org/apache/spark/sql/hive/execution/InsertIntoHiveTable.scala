@@ -32,14 +32,12 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.SparkException
-import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.{CommandUtils, DataWritingCommand}
-import org.apache.spark.sql.execution.datasources.FileFormatWriter
+import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
@@ -80,7 +78,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends DataWritingCommand {
+    ifPartitionNotExists: Boolean) extends SaveAsHiveFile {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
@@ -234,10 +232,9 @@ case class InsertIntoHiveTable(
   override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     assert(children.length == 1)
 
-    val sessionState = sparkSession.sessionState
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
-    val hadoopConf = sessionState.newHadoopConf()
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
@@ -257,20 +254,6 @@ case class InsertIntoHiveTable(
     val tmpLocation =
       getExternalTmpPath(tableLocation, hiveVersion, hadoopConf, stagingDir, scratchDir)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
-    val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
-
-    if (isCompressed) {
-      // Please note that isCompressed, "mapreduce.output.fileoutputformat.compress",
-      // "mapreduce.output.fileoutputformat.compress.codec", and
-      // "mapreduce.output.fileoutputformat.compress.type"
-      // have no impact on ORC because it uses table properties to store compression information.
-      hadoopConf.set("mapreduce.output.fileoutputformat.compress", "true")
-      fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(hadoopConf
-        .get("mapreduce.output.fileoutputformat.compress.codec"))
-      fileSinkConf.setCompressType(hadoopConf
-        .get("mapreduce.output.fileoutputformat.compress.type"))
-    }
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
     val numStaticPartitions = partition.values.count(_.nonEmpty)
@@ -332,11 +315,6 @@ case class InsertIntoHiveTable(
       case _ => // do nothing since table has no bucketing
     }
 
-    val committer = FileCommitProtocol.instantiate(
-      sparkSession.sessionState.conf.fileCommitProtocolClass,
-      jobId = java.util.UUID.randomUUID().toString,
-      outputPath = tmpLocation.toString)
-
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
       query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
         throw new AnalysisException(
@@ -344,17 +322,12 @@ case class InsertIntoHiveTable(
       }.asInstanceOf[Attribute]
     }
 
-    FileFormatWriter.write(
+    saveAsHiveFile(
       sparkSession = sparkSession,
       plan = children.head,
-      fileFormat = new HiveFileFormat(fileSinkConf),
-      committer = committer,
-      outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
-      hadoopConf = hadoopConf,
-      partitionColumns = partitionAttributes,
-      bucketSpec = None,
-      statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
-      options = Map.empty)
+      fileSinkConf = fileSinkConf,
+      outputLocation = tmpLocation.toString,
+      partitionAttributes = partitionAttributes)
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {

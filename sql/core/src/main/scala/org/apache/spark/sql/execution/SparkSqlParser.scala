@@ -20,17 +20,16 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
-
 import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
-import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, _}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources.{CreateTable, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
@@ -1498,5 +1497,35 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+  }
+
+  /**
+   * Add an INSERT INTO [TABLE]/INSERT OVERWRITE TABLE or INSERT INTO [LOCAL] DIRECOTRY
+   * operation to the logical plan.
+   */
+  protected override def withInsertInto(ctx: InsertIntoContext,
+                                        query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val tableIdent = Option(ctx.tableIdentifier).map(visitTableIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+
+    val dynamicPartitionKeys = partitionKeys.filter(_._2.isEmpty)
+    if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
+      throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
+        "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
+    }
+
+    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+
+    tableIdent match {
+      case Some(ti: TableIdentifier) =>
+        InsertIntoTable(UnresolvedRelation(ti), partitionKeys, query,
+          ctx.OVERWRITE != null, ctx.EXISTS != null)
+      case _ =>
+        InsertIntoDir(string(ctx.path), ctx.LOCAL != null, rowStorage, fileStorage, query)
+    }
   }
 }
