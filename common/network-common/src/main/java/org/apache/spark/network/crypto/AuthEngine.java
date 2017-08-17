@@ -45,7 +45,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.util.TransportConf;
-import org.apache.spark.network.sasl.SparkSaslServer;
+
+import static org.apache.spark.network.util.HadoopSecurityUtils.decodeMasterKey;
+import static org.apache.spark.network.util.HadoopSecurityUtils.getClientToAMSecretKey;
+import static org.apache.spark.network.util.HadoopSecurityUtils.getIdentifier;
 
 /**
  * A helper class for abstracting authentication and key negotiation details. This is used by
@@ -79,7 +82,7 @@ class AuthEngine implements Closeable {
 
   AuthEngine(String appId, String user, String secret, TransportConf conf) throws GeneralSecurityException {
     this.appId = appId.getBytes(UTF_8);
-    this.user = user.getBytes();
+    this.user = user.getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
     this.secret = secret.toCharArray();
@@ -101,7 +104,7 @@ class AuthEngine implements Closeable {
   ClientChallenge challenge() throws GeneralSecurityException, IOException {
     this.authNonce = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
     SecretKeySpec authKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
-      authNonce, conf.encryptionKeyLength(), secret);
+      authNonce, conf.encryptionKeyLength());
     initializeForAuth(conf.cipherTransformation(), authNonce, authKey);
 
     this.challenge = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
@@ -127,18 +130,20 @@ class AuthEngine implements Closeable {
 
     SecretKeySpec authKey;
     if (conf.isConnectionUsingTokens()) {
-      //Create Secret Key
+      // Create a Secret from client's token identifier and AM's master key.
       ClientToAMTokenSecretManager secretManager = new ClientToAMTokenSecretManager(null,
-              SparkSaslServer.decodeMasterKey(new String(secret)));
-      ClientToAMTokenIdentifier identifier = SparkSaslServer.getIdentifier(clientChallenge.user);
+        decodeMasterKey(new String(secret)));
+      ClientToAMTokenIdentifier identifier = getIdentifier(clientChallenge.user);
       clientUser = identifier.getUser().getShortUserName();
-      secret = SparkSaslServer.getClientToAMSecretKey(identifier, secretManager);
+
+      // Set the secret used for the
+      secret = getClientToAMSecretKey(identifier, secretManager);
     } else {
       clientUser = clientChallenge.user;
     }
 
       authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations, clientChallenge.nonce,
-       clientChallenge.keyLength, secret);
+       clientChallenge.keyLength);
 //      authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
 //              clientChallenge.nonce, clientChallenge.keyLength, secret);
 
@@ -151,7 +156,7 @@ class AuthEngine implements Closeable {
     byte[] outputIv = randomBytes(conf.ivLength());
 
     SecretKeySpec sessionKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-            sessionNonce, clientChallenge.keyLength, secret);
+            sessionNonce, clientChallenge.keyLength);
 
     this.sessionCipher = new TransportCipher(cryptoConf, clientChallenge.cipher, sessionKey,
       inputIv, outputIv);
@@ -176,7 +181,7 @@ class AuthEngine implements Closeable {
     byte[] outputIv = decrypt(serverResponse.outputIv);
 
     SecretKeySpec sessionKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
-      nonce, conf.encryptionKeyLength(), secret);
+      nonce, conf.encryptionKeyLength());
     this.sessionCipher = new TransportCipher(cryptoConf, conf.cipherTransformation(), sessionKey,
       inputIv, outputIv);
   }
@@ -259,11 +264,11 @@ class AuthEngine implements Closeable {
     return Arrays.copyOfRange(challenge, appId.length + nonce.length, challenge.length);
   }
 
-  private SecretKeySpec generateKey(String kdf, int iterations, byte[] salt, int keyLength, char[] password)
+  private SecretKeySpec generateKey(String kdf, int iterations, byte[] salt, int keyLength)
     throws GeneralSecurityException {
 
     SecretKeyFactory factory = SecretKeyFactory.getInstance(kdf);
-    PBEKeySpec spec = new PBEKeySpec(password, salt, iterations, keyLength);
+    PBEKeySpec spec = new PBEKeySpec(secret, salt, iterations, keyLength);
 
     long start = System.nanoTime();
     SecretKey key = factory.generateSecret(spec);
