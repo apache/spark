@@ -18,10 +18,10 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -30,67 +30,42 @@ import org.apache.spark.sql.types.IntegerType
 
 /**
  * Evaluator for clustering results.
- * At the moment, the supported metrics are:
- *  squaredSilhouette: silhouette measure using the squared Euclidean distance;
- *  cosineSilhouette: silhouette measure using the cosine distance.
- *  The implementation follows the proposal explained
+ * The metric computes the silhouette measure
+ * using the squared Euclidean distance.
+ * The implementation follows the proposal explained
  * <a href="https://drive.google.com/file/d/0B0Hyo%5f%5fbG%5f3fdkNvSVNYX2E3ZU0/view">
- *   in this document</a>.
+ * in this document</a>.
  */
 @Experimental
+@Since("2.3.0")
 class ClusteringEvaluator (val uid: String)
   extends Evaluator with HasPredictionCol with HasFeaturesCol with DefaultParamsWritable {
 
-  def this() = this(Identifiable.randomUID("SquaredEuclideanSilhouette"))
+  def this() = this(Identifiable.randomUID("cluEval"))
 
   override def copy(pMap: ParamMap): ClusteringEvaluator = this.defaultCopy(pMap)
 
   override def isLargerBetter: Boolean = true
 
   /** @group setParam */
+  @Since("2.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /** @group setParam */
+  @Since("2.3.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
-  /**
-   * param for metric name in evaluation
-   * (supports `"squaredSilhouette"` (default))
-   * @group param
-   */
-  val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("squaredSilhouette"))
-    new Param(
-      this,
-      "metricName",
-      "metric name in evaluation (squaredSilhouette)",
-      allowedParams
-    )
-  }
-
-  /** @group getParam */
-  def getMetricName: String = $(metricName)
-
-  /** @group setParam */
-  def setMetricName(value: String): this.type = set(metricName, value)
-
-  setDefault(metricName -> "squaredSilhouette")
-
+  @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkColumnType(dataset.schema, $(predictionCol), IntegerType)
 
-    val metric: Double = $(metricName) match {
-      case "squaredSilhouette" =>
-        SquaredEuclideanSilhouette.computeSquaredSilhouette(
-          dataset,
-          $(predictionCol),
-          $(featuresCol)
-        )
-    }
-    metric
+    SquaredEuclideanSilhouette.computeSilhouetteScore(
+      dataset,
+      $(predictionCol),
+      $(featuresCol)
+    )
   }
-
 }
 
 
@@ -161,9 +136,9 @@ private[evaluation] object SquaredEuclideanSilhouette {
       .toMap
   }
 
-  def computeSquaredSilhouetteCoefficient(
+  def computeSilhouetteCoefficient(
      broadcastedClustersMap: Broadcast[Map[Int, ClusterStats]],
-     vector: Vector,
+     features: Vector,
      clusterId: Int,
      squaredNorm: Double): Double = {
 
@@ -175,47 +150,51 @@ private[evaluation] object SquaredEuclideanSilhouette {
         2 * pointDotClusterFeaturesSum / clusterStats.numOfPoints
     }
 
-    var minOther = Double.MaxValue
-    for(c <- broadcastedClustersMap.value.keySet) {
-      if (c != clusterId) {
-        val sil = compute(squaredNorm, vector, broadcastedClustersMap.value(c))
-        if(sil < minOther) {
-          minOther = sil
+    // Here we compute the average dissimilarity of the
+    // current point to any cluster of which the point
+    // is not a member.
+    // The cluster with the lowest average dissimilarity
+    // - i.e. the nearest cluster to the current point -
+    // is said to be the "neighboring cluster".
+    var neighboringClusterDissimilarity = Double.MaxValue
+    broadcastedClustersMap.value.keySet.foreach {
+      c =>
+        if (c != clusterId) {
+          val dissimilarity = compute(squaredNorm, features, broadcastedClustersMap.value(c))
+          if(dissimilarity < neighboringClusterDissimilarity) {
+            neighboringClusterDissimilarity = dissimilarity
+          }
         }
-      }
     }
-    val clusterCurrentPoint = broadcastedClustersMap.value(clusterId)
+    val currentCluster = broadcastedClustersMap.value(clusterId)
     // adjustment for excluding the node itself from
     // the computation of the average dissimilarity
-    val clusterSil = if (clusterCurrentPoint.numOfPoints == 1) {
+    val currentClusterDissimilarity = if (currentCluster.numOfPoints == 1) {
       0
     } else {
-      compute(squaredNorm, vector, clusterCurrentPoint) * clusterCurrentPoint.numOfPoints /
-        (clusterCurrentPoint.numOfPoints - 1)
+      compute(squaredNorm, features, currentCluster) * currentCluster.numOfPoints /
+        (currentCluster.numOfPoints - 1)
     }
 
-    var silhouetteCoeff = 0.0
-    if (clusterSil < minOther) {
-      silhouetteCoeff = 1 - (clusterSil / minOther)
-    } else {
-      if (clusterSil > minOther) {
-        silhouetteCoeff = (minOther / clusterSil) - 1
-      }
+    (currentClusterDissimilarity compare neighboringClusterDissimilarity).signum match {
+      case -1 => 1 - (currentClusterDissimilarity / neighboringClusterDissimilarity)
+      case 1 => (neighboringClusterDissimilarity / currentClusterDissimilarity) - 1
+      case 0 => 0.0
     }
-    silhouetteCoeff
-
   }
 
-  def computeSquaredSilhouette(dataset: Dataset[_],
-    predictionCol: String,
-    featuresCol: String): Double = {
+  /**
+   * Compute the mean Silhouette Coefficient of all samples.
+   */
+  def computeSilhouetteScore(dataset: Dataset[_],
+      predictionCol: String,
+      featuresCol: String): Double = {
     SquaredEuclideanSilhouette.registerKryoClasses(dataset.sparkSession.sparkContext)
 
-    val squaredNorm = udf {
-      features: Vector =>
-        math.pow(Vectors.norm(features, 2.0), 2.0)
+    val squaredNormUDF = udf {
+      features: Vector => math.pow(Vectors.norm(features, 2.0), 2.0)
     }
-    val dfWithSquaredNorm = dataset.withColumn("squaredNorm", squaredNorm(col(featuresCol)))
+    val dfWithSquaredNorm = dataset.withColumn("squaredNorm", squaredNormUDF(col(featuresCol)))
 
     // compute aggregate values for clusters
     // needed by the algorithm
@@ -224,17 +203,15 @@ private[evaluation] object SquaredEuclideanSilhouette {
 
     val bClustersStatsMap = dataset.sparkSession.sparkContext.broadcast(clustersStatsMap)
 
-    val computeSilhouette = dataset.sparkSession.udf.register("computeSilhouette",
-      computeSquaredSilhouetteCoefficient(bClustersStatsMap, _: Vector, _: Int, _: Double)
-    )
+    val computeSilhouetteCoefficientUDF = udf {
+      computeSilhouetteCoefficient(bClustersStatsMap, _: Vector, _: Int, _: Double)
+    }
 
-    val squaredSilhouetteDF = dfWithSquaredNorm
-      .withColumn("silhouetteCoefficient",
-        computeSilhouette(col(featuresCol), col(predictionCol), col("squaredNorm"))
-      )
-      .agg(avg(col("silhouetteCoefficient")))
-
-    squaredSilhouetteDF.collect()(0).getDouble(0)
+    dfWithSquaredNorm
+      .select(avg(
+        computeSilhouetteCoefficientUDF(col(featuresCol), col(predictionCol), col("squaredNorm"))
+      ))
+      .collect()(0)
+      .getDouble(0)
   }
-
 }
