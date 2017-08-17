@@ -37,7 +37,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   with HasFeaturesCol with HasPredictionCol with HasWeightCol {
 
   /**
-   * The number of clusters to create (k). Must be > 1. Default: 2.
+   * The number of clusters to create (k). Must be &gt; 1. Default: 2.
    * @group param
    */
   @Since("2.3.0")
@@ -64,7 +64,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   def getInitMode: String = $(initMode)
 
   /**
-   * Param for the column name for ids returned by [[PowerIterationClustering.transform()]].
+   * Param for the column name for ids returned by PowerIterationClustering.transform().
    * Default: "id"
    * @group param
    */
@@ -76,7 +76,7 @@ private[clustering] trait PowerIterationClusteringParams extends Params with Has
   def getIdCol: String = $(idCol)
 
   /**
-   * Param for the column name for neighbors required by [[PowerIterationClustering.transform()]].
+   * Param for the column name for neighbors required by PowerIterationClustering.transform().
    * Default: "neighbor"
    * @group param
    */
