@@ -189,7 +189,7 @@ NULL	2	NULL	1
 
 
 -- !query 18
-CREATE TEMPORARY VIEW jsonTable(jsonField, a, b) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a', 'b')
+CREATE TEMPORARY VIEW jsonTable(jsonField, a) AS SELECT * FROM VALUES ('{"a": 1, "b": 2}', 'a')
 -- !query 18 schema
 struct<>
 -- !query 18 output
@@ -197,7 +197,7 @@ struct<>
 
 
 -- !query 19
-SELECT json_tuple(jsonField, b, CAST(NULL AS STRING), 'a') FROM jsonTable
+SELECT json_tuple(jsonField, 'b', CAST(NULL AS STRING), a) FROM jsonTable
 -- !query 19 schema
 struct<c0:string,c1:string,c2:string>
 -- !query 19 output
