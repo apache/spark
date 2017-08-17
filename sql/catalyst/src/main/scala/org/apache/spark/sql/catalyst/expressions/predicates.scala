@@ -187,7 +187,6 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
                | [${subqueryOutputNotInCondition.map(_.sql).mkString(", ")}].
                | Condition:
                | [${children.map(_.sql).mkString(", ")}].
-               | ${l.references}
              """.stripMargin
           TypeCheckResult.TypeCheckFailure(finalErrorMessage)
         } else {
