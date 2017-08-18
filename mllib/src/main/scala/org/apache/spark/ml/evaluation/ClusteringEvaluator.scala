@@ -100,8 +100,8 @@ object ClusteringEvaluator
  *
  * <blockquote>
  *   s_{i}=\left\{ \begin{tabular}{cc}
- *   $1-\frac{a_{i}}{b_{i}}$ & se $a_{i} \leq b_{i}$ \\
- *   $\frac{b_{i}}{a_{i}}-1$ & se $a_{i} > b_{i}$
+ *   $1-\frac{a_{i}}{b_{i}}$ & if $a_{i} \leq b_{i}$ \\
+ *   $\frac{b_{i}}{a_{i}}-1$ & if $a_{i} \gt b_{i}$
  * </blockquote>
  *
  * where `a(i)` is the average dissimilarity of `i` with all other data
@@ -127,12 +127,12 @@ object ClusteringEvaluator
  * to the points `C_{i}` belonging to the cluster `\Gamma` is:
  *
  * <blockquote>
- *   \sum\limits_{i=1}^N d(X, C_{i} )^2 = \\
+ *   \sum\limits_{i=1}^N d(X, C_{i} )^2 =
  *   \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D (x_{j}-c_{ij})^2 \Big)
- *   = \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D x_{j}^2 + \\
+ *   = \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D x_{j}^2 +
  *   \sum\limits_{j=1}^D c_{ij}^2 -2\sum\limits_{j=1}^D x_{i}c_{ij} \Big)
- *   = \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 + \\
- *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2 \\
+ *   = \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 +
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2
  *   -2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij}
  * </blockquote>
  *
@@ -142,7 +142,7 @@ object ClusteringEvaluator
  * Then, the first term of the equation can be rewritten as:
  *
  * <blockquote>
- *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 = N \xi_{X} , \\
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 = N \xi_{X} ,
  *   with \xi_{X} = \sum\limits_{j=1}^D x_{j}^2
  * </blockquote>
  *
@@ -152,14 +152,14 @@ object ClusteringEvaluator
  * thus we can name it `\Psi_{\Gamma}`
  *
  * <blockquote>
- *   sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2 = \\
+ *   sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2 =
  *   \sum\limits_{i=1}^N \xi_{C_{i}} = \Psi_{\Gamma}
  * </blockquote>
  *
  * Last, the third element becomes
  *
  * <blockquote>
- *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij} = \\
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij} =
  *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i}
  * </blockquote>
  *
@@ -172,7 +172,7 @@ object ClusteringEvaluator
  * which is fixed for each cluster `\Gamma`, we have
  *
  * <blockquote>
- *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i} = \\
+ *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i} =
  *   \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}
  * </blockquote>
  *
@@ -185,8 +185,8 @@ object ClusteringEvaluator
  * and the distance of a point to a cluster can be computed as
  *
  * <blockquote>
- *   \frac{\sum\limits_{i=1}^N d(X, C_{i} )^2}{N} = \\
- *   \frac{N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N} = \\
+ *   \frac{\sum\limits_{i=1}^N d(X, C_{i} )^2}{N} =
+ *   \frac{N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N} =
  *   \xi_{X} + \frac{\Psi_{\Gamma} }{N} - 2 \frac{\sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N}
  * </blockquote>
  *
@@ -244,8 +244,9 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * @param df The DataFrame which contains the input data
    * @param predictionCol The name of the column which contains the cluster id for the point.
    * @param featuresCol The name of the column which contains the feature vector of the point.
-   * @return A [[Map]] which associates each cluster id to a [[ClusterStats]] object (which
-   *         contains the precomputed values `N`, `\Psi_{\Gamma}` and `Y_{\Gamma}` for a cluster).
+   * @return A [[scala.collection.immutable.Map]] which associates each cluster id
+   *         to a [[ClusterStats]] object (which contains the precomputed values `N`,
+   *         `\Psi_{\Gamma}` and `Y_{\Gamma}` for a cluster).
    */
   def computeClusterStats(
     df: DataFrame,
