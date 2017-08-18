@@ -70,28 +70,19 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
     }
   }
 
-  test("SPARK-21739: Cast expression should initialize timezoneId " +
-    "when it is called statically to convert something into TimestampType") {
+  test("SPARK-21739: Cast expression should initialize timezoneId") {
     withTable("table_with_timestamp_partition") {
-      // create table for test
-      sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED by (ts timestamp)")
+      sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED BY (ts TIMESTAMP)")
       sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
-        "partition (ts = '2010-01-01 00:00:00.000') VALUES (1)")
-      sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
-        "partition (ts = '2010-01-02 00:00:00.000') VALUES (2)")
-      sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
-        "partition (ts = '2010-01-03 00:00:00.000') VALUES (3)")
+        "PARTITION (ts = '2010-01-01 00:00:00.000') VALUES (1)")
 
       // test for Cast expression in TableReader
-      checkAnswer(sql("select * from table_with_timestamp_partition"),
-        Seq(
-          Row(1, Timestamp.valueOf("2010-01-01 00:00:00.000")),
-          Row(2, Timestamp.valueOf("2010-01-02 00:00:00.000")),
-          Row(3, Timestamp.valueOf("2010-01-03 00:00:00.000"))))
+      checkAnswer(sql("SELECT * FROM table_with_timestamp_partition"),
+        Seq(Row(1, Timestamp.valueOf("2010-01-01 00:00:00.000"))))
 
       // test for Cast expression in HiveTableScanExec
-      checkAnswer(sql("select value from table_with_timestamp_partition " +
-        "where ts = '2010-01-02 00:00:00.000'"), Row(2))
+      checkAnswer(sql("SELECT value FROM table_with_timestamp_partition " +
+        "WHERE ts = '2010-01-01 00:00:00.000'"), Row(1))
     }
   }
 }
