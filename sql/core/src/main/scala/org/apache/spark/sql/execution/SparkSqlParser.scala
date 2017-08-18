@@ -1366,7 +1366,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else {
       // CREATE VIEW ... AS INSERT INTO is not allowed.
       ctx.query.queryNoWith match {
-        case s: SingleInsertQueryContext if s.insertInto != null =>
+        case s: SingleInsertQueryContext if s.insertIntoTable != null =>
           operationNotAllowed("CREATE VIEW ... AS INSERT INTO", ctx)
         case _: MultiInsertQueryContext =>
           operationNotAllowed("CREATE VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)
@@ -1505,8 +1505,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * Add an INSERT INTO [TABLE]/INSERT OVERWRITE TABLE or INSERT INTO [LOCAL] DIRECOTRY
    * operation to the logical plan.
    */
-  protected override def withInsertInto(ctx: InsertIntoContext,
-                                        query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+  protected override def withInsertIntoTable(ctx: InsertIntoTableContext,
+                                             query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val tableIdent = Option(ctx.tableIdentifier).map(visitTableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 

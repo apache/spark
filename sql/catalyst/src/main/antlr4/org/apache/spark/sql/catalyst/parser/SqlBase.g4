@@ -237,7 +237,7 @@ query
     : ctes? queryNoWith
     ;
 
-insertInto
+insertIntoTable
     : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
     | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?
@@ -326,7 +326,7 @@ resource
     ;
 
 queryNoWith
-    : insertInto? queryTerm queryOrganization                                              #singleInsertQuery
+    : insertIntoTable? queryTerm queryOrganization                                         #singleInsertQuery
     | fromClause multiInsertQueryBody+                                                     #multiInsertQuery
     ;
 
@@ -340,7 +340,7 @@ queryOrganization
     ;
 
 multiInsertQueryBody
-    : insertInto?
+    : insertIntoTable?
       querySpecification
       queryOrganization
     ;
