@@ -397,10 +397,11 @@ class CloudPickler(Pickler):
         """
         # check if any known dependency is an imported package
         for x in top_level_dependencies:
-            if isinstance(x, types.ModuleType) and x.__package__:
+            if isinstance(x, types.ModuleType) and hasattr(x, '__package__') and x.__package__:
                 # check if the package has any currently loaded sub-imports
                 prefix = x.__name__ + '.'
                 for name, module in sys.modules.items():
+                    # Older versions of pytest will add a "None" module to sys.modules.
                     if name is not None and name.startswith(prefix):
                         # check whether the function can address the sub-module
                         tokens = set(name[len(prefix):].split('.'))
@@ -616,7 +617,12 @@ class CloudPickler(Pickler):
 
         modname = getattr(obj, "__module__", None)
         if modname is None:
-            modname = pickle.whichmodule(obj, name)
+            try:
+                # whichmodule() could fail, see
+                # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
+                modname = pickle.whichmodule(obj, name)
+            except Exception:
+                modname = '__main__'
 
         if modname == '__main__':
             themodule = None
