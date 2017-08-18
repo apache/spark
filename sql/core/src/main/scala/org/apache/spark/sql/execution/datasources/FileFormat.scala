@@ -65,6 +65,18 @@ trait FileFormat {
   }
 
   /**
+   * Returns concrete column vector class names for each column to be used in a columnar batch
+   * if this format supports returning columnar batch.
+   */
+  def vectorTypes(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType): Option[Seq[String]] = {
+    None
+  }
+
+  /**
    * Returns whether a file with `path` could be splitted or not.
    */
   def isSplitable(

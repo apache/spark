@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -270,6 +271,15 @@ class ParquetFileFormat
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
+  }
+
+  override def vectorTypes(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType): Option[Seq[String]] = {
+    Option(Seq.fill(requiredSchema.fields.length + partitionSchema.fields.length)(
+      classOf[OnHeapColumnVector].getName))
   }
 
   override def isSplitable(
