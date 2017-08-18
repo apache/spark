@@ -322,7 +322,12 @@ class CloudPickler(Pickler):
 
         if name is None:
             name = obj.__name__
-        modname = pickle.whichmodule(obj, name)
+        try:
+            # whichmodule() could fail, see
+            # https://bitbucket.org/gutworth/six/issues/63/importing-six-breaks-pickling
+            modname = pickle.whichmodule(obj, name)
+        except Exception:
+            modname = None
         # print('which gives %s %s %s' % (modname, obj, name))
         try:
             themodule = sys.modules[modname]
