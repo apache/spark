@@ -27,6 +27,12 @@ import org.apache.spark.util.Utils
 
 /**
  * Test how BasicWriteTaskStatsTracker handles files.
+ *
+ * Two different datasets are written (alongside 0), one of
+ * length 10, one of 3. They were chosen to be distinct enough
+ * that it is straightforward to determine which file lengths were added
+ * from the sum of all files added. Lengths like "10" and "5" would
+ * be less informative.
  */
 class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
@@ -158,13 +164,14 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     tracker.newFile(file1.toString)
     write1(file1)
 
-    // file 2 is noted, but not visible
+    // file 2 is noted, but not created
     tracker.newFile(file2.toString)
-    touch(file3)
 
-    // file 3 is created
+    // file 3 is noted & then created
     tracker.newFile(file3.toString)
     write2(file3)
+
+    // the expeected size is file1 + file3
     assertStats(tracker, 3, len1 + len2)
   }
 
