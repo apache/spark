@@ -48,13 +48,13 @@ case class AnalyzePartitionCommand(
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
     val normalizedPartitionSpec =
       PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionColumnNames,
-        table.identifier.quotedString, conf.resolver);
+        table.identifier.quotedString, conf.resolver)
 
     // Report an error if partition columns in partition specification do not form
     // a prefix of the list of partition columns defined in the table schema
-    val isSpecified =
+    val isNotSpecified =
       table.partitionColumnNames.map(normalizedPartitionSpec.getOrElse(_, None).isEmpty)
-    if (isSpecified.init.zip(isSpecified.tail).contains((true, false))) {
+    if (isNotSpecified.init.zip(isNotSpecified.tail).contains((true, false))) {
       val tableId = table.identifier
       val schemaColumns = table.partitionColumnNames.mkString(",")
       val specColumns = normalizedPartitionSpec.keys.mkString(",")
