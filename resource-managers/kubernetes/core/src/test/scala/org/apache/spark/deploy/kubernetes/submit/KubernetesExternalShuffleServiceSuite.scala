@@ -17,8 +17,8 @@
 package org.apache.spark.deploy.kubernetes.submit
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.KubernetesExternalShuffleService
+import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClient
