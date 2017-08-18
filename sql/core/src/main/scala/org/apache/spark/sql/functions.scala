@@ -3227,7 +3227,7 @@ object functions {
       val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
       val inputTypes = Try($inputTypes).toOption
       val udf = UserDefinedFunction(f, dataType, inputTypes)
-      if (nullable) udf else udf.asNonNullabe()
+      if (nullable) udf else udf.asNonNullable()
     }""")
   }
 
@@ -3246,7 +3246,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3262,7 +3262,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3278,7 +3278,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3294,7 +3294,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3310,7 +3310,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3326,7 +3326,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3342,7 +3342,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3358,7 +3358,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3374,7 +3374,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3390,7 +3390,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   /**
@@ -3406,7 +3406,7 @@ object functions {
     val ScalaReflection.Schema(dataType, nullable) = ScalaReflection.schemaFor[RT]
     val inputTypes = Try(ScalaReflection.schemaFor(typeTag[A1]).dataType :: ScalaReflection.schemaFor(typeTag[A2]).dataType :: ScalaReflection.schemaFor(typeTag[A3]).dataType :: ScalaReflection.schemaFor(typeTag[A4]).dataType :: ScalaReflection.schemaFor(typeTag[A5]).dataType :: ScalaReflection.schemaFor(typeTag[A6]).dataType :: ScalaReflection.schemaFor(typeTag[A7]).dataType :: ScalaReflection.schemaFor(typeTag[A8]).dataType :: ScalaReflection.schemaFor(typeTag[A9]).dataType :: ScalaReflection.schemaFor(typeTag[A10]).dataType :: Nil).toOption
     val udf = UserDefinedFunction(f, dataType, inputTypes)
-    if (nullable) udf else udf.asNonNullabe()
+    if (nullable) udf else udf.asNonNullable()
   }
 
   // scalastyle:on parameter.number

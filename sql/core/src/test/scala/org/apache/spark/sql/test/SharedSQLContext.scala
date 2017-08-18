@@ -31,7 +31,9 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventually {
 
   protected def sparkConf = {
-    new SparkConf().set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
+    new SparkConf()
+      .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
+      .set("spark.unsafe.exceptionOnMemoryLeak", "true")
   }
 
   /**
