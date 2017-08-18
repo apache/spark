@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.atomic.AtomicInteger
 import javax.annotation.concurrent.GuardedBy
 
+import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 import scala.util.control.NonFatal
 
@@ -33,6 +35,7 @@ import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
+
 
 object MemoryStream {
   protected val currentBlockId = new AtomicInteger(0)
@@ -119,8 +122,15 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       batches.slice(sliceStart, sliceEnd)
     }
 
-    logDebug(
-      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${newBlocks.flatMap(_.collect()).mkString(", ")}")
+    logDebug({
+      val items: Seq[A] = newBlocks.flatMap(ds => {
+        val writer = new DebugForeachWriter[A]()
+        val execution = ds.writeStream.foreach(writer).start()
+        execution.stop()
+        writer.items
+      })
+      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${items.mkString(", ")}"
+    })
     newBlocks
       .map(_.toDF())
       .reduceOption(_ union _)
@@ -232,4 +242,20 @@ case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode
   private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
+}
+
+/** A [[ForeachWriter]] that appends events onto a sequence. Not thread-safe. */
+class DebugForeachWriter[A : Encoder]() extends ForeachWriter[A] {
+
+  var items: Seq[A] = Seq()
+
+  override def open(partitionId: Long, version: Long): Boolean = {
+    true
+  }
+
+  override def process(value: A): Unit = {
+    items = items :+ value
+  }
+
+  override def close(errorOrNull: Throwable): Unit = {}
 }
