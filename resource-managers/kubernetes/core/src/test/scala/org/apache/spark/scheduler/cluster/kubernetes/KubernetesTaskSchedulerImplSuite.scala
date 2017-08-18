@@ -19,10 +19,11 @@ package org.apache.spark.scheduler.cluster.kubernetes
 import io.fabric8.kubernetes.api.model.{Pod, PodSpec, PodStatus}
 import org.mockito.Matchers._
 import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.scheduler.FakeTask
-import org.scalatest.BeforeAndAfter
 
 class KubernetesTaskSchedulerImplSuite extends SparkFunSuite with BeforeAndAfter {
 
