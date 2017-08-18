@@ -15,25 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.orc
+package org.apache.spark.sql.execution.datasources.orc
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConverters._
 
-import org.apache.hadoop.hive.ql.io.sarg.{PredicateLeaf, SearchArgument}
+import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument}
 
-import org.apache.spark.sql.{Column, DataFrame, QueryTest}
+import org.apache.spark.sql.{Column, DataFrame}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
 /**
- * A test suite that tests ORC filter API based filter pushdown optimization.
+ * A test suite that tests Apache ORC filter API based filter pushdown optimization.
  */
-class OrcFilterSuite extends QueryTest with OrcTest {
+class OrcFilterSuite extends OrcTest with SharedSQLContext {
+
   private def checkFilterPredicate(
       df: DataFrame,
       predicate: Predicate,
@@ -55,7 +58,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
+    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
     assert(maybeFilter.isDefined, s"Couldn't generate filter predicate for $selectedFilters")
     checker(maybeFilter.get)
   }
@@ -99,7 +102,7 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       DataSourceStrategy.selectFilters(maybeRelation.get, maybeAnalyzedPredicate.toSeq)
     assert(selectedFilters.nonEmpty, "No filter is pushed down")
 
-    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters.toArray)
+    val maybeFilter = OrcFilters.createFilter(query.schema, selectedFilters)
     assert(maybeFilter.isEmpty, s"Could generate filter predicate for $selectedFilters")
   }
 
@@ -291,33 +294,25 @@ class OrcFilterSuite extends QueryTest with OrcTest {
       // This might have to be changed after Hive version is upgraded.
       checkFilterPredicate(
         '_1.isNotNull,
-        """leaf-0 = (IS_NULL _1)
-          |expr = (not leaf-0)""".stripMargin.trim
+        "leaf-0 = (IS_NULL _1), expr = (not leaf-0)"
       )
       checkFilterPredicate(
         '_1 =!= 1,
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (EQUALS _1 1)
-          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
+        "leaf-0 = (IS_NULL _1), leaf-1 = (EQUALS _1 1), expr = (and (not leaf-0) (not leaf-1))"
       )
       checkFilterPredicate(
         !('_1 < 4),
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (LESS_THAN _1 4)
-          |expr = (and (not leaf-0) (not leaf-1))""".stripMargin.trim
+        "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 4), expr = (and (not leaf-0) (not leaf-1))"
       )
       checkFilterPredicate(
         '_1 < 2 || '_1 > 3,
-        """leaf-0 = (LESS_THAN _1 2)
-          |leaf-1 = (LESS_THAN_EQUALS _1 3)
-          |expr = (or leaf-0 (not leaf-1))""".stripMargin.trim
+        "leaf-0 = (LESS_THAN _1 2), leaf-1 = (LESS_THAN_EQUALS _1 3), " +
+          "expr = (or leaf-0 (not leaf-1))"
       )
       checkFilterPredicate(
         '_1 < 2 && '_1 > 3,
-        """leaf-0 = (IS_NULL _1)
-          |leaf-1 = (LESS_THAN _1 2)
-          |leaf-2 = (LESS_THAN_EQUALS _1 3)
-          |expr = (and (not leaf-0) leaf-1 (not leaf-2))""".stripMargin.trim
+        "leaf-0 = (IS_NULL _1), leaf-1 = (LESS_THAN _1 2), leaf-2 = (LESS_THAN_EQUALS _1 3), " +
+          "expr = (and (not leaf-0) leaf-1 (not leaf-2))"
       )
     }
   }
@@ -342,6 +337,32 @@ class OrcFilterSuite extends QueryTest with OrcTest {
     // MapType
     withOrcDataFrame((1 to 4).map(i => Tuple1(Map(i -> i)))) { implicit df =>
       checkNoFilterPredicate('_1.isNotNull)
+    }
+  }
+
+  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+    import org.apache.spark.sql.sources._
+    // The `LessThan` should be converted while the `StringContains` shouldn't
+    val schema = new StructType(
+      Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = true)))
+    assertResult("leaf-0 = (LESS_THAN a 10), expr = leaf-0") {
+      OrcFilters.createFilter(schema, Array(
+        LessThan("a", 10),
+        StringContains("b", "prefix")
+      )).get.toString
+    }
+
+    // The `LessThan` should be converted while the whole inner `And` shouldn't
+    assertResult("leaf-0 = (LESS_THAN a 10), expr = leaf-0") {
+      OrcFilters.createFilter(schema, Array(
+        LessThan("a", 10),
+        Not(And(
+          GreaterThan("a", 1),
+          StringContains("b", "prefix")
+        ))
+      )).get.toString
     }
   }
 }
