@@ -1465,6 +1465,62 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
+   * Alter table to add a constraint. This creates a [[AlterTableAddConstraintCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   ALTER TABLE [db_name.]table_name ADD [CONSTRAINT constraintName] constraint
+   * }}}
+   */
+  override def visitAddTableConstraint(
+      ctx: AddTableConstraintContext): LogicalPlan = withOrigin(ctx) {
+    val tableIdentifier = visitTableIdentifier(ctx.tableIdentifier)
+    AlterTableAddConstraintCommand(
+      tableIdentifier = visitTableIdentifier(ctx.tableIdentifier),
+      inputConstraint = visitTableConstraint(ctx.tableConstraint))
+  }
+
+  /**
+   * Creates primary or foreign key constraint.
+   *
+   * For example:
+   * {{{
+   *  (PRIMARY KEY (col_names) |
+   *  FOREIGN KEY (col_names) REFERENCES [db_name.]table_name [(col_names)])
+   *  [VALIDATE | NOVALIDATE] [RELY | NORELY]
+   * }}}
+   */
+  override def visitTableConstraint(
+      ctx: TableConstraintContext): TableConstraint = withOrigin(ctx) {
+    val keyColNames = visitIdentifierList(ctx.keyColNames).toArray
+    val constraintName = Option(ctx.identifier()).map(_.getText)
+    val isValidated = Option(ctx.constraintState).map(_.VALIDATE != null).getOrElse(false)
+    val isRely = Option(ctx.constraintState).map(_.RELY != null).getOrElse(false)
+    // TODO: Support VALIDATE option to verify data conforms to the constraint definition
+    if (isValidated) {
+      throw new ParseException("VALIDATE option is not currently supported.", ctx)
+    }
+    if (ctx.PRIMARY != null) {
+      PrimaryKey(
+        constraintName = constraintName.getOrElse(TableConstraint.generateConstraintName("pk")),
+        keyColumnNames = keyColNames,
+        isValidated = isValidated,
+        isRely = isRely)
+    } else {
+      // Foreign key
+      val referenceColNames = Option(ctx.referenceClause.referenceColNames)
+        .map(visitIdentifierList(_)).getOrElse(Seq.empty)
+      ForeignKey(
+        constraintName = constraintName.getOrElse(TableConstraint.generateConstraintName("fk")),
+        keyColumnNames = keyColNames,
+        referenceTableIdentifier = visitTableIdentifier(ctx.referenceClause.tableIdentifier),
+        referenceColumnNames = referenceColNames,
+        isValidated = isValidated,
+        isRely = isRely)
+    }
+  }
+
+  /**
    * Create a [[ScriptInputOutputSchema]].
    */
   override protected def withScriptIOSchema(

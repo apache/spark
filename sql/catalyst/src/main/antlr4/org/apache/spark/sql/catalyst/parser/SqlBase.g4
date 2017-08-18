@@ -120,6 +120,7 @@ statement
         DROP (IF EXISTS)? partitionSpec (',' partitionSpec)*           #dropTablePartitions
     | ALTER TABLE tableIdentifier partitionSpec? SET locationSpec      #setTableLocation
     | ALTER TABLE tableIdentifier RECOVER PARTITIONS                   #recoverPartitions
+    | ALTER TABLE tableIdentifier ADD tableConstraint                  #addTableConstraint
     | DROP TABLE (IF EXISTS)? tableIdentifier PURGE?                   #dropTable
     | DROP VIEW (IF EXISTS)? tableIdentifier                           #dropTable
     | CREATE (OR REPLACE)? (GLOBAL? TEMPORARY)?
@@ -237,6 +238,20 @@ skewSpec
 locationSpec
     : LOCATION STRING
     ;
+
+tableConstraint
+    : (CONSTRAINT identifier)?
+      (PRIMARY KEY keyColNames=identifierList
+        | FOREIGN KEY keyColNames=identifierList referenceClause) constraintState
+    ;
+
+constraintState
+    : (VALIDATE | NOVALIDATE)? (RELY | NORELY)?
+    ;
+
+referenceClause
+   : REFERENCES tableIdentifier (referenceColNames = identifierList)?
+   ;
 
 query
     : ctes? queryNoWith
@@ -753,6 +768,7 @@ nonReserved
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     | DIRECTORY
     | BOTH | LEADING | TRAILING
+    | CONSTRAINT | PRIMARY | FOREIGN | KEY | REFERENCES | VALIDATE | NOVALIDATE | RELY | NORELY
     ;
 
 SELECT: 'SELECT';
@@ -986,6 +1002,15 @@ OPTION: 'OPTION';
 ANTI: 'ANTI';
 LOCAL: 'LOCAL';
 INPATH: 'INPATH';
+CONSTRAINT: 'CONSTRAINT';
+PRIMARY: 'PRIMARY';
+FOREIGN: 'FOREIGN';
+KEY: 'KEY';
+REFERENCES: 'REFERENCES';
+VALIDATE: 'VALIDATE';
+NOVALIDATE: 'NOVALIDATE';
+RELY: 'RELY';
+NORELY: 'NORELY';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''

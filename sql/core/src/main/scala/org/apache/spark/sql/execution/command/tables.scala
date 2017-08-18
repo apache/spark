@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, Resolver, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.util.Utils
@@ -250,6 +251,43 @@ case class AlterTableAddColumnsCommand(
   }
 }
 
+/**
+ * A command that add constraint to a table
+ * The syntax of using this command in SQL is:
+ * {{{
+ *  ALTER TABLE [db_name.]table_name ADD [CONSTRAINT constraintName]
+ *  (PRIMARY KEY (col_names) |
+ *   FOREIGN KEY (col_names) REFERENCES [db_name.]table_name [(col_names)])
+ *  [VALIDATE | NOVALIDATE] [RELY | NORELY]
+ *
+ * }}}
+ */
+case class AlterTableAddConstraintCommand(
+    tableIdentifier: TableIdentifier,
+    inputConstraint: TableConstraint) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    val table = catalog.getTableMetadata(tableIdentifier)
+    // TODO: Support in-memory catalog, currently only Hive catalog is supported
+    if (!sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive")) {
+      throw new UnsupportedOperationException(
+        "Hive support is required to add table constraints.")
+    }
+    if (table.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException("Can not add table constraints on a view.")
+    }
+    val resolver = sparkSession.sessionState.conf.resolver
+    val constraint = TableConstraint
+      .verifyAndBuildConstraint(inputConstraint, table, catalog, resolver)
+    val newTableConstraints = table.tableConstraints match {
+      case Some(constraints) => constraints.addConstraint(constraint, resolver)
+      case None => TableConstraints(constraint)
+    }
+    catalog.alterTable(table.copy(tableConstraints = Option(newTableConstraints)))
+    Seq.empty[Row]
+  }
+}
 
 /**
  * A command that loads data into a Hive table.
