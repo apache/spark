@@ -143,4 +143,10 @@ public class SparkFirehoseListener implements SparkListenerInterface {
   public void onOtherEvent(SparkListenerEvent event) {
     onEvent(event);
   }
+
+  @Override
+  public void onExecutorLogLevelChange(ExecutorLogLevelChange executorLogLevelChange)
+  {
+    onEvent(executorLogLevelChange);
+  }
 }

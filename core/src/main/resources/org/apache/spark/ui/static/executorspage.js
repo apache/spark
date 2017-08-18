@@ -171,6 +171,22 @@ function totalDurationColor(totalGCTime, totalDuration) {
     return (totalGCTime > GCTimePercent * totalDuration) ? "white" : "black";
 }
 
+function setLogLevel(executorId, lastLevel){
+    var level = $("#executor-"+executorId).select().val();
+    if(lastLevel != level){
+        $.get("executor/setLogLevel?logLevel="+level+"&executorId="+executorId,function(data){
+     });
+    }
+}
+
+function restoreLogLevel(executorId, originLevel){
+    if(originLevel != null){
+        $("#executor-"+executorId).val(originLevel);
+        $.get("executor/setLogLevel?logLevel="+originLevel+"&executorId="+executorId,function(data){
+        });
+    }
+}
+
 $(document).ready(function () {
     $.extend($.fn.dataTable.defaults, {
         stateSave: true,
@@ -496,6 +512,34 @@ $(document).ready(function () {
                             data: 'id', render: function (data, type) {
                                 return type === 'display' ? ("<a href='threadDump/?executorId=" + data + "'>Thread Dump</a>" ) : data;
                             }
+                        },
+                        {
+                            data: function (row, type) {
+                            var executorId = type !== 'display' ? (isNaN(row.id) ? 0 : row.id ) : row.id;
+                            var level = row.logLevel;
+                            var originLevel = level[0];
+                            var lastLevel = level[1];
+                            var options = {
+                                INFO: '<option value="INFO">INFO</option>',
+                                DEBUG: '<option value="DEBUG">DEBUG</option>',
+                                WARN: '<option value="WARN">WARN</option>',
+                                ERROR: '<option value="ERROR">ERROR</option>',
+                                FATAL: '<option value="FATAL">FATAL</option>',
+                                OFF: '<option value="OFF">OFF</option>',
+                                TRACE: '<option value="TRACE">TRACE</option>',
+                                ALL: '<option value="ALL">ALL</option>'
+                            };
+                            if(lastLevel != null){
+                            var levelOption = options[lastLevel];
+                            }
+                            for (opt in options) {
+                                if (opt != lastLevel)
+                                    levelOption = levelOption + options[opt];
+                            }
+                            return '<div class="container" ><select style="width: 70px;" id=executor-'+ executorId +' >' + levelOption +
+                                '</select><input class="apply" type="button" value="apply" name="clear"  onClick=setLogLevel("' + executorId +'","'+lastLevel+ '") />' +
+                                '<input class="restore" type="button" value="restore" name="clear" onClick=restoreLogLevel("' + executorId + '","' + originLevel + '") /></div>';
+                        }
                         }
                     ],
                     "order": [[0, "asc"]]

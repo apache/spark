@@ -357,6 +357,7 @@ class SparkContext(config: SparkConf) extends Logging {
       s"Supplied level $logLevel did not match one of:" +
         s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
+    listenerBus.post(ExecutorLogLevelChange("driver", Utils.getLogLevel(), logLevel))
   }
 
   try {
@@ -584,6 +585,22 @@ class SparkContext(config: SparkConf) extends Logging {
       } finally {
         throw e
       }
+  }
+
+  def setExecutorLogLevel(logLevel: String, executorId: String) {
+    // let's allow lowercase or mixed case too
+    val upperCased = logLevel.toUpperCase(Locale.ROOT)
+    require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+      s"Supplied level $logLevel did not match one of:" +
+        s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
+    schedulerBackend match {
+      case scheduler: CoarseGrainedSchedulerBackend =>
+        scheduler.setExecutorLogLevel(logLevel, executorId)
+      case scheduler: LocalSchedulerBackend =>
+        scheduler.setExecutorLogLevel(logLevel, executorId)
+      case _ =>
+        logWarning("Requesting executors is only supported in coarse-grained mode")
+    }
   }
 
   /**

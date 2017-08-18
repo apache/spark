@@ -77,6 +77,7 @@ class ExecutorSummary private[spark](
     val isBlacklisted: Boolean,
     val maxMemory: Long,
     val executorLogs: Map[String, String],
+    var logLevel: (String, String) = (null, null),
     val memoryMetrics: Option[MemoryMetrics])
 
 class MemoryMetrics private[spark](

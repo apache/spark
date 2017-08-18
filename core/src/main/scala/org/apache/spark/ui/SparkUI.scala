@@ -72,7 +72,8 @@ private[spark] class SparkUI private (
     attachTab(stagesTab)
     attachTab(new StorageTab(this))
     attachTab(new EnvironmentTab(this))
-    attachTab(new ExecutorsTab(this))
+    val executorsTab = new ExecutorsTab(this)
+    attachTab(executorsTab)
     attachHandler(createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler("/", "/jobs/", basePath = basePath))
     attachHandler(ApiRootResource.getServletHandler(this))
@@ -81,6 +82,9 @@ private[spark] class SparkUI private (
       "/jobs/job/kill", "/jobs/", jobsTab.handleKillRequest, httpMethods = Set("GET", "POST")))
     attachHandler(createRedirectHandler(
       "/stages/stage/kill", "/stages/", stagesTab.handleKillRequest,
+      httpMethods = Set("GET", "POST")))
+    attachHandler(createRedirectHandler(
+      "/executors/executor/setLogLevel", "/exeuctors/", executorsTab.handleSetLogLevel,
       httpMethods = Set("GET", "POST")))
   }
   initialize()
