@@ -100,7 +100,8 @@ public class TransportServer implements Closeable {
       .option(ChannelOption.ALLOCATOR, allocator)
       .childOption(ChannelOption.ALLOCATOR, allocator);
 
-    this.metrics = new NettyMemoryMetrics(allocator, conf.getModuleName() + "-server");
+    this.metrics = new NettyMemoryMetrics(
+      allocator, conf.getModuleName() + "-server", conf);
 
     if (conf.backLog() > 0) {
       bootstrap.option(ChannelOption.SO_BACKLOG, conf.backLog());

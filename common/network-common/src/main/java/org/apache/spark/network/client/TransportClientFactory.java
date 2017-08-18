@@ -105,7 +105,8 @@ public class TransportClientFactory implements Closeable {
         conf.getModuleName() + "-client");
     this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
       conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
-    this.metrics = new NettyMemoryMetrics(this.pooledAllocator, conf.getModuleName() + "-client");
+    this.metrics = new NettyMemoryMetrics(
+      this.pooledAllocator, conf.getModuleName() + "-client", conf);
   }
 
   public MetricSet getAllMetrics() {

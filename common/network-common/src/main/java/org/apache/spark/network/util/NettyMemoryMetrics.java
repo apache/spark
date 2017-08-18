@@ -25,8 +25,10 @@ import com.codahale.metrics.Gauge;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricRegistry;
 import com.codahale.metrics.MetricSet;
+import com.google.common.annotations.VisibleForTesting;
 import io.netty.buffer.PoolArenaMetric;
 import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocatorMetric;
 
 /**
  * A Netty memory metrics class to collect metrics from Netty PooledByteBufAllocator.
@@ -35,54 +37,79 @@ public class NettyMemoryMetrics implements MetricSet {
 
   private final PooledByteBufAllocator pooledAllocator;
 
+  private final boolean verboseMetricsEnabled;
+
   private final Map<String, Metric> allMetrics;
 
   private final String metricPrefix;
 
-  public NettyMemoryMetrics(PooledByteBufAllocator pooledAllocator, String metricPrefix) {
+  @VisibleForTesting
+  final static Set<String> VERBOSE_METRICS = new HashSet<>();
+  static {
+    VERBOSE_METRICS.addAll(Arrays.asList(
+      "numAllocations",
+      "numTinyAllocations",
+      "numSmallAllocations",
+      "numNormalAllocations",
+      "numHugeAllocations",
+      "numDeallocations",
+      "numTinyDeallocations",
+      "numSmallDeallocations",
+      "numNormalDeallocations",
+      "numHugeDeallocations",
+      "numActiveAllocations",
+      "numActiveTinyAllocations",
+      "numActiveSmallAllocations",
+      "numActiveNormalAllocations",
+      "numActiveHugeAllocations",
+      "numActiveBytes"));
+  }
+
+  public NettyMemoryMetrics(PooledByteBufAllocator pooledAllocator,
+      String metricPrefix,
+      TransportConf conf) {
     this.pooledAllocator = pooledAllocator;
     this.allMetrics = new HashMap<>();
     this.metricPrefix = metricPrefix;
+    this.verboseMetricsEnabled = conf.verboseMetrics();
 
-    // using reflection to register all the metrics of this allocator.
     registerMetrics(this.pooledAllocator);
-
-    // register the String Gauge to dump all the details of this allocator.
-    allMetrics.put(MetricRegistry.name(metricPrefix, "stats"),
-      (Gauge<String>) () -> this.pooledAllocator.dumpStats());
   }
 
   private void registerMetrics(PooledByteBufAllocator allocator) {
-    int directArenaIndex = 0;
-    for (PoolArenaMetric metric : allocator.directArenas()) {
-      registerArenaMetric(metric, "directArena" + directArenaIndex);
-      directArenaIndex++;
-    }
+    PooledByteBufAllocatorMetric pooledAllocatorMetric = allocator.metric();
 
-    int heapArenaIndex = 0;
-    for (PoolArenaMetric metric : allocator.heapArenas()) {
-      registerArenaMetric(metric, "heapArena" + heapArenaIndex);
-      heapArenaIndex++;
-    }
+    // Register general metrics.
+    allMetrics.put(MetricRegistry.name(metricPrefix, "usedHeapMemory"),
+      (Gauge<Long>) () -> pooledAllocatorMetric.usedHeapMemory());
+    allMetrics.put(MetricRegistry.name(metricPrefix, "usedDirectMemory"),
+      (Gauge<Long>) () -> pooledAllocatorMetric.usedDirectMemory());
 
-    Set<String> uniqueKeySet = new HashSet<>();
-    for (String key : allMetrics.keySet()) {
-      String metricName = key.substring(key.lastIndexOf(".") + 1);
-      uniqueKeySet.add(metricName);
-    }
+    if (verboseMetricsEnabled) {
+      int directArenaIndex = 0;
+      for (PoolArenaMetric metric : pooledAllocatorMetric.directArenas()) {
+        registerArenaMetric(metric, "directArena" + directArenaIndex);
+        directArenaIndex++;
+      }
 
-    // Aggregate metrics of different arenas to sum together as the metrics for this allocator.
-    if (pooledAllocator.numDirectArenas() > 0) {
-      registerAggregatedArenaMetric("directArena", pooledAllocator.numDirectArenas(), uniqueKeySet);
-    }
-
-    if (pooledAllocator.numHeapArenas() > 0) {
-      registerAggregatedArenaMetric("heapArena", pooledAllocator.numHeapArenas(), uniqueKeySet);
+      int heapArenaIndex = 0;
+      for (PoolArenaMetric metric : pooledAllocatorMetric.heapArenas()) {
+        registerArenaMetric(metric, "heapArena" + heapArenaIndex);
+        heapArenaIndex++;
+      }
     }
   }
 
   private void registerArenaMetric(PoolArenaMetric arenaMetric, String arenaName) {
-    for (Method m : PoolArenaMetric.class.getDeclaredMethods()) {
+    for (String methodName : VERBOSE_METRICS) {
+      Method m;
+      try {
+        m = PoolArenaMetric.class.getMethod(methodName);
+      } catch (Exception e) {
+        // Failed to find metric related method, ignore this metric.
+        continue;
+      }
+
       if (!Modifier.isPublic(m.getModifiers())) {
         // Ignore non-public methods.
         continue;
@@ -107,51 +134,6 @@ public class NettyMemoryMetrics implements MetricSet {
             return -1L; // Swallow the exceptions.
           }
         });
-
-      } else {
-        // Neglect all other unknown metrics: tinySubpages, smallSubpages chunkList details,
-        // these are too verbose to report.
-      }
-    }
-  }
-
-  @SuppressWarnings("unchecked")
-  private void registerAggregatedArenaMetric(String arenaType, int numArenas, Set<String> keySet) {
-    for (String key : keySet) {
-      String metricName = MetricRegistry.name(metricPrefix, arenaType, key);
-      Class<?> returnType;
-      try {
-        returnType = PoolArenaMetric.class.getMethod(key).getReturnType();
-      } catch (Exception e) {
-        continue; // Bypass current metric if exception met.
-      }
-
-      if (returnType.equals(int.class)) {
-        Gauge<Integer> gauge = () -> {
-          int ret = 0;
-          for (int i = 0; i < numArenas; i++) {
-            ret += ((Gauge<Integer>) (allMetrics.get(MetricRegistry.name(metricPrefix,
-              arenaType + i, key)))).getValue();
-          }
-          return ret;
-        };
-
-        allMetrics.put(metricName, gauge);
-
-      } else if (returnType.equals(long.class)) {
-        Gauge<Long> gauge = () -> {
-          long ret = 0;
-          for (int i = 0; i < numArenas; i++) {
-            ret += ((Gauge<Long>) (allMetrics.get(MetricRegistry.name(metricPrefix,
-              arenaType + i, key)))).getValue();
-          }
-          return ret;
-        };
-
-        allMetrics.put(metricName, gauge);
-
-      } else {
-        // Assume there's no other types of metrics
       }
     }
   }
