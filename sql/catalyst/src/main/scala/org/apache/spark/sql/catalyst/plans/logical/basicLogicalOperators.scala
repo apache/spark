@@ -362,8 +362,7 @@ case class InsertIntoTable(
 case class InsertIntoDir(
     path: String,
     isLocal: Boolean,
-    rowStorage: CatalogStorageFormat,
-    fileStorage: CatalogStorageFormat,
+    storage: CatalogStorageFormat,
     child: LogicalPlan)
   extends LogicalPlan {
 

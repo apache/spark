@@ -1522,12 +1522,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
       .getOrElse(CatalogStorageFormat.empty)
 
+    val defaultStorage = HiveSerDe.getDefaultStorage(conf)
+
+    val path = string(ctx.path)
+    val storage = CatalogStorageFormat(
+      locationUri = Some(CatalogUtils.stringToURI(path)),
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      compressed = false,
+      properties = rowStorage.properties ++ fileStorage.properties)
+
     tableIdent match {
       case Some(ti: TableIdentifier) =>
         InsertIntoTable(UnresolvedRelation(ti), partitionKeys, query,
           ctx.OVERWRITE != null, ctx.EXISTS != null)
       case _ =>
-        InsertIntoDir(string(ctx.path), ctx.LOCAL != null, rowStorage, fileStorage, query)
+        InsertIntoDir(path, ctx.LOCAL != null, storage, query)
     }
   }
 }

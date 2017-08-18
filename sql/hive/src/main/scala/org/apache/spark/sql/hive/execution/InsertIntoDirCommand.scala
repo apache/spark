@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.net.URI
 import java.util.Properties
 
 import scala.language.existentials
@@ -33,14 +32,12 @@ import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.util.Utils
 
 
 case class InsertIntoDirCommand(path: String,
                                 isLocal: Boolean,
-                                rowStorage: CatalogStorageFormat,
-                                fileStorage: CatalogStorageFormat,
+                                storage: CatalogStorageFormat,
                                 query: LogicalPlan) extends SaveAsHiveFile {
 
   override def children: Seq[LogicalPlan] = query :: Nil
@@ -60,36 +57,11 @@ case class InsertIntoDirCommand(path: String,
 
     val sqlContext = sparkSession.sqlContext
 
-    val defaultStorage: CatalogStorageFormat = {
-      val defaultStorageType =
-        sqlContext.conf.getConfString("hive.default.fileformat", "textfile")
-      val defaultHiveSerde = HiveSerDe.sourceToSerDe(defaultStorageType)
-      CatalogStorageFormat(
-        locationUri = None,
-        inputFormat = defaultHiveSerde.flatMap(_.inputFormat)
-          .orElse(Some("org.apache.hadoop.mapred.TextInputFormat")),
-        outputFormat = defaultHiveSerde.flatMap(_.outputFormat)
-          .orElse(Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")),
-        serde = defaultHiveSerde.flatMap(_.serde),
-        compressed = false,
-        properties = Map())
-    }
-
-    val pathUri = if (isLocal) Utils.resolveURI(path) else new URI(path)
-    val storage = CatalogStorageFormat(
-      locationUri = Some(pathUri),
-      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
-      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
-      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
-      compressed = false,
-      properties = rowStorage.properties ++ fileStorage.properties)
-
     properties.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
 
     import scala.collection.JavaConverters._
-    properties.putAll(rowStorage.properties.asJava)
-    properties.putAll(fileStorage.properties.asJava)
+    properties.putAll(storage.properties.asJava)
 
     var tableDesc = new TableDesc(
       Utils.classForName(storage.inputFormat.get).asInstanceOf[Class[_ <: InputFormat[_, _]]],
