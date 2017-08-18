@@ -50,7 +50,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType,
-    Index, Float)
+    Index, Float, LargeBinary)
 from sqlalchemy import func, or_, and_
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -94,9 +94,18 @@ def get_fernet():
 
     This function could fail either because Cryptography is not installed
     or because the Fernet key is invalid.
+    :return: Fernet object
+    :raises: AirflowException if there's a problem trying to load Fernet
     """
-    from cryptography.fernet import Fernet
-    return Fernet(configuration.get('core', 'FERNET_KEY').encode('utf-8'))
+    try:
+        from cryptography.fernet import Fernet
+    except ImportError:
+        raise AirflowException('Failed to import Fernet, it may not be installed')
+    try:
+        return Fernet(configuration.get('core', 'FERNET_KEY').encode('utf-8'))
+    except ValueError as ve:
+        raise AirflowException("Could not create Fernet object: {}"
+                               .format(ve.message))
 
 
 if 'mysql' in settings.SQL_ALCHEMY_CONN:
@@ -104,7 +113,7 @@ if 'mysql' in settings.SQL_ALCHEMY_CONN:
 else:
     LongText = Text
 
-# used by DAG context_managers
+# Used by DAG context_managers
 _CONTEXT_MANAGER_DAG = None
 
 
@@ -608,7 +617,9 @@ class Connection(Base):
                 fernet = get_fernet()
                 self._password = fernet.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_encrypted = True
-            except NameError:
+            except AirflowException:
+                self.logger.exception("Failed to load fernet while encrypting value, "
+                                      "using non-encrypted value.")
                 self._password = value
                 self.is_encrypted = False
 
@@ -635,7 +646,9 @@ class Connection(Base):
                 fernet = get_fernet()
                 self._extra = fernet.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_extra_encrypted = True
-            except NameError:
+            except AirflowException:
+                self.logger.exception("Failed to load fernet while encrypting value, "
+                                      "using non-encrypted value.")
                 self._extra = value
                 self.is_extra_encrypted = False
 
@@ -3846,7 +3859,9 @@ class Variable(Base):
                 fernet = get_fernet()
                 self._val = fernet.encrypt(bytes(value, 'utf-8')).decode()
                 self.is_encrypted = True
-            except NameError:
+            except AirflowException:
+                self.logger.exception("Failed to load fernet while encrypting value, "
+                                      "using non-encrypted value.")
                 self._val = value
                 self.is_encrypted = False
 
@@ -3921,7 +3936,7 @@ class XCom(Base):
 
     id = Column(Integer, primary_key=True)
     key = Column(String(512))
-    value = Column(PickleType(pickler=dill))
+    value = Column(LargeBinary)
     timestamp = Column(
         DateTime, default=func.now(), nullable=False)
     execution_date = Column(DateTime, nullable=False)
@@ -3949,11 +3964,31 @@ class XCom(Base):
             execution_date,
             task_id,
             dag_id,
+            enable_pickling=None,
             session=None):
         """
         Store an XCom value.
+        TODO: "pickling" has been deprecated and JSON is preferred. "pickling" will be
+        removed in Airflow 2.0. :param enable_pickling: If pickling is not enabled, the
+        XCOM value will be parsed as JSON instead.
+        :return: None
         """
         session.expunge_all()
+
+        if enable_pickling is None:
+            enable_pickling = configuration.getboolean('core', 'enable_xcom_pickling')
+
+        if enable_pickling:
+            value = pickle.dumps(value)
+        else:
+            try:
+                value = json.dumps(value).encode('UTF-8')
+            except ValueError:
+                logging.error("Could not serialize the XCOM value into JSON. "
+                              "If you are using pickles instead of JSON "
+                              "for XCOM, then you need to enable pickle "
+                              "support for XCOM in your airflow config.")
+                raise
 
         # remove any duplicate XComs
         session.query(cls).filter(
@@ -3977,15 +4012,19 @@ class XCom(Base):
     @classmethod
     @provide_session
     def get_one(
-            cls,
-            execution_date,
-            key=None,
-            task_id=None,
-            dag_id=None,
-            include_prior_dates=False,
-            session=None):
+                cls,
+                execution_date,
+                key=None,
+                task_id=None,
+                dag_id=None,
+                include_prior_dates=False,
+                enable_pickling=None,
+                session=None):
         """
-        Retrieve an XCom value, optionally meeting certain criteria
+        Retrieve an XCom value, optionally meeting certain criteria.
+        TODO: "pickling" has been deprecated and JSON is preferred. "pickling" will be removed in Airflow 2.0.
+        :param enable_pickling: If pickling is not enabled, the XCOM value will be parsed to JSON instead.
+        :return: XCom value
         """
         filters = []
         if key:
@@ -4001,27 +4040,41 @@ class XCom(Base):
 
         query = (
             session.query(cls.value)
-            .filter(and_(*filters))
-            .order_by(cls.execution_date.desc(), cls.timestamp.desc())
-            .limit(1))
+                .filter(and_(*filters))
+                .order_by(cls.execution_date.desc(), cls.timestamp.desc()))
 
         result = query.first()
         if result:
-            return result.value
+            if enable_pickling is None:
+                enable_pickling = configuration.getboolean('core', 'enable_xcom_pickling')
+
+            if enable_pickling:
+                return pickle.loads(result.value)
+            else:
+                try:
+                    return json.loads(result.value.decode('UTF-8'))
+                except ValueError:
+                    logging.error("Could not serialize the XCOM value into JSON. "
+                                  "If you are using pickles instead of JSON "
+                                  "for XCOM, then you need to enable pickle "
+                                  "support for XCOM in your airflow config.")
+                    raise
 
     @classmethod
     @provide_session
     def get_many(
-            cls,
-            execution_date,
-            key=None,
-            task_ids=None,
-            dag_ids=None,
-            include_prior_dates=False,
-            limit=100,
-            session=None):
+                cls,
+                execution_date,
+                key=None,
+                task_ids=None,
+                dag_ids=None,
+                include_prior_dates=False,
+                limit=100,
+                enable_pickling=None,
+                session=None):
         """
         Retrieve an XCom value, optionally meeting certain criteria
+        TODO: "pickling" has been deprecated and JSON is preferred. "pickling" will be removed in Airflow 2.0.
         """
         filters = []
         if key:
@@ -4037,11 +4090,25 @@ class XCom(Base):
 
         query = (
             session.query(cls)
-            .filter(and_(*filters))
-            .order_by(cls.execution_date.desc(), cls.timestamp.desc())
-            .limit(limit))
-
-        return query.all()
+                .filter(and_(*filters))
+                .order_by(cls.execution_date.desc(), cls.timestamp.desc())
+                .limit(limit))
+        results = query.all()
+        if enable_pickling is None:
+            enable_pickling = configuration.getboolean('core', 'enable_xcom_pickling')
+        for result in results:
+            if enable_pickling:
+                result.value = pickle.loads(result.value)
+            else:
+                try:
+                    result.value = json.loads(result.value.decode('UTF-8'))
+                except ValueError:
+                    logging.error("Could not serialize the XCOM value into JSON. "
+                                    "If you are using pickles instead of JSON "
+                                    "for XCOM, then you need to enable pickle "
+                                    "support for XCOM in your airflow config.")
+                    raise
+        return results
 
     @classmethod
     @provide_session
@@ -4179,7 +4246,6 @@ class DagRun(Base):
 
     ID_PREFIX = 'scheduled__'
     ID_FORMAT_PREFIX = ID_PREFIX + '{0}'
-    DEADLOCK_CHECK_DEP_CONTEXT = DepContext(ignore_in_retry_period=True)
 
     id = Column(Integer, primary_key=True)
     dag_id = Column(String(ID_LEN))
@@ -4405,13 +4471,19 @@ class DagRun(Base):
         # small speed up
         if unfinished_tasks and none_depends_on_past:
             # todo: this can actually get pretty slow: one task costs between 0.01-015s
-            no_dependencies_met = all(
-                # Use a special dependency context that ignores task's up for retry
-                # dependency, since a task that is up for retry is not necessarily
-                # deadlocked.
-                not t.are_dependencies_met(dep_context=self.DEADLOCK_CHECK_DEP_CONTEXT,
-                                           session=session)
-                for t in unfinished_tasks)
+            no_dependencies_met = True
+            for ut in unfinished_tasks:
+                # We need to flag upstream and check for changes because upstream
+                # failures can result in deadlock false positives
+                old_state = ut.state
+                deps_met = ut.are_dependencies_met(
+                    dep_context=DepContext(
+                        flag_upstream_failed=True,
+                        ignore_in_retry_period=True),
+                    session=session)
+                if deps_met or old_state != ut.current_state(session=session):
+                    no_dependencies_met = False
+                    break
 
         duration = (datetime.now() - start_dttm).total_seconds() * 1000
         Stats.timing("dagrun.dependency-check.{}.{}".
