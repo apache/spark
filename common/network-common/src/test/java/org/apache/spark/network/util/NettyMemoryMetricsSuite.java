@@ -18,7 +18,6 @@
 package org.apache.spark.network.util;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,7 +29,6 @@ import org.apache.spark.network.TestUtils;
 import org.apache.spark.network.client.TransportClient;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.network.TransportContext;
