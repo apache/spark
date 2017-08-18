@@ -171,8 +171,11 @@ case class InsertIntoHiveTable(
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
-    val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = getExternalTmpPath(tableLocation, hadoopConf)
+    // val tableLocation = table.hiveQlTable.getDataLocation
+    val stagingParentDir = Option(stagingDir).filter(_.startsWith("/")).map(new Path(_))
+      .getOrElse(Option(FileSystem.get(hadoopConf).getHomeDirectory)
+        .map(new Path(_, ".sqlStaging")).get)
+    val tmpLocation = getExternalTmpPath(stagingParentDir, hadoopConf)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
 
