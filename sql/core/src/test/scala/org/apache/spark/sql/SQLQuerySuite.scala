@@ -2663,4 +2663,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     // In unit test, Spark will fail the query if memory leak detected.
     spark.range(100).groupBy("id").count().limit(1).collect()
   }
+
+  test("SPARK-21774: should cast a string to double type when compare with a int") {
+    withTempView("src") {
+      Seq(("0", 1), ("-0.4", 2)).toDF("a", "b").createOrReplaceTempView("src")
+      checkAnswer(sql("SELECT a FROM src WHERE a=0"), Seq(Row("0")))
+    }
+  }
 }
