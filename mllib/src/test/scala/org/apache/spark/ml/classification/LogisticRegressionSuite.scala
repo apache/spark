@@ -213,15 +213,15 @@ class LogisticRegressionSuite
       case (family, dataset) =>
         lr.setFamily(family)
         lr.setProbabilityCol("").setPredictionCol("prediction")
-        val modelNoProb = lr.fit(smallBinaryDataset)
+        val modelNoProb = lr.fit(dataset)
         checkSummarySchema(modelNoProb, Seq("probability_"))
 
         lr.setProbabilityCol("probability").setPredictionCol("")
-        val modelNoPred = lr.fit(smallBinaryDataset)
+        val modelNoPred = lr.fit(dataset)
         checkSummarySchema(modelNoPred, Seq("prediction_"))
 
         lr.setProbabilityCol("").setPredictionCol("")
-        val modelNoPredNoProb = lr.fit(smallBinaryDataset)
+        val modelNoPredNoProb = lr.fit(dataset)
         checkSummarySchema(modelNoPredNoProb, Seq("prediction_", "probability_"))
     }
   }
@@ -229,13 +229,14 @@ class LogisticRegressionSuite
   test("check summary types for binary and multiclass") {
     val lr = new LogisticRegression()
       .setFamily("binomial")
+      .setMaxIter(1)
 
     val blorModel = lr.fit(smallBinaryDataset)
-    assert(blorModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummaryImpl])
-    assert(blorModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummaryImpl])
+    assert(blorModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(blorModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
 
     val mlorModel = lr.setFamily("multinomial").fit(smallMultinomialDataset)
-    assert(mlorModel.summary.isInstanceOf[LogisticRegressionTrainingSummaryImpl])
+    assert(mlorModel.summary.isInstanceOf[LogisticRegressionTrainingSummary])
     withClue("cannot get binary summary for multiclass model") {
       intercept[RuntimeException] {
         mlorModel.binarySummary
@@ -243,13 +244,13 @@ class LogisticRegressionSuite
     }
 
     val mlorBinaryModel = lr.setFamily("multinomial").fit(smallBinaryDataset)
-    assert(mlorBinaryModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummaryImpl])
-    assert(mlorBinaryModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummaryImpl])
+    assert(mlorBinaryModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(mlorBinaryModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
 
     val blorSummary = blorModel.evaluate(smallBinaryDataset)
     val mlorSummary = mlorModel.evaluate(smallMultinomialDataset)
-    assert(blorSummary.isInstanceOf[BinaryLogisticRegressionSummaryImpl])
-    assert(mlorSummary.isInstanceOf[LogisticRegressionSummaryImpl])
+    assert(blorSummary.isInstanceOf[BinaryLogisticRegressionSummary])
+    assert(mlorSummary.isInstanceOf[LogisticRegressionSummary])
   }
 
   test("setThreshold, getThreshold") {

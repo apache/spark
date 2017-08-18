@@ -884,7 +884,7 @@ class LogisticRegression @Since("1.2.0") (
       numClasses, isMultinomial))
 
     val (summaryModel, probabilityColName, predictionColName) = model.findSummaryModel()
-    val logRegSummary = if (numClasses <=2) {
+    val logRegSummary = if (numClasses <= 2) {
       new BinaryLogisticRegressionTrainingSummaryImpl(
         summaryModel.transform(dataset),
         probabilityColName,
@@ -1017,15 +1017,19 @@ class LogisticRegressionModel private[spark] (
   private var trainingSummary: Option[LogisticRegressionTrainingSummary] = None
 
   /**
-   * Gets summary of model on training set. An exception is
-   * thrown if `trainingSummary == None`.
+   * Gets summary of model on training set. An exception is thrown
+   * if `trainingSummary == None`.
    */
   @Since("1.5.0")
   def summary: LogisticRegressionTrainingSummary = trainingSummary.getOrElse {
     throw new SparkException("No training summary available for this LogisticRegressionModel")
   }
 
-  @Since("2.2.0")
+  /**
+   * Gets summary of model on training set. An exception is thrown
+   * if `trainingSummary == None` or it is a multiclass model.
+   */
+  @Since("2.3.0")
   def binarySummary: BinaryLogisticRegressionTrainingSummary = summary match {
     case b: BinaryLogisticRegressionTrainingSummary => b
     case _ =>
@@ -1357,11 +1361,11 @@ sealed trait LogisticRegressionSummary extends Serializable {
   /**
    * Dataframe output by the model's `transform` method.
    */
-  @Since("2.3.0")
+  @Since("1.5.0")
   def predictions: DataFrame
 
   /** Field in "predictions" which gives the probability of each class as a vector. */
-  @Since("2.3.0")
+  @Since("1.5.0")
   def probabilityCol: String
 
   /** Field in "predictions" which gives the prediction of each class. */
@@ -1369,11 +1373,11 @@ sealed trait LogisticRegressionSummary extends Serializable {
   def predictionCol: String
 
   /** Field in "predictions" which gives the true label of each instance (if available). */
-  @Since("2.3.0")
+  @Since("1.5.0")
   def labelCol: String
 
   /** Field in "predictions" which gives the features of each instance as a vector. */
-  @Since("2.3.0")
+  @Since("1.6.0")
   def featuresCol: String
 
   @transient private val multiclassMetrics = {
@@ -1383,6 +1387,17 @@ sealed trait LogisticRegressionSummary extends Serializable {
         col(labelCol).cast(DoubleType))
         .rdd.map { case Row(prediction: Double, label: Double) => (prediction, label) })
   }
+
+  /**
+   * Returns the sequence of labels in ascending order
+   *
+   * Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
+   * training set is missing a label, then all of the arrays over labels
+   * (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
+   * expected numClasses.
+   */
+  @Since("2.3.0")
+  def labels: Array[Double] = multiclassMetrics.labels
 
   /** Returns true positive rate for each label (category). */
   @Since("2.3.0")
@@ -1561,7 +1576,6 @@ sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegre
   with LogisticRegressionTrainingSummary
 
 /**
- * :: Experimental ::
  * Multiclass logistic regression training results.
  *
  * @param predictions dataframe output by the model's `transform` method.
@@ -1574,18 +1588,17 @@ sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegre
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class LogisticRegressionTrainingSummaryImpl(
-    override val predictions: DataFrame,
-    override val probabilityCol: String,
-    override val predictionCol: String,
-    override val labelCol: String,
-    override val featuresCol: String,
-    val objectiveHistory: Array[Double])
+    predictions: DataFrame,
+    probabilityCol: String,
+    predictionCol: String,
+    labelCol: String,
+    featuresCol: String,
+    override val objectiveHistory: Array[Double])
   extends LogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
   with LogisticRegressionTrainingSummary
 
 /**
- * :: Experimental ::
  * Multiclass logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
@@ -1605,7 +1618,6 @@ private class LogisticRegressionSummaryImpl(
   extends LogisticRegressionSummary
 
 /**
- * :: Experimental ::
  * Binary logistic regression training results.
  *
  * @param predictions dataframe output by the model's `transform` method.
@@ -1618,18 +1630,17 @@ private class LogisticRegressionSummaryImpl(
  * @param objectiveHistory objective function (scaled loss + regularization) at each iteration.
  */
 private class BinaryLogisticRegressionTrainingSummaryImpl(
-    override val predictions: DataFrame,
-    override val probabilityCol: String,
-    override val predictionCol: String,
-    override val labelCol: String,
-    override val featuresCol: String,
+    predictions: DataFrame,
+    probabilityCol: String,
+    predictionCol: String,
+    labelCol: String,
+    featuresCol: String,
     override val objectiveHistory: Array[Double])
   extends BinaryLogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
   with BinaryLogisticRegressionTrainingSummary
 
 /**
- * :: Experimental ::
  * Binary logistic regression results for a given model.
  *
  * @param predictions dataframe output by the model's `transform` method.
@@ -1641,11 +1652,11 @@ private class BinaryLogisticRegressionTrainingSummaryImpl(
  * @param featuresCol field in "predictions" which gives the features of each instance as a vector.
  */
 private class BinaryLogisticRegressionSummaryImpl(
-    @transient override val predictions: DataFrame,
-    override val probabilityCol: String,
-    override val predictionCol: String,
-    override val labelCol: String,
-    override val featuresCol: String)
+    predictions: DataFrame,
+    probabilityCol: String,
+    predictionCol: String,
+    labelCol: String,
+    featuresCol: String)
   extends LogisticRegressionSummaryImpl(
     predictions, probabilityCol, predictionCol, labelCol, featuresCol)
   with BinaryLogisticRegressionSummary
