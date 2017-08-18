@@ -434,8 +434,8 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val message = intercept[AnalysisException] {
           sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
         }.getMessage
-        assert(message.contains(s"Partition specification for table '${tableName.toLowerCase}' " +
-          "in database 'default' refers to unknown partition column(s): DS"))
+        assert(message.contains(
+          s"DS is not a valid partition column in table `default`.`${tableName.toLowerCase}`"))
       }
     }
   }
@@ -496,14 +496,12 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
-        s"Partition specification for table '${tableName.toLowerCase}' " +
-          "in database 'default' refers to unknown partition column(s): hour"
+        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
       )
 
       assertAnalysisException(
         s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
-        s"Partition specification for table '${tableName.toLowerCase}' " +
-          "in database 'default' refers to unknown partition column(s): hour"
+        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
       )
 
       intercept[NoSuchPartitionException] {

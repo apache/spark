@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, Unresol
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 
 /**
  * Analyzes a given set of partitions to generate per-partition statistics, which will be used in
@@ -45,26 +46,18 @@ case class AnalyzePartitionCommand(
     noscan: Boolean = true) extends RunnableCommand {
 
   private def getPartitionSpec(table: CatalogTable): Option[TablePartitionSpec] = {
-    val partitionColumnNames = table.partitionColumnNames.toSet
-    val partitionSpecWithCase =
-      if (conf.caseSensitiveAnalysis) partitionSpec
-      else partitionSpec.map { case (k, v) => (k.toLowerCase, v)}
-    val invalidColumnNames = partitionSpecWithCase.keys.filterNot(partitionColumnNames.contains(_))
-    if (invalidColumnNames.nonEmpty) {
-      val tableId = table.identifier
-      throw new AnalysisException(s"Partition specification for table '${tableId.table}' " +
-        s"in database '${tableId.database.get}' refers to unknown partition column(s): " +
-        invalidColumnNames.mkString(","))
-    }
+    val normalizedPartitionSpec =
+      PartitioningUtils.normalizePartitionSpec(partitionSpec, table.partitionColumnNames,
+        table.identifier.quotedString, conf.resolver);
 
     // Report an error if partition columns in partition specification do not form
     // a prefix of the list of partition columns defined in the table schema
     val isSpecified =
-      table.partitionColumnNames.map(partitionSpecWithCase.getOrElse(_, None).isEmpty)
+      table.partitionColumnNames.map(normalizedPartitionSpec.getOrElse(_, None).isEmpty)
     if (isSpecified.init.zip(isSpecified.tail).contains((true, false))) {
       val tableId = table.identifier
       val schemaColumns = table.partitionColumnNames.mkString(",")
-      val specColumns = partitionSpecWithCase.keys.mkString(",")
+      val specColumns = normalizedPartitionSpec.keys.mkString(",")
       throw new AnalysisException("The list of partition columns with values " +
         s"in partition specification for table '${tableId.table}' " +
         s"in database '${tableId.database.get}' is not a prefix of the list of " +
@@ -72,7 +65,7 @@ case class AnalyzePartitionCommand(
         s"Expected a prefix of [${schemaColumns}], but got [${specColumns}].")
     }
 
-    val filteredSpec = partitionSpecWithCase.filter(_._2.isDefined).mapValues(_.get)
+    val filteredSpec = normalizedPartitionSpec.filter(_._2.isDefined).mapValues(_.get)
     if (filteredSpec.isEmpty) {
       None
     } else {
