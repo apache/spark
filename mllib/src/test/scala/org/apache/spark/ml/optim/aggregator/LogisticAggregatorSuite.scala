@@ -238,8 +238,17 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val aggConstantFeature = getNewAggregator(instancesConstantFeature,
       Vectors.dense(coefArray ++ interceptArray), fitIntercept = true, isMultinomial = true)
     instances.foreach(aggConstantFeature.add)
+
     // constant features should not affect gradient
-    assert(aggConstantFeature.gradient(0) === 0.0)
+    def validateGradient(grad: Vector): Unit = {
+      assert(grad(0) === 0.0)
+      grad.toArray.foreach { gradientValue =>
+        assert(!gradientValue.isNaN &&
+          gradientValue > Double.NegativeInfinity && gradientValue < Double.PositiveInfinity)
+      }
+    }
+
+    validateGradient(aggConstantFeature.gradient)
 
     val binaryCoefArray = Array(1.0, 2.0)
     val intercept = 1.0
@@ -248,6 +257,6 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       isMultinomial = false)
     instances.foreach(aggConstantFeatureBinary.add)
     // constant features should not affect gradient
-    assert(aggConstantFeatureBinary.gradient(0) === 0.0)
+    validateGradient(aggConstantFeatureBinary.gradient)
   }
 }
