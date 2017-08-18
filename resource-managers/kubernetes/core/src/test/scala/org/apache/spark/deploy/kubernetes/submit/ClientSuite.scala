@@ -135,7 +135,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
         .set("spark.logConf", "true")
         .set(
           org.apache.spark.internal.config.DRIVER_JAVA_OPTIONS,
-          "-XX:+|-HeapDumpOnOutOfMemoryError")
+          "-XX:+HeapDumpOnOutOfMemoryError -XX:+PrintGCDetails")
     val submissionClient = new Client(
         submissionSteps,
         sparkConf,
@@ -147,15 +147,22 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     val createdPod = createdPodArgumentCaptor.getValue
     val driverContainer = Iterables.getOnlyElement(createdPod.getSpec.getContainers)
     assert(driverContainer.getName === SecondTestConfigurationStep.containerName)
-    val driverJvmOptsEnv = Iterables.getOnlyElement(driverContainer.getEnv)
-    assert(driverJvmOptsEnv.getName === ENV_DRIVER_JAVA_OPTS)
-    val driverJvmOpts = driverJvmOptsEnv.getValue.split(" ").toSet
-    assert(driverJvmOpts.contains("-Dspark.logConf=true"))
-    assert(driverJvmOpts.contains(
+    val driverJvmOptsEnvs = driverContainer.getEnv.asScala.filter { env =>
+      env.getName.startsWith(ENV_JAVA_OPT_PREFIX)
+    }.sortBy(_.getName)
+    assert(driverJvmOptsEnvs.size === 4)
+
+    val expectedJvmOptsValues = Seq(
+        "-Dspark.logConf=true",
         s"-D${SecondTestConfigurationStep.sparkConfKey}=" +
-          SecondTestConfigurationStep.sparkConfValue))
-    assert(driverJvmOpts.contains(
-        "-XX:+|-HeapDumpOnOutOfMemoryError"))
+            s"${SecondTestConfigurationStep.sparkConfValue}",
+        s"-XX:+HeapDumpOnOutOfMemoryError",
+        s"-XX:+PrintGCDetails")
+    driverJvmOptsEnvs.zip(expectedJvmOptsValues).zipWithIndex.foreach {
+      case ((resolvedEnv, expectedJvmOpt), index) =>
+        assert(resolvedEnv.getName === s"$ENV_JAVA_OPT_PREFIX$index")
+        assert(resolvedEnv.getValue === expectedJvmOpt)
+    }
   }
 
   test("Waiting for app completion should stall on the watcher") {
@@ -211,8 +218,8 @@ private object SecondTestConfigurationStep extends DriverConfigurationStep {
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val modifiedPod = new PodBuilder(driverSpec.driverPod)
       .editMetadata()
-      .addToAnnotations(annotationKey, annotationValue)
-      .endMetadata()
+        .addToAnnotations(annotationKey, annotationValue)
+        .endMetadata()
       .build()
     val resolvedSparkConf = driverSpec.driverSparkConf.clone().set(sparkConfKey, sparkConfValue)
     val modifiedContainer = new ContainerBuilder(driverSpec.driverContainer)
