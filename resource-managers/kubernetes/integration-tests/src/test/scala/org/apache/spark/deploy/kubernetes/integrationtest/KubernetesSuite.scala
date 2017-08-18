@@ -231,18 +231,28 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     launchStagingServer(SSLOptions(), None)
     val driverJvmOptionsFile = storeJvmOptionsInTempFile(
         Map("simpleDriverConf" -> "simpleDriverConfValue",
-          "driverconfwithspaces" -> "driver conf with spaces value"),
+            "driverconfwithspaces" -> "driver conf with spaces value"),
         "driver-jvm-options.properties",
         "JVM options that should be set on the driver.")
+    val executorJvmOptionsFile = storeJvmOptionsInTempFile(
+        Map("simpleExecutorConf" -> "simpleExecutorConfValue",
+            "executor conf with spaces" -> "executor conf with spaces value"),
+        "executor-jvm-options.properties",
+        "JVM options that should be set on the executors.")
     sparkConf.set(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
         "-DsimpleDriverConf=simpleDriverConfValue" +
             " -Ddriverconfwithspaces='driver conf with spaces value'")
-    sparkConf.set("spark.files", driverJvmOptionsFile.getAbsolutePath)
+    sparkConf.set(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS,
+        "-DsimpleExecutorConf=simpleExecutorConfValue" +
+            " -D\'executor conf with spaces\'=\'executor conf with spaces value\'")
+    sparkConf.set("spark.files",
+        Seq(driverJvmOptionsFile.getAbsolutePath, executorJvmOptionsFile.getAbsolutePath)
+            .mkString(","))
     runSparkApplicationAndVerifyCompletion(
         JavaMainAppResource(SUBMITTER_LOCAL_MAIN_APP_RESOURCE),
         JAVA_OPTIONS_MAIN_CLASS,
         Seq(s"All expected JVM options were present on the driver and executors."),
-        Array(driverJvmOptionsFile.getName),
+        Array(driverJvmOptionsFile.getName, executorJvmOptionsFile.getName),
         Seq.empty[String])
   }
 

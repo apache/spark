@@ -457,7 +457,16 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .withValue(cp)
         .build()
     }
-    val requiredEnv = (Seq(
+    val executorExtraJavaOptionsEnv = conf
+        .get(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS)
+        .map { opts =>
+          val delimitedOpts = Utils.splitCommandString(opts)
+          delimitedOpts.zipWithIndex.map {
+            case (opt, index) =>
+              new EnvVarBuilder().withName(s"$ENV_JAVA_OPT_PREFIX$index").withValue(opt).build()
+          }
+        }.getOrElse(Seq.empty[EnvVar])
+    val executorEnv = (Seq(
       (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       // Executor backend expects integral value for executor cores, so round it up to an int.
@@ -477,7 +486,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withNewFieldRef("v1", "status.podIP")
           .build())
         .build()
-      )
+      ) ++ executorExtraJavaOptionsEnv ++ executorExtraClasspathEnv.toSeq
     val requiredPorts = Seq(
       (EXECUTOR_PORT_NAME, executorPort),
       (BLOCK_MANAGER_PORT_NAME, blockmanagerPort))
@@ -497,8 +506,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .addToLimits("memory", executorMemoryLimitQuantity)
         .addToRequests("cpu", executorCpuQuantity)
       .endResources()
-      .addAllToEnv(requiredEnv.asJava)
-      .addToEnv(executorExtraClasspathEnv.toSeq: _*)
+      .addAllToEnv(executorEnv.asJava)
       .withPorts(requiredPorts.asJava)
       .build()
 
