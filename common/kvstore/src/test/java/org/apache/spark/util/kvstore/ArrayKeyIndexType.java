@@ -15,34 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
-import java.io.File;
+import java.util.Arrays;
 
-import org.apache.commons.io.FileUtils;
-import org.junit.AfterClass;
+public class ArrayKeyIndexType {
 
-public class LevelDBIteratorSuite extends DBIteratorSuite {
+  @KVIndex
+  public int[] key;
 
-  private static File dbpath;
-  private static LevelDB db;
+  @KVIndex("id")
+  public String[] id;
 
-  @AfterClass
-  public static void cleanup() throws Exception {
-    if (db != null) {
-      db.close();
+  @Override
+  public boolean equals(Object o) {
+    if (o instanceof ArrayKeyIndexType) {
+      ArrayKeyIndexType other = (ArrayKeyIndexType) o;
+      return Arrays.equals(key, other.key) && Arrays.equals(id, other.id);
     }
-    if (dbpath != null) {
-      FileUtils.deleteQuietly(dbpath);
-    }
+    return false;
   }
 
   @Override
-  protected KVStore createStore() throws Exception {
-    dbpath = File.createTempFile("test.", ".ldb");
-    dbpath.delete();
-    db = new LevelDB(dbpath);
-    return db;
+  public int hashCode() {
+    return key.hashCode();
   }
 
 }

@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
  * sorted by values of [[groupingExpressions]].
  */
 class SortBasedAggregationIterator(
+    partIndex: Int,
     groupingExpressions: Seq[NamedExpression],
     valueAttributes: Seq[Attribute],
     inputIterator: Iterator[InternalRow],
@@ -37,6 +38,7 @@ class SortBasedAggregationIterator(
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
     numOutputRows: SQLMetric)
   extends AggregationIterator(
+    partIndex,
     groupingExpressions,
     valueAttributes,
     aggregateExpressions,

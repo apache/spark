@@ -90,30 +90,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
-   * Example SQL for analyzing table :
+   * Create an [[AnalyzeTableCommand]] command, or an [[AnalyzePartitionCommand]]
+   * or an [[AnalyzeColumnCommand]] command.
+   * Example SQL for analyzing a table or a set of partitions :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS [NOSCAN];
+   *   ANALYZE TABLE [db_name.]tablename [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
+   *   COMPUTE STATISTICS [NOSCAN];
    * }}}
+   *
    * Example SQL for analyzing columns :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS FOR COLUMNS column1, column2;
+   *   ANALYZE TABLE [db_name.]tablename COMPUTE STATISTICS FOR COLUMNS column1, column2;
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
-    if (ctx.identifier != null) {
-      if (ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-        throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    if (ctx.identifierSeq() == null) {
+      if (ctx.partitionSpec != null) {
+        AnalyzePartitionCommand(table, visitPartitionSpec(ctx.partitionSpec),
+          noscan = ctx.identifier != null)
+      } else {
+        AnalyzeTableCommand(table, noscan = ctx.identifier != null)
       }
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
-    } else if (ctx.identifierSeq() == null) {
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier), noscan = false)
     } else {
+      if (ctx.partitionSpec != null) {
+        logWarning("Partition specification is ignored when collecting column statistics: " +
+          ctx.partitionSpec.getText)
+      }
       AnalyzeColumnCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
+        table,
         visitIdentifierSeq(ctx.identifierSeq()))
     }
   }
@@ -304,7 +314,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         codegen = ctx.CODEGEN != null,
         cost = ctx.COST != null)
     } else {
-      ExplainCommand(OneRowRelation)
+      ExplainCommand(OneRowRelation())
     }
   }
 

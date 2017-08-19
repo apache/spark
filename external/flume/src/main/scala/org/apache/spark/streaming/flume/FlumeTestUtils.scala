@@ -35,8 +35,8 @@ import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
 import org.jboss.netty.handler.codec.compression.{ZlibDecoder, ZlibEncoder}
 
-import org.apache.spark.util.Utils
 import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
 /**
  * Share codes for Scala and Python unit tests

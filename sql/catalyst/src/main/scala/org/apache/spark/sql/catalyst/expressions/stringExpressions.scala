@@ -42,7 +42,7 @@ import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
  */
 @ExpressionDescription(
   usage = "_FUNC_(str1, str2, ..., strN) - Returns the concatenation of str1, str2, ..., strN.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark', 'SQL');
        SparkSQL
@@ -85,7 +85,7 @@ case class Concat(children: Seq[Expression]) extends Expression with ImplicitCas
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(sep, [str | array(str)]+) - Returns the concatenation of the strings separated by `sep`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(' ', 'Spark', 'SQL');
         Spark SQL
@@ -179,7 +179,7 @@ case class ConcatWs(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(n, str1, str2, ...) - Returns the `n`-th string, e.g., returns `str2` when `n` is 2.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1, 'scala', 'java');
        scala
@@ -262,7 +262,7 @@ trait String2StringExpression extends ImplicitCastInputTypes {
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns `str` with all characters changed to uppercase.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('SparkSql');
        SPARKSQL
@@ -282,7 +282,7 @@ case class Upper(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns `str` with all characters changed to lowercase.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('SparkSql');
        sparksql
@@ -346,13 +346,14 @@ case class EndsWith(left: Expression, right: Expression) extends StringPredicate
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, search[, replace]) - Replaces all occurrences of `search` with `replace`.",
-  extended = """
+  arguments = """
     Arguments:
-      str - a string expression
-      search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
-      replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
-                the string that is removed from `str`.
-
+      * str - a string expression
+      * search - a string expression. If `search` is not found in `str`, `str` is returned unchanged.
+      * replace - a string expression. If `replace` is not specified or is an empty string, nothing replaces
+          the string that is removed from `str`.
+  """,
+  examples = """
     Examples:
       > SELECT _FUNC_('ABCabc', 'abc', 'DEF');
        ABCDEF
@@ -410,7 +411,7 @@ object StringTranslate {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(input, from, to) - Translates the `input` string by replacing the characters present in the `from` string with the corresponding characters in the `to` string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('AaBbCc', 'abc', '123');
        A1B2C3
@@ -477,7 +478,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
     _FUNC_(str, str_array) - Returns the index (1-based) of the given string (`str`) in the comma-delimited list (`str_array`).
       Returns 0, if the string was not found or if the given string (`str`) contains a comma.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('ab','abc,b,ab,c,def');
        3
@@ -507,7 +508,7 @@ case class FindInSet(left: Expression, right: Expression) extends BinaryExpressi
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Removes the leading and trailing space characters from `str`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
@@ -529,7 +530,7 @@ case class StringTrim(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Removes the leading and trailing space characters from `str`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL');
        SparkSQL
@@ -551,7 +552,7 @@ case class StringTrimLeft(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Removes the trailing space characters from `str`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
            SparkSQL
@@ -577,7 +578,7 @@ case class StringTrimRight(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('SparkSQL', 'SQL');
        6
@@ -617,7 +618,7 @@ case class StringInstr(str: Expression, substr: Expression)
       (counting from the right) is returned. The function substring_index performs a case-sensitive match
       when searching for `delim`.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('www.apache.org', '.', 2);
        www.apache
@@ -652,7 +653,7 @@ case class SubstringIndex(strExpr: Expression, delimExpr: Expression, countExpr:
     _FUNC_(substr, str[, pos]) - Returns the position of the first occurrence of `substr` in `str` after position `pos`.
       The given `pos` and return value are 1-based.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('bar', 'foobarbar');
        4
@@ -739,7 +740,7 @@ case class StringLocate(substr: Expression, str: Expression, start: Expression)
     _FUNC_(str, len, pad) - Returns `str`, left-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('hi', 5, '??');
        ???hi
@@ -772,7 +773,7 @@ case class StringLPad(str: Expression, len: Expression, pad: Expression)
     _FUNC_(str, len, pad) - Returns `str`, right-padded with `pad` to a length of `len`.
       If `str` is longer than `len`, the return value is shortened to `len` characters.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('hi', 5, '??');
        hi???
@@ -815,7 +816,7 @@ object ParseUrl {
  */
 @ExpressionDescription(
   usage = "_FUNC_(url, partToExtract[, key]) - Extracts a part from a URL.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('http://spark.apache.org/path?query=1', 'HOST')
        spark.apache.org
@@ -970,7 +971,7 @@ case class ParseUrl(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(strfmt, obj, ...) - Returns a formatted string from printf-style format strings.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_("Hello World %d %s", 100, "days");
        Hello World 100 days
@@ -1049,7 +1050,7 @@ case class FormatString(children: Expression*) extends Expression with ImplicitC
     _FUNC_(str) - Returns `str` with the first letter of each word in uppercase.
       All other letters are in lowercase. Words are delimited by white space.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('sPark sql');
        Spark Sql
@@ -1072,7 +1073,7 @@ case class InitCap(child: Expression) extends UnaryExpression with ImplicitCastI
  */
 @ExpressionDescription(
   usage = "_FUNC_(str, n) - Returns the string which repeats the given string value n times.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('123', 2);
        123123
@@ -1101,7 +1102,7 @@ case class StringRepeat(str: Expression, times: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns the reversed given string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        LQS krapS
@@ -1121,7 +1122,7 @@ case class StringReverse(child: Expression) extends UnaryExpression with String2
  */
 @ExpressionDescription(
   usage = "_FUNC_(n) - Returns a string consisting of `n` spaces.",
-  extended = """
+  examples = """
     Examples:
       > SELECT concat(_FUNC_(2), '1');
          1
@@ -1154,7 +1155,7 @@ case class StringSpace(child: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, pos[, len]) - Returns the substring of `str` that starts at `pos` and is of length `len`, or the slice of byte array that starts at `pos` and is of length `len`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 5);
        k SQL
@@ -1204,7 +1205,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, len) - Returns the rightmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        SQL
@@ -1226,7 +1227,7 @@ case class Right(str: Expression, len: Expression, child: Expression) extends Ru
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, len) - Returns the leftmost `len`(`len` can be string type) characters from the string `str`,if `len` is less or equal than 0 the result is an empty string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL', 3);
        Spa
@@ -1248,7 +1249,7 @@ case class Left(str: Expression, len: Expression, child: Expression) extends Run
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the character length of `expr` or number of bytes in binary data.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        9
@@ -1280,7 +1281,7 @@ case class Length(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the bit length of `expr` or number of bits in binary data.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        72
@@ -1307,7 +1308,7 @@ case class BitLength(child: Expression) extends UnaryExpression with ImplicitCas
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the byte length of `expr` or number of bytes in binary data.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        9
@@ -1334,7 +1335,7 @@ case class OctetLength(child: Expression) extends UnaryExpression with ImplicitC
  */
 @ExpressionDescription(
   usage = "_FUNC_(str1, str2) - Returns the Levenshtein distance between the two given strings.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('kitten', 'sitting');
        3
@@ -1359,7 +1360,7 @@ case class Levenshtein(left: Expression, right: Expression) extends BinaryExpres
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns Soundex code of the string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Miller');
        M460
@@ -1382,7 +1383,7 @@ case class SoundEx(child: Expression) extends UnaryExpression with ExpectsInputT
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Returns the numeric value of the first character of `str`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('222');
        50
@@ -1424,7 +1425,7 @@ case class Ascii(child: Expression) extends UnaryExpression with ImplicitCastInp
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns the ASCII character having the binary equivalent to `expr`. If n is larger than 256 the result is equivalent to chr(n % 256)",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(65);
        A
@@ -1467,7 +1468,7 @@ case class Chr(child: Expression) extends UnaryExpression with ImplicitCastInput
  */
 @ExpressionDescription(
   usage = "_FUNC_(bin) - Converts the argument from a binary `bin` to a base 64 string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Spark SQL');
        U3BhcmsgU1FM
@@ -1496,7 +1497,7 @@ case class Base64(child: Expression) extends UnaryExpression with ImplicitCastIn
  */
 @ExpressionDescription(
   usage = "_FUNC_(str) - Converts the argument from a base 64 string `str` to a binary.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('U3BhcmsgU1FM');
        Spark SQL
@@ -1525,7 +1526,7 @@ case class UnBase64(child: Expression) extends UnaryExpression with ImplicitCast
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(bin, charset) - Decodes the first argument using the second argument character set.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(encode('abc', 'utf-8'), 'utf-8');
        abc
@@ -1564,7 +1565,7 @@ case class Decode(bin: Expression, charset: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, charset) - Encodes the first argument using the second argument character set.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('abc', 'utf-8');
        abc
@@ -1605,7 +1606,7 @@ case class Encode(value: Expression, charset: Expression)
       decimal places. If `expr2` is 0, the result has no decimal point or fractional part.
       This is supposed to function like MySQL's FORMAT.
   """,
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(12332.123456, 4);
        12,332.1235
@@ -1738,7 +1739,7 @@ case class FormatNumber(x: Expression, d: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(str[, lang, country]) - Splits `str` into an array of array of words.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('Hi there! Good morning.');
        [["Hi","there"],["Good","morning"]]

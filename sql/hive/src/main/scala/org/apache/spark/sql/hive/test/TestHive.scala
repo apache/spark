@@ -55,7 +55,8 @@ object TestHive
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set("spark.unsafe.exceptionOnMemoryLeak", "true")))
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -463,7 +464,7 @@ private[hive] class TestHiveSparkSession(
       // has already set the execution id.
       if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
         // We don't actually have a `QueryExecution` here, use a fake one instead.
-        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation)) {
+        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation())) {
           createCmds.foreach(_())
         }
       } else {
@@ -554,7 +555,7 @@ private[hive] class TestHiveQueryExecution(
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
+        logical.collect { case UnresolvedRelation(tableIdent) => tableIdent.table }
     val resolver = sparkSession.sessionState.conf.resolver
     val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
       referencedTables.exists(resolver(_, testTable))

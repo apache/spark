@@ -1372,6 +1372,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         hiveClient.createTable(tableDesc, ignoreIfExists = false)
 
         checkAnswer(spark.table("old"), Row(1, "a"))
+        checkAnswer(sql("select * from old"), Row(1, "a"))
 
         val expectedSchema = StructType(Seq(
           StructField("i", IntegerType, nullable = true),

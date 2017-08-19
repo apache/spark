@@ -63,24 +63,24 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object SpecialLimits extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ReturnAnswer(rootPlan) => rootPlan match {
-        case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-          execution.TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-        case logical.Limit(
-            IntegerLiteral(limit),
-            logical.Project(projectList, logical.Sort(order, true, child))) =>
-          execution.TakeOrderedAndProjectExec(
-            limit, order, projectList, planLater(child)) :: Nil
-        case logical.Limit(IntegerLiteral(limit), child) =>
-          execution.CollectLimitExec(limit, planLater(child)) :: Nil
+      case ReturnAnswer(rootPlan) => rootPlan match {
+        case Limit(IntegerLiteral(limit), Sort(order, true, child)) =>
+          TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child))) =>
+          TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
+        case Limit(IntegerLiteral(limit), child) =>
+          // With whole stage codegen, Spark releases resources only when all the output data of the
+          // query plan are consumed. It's possible that `CollectLimitExec` only consumes a little
+          // data from child plan and finishes the query without releasing resources. Here we wrap
+          // the child plan with `LocalLimitExec`, to stop the processing of whole stage codegen and
+          // trigger the resource releasing work, after we consume `limit` rows.
+          CollectLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
         case other => planLater(other) :: Nil
       }
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
-        execution.TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
-      case logical.Limit(
-          IntegerLiteral(limit), logical.Project(projectList, logical.Sort(order, true, child))) =>
-        execution.TakeOrderedAndProjectExec(
-          limit, order, projectList, planLater(child)) :: Nil
+      case Limit(IntegerLiteral(limit), Sort(order, true, child)) =>
+        TakeOrderedAndProjectExec(limit, order, child.output, planLater(child)) :: Nil
+      case Limit(IntegerLiteral(limit), Project(projectList, Sort(order, true, child))) =>
+        TakeOrderedAndProjectExec(limit, order, projectList, planLater(child)) :: Nil
       case _ => Nil
     }
   }
@@ -422,7 +422,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.GenerateExec(
           generator, join = join, outer = outer, g.qualifiedGeneratorOutput,
           planLater(child)) :: Nil
-      case logical.OneRowRelation =>
+      case _: logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil

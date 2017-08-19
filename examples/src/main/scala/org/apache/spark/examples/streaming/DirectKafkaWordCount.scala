@@ -20,9 +20,9 @@ package org.apache.spark.examples.streaming
 
 import kafka.serializer.StringDecoder
 
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.kafka._
-import org.apache.spark.SparkConf
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.

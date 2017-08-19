@@ -42,7 +42,7 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasAggregationDepth {
+  with HasAggregationDepth with HasThreshold {
 
   /**
    * Param for threshold in binary classification prediction.
@@ -53,11 +53,8 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
    *
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold",
+  final override val threshold: DoubleParam = new DoubleParam(this, "threshold",
     "threshold in binary classification prediction applied to rawPrediction")
-
-  /** @group getParam */
-  def getThreshold: Double = $(threshold)
 }
 
 /**
