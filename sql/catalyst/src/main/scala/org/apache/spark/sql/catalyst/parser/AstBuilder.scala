@@ -179,6 +179,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   type InsertDirParams = (Boolean, CatalogStorageFormat)
 
+  /**
+   * Add an
+   *   INSERT INTO [TABLE] or
+   *   INSERT OVERWRITE TABLE or
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY
+   * operation to logical plan
+   */
   private def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
@@ -192,6 +199,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     }
   }
 
+  /**
+   * Add an INSERT OVERWRITE [LOCAL] DIRECTORY operation to the logical plan
+   */
   private def withInsertOverwriteDirectory(
       ctx: InsertOverwriteDirectoryContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {

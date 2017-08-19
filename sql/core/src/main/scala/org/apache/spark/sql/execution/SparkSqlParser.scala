@@ -26,7 +26,6 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.parser._
@@ -1502,7 +1501,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Write to a file, returning a [[InsertIntoDir]] logical plan.
+   * Return the parameters for [[InsertIntoDir]] logical plan.
    *
    * Expected format:
    * {{{
@@ -1527,15 +1526,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       throw new ParseException(
         "You need to specify directory path or 'path' in OPTIONS, but not both", ctx)
     }
-    val customLocation = storage.locationUri.orElse(Some(CatalogUtils.stringToURI(path)))
 
+    val customLocation = storage.locationUri.orElse(Some(CatalogUtils.stringToURI(path)))
     storage = storage.copy(locationUri = customLocation)
 
     (ctx.LOCAL != null, storage)
   }
 
   /**
-   * Write to a file, returning a [[InsertIntoDir]] logical plan.
+   * Return the parameters for [[InsertIntoDir]] logical plan.
    *
    * Expected format:
    * {{{
