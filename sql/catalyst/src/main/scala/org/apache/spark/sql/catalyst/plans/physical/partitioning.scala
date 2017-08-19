@@ -47,7 +47,8 @@ case object AllTuples extends Distribution
  * Represents data where tuples that share the same values for the `clustering`
  * [[Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
- * within a single partition.
+ * within a single partition. `clusterOpt` indicates the numbers of partitions. `useHiveHash`
+ * tells if Hive hash should be used when do partitioning.
  */
 case class ClusteredDistribution(clustering: Seq[Expression], clustersOpt: Option[Int] = None,
                                  useHiveHash: Boolean = false) extends Distribution {

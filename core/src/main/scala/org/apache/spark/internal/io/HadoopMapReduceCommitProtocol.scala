@@ -108,6 +108,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     if (fileNameWithPartitionId) {
       f"part-$split%05d-$jobId$ext"
     } else {
+      // File names created by different tasks should have different `ext` when `split` is not used.
       f"part-$jobId$ext"
     }
   }
@@ -160,24 +161,22 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val attemptId = taskContext.getTaskAttemptID
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
-    val p1 = committer match {
+    val committedPaths = mutable.HashSet[String]()
+    committer match {
       case fileOutputCommitter: FileOutputCommitter =>
         val committedPath = fileOutputCommitter.getCommittedTaskPath(taskContext)
         if (committedPath != null) {
-          committedPath.toString
-        } else {
-          null
+          committedPaths += committedPath.toString
         }
-      case _ => path
+      case _ =>
+        committedPaths += path
     }
-    val p2 = if (path == null) {
-      null
-    } else {
-      absPathStagingDir.toString
+    if (path != null) {
+      committedPaths += absPathStagingDir.toString
     }
 
     new TaskCommitMessage(
-      HadoopMRTaskCommitStatus(addedAbsPathFiles.toMap, Seq(p1, p2).filter(_ != null)))
+      HadoopMRTaskCommitStatus(addedAbsPathFiles.toMap, committedPaths.toSeq))
   }
 
   override def abortTask(taskContext: TaskAttemptContext): Unit = {

@@ -202,14 +202,14 @@ object CatalogUtils {
       tableCols: Seq[String],
       bucketSpec: BucketSpec,
       resolver: Resolver): BucketSpec = {
-    val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, _) = bucketSpec
+    val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, isHiveBucket) = bucketSpec
     val normalizedBucketCols = bucketColumnNames.map { colName =>
       normalizeColumnName(tableName, tableCols, colName, "bucket", resolver)
     }
     val normalizedSortCols = sortColumnNames.map { colName =>
       normalizeColumnName(tableName, tableCols, colName, "sort", resolver)
     }
-    BucketSpec(numBuckets, normalizedBucketCols, normalizedSortCols, bucketSpec.isHiveBucket)
+    BucketSpec(numBuckets, normalizedBucketCols, normalizedSortCols, isHiveBucket)
   }
 
   /**
