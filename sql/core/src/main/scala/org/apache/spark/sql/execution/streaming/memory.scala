@@ -245,7 +245,7 @@ case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode
 }
 
 /** A [[ForeachWriter]] that appends events onto a sequence. Not thread-safe. */
-class DebugForeachWriter[A : Encoder]() extends ForeachWriter[A] {
+private class DebugForeachWriter[A : Encoder]() extends ForeachWriter[A] {
 
   var items: Seq[A] = Seq()
 
