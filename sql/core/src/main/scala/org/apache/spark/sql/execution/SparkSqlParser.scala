@@ -1366,7 +1366,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     } else {
       // CREATE VIEW ... AS INSERT INTO is not allowed.
       ctx.query.queryNoWith match {
-        case s: SingleInsertQueryContext if s.insertIntoTable != null =>
+        case s: SingleInsertQueryContext if s.insertInto != null =>
           operationNotAllowed("CREATE VIEW ... AS INSERT INTO", ctx)
         case _: MultiInsertQueryContext =>
           operationNotAllowed("CREATE VIEW ... AS FROM ... [INSERT INTO ...]+", ctx)

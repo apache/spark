@@ -151,7 +151,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           // Add organization statements.
           optionalMap(body.queryOrganization)(withQueryResultClauses).
           // Add insert.
-          optionalMap(body.insertIntoTable())(withInsertIntoTable)
+          optionalMap(body.insertIntoTable())(plan(ctx.insertInto))
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -170,13 +170,13 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       // Add organization statements.
       optionalMap(ctx.queryOrganization)(withQueryResultClauses).
       // Add insert.
-      optionalMap(ctx.insertIntoTable())(withInsertIntoTable)
+      optionalMap(ctx.insertIntoTable())(plan(ctx.insertInto))
   }
 
   /**
    * Add an INSERT INTO [TABLE]/INSERT OVERWRITE TABLE operation to the logical plan.
    */
-  protected def withInsertIntoTable(
+  private def withInsertIntoTable(
       ctx: InsertIntoTableContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
