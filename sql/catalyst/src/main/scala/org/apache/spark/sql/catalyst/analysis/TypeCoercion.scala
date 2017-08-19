@@ -127,10 +127,10 @@ object TypeCoercion {
     case (DateType, TimestampType) => Some(StringType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
-    case (StringType, IntegerType) => Some(DoubleType)
-    case (IntegerType, StringType) => Some(DoubleType)
-    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+    case (l: StringType, r: AtomicType) if r != StringType =>
+      if (r == IntegerType || r == LongType) Some(DoubleType) else Some(r)
+    case (l: AtomicType, r: StringType) if l != StringType =>
+      if (l == IntegerType || l == LongType) Some(DoubleType) else Some(l)
     case (l, r) => None
   }
 

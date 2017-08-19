@@ -1103,6 +1103,9 @@ class TypeCoercionSuite extends AnalysisTest {
       GreaterThan(Literal("123"), Literal(1)),
       GreaterThan(Cast(Literal("123"), DoubleType), Cast(Literal(1), DoubleType)))
     ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(1L)),
+      GreaterThan(Cast(Literal("123"), DoubleType), Cast(Literal(1L), DoubleType)))
+    ruleTest(PromoteStrings,
       GreaterThan(Literal("123"), Literal(0.1)),
       GreaterThan(Cast(Literal("123"), DoubleType), Literal(0.1)))
     ruleTest(PromoteStrings,
