@@ -334,7 +334,7 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
-   * Checks that the current running process can read, write and execute the given file
+   * Checks that the current running process can read, write the given file
    * by using methods of the File objects.
    *
    * @param file File to check
@@ -348,11 +348,6 @@ public class YarnShuffleService extends AuxiliaryService {
 
     if (!FileUtil.canWrite(file)) {
       logger.warn("File is not writable: " + file.toString());
-      return false;
-    }
-
-    if (!FileUtil.canExecute(file)) {
-      logger.warn("File is not executable: " + file.toString());
       return false;
     }
 
