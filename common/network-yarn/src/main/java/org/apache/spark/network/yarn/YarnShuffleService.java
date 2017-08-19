@@ -341,6 +341,11 @@ public class YarnShuffleService extends AuxiliaryService {
    * @return True if process has read, write and execute access on the path, or false.
    */
   protected Boolean checkFileAccess(File file) {
+    if (!file.exists()) {
+      logger.warn("File is not existed: " + file.toString());
+      return false;
+    }
+
     if (!FileUtil.canRead(file)) {
       logger.warn("File is not readable: " + file.toString());
       return false;
@@ -348,6 +353,11 @@ public class YarnShuffleService extends AuxiliaryService {
 
     if (!FileUtil.canWrite(file)) {
       logger.warn("File is not writable: " + file.toString());
+      return false;
+    }
+
+    if (!FileUtil.canExecute(file)) {
+      logger.warn("File is not executable: " + file.toString());
       return false;
     }
 
@@ -365,8 +375,9 @@ public class YarnShuffleService extends AuxiliaryService {
     if (_recoveryPath != null) {
         File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
 
-        bolRecoveryPathAvailable = checkFileAccess(recoveryFile);
+        bolRecoveryPathAvailable = checkFileAccess(new File(_recoveryPath.toUri().getPath()));
         logger.info("Recovery path {} ldb available: {}.", _recoveryPath, bolRecoveryPathAvailable);
+
         if (recoveryFile.exists() && bolRecoveryPathAvailable) {
           return recoveryFile;
         }
