@@ -2671,7 +2671,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(sql("SELECT a FROM src WHERE a=0L"), Seq(Row("0")))
       checkAnswer(sql("SELECT a FROM src WHERE a=0.0"), Seq(Row("0")))
       checkAnswer(sql("SELECT a FROM src WHERE a=-0.4"), Seq(Row("-0.4")))
-      checkAnswer(sql("SELECT a FROM src WHERE a=0.0"), Seq(Row("0")))
     }
   }
 }
