@@ -44,6 +44,7 @@ case class InsertIntoDirCommand(path: String,
 
   override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     assert(children.length == 1)
+    assert(!storage.locationUri.isEmpty)
 
     val Array(cols, types) = children.head.output.foldLeft(Array("", "")) { case (r, a) =>
       r(0) = r(0) + a.name + ","
@@ -72,7 +73,7 @@ case class InsertIntoDirCommand(path: String,
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     val jobConf = new JobConf(hadoopConf)
 
-    val targetPath = new Path(path)
+    val targetPath = new Path(storage.locationUri.get)
     val writeToPath =
       if (isLocal) {
         val localFileSystem = FileSystem.getLocal(jobConf)

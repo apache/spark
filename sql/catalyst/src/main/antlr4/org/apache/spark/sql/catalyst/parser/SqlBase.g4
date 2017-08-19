@@ -162,6 +162,7 @@ statement
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
+    | insertOverwriteDirectory                                         #insertOverwriteDir
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -240,7 +241,11 @@ query
 insertIntoTable
     : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
-    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?
+    ;
+
+insertOverwriteDirectory
+    : INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat? query             #insertOverwriteHiveDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? (OPTIONS options=tablePropertyList) query   #insertOverwriteDir
     ;
 
 partitionSpecLocation
