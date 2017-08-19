@@ -35,10 +35,10 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.Utils
 
 
-case class InsertIntoDirCommand(path: String,
-                                isLocal: Boolean,
-                                storage: CatalogStorageFormat,
-                                query: LogicalPlan) extends SaveAsHiveFile {
+case class InsertIntoDirCommand(
+    isLocal: Boolean,
+    storage: CatalogStorageFormat,
+    query: LogicalPlan) extends SaveAsHiveFile {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
@@ -101,7 +101,7 @@ case class InsertIntoDirCommand(path: String,
       plan = children.head,
       hadoopConf = hadoopConf,
       fileSinkConf = fileSinkConf,
-      outputLocation = path)
+      outputLocation = targetPath.toString)
 
     Seq.empty[Row]
   }

@@ -360,7 +360,6 @@ case class InsertIntoTable(
 }
 
 case class InsertIntoDir(
-    path: String,
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     child: LogicalPlan)

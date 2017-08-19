@@ -1513,7 +1513,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    * }}}
    */
   override def visitInsertOverwriteDir(
-      ctx: InsertOverwriteDirContext): LogicalPlan = withOrigin(ctx) {
+      ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
     val options = visitPropertyKeyValues(ctx.options)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 
@@ -1531,23 +1531,23 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     storage = storage.copy(locationUri = customLocation)
 
-    InsertIntoDir(path, ctx.LOCAL != null, storage, plan(ctx.query))
+    (ctx.LOCAL != null, storage)
   }
 
   /**
-    * Write to a file, returning a [[InsertIntoDir]] logical plan.
-    *
-    * Expected format:
-    * {{{
-    *   INSERT OVERWRITE DIRECTORY
-    *   path
-    *   [ROW FORMAT row_format]
-    *   [STORED AS file_format]
-    *   select_statement;
-    * }}}
-    */
+   * Write to a file, returning a [[InsertIntoDir]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   INSERT OVERWRITE DIRECTORY
+   *   path
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format]
+   *   select_statement;
+   * }}}
+   */
   override def visitInsertOverwriteHiveDir(
-      ctx: InsertOverwriteHiveDirContext): LogicalPlan = withOrigin(ctx) {
+      ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
       .getOrElse(CatalogStorageFormat.empty)
@@ -1562,7 +1562,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
 
     val defaultStorage = HiveSerDe.getDefaultStorage(conf)
 
-    val path = string(ctx.path)
     val storage = CatalogStorageFormat(
       locationUri = Some(CatalogUtils.stringToURI(path)),
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
@@ -1571,6 +1570,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       compressed = false,
       properties = rowStorage.properties ++ fileStorage.properties)
 
-    InsertIntoDir(path, ctx.LOCAL != null, storage, plan(ctx.query))
+    (ctx.LOCAL != null, storage)
   }
 }

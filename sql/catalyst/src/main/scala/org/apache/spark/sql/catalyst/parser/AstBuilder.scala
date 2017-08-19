@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -151,7 +152,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
           // Add organization statements.
           optionalMap(body.queryOrganization)(withQueryResultClauses).
           // Add insert.
-          optionalMap(body.insertIntoTable())(plan(ctx.insertInto))
+          optionalMap(body.insertInto())(withInsertInto)
     }
 
     // If there are multiple INSERTS just UNION them together into one query.
@@ -170,7 +171,36 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       // Add organization statements.
       optionalMap(ctx.queryOrganization)(withQueryResultClauses).
       // Add insert.
-      optionalMap(ctx.insertIntoTable())(plan(ctx.insertInto))
+      optionalMap(ctx.insertInto())(withInsertInto)
+  }
+
+  /**
+   * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat).
+   */
+  type InsertDirParams = (Boolean, CatalogStorageFormat)
+
+  private def withInsertInto(
+      ctx: InsertIntoContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    assert(ctx.children.size == 1)
+
+    ctx.getChild(0) match {
+      case c if c. isInstanceOf[InsertIntoTableContext] =>
+        withInsertIntoTable(c.asInstanceOf[InsertIntoTableContext], query)
+      case c if c.isInstanceOf[InsertOverwriteDirectoryContext] =>
+        withInsertOverwriteDirectory(c.asInstanceOf[InsertOverwriteDirectoryContext], query)
+    }
+  }
+
+  private def withInsertOverwriteDirectory(
+      ctx: InsertOverwriteDirectoryContext,
+      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+    val (isLocal, storage) = ctx match {
+      case dir: InsertOverwriteDirContext => visitInsertOverwriteDir(dir)
+      case hiveDir: InsertOverwriteHiveDirContext => visitInsertOverwriteHiveDir(hiveDir)
+    }
+
+    InsertIntoDir(isLocal, storage, query)
   }
 
   /**
@@ -200,7 +230,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Write to a file, returning a [[InsertIntoDir]] logical plan.
    */
   override def visitInsertOverwriteDir(
-      ctx: InsertOverwriteDirContext): LogicalPlan = withOrigin(ctx) {
+      ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
   }
 
@@ -208,7 +238,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    * Write to a file, returning a [[InsertIntoDir]] logical plan.
    */
   override def visitInsertOverwriteHiveDir(
-      ctx: InsertOverwriteHiveDirContext): LogicalPlan = withOrigin(ctx) {
+      ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
     throw new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
   }
 
