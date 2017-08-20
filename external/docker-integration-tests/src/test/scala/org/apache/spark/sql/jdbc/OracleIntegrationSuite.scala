@@ -22,7 +22,7 @@ import java.util.Properties
 import java.math.BigDecimal
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.execution.{RowDataSourceScanExec, DataSourceScanExec}
+import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -257,8 +257,8 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       .filter(dfRead.col("timestamp_type").lt(ts))
 
     val parentPlan = df.queryExecution.executedPlan
-    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
-    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    assert(parentPlan.isInstanceOf[WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[WholeStageCodegenExec]
     val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
     // The "PushedFilters" part should be exist in Datafrome's
     // physical plan and the existence of right literals in
