@@ -718,7 +718,7 @@ class DataFrame(object):
             raise TypeError(
                 "withReplacement (optional), fraction (required) and seed (optional)"
                 " should be a bool, float and number; however, "
-                "got %s." % ", ".join(argtypes))
+                "got [%s]." % ", ".join(argtypes))
 
         if is_withReplacement_omitted_args:
             if fraction is not None:
