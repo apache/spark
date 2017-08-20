@@ -178,19 +178,6 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-21759: IN for correlated subquery case") {
-    def testInResolve(inPredicate: In, shouldBeResolved: Boolean): Unit = {
-      if (shouldBeResolved) {
-        assert(inPredicate.resolved)
-      } else {
-        assert(!inPredicate.resolved)
-        val typeCheckResult = inPredicate.checkInputDataTypes()
-        assert(typeCheckResult.isInstanceOf[TypeCheckFailure])
-        val errorMessage =
-          "The additional output in subquery aren't used in the condition of subquery"
-        assert(typeCheckResult.asInstanceOf[TypeCheckFailure].message.contains(errorMessage))
-      }
-    }
-
     val testRelation = LocalRelation('a.int, 'b.double, 'c.int)
     val testRelation2 = LocalRelation('d.int, 'e.double)
 
@@ -202,7 +189,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     // In.value has 1 expr, subquery has 1 output attribute. No condition.
     // a#1 IN (list#4 [])
     val validInPredicate = In(testRelation2.output(0), inSubquery :: Nil)
-    testInResolve(validInPredicate, shouldBeResolved = true)
+    assert(validInPredicate.resolved)
 
     // Project [a#1, b#2]
     // +- LocalRelation <empty>, [a#1, b#2, c#3]
@@ -212,7 +199,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     // In.value has 1 expr, subquery has 2 output attribute. No condition.
     // a#1 IN (list#4 [])
     val unresolvedInPredicate = In(testRelation2.output(0), inSubqueryWithTwoAttr :: Nil)
-    testInResolve(unresolvedInPredicate, shouldBeResolved = false)
+    assert(!unresolvedInPredicate.resolved)
 
     val condition = EqualTo(testRelation.output(1), testRelation2.output(1))
 
@@ -220,7 +207,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     // a#1 IN (list#4 [d#5 = b#2])
     val validInPredicateWithCondition =
       In(testRelation2.output(0), inSubqueryWithTwoAttr.copy(children = Seq(condition)) :: Nil)
-    testInResolve(validInPredicateWithCondition, shouldBeResolved = true)
+    assert(validInPredicateWithCondition.resolved)
   }
 
   test("INSET") {

@@ -72,7 +72,7 @@ t1a IN (SELECT t2a, t2b
 struct<>
 -- !query 5 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(t1.`t1a` IN (listquery(t1.`t1a`)))' due to data type mismatch: 
+
 The number of columns in the left hand side of an IN subquery does not match the
 number of columns in the output of subquery.
 #columns in left hand side: 1.
@@ -80,12 +80,7 @@ number of columns in the output of subquery.
 Left side columns:
 [t1.`t1a`].
 Right side columns:
-[t2.`t2a`, t2.`t2b`].
-The additional output in subquery aren't used in the condition of subquery.
-Additional output:
-[t2.`t2b`].
-Condition:
-[t1.`t1a`].;
+[t2.`t2a`, t2.`t2b`].;
 
 
 -- !query 6
@@ -98,7 +93,7 @@ WHERE
 struct<>
 -- !query 6 output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(named_struct('t1a', t1.`t1a`, 't1b', t1.`t1b`) IN (listquery(t1.`t1a`)))' due to data type mismatch: 
+
 The number of columns in the left hand side of an IN subquery does not match the
 number of columns in the output of subquery.
 #columns in left hand side: 2.

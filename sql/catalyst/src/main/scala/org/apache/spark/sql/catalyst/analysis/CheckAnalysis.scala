@@ -124,6 +124,12 @@ trait CheckAnalysis extends PredicateHelper {
                 failAnalysis(s"Expression '$e' not supported within a window function.")
             }
 
+          case i @ In(value, Seq(l: ListQuery)) =>
+            // `ListQuery` is also a `SubqueryExpression`, do necessary check for it.
+            checkSubqueryExpression(operator, l)
+            checkInSubquery(i, l)
+            i
+
           case s: SubqueryExpression =>
             checkSubqueryExpression(operator, s)
             s
@@ -342,6 +348,24 @@ trait CheckAnalysis extends PredicateHelper {
     }
 
     plan.foreach(_.setAnalyzed())
+  }
+
+  /**
+   * Validates IN subquery in the plan. Upon failure, returns an user facing error.
+   */
+  private def checkInSubquery(inExpr: In, listQuery: ListQuery): Unit = {
+    if (inExpr.valExprs.length != listQuery.plan.output.length) {
+      failAnalysis(
+        s"""
+           |The number of columns in the left hand side of an IN subquery does not match the
+           |number of columns in the output of subquery.
+           |#columns in left hand side: ${inExpr.valExprs.length}.
+           |#columns in right hand side: ${listQuery.plan.output.length}.
+           |Left side columns:
+           |[${inExpr.valExprs.map(_.sql).mkString(", ")}].
+           |Right side columns:
+           |[${listQuery.plan.output.map(_.sql).mkString(", ")}].""".stripMargin)
+    }
   }
 
   /**

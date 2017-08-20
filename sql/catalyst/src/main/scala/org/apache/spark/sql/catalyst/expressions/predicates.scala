@@ -138,14 +138,15 @@ case class Not(child: Expression)
 case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
-  override def checkInputDataTypes(): TypeCheckResult = {
-    list match {
-      case (l @ ListQuery(sub, children, _)) :: Nil =>
-        val valExprs = value match {
-          case cns: CreateNamedStruct => cns.valExprs
-          case expr => Seq(expr)
-        }
 
+  lazy val valExprs = value match {
+    case cns: CreateNamedStruct => cns.valExprs
+    case expr => Seq(expr)
+  }
+
+  override lazy val resolved: Boolean = {
+    lazy val checkForInSubquery = list match {
+      case (l @ ListQuery(sub, children, _)) :: Nil =>
         // SPARK-21759:
         // It is possibly that the subquery plan has more output than value expressions, because
         // the condition expressions in `ListQuery` might use part of subquery plan's output.
@@ -164,6 +165,11 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         //      :  +- Project [c#2, d#3]
         //      :     +- LocalRelation <empty>, [c#2, d#3]
         //      +- LocalRelation <empty>, [a#0, b#1]
+        //
+        // Notice that in analysis we should not face such problem. During analysis we only care
+        // if the size of subquery plan match the size of value expression. `CheckAnalysis` makes
+        // sure this by a particular check. However, optimization rules will possibly change the
+        // analyzed plan and produce unresolved plan again. That's why we add this check here.
 
         // Take the subset of output which are not going to match with value expressions and also
         // not used in condition expressions, if any.
@@ -173,49 +179,39 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
           }
         }
 
-        val basicErrorMessage =
-          s"""
-             |The number of columns in the left hand side of an IN subquery does not match the
-             |number of columns in the output of subquery.
-             |#columns in left hand side: ${valExprs.length}.
-             |#columns in right hand side: ${sub.output.length}.
-             |Left side columns:
-             |[${valExprs.map(_.sql).mkString(", ")}].
-             |Right side columns:
-             |[${sub.output.map(_.sql).mkString(", ")}].""".stripMargin
-
-        if (valExprs.length > sub.output.length) {
-          TypeCheckResult.TypeCheckFailure(basicErrorMessage)
-        } else if (subqueryOutputNotInCondition.nonEmpty) {
-          val finalErrorMessage = basicErrorMessage +
-            s"""
-               |The additional output in subquery aren't used in the condition of subquery.
-               |Additional output:
-               |[${subqueryOutputNotInCondition.map(_.sql).mkString(", ")}].
-               |Condition:
-               |[${children.map(_.sql).mkString(", ")}].""".stripMargin
-          TypeCheckResult.TypeCheckFailure(finalErrorMessage)
+        if (sub.output.length < valExprs.length || subqueryOutputNotInCondition.nonEmpty) {
+          false
         } else {
-          val mismatchedColumns = valExprs.zip(sub.output.take(valExprs.length)).flatMap {
-            case (l, r) if l.dataType != r.dataType =>
-              s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-            case _ => None
-          }
-          if (mismatchedColumns.nonEmpty) {
-            TypeCheckResult.TypeCheckFailure(
-              s"""
-                 |The data type of one or more elements in the left hand side of an IN subquery
-                 |is not compatible with the data type of the output of the subquery
-                 |Mismatched columns:
-                 |[${mismatchedColumns.mkString(", ")}]
-                 |Left side:
-                 |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
-                 |Right side:
-                 |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
-               """.stripMargin)
-          } else {
-            TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
-          }
+          true
+        }
+      case _ => true
+    }
+    // Scala doesn't allow us refer super.resolved.
+    childrenResolved && checkInputDataTypes().isSuccess && checkForInSubquery
+  }
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    list match {
+      case (l @ ListQuery(sub, children, _)) :: Nil =>
+        val mismatchedColumns = valExprs.zip(sub.output.take(valExprs.length)).flatMap {
+          case (l, r) if l.dataType != r.dataType =>
+            s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
+          case _ => None
+        }
+        if (mismatchedColumns.nonEmpty) {
+          TypeCheckResult.TypeCheckFailure(
+            s"""
+               |The data type of one or more elements in the left hand side of an IN subquery
+               |is not compatible with the data type of the output of the subquery
+               |Mismatched columns:
+               |[${mismatchedColumns.mkString(", ")}]
+               |Left side:
+               |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
+               |Right side:
+               |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
+             """.stripMargin)
+        } else {
+          TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
         }
       case _ =>
         val mismatchOpt = list.find(l => l.dataType != value.dataType)
