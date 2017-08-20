@@ -22,6 +22,7 @@ import java.util.Properties
 import java.math.BigDecimal
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.{RowDataSourceScanExec, DataSourceScanExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -254,6 +255,18 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // which should be pushed down to Oracle.
     val df = dfRead.filter(dfRead.col("date_type").lt(dt))
       .filter(dfRead.col("timestamp_type").lt(ts))
+
+    val parentPlan = df.queryExecution.executedPlan
+    assert(parentPlan.isInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[org.apache.spark.sql.execution.WholeStageCodegenExec]
+    val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
+    // The "PushedFilters" part should be exist in Datafrome's
+    // physical plan and the existence of right literals in
+    // "PushedFilters" is used to prove that the predicates
+    // pushing down have been effective.
+    assert(metadata.get("PushedFilters").ne(None))
+    assert(metadata("PushedFilters").contains(dt.toString))
+    assert(metadata("PushedFilters").contains(ts.toString))
 
     val row = df.collect()(0)
     assert(row.getDate(0).equals(dateVal))
