@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -260,6 +260,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
     // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
     val provider = table.provider.get
+    val options = new SourceOptions(table.storage.properties)
 
     // To work around some hive metastore issues, e.g. not case-preserving, bad decimal type
     // support, no column nullability, etc., we should do some extra works before saving table
@@ -325,11 +326,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
     val qualifiedTableName = table.identifier.quotedString
     val maybeSerde = HiveSerDe.sourceToSerDe(provider)
-    val skipHiveMetadata = table.storage.properties
-      .getOrElse("skipHiveMetadata", "false").toBoolean
 
     val (hiveCompatibleTable, logMessage) = maybeSerde match {
-      case _ if skipHiveMetadata =>
+      case _ if options.skipHiveMetadata =>
         val message =
           s"Persisting data source table $qualifiedTableName into Hive metastore in" +
             "Spark SQL specific format, which is NOT compatible with Hive."
@@ -722,6 +721,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
+    val options = new SourceOptions(table.storage.properties)
     val hiveTable = table.copy(
       provider = Some(DDLUtils.HIVE_PROVIDER),
       tracksPartitionsInCatalog = true)
@@ -733,7 +733,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val partColumnNames = getPartitionColumnsFromTableProperties(table)
       val reorderedSchema = reorderSchema(schema = schemaFromTableProps, partColumnNames)
 
-      if (DataType.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema)) {
+      if (DataType.equalsIgnoreCaseAndNullability(reorderedSchema, table.schema) ||
+          options.respectSparkSchema) {
         hiveTable.copy(
           schema = reorderedSchema,
           partitionColumnNames = partColumnNames,
