@@ -1243,6 +1243,24 @@ class Dataset[T] private[sql](
   def alias(alias: Symbol): Dataset[T] = as(alias)
 
   /**
+    * Selects all the columns in the Dataset except a set of columns
+    * {{{
+    *   ds.selectAllColumns()
+    *   ds.selectAllColumns(except = Seq[Column]($"first_name", $"last_name"))
+    * }}}
+    */
+  def selectAllColumns(except: Seq[Column] = Seq.empty[Column]): DataFrame = select(this.columns.map(Column(_)).diff(except) : _*)
+
+  /**
+    * Selects all the columns in the Dataset without a set of columns
+    * {{{
+    *   ds.selectAllColumns()
+    *   ds.selectAllColumns(except = Seq[String]("first_name", "last_name"))
+    * }}}
+    */
+  def selectAllColumns(except: Seq[String] = Seq.empty[String]): DataFrame = selectAllColumns(except.map(Column(_)))
+
+  /**
    * Selects a set of column based expressions.
    * {{{
    *   ds.select($"colA", $"colB" + 1)
