@@ -25,6 +25,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -196,7 +197,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 }
 
-class OrcSourceSuite extends OrcSuite {
+class OrcSourceSuite extends OrcSuite with SQLTestUtils {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -247,6 +248,17 @@ class OrcSourceSuite extends OrcSuite {
           StringContains("b", "prefix")
         ))
       )).get.toString
+    }
+  }
+
+  // This test works with Apache ORC 1.4.0
+  // https://github.com/apache/spark/pull/18953
+  ignore("SPARK-21791 ORC should support column names with dot") {
+    import spark.implicits._
+    withTempDir { dir =>
+      val path = new File(dir, "orc").getCanonicalPath
+      Seq(Some(1), None).toDF("col.dots").write.orc(path)
+      assert(spark.read.orc(path).collect().length == 2)
     }
   }
 }
