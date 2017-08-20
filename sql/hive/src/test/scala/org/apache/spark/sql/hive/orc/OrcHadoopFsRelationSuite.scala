@@ -65,19 +65,17 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-12218: 'Not' is included in ORC filter pushdown") {
     import testImplicits._
 
-    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
-      withTempPath { dir =>
-        val path = s"${dir.getCanonicalPath}/table1"
-        (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.orc(path)
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/table1"
+      (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.orc(path)
 
-        checkAnswer(
-          spark.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
-          (1 to 5).map(i => Row(i, (i % 2).toString)))
+      checkAnswer(
+        spark.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
+        (1 to 5).map(i => Row(i, (i % 2).toString)))
 
-        checkAnswer(
-          spark.read.orc(path).where("not (a = 2 and b in ('1'))"),
-          (1 to 5).map(i => Row(i, (i % 2).toString)))
-      }
+      checkAnswer(
+        spark.read.orc(path).where("not (a = 2 and b in ('1'))"),
+        (1 to 5).map(i => Row(i, (i % 2).toString)))
     }
   }
 
