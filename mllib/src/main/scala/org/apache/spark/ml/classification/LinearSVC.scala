@@ -214,12 +214,13 @@ class LinearSVC @Since("2.2.0") (
       }
 
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+      val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
       val regularization = if (regParamL2 != 0.0) {
         val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
         Some(new L2Regularization(regParamL2, shouldApply,
-          if ($(standardization)) None else Some(featuresStd)))
+          if ($(standardization)) None else Some(getFeaturesStd)))
       } else {
         None
       }

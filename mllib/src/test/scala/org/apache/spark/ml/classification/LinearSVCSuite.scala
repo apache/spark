@@ -171,7 +171,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model2.intercept !== 0.0)
   }
 
-  test("sparse coefficients in SVCAggregator") {
+  test("sparse coefficients in HingeAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
     val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)

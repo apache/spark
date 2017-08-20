@@ -27,6 +27,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
   import DifferentiableLossAggregatorSuite.getClassificationSummarizers
 
   @transient var instances: Array[Instance] = _
+  @transient var instancesConstantFeature: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -35,6 +36,10 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       Instance(1.0, 0.5, Vectors.dense(1.5, 1.0)),
       Instance(0.0, 0.3, Vectors.dense(4.0, 0.5))
     )
+    instancesConstantFeature = Array(
+      Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
+      Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
+      Instance(1.0, 0.3, Vectors.dense(1.0, 0.5)))
   }
 
    /** Get summary statistics for some data and create a new HingeAggregator. */
@@ -74,7 +79,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-  test("check sizes binomial") {
+  test("check sizes") {
     val rng = new scala.util.Random
     val numFeatures = instances.head.features.size
     val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble))
@@ -89,8 +94,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(aggNoIntercept.gradient.size === numFeatures)
   }
 
-
-  test("check correctness binomial") {
+  test("check correctness") {
     val coefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val numFeatures = instances.head.features.size
@@ -134,10 +138,6 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("check with zero standard deviation") {
-    val instancesConstantFeature = Array(
-      Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
-      Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
-      Instance(1.0, 0.3, Vectors.dense(1.0, 0.5)))
     val binaryCoefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val aggConstantFeatureBinary = getNewAggregator(instancesConstantFeature,
