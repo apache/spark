@@ -33,8 +33,8 @@ if ! hash python 2>/dev/null; then
 fi
 
 if ! hash mkdocs 2>/dev/null; then
-  echo "Missing mkdocs in your path, skipping SQL documentation generation."
-  exit 0
+  echo "Missing mkdocs in your path, trying to install mkdocs for SQL documentation generation."
+  pip install mkdocs
 fi
 
 # Now create the markdown file
