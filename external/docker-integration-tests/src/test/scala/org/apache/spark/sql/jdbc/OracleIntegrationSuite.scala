@@ -260,7 +260,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(parentPlan.isInstanceOf[WholeStageCodegenExec])
     val node = parentPlan.asInstanceOf[WholeStageCodegenExec]
     val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
-    // The "PushedFilters" part should be exist in Datafrome's
+    // The "PushedFilters" part should be exist in Dataframe's
     // physical plan and the existence of right literals in
     // "PushedFilters" is used to prove that the predicates
     // pushing down have been effective.
