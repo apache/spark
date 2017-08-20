@@ -2034,7 +2034,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-21721: Clear FileSystem deleterOnExit cache if path is successfully removed") {
-    withTable("test21721") {
+    val table = "test21721"
+    withTable(table) {
       val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
       deleteOnExitField.setAccessible(true)
 
@@ -2042,10 +2043,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
 
       val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-      sql("CREATE TABLE test21721 (key INT, value STRING)")
+      sql(s"CREATE TABLE $table (key INT, value STRING)")
       val pathSizeToDeleteOnExit = setOfPath.size()
 
-      (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto("test1"))
+      (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto(table))
 
       assert(setOfPath.size() == pathSizeToDeleteOnExit)
     }
