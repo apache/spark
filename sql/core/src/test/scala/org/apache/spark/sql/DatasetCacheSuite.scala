@@ -39,7 +39,6 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     ds.persist(eager = false)
     assert(!ds.isMaterialized())
     ds.persist(eager = true)
-    ds.collect()
     assert(ds.isMaterialized())
   }
 

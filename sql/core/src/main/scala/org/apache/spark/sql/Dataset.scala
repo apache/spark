@@ -2796,10 +2796,7 @@ class Dataset[T] private[sql](
         val blockManager = sparkSession.sparkContext.env.blockManager
         val rdd = i.relation.cachedColumnBuffers
         val blockIDs = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index))
-        blockIDs.foreach { bid =>
-          if (blockManager.get(bid).nonEmpty) blockManager.releaseLock(bid) else return false
-        }
-        true
+        blockIDs.forall { bid => blockManager.getStatus(bid).exists(_.isCached) }
       case _ => false
     }
   }
