@@ -390,6 +390,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val bucketSpec = table.bucketSpec
 
     val properties = new mutable.HashMap[String, String]
+
+    properties.put(CREATED_SPARK_VERSION, table.createVersion)
+
     // Serialized JSON schema string may be too long to be stored into a single metastore table
     // property. In this case, we split the JSON string and store each part as a separate table
     // property.
@@ -594,7 +597,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       // Set the `schema`, `partitionColumnNames` and `bucketSpec` from the old table definition,
       // to retain the spark specific format if it is.
       val propsFromOldTable = oldTableDef.properties.filter { case (k, v) =>
-        k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX)
+        k.startsWith(DATASOURCE_PREFIX) || k.startsWith(STATISTICS_PREFIX) ||
+          k.startsWith(CREATED_SPARK_VERSION)
       }
       val newTableProps = propsFromOldTable ++ tableDefinition.properties + partitionProviderProp
       val newDef = tableDefinition.copy(
@@ -635,26 +639,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     requireTableExists(db, table)
     val rawTable = getRawTable(db, table)
 
+    // For datasource tables and hive serde tables created by spark 2.1 or higher,
+    // the data schema is stored in the table properties.
+    val schema = restoreTableMetadata(rawTable).schema
+
     // convert table statistics to properties so that we can persist them through hive client
-    val statsProperties = new mutable.HashMap[String, String]()
-    if (stats.isDefined) {
-      statsProperties += STATISTICS_TOTAL_SIZE -> stats.get.sizeInBytes.toString()
-      if (stats.get.rowCount.isDefined) {
-        statsProperties += STATISTICS_NUM_ROWS -> stats.get.rowCount.get.toString()
+    var statsProperties =
+      if (stats.isDefined) {
+        statsToProperties(stats.get, schema)
+      } else {
+        new mutable.HashMap[String, String]()
       }
-
-      // For datasource tables and hive serde tables created by spark 2.1 or higher,
-      // the data schema is stored in the table properties.
-      val schema = restoreTableMetadata(rawTable).schema
-
-      val colNameTypeMap: Map[String, DataType] =
-        schema.fields.map(f => (f.name, f.dataType)).toMap
-      stats.get.colStats.foreach { case (colName, colStat) =>
-        colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-          statsProperties += (columnStatKeyPropName(colName, k) -> v)
-        }
-      }
-    }
 
     val oldTableNonStatsProps = rawTable.properties.filterNot(_._1.startsWith(STATISTICS_PREFIX))
     val updatedTable = rawTable.copy(properties = oldTableNonStatsProps ++ statsProperties)
@@ -663,10 +658,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
   override def getTable(db: String, table: String): CatalogTable = withClient {
     restoreTableMetadata(getRawTable(db, table))
-  }
-
-  override def getTableOption(db: String, table: String): Option[CatalogTable] = withClient {
-    client.getTableOption(db, table).map(restoreTableMetadata)
   }
 
   /**
@@ -700,41 +691,19 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         table = restoreDataSourceTable(table, provider)
     }
 
+    // Restore version info
+    val version: String = table.properties.getOrElse(CREATED_SPARK_VERSION, "2.2 or prior")
+
     // Restore Spark's statistics from information in Metastore.
-    val statsProps = table.properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
-
-    // Currently we have two sources of statistics: one from Hive and the other from Spark.
-    // In our design, if Spark's statistics is available, we respect it over Hive's statistics.
-    if (statsProps.nonEmpty) {
-      val colStats = new mutable.HashMap[String, ColumnStat]
-
-      // For each column, recover its column stats. Note that this is currently a O(n^2) operation,
-      // but given the number of columns it usually not enormous, this is probably OK as a start.
-      // If we want to map this a linear operation, we'd need a stronger contract between the
-      // naming convention used for serialization.
-      table.schema.foreach { field =>
-        if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
-          // If "version" field is defined, then the column stat is defined.
-          val keyPrefix = columnStatKeyPropName(field.name, "")
-          val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
-            (k.drop(keyPrefix.length), v)
-          }
-
-          ColumnStat.fromMap(table.identifier.table, field, colStatMap).foreach {
-            colStat => colStats += field.name -> colStat
-          }
-        }
-      }
-
-      table = table.copy(
-        stats = Some(CatalogStatistics(
-          sizeInBytes = BigInt(table.properties(STATISTICS_TOTAL_SIZE)),
-          rowCount = table.properties.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
-          colStats = colStats.toMap)))
+    val restoredStats =
+      statsFromProperties(table.properties, table.identifier.table, table.schema)
+    if (restoredStats.isDefined) {
+      table = table.copy(stats = restoredStats)
     }
 
     // Get the original table properties as defined by the user.
     table.copy(
+      createVersion = version,
       properties = table.properties.filterNot { case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
   }
 
@@ -1033,17 +1002,92 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     currentFullPath
   }
 
+  private def statsToProperties(
+      stats: CatalogStatistics,
+      schema: StructType): Map[String, String] = {
+
+    var statsProperties: Map[String, String] =
+      Map(STATISTICS_TOTAL_SIZE -> stats.sizeInBytes.toString())
+    if (stats.rowCount.isDefined) {
+      statsProperties += STATISTICS_NUM_ROWS -> stats.rowCount.get.toString()
+    }
+
+    val colNameTypeMap: Map[String, DataType] =
+      schema.fields.map(f => (f.name, f.dataType)).toMap
+    stats.colStats.foreach { case (colName, colStat) =>
+      colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
+        statsProperties += (columnStatKeyPropName(colName, k) -> v)
+      }
+    }
+
+    statsProperties
+  }
+
+  private def statsFromProperties(
+      properties: Map[String, String],
+      table: String,
+      schema: StructType): Option[CatalogStatistics] = {
+
+    val statsProps = properties.filterKeys(_.startsWith(STATISTICS_PREFIX))
+    if (statsProps.isEmpty) {
+      None
+    } else {
+
+      val colStats = new mutable.HashMap[String, ColumnStat]
+
+      // For each column, recover its column stats. Note that this is currently a O(n^2) operation,
+      // but given the number of columns it usually not enormous, this is probably OK as a start.
+      // If we want to map this a linear operation, we'd need a stronger contract between the
+      // naming convention used for serialization.
+      schema.foreach { field =>
+        if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
+          // If "version" field is defined, then the column stat is defined.
+          val keyPrefix = columnStatKeyPropName(field.name, "")
+          val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
+            (k.drop(keyPrefix.length), v)
+          }
+
+          ColumnStat.fromMap(table, field, colStatMap).foreach {
+            colStat => colStats += field.name -> colStat
+          }
+        }
+      }
+
+      Some(CatalogStatistics(
+        sizeInBytes = BigInt(statsProps(STATISTICS_TOTAL_SIZE)),
+        rowCount = statsProps.get(STATISTICS_NUM_ROWS).map(BigInt(_)),
+        colStats = colStats.toMap))
+    }
+  }
+
   override def alterPartitions(
       db: String,
       table: String,
       newParts: Seq[CatalogTablePartition]): Unit = withClient {
     val lowerCasedParts = newParts.map(p => p.copy(spec = lowerCasePartitionSpec(p.spec)))
+
+    val rawTable = getRawTable(db, table)
+
+    // For datasource tables and hive serde tables created by spark 2.1 or higher,
+    // the data schema is stored in the table properties.
+    val schema = restoreTableMetadata(rawTable).schema
+
+    // convert partition statistics to properties so that we can persist them through hive api
+    val withStatsProps = lowerCasedParts.map(p => {
+      if (p.stats.isDefined) {
+        val statsProperties = statsToProperties(p.stats.get, schema)
+        p.copy(parameters = p.parameters ++ statsProperties)
+      } else {
+        p
+      }
+    })
+
     // Note: Before altering table partitions in Hive, you *must* set the current database
     // to the one that contains the table of interest. Otherwise you will end up with the
     // most helpful error message ever: "Unable to alter partition. alter is not possible."
     // See HIVE-2742 for more detail.
     client.setCurrentDatabase(db)
-    client.alterPartitions(db, table, lowerCasedParts)
+    client.alterPartitions(db, table, withStatsProps)
   }
 
   override def getPartition(
@@ -1051,7 +1095,34 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       spec: TablePartitionSpec): CatalogTablePartition = withClient {
     val part = client.getPartition(db, table, lowerCasePartitionSpec(spec))
-    part.copy(spec = restorePartitionSpec(part.spec, getTable(db, table).partitionColumnNames))
+    restorePartitionMetadata(part, getTable(db, table))
+  }
+
+  /**
+   * Restores partition metadata from the partition properties.
+   *
+   * Reads partition-level statistics from partition properties, puts these
+   * into [[CatalogTablePartition#stats]] and removes these special entries
+   * from the partition properties.
+   */
+  private def restorePartitionMetadata(
+      partition: CatalogTablePartition,
+      table: CatalogTable): CatalogTablePartition = {
+    val restoredSpec = restorePartitionSpec(partition.spec, table.partitionColumnNames)
+
+    // Restore Spark's statistics from information in Metastore.
+    // Note: partition-level statistics were introduced in 2.3.
+    val restoredStats =
+      statsFromProperties(partition.parameters, table.identifier.table, table.schema)
+    if (restoredStats.isDefined) {
+      partition.copy(
+        spec = restoredSpec,
+        stats = restoredStats,
+        parameters = partition.parameters.filterNot {
+          case (key, _) => key.startsWith(SPARK_SQL_PREFIX) })
+    } else {
+      partition.copy(spec = restoredSpec)
+    }
   }
 
   /**
@@ -1062,7 +1133,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       table: String,
       spec: TablePartitionSpec): Option[CatalogTablePartition] = withClient {
     client.getPartitionOption(db, table, lowerCasePartitionSpec(spec)).map { part =>
-      part.copy(spec = restorePartitionSpec(part.spec, getTable(db, table).partitionColumnNames))
+      restorePartitionMetadata(part, getTable(db, table))
     }
   }
 
@@ -1207,6 +1278,8 @@ object HiveExternalCatalog {
   val TABLE_PARTITION_PROVIDER = SPARK_SQL_PREFIX + "partitionProvider"
   val TABLE_PARTITION_PROVIDER_CATALOG = "catalog"
   val TABLE_PARTITION_PROVIDER_FILESYSTEM = "filesystem"
+
+  val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
 
   /**
    * Returns the fully qualified name used in table properties for a particular column stat.

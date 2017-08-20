@@ -363,6 +363,16 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(UTF8String.fromString("b\nc")))
   }
 
+  test("SPARK-21677: json_tuple throws NullPointException when column is null as string type") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f2") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("2")))
+  }
+
   val gmtId = Option(DateTimeUtils.TimeZoneGMT.getID)
 
   test("from_json") {

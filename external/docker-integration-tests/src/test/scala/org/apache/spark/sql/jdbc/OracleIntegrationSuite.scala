@@ -255,15 +255,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val df = dfRead.filter(dfRead.col("date_type").lt(dt))
       .filter(dfRead.col("timestamp_type").lt(ts))
 
-    val metadata = df.queryExecution.sparkPlan.metadata
-    // The "PushedFilters" part should be exist in Datafrome's
-    // physical plan and the existence of right literals in
-    // "PushedFilters" is used to prove that the predicates
-    // pushing down have been effective.
-    assert(metadata.get("PushedFilters").ne(None))
-    assert(metadata("PushedFilters").contains(dt.toString))
-    assert(metadata("PushedFilters").contains(ts.toString))
-
     val row = df.collect()(0)
     assert(row.getDate(0).equals(dateVal))
     assert(row.getTimestamp(1).equals(timestampVal))

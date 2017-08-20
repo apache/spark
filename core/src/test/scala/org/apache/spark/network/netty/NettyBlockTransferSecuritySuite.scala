@@ -28,8 +28,8 @@ import scala.util.{Failure, Success, Try}
 
 import com.google.common.io.CharStreams
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.ShouldMatchers
+import org.scalatest.mock.MockitoSugar
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
