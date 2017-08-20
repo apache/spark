@@ -2740,18 +2740,6 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
-   * @param eager If true, persist the Dataset eagerly.
-   * @group basic
-   * @since 2.3.0
-   */
-  def persist(eager: Boolean): this.type = {
-    persist()
-    if (eager) queryExecution.toRdd.foreachPartition(_ => {})
-    this
-  }
-
-  /**
-   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
    *
    * @group basic
    * @since 1.6.0
@@ -2769,6 +2757,34 @@ class Dataset[T] private[sql](
    */
   def persist(newLevel: StorageLevel): this.type = {
     sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+    this
+  }
+
+  /**
+   * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   * @param eager If true, persist the Dataset eagerly.
+   * @group basic
+   * @since 2.3.0
+   */
+  def persist(eager: Boolean): this.type = {
+    persist()
+    if (eager) queryExecution.toRdd.foreachPartition(_ => {})
+    this
+  }
+
+  /**
+   * Persist this Dataset with the given storage level.
+   * @param eager If true, persist the Dataset eagerly.
+   * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
+   *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
+   *                 `MEMORY_AND_DISK_2`, etc.
+   *
+   * @group basic
+   * @since 2.3.0
+   */
+  def persist(eager: Boolean, newLevel: StorageLevel): this.type = {
+    persist(newLevel)
+    if (eager) queryExecution.toRdd.foreachPartition(_ => {})
     this
   }
 
@@ -2795,8 +2811,10 @@ class Dataset[T] private[sql](
       case i: InMemoryTableScanExec =>
         val blockManager = sparkSession.sparkContext.env.blockManager
         val rdd = i.relation.cachedColumnBuffers
-        val blockIDs = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index))
-        blockIDs.forall { bid => blockManager.getStatus(bid).exists(_.isCached) }
+        sparkSession.sparkContext.persistentRdds.contains(rdd.id) &&
+          rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).forall {
+            bid => blockManager.getStatus(bid).exists(_.isCached)
+          }
       case _ => false
     }
   }

@@ -40,6 +40,21 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     assert(!ds.isMaterialized())
     ds.persist(eager = true)
     assert(ds.isMaterialized())
+    ds.unpersist()
+    assert(!ds.isMaterialized())
+  }
+
+  test("eager persist with storagelevel") {
+    val ds = Seq("1", "2").toDF()
+    ds.persist(eager = false, StorageLevel.MEMORY_ONLY_2)
+    assert(!ds.isMaterialized())
+    assert(ds.storageLevel == StorageLevel.MEMORY_ONLY_2)
+    ds.persist(eager = true, StorageLevel.MEMORY_ONLY_2)
+    assert(ds.isMaterialized())
+    assert(ds.storageLevel == StorageLevel.MEMORY_ONLY_2)
+    ds.unpersist()
+    assert(ds.storageLevel == StorageLevel.NONE)
+    assert(!ds.isMaterialized())
   }
 
   test("get storage level") {

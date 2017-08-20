@@ -220,7 +220,7 @@ abstract class QueryTest extends PlanTest {
    */
   def assertMaterialized(query: Dataset[_]): Unit = {
     assert(query.isMaterialized(),
-      "Eagerly cached cached Dataset should have already been materialized")
+      "Eagerly cached Dataset should have already been materialized")
   }
 
   /**
