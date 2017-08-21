@@ -1249,9 +1249,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskDescs2.size === 0) // tsm doesn't accept any as it is already running at max tasks
 
     // inform tsm that one task has completed
-    val directTaskResult = new DirectTaskResult[String](null, Seq()) {
-      override def value(resultSer: SerializerInstance): String = ""
-    }
+    val directTaskResult = createTaskResult(0)
     tsm.handleSuccessfulTask(taskDescs(0).taskId, directTaskResult)
 
     // make 4 more offers after previous task completed
@@ -1295,9 +1293,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
     assert(taskDescs.size === 2) // tsm accepts more offers as it has tasks to run
 
-    val directTaskResult = new DirectTaskResult[String](null, Seq()) {
-      override def value(resultSer: SerializerInstance): String = ""
-    }
+    val directTaskResult = createTaskResult(0)
     tsm.handleSuccessfulTask(taskDescs(0).taskId, directTaskResult)
 
     taskDescs = Seq(

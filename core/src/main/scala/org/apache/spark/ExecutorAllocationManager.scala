@@ -92,7 +92,7 @@ private[spark] class ExecutorAllocationManager(
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
   private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
   private val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
-  private var maxConcurrentTasks = Int.MaxValue
+  private var maxConcurrentTasks = 0
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
   private val schedulerBacklogTimeoutS = conf.getTimeAsSeconds(
@@ -316,7 +316,7 @@ private[spark] class ExecutorAllocationManager(
       // Do not change our target while we are still initializing,
       // Otherwise the first job may have to ramp up unnecessarily
       0
-    } else if (maxNeeded <= numExecutorsTarget) {
+    } else if (maxNeeded < numExecutorsTarget) {
       // The target number exceeds the number we actually need, so stop adding new
       // executors and inform the cluster manager to cancel the extra pending requests
       val oldNumExecutorsTarget = numExecutorsTarget
@@ -597,6 +597,10 @@ private[spark] class ExecutorAllocationManager(
     private val executorIdToTaskIds = new mutable.HashMap[String, mutable.HashSet[Long]]
     // Number of tasks currently running on the cluster.  Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
+    private val jobGroupToMaxConTasks = new mutable.HashMap[String, Int]
+    private val jobIdToJobGroup = new mutable.HashMap[Int, String]
+    private val stageIdToJobId = new mutable.HashMap[Int, Int]
+    private val stageIdToCompleteTaskCount = new mutable.HashMap[Int, Int]
 
     // stageId to tuple (the number of task with locality preferences, a map where each pair is a
     // node and the number of tasks that would like to be scheduled on that node) map,
@@ -605,17 +609,44 @@ private[spark] class ExecutorAllocationManager(
     private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-      val jobGroupId = if (jobStart.properties != null) {
+      // limit the concurrent tasks if the job belongs to a jobGroup & a config is specified.
+      jobStart.stageInfos.foreach(stageInfo => stageIdToJobId(stageInfo.stageId) = jobStart.jobId)
+
+      var jobGroupId = if (jobStart.properties != null) {
         jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
       } else {
-        ""
+        null
       }
-      val maxConcurrentTasks = conf.getInt(s"spark.job.$jobGroupId.maxConcurrentTasks",
-        Int.MaxValue)
 
-      logInfo(s"Setting maximum concurrent tasks for group: ${jobGroupId} to $maxConcurrentTasks")
-      allocationManager.synchronized {
-        allocationManager.maxConcurrentTasks = maxConcurrentTasks
+      val maxConTasks = if (jobGroupId != null &&
+        conf.contains(s"spark.job.$jobGroupId.maxConcurrentTasks")) {
+        conf.get(s"spark.job.$jobGroupId.maxConcurrentTasks").toInt
+      } else {
+        Int.MaxValue
+      }
+
+      if (maxConTasks <= 0) {
+        throw new IllegalArgumentException(
+          "Maximum Concurrent Tasks should be set greater than 0 for the job to progress.")
+      }
+
+      if (jobGroupId == null || !conf.contains(s"spark.job.$jobGroupId.maxConcurrentTasks")) {
+        jobGroupId = "default-group-" + jobStart.jobId.hashCode
+      }
+
+      jobIdToJobGroup(jobStart.jobId) = jobGroupId
+      if (!jobGroupToMaxConTasks.contains(jobGroupId)) {
+        jobGroupToMaxConTasks(jobGroupId) = maxConTasks
+      }
+    }
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+      val jobGroupId = jobIdToJobGroup(jobEnd.jobId)
+
+      jobIdToJobGroup -= jobEnd.jobId
+      // Remove jobGroup mapping if this is the only remaining job in the group.
+      if (!jobIdToJobGroup.values.exists(_ == jobGroupId)) {
+        jobGroupToMaxConTasks -= jobGroupId
       }
     }
 
@@ -644,7 +675,9 @@ private[spark] class ExecutorAllocationManager(
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
+        maxConcurrentTasks = getMaxConTasks
       }
+      logInfo(s"Setting max concurrent tasks to $maxConcurrentTasks on stage submit.")
     }
 
     override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
@@ -653,7 +686,7 @@ private[spark] class ExecutorAllocationManager(
         stageIdToNumTasks -= stageId
         stageIdToTaskIndices -= stageId
         stageIdToExecutorPlacementHints -= stageId
-
+        stageIdToJobId -= stageId
         // Update the executor placement hints
         updateExecutorPlacementHints()
 
@@ -666,7 +699,9 @@ private[spark] class ExecutorAllocationManager(
             numRunningTasks = 0
           }
         }
+        maxConcurrentTasks = getMaxConTasks
       }
+      logInfo(s"Setting max concurrent tasks to $maxConcurrentTasks on stage complete.")
     }
 
     override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
@@ -720,6 +755,8 @@ private[spark] class ExecutorAllocationManager(
             allocationManager.onSchedulerBacklogged()
           }
           stageIdToTaskIndices.get(stageId).foreach { _.remove(taskIndex) }
+        } else {
+          stageIdToCompleteTaskCount(stageId) = stageIdToCompleteTaskCount.getOrElse(stageId, 0) + 1
         }
       }
     }
@@ -739,6 +776,62 @@ private[spark] class ExecutorAllocationManager(
     override def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit = {
       allocationManager.onExecutorRemoved(executorRemoved.executorId)
     }
+
+    /**
+      * Calculate the maximum no. of concurrent tasks that can run currently.
+      */
+    def getMaxConTasks(): Int = {
+      val stagesByJobGroup = stageIdToNumTasks.groupBy(x => jobIdToJobGroup(stageIdToJobId(x._1)))
+
+      def getMaxConTasks(maxConTasks: Int,
+        stagesByJobGroupItr: Iterator[(String, mutable.HashMap[Int, Int])]): Int = {
+        if (stagesByJobGroupItr.hasNext) {
+          val (jobGroupId, stages) = stagesByJobGroupItr.next
+          // Get the total running and pending tasks for a job group.
+          val totalIncompleteTasksForJobGroup = getIncompleteTasksForJobGroup(0, stages.iterator)
+          val maxTasks = Math.min(jobGroupToMaxConTasks(jobGroupId),
+            totalIncompleteTasksForJobGroup)
+          if (doesSumOverflow(maxConTasks, maxTasks)) {
+            Int.MaxValue
+          } else {
+            getMaxConTasks(maxConTasks + maxTasks, stagesByJobGroupItr)
+          }
+        } else {
+          maxConTasks
+        }
+      }
+
+      // Get the total running & pending tasks for all stages in a job group.
+      def getIncompleteTasksForJobGroup(totalTasks: Int, stagesItr: Iterator[(Int, Int)]): Int = {
+        if (stagesItr.hasNext) {
+          val (stageId, numTasks) = stagesItr.next
+          val activeTasks = getIncompleteTasksForStage(stageId, numTasks)
+          if (doesSumOverflow(totalTasks, activeTasks)) {
+            Int.MaxValue
+          } else {
+            getIncompleteTasksForJobGroup(totalTasks + activeTasks, stagesItr)
+          }
+        } else {
+          totalTasks
+        }
+      }
+
+      // Get the total running & pending tasks for a single stage.
+      def getIncompleteTasksForStage(stageId: Int, numTasks: Int): Int = {
+        var pendingTasks = numTasks
+        if (stageIdToTaskIndices.contains(stageId)) {
+          pendingTasks -= stageIdToTaskIndices(stageId).size
+        }
+        var runningTasks = 0
+        if (stageIdToCompleteTaskCount.contains(stageId)) {
+          runningTasks = stageIdToTaskIndices(stageId).size - stageIdToCompleteTaskCount(stageId)
+        }
+        pendingTasks + runningTasks
+      }
+      getMaxConTasks(0, stagesByJobGroup.iterator)
+    }
+
+    private def doesSumOverflow(a: Int, b: Int): Boolean = b > (Int.MaxValue - a)
 
     /**
      * An estimate of the total number of pending tasks remaining for currently running stages. Does

@@ -477,63 +477,62 @@ private[spark] class TaskSetManager(
         }
       }
 
-      dequeueTask(execId, host, allowedLocality).map {
-        case ((index, taskLocality, speculative)) =>
-          // Found a task; do some bookkeeping and return a task description
-          val task = tasks(index)
-          val taskId = sched.newTaskId()
-          // Do various bookkeeping
-          copiesRunning(index) += 1
-          val attemptNum = taskAttempts(index).size
-          val info = new TaskInfo(taskId, index, attemptNum, curTime,
-            execId, host, taskLocality, speculative)
-          taskInfos(taskId) = info
-          taskAttempts(index) = info :: taskAttempts(index)
-          // Update our locality level for delay scheduling
-          // NO_PREF will not affect the variables related to delay scheduling
-          if (maxLocality != TaskLocality.NO_PREF) {
-            currentLocalityIndex = getLocalityIndex(taskLocality)
-            lastLaunchTime = curTime
-          }
-          // Serialize and return the task
-          val serializedTask: ByteBuffer = try {
-            ser.serialize(task)
-          } catch {
-            // If the task cannot be serialized, then there's no point to re-attempt the task,
-            // as it will always fail. So just abort the whole task-set.
-            case NonFatal(e) =>
-              val msg = s"Failed to serialize task $taskId, not attempting to retry it."
-              logError(msg, e)
-              abort(s"$msg Exception during serialization: $e")
-              throw new TaskNotSerializableException(e)
-          }
-          if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
-            !emittedTaskSizeWarning) {
-            emittedTaskSizeWarning = true
-            logWarning(s"Stage ${task.stageId} contains a task of very large size " +
-              s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
-              s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
-          }
-          addRunningTask(taskId)
+      dequeueTask(execId, host, allowedLocality).map { case ((index, taskLocality, speculative)) =>
+        // Found a task; do some bookkeeping and return a task description
+        val task = tasks(index)
+        val taskId = sched.newTaskId()
+        // Do various bookkeeping
+        copiesRunning(index) += 1
+        val attemptNum = taskAttempts(index).size
+        val info = new TaskInfo(taskId, index, attemptNum, curTime,
+          execId, host, taskLocality, speculative)
+        taskInfos(taskId) = info
+        taskAttempts(index) = info :: taskAttempts(index)
+        // Update our locality level for delay scheduling
+        // NO_PREF will not affect the variables related to delay scheduling
+        if (maxLocality != TaskLocality.NO_PREF) {
+          currentLocalityIndex = getLocalityIndex(taskLocality)
+          lastLaunchTime = curTime
+        }
+        // Serialize and return the task
+        val serializedTask: ByteBuffer = try {
+          ser.serialize(task)
+        } catch {
+          // If the task cannot be serialized, then there's no point to re-attempt the task,
+          // as it will always fail. So just abort the whole task-set.
+          case NonFatal(e) =>
+            val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+            logError(msg, e)
+            abort(s"$msg Exception during serialization: $e")
+            throw new TaskNotSerializableException(e)
+        }
+        if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
+          !emittedTaskSizeWarning) {
+          emittedTaskSizeWarning = true
+          logWarning(s"Stage ${task.stageId} contains a task of very large size " +
+            s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
+            s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+        }
+        addRunningTask(taskId)
 
-          // We used to log the time it takes to serialize the task, but task size is already
-          // a good proxy to task serialization time.
-          // val timeTaken = clock.getTime() - startTime
-          val taskName = s"task ${info.id} in stage ${taskSet.id}"
-          logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
-            s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
+        // We used to log the time it takes to serialize the task, but task size is already
+        // a good proxy to task serialization time.
+        // val timeTaken = clock.getTime() - startTime
+        val taskName = s"task ${info.id} in stage ${taskSet.id}"
+        logInfo(s"Starting $taskName (TID $taskId, $host, executor ${info.executorId}, " +
+          s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit} bytes)")
 
-          sched.dagScheduler.taskStarted(task, info)
-          new TaskDescription(
-            taskId,
-            attemptNum,
-            execId,
-            taskName,
-            index,
-            addedFiles,
-            addedJars,
-            task.localProperties,
-            serializedTask)
+        sched.dagScheduler.taskStarted(task, info)
+        new TaskDescription(
+          taskId,
+          attemptNum,
+          execId,
+          taskName,
+          index,
+          addedFiles,
+          addedJars,
+          task.localProperties,
+          serializedTask)
       }
     } else {
       if (runningTasks >= maxConcurrentTasks) {

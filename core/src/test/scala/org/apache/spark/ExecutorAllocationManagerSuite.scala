@@ -95,7 +95,9 @@ class ExecutorAllocationManagerSuite
   test("add executors") {
     sc = createSparkContext(1, 10, 1)
     val manager = sc.executorAllocationManager.get
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    val stage0 = createStageInfo(0, 1000)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
 
     // Keep adding until the limit is reached
     assert(numExecutorsTarget(manager) === 1)
@@ -140,7 +142,9 @@ class ExecutorAllocationManagerSuite
   test("add executors capped by num pending tasks") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 5)))
+    val stages = Seq(createStageInfo(0, 5), createStageInfo(1, 3), createStageInfo(2, 3))
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
 
     // Verify that we're capped at number of tasks in the stage
     assert(numExecutorsTarget(manager) === 0)
@@ -156,7 +160,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
 
     // Verify that running a task doesn't affect the target
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 3)))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
       0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, createTaskInfo(0, 0, "executor-1")))
@@ -172,7 +176,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsToAdd(manager) === 1)
 
     // Verify that re-running a task doesn't blow things up
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, 3)))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(2)))
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(0, 0, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerTaskStart(2, 0, createTaskInfo(1, 0, "executor-1")))
     assert(addExecutors(manager) === 1)
@@ -201,21 +205,20 @@ class ExecutorAllocationManagerSuite
     sc.setJobGroup("group1", "", false)
 
     val manager = sc.executorAllocationManager.get
-    val stage0 = createStageInfo(0, 10)
+    val stages = Seq(createStageInfo(0, 10), createStageInfo(1, 10))
     // Submit the job and stage start/submit events
-    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq{stage0}, sc.getLocalProperties))
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
 
     // Verify that we're capped at number of max concurrent tasks in the stage
     assert(maxNumExecutorsNeeded(manager) === 2)
 
     // Submit another stage in the same job
-    val stage1 = createStageInfo(1, 10)
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage1))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
     assert(maxNumExecutorsNeeded(manager) === 2)
 
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage0))
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage1))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(0)))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(1)))
     sc.listenerBus.postToAll(SparkListenerJobEnd(0, 10, JobSucceeded))
 
     // Submit a new job in the same job group
@@ -261,26 +264,25 @@ class ExecutorAllocationManagerSuite
     sc.setJobGroup("group1", "", false)
 
     val manager = sc.executorAllocationManager.get
-    val stage0 = createStageInfo(0, 10)
+    val stages = Seq(createStageInfo(0, 10), createStageInfo(1, 10))
     // Submit the job and stage start/submit events
-    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq{stage0}, sc.getLocalProperties))
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
 
     // Verify that we're capped at number of max concurrent tasks in the stage
     assert(maxNumExecutorsNeeded(manager) === 1)
 
     // Submit another stage in the same job
-    val stage1 = createStageInfo(1, 10)
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage1))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
     assert(maxNumExecutorsNeeded(manager) === 1)
 
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage0))
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage1))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(0)))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(1)))
     sc.listenerBus.postToAll(SparkListenerJobEnd(0, 10, JobSucceeded))
 
     // Submit a new job in the same job group
     val stage2 = createStageInfo(2, 20)
-    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq{stage2}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq(stage2), sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage2))
     assert(maxNumExecutorsNeeded(manager) === 1)
 
@@ -291,7 +293,7 @@ class ExecutorAllocationManagerSuite
     sc.setJobGroup("group2", "", false)
 
     val stage3 = createStageInfo(3, 20)
-    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage3}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq(stage3), sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage3))
     assert(maxNumExecutorsNeeded(manager) === 2)
 
@@ -302,15 +304,83 @@ class ExecutorAllocationManagerSuite
     sc.clearJobGroup()
 
     val stage4 = createStageInfo(4, 50)
-    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage4}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq(stage4), sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage4))
     assert(maxNumExecutorsNeeded(manager) === 17)
+  }
+
+  test("add executors capped by max concurrent tasks for concurrent job groups") {
+    val conf = new SparkConf()
+      .setMaster("myDummyLocalExternalClusterManager")
+      .setAppName("test-executor-allocation-manager")
+      .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.job.group1.maxConcurrentTasks", "5")
+      .set("spark.job.group2.maxConcurrentTasks", "11")
+      .set("spark.job.group3.maxConcurrentTasks", "17")
+    val sc = new SparkContext(conf)
+    contexts += sc
+
+    val manager = sc.executorAllocationManager.get
+
+    // Submit a job in group1
+    sc.setJobGroup("group1", "", false)
+    val stages = Seq(createStageInfo(0, 2), createStageInfo(1, 10))
+    // Submit the job and stage start/submit events
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
+
+    // Verify that we're capped at number of max concurrent tasks in the job group
+    assert(maxNumExecutorsNeeded(manager) === 2)
+
+    // Submit another stage in the same job
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
+    assert(maxNumExecutorsNeeded(manager) === 5)
+
+    // Submit a job in group 2
+    sc.setJobGroup("group2", "", false)
+    val stage2 = createStageInfo(2, 20)
+    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq(stage2), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage2))
+    assert(maxNumExecutorsNeeded(manager) === 16) // 5 + 11
+
+    // Submit a job in group 3
+    sc.setJobGroup("group3", "", false)
+    val stage3 = createStageInfo(3, 50)
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq(stage3), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage3))
+    assert(maxNumExecutorsNeeded(manager) === 33) // 5 + 11 + 17
+
+    // Mark job in group 2 as complete
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage2))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(1, 20, JobSucceeded))
+    assert(maxNumExecutorsNeeded(manager) === 22) // 33 - 11
+
+    // Mark job in group 1 as complete
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(0)))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(1)))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(0, 10, JobSucceeded))
+    assert(maxNumExecutorsNeeded(manager) === 17) // 22 - 5
+
+    // Submit a job without any job group
+    sc.clearJobGroup()
+    val stage4 = createStageInfo(4, 333)
+    sc.listenerBus.postToAll(SparkListenerJobStart(4, 0, Seq(stage4), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage4))
+    assert(maxNumExecutorsNeeded(manager) === 350) // 17 + 333
+
+    // Mark job without job group as complete
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage4))
+    sc.listenerBus.postToAll(SparkListenerJobEnd(4, 20, JobSucceeded))
+    assert(maxNumExecutorsNeeded(manager) === 17) // 350 - 333
   }
 
   test("cancel pending executors when no longer needed") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, 5)))
+    val stage0 = createStageInfo(2, 5)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
 
     assert(numExecutorsTarget(manager) === 0)
     assert(numExecutorsToAdd(manager) === 1)
@@ -436,7 +506,9 @@ class ExecutorAllocationManagerSuite
   test ("interleaving add and remove") {
     sc = createSparkContext(5, 10, 5)
     val manager = sc.executorAllocationManager.get
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    val stage0 = createStageInfo(0, 1000)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
 
     // Add a few executors
     assert(addExecutors(manager) === 1)
@@ -608,7 +680,9 @@ class ExecutorAllocationManagerSuite
     val clock = new ManualClock(2020L)
     val manager = sc.executorAllocationManager.get
     manager.setClock(clock)
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1000)))
+    val stage0 = createStageInfo(0, 1000)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
 
     // Scheduler queue backlogged
     onSchedulerBacklogged(manager)
@@ -721,7 +795,10 @@ class ExecutorAllocationManagerSuite
 
     // Starting a stage should start the add timer
     val numTasks = 10
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, numTasks)))
+    val stages = Seq(createStageInfo(0, numTasks), createStageInfo(1, numTasks),
+      createStageInfo(2, numTasks))
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
     assert(addTime(manager) !== NOT_SET)
 
     // Starting a subset of the tasks should not cancel the add timer
@@ -735,8 +812,8 @@ class ExecutorAllocationManagerSuite
 
     // Start two different stages
     // The add timer should be canceled only if all tasks in both stages start running
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, numTasks)))
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(2, numTasks)))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(2)))
     assert(addTime(manager) !== NOT_SET)
     taskInfos.foreach { info => sc.listenerBus.postToAll(SparkListenerTaskStart(1, 0, info)) }
     assert(addTime(manager) !== NOT_SET)
@@ -847,8 +924,9 @@ class ExecutorAllocationManagerSuite
   test("avoid ramp up when target < running executors") {
     sc = createSparkContext(0, 100000, 0)
     val manager = sc.executorAllocationManager.get
-    val stage1 = createStageInfo(0, 1000)
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage1))
+    val stages = Seq(createStageInfo(0, 1000), createStageInfo(1, 1000))
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
 
     assert(addExecutors(manager) === 1)
     assert(addExecutors(manager) === 2)
@@ -859,12 +937,12 @@ class ExecutorAllocationManagerSuite
       onExecutorAdded(manager, s"executor-$i")
     }
     assert(executorIds(manager).size === 15)
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stage1))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(0)))
 
     adjustRequestedExecutors(manager)
     assert(numExecutorsTarget(manager) === 0)
 
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 1000)))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
     addExecutors(manager)
     assert(numExecutorsTarget(manager) === 16)
   }
@@ -881,7 +959,9 @@ class ExecutorAllocationManagerSuite
     // Verify whether the initial number of executors is kept with no pending tasks
     assert(numExecutorsTarget(manager) === 3)
 
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(1, 2)))
+    val stage0 = createStageInfo(1, 2)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
     clock.advance(100L)
 
     assert(maxNumExecutorsNeeded(manager) === 2)
@@ -930,26 +1010,29 @@ class ExecutorAllocationManagerSuite
       Seq.empty,
       Seq.empty
     )
-    val stageInfo1 = createStageInfo(1, 5, localityPreferences1)
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo1))
-
-    assert(localityAwareTasks(manager) === 3)
-    assert(hostToLocalTaskCount(manager) ===
-      Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
-
     val localityPreferences2 = Seq(
       Seq(TaskLocation("host2"), TaskLocation("host3"), TaskLocation("host5")),
       Seq(TaskLocation("host3"), TaskLocation("host4"), TaskLocation("host5")),
       Seq.empty
     )
-    val stageInfo2 = createStageInfo(2, 3, localityPreferences2)
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfo2))
+    val stageInfos = Seq(createStageInfo(1, 5, localityPreferences1),
+      createStageInfo(2, 3, localityPreferences2))
+
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stageInfos, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfos(0)))
+
+    assert(localityAwareTasks(manager) === 3)
+    assert(hostToLocalTaskCount(manager) ===
+      Map("host1" -> 2, "host2" -> 3, "host3" -> 2, "host4" -> 2))
+
+
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stageInfos(1)))
 
     assert(localityAwareTasks(manager) === 5)
     assert(hostToLocalTaskCount(manager) ===
       Map("host1" -> 2, "host2" -> 4, "host3" -> 4, "host4" -> 3, "host5" -> 2))
 
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stageInfo1))
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stageInfos(0)))
     assert(localityAwareTasks(manager) === 2)
     assert(hostToLocalTaskCount(manager) ===
       Map("host2" -> 1, "host3" -> 2, "host4" -> 1, "host5" -> 2))
@@ -960,7 +1043,9 @@ class ExecutorAllocationManagerSuite
     val manager = sc.executorAllocationManager.get
     assert(maxNumExecutorsNeeded(manager) === 0)
 
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    val stage0 = createStageInfo(0, 1)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
     assert(maxNumExecutorsNeeded(manager) === 1)
 
     val taskInfo = createTaskInfo(1, 1, "executor-1")
@@ -981,7 +1066,9 @@ class ExecutorAllocationManagerSuite
 
     // Allocation manager is reset when adding executor requests are sent without reporting back
     // executor added.
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 10)))
+    val stage0 = createStageInfo(0, 10)
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, Seq(stage0), sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage0))
 
     assert(addExecutors(manager) === 1)
     assert(numExecutorsTarget(manager) === 2)
