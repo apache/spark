@@ -46,7 +46,7 @@ private[mllib] object NumericParser {
         parseDouble(token)
       }
     } else {
-      throw new SparkException(s"Cannot find any token from the input string.")
+      throw new SparkException("Cannot find any token from the input string.")
     }
   }
 
@@ -72,7 +72,7 @@ private[mllib] object NumericParser {
       }
     }
     if (parsing) {
-      throw new SparkException(s"An array must end with ']'.")
+      throw new SparkException("An array must end with ']'.")
     }
     values.result()
   }
@@ -107,7 +107,7 @@ private[mllib] object NumericParser {
       }
     }
     if (parsing) {
-      throw new SparkException(s"A tuple must end with ')'.")
+      throw new SparkException("A tuple must end with ')'.")
     }
     items
   }

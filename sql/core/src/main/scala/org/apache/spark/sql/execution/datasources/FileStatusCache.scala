@@ -108,7 +108,7 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
       override def weigh(key: (ClientId, Path), value: Array[FileStatus]): Int = {
         val estimate = (SizeEstimator.estimate(key) + SizeEstimator.estimate(value)) / weightScale
         if (estimate > Int.MaxValue) {
-          logWarning(s"Cached table partition metadata size is too big. Approximating to " +
+          logWarning("Cached table partition metadata size is too big. Approximating to " +
             s"${Int.MaxValue.toLong * weightScale}.")
           Int.MaxValue
         } else {

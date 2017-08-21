@@ -216,7 +216,7 @@ class StreamSuite extends StreamTest {
 
     // Ensure that there has not been an incremental execution after restart
     def CheckNoIncrementalExecutionCurrentBatchId(): AssertOnQuery =
-      AssertOnQuery(_.lastExecution == null, s"lastExecution not expected to run")
+      AssertOnQuery(_.lastExecution == null, "lastExecution not expected to run")
 
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
