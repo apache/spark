@@ -354,8 +354,9 @@ public final class ColumnarBatch {
 
     private MutableColumnVector getColumnAsMutable(int ordinal) {
       assert (columns[ordinal] instanceof MutableColumnVector);
-      assert (!columns[ordinal].isConstant);
-      return (MutableColumnVector) columns[ordinal];
+      MutableColumnVector column = (MutableColumnVector) columns[ordinal];
+      assert (!column.isConstant);
+      return column;
     }
   }
 

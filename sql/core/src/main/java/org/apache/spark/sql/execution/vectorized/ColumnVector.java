@@ -458,12 +458,6 @@ public abstract class ColumnVector implements AutoCloseable {
   protected boolean anyNullsSet;
 
   /**
-   * True if this column's values are fixed. This means the column values never change, even
-   * across resets.
-   */
-  protected boolean isConstant;
-
-  /**
    * If this is a nested type (array or struct), the column for the child data.
    */
   protected ColumnVector[] childColumns;
@@ -509,6 +503,5 @@ public abstract class ColumnVector implements AutoCloseable {
   protected ColumnVector(int capacity, DataType type) {
     this.capacity = capacity;
     this.type = type;
-    this.isConstant = true;
   }
 }

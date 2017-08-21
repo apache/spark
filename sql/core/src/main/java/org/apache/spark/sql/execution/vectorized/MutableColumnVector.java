@@ -563,6 +563,12 @@ public abstract class MutableColumnVector extends ColumnVector {
   protected int elementsAppended;
 
   /**
+   * True if this column's values are fixed. This means the column values never change, even
+   * across resets.
+   */
+  protected boolean isConstant;
+
+  /**
    * Update the dictionary.
    */
   public void setDictionary(Dictionary dictionary) {
@@ -643,6 +649,5 @@ public abstract class MutableColumnVector extends ColumnVector {
    */
   protected MutableColumnVector(int capacity, DataType type) {
     super(capacity, type);
-    this.isConstant = false;
   }
 }
