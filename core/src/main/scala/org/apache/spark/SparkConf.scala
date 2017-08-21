@@ -598,7 +598,8 @@ private[spark] object SparkConf extends Logging {
         "Please use the new blacklisting options, spark.blacklist.*"),
       DeprecatedConfig("spark.yarn.am.port", "2.0.0", "Not used any more"),
       DeprecatedConfig("spark.executor.port", "2.0.0", "Not used any more"),
-      DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0", "Not used any more")
+      DeprecatedConfig("spark.shuffle.service.index.cache.entries", "2.3.0",
+        "Not used any more. Please use spark.shuffle.service.index.cache.size")
     )
 
     Map(configs.map { cfg => (cfg.key -> cfg) } : _*)
