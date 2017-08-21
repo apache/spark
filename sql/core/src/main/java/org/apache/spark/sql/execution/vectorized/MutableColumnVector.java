@@ -43,13 +43,12 @@ public abstract class MutableColumnVector extends ColumnVector {
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
    */
-  @Override
   public void reset() {
     if (isConstant) return;
 
     if (childColumns != null) {
       for (ColumnVector c: childColumns) {
-        c.reset();
+        ((MutableColumnVector) c).reset();
       }
     }
     numNulls = 0;

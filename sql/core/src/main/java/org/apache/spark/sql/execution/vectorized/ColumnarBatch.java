@@ -400,7 +400,9 @@ public final class ColumnarBatch {
    */
   public void reset() {
     for (int i = 0; i < numCols(); ++i) {
-      columns[i].reset();
+      if (columns[i] instanceof MutableColumnVector) {
+        ((MutableColumnVector) columns[i]).reset();
+      }
     }
     if (this.numRowsFiltered > 0) {
       Arrays.fill(filteredRows, false);

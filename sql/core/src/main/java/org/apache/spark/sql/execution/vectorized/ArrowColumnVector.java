@@ -59,10 +59,6 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   @Override
-  public void reset() {
-  }
-
-  @Override
   public void close() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {

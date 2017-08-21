@@ -253,11 +253,6 @@ public abstract class ColumnVector implements AutoCloseable {
   public final DataType dataType() { return type; }
 
   /**
-   * Resets this column for writing. The currently stored values are no longer accessible.
-   */
-  public abstract void reset();
-
-  /**
    * Cleans up memory for this column. The column is not usable after this.
    * TODO: this should probably have ref-counted semantics.
    */
