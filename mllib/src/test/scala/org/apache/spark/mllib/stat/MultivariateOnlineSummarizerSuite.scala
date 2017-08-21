@@ -271,12 +271,17 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
   }
 
-  test("test min/max with identical NaN feature") {
+  test("test min/max with NaN feature") {
     val summarizer = new MultivariateOnlineSummarizer()
       .add(Vectors.dense(Double.NaN, -10.0))
       .add(Vectors.dense(Double.NaN, 0.0))
+      .add(Vectors.dense(Double.NaN, Double.NaN))
 
-    assert(summarizer.min(0).isNaN)
-    assert(summarizer.max(0).isNaN)
+    val minVec = summarizer.min
+    val maxVec = summarizer.max
+    assert(minVec(0).isNaN)
+    assert(minVec(1).isNaN)
+    assert(maxVec(0).isNaN)
+    assert(maxVec(1).isNaN)
   }
 }
