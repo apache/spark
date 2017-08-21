@@ -777,8 +777,8 @@ private[spark] class ExecutorAllocationManager(
     }
 
     /**
-      * Calculate the maximum no. of concurrent tasks that can run currently.
-      */
+     * Calculate the maximum no. of concurrent tasks that can run currently.
+     */
     def getMaxConTasks(): Int = {
       val stagesByJobGroup = stageIdToNumTasks.groupBy(x => jobIdToJobGroup(stageIdToJobId(x._1)))
 
