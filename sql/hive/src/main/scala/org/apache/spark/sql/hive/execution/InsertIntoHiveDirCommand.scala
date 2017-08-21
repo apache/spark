@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.util.Utils
 
 
-case class InsertIntoDirCommand(
+case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     query: LogicalPlan) extends SaveAsHiveFile {

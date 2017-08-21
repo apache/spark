@@ -202,6 +202,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         mode,
         table,
         Some(t.location))
+    // case InsertIntoDir(isLocal, storage, child) =>
+    //  InsertIntoDirCommand(isLocal, storage, child)
   }
 }
 

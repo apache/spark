@@ -175,9 +175,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
-   * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat).
+   * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
    */
-  type InsertDirParams = (Boolean, CatalogStorageFormat)
+  type InsertDirParams = (Boolean, CatalogStorageFormat, Option[String])
 
   /**
    * Add an
@@ -205,12 +205,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   private def withInsertOverwriteDirectory(
       ctx: InsertOverwriteDirectoryContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val (isLocal, storage) = ctx match {
+    val (isLocal, storage, provider) = ctx match {
       case dir: InsertOverwriteDirContext => visitInsertOverwriteDir(dir)
       case hiveDir: InsertOverwriteHiveDirContext => visitInsertOverwriteHiveDir(hiveDir)
     }
 
-    InsertIntoDir(isLocal, storage, query)
+    InsertIntoDir(isLocal, storage, provider, query)
   }
 
   /**

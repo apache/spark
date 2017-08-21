@@ -1540,7 +1540,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val customLocation = storage.locationUri.orElse(Some(CatalogUtils.stringToURI(path)))
     storage = storage.copy(locationUri = customLocation)
 
-    (ctx.LOCAL != null, storage)
+    val provider = ctx.tableProvider.qualifiedName.getText
+
+    (ctx.LOCAL != null, storage, Some(provider))
   }
 
   /**
@@ -1579,6 +1581,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       compressed = false,
       properties = rowStorage.properties ++ fileStorage.properties)
 
-    (ctx.LOCAL != null, storage)
+    (ctx.LOCAL != null, storage, None)
   }
 }
