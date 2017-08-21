@@ -488,7 +488,7 @@ public abstract class MutableColumnVector extends ColumnVector {
   }
 
   public final int appendByteArray(byte[] value, int offset, int length) {
-    int copiedOffset = ((MutableColumnVector) arrayData()).appendBytes(length, value, offset);
+    int copiedOffset = arrayData().appendBytes(length, value, offset);
     reserve(elementsAppended + 1);
     putArray(elementsAppended, copiedOffset, length);
     return elementsAppended++;
@@ -496,7 +496,7 @@ public abstract class MutableColumnVector extends ColumnVector {
 
   public final int appendArray(int length) {
     reserve(elementsAppended + 1);
-    putArray(elementsAppended, ((MutableColumnVector) arrayData()).elementsAppended, length);
+    putArray(elementsAppended, arrayData().elementsAppended, length);
     return elementsAppended++;
   }
 
