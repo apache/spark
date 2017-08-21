@@ -107,31 +107,31 @@ private[ml] class HuberAggregator(
       val linearLoss = label - margin
 
       if (math.abs(linearLoss) <= sigma * m) {
-        lossSum += weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
+        lossSum += 0.5 * weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
 
         features.foreachActive { (index, value) =>
           if (featuresStd(index) != 0.0 && value != 0.0) {
             gradientSumArray(index) +=
-              weight * -2.0 * linearLoss / sigma * (value / featuresStd(index))
+              0.5 * weight * -2.0 * linearLoss / sigma * (value / featuresStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += weight * -2.0 * linearLoss / sigma
+          gradientSumArray(dim - 2) += 0.5 * weight * -2.0 * linearLoss / sigma
         }
-        gradientSumArray(dim - 1) += weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
+        gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0
-        lossSum += weight * (sigma + 2.0 * m * math.abs(linearLoss) - sigma * m * m)
+        lossSum += 0.5 * weight * (sigma + 2.0 * m * math.abs(linearLoss) - sigma * m * m)
 
         features.foreachActive { (index, value) =>
           if (featuresStd(index) != 0.0 && value != 0.0) {
-            gradientSumArray(index) += weight * sign * 2.0 * m * (value / featuresStd(index))
+            gradientSumArray(index) += 0.5 * weight * sign * 2.0 * m * (value / featuresStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += weight * (sign * 2.0 * m)
+          gradientSumArray(dim - 2) += 0.5 * weight * (sign * 2.0 * m)
         }
-        gradientSumArray(dim - 1) += weight * (1.0 - m * m)
+        gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - m * m)
       }
 
       weightSum += weight

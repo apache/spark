@@ -110,9 +110,9 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       val margin = BLAS.dot(Vectors.dense(stdCoef), features) + intercept
       val linearLoss = label - margin
       if (math.abs(linearLoss) <= sigma * m) {
-        weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
+        0.5 * weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
       } else {
-        weight * (sigma + 2.0 * m * math.abs(linearLoss) - sigma * m * m)
+        0.5 * weight * (sigma + 2.0 * m * math.abs(linearLoss) - sigma * m * m)
       }
     }.sum
     val loss = lossSum / weightSum
@@ -124,17 +124,18 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       val linearLoss = label - margin
       if (math.abs(linearLoss) <= sigma * m) {
         features.toArray.indices.foreach { i =>
-          gradientCoef(i) += weight * -2.0 * linearLoss / sigma * (features(i) / featuresStd(i))
+          gradientCoef(i) +=
+            0.5 * weight * -2.0 * linearLoss / sigma * (features(i) / featuresStd(i))
         }
-        gradientCoef(2) += weight * -2.0 * linearLoss / sigma
-        gradientCoef(3) += weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
+        gradientCoef(2) += 0.5 * weight * -2.0 * linearLoss / sigma
+        gradientCoef(3) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0
         features.toArray.indices.foreach { i =>
-          gradientCoef(i) += weight * sign * 2.0 * m * (features(i) / featuresStd(i))
+          gradientCoef(i) += 0.5 * weight * sign * 2.0 * m * (features(i) / featuresStd(i))
         }
-        gradientCoef(2) += weight * (sign * 2.0 * m)
-        gradientCoef(3) += weight * (1.0 - m * m)
+        gradientCoef(2) += 0.5 * weight * (sign * 2.0 * m)
+        gradientCoef(3) += 0.5 * weight * (1.0 - m * m)
       }
     }
     val gradient = Vectors.dense(gradientCoef.map(_ / weightSum))
