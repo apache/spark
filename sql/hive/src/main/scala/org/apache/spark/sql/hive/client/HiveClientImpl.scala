@@ -882,14 +882,9 @@ private[hive] object HiveClientImpl {
     val (partCols, schema) = table.schema.map(toHiveColumn).partition { c =>
       table.partitionColumnNames.contains(c.getName)
     }
-    // Because HiveExternalCatalog sometimes writes back "raw" tables that have not been
-    // completely translated to Spark's view, the provider information needs to be looked
-    // up in two places.
-    val provider = table.provider.orElse(
-      table.properties.get(HiveExternalCatalog.DATASOURCE_PROVIDER))
     // after SPARK-19279, it is not allowed to create a hive table with an empty schema,
     // so here we should not add a default col schema
-    if (schema.isEmpty && provider != Some(DDLUtils.HIVE_PROVIDER)) {
+    if (schema.isEmpty && HiveExternalCatalog.isDatasourceTable(table)) {
       // This is a hack to preserve existing behavior. Before Spark 2.0, we do not
       // set a default serde here (this was done in Hive), and so if the user provides
       // an empty schema Hive would automatically populate the schema with a single

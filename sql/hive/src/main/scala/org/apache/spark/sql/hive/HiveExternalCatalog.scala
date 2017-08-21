@@ -288,7 +288,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // bucket specification to empty. Note that partition columns are retained, so that we can
     // call partition-related Hive API later.
     def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
-      val hiveCompatible = Map(DATASOURCE_HIVE_COMPATIBLE -> "false")
       table.copy(
         // Hive only allows directory paths as location URIs while Spark SQL data source tables
         // also allow file paths. For non-hive-compatible format, we should not set location URI
@@ -298,12 +297,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           properties = storagePropsWithLocation),
         schema = table.partitionSchema,
         bucketSpec = None,
-        properties = table.properties ++ tableProperties ++ hiveCompatible)
+        properties = table.properties ++ tableProperties)
     }
 
     // converts the table metadata to Hive compatible format, i.e. set the serde information.
     def newHiveCompatibleMetastoreTable(serde: HiveSerDe): CatalogTable = {
-      val hiveCompatible = Map(DATASOURCE_HIVE_COMPATIBLE -> "true")
       val location = if (table.tableType == EXTERNAL) {
         // When we hit this branch, we are saving an external data source table with hive
         // compatible format, which means the data source is file-based and must have a `path`.
@@ -322,7 +320,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           serde = serde.serde,
           properties = storagePropsWithLocation
         ),
-        properties = table.properties ++ tableProperties ++ hiveCompatible)
+        properties = table.properties ++ tableProperties)
     }
 
     val qualifiedTableName = table.identifier.quotedString
@@ -625,20 +623,28 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val rawTable = getRawTable(db, table)
     // Add table metadata such as table schema, partition columns, etc. to table properties.
     val updatedProperties = rawTable.properties ++ tableMetaToTableProps(rawTable, schema)
+    val withNewSchema = rawTable.copy(properties = updatedProperties, schema = schema)
+    verifyColumnNames(withNewSchema)
 
-    val updatedTable = if (isHiveCompatible(rawTable)) {
-      val _updated = rawTable.copy(properties = updatedProperties, schema = schema)
-      verifyColumnNames(_updated)
-      _updated
+    if (isDatasourceTable(rawTable)) {
+      // For data source tables, first try to write it with the schema set; if that does not work,
+      // try again with updated properties and the partition schema. This is a simplified version of
+      // what createDataSourceTable() does, and may leave the table in a state unreadable by Hive
+      // (for example, the schema does not match the data source schema, or does not match the
+      // storage descriptor).
+      try {
+        client.alterTable(withNewSchema)
+      } catch {
+        case NonFatal(e) =>
+          val warningMessage =
+            s"Could not alter schema of table  ${rawTable.identifier.quotedString} in a Hive " +
+              "compatible way. Updating Hive metastore in Spark SQL specific format."
+          logWarning(warningMessage, e)
+          client.alterTable(withNewSchema.copy(schema = rawTable.partitionSchema))
+      }
     } else {
-      // If the table is not Hive-compatible, the schema of the table should not be overwritten with
-      // the updated schema. The previous value stored in the metastore should be preserved; that
-      // will be either the table's original partition schema, or a placeholder schema inserted by
-      // the Hive client wrapper if the partition schema was empty.
-      rawTable.copy(properties = updatedProperties)
+      client.alterTable(withNewSchema)
     }
-
-    client.alterTable(updatedTable)
   }
 
   override def alterTableStats(
@@ -1260,27 +1266,6 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.listFunctions(db, pattern)
   }
 
-  /** Detect whether a table is stored with Hive-compatible metadata. */
-  private def isHiveCompatible(table: CatalogTable): Boolean = {
-    val provider = table.provider.orElse(table.properties.get(DATASOURCE_PROVIDER))
-    if (provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)) {
-      table.properties.get(DATASOURCE_HIVE_COMPATIBLE) match {
-        case Some(value) =>
-          value.toBoolean
-        case _ =>
-          // If the property is not set, the table may have been created by an old version
-          // of Spark. Detect Hive compatibility by comparing the table's serde with the
-          // serde for the table's data source. If they match, the table is Hive-compatible.
-          // If they don't, they're not, because of some other table property that made it
-          // not initially Hive-compatible.
-          HiveSerDe.sourceToSerDe(provider.get) == table.storage.serde
-      }
-    } else {
-      // All non-DS tables are treated as regular Hive tables.
-      true
-    }
-  }
-
 }
 
 object HiveExternalCatalog {
@@ -1299,7 +1284,6 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
   val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
   val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
-  val DATASOURCE_HIVE_COMPATIBLE = DATASOURCE_PREFIX + "hive.compatibility"
 
   val STATISTICS_PREFIX = SPARK_SQL_PREFIX + "statistics."
   val STATISTICS_TOTAL_SIZE = STATISTICS_PREFIX + "totalSize"
@@ -1382,4 +1366,14 @@ object HiveExternalCatalog {
         getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
     }
   }
+
+  /**
+   * Detects a data source table. This checks both the table provider and the table properties,
+   * unlike DDLUtils which just checks the former.
+   */
+  private[spark] def isDatasourceTable(table: CatalogTable): Boolean = {
+    val provider = table.provider.orElse(table.properties.get(DATASOURCE_PROVIDER))
+    provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)
+  }
+
 }

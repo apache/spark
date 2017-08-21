@@ -121,11 +121,6 @@ class Hive_2_1_DDLSuite extends SparkFunSuite with TestHiveSingleton with Before
 
     val updatedTable = catalog.getTable("default", tableName)
     assert(updatedTable.schema.fieldNames === updatedSchema.fieldNames)
-
-    val rawTable = catalog.getRawTable("default", tableName)
-    val compatibility = rawTable.properties.get(HiveExternalCatalog.DATASOURCE_HIVE_COMPATIBLE)
-      .map(_.toBoolean).getOrElse(true)
-    assert(hiveCompatible === compatibility)
   }
 
 }
