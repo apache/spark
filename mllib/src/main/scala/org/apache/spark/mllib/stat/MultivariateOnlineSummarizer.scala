@@ -97,12 +97,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     val localCurrMin = currMin
     instance.foreachActive { (index, value) =>
       if (value != 0.0) {
-        if (localCurrMax(index) < value) {
-          localCurrMax(index) = value
-        }
-        if (localCurrMin(index) > value) {
-          localCurrMin(index) = value
-        }
+        localCurrMax(index) = math.max(localCurrMax(index), value)
+        localCurrMin(index) = math.min(localCurrMin(index), value)
 
         val prevMean = localCurrMean(index)
         val diff = value - prevMean
@@ -249,12 +245,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if (nnz(i) < totalCnt) {
-        if (currMax(i) < 0.0) currMax(i) = 0.0
-      } else if (currMax(i) < currMin(i)) {
-        currMin(i) = Double.NaN
-        currMax(i) = Double.NaN
-      }
+      if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
       i += 1
     }
     Vectors.dense(currMax)
@@ -270,12 +261,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
     var i = 0
     while (i < n) {
-      if (nnz(i) < totalCnt) {
-        if (currMin(i) > 0.0) currMin(i) = 0.0
-      } else if (currMax(i) < currMin(i)) {
-        currMin(i) = Double.NaN
-        currMax(i) = Double.NaN
-      }
+      if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
       i += 1
     }
     Vectors.dense(currMin)
