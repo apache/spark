@@ -156,9 +156,15 @@ class ChildProcAppHandle implements SparkAppHandle {
    * the exit code.
    */
   void monitorChild() {
-    while (childProc.isAlive()) {
+    Process proc = childProc;
+    if (proc == null) {
+      // Process may have already been disposed of, e.g. by calling kill().
+      return;
+    }
+
+    while (proc.isAlive()) {
       try {
-        childProc.waitFor();
+        proc.waitFor();
       } catch (Exception e) {
         LOG.log(Level.WARNING, "Exception waiting for child process to exit.", e);
       }
