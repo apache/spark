@@ -243,8 +243,8 @@ insertIntoTable
     ;
 
 insertOverwriteDirectory
-    : INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                           #insertOverwriteHiveDir
-    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)   #insertOverwriteDir
+    : INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                     #insertOverwriteHiveDir
+    | INSERT OVERWRITE DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
 
 insertInto

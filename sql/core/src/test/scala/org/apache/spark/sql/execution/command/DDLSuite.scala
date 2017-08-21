@@ -2346,6 +2346,37 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("insert overwrite directory") {
+    case class ClassData(a: Int, b: String)
+
+    val path = Utils.createTempDir()
+    path.delete()
+
+    val v1 =
+      s"""
+        | INSERT OVERWRITE DIRECTORY '${path.toString}' USING json
+        | OPTIONS (a 1, b 0.1, c TRUE)
+        | SELECT 1 as a, 'c' as b
+      """.stripMargin
+    checkAnswer(
+      spark.sql(v1),
+      Seq.empty[Row])
+
+    // use orc data source to check the data of path is right.
+    sql(
+      s"""CREATE TEMPORARY TABLE json_source
+         |USING json
+         |OPTIONS (
+         |  PATH '${path.getCanonicalPath}'
+         |)
+       """.stripMargin)
+    checkAnswer(
+      sql("select * from json_source"),
+      sql("SELECT 1 as a, 'c' as b")
+    )
+    Utils.deleteRecursively(path)
+  }
+
   Seq(true, false).foreach { caseSensitive =>
     test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {

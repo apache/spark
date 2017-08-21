@@ -1523,10 +1523,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitInsertOverwriteDir(
       ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
-    val options = visitPropertyKeyValues(ctx.options)
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 
-    val path = string(ctx.path)
+    val path = Option(ctx.path) match {
+      case Some(s) => string(s)
+      case None => ""
+    }
+
     if (!path.isEmpty && storage.locationUri.isDefined) {
       throw new ParseException(
         "Directory path and 'path' in OPTIONS are both used to indicate the directory path, " +
@@ -1537,12 +1541,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         "You need to specify directory path or 'path' in OPTIONS, but not both", ctx)
     }
 
-    val customLocation = storage.locationUri.orElse(Some(CatalogUtils.stringToURI(path)))
-    storage = storage.copy(locationUri = customLocation)
+    if (!path.isEmpty) {
+      val customLocation = Some(CatalogUtils.stringToURI(path))
+      storage = storage.copy(locationUri = customLocation)
+    }
 
     val provider = ctx.tableProvider.qualifiedName.getText
 
-    (ctx.LOCAL != null, storage, Some(provider))
+    (false, storage, Some(provider))
   }
 
   /**

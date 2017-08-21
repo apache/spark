@@ -20,13 +20,12 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 import java.util.Locale
 
-import scala.reflect.{classTag, ClassTag}
-
+import scala.reflect.{ClassTag, classTag}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, Project}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -485,6 +484,49 @@ class DDLCommandSuite extends PlanTest {
       parser.parsePlan(v2)
     }
     assert(e.message.contains("you can only specify one of them."))
+  }
+
+  test("insert overwrite directory") {
+    val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
+    parser.parsePlan(v1) match {
+      case InsertIntoDir(_, storage, provider, query) =>
+        assert(storage.locationUri != None && storage.locationUri.get.toString == "/tmp/file")
+      case other =>
+        fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
+          " from query," + s"got ${other.getClass.getName}: $v1")
+    }
+
+    val v2 = "INSERT OVERWRITE DIRECTORY USING parquet SELECT 1 as a"
+    val e2 = intercept[ParseException] {
+      parser.parsePlan(v2)
+    }
+    assert(e2.message.contains("You need to specify directory path or 'path' in OPTIONS"))
+
+    val v3 =
+      """
+        | INSERT OVERWRITE DIRECTORY USING json
+        | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)
+        | SELECT 1 as a
+      """.stripMargin
+    parser.parsePlan(v3) match {
+      case InsertIntoDir(_, storage, provider, query) =>
+        assert(storage.locationUri != None && provider == Some("json"))
+      case other =>
+        fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
+          " from query," + s"got ${other.getClass.getName}: $v1")
+    }
+
+    val v4 =
+      """
+        | INSERT OVERWRITE DIRECTORY '/tmp/file' USING json
+        | OPTIONS ('path' '/tmp/file', a 1, b 0.1, c TRUE)
+        | SELECT 1 as a
+      """.stripMargin
+    val e4 = intercept[ParseException] {
+      parser.parsePlan(v4)
+    }
+    assert(e4.message.contains(
+      "Directory path and 'path' in OPTIONS are both used to indicate the directory path"))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;
