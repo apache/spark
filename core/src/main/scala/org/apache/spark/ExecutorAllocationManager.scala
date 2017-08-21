@@ -609,7 +609,6 @@ private[spark] class ExecutorAllocationManager(
     private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-      // limit the concurrent tasks if the job belongs to a jobGroup & a config is specified.
       jobStart.stageInfos.foreach(stageInfo => stageIdToJobId(stageInfo.stageId) = jobStart.jobId)
 
       var jobGroupId = if (jobStart.properties != null) {
