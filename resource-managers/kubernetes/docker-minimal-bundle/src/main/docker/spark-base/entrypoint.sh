@@ -1,3 +1,4 @@
+#!/bin/bash
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,11 +16,19 @@
 # limitations under the License.
 #
 
-FROM spark-base
+# Check whether there is a passwd entry for the container UID
+myuid=$(id -u)
+mygid=$(id -g)
+uidentry=$(getent passwd $myuid)
 
+# If there is no passwd entry for the container UID, attempt to create one
+if [ -z "$uidentry" ] ; then
+    if [ -w /etc/passwd ] ; then
+        echo "$myuid:x:$myuid:$mygid:anonymous uid:$SPARK_HOME:/bin/false" >> /etc/passwd
+    else
+        echo "Container ENTRYPOINT failed to add passwd entry for anonymous UID"
+    fi
+fi
 
-# If this docker file is being used in the context of building your images from a Spark distribution, the docker build
-# command should be invoked from the top level directory of the Spark distribution. E.g.:
-# docker build -t spark-resource-staging-server:latest -f dockerfiles/resource-staging-server/Dockerfile .
-
-ENTRYPOINT [ "/opt/entrypoint.sh", "bin/spark-class", "org.apache.spark.deploy.rest.kubernetes.ResourceStagingServer" ]
+# Execute the container CMD under tini for better hygiene
+/sbin/tini -s -- "$@"

@@ -37,5 +37,5 @@ private[spark] class SparkReadinessWatcher[T <: HasMetadata] extends Watcher[T] 
 
   override def onClose(cause: KubernetesClientException): Unit = {}
 
-  def waitUntilReady(): Boolean = signal.get(30, TimeUnit.SECONDS)
+  def waitUntilReady(): Boolean = signal.get(60, TimeUnit.SECONDS)
 }

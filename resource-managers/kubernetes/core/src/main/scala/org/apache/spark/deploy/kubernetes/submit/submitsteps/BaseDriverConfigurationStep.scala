@@ -72,6 +72,13 @@ private[spark] class BaseDriverConfigurationStep(
     require(!driverCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION),
         s"Annotation with key $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for" +
             s" Spark bookkeeping operations.")
+
+    val driverCustomEnvs = submissionSparkConf.getAllWithPrefix(KUBERNETES_DRIVER_ENV_KEY).toSeq
+      .map(env => new EnvVarBuilder()
+        .withName(env._1)
+        .withValue(env._2)
+        .build())
+
     val allDriverAnnotations = driverCustomAnnotations ++ Map(SPARK_APP_NAME_ANNOTATION -> appName)
     val nodeSelector = ConfigurationUtils.parsePrefixedKeyValuePairs(
       submissionSparkConf, KUBERNETES_NODE_SELECTOR_PREFIX, "node selector")
@@ -91,6 +98,7 @@ private[spark] class BaseDriverConfigurationStep(
       .withName(DRIVER_CONTAINER_NAME)
       .withImage(driverDockerImage)
       .withImagePullPolicy(dockerImagePullPolicy)
+      .addAllToEnv(driverCustomEnvs.asJava)
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()
         .withName(ENV_DRIVER_MEMORY)

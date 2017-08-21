@@ -16,18 +16,19 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
-import java.net.InetAddress
-
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.scheduler.{TaskSchedulerImpl, TaskSet, TaskSetManager}
 
 private[spark] class KubernetesTaskSetManager(
     sched: TaskSchedulerImpl,
     taskSet: TaskSet,
     maxTaskFailures: Int,
-    inetAddressUtil: InetAddressUtil = new InetAddressUtil)
+    inetAddressUtil: InetAddressUtil = InetAddressUtilImpl)
   extends TaskSetManager(sched, taskSet, maxTaskFailures) {
+
+  private val conf = sched.sc.conf
 
   /**
    * Overrides the lookup to use not only the executor pod IP, but also the cluster node
@@ -58,13 +59,19 @@ private[spark] class KubernetesTaskSetManager(
               s"$executorIP using cluster node IP $clusterNodeIP")
             pendingTasksClusterNodeIP
           } else {
-            val clusterNodeFullName = inetAddressUtil.getFullHostName(clusterNodeIP)
-            val pendingTasksClusterNodeFullName = super.getPendingTasksForHost(clusterNodeFullName)
-            if (pendingTasksClusterNodeFullName.nonEmpty) {
-              logDebug(s"Got preferred task list $pendingTasksClusterNodeFullName " +
-                s"for executor host $executorIP using cluster node full name $clusterNodeFullName")
+            if (conf.get(KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED)) {
+              val clusterNodeFullName = inetAddressUtil.getFullHostName(clusterNodeIP)
+              val pendingTasksClusterNodeFullName = super.getPendingTasksForHost(
+                clusterNodeFullName)
+              if (pendingTasksClusterNodeFullName.nonEmpty) {
+                logDebug(s"Got preferred task list $pendingTasksClusterNodeFullName " +
+                  s"for executor host $executorIP using cluster node full name " +
+                  s"$clusterNodeFullName")
+              }
+              pendingTasksClusterNodeFullName
+            } else {
+              pendingTasksExecutorIP  // Empty
             }
-            pendingTasksClusterNodeFullName
           }
         }
       } else {
@@ -74,12 +81,3 @@ private[spark] class KubernetesTaskSetManager(
   }
 }
 
-// To support mocks in unit tests.
-private[kubernetes] class InetAddressUtil {
-
-  // NOTE: This does issue a network call to DNS. Caching is done internally by the InetAddress
-  // class for both hits and misses.
-  def getFullHostName(ipAddress: String): String = {
-    InetAddress.getByName(ipAddress).getCanonicalHostName
-  }
-}

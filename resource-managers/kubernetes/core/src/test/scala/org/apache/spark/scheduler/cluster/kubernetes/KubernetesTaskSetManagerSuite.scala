@@ -20,17 +20,24 @@ import scala.collection.mutable.ArrayBuffer
 
 import io.fabric8.kubernetes.api.model.{Pod, PodSpec, PodStatus}
 import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.scheduler.{FakeTask, FakeTaskScheduler, HostTaskLocation, TaskLocation}
 
-class KubernetesTaskSetManagerSuite extends SparkFunSuite {
+class KubernetesTaskSetManagerSuite extends SparkFunSuite with BeforeAndAfter {
 
+  SparkContext.clearActiveContext()
   val sc = new SparkContext("local", "test")
   val sched = new FakeTaskScheduler(sc,
     ("execA", "10.0.0.1"), ("execB", "10.0.0.2"), ("execC", "10.0.0.3"))
   val backend = mock(classOf[KubernetesClusterSchedulerBackend])
   sched.backend = backend
+
+  before {
+    sc.conf.remove(KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED)
+  }
 
   test("Find pending tasks for executors using executor pod IP addresses") {
     val taskSet = FakeTask.createTaskSet(3,
@@ -76,7 +83,33 @@ class KubernetesTaskSetManagerSuite extends SparkFunSuite {
     assert(manager.getPendingTasksForHost("10.0.0.1") == ArrayBuffer(1, 0))
   }
 
+  test("Test DNS lookup is disabled by default for cluster node full hostnames") {
+    assert(!sc.conf.get(KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED))
+  }
+
+  test("Find pending tasks for executors, but avoid looking up cluster node FQDNs from DNS") {
+    sc.conf.set(KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED, false)
+    val taskSet = FakeTask.createTaskSet(2,
+      Seq(HostTaskLocation("kube-node1.domain1")),  // Task 0's partition belongs to datanode here.
+      Seq(HostTaskLocation("kube-node1.domain1"))   // task 1's partition belongs to datanode here.
+    )
+    val spec1 = mock(classOf[PodSpec])
+    when(spec1.getNodeName).thenReturn("kube-node1")
+    val pod1 = mock(classOf[Pod])
+    when(pod1.getSpec).thenReturn(spec1)
+    val status1 = mock(classOf[PodStatus])
+    when(status1.getHostIP).thenReturn("196.0.0.5")
+    when(pod1.getStatus).thenReturn(status1)
+    val inetAddressUtil = mock(classOf[InetAddressUtil])
+    when(inetAddressUtil.getFullHostName("196.0.0.5")).thenReturn("kube-node1.domain1")
+    when(backend.getExecutorPodByIP("10.0.0.1")).thenReturn(Some(pod1))
+
+    val manager = new KubernetesTaskSetManager(sched, taskSet, maxTaskFailures = 2, inetAddressUtil)
+    assert(manager.getPendingTasksForHost("10.0.0.1") == ArrayBuffer())
+  }
+
   test("Find pending tasks for executors using cluster node FQDNs that executor pods run on") {
+    sc.conf.set(KUBERNETES_DRIVER_CLUSTER_NODENAME_DNS_LOOKUP_ENABLED, true)
     val taskSet = FakeTask.createTaskSet(2,
       Seq(HostTaskLocation("kube-node1.domain1")),  // Task 0's partition belongs to datanode here.
       Seq(HostTaskLocation("kube-node1.domain1"))   // task 1's partition belongs to datanode here.

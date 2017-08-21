@@ -69,6 +69,7 @@
       <excludes>
         <exclude>org.apache.spark:spark-assembly_${scala.binary.version}:pom</exclude>
         <exclude>org.spark-project.spark:unused</exclude>
+        <exclude>com.sun.jersey:*</exclude>
       </excludes>
     </dependencySet>
   </dependencySets>
