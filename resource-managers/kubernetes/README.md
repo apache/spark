@@ -14,10 +14,13 @@ important matters to keep in mind when developing this feature.
 
 # Building Spark with Kubernetes Support
 
-To build Spark with Kubernetes support, use the `kubernetes` profile when invoking Maven. For example, to simply compile
-the Kubernetes core implementation module along with its dependencies:
+To build Spark with Kubernetes support, use the `kubernetes` profile when invoking Maven. For example, to simply compile the Kubernetes core implementation module along with its dependencies:
 
     build/mvn compile -Pkubernetes -pl resource-managers/kubernetes/core -am -DskipTests
+
+If this is the first time you compile the Kubernetes core implementation module, run the following command to install the dependencies and compile:
+
+    build/mvn install -Pkubernetes -pl resource-managers/kubernetes/core -am -DskipTests
 
 To build a distribution of Spark with Kubernetes support, use the `dev/make-distribution.sh` script, and add the
 `kubernetes` profile as part of the build arguments. Any other build arguments can be specified as one would expect when
