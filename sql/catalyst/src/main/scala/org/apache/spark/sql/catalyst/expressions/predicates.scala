@@ -148,41 +148,24 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
     lazy val checkForInSubquery = list match {
       case (l @ ListQuery(sub, children, _)) :: Nil =>
         // SPARK-21759:
-        // It is possibly that the subquery plan has more output than value expressions, because
-        // the condition expressions in `ListQuery` might use part of subquery plan's output.
-        // For example, in the following query plan, the condition of `ListQuery` uses d#3.
-        // from the subquery query. For now the size of output of subquery is 2(c#2, d#3), the
-        // size of value is 1 (a#0).
-        // Query:
-        //   SELECT t1.a FROM t1
-        //   WHERE
-        //   t1.a IN (SELECT t2.c
-        //           FROM t2
-        //           WHERE t1.b < t2.d);
-        // Query Plan:
-        //   Project [a#0]
-        //   +- Filter a#0 IN (list#4 [(b#1 < d#3)])
-        //      :  +- Project [c#2, d#3]
-        //      :     +- LocalRelation <empty>, [c#2, d#3]
-        //      +- LocalRelation <empty>, [a#0, b#1]
+        // TODO: Update this check if we combine the optimizer rules for subquery rewriting.
         //
-        // Notice that in analysis we should not face such problem. During analysis we only care
-        // if the size of subquery plan match the size of value expression. `CheckAnalysis` makes
-        // sure this by a particular check. However, optimization rules will possibly change the
-        // analyzed plan and produce unresolved plan again. That's why we add this check here.
+        // In `CheckAnalysis`, we already check if the size of subquery plan output match the size
+        // of value expressions. However, we can add extra correlated predicate references into
+        // the top of subquery plan when pulling up correlated predicates. Thus, we add extra check
+        // here to make sure we don't mess the query plan.
 
-        // Take the subset of output which are not going to match with value expressions and also
-        // not used in condition expressions, if any.
-        val subqueryOutputNotInCondition = sub.output.drop(valExprs.length).filter { attr =>
+        // Try to find out if any extra subquery output doesn't in the subquery condition.
+        val extraOutputAllInCondition = sub.output.drop(valExprs.length).find { attr =>
           l.children.forall { c =>
             !c.references.contains(attr)
           }
-        }
+        }.isEmpty
 
-        if (sub.output.length < valExprs.length || subqueryOutputNotInCondition.nonEmpty) {
-          false
-        } else {
+        if (sub.output.length >= valExprs.length && extraOutputAllInCondition) {
           true
+        } else {
+          false
         }
       case _ => true
     }
