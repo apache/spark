@@ -104,9 +104,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val outputBuffer = runFPGA(originBuffer)
 
       // Convert ByteBuffer => InternalRows, pass the originBuffer to release the buffer memory after use
-      val resIter = toInternalRow(outputBuffer, originBuffer)
-
-      resIter
+      toInternalRow(outputBuffer, originBuffer)
 
     }
   }

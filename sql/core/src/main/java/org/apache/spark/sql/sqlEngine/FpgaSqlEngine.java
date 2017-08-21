@@ -26,53 +26,41 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class FpgaSqlEngine {
 
-private static final Logger logger = LoggerFactory.getLogger(FpgaSqlEngine.class);
+    private static final Logger logger = LoggerFactory.getLogger(FpgaSqlEngine.class);
 
-private static Lock lock;
-private static int initFlag = 0;
+    private static Lock lock;
+    private static int initFlag = 0;
 
+    static private native ByteBuffer sqlEngineGetBuf(int size);
+    static private native void sqlEnginePutBuf(ByteBuffer buf);
 
-static private native ByteBuffer sqlEngineGetBuf(int size);
-static private native void sqlEnginePutBuf(ByteBuffer buf);
+    static private native ByteBuffer sqlEngineRun(ByteBuffer buf, int rowCount);
 
-static private native ByteBuffer sqlEngineRun(ByteBuffer buf, int rowCount);
-
-static void init() {
-    if(1 != initFlag) {
-        initFlag = 1;
-        lock = new ReentrantLock(true);
-        logger.warn("WQF: initalizing FPGA lock\n");
+    static void init() {
+        if(1 != initFlag) {
+            initFlag = 1;
+            lock = new ReentrantLock(true);
+            logger.warn("WQF: initalizing FPGA lock\n");
+        }
     }
-}
 
-public static ByteBuffer getBuf(int size) {
-  init();
+    public static ByteBuffer getBuf(int size) {
+      init();
+      logger.warn("WQF: invoking getBuf");
+      return sqlEngineGetBuf(size);
+    }
 
-  logger.warn("WQF: invoking getBuf");
+    public static void putBuf(ByteBuffer buf) {
+      logger.warn("WQF: invoking putBuf");
+      init();
+      sqlEnginePutBuf(buf);
+    }
 
-  logger.warn("WQF: grabbed FPGA lock\n");
-  return sqlEngineGetBuf(size);
-}
-
-public static void putBuf(ByteBuffer buf) {
-  logger.warn("WQF: invoking putBuf");
-  init();
-
-  sqlEnginePutBuf(buf);
-
-
-  logger.warn("WQF: released FPGA lock\n");
-}
-
-public static ByteBuffer project(ByteBuffer buf, int rowCount) {
-  logger.warn("WQF: invoking project");
-  init();
-  lock.lock();
-
-  buf.limit(rowCount*768);
-  ByteBuffer buffer = sqlEngineRun(buf, rowCount);
-  lock.unlock();
-
-  return buffer;
-}
+    public static ByteBuffer project(ByteBuffer buf, int rowCount) {
+      logger.warn("WQF: invoking project");
+      init();
+      buf.limit(rowCount*768);
+      ByteBuffer buffer = sqlEngineRun(buf, rowCount);
+      return buffer;
+    }
 }
