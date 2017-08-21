@@ -40,7 +40,7 @@ public class ColumnVectorUtils {
   /**
    * Populates the entire `col` with `row[fieldIdx]`
    */
-  public static void populate(MutableColumnVector col, InternalRow row, int fieldIdx) {
+  public static void populate(WritableColumnVector col, InternalRow row, int fieldIdx) {
     int capacity = col.capacity;
     DataType t = col.dataType();
 
@@ -115,7 +115,7 @@ public class ColumnVectorUtils {
     }
   }
 
-  private static void appendValue(MutableColumnVector dst, DataType t, Object o) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
       if (t instanceof CalendarIntervalType) {
         dst.appendStruct(true);
@@ -165,7 +165,7 @@ public class ColumnVectorUtils {
     }
   }
 
-  private static void appendValue(MutableColumnVector dst, DataType t, Row src, int fieldIdx) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
     if (t instanceof ArrayType) {
       ArrayType at = (ArrayType)t;
       if (src.isNullAt(fieldIdx)) {
@@ -199,7 +199,7 @@ public class ColumnVectorUtils {
   public static ColumnarBatch toBatch(
       StructType schema, MemoryMode memMode, Iterator<Row> row) {
     int capacity = ColumnarBatch.DEFAULT_BATCH_SIZE;
-    MutableColumnVector[] columnVectors;
+    WritableColumnVector[] columnVectors;
     if (memMode == MemoryMode.OFF_HEAP) {
       columnVectors = OffHeapColumnVector.allocateColumns(capacity, schema);
     } else {

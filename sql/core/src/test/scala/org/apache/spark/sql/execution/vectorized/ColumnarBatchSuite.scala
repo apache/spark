@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 class ColumnarBatchSuite extends SparkFunSuite {
 
-  def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): MutableColumnVector = {
+  def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
     if (memMode == MemoryMode.OFF_HEAP) {
       new OffHeapColumnVector(capacity, dt)
     } else {

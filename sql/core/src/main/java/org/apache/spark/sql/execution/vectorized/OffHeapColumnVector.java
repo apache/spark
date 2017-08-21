@@ -25,7 +25,7 @@ import org.apache.spark.unsafe.Platform;
 /**
  * Column data backed using offheap memory.
  */
-public final class OffHeapColumnVector extends MutableColumnVector {
+public final class OffHeapColumnVector extends WritableColumnVector {
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);

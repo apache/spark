@@ -25,7 +25,7 @@ import org.apache.parquet.column.values.bitpacking.Packer;
 import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.io.api.Binary;
 
-import org.apache.spark.sql.execution.vectorized.MutableColumnVector;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 
 /**
  * A values reader for Parquet's run-length encoded data. This is based off of the version in
@@ -179,7 +179,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
    */
   public void readIntegers(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -214,7 +214,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   // TODO: can this code duplication be removed without a perf penalty?
   public void readBooleans(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -248,7 +248,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   public void readBytes(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -282,7 +282,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   public void readShorts(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -318,7 +318,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   public void readLongs(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -352,7 +352,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   public void readFloats(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -386,7 +386,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   public void readDoubles(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -420,7 +420,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
 
   public void readBinarys(
       int total,
-      MutableColumnVector c,
+      WritableColumnVector c,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -458,8 +458,8 @@ public final class VectorizedRleValuesReader extends ValuesReader
    */
   public void readIntegers(
       int total,
-      MutableColumnVector values,
-      MutableColumnVector nulls,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
       int rowId,
       int level,
       VectorizedValuesReader data) {
@@ -496,7 +496,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
   // IDs. This is different than the above APIs that decodes definitions levels along with values.
   // Since this is only used to decode dictionary IDs, only decoding integers is supported.
   @Override
-  public void readIntegers(int total, MutableColumnVector c, int rowId) {
+  public void readIntegers(int total, WritableColumnVector c, int rowId) {
     int left = total;
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
@@ -522,32 +522,32 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   @Override
-  public void readBytes(int total, MutableColumnVector c, int rowId) {
+  public void readBytes(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   @Override
-  public void readLongs(int total, MutableColumnVector c, int rowId) {
+  public void readLongs(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   @Override
-  public void readBinary(int total, MutableColumnVector c, int rowId) {
+  public void readBinary(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   @Override
-  public void readBooleans(int total, MutableColumnVector c, int rowId) {
+  public void readBooleans(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   @Override
-  public void readFloats(int total, MutableColumnVector c, int rowId) {
+  public void readFloats(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 
   @Override
-  public void readDoubles(int total, MutableColumnVector c, int rowId) {
+  public void readDoubles(int total, WritableColumnVector c, int rowId) {
     throw new UnsupportedOperationException("only readInts is valid.");
   }
 

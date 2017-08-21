@@ -24,9 +24,9 @@ import scala.util.Random
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.vectorized.ColumnVector
-import org.apache.spark.sql.execution.vectorized.MutableColumnVector
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Benchmark
@@ -37,7 +37,7 @@ import org.apache.spark.util.collection.BitSet
  */
 object ColumnarBatchBenchmark {
 
-  def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): MutableColumnVector = {
+  def allocate(capacity: Int, dt: DataType, memMode: MemoryMode): WritableColumnVector = {
     if (memMode == MemoryMode.OFF_HEAP) {
       new OffHeapColumnVector(capacity, dt)
     } else {

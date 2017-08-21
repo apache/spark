@@ -38,7 +38,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * A ColumnVector should be considered immutable once originally created. In other words, it is not
  * valid to call put APIs after reads until reset() is called.
  */
-public abstract class MutableColumnVector extends ColumnVector {
+public abstract class WritableColumnVector extends ColumnVector {
 
   /**
    * Resets this column for writing. The currently stored values are no longer accessible.
@@ -48,7 +48,7 @@ public abstract class MutableColumnVector extends ColumnVector {
 
     if (childColumns != null) {
       for (ColumnVector c: childColumns) {
-        ((MutableColumnVector) c).reset();
+        ((WritableColumnVector) c).reset();
       }
     }
     numNulls = 0;
@@ -511,9 +511,9 @@ public abstract class MutableColumnVector extends ColumnVector {
       appendNull();
       for (ColumnVector c: childColumns) {
         if (c.type instanceof StructType) {
-          ((MutableColumnVector) c).appendStruct(true);
+          ((WritableColumnVector) c).appendStruct(true);
         } else {
-          ((MutableColumnVector) c).appendNull();
+          ((WritableColumnVector) c).appendNull();
         }
       }
     } else {
@@ -526,14 +526,14 @@ public abstract class MutableColumnVector extends ColumnVector {
    * Returns the data for the underlying array.
    */
   @Override
-  public MutableColumnVector arrayData() { return (MutableColumnVector) childColumns[0]; }
+  public WritableColumnVector arrayData() { return (WritableColumnVector) childColumns[0]; }
 
   /**
    * Returns the ordinal's child data column.
    */
   @Override
-  public MutableColumnVector getChildColumn(int ordinal) {
-    return (MutableColumnVector) childColumns[ordinal];
+  public WritableColumnVector getChildColumn(int ordinal) {
+    return (WritableColumnVector) childColumns[ordinal];
   }
 
   /**
@@ -578,8 +578,8 @@ public abstract class MutableColumnVector extends ColumnVector {
   /**
    * Reserve a integer column for ids of dictionary.
    */
-  public MutableColumnVector reserveDictionaryIds(int capacity) {
-    MutableColumnVector dictionaryIds = (MutableColumnVector) this.dictionaryIds;
+  public WritableColumnVector reserveDictionaryIds(int capacity) {
+    WritableColumnVector dictionaryIds = (WritableColumnVector) this.dictionaryIds;
     if (dictionaryIds == null) {
       dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.dictionaryIds = dictionaryIds;
@@ -594,14 +594,14 @@ public abstract class MutableColumnVector extends ColumnVector {
    * Returns the underlying integer column for ids of dictionary.
    */
   @Override
-  public MutableColumnVector getDictionaryIds() {
-    return (MutableColumnVector) dictionaryIds;
+  public WritableColumnVector getDictionaryIds() {
+    return (WritableColumnVector) dictionaryIds;
   }
 
   /**
    * Reserve a new column.
    */
-  protected abstract MutableColumnVector reserveNewColumn(int capacity, DataType type);
+  protected abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
 
   /**
    * Initialize child columns.
@@ -647,7 +647,7 @@ public abstract class MutableColumnVector extends ColumnVector {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected MutableColumnVector(int capacity, DataType type) {
+  protected WritableColumnVector(int capacity, DataType type) {
     super(capacity, type);
   }
 }

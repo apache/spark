@@ -30,7 +30,7 @@ import org.apache.parquet.schema.PrimitiveType;
 
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnVector;
-import org.apache.spark.sql.execution.vectorized.MutableColumnVector;
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.DecimalType;
 
@@ -136,9 +136,9 @@ public class VectorizedColumnReader {
   /**
    * Reads `total` values from this columnReader into column.
    */
-  void readBatch(int total, MutableColumnVector column) throws IOException {
+  void readBatch(int total, WritableColumnVector column) throws IOException {
     int rowId = 0;
-    MutableColumnVector dictionaryIds = null;
+    WritableColumnVector dictionaryIds = null;
     if (dictionary != null) {
       // SPARK-16334: We only maintain a single dictionary per row batch, so that it can be used to
       // decode all previous dictionary encoded pages if we ever encounter a non-dictionary encoded
@@ -223,7 +223,7 @@ public class VectorizedColumnReader {
   private void decodeDictionaryIds(
       int rowId,
       int num,
-      MutableColumnVector column,
+      WritableColumnVector column,
       ColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
@@ -350,13 +350,13 @@ public class VectorizedColumnReader {
    * is guaranteed that num is smaller than the number of values left in the current page.
    */
 
-  private void readBooleanBatch(int rowId, int num, MutableColumnVector column) throws IOException {
+  private void readBooleanBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     assert(column.dataType() == DataTypes.BooleanType);
     defColumn.readBooleans(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
   }
 
-  private void readIntBatch(int rowId, int num, MutableColumnVector column) throws IOException {
+  private void readIntBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.IntegerType || column.dataType() == DataTypes.DateType ||
@@ -374,7 +374,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readLongBatch(int rowId, int num, MutableColumnVector column) throws IOException {
+  private void readLongBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     if (column.dataType() == DataTypes.LongType ||
         DecimalType.is64BitDecimalType(column.dataType())) {
@@ -393,7 +393,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readFloatBatch(int rowId, int num, MutableColumnVector column) throws IOException {
+  private void readFloatBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: support implicit cast to double?
     if (column.dataType() == DataTypes.FloatType) {
@@ -404,7 +404,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readDoubleBatch(int rowId, int num, MutableColumnVector column) throws IOException {
+  private void readDoubleBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     if (column.dataType() == DataTypes.DoubleType) {
@@ -415,7 +415,7 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readBinaryBatch(int rowId, int num, MutableColumnVector column) throws IOException {
+  private void readBinaryBatch(int rowId, int num, WritableColumnVector column) throws IOException {
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
@@ -439,7 +439,7 @@ public class VectorizedColumnReader {
   private void readFixedLenByteArrayBatch(
       int rowId,
       int num,
-      MutableColumnVector column,
+      WritableColumnVector column,
       int arrayLen) throws IOException {
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     // This is where we implement support for the valid type conversions.
