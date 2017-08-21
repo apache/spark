@@ -684,14 +684,6 @@ class DataFrame(object):
         10
         >>> df.sample(False, fraction=1.0).count()
         10
-        >>> df.sample("a").count()
-        Traceback (most recent call last):
-            ...
-        TypeError:...
-        >>> df.sample(seed="abc").count()
-        Traceback (most recent call last):
-            ...
-        TypeError:...
         """
 
         # For the cases below:
