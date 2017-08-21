@@ -220,8 +220,11 @@ public class VectorizedColumnReader {
   /**
    * Reads `num` values into column, decoding the values from `dictionaryIds` and `dictionary`.
    */
-  private void decodeDictionaryIds(int rowId, int num, MutableColumnVector column,
-                                   ColumnVector dictionaryIds) {
+  private void decodeDictionaryIds(
+      int rowId,
+      int num,
+      MutableColumnVector column,
+      ColumnVector dictionaryIds) {
     switch (descriptor.getType()) {
       case INT32:
         if (column.dataType() == DataTypes.IntegerType ||
@@ -433,9 +436,11 @@ public class VectorizedColumnReader {
     }
   }
 
-  private void readFixedLenByteArrayBatch(int rowId, int num,
-                                          MutableColumnVector column,
-                                          int arrayLen) throws IOException {
+  private void readFixedLenByteArrayBatch(
+      int rowId,
+      int num,
+      MutableColumnVector column,
+      int arrayLen) throws IOException {
     VectorizedValuesReader data = (VectorizedValuesReader) dataColumn;
     // This is where we implement support for the valid type conversions.
     // TODO: implement remaining type conversions
