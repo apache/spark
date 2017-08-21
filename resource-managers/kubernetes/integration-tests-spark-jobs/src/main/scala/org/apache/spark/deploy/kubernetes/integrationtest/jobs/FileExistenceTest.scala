@@ -16,6 +16,7 @@
  */
 package org.apache.spark.deploy.kubernetes.integrationtest.jobs
 
+import java.io.File
 import java.nio.file.Paths
 
 import com.google.common.base.Charsets
@@ -45,6 +46,20 @@ private[spark] object FileExistenceTest {
       } else {
         println(s"File found at ${file.getAbsolutePath} with correct contents.")
       }
+      val spark = SparkSession.builder().getOrCreate().sparkContext
+      val fileNamesRdd = spark.parallelize(Seq(args(0)))
+      if (fileNamesRdd.filter(fileName => new File(fileName).isFile()).count() != 1) {
+        throw new SparkException(s"Executors do not have the file ${args(0)}.")
+      }
+      val matchingContents = fileNamesRdd.map { fileName =>
+        Files.toString(new File(fileName), Charsets.UTF_8)
+      }.filter(_.equals(args(1)))
+      if (matchingContents.count() != 1) {
+        throw new SparkException(s"The file on the executors at ${args(0)} did not have" +
+          s" the correct contents.")
+      }
+      println(s"File found on the executors at the relative path ${args(0)} with the" +
+        s" correct contents.")
       // scalastyle:on println
     }
     while (true) {

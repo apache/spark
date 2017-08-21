@@ -20,7 +20,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.ConfigurationUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, InitContainerBootstrapStep, PythonStep}
+import org.apache.spark.deploy.kubernetes.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, InitContainerBootstrapStep, MountSmallLocalFilesStep, PythonStep}
 import org.apache.spark.deploy.kubernetes.submit.submitsteps.initcontainer.InitContainerConfigurationStepsOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.Utils
@@ -99,40 +99,77 @@ private[spark] class DriverConfigurationStepsOrchestrator(
         Option(new PythonStep(mainPyResource, additionalPythonFiles, filesDownloadPath))
       case _ => Option.empty[DriverConfigurationStep]
     }
-    val initContainerBootstrapStep = if ((sparkJars ++ sparkFiles).exists { uri =>
-      Option(Utils.resolveURI(uri).getScheme).getOrElse("file") != "local"
-    }) {
-      val initContainerConfigurationStepsOrchestrator =
-          new InitContainerConfigurationStepsOrchestrator(
-              namespace,
-              kubernetesResourceNamePrefix,
-              sparkJars,
+
+    val (localFilesDownloadPath, submittedDependenciesBootstrapSteps) =
+      if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFiles)) {
+        val (submittedLocalFilesDownloadPath,
+            sparkFilesResolvedFromInitContainer,
+            mountSmallFilesWithoutInitContainerStep) =
+          // If the resource staging server is specified, submit all local files through that.
+          submissionSparkConf.get(RESOURCE_STAGING_SERVER_URI).map { _ =>
+            (filesDownloadPath, sparkFiles, Option.empty[DriverConfigurationStep])
+          }.getOrElse {
+            // Else - use a small files bootstrap that submits the local files via a secret.
+            // Then, indicate to the outer block that the init-container should not handle
+            // those local files simply by filtering them out.
+            val sparkFilesWithoutLocal = KubernetesFileUtils.getNonSubmitterLocalFiles(sparkFiles)
+            val smallFilesSecretName = s"${kubernetesAppId}-submitted-files"
+            val mountSmallFilesBootstrap = new MountSmallFilesBootstrapImpl(
+                smallFilesSecretName, MOUNTED_SMALL_FILES_SECRET_MOUNT_PATH)
+            val mountSmallLocalFilesStep = new MountSmallLocalFilesStep(
               sparkFiles,
-              jarsDownloadPath,
-              filesDownloadPath,
-              dockerImagePullPolicy,
-              allDriverLabels,
+              smallFilesSecretName,
+              MOUNTED_SMALL_FILES_SECRET_MOUNT_PATH,
+              mountSmallFilesBootstrap)
+            (MOUNTED_SMALL_FILES_SECRET_MOUNT_PATH,
+              sparkFilesWithoutLocal.toArray,
+              Some(mountSmallLocalFilesStep))
+          }
+
+        val initContainerBootstrapStep =
+          if (areAnyFilesNonContainerLocal(sparkJars ++ sparkFilesResolvedFromInitContainer)) {
+            val initContainerConfigurationStepsOrchestrator =
+              new InitContainerConfigurationStepsOrchestrator(
+                namespace,
+                kubernetesResourceNamePrefix,
+                sparkJars,
+                sparkFilesResolvedFromInitContainer,
+                jarsDownloadPath,
+                filesDownloadPath,
+                dockerImagePullPolicy,
+                allDriverLabels,
+                initContainerConfigMapName,
+                INIT_CONTAINER_CONFIG_MAP_KEY,
+                submissionSparkConf)
+            val initContainerConfigurationSteps =
+              initContainerConfigurationStepsOrchestrator.getAllConfigurationSteps()
+            Some(new InitContainerBootstrapStep(initContainerConfigurationSteps,
               initContainerConfigMapName,
-              INIT_CONTAINER_CONFIG_MAP_KEY,
-              submissionSparkConf)
-      val initContainerConfigurationSteps =
-          initContainerConfigurationStepsOrchestrator.getAllConfigurationSteps()
-      Some(new InitContainerBootstrapStep(initContainerConfigurationSteps,
-        initContainerConfigMapName,
-        INIT_CONTAINER_CONFIG_MAP_KEY))
+              INIT_CONTAINER_CONFIG_MAP_KEY))
+        } else Option.empty[DriverConfigurationStep]
+        (submittedLocalFilesDownloadPath,
+          mountSmallFilesWithoutInitContainerStep.toSeq ++
+            initContainerBootstrapStep.toSeq)
     } else {
-      Option.empty[DriverConfigurationStep]
+      (filesDownloadPath, Seq.empty[DriverConfigurationStep])
     }
     val dependencyResolutionStep = new DependencyResolutionStep(
       sparkJars,
       sparkFiles,
       jarsDownloadPath,
-      filesDownloadPath)
+      localFilesDownloadPath)
     Seq(
       initialSubmissionStep,
       kubernetesCredentialsStep,
       dependencyResolutionStep) ++
-      initContainerBootstrapStep.toSeq ++
+      submittedDependenciesBootstrapSteps ++
       pythonStep.toSeq
   }
+
+  private def areAnyFilesNonContainerLocal(files: Seq[String]): Boolean = {
+    files.exists { uri =>
+      Option(Utils.resolveURI(uri).getScheme).getOrElse("file") != "local"
+    }
+  }
+
 }

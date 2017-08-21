@@ -17,7 +17,8 @@
 package org.apache.spark.deploy.kubernetes.submit
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.kubernetes.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverKubernetesCredentialsStep, InitContainerBootstrapStep, PythonStep}
+import org.apache.spark.deploy.kubernetes.config._
+import org.apache.spark.deploy.kubernetes.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, InitContainerBootstrapStep, MountSmallLocalFilesStep, PythonStep}
 
 private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
@@ -31,7 +32,7 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
 
   test("Base submission steps without an init-container or python files.") {
     val sparkConf = new SparkConf(false)
-      .set("spark.jars", "local:///var/apps/jars/jar1.jar")
+        .set("spark.jars", "local:///var/apps/jars/jar1.jar")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigurationStepsOrchestrator(
         NAMESPACE,
@@ -43,16 +44,17 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         APP_ARGS,
         ADDITIONAL_PYTHON_FILES,
         sparkConf)
-    val steps = orchestrator.getAllConfigurationSteps()
-    assert(steps.size === 3)
-    assert(steps(0).isInstanceOf[BaseDriverConfigurationStep])
-    assert(steps(1).isInstanceOf[DriverKubernetesCredentialsStep])
-    assert(steps(2).isInstanceOf[DependencyResolutionStep])
+    validateStepTypes(
+        orchestrator,
+        classOf[BaseDriverConfigurationStep],
+        classOf[DriverKubernetesCredentialsStep],
+        classOf[DependencyResolutionStep])
   }
 
   test("Submission steps with an init-container.") {
     val sparkConf = new SparkConf(false)
-      .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
+        .set("spark.jars", "hdfs://localhost:9000/var/apps/jars/jar1.jar")
+        .set(RESOURCE_STAGING_SERVER_URI, "https://localhost:8080")
     val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
     val orchestrator = new DriverConfigurationStepsOrchestrator(
         NAMESPACE,
@@ -64,12 +66,12 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         APP_ARGS,
         ADDITIONAL_PYTHON_FILES,
         sparkConf)
-    val steps = orchestrator.getAllConfigurationSteps()
-    assert(steps.size === 4)
-    assert(steps(0).isInstanceOf[BaseDriverConfigurationStep])
-    assert(steps(1).isInstanceOf[DriverKubernetesCredentialsStep])
-    assert(steps(2).isInstanceOf[DependencyResolutionStep])
-    assert(steps(3).isInstanceOf[InitContainerBootstrapStep])
+    validateStepTypes(
+        orchestrator,
+        classOf[BaseDriverConfigurationStep],
+        classOf[DriverKubernetesCredentialsStep],
+        classOf[DependencyResolutionStep],
+        classOf[InitContainerBootstrapStep])
   }
 
   test("Submission steps with python files.") {
@@ -85,11 +87,40 @@ private[spark] class DriverConfigurationStepsOrchestratorSuite extends SparkFunS
         APP_ARGS,
         ADDITIONAL_PYTHON_FILES,
         sparkConf)
+    validateStepTypes(
+        orchestrator,
+        classOf[BaseDriverConfigurationStep],
+        classOf[DriverKubernetesCredentialsStep],
+        classOf[DependencyResolutionStep],
+        classOf[PythonStep])
+  }
+
+  test("Only local files without a resource staging server.") {
+    val sparkConf = new SparkConf(false).set("spark.files", "/var/spark/file1.txt")
+    val mainAppResource = JavaMainAppResource("local:///var/apps/jars/main.jar")
+    val orchestrator = new DriverConfigurationStepsOrchestrator(
+        NAMESPACE,
+        APP_ID,
+        LAUNCH_TIME,
+        mainAppResource,
+        APP_NAME,
+        MAIN_CLASS,
+        APP_ARGS,
+        ADDITIONAL_PYTHON_FILES,
+        sparkConf)
+    validateStepTypes(
+        orchestrator,
+        classOf[BaseDriverConfigurationStep],
+        classOf[DriverKubernetesCredentialsStep],
+        classOf[DependencyResolutionStep],
+        classOf[MountSmallLocalFilesStep])
+  }
+
+  private def validateStepTypes(
+      orchestrator: DriverConfigurationStepsOrchestrator,
+      types: Class[_ <: DriverConfigurationStep]*): Unit = {
     val steps = orchestrator.getAllConfigurationSteps()
-    assert(steps.size === 4)
-    assert(steps(0).isInstanceOf[BaseDriverConfigurationStep])
-    assert(steps(1).isInstanceOf[DriverKubernetesCredentialsStep])
-    assert(steps(2).isInstanceOf[DependencyResolutionStep])
-    assert(steps(3).isInstanceOf[PythonStep])
+    assert(steps.size === types.size)
+    assert(steps.map(_.getClass) === types)
   }
 }

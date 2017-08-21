@@ -450,6 +450,22 @@ package object config extends Logging {
       .timeConf(TimeUnit.MINUTES)
       .createWithDefault(5)
 
+  private[spark] val EXECUTOR_SUBMITTED_SMALL_FILES_SECRET =
+    ConfigBuilder("spark.kubernetes.mountdependencies.smallfiles.executor.secretName")
+      .doc("Name of the secret that should be mounted into the executor containers for" +
+        " distributing submitted small files without the resource staging server.")
+      .internal()
+      .stringConf
+      .createOptional
+
+  private[spark] val EXECUTOR_SUBMITTED_SMALL_FILES_SECRET_MOUNT_PATH =
+    ConfigBuilder("spark.kubernetes.mountdependencies.smallfiles.executor.secretMountPath")
+      .doc(s"Mount path in the executors for the secret given by" +
+        s" ${EXECUTOR_SUBMITTED_SMALL_FILES_SECRET.key}")
+      .internal()
+      .stringConf
+      .createOptional
+
   private[spark] val EXECUTOR_INIT_CONTAINER_CONFIG_MAP =
     ConfigBuilder("spark.kubernetes.initcontainer.executor.configmapname")
       .doc("Name of the config map to use in the init-container that retrieves submitted files" +

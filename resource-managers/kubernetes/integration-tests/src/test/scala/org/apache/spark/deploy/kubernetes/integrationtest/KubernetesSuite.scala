@@ -213,17 +213,38 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
   test("Added files should be placed in the driver's working directory.") {
     assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    launchStagingServer(SSLOptions(), None)
     val testExistenceFileTempDir = Utils.createTempDir(namePrefix = "test-existence-file-temp-dir")
     val testExistenceFile = new File(testExistenceFileTempDir, "input.txt")
     Files.write(TEST_EXISTENCE_FILE_CONTENTS, testExistenceFile, Charsets.UTF_8)
-    launchStagingServer(SSLOptions(), None)
     sparkConf.set("spark.files", testExistenceFile.getAbsolutePath)
     runSparkApplicationAndVerifyCompletion(
         JavaMainAppResource(SUBMITTER_LOCAL_MAIN_APP_RESOURCE),
         FILE_EXISTENCE_MAIN_CLASS,
-        Seq(s"File found at /opt/spark/${testExistenceFile.getName} with correct contents."),
+        Seq(
+          s"File found at /opt/spark/work-dir/${testExistenceFile.getName} with correct contents.",
+          s"File found on the executors at the relative path ${testExistenceFile.getName} with" +
+            s" the correct contents."),
         Array(testExistenceFile.getName, TEST_EXISTENCE_FILE_CONTENTS),
         Seq.empty[String])
+  }
+
+  test("Submit small local files without the resource staging server.") {
+    assume(testBackend.name == MINIKUBE_TEST_BACKEND)
+    sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
+    val testExistenceFileTempDir = Utils.createTempDir(namePrefix = "test-existence-file-temp-dir")
+    val testExistenceFile = new File(testExistenceFileTempDir, "input.txt")
+    Files.write(TEST_EXISTENCE_FILE_CONTENTS, testExistenceFile, Charsets.UTF_8)
+    sparkConf.set("spark.files", testExistenceFile.getAbsolutePath)
+    runSparkApplicationAndVerifyCompletion(
+      JavaMainAppResource(CONTAINER_LOCAL_MAIN_APP_RESOURCE),
+      FILE_EXISTENCE_MAIN_CLASS,
+      Seq(
+        s"File found at /opt/spark/work-dir/${testExistenceFile.getName} with correct contents.",
+        s"File found on the executors at the relative path ${testExistenceFile.getName} with" +
+          s" the correct contents."),
+      Array(testExistenceFile.getName, TEST_EXISTENCE_FILE_CONTENTS),
+      Seq.empty[String])
   }
 
   test("Use a very long application name.") {
