@@ -23,8 +23,8 @@ import scala.xml.Node
 
 import org.apache.mesos.Protos.TaskStatus
 
-import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.scheduler.cluster.mesos.MesosClusterSubmissionState
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 

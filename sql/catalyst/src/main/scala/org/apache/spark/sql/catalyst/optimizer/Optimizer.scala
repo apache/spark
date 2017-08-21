@@ -1171,7 +1171,7 @@ object DecimalAggregates extends Rule[LogicalPlan] {
  * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
  * another LocalRelation.
  *
- * This is relatively simple as it currently handles only a single case: Project.
+ * This is relatively simple as it currently handles only 2 single case: Project and Limit.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1180,6 +1180,9 @@ object ConvertToLocalRelation extends Rule[LogicalPlan] {
       val projection = new InterpretedProjection(projectList, output)
       projection.initialize(0)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+
+    case Limit(IntegerLiteral(limit), LocalRelation(output, data)) =>
+      LocalRelation(output, data.take(limit))
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {

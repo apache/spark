@@ -17,8 +17,8 @@
 
 package org.apache.spark.deploy.yarn
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 import scala.collection.JavaConverters._
+import scala.collection.mutable.{ArrayBuffer, HashMap, Set}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records.{ContainerId, Resource}
