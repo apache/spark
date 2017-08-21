@@ -2087,19 +2087,19 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaisesRegexp(
             TypeError,
             "should be a bool, float and number",
-            lambda: self.spark.range(1).sample().count())
+            lambda: self.spark.range(1).sample())
 
         self.assertRaises(
             TypeError,
-            lambda: self.spark.range(1).sample("a").count())
+            lambda: self.spark.range(1).sample("a"))
 
         self.assertRaises(
             TypeError,
-            lambda: self.spark.range(1).sample(seed="abc").count())
+            lambda: self.spark.range(1).sample(seed="abc"))
 
         self.assertRaises(
             IllegalArgumentException,
-            lambda: self.spark.range(1).sample(-1.0).count())
+            lambda: self.spark.range(1).sample(-1.0))
 
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
