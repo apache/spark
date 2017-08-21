@@ -169,7 +169,7 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   override def checkInputDataTypes(): TypeCheckResult = {
     list match {
       case (l @ ListQuery(sub, children, _)) :: Nil =>
-        val mismatchedColumns = valExprs.zip(sub.output.take(valExprs.length)).flatMap {
+        val mismatchedColumns = valExprs.zip(sub.output).flatMap {
           case (l, r) if l.dataType != r.dataType =>
             s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
           case _ => None
