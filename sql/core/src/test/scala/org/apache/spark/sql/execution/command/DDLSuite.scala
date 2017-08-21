@@ -2347,8 +2347,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert overwrite directory") {
-    case class ClassData(a: Int, b: String)
-
     val path = Utils.createTempDir()
     path.delete()
 
