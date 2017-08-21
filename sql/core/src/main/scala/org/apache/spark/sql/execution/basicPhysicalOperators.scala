@@ -101,7 +101,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val originBuffer = toFPGABatch(iter)
 
       // FPGA Calculation
-      val outputBuffer = mockFPGA(originBuffer)
+      val outputBuffer = runFPGA(originBuffer)
 
       // Convert ByteBuffer => InternalRows, pass the originBuffer to release the buffer memory after use
       val resIter = toInternalRow(outputBuffer, originBuffer)
@@ -151,7 +151,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
   }
 
   def toFPGABatch (iter: Iterator[InternalRow]): ByteBuffer = {
-    val originBuffer = mockGetByteBuffer(0)
+    val originBuffer = getByteBuffer(0)
 
     originBuffer.order(ByteOrder.nativeOrder())
 
@@ -214,7 +214,7 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
 
         // The release memory process has to be put here
         if (rowCount == 0)
-          mockReturnByteBuffer(originBufferShouldReturn)
+          returnByteBuffer(originBufferShouldReturn)
 
         row.setTotalSize(holder.totalSize())
         row
@@ -222,17 +222,17 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
     }
   }
 
-  def mockGetByteBuffer(size: Int): ByteBuffer = {
+  def getByteBuffer(size: Int): ByteBuffer = {
 //    ByteBuffer.allocate(10000)
     FpgaSqlEngine.getBuf(10000)
   }
 
-  def mockFPGA(input: ByteBuffer): ByteBuffer = {
+  def runFPGA(input: ByteBuffer): ByteBuffer = {
 //    input
     FpgaSqlEngine.project(input, FPGARowNumber)
   }
 
-  def mockReturnByteBuffer(buffer: ByteBuffer): Unit = {
+  def returnByteBuffer(buffer: ByteBuffer): Unit = {
     FpgaSqlEngine.putBuf(buffer)
   }
 
