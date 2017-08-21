@@ -1457,9 +1457,9 @@ class LogisticRegressionSuite
     */
 
     val coefficientsR = new DenseMatrix(3, 2, Array(
-      0.1881871, -0.0,
+      0.1881871, 0.0,
       -0.02412645, 0.0,
-      -0.1640607, -0.0), isTransposed = true)
+      -0.1640607, 0.0), isTransposed = true)
     val interceptsR = Vectors.dense(0.2658824, 0.53604701, -0.8019294)
 
     model.coefficientMatrix.colIter.foreach(v => assert(v.toArray.sum ~== 0.0 absTol eps))
