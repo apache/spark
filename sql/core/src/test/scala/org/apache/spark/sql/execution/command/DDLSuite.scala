@@ -2358,8 +2358,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             assert(e.contains("Found duplicate column(s)"))
           } else {
             sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-            assert(spark.table("t1").schema
-              .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
+            assert(spark.table("t1").schema ==
+              new StructType().add("c1", IntegerType).add("C1", StringType))
           }
         }
       }
