@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
@@ -127,6 +128,13 @@ class SessionCatalog(
    */
   protected[this] def formatDatabaseName(name: String): String = {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+  }
+
+  /**
+   * Checks whether the Hive metastore is being used
+   */
+  private def isUsingHiveMetastore: Boolean = {
+    conf.getConf(CATALOG_IMPLEMENTATION).toLowerCase(Locale.ROOT) == "hive"
   }
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
@@ -1094,27 +1102,24 @@ class SessionCatalog(
   // ----------------------------------------------------------------
 
   /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
-   *
-   * This performs reflection to decide what type of [[Expression]] to return in the builder.
+   * Constructs a [[FunctionBuilder]] based on the provided class that represents a function.
    */
   protected def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     val clazz = Utils.classForName(functionClassName)
     (children: Seq[Expression]) => {
       try {
         makeFunctionExpression(name, Utils.classForName(functionClassName), children).getOrElse {
-          throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
+          val extraMsg =
+            if (!isUsingHiveMetastore) "Use sparkSession.udf.register(...) instead." else ""
+          throw new AnalysisException(
+            s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'. $extraMsg")
         }
       } catch {
-        case NonFatal(exception) =>
-          val e = exception match {
-            // Since we are using shim, the exceptions thrown by the underlying method of
-            // Method.invoke() are wrapped by InvocationTargetException
-            case i: InvocationTargetException => i.getCause
-            case o => o
-          }
+        case ae: AnalysisException =>
+          throw ae
+        case NonFatal(e) =>
           val analysisException =
-            new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}': $e")
+            new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e")
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
       }
@@ -1123,6 +1128,8 @@ class SessionCatalog(
 
   /**
    * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
   protected def makeFunctionExpression(
       name: String,

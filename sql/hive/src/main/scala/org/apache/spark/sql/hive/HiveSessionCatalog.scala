@@ -27,7 +27,6 @@ import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
@@ -37,7 +36,6 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
-import org.apache.spark.util.Utils
 
 
 private[sql] class HiveSessionCatalog(
@@ -57,25 +55,6 @@ private[sql] class HiveSessionCatalog(
       hadoopConf,
       parser,
       functionResourceLoader) {
-
-  override def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
-    val clazz = Utils.classForName(functionClassName)
-    (children: Seq[Expression]) => {
-      try {
-        makeFunctionExpression(name, Utils.classForName(functionClassName), children).getOrElse {
-          throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
-        }
-      } catch {
-        case ae: AnalysisException =>
-          throw ae
-        case NonFatal(e) =>
-          val analysisException =
-            new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}': $e")
-          analysisException.setStackTrace(e.getStackTrace)
-          throw analysisException
-      }
-    }
-  }
 
   /**
    * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
