@@ -30,7 +30,7 @@ vignette: >
 ```{r setup, include=FALSE}
 library(knitr)
 opts_hooks$set(eval = function(options) {
-  # override eval only on windows
+  # override eval to FALSE only on windows
   if (.Platform$OS.type == "windows") {
     options$eval = FALSE
   }
