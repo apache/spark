@@ -3661,7 +3661,8 @@ setMethod("getNumPartitions",
 #' isStreaming
 #'
 #' Returns TRUE if this SparkDataFrame contains one or more sources that continuously return data
-#' as it arrives.
+#' as it arrives. A dataset that reads data from a streaming source must be executed as a
+#' \code{StreamingQuery} using \code{write.stream}.
 #'
 #' @param x A SparkDataFrame
 #' @return TRUE if this SparkDataFrame is from a streaming source
@@ -3965,5 +3966,48 @@ setMethod("broadcast",
           signature(x = "SparkDataFrame"),
           function(x) {
             sdf <- callJStatic("org.apache.spark.sql.functions", "broadcast", x@sdf)
+            dataFrame(sdf)
+          })
+
+#' withWatermark
+#'
+#' Defines an event time watermark for this streaming SparkDataFrame. A watermark tracks a point in
+#' time before which we assume no more late data is going to arrive.
+#'
+#' Spark will use this watermark for several purposes:
+#' \itemize{
+#'  \item{-} To know when a given time window aggregation can be finalized and thus can be emitted
+#' when using output modes that do not allow updates.
+#'  \item{-} To minimize the amount of state that we need to keep for on-going aggregations.
+#' }
+#' The current watermark is computed by looking at the \code{MAX(eventTime)} seen across
+#' all of the partitions in the query minus a user specified \code{delayThreshold}. Due to the cost
+#' of coordinating this value across partitions, the actual watermark used is only guaranteed
+#' to be at least \code{delayThreshold} behind the actual event time.  In some cases we may still
+#' process records that arrive more than \code{delayThreshold} late.
+#'
+#' @param eventTime a string specifying the name of the Column that contains the event time of the
+#'                  row.
+#' @param delayThreshold a string specifying the minimum delay to wait to data to arrive late,
+#'                       relative to the latest record that has been processed in the form of an
+#'                       interval (e.g. "1 minute" or "5 hours"). NOTE: This should not be negative.
+#' @return a SparkDataFrame.
+#' @aliases withWatermark,SparkDataFrame,character,character-method
+#' @family SparkDataFrame functions
+#' @rdname withWatermark
+#' @name withWatermark
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' schema <- structType(structField("time", "timestamp"), structField("value", "double"))
+#' df <- read.stream("json", path = jsonDir, schema = schema, maxFilesPerTrigger = 1)
+#' df <- withWatermark(df, "time", "10 minutes")
+#' }
+#' @note withWatermark since 2.3.0
+setMethod("withWatermark",
+          signature(x = "SparkDataFrame", eventTime = "character", delayThreshold = "character"),
+          function(x, eventTime, delayThreshold) {
+            sdf <- callJMethod(x@sdf, "withWatermark", eventTime, delayThreshold)
             dataFrame(sdf)
           })
