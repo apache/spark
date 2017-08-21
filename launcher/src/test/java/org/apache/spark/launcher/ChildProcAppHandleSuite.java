@@ -47,7 +47,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   private static final List<String> TEST_SCRIPT = Arrays.asList(
     "#!/bin/sh",
     "echo \"output\"",
-    "echo \"error\" 1>&2");
+    "echo \"error\" 1>&2",
+    "while [ -n \"$1\" ]; do EC=$1; shift; done",
+    "exit $EC");
 
   private static File TEST_SCRIPT_PATH;
 
@@ -177,6 +179,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test
   public void testProcMonitorWithOutputRedirection() throws Exception {
+    assumeFalse(isWindows());
     File err = Files.createTempFile("out", "txt").toFile();
     SparkAppHandle handle = new TestSparkLauncher()
       .redirectError()
@@ -188,11 +191,22 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test
   public void testProcMonitorWithLogRedirection() throws Exception {
+    assumeFalse(isWindows());
     SparkAppHandle handle = new TestSparkLauncher()
       .redirectToLog(getClass().getName())
       .startApplication();
     waitFor(handle);
     assertEquals(SparkAppHandle.State.LOST, handle.getState());
+  }
+
+  @Test
+  public void testFailedChildProc() throws Exception {
+    assumeFalse(isWindows());
+    SparkAppHandle handle = new TestSparkLauncher(1)
+      .redirectToLog(getClass().getName())
+      .startApplication();
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.FAILED, handle.getState());
   }
 
   private void waitFor(SparkAppHandle handle) throws Exception {
@@ -213,7 +227,12 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   private static class TestSparkLauncher extends SparkLauncher {
 
     TestSparkLauncher() {
+      this(0);
+    }
+
+    TestSparkLauncher(int ec) {
       setAppResource("outputredirtest");
+      addAppArgs(String.valueOf(ec));
     }
 
     @Override

@@ -179,9 +179,18 @@ class ChildProcAppHandle implements SparkAppHandle {
         ec = 1;
       }
 
-      // Only override the success state; leave other fail states alone.
-      if (!state.isFinal() || (ec != 0 && state == State.FINISHED)) {
-        state = State.LOST;
+      State newState = null;
+      if (ec != 0) {
+        // Override state with failure if the current state is not final, or is success.
+        if (!state.isFinal() || state == State.FINISHED) {
+          newState = State.FAILED;
+        }
+      } else if (!state.isFinal()) {
+        newState = State.LOST;
+      }
+
+      if (newState != null) {
+        state = newState;
         fireEvent(false);
       }
     }
