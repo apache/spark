@@ -1099,26 +1099,10 @@ class SessionCatalog(
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
   protected def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
-    makeFunctionBuilder(name, Utils.classForName(functionClassName))
-  }
-
-  /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
-   */
-  private def makeFunctionBuilder(name: String, clazz: Class[_]): FunctionBuilder = {
-    // When we instantiate ScalaUDAF class, we may throw exception if the input
-    // expressions don't satisfy the UDAF, such as type mismatch, input number
-    // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+    val clazz = Utils.classForName(functionClassName)
     (children: Seq[Expression]) => {
       try {
-        val clsForUDAF =
-          Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
-        if (clsForUDAF.isAssignableFrom(clazz)) {
-          val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-          cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-            .newInstance(children, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
-            .asInstanceOf[Expression]
-        } else {
+        makeFunctionExpression(name, Utils.classForName(functionClassName), children).getOrElse {
           throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
         }
       } catch {
@@ -1134,6 +1118,25 @@ class SessionCatalog(
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
       }
+    }
+  }
+
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   */
+  protected def makeFunctionExpression(
+      name: String,
+      clazz: Class[_],
+      children: Seq[Expression]): Option[Expression] = {
+    val clsForUDAF =
+      Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
+    if (clsForUDAF.isAssignableFrom(clazz)) {
+      val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
+      Some(cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
+        .newInstance(children, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+        .asInstanceOf[Expression])
+    } else {
+      None
     }
   }
 

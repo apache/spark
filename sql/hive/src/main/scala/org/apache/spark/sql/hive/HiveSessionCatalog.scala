@@ -34,8 +34,6 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
-import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.expressions.UserDefinedAggregateFunction
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DecimalType, DoubleType}
@@ -60,46 +58,11 @@ private[sql] class HiveSessionCatalog(
       parser,
       functionResourceLoader) {
 
-  override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
-    makeFunctionBuilder(funcName, Utils.classForName(className))
-  }
-
-  /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
-   */
-  private def makeFunctionBuilder(name: String, clazz: Class[_]): FunctionBuilder = {
-    // When we instantiate hive UDF wrapper class, we may throw exception if the input
-    // expressions don't satisfy the hive UDF, such as type mismatch, input number
-    // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+  override def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+    val clazz = Utils.classForName(functionClassName)
     (children: Seq[Expression]) => {
       try {
-        if (classOf[UDF].isAssignableFrom(clazz)) {
-          val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udf.dataType // Force it to check input data types.
-          udf
-        } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
-          val udf = HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udf.dataType // Force it to check input data types.
-          udf
-        } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
-          val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), children)
-          udaf.dataType // Force it to check input data types.
-          udaf
-        } else if (classOf[UDAF].isAssignableFrom(clazz)) {
-          val udaf = HiveUDAFFunction(
-            name,
-            new HiveFunctionWrapper(clazz.getName),
-            children,
-            isUDAFBridgeRequired = true)
-          udaf.dataType  // Force it to check input data types.
-          udaf
-        } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-          val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udtf.elementSchema // Force it to check input data types.
-          udtf
-        } else if (classOf[UserDefinedAggregateFunction].isAssignableFrom(clazz)) {
-          ScalaUDAF(children, clazz.newInstance().asInstanceOf[UserDefinedAggregateFunction])
-        } else {
+        makeFunctionExpression(name, Utils.classForName(functionClassName), children).getOrElse {
           throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
         }
       } catch {
@@ -110,6 +73,48 @@ private[sql] class HiveSessionCatalog(
             new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}': $e")
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
+      }
+    }
+  }
+
+  /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   */
+  override def makeFunctionExpression(
+      name: String,
+      clazz: Class[_],
+      children: Seq[Expression]): Option[Expression] = {
+
+    super.makeFunctionExpression(name, clazz, children).orElse {
+      // When we instantiate hive UDF wrapper class, we may throw exception if the input
+      // expressions don't satisfy the hive UDF, such as type mismatch, input number
+      // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
+      if (classOf[UDF].isAssignableFrom(clazz)) {
+        val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), children)
+        udf.dataType // Force it to check input data types.
+        Some(udf)
+      } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
+        val udf = HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), children)
+        udf.dataType // Force it to check input data types.
+        Some(udf)
+      } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
+        val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), children)
+        udaf.dataType // Force it to check input data types.
+        Some(udaf)
+      } else if (classOf[UDAF].isAssignableFrom(clazz)) {
+        val udaf = HiveUDAFFunction(
+          name,
+          new HiveFunctionWrapper(clazz.getName),
+          children,
+          isUDAFBridgeRequired = true)
+        udaf.dataType // Force it to check input data types.
+        Some(udaf)
+      } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
+        val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
+        udtf.elementSchema // Force it to check input data types.
+        Some(udtf)
+      } else {
+        None
       }
     }
   }
