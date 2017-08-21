@@ -156,17 +156,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
         // here to make sure we don't mess the query plan.
 
         // Try to find out if any extra subquery output doesn't in the subquery condition.
-        val extraOutputAllInCondition = sub.output.drop(valExprs.length).find { attr =>
-          l.children.forall { c =>
-            !c.references.contains(attr)
-          }
-        }.isEmpty
-
-        if (sub.output.length >= valExprs.length && extraOutputAllInCondition) {
-          true
-        } else {
-          false
+        val isAllExtraOutputInCondition = sub.output.drop(valExprs.length).forall { attr =>
+          children.exists(_.references.contains(attr))
         }
+        sub.output.length >= valExprs.length && isAllExtraOutputInCondition
       case _ => true
     }
     // Scala doesn't allow us refer super.resolved.
