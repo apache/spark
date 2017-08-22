@@ -33,6 +33,7 @@ public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
   private final int valueCount;
+  private ArrowColumnVector[] childColumns;
 
   private void ensureAccessible(int index) {
     if (index < 0 || index >= valueCount) {
@@ -274,6 +275,18 @@ public final class ArrowColumnVector extends ColumnVector {
     return accessor.getBinary(rowId);
   }
 
+  /**
+   * Returns the data for the underlying array.
+   */
+  @Override
+  public ArrowColumnVector arrayData() { return childColumns[0]; }
+
+  /**
+   * Returns the ordinal's child data column.
+   */
+  @Override
+  public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
+
   public ArrowColumnVector(ValueVector vector) {
     super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()));
 
@@ -301,7 +314,7 @@ public final class ArrowColumnVector extends ColumnVector {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
 
-      childColumns = new ColumnVector[1];
+      childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
       resultArray = new ColumnVector.Array(childColumns[0]);
     } else if (vector instanceof MapVector) {

@@ -526,15 +526,13 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Returns the data for the underlying array.
    */
   @Override
-  public WritableColumnVector arrayData() { return (WritableColumnVector) childColumns[0]; }
+  public WritableColumnVector arrayData() { return childColumns[0]; }
 
   /**
    * Returns the ordinal's child data column.
    */
   @Override
-  public WritableColumnVector getChildColumn(int ordinal) {
-    return (WritableColumnVector) childColumns[ordinal];
-  }
+  public WritableColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
 
   /**
    * Returns the elements appended.
@@ -561,6 +559,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Current write cursor (row index) when appending data.
    */
   protected int elementsAppended;
+
+  /**
+   * If this is a nested type (array or struct), the column for the child data.
+   */
+  protected WritableColumnVector[] childColumns;
 
   /**
    * True if this column's values are fixed. This means the column values never change, even
@@ -617,13 +620,13 @@ public abstract class WritableColumnVector extends ColumnVector {
         childType = DataTypes.ByteType;
         childCapacity *= DEFAULT_ARRAY_LENGTH;
       }
-      this.childColumns = new ColumnVector[1];
+      this.childColumns = new WritableColumnVector[1];
       this.childColumns[0] = reserveNewColumn(childCapacity, childType);
       this.resultArray = new ColumnVector.Array(this.childColumns[0]);
       this.resultStruct = null;
     } else if (type instanceof StructType) {
       StructType st = (StructType)type;
-      this.childColumns = new ColumnVector[st.fields().length];
+      this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
         this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
       }
@@ -631,7 +634,7 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.resultStruct = new ColumnarBatch.Row(this.childColumns);
     } else if (type instanceof CalendarIntervalType) {
       // Two columns. Months as int. Microseconds as Long.
-      this.childColumns = new ColumnVector[2];
+      this.childColumns = new WritableColumnVector[2];
       this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
       this.childColumns[1] = reserveNewColumn(capacity, DataTypes.LongType);
       this.resultArray = null;

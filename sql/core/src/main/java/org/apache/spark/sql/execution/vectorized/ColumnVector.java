@@ -424,12 +424,12 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the data for the underlying array.
    */
-  public ColumnVector arrayData() { return childColumns[0]; }
+  public abstract ColumnVector arrayData();
 
   /**
    * Returns the ordinal's child data column.
    */
-  public ColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
+  public abstract ColumnVector getChildColumn(int ordinal);
 
   /**
    * Returns true if this column is an array.
@@ -456,11 +456,6 @@ public abstract class ColumnVector implements AutoCloseable {
    * having to clear NULL bits.
    */
   protected boolean anyNullsSet;
-
-  /**
-   * If this is a nested type (array or struct), the column for the child data.
-   */
-  protected ColumnVector[] childColumns;
 
   /**
    * Reusable Array holder for getArray().
