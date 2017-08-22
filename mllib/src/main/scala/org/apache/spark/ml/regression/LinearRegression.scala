@@ -83,7 +83,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
     ParamValidators.inArray[String](supportedLosses))
 
   /**
-   * The shape parameter to control the amount of robustness. Must be > 1.0.
+   * The shape parameter to control the amount of robustness. Must be &gt; 1.0.
    * At larger values of M, the huber criterion becomes more similar to least squares regression;
    * for small values of M, the criterion is more similar to L1 regression.
    * Default is 1.35 to get as much robustness as possible while retaining

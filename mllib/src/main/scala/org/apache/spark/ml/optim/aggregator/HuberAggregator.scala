@@ -26,7 +26,7 @@ import org.apache.spark.ml.linalg.Vector
  *
  * The huber loss function based on:
  * Art B. Owen (2006), A robust hybrid of lasso and ridge regression.
- * ([[http://statweb.stanford.edu/~owen/reports/hhu.pdf]])
+ * (http://statweb.stanford.edu/~owen/reports/hhu.pdf)
  *
  * Two HuberAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
@@ -48,7 +48,7 @@ import org.apache.spark.ml.linalg.Vector
  *   $$
  *   \begin{align}
  *   H_m(z) = \begin{cases}
- *            z^2, & \text {if } |z| < \epsilon, \\
+ *            z^2, & \text {if } |z| <= \epsilon, \\
  *            2\epsilon|z| - \epsilon^2, & \text{otherwise}
  *            \end{cases}
  *   \end{align}
