@@ -60,11 +60,9 @@ class WorkerDecommissionSuite extends SparkFunSuite with LocalSparkContext {
     // The master passing message is tested with
     val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
     val execs = sched.getExecutorIds()
-    println("execs are " + execs)
     execs.foreach(execId => sched.decommissionExecutor(execId))
     assert(asyncCount.get() === 10)
     // Try and launch task after decommissioning, this should fail
-    println("post decom execs are " + sched.getExecutorIds())
     val postDecommissioned = input.map(x => x)
     val postDecomAsyncCount = postDecommissioned.countAsync()
     val thrown = intercept[java.util.concurrent.TimeoutException]{
