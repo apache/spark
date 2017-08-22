@@ -433,11 +433,12 @@ case class JsonTuple(children: Seq[Expression])
     val row = Array.ofDim[Any](fieldNames.length)
 
     // start reading through the token stream, looking for any requested field names
+    val fieldNamesWithIndex = fieldNames.zipWithIndex
     while (parser.nextToken() != JsonToken.END_OBJECT) {
       if (parser.getCurrentToken == JsonToken.FIELD_NAME) {
         // check to see if this field is desired in the output
-        val idx = fieldNames.indexOf(parser.getCurrentName)
-        if (idx >= 0) {
+        val indices = fieldNamesWithIndex.filter(_._1 == parser.getCurrentName).map(_._2)
+        if (indices.nonEmpty) {
           // it is, copy the child tree to the correct location in the output row
           val output = new ByteArrayOutputStream()
 
@@ -447,7 +448,7 @@ case class JsonTuple(children: Seq[Expression])
               generator => copyCurrentStructure(generator, parser)
             }
 
-            row(idx) = UTF8String.fromBytes(output.toByteArray)
+            indices.foreach(idx => row(idx) = UTF8String.fromBytes(output.toByteArray))
           }
         }
       }
