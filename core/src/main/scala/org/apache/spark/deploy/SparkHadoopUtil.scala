@@ -17,13 +17,15 @@
 
 package org.apache.spark.deploy
 
-import java.io.IOException
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.Map
 import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import com.google.common.primitives.Longs
@@ -74,7 +76,6 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-
   /**
    * Appends S3-specific, spark.hadoop.*, and spark.buffer.size configurations to a Hadoop
    * configuration.
@@ -99,14 +100,32 @@ class SparkHadoopUtil extends Logging {
           hadoopConf.set("fs.s3a.session.token", sessionToken)
         }
       }
-      // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-      conf.getAll.foreach { case (key, value) =>
-        if (key.startsWith("spark.hadoop.")) {
-          hadoopConf.set(key.substring("spark.hadoop.".length), value)
-        }
-      }
+      appendSparkHadoopConfigs(conf, hadoopConf)
       val bufferSize = conf.get("spark.buffer.size", "65536")
       hadoopConf.set("io.file.buffer.size", bufferSize)
+    }
+  }
+
+  /**
+   * Appends spark.hadoop.* configurations from a [[SparkConf]] to a Hadoop
+   * configuration without the spark.hadoop. prefix.
+   */
+  def appendSparkHadoopConfigs(conf: SparkConf, hadoopConf: Configuration): Unit = {
+    // Copy any "spark.hadoop.foo=bar" spark properties into conf as "foo=bar"
+    for ((key, value) <- conf.getAll if key.startsWith("spark.hadoop.")) {
+      hadoopConf.set(key.substring("spark.hadoop.".length), value)
+    }
+  }
+
+  /**
+   * Appends spark.hadoop.* configurations from a Map to another without the spark.hadoop. prefix.
+   */
+  def appendSparkHadoopConfigs(
+      srcMap: Map[String, String],
+      destMap: HashMap[String, String]): Unit = {
+    // Copy any "spark.hadoop.foo=bar" system properties into destMap as "foo=bar"
+    for ((key, value) <- srcMap if key.startsWith("spark.hadoop.")) {
+      destMap.put(key.substring("spark.hadoop.".length), value)
     }
   }
 
@@ -128,16 +147,26 @@ class SparkHadoopUtil extends Logging {
 
   def isYarnMode(): Boolean = { false }
 
-  def getCurrentUserCredentials(): Credentials = { null }
-
-  def addCurrentUserCredentials(creds: Credentials) {}
-
   def addSecretKeyToUserCredentials(key: String, secret: String) {}
 
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
 
-  def loginUserFromKeytab(principalName: String, keytabFilename: String) {
-    UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  def getCurrentUserCredentials(): Credentials = {
+    UserGroupInformation.getCurrentUser().getCredentials()
+  }
+
+  def addCurrentUserCredentials(creds: Credentials): Unit = {
+    UserGroupInformation.getCurrentUser.addCredentials(creds)
+  }
+
+  def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
+    if (!new File(keytabFilename).exists()) {
+      throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
+    } else {
+      logInfo("Attempting to login to Kerberos" +
+        s" using principal: ${principalName} and keytab: ${keytabFilename}")
+      UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+    }
   }
 
   /**
@@ -227,6 +256,10 @@ class SparkHadoopUtil extends Logging {
 
   def globPath(pattern: Path): Seq[Path] = {
     val fs = pattern.getFileSystem(conf)
+    globPath(fs, pattern)
+  }
+
+  def globPath(fs: FileSystem, pattern: Path): Seq[Path] = {
     Option(fs.globStatus(pattern)).map { statuses =>
       statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory)).toSeq
     }.getOrElse(Seq.empty[Path])
@@ -234,6 +267,10 @@ class SparkHadoopUtil extends Logging {
 
   def globPathIfNecessary(pattern: Path): Seq[Path] = {
     if (isGlobPath(pattern)) globPath(pattern) else Seq(pattern)
+  }
+
+  def globPathIfNecessary(fs: FileSystem, pattern: Path): Seq[Path] = {
+    if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
   /**
@@ -337,7 +374,7 @@ class SparkHadoopUtil extends Logging {
     if (credentials != null) {
       credentials.getAllTokens.asScala.map(tokenToString)
     } else {
-      Seq()
+      Seq.empty
     }
   }
 
@@ -391,6 +428,21 @@ class SparkHadoopUtil extends Logging {
       s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
       s"${if (status.isDirectory) "d" else "-"}$perm")
     false
+  }
+
+  def serialize(creds: Credentials): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream
+    val dataStream = new DataOutputStream(byteStream)
+    creds.writeTokenStorageToStream(dataStream)
+    byteStream.toByteArray
+  }
+
+  def deserialize(tokenBytes: Array[Byte]): Credentials = {
+    val tokensBuf = new ByteArrayInputStream(tokenBytes)
+
+    val creds = new Credentials()
+    creds.readTokenStorageStream(new DataInputStream(tokensBuf))
+    creds
   }
 }
 

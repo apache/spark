@@ -33,7 +33,7 @@ class ConstantFoldingSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
       Batch("ConstantFolding", Once,
-        OptimizeIn(conf),
+        OptimizeIn,
         ConstantFolding,
         BooleanSimplification) :: Nil
   }

@@ -273,6 +273,39 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
   }
 
+  for {
+    elementType <- Seq(IntegerType, StringType)
+    containsNull <- Seq(true, false)
+    nullable <- Seq(true, false)
+  } {
+    test("RowEncoder should preserve array nullability: " +
+      s"ArrayType($elementType, containsNull = $containsNull), nullable = $nullable") {
+      val schema = new StructType().add("array", ArrayType(elementType, containsNull), nullable)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.serializer.length == 1)
+      assert(encoder.serializer.head.dataType == ArrayType(elementType, containsNull))
+      assert(encoder.serializer.head.nullable == nullable)
+    }
+  }
+
+  for {
+    keyType <- Seq(IntegerType, StringType)
+    valueType <- Seq(IntegerType, StringType)
+    valueContainsNull <- Seq(true, false)
+    nullable <- Seq(true, false)
+  } {
+    test("RowEncoder should preserve map nullability: " +
+      s"MapType($keyType, $valueType, valueContainsNull = $valueContainsNull), " +
+      s"nullable = $nullable") {
+      val schema = new StructType().add(
+        "map", MapType(keyType, valueType, valueContainsNull), nullable)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.serializer.length == 1)
+      assert(encoder.serializer.head.dataType == MapType(keyType, valueType, valueContainsNull))
+      assert(encoder.serializer.head.nullable == nullable)
+    }
+  }
+
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       val encoder = RowEncoder(schema).resolveAndBind()

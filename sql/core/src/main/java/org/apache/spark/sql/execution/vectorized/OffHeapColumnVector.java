@@ -134,6 +134,16 @@ public final class OffHeapColumnVector extends ColumnVector {
   @Override
   public boolean getBoolean(int rowId) { return Platform.getByte(null, data + rowId) == 1; }
 
+  @Override
+  public boolean[] getBooleans(int rowId, int count) {
+    assert(dictionary == null);
+    boolean[] array = new boolean[count];
+    for (int i = 0; i < count; ++i) {
+      array[i] = (Platform.getByte(null, data + rowId + i) == 1);
+    }
+    return array;
+  }
+
   //
   // APIs dealing with Bytes
   //
@@ -163,6 +173,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return (byte) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public byte[] getBytes(int rowId, int count) {
+    assert(dictionary == null);
+    byte[] array = new byte[count];
+    Platform.copyMemory(null, data + rowId, array, Platform.BYTE_ARRAY_OFFSET, count);
+    return array;
   }
 
   //
@@ -195,6 +213,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public short[] getShorts(int rowId, int count) {
+    assert(dictionary == null);
+    short[] array = new short[count];
+    Platform.copyMemory(null, data + rowId * 2, array, Platform.SHORT_ARRAY_OFFSET, count * 2);
+    return array;
   }
 
   //
@@ -242,6 +268,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public int[] getInts(int rowId, int count) {
+    assert(dictionary == null);
+    int[] array = new int[count];
+    Platform.copyMemory(null, data + rowId * 4, array, Platform.INT_ARRAY_OFFSET, count * 4);
+    return array;
   }
 
   /**
@@ -302,6 +336,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public long[] getLongs(int rowId, int count) {
+    assert(dictionary == null);
+    long[] array = new long[count];
+    Platform.copyMemory(null, data + rowId * 8, array, Platform.LONG_ARRAY_OFFSET, count * 8);
+    return array;
+  }
+
   //
   // APIs dealing with floats
   //
@@ -346,6 +388,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public float[] getFloats(int rowId, int count) {
+    assert(dictionary == null);
+    float[] array = new float[count];
+    Platform.copyMemory(null, data + rowId * 4, array, Platform.FLOAT_ARRAY_OFFSET, count * 4);
+    return array;
   }
 
 
@@ -393,6 +443,14 @@ public final class OffHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public double[] getDoubles(int rowId, int count) {
+    assert(dictionary == null);
+    double[] array = new double[count];
+    Platform.copyMemory(null, data + rowId * 8, array, Platform.DOUBLE_ARRAY_OFFSET, count * 8);
+    return array;
   }
 
   //

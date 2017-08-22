@@ -195,21 +195,25 @@ private[window] final class SlidingWindowFunctionFrame(
   override def write(index: Int, current: InternalRow): Unit = {
     var bufferUpdated = index == 0
 
-    // Add all rows to the buffer for which the input row value is equal to or less than
-    // the output row upper bound.
-    while (nextRow != null && ubound.compare(nextRow, inputHighIndex, current, index) <= 0) {
-      buffer.add(nextRow.copy())
-      nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
-      inputHighIndex += 1
-      bufferUpdated = true
-    }
-
     // Drop all rows from the buffer for which the input row value is smaller than
     // the output row lower bound.
     while (!buffer.isEmpty && lbound.compare(buffer.peek(), inputLowIndex, current, index) < 0) {
       buffer.remove()
       inputLowIndex += 1
       bufferUpdated = true
+    }
+
+    // Add all rows to the buffer for which the input row value is equal to or less than
+    // the output row upper bound.
+    while (nextRow != null && ubound.compare(nextRow, inputHighIndex, current, index) <= 0) {
+      if (lbound.compare(nextRow, inputLowIndex, current, index) < 0) {
+        inputLowIndex += 1
+      } else {
+        buffer.add(nextRow.copy())
+        bufferUpdated = true
+      }
+      nextRow = WindowFunctionFrame.getNextOrNull(inputIterator)
+      inputHighIndex += 1
     }
 
     // Only recalculate and update when the buffer changes.

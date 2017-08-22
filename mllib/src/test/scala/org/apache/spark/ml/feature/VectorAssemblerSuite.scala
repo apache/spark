@@ -79,7 +79,10 @@ class VectorAssemblerSuite
     val thrown = intercept[IllegalArgumentException] {
       assembler.transform(df)
     }
-    assert(thrown.getMessage contains "Data type StringType is not supported")
+    assert(thrown.getMessage contains
+      "Data type StringType of column a is not supported.\n" +
+      "Data type StringType of column b is not supported.\n" +
+      "Data type StringType of column c is not supported.")
   }
 
   test("ML attributes") {

@@ -24,11 +24,11 @@ import scala.util.parsing.combinator.RegexParsers
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -112,7 +112,7 @@ private[this] object SharedFactory {
  */
 @ExpressionDescription(
   usage = "_FUNC_(json_txt, path) - Extracts a json object from `path`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":"b"}', '$.a');
        b
@@ -335,7 +335,7 @@ case class GetJsonObject(json: Expression, path: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - Returns a tuple like the function get_json_object, but it takes multiple names. All the input parameters and output column types are string.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":2}', 'a', 'b');
        1  2
@@ -362,9 +362,9 @@ case class JsonTuple(children: Seq[Expression])
   @transient private lazy val fieldExpressions: Seq[Expression] = children.tail
 
   // eagerly evaluate any foldable the field names
-  @transient private lazy val foldableFieldNames: IndexedSeq[String] = {
+  @transient private lazy val foldableFieldNames: IndexedSeq[Option[String]] = {
     fieldExpressions.map {
-      case expr if expr.foldable => expr.eval().asInstanceOf[UTF8String].toString
+      case expr if expr.foldable => Option(expr.eval()).map(_.asInstanceOf[UTF8String].toString)
       case _ => null
     }.toIndexedSeq
   }
@@ -417,7 +417,7 @@ case class JsonTuple(children: Seq[Expression])
     val fieldNames = if (constantFields == fieldExpressions.length) {
       // typically the user will provide the field names as foldable expressions
       // so we can use the cached copy
-      foldableFieldNames
+      foldableFieldNames.map(_.orNull)
     } else if (constantFields == 0) {
       // none are foldable so all field names need to be evaluated from the input row
       fieldExpressions.map(_.eval(input).asInstanceOf[UTF8String].toString)
@@ -426,7 +426,7 @@ case class JsonTuple(children: Seq[Expression])
       // prefer the cached copy when available
       foldableFieldNames.zip(fieldExpressions).map {
         case (null, expr) => expr.eval(input).asInstanceOf[UTF8String].toString
-        case (fieldName, _) => fieldName
+        case (fieldName, _) => fieldName.orNull
       }
     }
 
@@ -492,13 +492,14 @@ case class JsonTuple(children: Seq[Expression])
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(jsonStr, schema[, options]) - Returns a struct value with the given `jsonStr` and `schema`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('{"a":1, "b":0.8}', 'a INT, b DOUBLE');
        {"a":1, "b":0.8}
       > SELECT _FUNC_('{"time":"26/08/2015"}', 'time Timestamp', map('timestampFormat', 'dd/MM/yyyy'));
        {"time":"2015-08-26 00:00:00.0"}
-  """)
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class JsonToStructs(
     schema: DataType,
@@ -600,7 +601,7 @@ case class JsonToStructs(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr[, options]) - Returns a json string with a given struct value",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(named_struct('a', 1, 'b', 2));
        {"a":1,"b":2}
@@ -608,7 +609,8 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
-  """)
+  """,
+  since = "2.2.0")
 // scalastyle:on line.size.limit
 case class StructsToJson(
     options: Map[String, String],

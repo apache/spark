@@ -207,11 +207,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       uriScheme match {
         case "file" =>
           try {
-            val jar = new JarFile(uri.getPath)
-            // Note that this might still return null if no main-class is set; we catch that later
-            mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+            Utils.tryWithResource(new JarFile(uri.getPath)) { jar =>
+              // Note that this might still return null if no main-class is set; we catch that later
+              mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+            }
           } catch {
-            case e: Exception =>
+            case _: Exception =>
               SparkSubmit.printErrorAndExit(s"Cannot load main class from JAR $primaryResource")
           }
         case _ =>
@@ -504,7 +505,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       outStream.println("Unknown/unsupported param " + unknownParam)
     }
     val command = sys.env.get("_SPARK_CMD_USAGE").getOrElse(
-      """Usage: spark-submit [options] <app jar | python file> [app arguments]
+      """Usage: spark-submit [options] <app jar | python file | R file> [app arguments]
         |Usage: spark-submit --kill [submission ID] --master [spark://...]
         |Usage: spark-submit --status [submission ID] --master [spark://...]
         |Usage: spark-submit run-example [options] example-class [example args]""".stripMargin)
@@ -514,13 +515,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     outStream.println(
       s"""
         |Options:
-        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.
+        |  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local
+        |                              (Default: local[*]).
         |  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally ("client") or
         |                              on one of the worker machines inside the cluster ("cluster")
         |                              (Default: client).
         |  --class CLASS_NAME          Your application's main class (for Java / Scala apps).
         |  --name NAME                 A name of your application.
-        |  --jars JARS                 Comma-separated list of local jars to include on the driver
+        |  --jars JARS                 Comma-separated list of jars to include on the driver
         |                              and executor classpaths.
         |  --packages                  Comma-separated list of maven coordinates of jars to include
         |                              on the driver and executor classpaths. Will search the local
@@ -558,8 +560,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --verbose, -v               Print additional debug output.
         |  --version,                  Print the version of current Spark.
         |
-        | Spark standalone with cluster deploy mode only:
-        |  --driver-cores NUM          Cores for driver (Default: 1).
+        | Cluster deploy mode only:
+        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
+        |                              (Default: 1).
         |
         | Spark standalone or Mesos with cluster deploy mode only:
         |  --supervise                 If given, restarts the driver on failure.
@@ -574,8 +577,6 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              or all available cores on the worker in standalone mode)
         |
         | YARN-only:
-        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
-        |                              (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |                              If dynamic allocation is enabled, the initial number of

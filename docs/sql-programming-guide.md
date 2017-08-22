@@ -392,41 +392,31 @@ While those functions are designed for DataFrames, Spark SQL also has type-safe 
 Moreover, users are not limited to the predefined aggregate functions and can create their own.
 
 ### Untyped User-Defined Aggregate Functions
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
 Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction)
 abstract class to implement a custom untyped aggregate function. For example, a user-defined average
 can look like:
 
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
 {% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
 </div>
-
 <div data-lang="java"  markdown="1">
-
 {% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
 </div>
-
 </div>
 
 ### Type-Safe User-Defined Aggregate Functions
 
 User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/index.html#org.apache.spark.sql.expressions.Aggregator) abstract class.
 For example, a type-safe user-defined average can look like:
+
 <div class="codetabs">
-
 <div data-lang="scala"  markdown="1">
-
 {% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
 </div>
-
 <div data-lang="java"  markdown="1">
-
 {% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
 </div>
-
 </div>
 
 # Data Sources
@@ -524,7 +514,7 @@ new data.
 <tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr>
 <tr>
   <td><code>SaveMode.ErrorIfExists</code> (default)</td>
-  <td><code>"error"</code> (default)</td>
+  <td><code>"error" or "errorifexists"</code> (default)</td>
   <td>
     When saving a DataFrame to a data source, if data already exists,
     an exception is expected to be thrown.
@@ -998,7 +988,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` option to `true`.
+For a regular multi-line JSON file, set the `multiLine` option to `true`.
 
 {% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -1012,7 +1002,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` option to `true`.
+For a regular multi-line JSON file, set the `multiLine` option to `true`.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
@@ -1025,7 +1015,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` parameter to `True`.
+For a regular multi-line JSON file, set the `multiLine` parameter to `True`.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -1039,7 +1029,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set a named parameter `wholeFile` to `TRUE`.
+For a regular multi-line JSON file, set a named parameter `multiLine` to `TRUE`.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
@@ -1317,6 +1307,13 @@ the following case-insensitive options:
        The transaction isolation level, which applies to current connection. It can be one of <code>NONE</code>, <code>READ_COMMITTED</code>, <code>READ_UNCOMMITTED</code>, <code>REPEATABLE_READ</code>, or <code>SERIALIZABLE</code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED</code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
      </td>
    </tr>
+
+  <tr>
+     <td><code>sessionInitStatement</code></td>
+     <td>
+       After each database session is opened to the remote DB and before starting to read data, this option executes a custom SQL statement (or a PL/SQL block). Use this to implement session initialization code. Example: <code>option("sessionInitStatement", """BEGIN execute immediate 'alter session set "_serial_direct_read"=true'; END;""")</code>
+     </td>
+  </tr>
 
   <tr>
     <td><code>truncate</code></td>
@@ -1912,6 +1909,23 @@ releases of Spark SQL.
 * Merge multiple small files for query results: if the result output contains multiple small files,
   Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
   metadata. Spark SQL does not support that.
+
+**Hive UDF/UDTF/UDAF**
+
+Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are the unsupported APIs:
+
+* `getRequiredJars` and `getRequiredFiles` (`UDF` and `GenericUDF`) are functions to automatically
+  include additional resources required by this UDF.
+* `initialize(StructObjectInspector)` in `GenericUDTF` is not supported yet. Spark SQL currently uses
+  a deprecated interface `initialize(ObjectInspector[])` only.
+* `configure` (`GenericUDF`, `GenericUDTF`, and `GenericUDAFEvaluator`) is a function to initialize
+  functions with `MapredContext`, which is inapplicable to Spark.
+* `close` (`GenericUDF` and `GenericUDAFEvaluator`) is a function to release associated resources.
+  Spark SQL does not call this function when tasks finish.
+* `reset` (`GenericUDAFEvaluator`) is a function to re-initialize aggregation for reusing the same aggregation.
+  Spark SQL currently does not support the reuse of aggregation.
+* `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
+  an aggregate over a fixed window.
 
 # Reference
 

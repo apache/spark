@@ -91,14 +91,6 @@ like ZooKeeper and Hadoop itself.
 
     ./build/mvn -Pmesos -DskipTests clean package
 
-## Building for Scala 2.10
-To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
-
-    ./dev/change-scala-version.sh 2.10
-    ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
-
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
-
 ## Building submodules individually
 
 It's possible to build Spark sub-modules using the `mvn -pl` option.
@@ -218,9 +210,11 @@ The run-tests script also can be limited to a specific Python version or a speci
 
 ## Running R Tests
 
-To run the SparkR tests you will need to install the R package `testthat`
-(run `install.packages(testthat)` from R shell).  You can run just the SparkR tests using
-the command:
+To run the SparkR tests you will need to install the [knitr](https://cran.r-project.org/package=knitr), [rmarkdown](https://cran.r-project.org/package=rmarkdown), [testthat](https://cran.r-project.org/package=testthat), [e1071](https://cran.r-project.org/package=e1071) and [survival](https://cran.r-project.org/package=survival) packages first:
+
+    R -e "install.packages(c('knitr', 'rmarkdown', 'testthat', 'e1071', 'survival'), repos='http://cran.us.r-project.org')"
+
+You can run just the SparkR tests using the command:
 
     ./R/run-tests.sh
 

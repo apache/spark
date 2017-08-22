@@ -10,7 +10,7 @@ Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache
 The advantages of deploying Spark with Mesos include:
 
 - dynamic partitioning between Spark and other
-  [frameworks](https://mesos.apache.org/documentation/latest/mesos-frameworks/)
+  [frameworks](https://mesos.apache.org/documentation/latest/frameworks/)
 - scalable partitioning between multiple instances of Spark
 
 # How it Works
@@ -61,7 +61,7 @@ third party projects publish binary releases that may be helpful in setting Meso
 
 One of those is Mesosphere.  To install Mesos using the binary releases provided by Mesosphere:
 
-1. Download Mesos installation package from [downloads page](http://mesosphere.io/downloads/)
+1. Download Mesos installation package from [downloads page](https://open.mesosphere.com/downloads/mesos/)
 2. Follow their instructions for installation and configuration
 
 The Mesosphere installation documents suggest setting up ZooKeeper to handle Mesos master failover,
@@ -153,10 +153,12 @@ can find the results of the driver from the Mesos Web UI.
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
+By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispacther, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
+
 If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
-For more information about these configurations please refer to the configurations (doc)[configurations.html#deploy].
+For more information about these configurations please refer to the configurations [doc](configurations.html#deploy).
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
 to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
@@ -382,8 +384,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>(none)</td>
   <td>
     Set the Mesos labels to add to each task. Labels are free-form key-value pairs.
-    Key-value pairs should be separated by a colon, and commas used to list more than one.
-    Ex. key:value,key2:value2.
+    Key-value pairs should be separated by a colon, and commas used to
+    list more than one.  If your label includes a colon or comma, you
+    can escape it with a backslash.  Ex. key:value,key2:a\:b.
   </td>
 </tr>
 <tr>
@@ -469,6 +472,15 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.driver.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Mesos labels to add to the driver.  See <code>spark.mesos.task.labels</code>
+    for formatting information.
+  </td>
+</tr>
+
+<tr>
   <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
   <td><code>(none)</code></td>
   <td>
@@ -533,6 +545,17 @@ See the [configuration page](configuration.html) for information on Spark config
     `spark.mesos.uris`) will be cached by the <a
     href="http://mesos.apache.org/documentation/latest/fetcher/">Mesos
     Fetcher Cache</a>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.failoverTimeout</code></td>
+  <td><code>0.0</code></td>
+  <td>
+    The amount of time (in seconds) that the master will wait for the 
+    driver to reconnect, after being temporarily disconnected, before 
+    it tears down the driver framework by killing all its 
+    executors. The default value is zero, meaning no timeout: if the 
+    driver disconnects, the master immediately tears down the framework.
   </td>
 </tr>
 </table>

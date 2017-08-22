@@ -112,7 +112,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   def convertToLogicalRelation(
-      relation: CatalogRelation,
+      relation: HiveTableRelation,
       options: Map[String, String],
       fileFormatClass: Class[_ <: FileFormat],
       fileType: String): LogicalRelation = {
@@ -154,7 +154,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           Some(partitionSchema))
 
         val logicalRelation = cached.getOrElse {
-          val sizeInBytes = relation.stats(sparkSession.sessionState.conf).sizeInBytes.toLong
+          val sizeInBytes = relation.stats.sizeInBytes.toLong
           val fileIndex = {
             val index = new CatalogFileIndex(sparkSession, relation.tableMeta, sizeInBytes)
             if (lazyPruningEnabled) {
@@ -210,7 +210,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logicalRelation
       })
     }
-    // The inferred schema may have different filed names as the table schema, we should respect
+    // The inferred schema may have different field names as the table schema, we should respect
     // it, but also respect the exprId in table relation output.
     assert(result.output.length == relation.output.length &&
       result.output.zip(relation.output).forall { case (a1, a2) => a1.dataType == a2.dataType })
@@ -221,7 +221,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
   }
 
   private def inferIfNeeded(
-      relation: CatalogRelation,
+      relation: HiveTableRelation,
       options: Map[String, String],
       fileFormat: FileFormat,
       fileIndexOpt: Option[FileIndex] = None): (StructType, CatalogTable) = {

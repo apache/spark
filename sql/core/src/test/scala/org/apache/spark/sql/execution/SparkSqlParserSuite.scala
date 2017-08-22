@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, UnresolvedAlias, UnresolvedAttribute, UnresolvedRelation, UnresolvedStar}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Concat, SortOrder}
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.CreateTable
+import org.apache.spark.sql.execution.datasources.{CreateTable, RefreshResource}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 
@@ -36,7 +35,7 @@ import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType
  * See [[org.apache.spark.sql.catalyst.parser.PlanParserSuite]] for rules
  * defined in the Catalyst module.
  */
-class SparkSqlParserSuite extends PlanTest {
+class SparkSqlParserSuite extends AnalysisTest {
 
   val newConf = new SQLConf
   private lazy val parser = new SparkSqlParser(newConf)
@@ -65,6 +64,25 @@ class SparkSqlParserSuite extends PlanTest {
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
+  }
+
+  test("refresh resource") {
+    assertEqual("REFRESH prefix_path", RefreshResource("prefix_path"))
+    assertEqual("REFRESH /", RefreshResource("/"))
+    assertEqual("REFRESH /path///a", RefreshResource("/path///a"))
+    assertEqual("REFRESH pat1h/112/_1a", RefreshResource("pat1h/112/_1a"))
+    assertEqual("REFRESH pat1h/112/_1a/a-1", RefreshResource("pat1h/112/_1a/a-1"))
+    assertEqual("REFRESH path-with-dash", RefreshResource("path-with-dash"))
+    assertEqual("REFRESH \'path with space\'", RefreshResource("path with space"))
+    assertEqual("REFRESH \"path with space 2\"", RefreshResource("path with space 2"))
+    intercept("REFRESH a b", "REFRESH statements cannot contain")
+    intercept("REFRESH a\tb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\rb", "REFRESH statements cannot contain")
+    intercept("REFRESH a\r\nb", "REFRESH statements cannot contain")
+    intercept("REFRESH @ $a$", "REFRESH statements cannot contain")
+    intercept("REFRESH  ", "Resource paths cannot be empty in REFRESH statements")
+    intercept("REFRESH", "Resource paths cannot be empty in REFRESH statements")
   }
 
   test("show functions") {
@@ -241,17 +259,33 @@ class SparkSqlParserSuite extends PlanTest {
     assertEqual("analyze table t compute statistics noscan",
       AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
     assertEqual("analyze table t partition (a) compute statistics nOscAn",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), Map("a" -> None), noscan = true))
 
-    // Partitions specified - we currently parse them but don't do anything with it
+    // Partitions specified
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> Some("11"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09') COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"))))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2008-04-09', hr) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> Some("2008-04-09"), "hr" -> None)))
+    assertEqual("ANALYZE TABLE t PARTITION(ds, hr=11) COMPUTE STATISTICS noscan",
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> Some("11"))))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = false))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = false,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
     assertEqual("ANALYZE TABLE t PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      AnalyzeTableCommand(TableIdentifier("t"), noscan = true))
+      AnalyzePartitionCommand(TableIdentifier("t"), noscan = true,
+        partitionSpec = Map("ds" -> None, "hr" -> None)))
 
     intercept("analyze table t compute statistics xxxx",
       "Expected `NOSCAN` instead of `xxxx`")
@@ -263,6 +297,11 @@ class SparkSqlParserSuite extends PlanTest {
     intercept("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS", "")
 
     assertEqual("ANALYZE TABLE t COMPUTE STATISTICS FOR COLUMNS key, value",
+      AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
+
+    // Partition specified - should be ignored
+    assertEqual("ANALYZE TABLE t PARTITION(ds='2017-06-10') " +
+      "COMPUTE STATISTICS FOR COLUMNS key, value",
       AnalyzeColumnCommand(TableIdentifier("t"), Seq("key", "value")))
   }
 
