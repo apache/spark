@@ -420,9 +420,10 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * converted to Catalyst rows.
    */
   private[sql]
-  def internalCreateDataFrame(catalystRows: RDD[InternalRow],
-                              schema: StructType,
-                              isStreaming: Boolean = false) = {
+  def internalCreateDataFrame(
+      catalystRows: RDD[InternalRow],
+      schema: StructType,
+      isStreaming: Boolean = false) = {
     sparkSession.internalCreateDataFrame(catalystRows, schema, isStreaming)
   }
 
