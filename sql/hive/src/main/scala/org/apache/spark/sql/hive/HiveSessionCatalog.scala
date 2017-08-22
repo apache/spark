@@ -58,7 +58,9 @@ private[sql] class HiveSessionCatalog(
       functionResourceLoader) {
 
   /**
-   * Constructs a [[FunctionBuilder]] based on the provided class that represents a function.
+   * Constructs a [[Expression]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
   override def makeFunctionExpression(
       name: String,
