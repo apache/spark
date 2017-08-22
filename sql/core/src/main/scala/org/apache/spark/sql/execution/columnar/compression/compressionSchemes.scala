@@ -420,9 +420,9 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
               }
               columnVector.putNull(pos)
             }
+            pos += 1
           }
         case _: LongType =>
-          val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
           var currentValueLocal: Long = 0
           while (valueCountLocal < runLocal || (pos < capacity)) {
             if (pos != nextNullIndex) {
