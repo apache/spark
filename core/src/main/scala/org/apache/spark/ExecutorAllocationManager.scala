@@ -783,10 +783,16 @@ private[spark] class ExecutorAllocationManager(
      * Calculate the maximum no. of concurrent tasks that can run currently.
      */
     def getMaxConTasks(): Int = {
+      // We can limit the no. of concurrent tasks by a job group and multiple jobs can run with
+      // multiple stages. We need to get all the active stages belonging to a job group to calculate
+      // the total no. of pending + running tasks to decide the maximum no. of executors we need at
+      // that time to serve the outstanding tasks. This is capped by the minimum of no. of
+      // outstanding tasks and the max concurrent limit specified for the job group if any.
       val stagesByJobGroup = stageIdToNumTasks.groupBy(x => jobIdToJobGroup(stageIdToJobId(x._1)))
 
-      def getMaxConTasks(maxConTasks: Int,
-        stagesByJobGroupItr: Iterator[(String, mutable.HashMap[Int, Int])]): Int = {
+      def getMaxConTasks(
+          maxConTasks: Int,
+          stagesByJobGroupItr: Iterator[(String, mutable.HashMap[Int, Int])]): Int = {
         if (stagesByJobGroupItr.hasNext) {
           val (jobGroupId, stages) = stagesByJobGroupItr.next
           // Get the total running and pending tasks for a job group.

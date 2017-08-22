@@ -223,7 +223,7 @@ class ExecutorAllocationManagerSuite
 
     // Submit a new job in the same job group
     val stage2 = createStageInfo(2, 20)
-    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq{stage2}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerJobStart(1, 0, Seq(stage2), sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage2))
     assert(maxNumExecutorsNeeded(manager) === 2)
 
@@ -234,7 +234,7 @@ class ExecutorAllocationManagerSuite
     sc.setJobGroup("group2", "", false)
 
     val stage3 = createStageInfo(3, 20)
-    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage3}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq(stage3), sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage3))
     assert(maxNumExecutorsNeeded(manager) === 5)
 
@@ -245,7 +245,7 @@ class ExecutorAllocationManagerSuite
     sc.clearJobGroup()
 
     val stage4 = createStageInfo(4, 50)
-    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq{stage4}, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerJobStart(2, 0, Seq(stage4), sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stage4))
     assert(maxNumExecutorsNeeded(manager) === 50)
   }
@@ -507,7 +507,9 @@ class ExecutorAllocationManagerSuite
     sc = createSparkContext(5, 12, 5)
     val manager = sc.executorAllocationManager.get
 
-    sc.listenerBus.postToAll(SparkListenerStageSubmitted(createStageInfo(0, 8)))
+    val stages = Seq(createStageInfo(0, 8))
+    sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
+    sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
 
     // Remove when numExecutorsTarget is the same as the current number of executors
     assert(addExecutors(manager) === 1)
