@@ -139,64 +139,13 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   require(list != null, "list should not be null")
 
-  lazy val valExprs = value match {
-    case cns: CreateNamedStruct => cns.valExprs
-    case expr => Seq(expr)
-  }
-
-  override lazy val resolved: Boolean = {
-    lazy val checkForInSubquery = list match {
-      case (l @ ListQuery(sub, children, _)) :: Nil =>
-        // SPARK-21759:
-        // TODO: Update this check if we combine the optimizer rules for subquery rewriting.
-        //
-        // In `CheckAnalysis`, we already check if the size of subquery plan output match the size
-        // of value expressions. However, we can add extra correlated predicate references into
-        // the top of subquery plan when pulling up correlated predicates. Thus, we add extra check
-        // here to make sure we don't mess the query plan.
-
-        // Try to find out if any extra subquery output doesn't in the subquery condition.
-        val isAllExtraOutputInCondition = sub.output.drop(valExprs.length).forall { attr =>
-          children.exists(_.references.contains(attr))
-        }
-        sub.output.length >= valExprs.length && isAllExtraOutputInCondition
-      case _ => true
-    }
-    // Scala doesn't allow us refer super.resolved.
-    childrenResolved && checkInputDataTypes().isSuccess && checkForInSubquery
-  }
-
   override def checkInputDataTypes(): TypeCheckResult = {
-    list match {
-      case (l @ ListQuery(sub, children, _)) :: Nil =>
-        val mismatchedColumns = valExprs.zip(sub.output).flatMap {
-          case (l, r) if l.dataType != r.dataType =>
-            s"(${l.sql}:${l.dataType.catalogString}, ${r.sql}:${r.dataType.catalogString})"
-          case _ => None
-        }
-        if (mismatchedColumns.nonEmpty) {
-          TypeCheckResult.TypeCheckFailure(
-            s"""
-               |The data type of one or more elements in the left hand side of an IN subquery
-               |is not compatible with the data type of the output of the subquery
-               |Mismatched columns:
-               |[${mismatchedColumns.mkString(", ")}]
-               |Left side:
-               |[${valExprs.map(_.dataType.catalogString).mkString(", ")}].
-               |Right side:
-               |[${sub.output.map(_.dataType.catalogString).mkString(", ")}].
-             """.stripMargin)
-        } else {
-          TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
-        }
-      case _ =>
-        val mismatchOpt = list.find(l => l.dataType != value.dataType)
-        if (mismatchOpt.isDefined) {
-          TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
-            s"${value.dataType} != ${mismatchOpt.get.dataType}")
-        } else {
-          TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
-        }
+    val mismatchOpt = list.find(l => l.dataType != value.dataType)
+    if (mismatchOpt.isDefined) {
+      TypeCheckResult.TypeCheckFailure(s"Arguments must be same type but were: " +
+        s"${value.dataType} != ${mismatchOpt.get.dataType}")
+    } else {
+      TypeUtils.checkForOrderingExpr(value.dataType, s"function $prettyName")
     }
   }
 

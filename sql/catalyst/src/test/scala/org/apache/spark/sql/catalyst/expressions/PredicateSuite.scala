@@ -22,9 +22,6 @@ import scala.collection.immutable.HashSet
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
-import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
@@ -175,39 +172,6 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       }
       checkEvaluation(In(input(0), input.slice(1, 10)), expected)
     }
-  }
-
-  test("SPARK-21759: IN for correlated subquery case") {
-    val testRelation = LocalRelation('a.int, 'b.double, 'c.int)
-    val testRelation2 = LocalRelation('d.int, 'e.double)
-
-    // Project [a#1]
-    // +- LocalRelation <empty>, [a#1, b#2, c#3]
-    val subqueryWithOneAttr = Project(testRelation.output.take(1), testRelation)
-    val inSubquery = ListQuery(subqueryWithOneAttr, Seq.empty)
-
-    // In.value has 1 expr, subquery has 1 output attribute. No condition.
-    // a#1 IN (list#4 [])
-    val validInPredicate = In(testRelation2.output(0), inSubquery :: Nil)
-    assert(validInPredicate.resolved)
-
-    // Project [a#1, b#2]
-    // +- LocalRelation <empty>, [a#1, b#2, c#3]
-    val subqueryWithTwoAttr = Project(testRelation.output.take(2), testRelation)
-    val inSubqueryWithTwoAttr = inSubquery.withNewPlan(subqueryWithTwoAttr)
-
-    // In.value has 1 expr, subquery has 2 output attribute. No condition.
-    // a#1 IN (list#4 [])
-    val unresolvedInPredicate = In(testRelation2.output(0), inSubqueryWithTwoAttr :: Nil)
-    assert(!unresolvedInPredicate.resolved)
-
-    val condition = EqualTo(testRelation.output(1), testRelation2.output(1))
-
-    // In.value has 1 expr, subquery has 2 output attribute that one of which is used in condition.
-    // a#1 IN (list#4 [d#5 = b#2])
-    val validInPredicateWithCondition =
-      In(testRelation2.output(0), inSubqueryWithTwoAttr.copy(children = Seq(condition)) :: Nil)
-    assert(validInPredicateWithCondition.resolved)
   }
 
   test("INSET") {
