@@ -1108,7 +1108,7 @@ class SessionCatalog(
     val clazz = Utils.classForName(functionClassName)
     (children: Seq[Expression]) => {
       try {
-        makeFunctionExpression(name, Utils.classForName(functionClassName), children).getOrElse {
+        makeFunctionExpression(name, clazz, children).getOrElse {
           val extraMsg =
             if (!isUsingHiveMetastore) "Use sparkSession.udf.register(...) instead." else ""
           throw new AnalysisException(
