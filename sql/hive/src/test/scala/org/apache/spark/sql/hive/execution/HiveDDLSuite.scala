@@ -2003,7 +2003,7 @@ class HiveDDLSuite
     // regression test for SPARK-11778
     withDatabase("usrdb") {
       spark.sql("create schema usrdb")
-      withTable("userdb.test") {
+      withTable("usrdb.test") {
         spark.sql("create table usrdb.test(c int)")
         spark.read.table("usrdb.test")
       }
