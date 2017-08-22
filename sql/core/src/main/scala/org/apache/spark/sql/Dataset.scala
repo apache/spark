@@ -58,6 +58,7 @@ import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
@@ -162,7 +163,7 @@ class Dataset[T] private[sql](
     @transient val sparkSession: SparkSession,
     @DeveloperApi @InterfaceStability.Unstable @transient val queryExecution: QueryExecution,
     encoder: Encoder[T])
-  extends Serializable {
+  extends Serializable with Logging {
 
   queryExecution.assertAnalyzed()
 
@@ -521,7 +522,8 @@ class Dataset[T] private[sql](
    * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
    * the logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir`.
+   * directory set with `SparkContext#setCheckpointDir`. 
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 2.1.0
@@ -534,7 +536,8 @@ class Dataset[T] private[sql](
    * Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
    * logical plan of this Dataset, which is especially useful in iterative algorithms where the
    * plan may grow exponentially. It will be saved to files inside the checkpoint
-   * directory set with `SparkContext#setCheckpointDir`.
+   * directory set with `SparkContext#setCheckpointDir`. 
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 2.1.0
@@ -542,35 +545,40 @@ class Dataset[T] private[sql](
   @Experimental
   @InterfaceStability.Evolving
   def checkpoint(eager: Boolean): Dataset[T] = {
-    val internalRdd = queryExecution.toRdd.map(_.copy())
-    internalRdd.checkpoint()
+    if (isStreaming) {
+      logWarning("Checkpoint is no-op in queries with streaming sources.")
+      this
+    } else {
+      val internalRdd = queryExecution.toRdd.map(_.copy())
+      internalRdd.checkpoint()
 
-    if (eager) {
-      internalRdd.count()
-    }
-
-    val physicalPlan = queryExecution.executedPlan
-
-    // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
-    // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
-    // joins.
-    def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
-      partitioning match {
-        case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
-        case p => p
+      if (eager) {
+        internalRdd.count()
       }
+
+      val physicalPlan = queryExecution.executedPlan
+
+      // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. 
+      // Otherwise the size of `PartitioningCollection` may grow exponentially for queries 
+      // involving deep inner joins.
+      def firstLeafPartitioning(partitioning: Partitioning): Partitioning = {
+        partitioning match {
+          case p: PartitioningCollection => firstLeafPartitioning(p.partitionings.head)
+          case p => p
+        }
+      }
+
+      val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
+
+      Dataset.ofRows(
+        sparkSession,
+        LogicalRDD(
+          logicalPlan.output,
+          internalRdd,
+          outputPartitioning,
+          physicalPlan.outputOrdering
+        )(sparkSession)).as[T]
     }
-
-    val outputPartitioning = firstLeafPartitioning(physicalPlan.outputPartitioning)
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(
-        logicalPlan.output,
-        internalRdd,
-        outputPartitioning,
-        physicalPlan.outputOrdering
-      )(sparkSession)).as[T]
   }
 
   /**
@@ -2728,17 +2736,23 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
    */
   def persist(): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this)
+    if (isStreaming) {
+      logWarning("Persist is no-op in queries with streaming sources.")
+    } else {
+      sparkSession.sharedState.cacheManager.cacheQuery(this)
+    }
     this
   }
 
   /**
    * Persist this Dataset with the default storage level (`MEMORY_AND_DISK`).
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
@@ -2747,6 +2761,8 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this Dataset with the given storage level.
+   * This is a no-op in queries with streaming sources.
+   *
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
    *                 `MEMORY_AND_DISK_2`, etc.
@@ -2755,7 +2771,11 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(newLevel: StorageLevel): this.type = {
-    sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+    if (isStreaming) {
+      logWarning("Persist is no-op in queries with streaming sources.")
+    } else {
+      sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
+    }
     this
   }
 
@@ -2773,6 +2793,7 @@ class Dataset[T] private[sql](
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
+   * This is a no-op in queries with streaming sources.
    *
    * @param blocking Whether to block until all blocks are deleted.
    *
@@ -2780,12 +2801,17 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
+    if (isStreaming) {
+      logWarning("Unpersist is no-op in queries with streaming sources.")
+    } else {
+      sparkSession.sharedState.cacheManager.uncacheQuery(this, blocking)
+    }
     this
   }
 
   /**
    * Mark the Dataset as non-persistent, and remove all blocks for it from memory and disk.
+   * This is a no-op in queries with streaming sources.
    *
    * @group basic
    * @since 1.6.0
