@@ -58,18 +58,6 @@ private[deploy] object DependencyUtils {
       hadoopConf: Configuration,
       secMgr: SecurityManager): String = {
     val targetDir = Utils.createTempDir()
-    val hadoopConf = new Configuration()
-    val sparkProperties = new HashMap[String, String]()
-    val securityProperties = List("spark.ssl.fs.trustStore", "spark.ssl.trustStore",
-      "spark.ssl.fs.trustStorePassword", "spark.ssl.trustStorePassword",
-      "spark.ssl.fs.protocol", "spark.ssl.protocol")
-
-    securityProperties.foreach { pName =>
-      sys.props.get(pName).foreach { pValue =>
-        sparkProperties.put(pName, pValue)
-      }
-    }
-
     Option(jars)
       .map {
         resolveGlobPaths(_, hadoopConf)
@@ -93,9 +81,12 @@ private[deploy] object DependencyUtils {
   /**
    * Download a list of remote files to temp local files. If the file is local, the original file
    * will be returned.
+   *
    * @param fileList A comma separated file list.
-   * @param targetDir A temporary directory for which downloaded files
-   * @param sparkProperties Spark properties
+   * @param targetDir A temporary directory for which downloaded files.
+   * @param sparkConf Spark configuration.
+   * @param hadoopConf Hadoop configuration.
+   * @param secMgr Spark security manager.
    * @return A comma separated local files list.
    */
   def downloadFileList(
@@ -113,9 +104,12 @@ private[deploy] object DependencyUtils {
   /**
    * Download a file from the remote to a local temporary directory. If the input path points to
    * a local path, returns it with no operation.
+   *
    * @param path A file path from where the files will be downloaded.
-   * @param targetDir A temporary directory for which downloaded files
-   * @param sparkProperties Spark properties
+   * @param targetDir A temporary directory for which downloaded files.
+   * @param sparkConf Spark configuration.
+   * @param hadoopConf Hadoop configuration.
+   * @param secMgr Spark security manager.
    * @return Path to the local file.
    */
   def downloadFile(
@@ -130,8 +124,9 @@ private[deploy] object DependencyUtils {
     uri.getScheme match {
       case "file" | "local" => path
       case _ =>
-        val localFile = Utils.fetchFile(uri.toString(), targetDir, sparkConf, secMgr, hadoopConf,
-          -1L, false)
+        val fname = new Path(uri).getName()
+        val localFile = Utils.doFetchFile(uri.toString(), targetDir, fname, sparkConf, secMgr,
+          hadoopConf)
         localFile.toURI().toString()
     }
   }

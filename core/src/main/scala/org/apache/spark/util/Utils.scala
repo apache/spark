@@ -639,13 +639,13 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  private def doFetchFile(
+  def doFetchFile(
       url: String,
       targetDir: File,
       filename: String,
       conf: SparkConf,
       securityMgr: SecurityManager,
-      hadoopConf: Configuration) {
+      hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
@@ -689,6 +689,8 @@ private[spark] object Utils extends Logging {
         fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
                       filename = Some(filename))
     }
+
+    targetFile
   }
 
   /**
