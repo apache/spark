@@ -29,10 +29,10 @@ import org.apache.arrow.vector.NullableIntVector
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
-import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.arrow.ArrowUtils
 import org.apache.spark.sql.execution.columnar.ColumnAccessor
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.types._
