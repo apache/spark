@@ -2347,32 +2347,35 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   }
 
   test("insert overwrite directory") {
-    val path = Utils.createTempDir()
-    path.delete()
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
 
-    val v1 =
-      s"""
-        | INSERT OVERWRITE DIRECTORY '${path.toString}' USING json
-        | OPTIONS (a 1, b 0.1, c TRUE)
-        | SELECT 1 as a, 'c' as b
-      """.stripMargin
-    checkAnswer(
-      spark.sql(v1),
-      Seq.empty[Row])
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY '${path}'
+           | USING json
+           | OPTIONS (a 1, b 0.1, c TRUE)
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
 
-    // use orc data source to check the data of path is right.
-    sql(
-      s"""CREATE TEMPORARY TABLE json_source
-         |USING json
-         |OPTIONS (
-         |  PATH '${path.getCanonicalPath}'
-         |)
-       """.stripMargin)
-    checkAnswer(
-      sql("select * from json_source"),
-      sql("SELECT 1 as a, 'c' as b")
-    )
-    Utils.deleteRecursively(path)
+      checkAnswer(
+        spark.sql(v1),
+        Seq.empty[Row])
+
+      // use orc data source to check the data of path is right.
+      sql(
+        s"""
+           |CREATE TEMPORARY TABLE json_source
+           |USING json
+           |OPTIONS (
+           |  PATH '${dir.getCanonicalPath}'
+           |)
+         """.stripMargin)
+
+      checkAnswer(
+        sql("select * from json_source"),
+        sql("SELECT 1 as a, 'c' as b"))
+    }
   }
 
   Seq(true, false).foreach { caseSensitive =>

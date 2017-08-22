@@ -2042,10 +2042,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("insert overwrite to dir from hive metastore table") {
-    import org.apache.spark.util.Utils
-
-    val path = Utils.createTempDir()
-    path.delete()
     withTempDir { dir =>
       val path = dir.toURI.getPath
 
