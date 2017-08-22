@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -217,6 +219,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         logInfo("Will periodically update credentials from: " +
           driverConf.get("spark.yarn.credentials.file"))
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
+      }
+
+      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
+        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
+        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
       }
 
       val env = SparkEnv.createExecutorEnv(

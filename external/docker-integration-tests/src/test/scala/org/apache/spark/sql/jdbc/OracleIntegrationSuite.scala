@@ -22,6 +22,7 @@ import java.util.Properties
 import java.math.BigDecimal
 
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -71,17 +72,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
 
-    conn.prepareStatement(
-      "CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)").executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO ts_with_timezone VALUES " +
-        "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
-    conn.commit()
-
-    conn.prepareStatement(
-      "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 number(1), n2 number(1))").executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)").executeUpdate()
+    conn.prepareStatement("CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)")
+        .executeUpdate()
+    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES (1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))")
+        .executeUpdate()
     conn.commit()
 
     sql(
@@ -262,12 +256,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val df = dfRead.filter(dfRead.col("date_type").lt(dt))
       .filter(dfRead.col("timestamp_type").lt(ts))
 
-    val metadata = df.queryExecution.sparkPlan.metadata
-    // The "PushedFilters" part should be exist in Datafrome's
+    val parentPlan = df.queryExecution.executedPlan
+    assert(parentPlan.isInstanceOf[WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[WholeStageCodegenExec]
+    val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
+    // The "PushedFilters" part should exist in Dataframe's
     // physical plan and the existence of right literals in
     // "PushedFilters" is used to prove that the predicates
     // pushing down have been effective.
-    assert(metadata.get("PushedFilters").ne(None))
+    assert(metadata.get("PushedFilters").isDefined)
     assert(metadata("PushedFilters").contains(dt.toString))
     assert(metadata("PushedFilters").contains(ts.toString))
 

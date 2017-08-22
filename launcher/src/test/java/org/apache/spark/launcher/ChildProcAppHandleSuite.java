@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import static java.nio.file.attribute.PosixFilePermission.*;
 
@@ -39,7 +40,7 @@ import static org.junit.Assume.*;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
 
-public class OutputRedirectionSuite extends BaseSuite {
+public class ChildProcAppHandleSuite extends BaseSuite {
 
   private static final List<String> MESSAGES = new ArrayList<>();
 
@@ -99,7 +100,8 @@ public class OutputRedirectionSuite extends BaseSuite {
   public void testRedirectToLog() throws Exception {
     assumeFalse(isWindows());
 
-    ChildProcAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher().startApplication();
+    SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
+      .startApplication();
     waitFor(handle);
 
     assertTrue(MESSAGES.contains("output"));
@@ -112,7 +114,7 @@ public class OutputRedirectionSuite extends BaseSuite {
 
     Path err = Files.createTempFile("stderr", "txt");
 
-    ChildProcAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
+    SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectError(err.toFile())
       .startApplication();
     waitFor(handle);
@@ -127,7 +129,7 @@ public class OutputRedirectionSuite extends BaseSuite {
 
     Path out = Files.createTempFile("stdout", "txt");
 
-    ChildProcAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
+    SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectOutput(out.toFile())
       .startApplication();
     waitFor(handle);
@@ -173,17 +175,37 @@ public class OutputRedirectionSuite extends BaseSuite {
       .waitFor();
   }
 
-  private void waitFor(ChildProcAppHandle handle) throws Exception {
+  @Test
+  public void testProcMonitorWithOutputRedirection() throws Exception {
+    File err = Files.createTempFile("out", "txt").toFile();
+    SparkAppHandle handle = new TestSparkLauncher()
+      .redirectError()
+      .redirectOutput(err)
+      .startApplication();
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.LOST, handle.getState());
+  }
+
+  @Test
+  public void testProcMonitorWithLogRedirection() throws Exception {
+    SparkAppHandle handle = new TestSparkLauncher()
+      .redirectToLog(getClass().getName())
+      .startApplication();
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.LOST, handle.getState());
+  }
+
+  private void waitFor(SparkAppHandle handle) throws Exception {
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
     try {
-      while (handle.isRunning()) {
-        Thread.sleep(10);
+      while (!handle.getState().isFinal()) {
+        assertTrue("Timed out waiting for handle to transition to final state.",
+          System.nanoTime() < deadline);
+        TimeUnit.MILLISECONDS.sleep(10);
       }
     } finally {
-      // Explicit unregister from server since the handle doesn't yet do that when the
-      // process finishes by itself.
-      LauncherServer server = LauncherServer.getServerInstance();
-      if (server != null) {
-        server.unregister(handle);
+      if (!handle.getState().isFinal()) {
+        handle.kill();
       }
     }
   }
