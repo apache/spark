@@ -451,17 +451,6 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     assert(progress.sources(0).numInputRows === 10)
   }
 
-  test("[SPARK-19690] stream join with aggregate batch query succeeds") {
-    val streamingTriggerDF = spark.createDataset(1 to 10).toDF
-    val streamingInputDF = createSingleTriggerStreamingDF(streamingTriggerDF).toDF("joinValue")
-    val staticInputDF = spark
-      .createDataFrame(Seq(1 -> "1", 2 -> "2"))
-      .toDF("value", "anotherValue")
-      .agg(count("*") as 'joinValue)
-
-    getFirstProgress(streamingInputDF.join(staticInputDF, "joinValue"))
-  }
-
   testQuietly("StreamExecution metadata garbage collection") {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map(6 / _)
