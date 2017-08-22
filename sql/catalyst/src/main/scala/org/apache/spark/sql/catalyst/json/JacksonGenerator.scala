@@ -38,7 +38,9 @@ private[sql] class JacksonGenerator(
   private val rootWriter = childType match {
     case _: StructType => rootFieldWriters(rowSchema)
     case ArrayType(_: StructType, _) => arrElementWriter(rowSchema)
-    case MapType(_: DataType, _: StructType, _: Boolean) => mapValueWriter(rowSchema)
+    case MapType(_: DataType, _: StructType, _: Boolean) => mapStructValueWriter(rowSchema)
+    case MapType(_: DataType, _: DataType, _: Boolean) =>
+      makeWriter(childType.asInstanceOf[MapType].valueType)
   }
 
   lazy val rowSchema = childType match {
@@ -59,7 +61,7 @@ private[sql] class JacksonGenerator(
     }
   }
 
-  private def mapValueWriter(schema: StructType): ValueWriter = makeWriter(schema)
+  private def mapStructValueWriter(schema: StructType): ValueWriter = makeWriter(schema)
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 

@@ -659,7 +659,7 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
-      case MapType(_: DataType, _: StructType, _: Boolean) =>
+      case MapType(_: DataType, _: DataType, _: Boolean) =>
         (map: Any) =>
           val mapType = child.dataType.asInstanceOf[MapType]
           gen.write(map.asInstanceOf[MapData])

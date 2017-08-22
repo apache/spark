@@ -620,4 +620,13 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("SPARK-21513: to_json support map[string, string] to json") {
+    val schema = MapType(StringType, IntegerType)
+    val input = Literal.create(ArrayBasedMapData(Map("a" -> 1)), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"a":1}"""
+    )
+  }
+
 }
