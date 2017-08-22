@@ -91,12 +91,14 @@ object CatalogStorageFormat {
  *
  * @param spec partition spec values indexed by column name
  * @param storage storage format of the partition
- * @param parameters some parameters for the partition, for example, stats.
+ * @param parameters some parameters for the partition
+ * @param stats optional statistics (number of rows, total size, etc.)
  */
 case class CatalogTablePartition(
     spec: CatalogTypes.TablePartitionSpec,
     storage: CatalogStorageFormat,
-    parameters: Map[String, String] = Map.empty) {
+    parameters: Map[String, String] = Map.empty,
+    stats: Option[CatalogStatistics] = None) {
 
   def toLinkedHashMap: mutable.LinkedHashMap[String, String] = {
     val map = new mutable.LinkedHashMap[String, String]()
@@ -106,6 +108,7 @@ case class CatalogTablePartition(
     if (parameters.nonEmpty) {
       map.put("Partition Parameters", s"{${parameters.map(p => p._1 + "=" + p._2).mkString(", ")}}")
     }
+    stats.foreach(s => map.put("Partition Statistics", s.simpleString))
     map
   }
 

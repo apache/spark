@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, IOException}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
@@ -147,13 +147,17 @@ class SparkHadoopUtil extends Logging {
 
   def isYarnMode(): Boolean = { false }
 
-  def getCurrentUserCredentials(): Credentials = { null }
-
-  def addCurrentUserCredentials(creds: Credentials) {}
-
   def addSecretKeyToUserCredentials(key: String, secret: String) {}
 
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
+
+  def getCurrentUserCredentials(): Credentials = {
+    UserGroupInformation.getCurrentUser().getCredentials()
+  }
+
+  def addCurrentUserCredentials(creds: Credentials): Unit = {
+    UserGroupInformation.getCurrentUser.addCredentials(creds)
+  }
 
   def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
     if (!new File(keytabFilename).exists()) {
@@ -424,6 +428,21 @@ class SparkHadoopUtil extends Logging {
       s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
       s"${if (status.isDirectory) "d" else "-"}$perm")
     false
+  }
+
+  def serialize(creds: Credentials): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream
+    val dataStream = new DataOutputStream(byteStream)
+    creds.writeTokenStorageToStream(dataStream)
+    byteStream.toByteArray
+  }
+
+  def deserialize(tokenBytes: Array[Byte]): Credentials = {
+    val tokensBuf = new ByteArrayInputStream(tokenBytes)
+
+    val creds = new Credentials()
+    creds.readTokenStorageStream(new DataInputStream(tokensBuf))
+    creds
   }
 }
 

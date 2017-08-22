@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
 import org.apache.spark.sql.catalyst.plans.logical.ColumnStat
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -253,6 +254,259 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
           assert(getCatalogStatistics(tableName).sizeInBytes === BigInt(5812))
         }
+    }
+  }
+
+  test("analyze single partition") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String): CatalogStatistics = {
+      val partition =
+        spark.sessionState.catalog.getPartition(TableIdentifier(tableName), Map("ds" -> ds))
+      partition.stats.get
+    }
+
+    def createPartition(ds: String, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds') $query")
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      createPartition("2010-01-01", "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
+      createPartition("2010-01-03", "SELECT '1', 'A' from src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
+
+      assert(queryStats("2010-01-01").rowCount === None)
+      assert(queryStats("2010-01-01").sizeInBytes === 2000)
+
+      assert(queryStats("2010-01-02").rowCount === None)
+      assert(queryStats("2010-01-02").sizeInBytes === 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
+
+      assert(queryStats("2010-01-01").rowCount.get === 500)
+      assert(queryStats("2010-01-01").sizeInBytes === 2000)
+
+      assert(queryStats("2010-01-02").rowCount.get === 2*500)
+      assert(queryStats("2010-01-02").sizeInBytes === 2*2000)
+    }
+  }
+
+  test("analyze a set of partitions") {
+    val tableName = "analyzeTable_part"
+
+    def queryStats(ds: String, hr: String): Option[CatalogStatistics] = {
+      val tableId = TableIdentifier(tableName)
+      val partition =
+        spark.sessionState.catalog.getPartition(tableId, Map("ds" -> ds, "hr" -> hr))
+      partition.stats
+    }
+
+    def assertPartitionStats(
+        ds: String,
+        hr: String,
+        rowCount: Option[BigInt],
+        sizeInBytes: BigInt): Unit = {
+      val stats = queryStats(ds, hr).get
+      assert(stats.rowCount === rowCount)
+      assert(stats.sizeInBytes === sizeInBytes)
+    }
+
+    def createPartition(ds: String, hr: Int, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+
+      createPartition("2010-01-01", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-01", 11, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 11,
+        "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS NOSCAN")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assert(queryStats("2010-01-02", "10") === None)
+      assert(queryStats("2010-01-02", "11") === None)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS NOSCAN")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-01') COMPUTE STATISTICS")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds='2010-01-02') COMPUTE STATISTICS")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000)
+    }
+  }
+
+  test("analyze all partitions") {
+    val tableName = "analyzeTable_part"
+
+    def assertPartitionStats(
+        ds: String,
+        hr: String,
+        rowCount: Option[BigInt],
+        sizeInBytes: BigInt): Unit = {
+      val stats = spark.sessionState.catalog.getPartition(TableIdentifier(tableName),
+        Map("ds" -> ds, "hr" -> hr)).stats.get
+      assert(stats.rowCount === rowCount)
+      assert(stats.sizeInBytes === sizeInBytes)
+    }
+
+    def createPartition(ds: String, hr: Int, query: String): Unit = {
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds', hr=$hr) $query")
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+
+      createPartition("2010-01-01", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-01", 11, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 10, "SELECT '1', 'A' from src")
+      createPartition("2010-01-02", 11,
+        "SELECT '1', 'A' from src UNION ALL SELECT '1', 'A' from src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds, hr) COMPUTE STATISTICS NOSCAN")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = None, sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = None, sizeInBytes = 2*2000)
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds, hr) COMPUTE STATISTICS")
+
+      assertPartitionStats("2010-01-01", "10", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-01", "11", rowCount = Some(500), sizeInBytes = 2000)
+      assertPartitionStats("2010-01-02", "11", rowCount = Some(2*500), sizeInBytes = 2*2000)
+    }
+  }
+
+  test("analyze partitions for an empty table") {
+    val tableName = "analyzeTable_part"
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      // make sure there is no exception
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds) COMPUTE STATISTICS NOSCAN")
+
+      // make sure there is no exception
+      sql(s"ANALYZE TABLE $tableName PARTITION (ds) COMPUTE STATISTICS")
+    }
+  }
+
+  test("analyze partitions case sensitivity") {
+    val tableName = "analyzeTable_part"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+        sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+      }
+
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        val message = intercept[AnalysisException] {
+          sql(s"ANALYZE TABLE $tableName PARTITION (DS='2010-01-01') COMPUTE STATISTICS")
+        }.getMessage
+        assert(message.contains(
+          s"DS is not a valid partition column in table `default`.`${tableName.toLowerCase}`"))
+      }
+    }
+  }
+
+  test("analyze partial partition specifications") {
+
+    val tableName = "analyzeTable_part"
+
+    def assertAnalysisException(partitionSpec: String): Unit = {
+      val message = intercept[AnalysisException] {
+        sql(s"ANALYZE TABLE $tableName $partitionSpec COMPUTE STATISTICS")
+      }.getMessage
+      assert(message.contains("The list of partition columns with values " +
+        s"in partition specification for table '${tableName.toLowerCase}' in database 'default' " +
+        "is not a prefix of the list of partition columns defined in the table schema"))
+    }
+
+    withTable(tableName) {
+      sql(
+        s"""
+           |CREATE TABLE $tableName (key STRING, value STRING)
+           |PARTITIONED BY (a STRING, b INT, c STRING)
+         """.stripMargin)
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (a='a1', b=10, c='c1') SELECT * FROM src")
+
+      sql(s"ANALYZE TABLE $tableName PARTITION (a='a1') COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (a='a1', b=10) COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (A='a1', b=10) COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (b=10, a='a1') COMPUTE STATISTICS")
+      sql(s"ANALYZE TABLE $tableName PARTITION (b=10, A='a1') COMPUTE STATISTICS")
+
+      assertAnalysisException("PARTITION (b=10)")
+      assertAnalysisException("PARTITION (a, b=10)")
+      assertAnalysisException("PARTITION (b=10, c='c1')")
+      assertAnalysisException("PARTITION (a, b=10, c='c1')")
+      assertAnalysisException("PARTITION (c='c1')")
+      assertAnalysisException("PARTITION (a, b, c='c1')")
+      assertAnalysisException("PARTITION (a='a1', c='c1')")
+      assertAnalysisException("PARTITION (a='a1', b, c='c1')")
+    }
+  }
+
+  test("analyze non-existent partition") {
+
+    def assertAnalysisException(analyzeCommand: String, errorMessage: String): Unit = {
+      val message = intercept[AnalysisException] {
+        sql(analyzeCommand)
+      }.getMessage
+      assert(message.contains(errorMessage))
+    }
+
+    val tableName = "analyzeTable_part"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (key STRING, value STRING) PARTITIONED BY (ds STRING)")
+
+      sql(s"INSERT INTO TABLE $tableName PARTITION (ds='2010-01-01') SELECT * FROM src")
+
+      assertAnalysisException(
+        s"ANALYZE TABLE $tableName PARTITION (hour=20) COMPUTE STATISTICS",
+        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+      )
+
+      assertAnalysisException(
+        s"ANALYZE TABLE $tableName PARTITION (hour) COMPUTE STATISTICS",
+        s"hour is not a valid partition column in table `default`.`${tableName.toLowerCase}`"
+      )
+
+      intercept[NoSuchPartitionException] {
+        sql(s"ANALYZE TABLE $tableName PARTITION (ds='2011-02-30') COMPUTE STATISTICS")
+      }
     }
   }
 

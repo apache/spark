@@ -2930,7 +2930,7 @@ setMethod("saveAsTable",
             invisible(callJMethod(write, "saveAsTable", tableName))
           })
 
-#' summary
+#' describe
 #'
 #' Computes statistics for numeric and string columns.
 #' If no columns are given, this function computes statistics for all numerical or string columns.
@@ -2941,7 +2941,7 @@ setMethod("saveAsTable",
 #' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases describe,SparkDataFrame,character-method describe,SparkDataFrame,ANY-method
-#' @rdname summary
+#' @rdname describe
 #' @name describe
 #' @export
 #' @examples
@@ -2953,6 +2953,7 @@ setMethod("saveAsTable",
 #' describe(df, "col1")
 #' describe(df, "col1", "col2")
 #' }
+#' @seealso See \link{summary} for expanded statistics and control over which statistics to compute.
 #' @note describe(SparkDataFrame, character) since 1.4.0
 setMethod("describe",
           signature(x = "SparkDataFrame", col = "character"),
@@ -2962,7 +2963,7 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
-#' @rdname summary
+#' @rdname describe
 #' @name describe
 #' @aliases describe,SparkDataFrame-method
 #' @note describe(SparkDataFrame) since 1.4.0
@@ -2973,15 +2974,50 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
+#' summary
+#'
+#' Computes specified statistics for numeric and string columns. Available statistics are:
+#' \itemize{
+#' \item count
+#' \item mean
+#' \item stddev
+#' \item min
+#' \item max
+#' \item arbitrary approximate percentiles specified as a percentage (eg, "75%")
+#' }
+#' If no statistics are given, this function computes count, mean, stddev, min,
+#' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+#' This function is meant for exploratory data analysis, as we make no guarantee about the
+#' backward compatibility of the schema of the resulting Dataset. If you want to
+#' programmatically compute summary statistics, use the \code{agg} function instead.
+#'
+#'
 #' @param object a SparkDataFrame to be summarized.
+#' @param ... (optional) statistics to be computed for all columns.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' summary(df)
+#' summary(df, "min", "25%", "75%", "max")
+#' summary(select(df, "age", "height"))
+#' }
 #' @note summary(SparkDataFrame) since 1.5.0
+#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for previous defaults.
+#' @seealso \link{describe}
 setMethod("summary",
           signature(object = "SparkDataFrame"),
           function(object, ...) {
-            describe(object)
+            statisticsList <- list(...)
+            sdf <- callJMethod(object@sdf, "summary", statisticsList)
+            dataFrame(sdf)
           })
 
 
