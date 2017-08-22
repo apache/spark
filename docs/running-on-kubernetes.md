@@ -114,9 +114,9 @@ the `default` service account used by the driver may not have appropriate pod `e
 for launching executor pods. We recommend to add another service account, say `spark`, with
 the necessary privilege. For example:
 
-  kubectl create serviceaccount spark
-  kubectl create clusterrolebinding spark-edit --clusterrole edit  \
-      --serviceaccount default:spark --namespace default
+    kubectl create serviceaccount spark
+    kubectl create clusterrolebinding spark-edit --clusterrole edit  \
+        --serviceaccount default:spark --namespace default
 
 With this, one can add `--conf spark.kubernetes.authenticate.driver.serviceAccountName=spark` to
 the spark-submit command line above to specify the service account to use.

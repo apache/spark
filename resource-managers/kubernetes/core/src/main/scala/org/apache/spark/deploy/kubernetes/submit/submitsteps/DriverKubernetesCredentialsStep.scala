@@ -83,13 +83,12 @@ private[spark] class DriverKubernetesCredentialsStep(
           .endSpec()
         .build()
     }.getOrElse(
-      driverServiceAccount.map {
-        account =>
+      driverServiceAccount.map { account =>
           new PodBuilder(driverSpec.driverPod)
             .editOrNewSpec()
-            .withServiceAccount(account)
-            .withServiceAccountName(account)
-            .endSpec()
+              .withServiceAccount(account)
+              .withServiceAccountName(account)
+              .endSpec()
             .build()
       }.getOrElse(driverSpec.driverPod)
     )
