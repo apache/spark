@@ -1678,6 +1678,9 @@ setGeneric("spark.associationRules", function(object) { standardGeneric("spark.a
 #' @export
 setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
 
+#' @rdname spark.binarizer
+#' @export
+setGeneric("spark.binarizer", function(data, inputCol, outputCol, threshold) { standardGeneric("spark.binarizer")})
 
 ###################### Streaming Methods ##########################
 

@@ -44,6 +44,7 @@ Collate:
     'jvm.R'
     'mllib_classification.R'
     'mllib_clustering.R'
+    'mllib_feature.R'
     'mllib_fpm.R'
     'mllib_recommendation.R'
     'mllib_regression.R'
