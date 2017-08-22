@@ -142,7 +142,6 @@ object UnsupportedOperationChecker {
             "Distinct aggregations are not supported on streaming DataFrames/Datasets. Consider " +
               "using approx_count_distinct() instead.")
 
-
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")

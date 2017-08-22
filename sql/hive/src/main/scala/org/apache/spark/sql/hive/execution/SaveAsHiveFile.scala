@@ -31,14 +31,15 @@ import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 // Base trait from which all hive insert statement physical execution extends.
 private[hive] trait SaveAsHiveFile extends DataWritingCommand {
 
-  protected def saveAsHiveFile(sparkSession: SparkSession,
-                               plan: SparkPlan,
-                               hadoopConf: Configuration,
-                               fileSinkConf: FileSinkDesc,
-                               outputLocation: String,
-                               partitionAttributes: Seq[Attribute] = Nil,
-                               bucketSpec: Option[BucketSpec] = None,
-                               options: Map[String, String] = Map.empty): Unit = {
+  protected def saveAsHiveFile(
+      sparkSession: SparkSession,
+      plan: SparkPlan,
+      hadoopConf: Configuration,
+      fileSinkConf: FileSinkDesc,
+      outputLocation: String,
+      partitionAttributes: Seq[Attribute] = Nil,
+      bucketSpec: Option[BucketSpec] = None,
+      options: Map[String, String] = Map.empty): Unit = {
 
     val sessionState = sparkSession.sessionState
 

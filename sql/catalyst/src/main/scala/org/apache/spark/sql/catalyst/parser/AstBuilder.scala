@@ -210,7 +210,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
       case hiveDir: InsertOverwriteHiveDirContext => visitInsertOverwriteHiveDir(hiveDir)
     }
 
-    InsertIntoDir(isLocal, storage, provider, query)
+    InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
   }
 
   /**

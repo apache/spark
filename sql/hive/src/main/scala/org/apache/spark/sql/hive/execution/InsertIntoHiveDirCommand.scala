@@ -38,13 +38,14 @@ import org.apache.spark.util.Utils
 case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
-    query: LogicalPlan) extends SaveAsHiveFile {
+    query: LogicalPlan,
+    overwrite: Boolean) extends SaveAsHiveFile {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
   override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     assert(children.length == 1)
-    assert(!storage.locationUri.isEmpty)
+    assert(storage.locationUri.nonEmpty)
 
     val Array(cols, types) = children.head.output.foldLeft(Array("", "")) { case (r, a) =>
       r(0) = r(0) + a.name + ","
@@ -79,14 +80,22 @@ case class InsertIntoHiveDirCommand(
         val localFileSystem = FileSystem.getLocal(jobConf)
         val localPath = localFileSystem.makeQualified(targetPath)
         if (localFileSystem.exists(localPath)) {
-          localFileSystem.delete(localPath, true)
+          if (overwrite) {
+            localFileSystem.delete(localPath, true)
+          } else {
+            throw new RuntimeException("Directory '" + localPath.toString + "' already exists")
+          }
         }
         localPath
       } else {
         val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
         val dfs = qualifiedPath.getFileSystem(jobConf)
         if (dfs.exists(qualifiedPath)) {
-          dfs.delete(qualifiedPath, true)
+          if (overwrite) {
+            dfs.delete(qualifiedPath, true)
+          } else {
+            throw new RuntimeException("Directory '" + qualifiedPath.toString + "' already exists")
+          }
         } else {
           dfs.mkdirs(qualifiedPath.getParent)
         }

@@ -157,8 +157,8 @@ object HiveAnalysis extends Rule[LogicalPlan] {
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
 
-    case InsertIntoDir(isLocal, storage, _, child) =>
-      InsertIntoHiveDirCommand(isLocal, storage, child)
+    case InsertIntoDir(isLocal, storage, _, child, overwrite) =>
+      InsertIntoHiveDirCommand(isLocal, storage, child, overwrite)
   }
 }
 

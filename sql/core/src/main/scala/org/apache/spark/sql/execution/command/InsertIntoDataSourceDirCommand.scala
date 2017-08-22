@@ -35,13 +35,14 @@ import org.apache.spark.sql.execution.datasources._
 case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,
     provider: Option[String],
-    query: LogicalPlan) extends RunnableCommand {
+    query: LogicalPlan,
+    overwrite: Boolean) extends RunnableCommand {
 
   override def innerChildren: Seq[LogicalPlan] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(innerChildren.length == 1)
-    assert(!storage.locationUri.isEmpty)
+    assert(storage.locationUri.nonEmpty)
     assert(provider.isDefined)
 
     // Create the relation based on the input logical plan: `data`.
@@ -52,8 +53,9 @@ case class InsertIntoDataSourceDirCommand(
       options = storage.properties ++ pathOption,
       catalogTable = None)
 
+    val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists
     try {
-      dataSource.writeAndRead(SaveMode.Overwrite, query)
+      dataSource.writeAndRead(saveMode, query)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to directory " + storage.locationUri.toString, ex)

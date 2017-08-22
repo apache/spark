@@ -1556,7 +1556,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *
    * Expected format:
    * {{{
-   *   INSERT OVERWRITE DIRECTORY
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY
    *   path
    *   [ROW FORMAT row_format]
    *   [STORED AS file_format]

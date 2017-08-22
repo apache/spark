@@ -490,7 +490,7 @@ class DDLCommandSuite extends PlanTest {
   test("insert overwrite directory") {
     val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
     parser.parsePlan(v1) match {
-      case InsertIntoDir(_, storage, provider, query) =>
+      case InsertIntoDir(_, storage, provider, query, overwrite) =>
         assert(storage.locationUri != None && storage.locationUri.get.toString == "/tmp/file")
       case other =>
         fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
@@ -510,7 +510,7 @@ class DDLCommandSuite extends PlanTest {
         | SELECT 1 as a
       """.stripMargin
     parser.parsePlan(v3) match {
-      case InsertIntoDir(_, storage, provider, query) =>
+      case InsertIntoDir(_, storage, provider, query, overwrite) =>
         assert(storage.locationUri != None && provider == Some("json"))
       case other =>
         fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +

@@ -363,7 +363,8 @@ case class InsertIntoDir(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     provider: Option[String],
-    child: LogicalPlan)
+    child: LogicalPlan,
+    overwrite: Boolean = true)
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
