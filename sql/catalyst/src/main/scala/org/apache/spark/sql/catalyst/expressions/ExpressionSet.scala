@@ -59,6 +59,12 @@ class ExpressionSet protected(
     }
   }
 
+  def addMultiExpression(elems: Set[Expression]): ExpressionSet = {
+    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
+    elemSet.foreach(newSet.add(_))
+    newSet
+  }
+
   override def contains(elem: Expression): Boolean = baseSet.contains(elem.canonicalized)
 
   override def +(elem: Expression): ExpressionSet = {

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Literal, Alias, Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
@@ -88,5 +89,15 @@ class LogicalPlanSuite extends SparkFunSuite {
     assert(TestBinaryRelation(incrementalRelation, relation).isStreaming === true)
     assert(TestBinaryRelation(relation, incrementalRelation).isStreaming === true)
     assert(TestBinaryRelation(incrementalRelation, incrementalRelation).isStreaming)
+  }
+
+  test("getAliasedConstraints") {
+    val expressionNum = 100
+    val aggExpression = (1 to expressionNum).map(i => Alias(Count(Literal(1)), s"cnt$i")())
+    val aggPlan = Aggregate(Nil, aggExpression, LocalRelation())
+
+    val expressions = aggPlan.validConstraints
+    // The size of Aliased expression is n * (n - 1) / 2 + n
+    assert( expressions.size === expressionNum * (expressionNum - 1) / 2 + expressionNum)
   }
 }
