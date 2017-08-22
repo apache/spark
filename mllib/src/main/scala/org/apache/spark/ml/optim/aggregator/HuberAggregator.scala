@@ -48,7 +48,7 @@ import org.apache.spark.ml.linalg.Vector
  *   $$
  *   \begin{align}
  *   H_m(z) = \begin{cases}
- *            z^2, & \text {if } |z| <= \epsilon, \\
+ *            z^2, & \text {if } |z| &lt; \epsilon, \\
  *            2\epsilon|z| - \epsilon^2, & \text{otherwise}
  *            \end{cases}
  *   \end{align}
