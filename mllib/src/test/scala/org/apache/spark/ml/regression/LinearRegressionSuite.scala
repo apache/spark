@@ -161,6 +161,8 @@ class LinearRegressionSuite
     assert(lir.getFitIntercept)
     assert(lir.getStandardization)
     assert(lir.getSolver == "auto")
+    assert(lir.getLoss == "leastSquares")
+    assert(lir.getM == 1.35)
     val model = lir.fit(datasetWithDenseFeature)
 
     MLTestingUtils.checkCopyAndUids(lir, model)
@@ -179,6 +181,21 @@ class LinearRegressionSuite
     assert(model.hasParent)
     val numFeatures = datasetWithDenseFeature.select("features").first().getAs[Vector](0).size
     assert(model.numFeatures === numFeatures)
+  }
+
+  test("linear regression: illegal params") {
+    withClue("LinearRegression with huber loss only supports L2 regularization") {
+      intercept[IllegalArgumentException] {
+        new LinearRegression().setLoss("huber").setElasticNetParam(0.5)
+          .fit(datasetWithDenseFeature)
+      }
+    }
+
+    withClue("LinearRegression with huber loss doesn't support normal solver") {
+      intercept[IllegalArgumentException] {
+        new LinearRegression().setLoss("huber").setSolver("normal").fit(datasetWithDenseFeature)
+      }
+    }
   }
 
   test("linear regression handles singular matrices") {

@@ -44,7 +44,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -88,6 +88,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    * for small values of M, the criterion is more similar to L1 regression.
    * Default is 1.35 to get as much robustness as possible while retaining
    * 95% statistical efficiency for normally distributed data.
+   * Only valid when "loss" is "huber".
    */
   @Since("2.3.0")
   final val m = new DoubleParam(this, "m", "The shape parameter to control the amount of " +
@@ -96,19 +97,29 @@ private[regression] trait LinearRegressionParams extends PredictorParams
   /** @group getParam */
   @Since("2.3.0")
   def getM: Double = $(m)
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    if ($(loss) == Huber) {
+      require($(solver)!= Normal, "LinearRegression with huber loss doesn't support " +
+        "normal solver, please change solver to auto or l-bfgs.")
+      require($(elasticNetParam) == 0.0, "LinearRegression with huber loss only supports " +
+        s"L2 regularization, but got elasticNetParam = $getElasticNetParam.")
+
+    }
+    super.validateAndTransformSchema(schema, fitting, featuresDataType)
+  }
 }
 
 /**
  * Linear regression.
  *
- * The learning objective is to minimize the squared error, with regularization.
- * The specific squared error loss function used is:
- *
- * <blockquote>
- *    $$
- *    L = 1/2n ||A coefficients - y||^2^
- *    $$
- * </blockquote>
+ * The learning objective is to minimize the specified loss function, with regularization.
+ * This supports two loss functions:
+ *  - leastSquares (a.k.a squared loss)
+ *  - huber
  *
  * This supports multiple types of regularization:
  *  - none (a.k.a. ordinary least squares)
@@ -169,6 +180,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    * For alpha in (0,1), the penalty is a combination of L1 and L2.
    * Default is 0.0 which is an L2 penalty.
    *
+   * Note: Fitting with huber loss only supports L2 regularization,
+   * so throws exception if this param is non-zero value.
+   *
    * @group setParam
    */
   @Since("1.4.0")
@@ -217,6 +231,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
    *    The Normal Equations solver will be used when possible, but this will automatically fall
    *    back to iterative optimization methods when needed.
    *
+   * Note: Fitting with huber loss doesn't support normal solver,
+   * so throws exception if this param was set with "normal".
    * @group setParam
    */
   @Since("1.6.0")
@@ -426,7 +442,8 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       case Huber =>
         val dim = if ($(fitIntercept)) numFeatures + 2 else numFeatures + 1
         val lowerBounds = BDV[Double](Array.fill(dim)(Double.MinValue))
-        lowerBounds(dim - 1) = 1E-20
+        // Optimize huber loss in space "\sigma > 0"
+        lowerBounds(dim - 1) = Double.MinPositiveValue
         val upperBounds = BDV[Double](Array.fill(dim)(Double.MaxValue))
         new BreezeLBFGSB(lowerBounds, upperBounds, $(maxIter), 10, $(tol))
     }
@@ -490,17 +507,15 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         i += 1
       }
 
-
-      /*
-       The intercept in R's GLMNET is computed using closed form after the coefficients are
-       converged. See the following discussion for detail.
-       http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
-     */
-
       val interceptValue: Double = if ($(fitIntercept)) {
         $(loss) match {
-          case LeastSquares => yMean -
-            dot(Vectors.dense(rawCoefficients), Vectors.dense(featuresMean))
+          case LeastSquares =>
+            /*
+            The intercept of leastSquares loss in R's GLMNET is computed using closed form
+            after the coefficients are converged. See the following discussion for detail.
+            http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
+            */
+            yMean - dot(Vectors.dense(rawCoefficients), Vectors.dense(featuresMean))
           case Huber => parameters(numFeatures)
         }
       } else {
