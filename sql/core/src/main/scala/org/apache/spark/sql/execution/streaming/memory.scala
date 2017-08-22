@@ -47,7 +47,7 @@ object MemoryStream {
 
 /**
  * A [[Source]] that produces value stored in memory as they are added by the user.  This [[Source]]
- * is primarily intended for use in unit tests as it can only replay data when the object is still
+ * is intended for use in unit tests as it can only replay data when the object is still
  * available.
  */
 case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
@@ -122,21 +122,29 @@ case class MemoryStream[A : Encoder](id: Int, sqlContext: SQLContext)
       batches.slice(sliceStart, sliceEnd)
     }
 
-    logDebug({
-      val items: Seq[A] = newBlocks.flatMap(ds => {
-        val writer = new DebugForeachWriter[A]()
-        val execution = ds.writeStream.foreach(writer).start()
-        execution.stop()
-        writer.items
-      })
-      s"MemoryBatch [$startOrdinal, $endOrdinal]: ${items.mkString(", ")}"
-    })
+    logDebug(generateDebugString(newBlocks, startOrdinal, endOrdinal))
+
     newBlocks
       .map(_.toDF())
       .reduceOption(_ union _)
       .getOrElse {
         sys.error("No data selected!")
       }
+  }
+
+  private def generateDebugString(
+      blocks: TraversableOnce[Dataset[A]],
+      startOrdinal: Int,
+      endOrdinal: Int): String = {
+    val originalUnsupportedCheck =
+      sqlContext.getConf("spark.sql.streaming.unsupportedOperationCheck")
+    try {
+      sqlContext.setConf("spark.sql.streaming.unsupportedOperationCheck", "false")
+      s"MemoryBatch [$startOrdinal, $endOrdinal]: " +
+          s"${blocks.flatMap(_.collect()).mkString(", ")}"
+    } finally {
+      sqlContext.setConf("spark.sql.streaming.unsupportedOperationCheck", originalUnsupportedCheck)
+    }
   }
 
   override def commit(end: Offset): Unit = synchronized {
@@ -242,20 +250,4 @@ case class MemoryPlan(sink: MemorySink, output: Seq[Attribute]) extends LeafNode
   private val sizePerRow = sink.schema.toAttributes.map(_.dataType.defaultSize).sum
 
   override def computeStats(): Statistics = Statistics(sizePerRow * sink.allData.size)
-}
-
-/** A [[ForeachWriter]] that appends events onto a sequence. Not thread-safe. */
-private class DebugForeachWriter[A : Encoder]() extends ForeachWriter[A] {
-
-  var items: Seq[A] = Seq()
-
-  override def open(partitionId: Long, version: Long): Boolean = {
-    true
-  }
-
-  override def process(value: A): Unit = {
-    items = items :+ value
-  }
-
-  override def close(errorOrNull: Throwable): Unit = {}
 }
