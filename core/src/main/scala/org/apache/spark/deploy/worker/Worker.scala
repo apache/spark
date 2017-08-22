@@ -38,7 +38,7 @@ import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.util.{SparkUncaughtExceptionHandler, ThreadUtils, Utils}
+import org.apache.spark.util.{SignalUtils, SparkUncaughtExceptionHandler, ThreadUtils, Utils}
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -57,6 +57,11 @@ private[deploy] class Worker(
 
   Utils.checkHost(host)
   assert (port > 0)
+
+  // If worker decommissioning is enabled register a handler on SIGPWR to shutdown.
+  if (conf.get(config.WORKER_DECOMMISSION_ENABLED)) {
+    SignalUtils.register("SIGPWR")(decommissionSelf)
+  }
 
   // A scheduled executor used to send messages at the specified time.
   private val forwordMessageScheduler =
@@ -688,7 +693,7 @@ private[deploy] class Worker(
     }
   }
 
-  private[deploy] def decommissionSelf(): Unit = {
+  private[deploy] def decommissionSelf(): Boolean = {
     if (conf.get(config.WORKER_DECOMMISSION_ENABLED)) {
       logDebug("Decommissioning self")
       decommissioned = true
@@ -698,6 +703,8 @@ private[deploy] class Worker(
     } else {
       logWarning("Asked to decommission self, but decommissioning not enabled")
     }
+    // Return true since can be called as a signal handler
+    true
   }
 
   private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {
