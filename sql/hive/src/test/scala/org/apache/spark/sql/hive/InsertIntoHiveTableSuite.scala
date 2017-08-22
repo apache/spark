@@ -22,9 +22,8 @@ import java.io.File
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, _}
-import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.HiveHashFunction
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
@@ -505,25 +504,6 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       }
   }
 
-  testBucketedTable("INSERT should fail if strict bucketing / sorting is enforced") {
-    tableName =>
-      withSQLConf("hive.enforce.bucketing" -> "true", "hive.enforce.sorting" -> "false") {
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName SELECT 1, 2, 3, 4")
-        }
-      }
-      withSQLConf("hive.enforce.bucketing" -> "false", "hive.enforce.sorting" -> "true") {
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName SELECT 1, 2, 3, 4")
-        }
-      }
-      withSQLConf("hive.enforce.bucketing" -> "true", "hive.enforce.sorting" -> "true") {
-        intercept[AnalysisException] {
-          sql(s"INSERT INTO TABLE $tableName SELECT 1, 2, 3, 4")
-        }
-      }
-  }
-
   test("SPARK-20594: hive.exec.stagingdir was deleted by Hive") {
     // Set hive.exec.stagingdir under the table directory without start with ".".
     withSQLConf("hive.exec.stagingdir" -> "./test") {
@@ -532,6 +512,31 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
         sql("INSERT OVERWRITE TABLE test_table SELECT 1")
         checkAnswer(sql("SELECT * FROM test_table"), Row(1))
       }
+    }
+  }
+
+  test("Insert data into hive bucketized table.") {
+    sql("""
+     |CREATE TABLE bucketizedTable (key int, value string)
+     |CLUSTERED BY (key) SORTED BY (key ASC) into 4 buckets
+     |ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
+     |""".stripMargin)
+    val identifier = spark.sessionState.sqlParser.parseTableIdentifier("bucketizedTable")
+    val data = spark.sparkContext.parallelize((0 until 100)
+      .map(i => TestData(i, i.toString))).toDF()
+    data.write.mode(SaveMode.Overwrite).insertInto("bucketizedTable")
+    val dir = spark.sessionState.catalog.defaultTablePath(identifier)
+    val bucketFiles = new File(dir).listFiles().sortWith((a: File, b: File) => {
+      a.getName < b.getName
+    }).filter(file => file.getName.startsWith("part-"))
+    assert(bucketFiles.length === 4)
+    (0 to 3).foreach { bucket =>
+      spark.read.format("text")
+        .load(bucketFiles(bucket).getAbsolutePath)
+        .collect().map(_.getString(0).split("\t")(0).toInt)
+        .foreach { key =>
+          assert(HiveHashFunction.hash(key, IntegerType, seed = 0) % 4 === bucket)
+        }
     }
   }
 }

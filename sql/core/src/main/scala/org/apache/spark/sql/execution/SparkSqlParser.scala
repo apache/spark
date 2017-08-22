@@ -1103,7 +1103,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
     val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
-    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
+    val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec).map(_.copy(isHiveBucket = true))
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
     // to include the partition columns here explicitly

@@ -57,6 +57,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    */
   private def absPathStagingDir: Path = new Path(path, "_temporary-" + jobId)
 
+  private var fileNameWithPartitionId: Boolean = true
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
@@ -103,7 +105,12 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     // Note that %05d does not truncate the split number, so if we have more than 100000 tasks,
     // the file name is fine and won't overflow.
     val split = taskContext.getTaskAttemptID.getTaskID.getId
-    f"part-$split%05d-$jobId$ext"
+    if (fileNameWithPartitionId) {
+      f"part-$split%05d-$jobId$ext"
+    } else {
+      // File names created by different tasks should have different `ext` when `split` is not used.
+      f"part-$jobId$ext"
+    }
   }
 
   override def setupJob(jobContext: JobContext): Unit = {
@@ -118,6 +125,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     jobContext.getConfiguration.set("mapreduce.task.attempt.id", taskAttemptId.toString)
     jobContext.getConfiguration.setBoolean("mapreduce.task.ismap", true)
     jobContext.getConfiguration.setInt("mapreduce.task.partition", 0)
+    fileNameWithPartitionId =
+      jobContext.getConfiguration.getBoolean("spark.sql.bucket.fileNameWithPartitionId", true)
 
     val taskAttemptContext = new TaskAttemptContextImpl(jobContext.getConfiguration, taskAttemptId)
     committer = setupCommitter(taskAttemptContext)
@@ -126,7 +135,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
   override def commitJob(jobContext: JobContext, taskCommits: Seq[TaskCommitMessage]): Unit = {
     committer.commitJob(jobContext)
-    val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
+    val filesToMove = taskCommits.map(_.obj.asInstanceOf[HadoopMRTaskCommitStatus].absPathFiles)
       .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
     val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
@@ -152,7 +161,22 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val attemptId = taskContext.getTaskAttemptID
     SparkHadoopMapRedUtil.commitTask(
       committer, taskContext, attemptId.getJobID.getId, attemptId.getTaskID.getId)
-    new TaskCommitMessage(addedAbsPathFiles.toMap)
+    val committedPaths = mutable.HashSet[String]()
+    committer match {
+      case fileOutputCommitter: FileOutputCommitter =>
+        val committedPath = fileOutputCommitter.getCommittedTaskPath(taskContext)
+        if (committedPath != null) {
+          committedPaths += committedPath.toString
+        }
+      case _ =>
+        committedPaths += path
+    }
+    if (path != null) {
+      committedPaths += absPathStagingDir.toString
+    }
+
+    new TaskCommitMessage(
+      HadoopMRTaskCommitStatus(addedAbsPathFiles.toMap, committedPaths.toSeq))
   }
 
   override def abortTask(taskContext: TaskAttemptContext): Unit = {
@@ -164,3 +188,5 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     }
   }
 }
+
+case class HadoopMRTaskCommitStatus(absPathFiles: Map[String, String], commitPaths: Seq[String])

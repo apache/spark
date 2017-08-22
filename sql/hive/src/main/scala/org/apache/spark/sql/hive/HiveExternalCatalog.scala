@@ -419,8 +419,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
 
     if (bucketSpec.isDefined) {
-      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
+      val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames, isHiveBucket) = bucketSpec.get
 
+      properties.put(DATASOURCE_SCHEMA_ISHIVEBUCKET, isHiveBucket.toString)
       properties.put(DATASOURCE_SCHEMA_NUMBUCKETS, numBuckets.toString)
       properties.put(DATASOURCE_SCHEMA_NUMBUCKETCOLS, bucketColumnNames.length.toString)
       bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
@@ -737,9 +738,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def restoreHiveSerdeTable(table: CatalogTable): CatalogTable = {
-    val hiveTable = table.copy(
-      provider = Some(DDLUtils.HIVE_PROVIDER),
-      tracksPartitionsInCatalog = true)
+    val hiveTable = table.bucketSpec match {
+      case Some(spec) =>
+        table.copy(
+          provider = Some(DDLUtils.HIVE_PROVIDER),
+          tracksPartitionsInCatalog = true,
+          bucketSpec = Some(spec.copy(isHiveBucket = true)))
+      case None =>
+        table.copy(
+          provider = Some(DDLUtils.HIVE_PROVIDER),
+          tracksPartitionsInCatalog = true)
+    }
 
     // If this is a Hive serde table created by Spark 2.1 or higher versions, we should restore its
     // schema from table properties.
@@ -1278,6 +1287,7 @@ object HiveExternalCatalog {
   val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
   val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
   val DATASOURCE_SCHEMA_NUMSORTCOLS = DATASOURCE_SCHEMA_PREFIX + "numSortCols"
+  val DATASOURCE_SCHEMA_ISHIVEBUCKET = DATASOURCE_SCHEMA_PREFIX + "isHiveBucket"
   val DATASOURCE_SCHEMA_NUMBUCKETS = DATASOURCE_SCHEMA_PREFIX + "numBuckets"
   val DATASOURCE_SCHEMA_NUMBUCKETCOLS = DATASOURCE_SCHEMA_PREFIX + "numBucketCols"
   val DATASOURCE_SCHEMA_PART_PREFIX = DATASOURCE_SCHEMA_PREFIX + "part."
@@ -1363,7 +1373,8 @@ object HiveExternalCatalog {
       BucketSpec(
         numBuckets.toInt,
         getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
-        getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
+        getColumnNamesByType(metadata.properties, "sort", "sorting columns"),
+        metadata.properties.get(DATASOURCE_SCHEMA_ISHIVEBUCKET).getOrElse("false") == "true")
     }
   }
 
