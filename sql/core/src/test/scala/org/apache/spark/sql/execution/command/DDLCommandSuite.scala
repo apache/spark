@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import java.net.URI
 import java.util.Locale
 
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
