@@ -177,7 +177,7 @@ test_that("spark.randomForest", {
   # classification
   data <- suppressWarnings(createDataFrame(iris))
   model <- spark.randomForest(data, Species ~ Petal_Length + Petal_Width, "classification",
-                              maxDepth = 5, maxBins = 16)
+                              maxDepth = 5, maxBins = 16, seed = 123)
 
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
@@ -215,7 +215,7 @@ test_that("spark.randomForest", {
   iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
   data <- suppressWarnings(createDataFrame(iris[-5]))
   model <- spark.randomForest(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
-                              maxDepth = 5, maxBins = 16)
+                              maxDepth = 5, maxBins = 16, seed = 123)
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
@@ -234,12 +234,12 @@ test_that("spark.randomForest", {
   traindf <- as.DataFrame(data[trainidxs, ])
   testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
   model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
-                          maxDepth = 10, maxBins = 10, numTrees = 10)
+                          maxDepth = 10, maxBins = 10, numTrees = 10, seed = 123)
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
   model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
                              maxDepth = 10, maxBins = 10, numTrees = 10,
-                             handleInvalid = "keep")
+                             handleInvalid = "keep", seed = 123)
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 
@@ -247,7 +247,7 @@ test_that("spark.randomForest", {
   if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                   source = "libsvm")
-    model <- spark.randomForest(data, label ~ features, "classification")
+    model <- spark.randomForest(data, label ~ features, "classification", seed = 123)
     expect_equal(summary(model)$numFeatures, 4)
   }
 })
