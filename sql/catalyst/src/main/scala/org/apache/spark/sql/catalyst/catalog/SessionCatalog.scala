@@ -1104,26 +1104,9 @@ class SessionCatalog(
   /**
    * Constructs a [[FunctionBuilder]] based on the provided class that represents a function.
    */
-  protected def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+  private def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
     val clazz = Utils.classForName(functionClassName)
-    (children: Seq[Expression]) => {
-      try {
-        makeFunctionExpression(name, clazz, children).getOrElse {
-          val extraMsg =
-            if (!isUsingHiveMetastore) "Use sparkSession.udf.register(...) instead." else ""
-          throw new AnalysisException(
-            s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'. $extraMsg")
-        }
-      } catch {
-        case ae: AnalysisException =>
-          throw ae
-        case NonFatal(e) =>
-          val analysisException =
-            new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e")
-          analysisException.setStackTrace(e.getStackTrace)
-          throw analysisException
-      }
-    }
+    (input: Seq[Expression]) => makeFunctionExpression(name, clazz, input)
   }
 
   /**
@@ -1134,16 +1117,17 @@ class SessionCatalog(
   protected def makeFunctionExpression(
       name: String,
       clazz: Class[_],
-      children: Seq[Expression]): Option[Expression] = {
+      input: Seq[Expression]): Expression = {
     val clsForUDAF =
       Utils.classForName("org.apache.spark.sql.expressions.UserDefinedAggregateFunction")
     if (clsForUDAF.isAssignableFrom(clazz)) {
       val cls = Utils.classForName("org.apache.spark.sql.execution.aggregate.ScalaUDAF")
-      Some(cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
-        .newInstance(children, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
-        .asInstanceOf[Expression])
+      cls.getConstructor(classOf[Seq[Expression]], clsForUDAF, classOf[Int], classOf[Int])
+        .newInstance(input, clazz.newInstance().asInstanceOf[Object], Int.box(1), Int.box(1))
+        .asInstanceOf[Expression]
     } else {
-      None
+      throw new AnalysisException(s"No handler for UDAF '${clazz.getCanonicalName}'. " +
+        s"Use sparkSession.udf.register(...) instead.")
     }
   }
 
