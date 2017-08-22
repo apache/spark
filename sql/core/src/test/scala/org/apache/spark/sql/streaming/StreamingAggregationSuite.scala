@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
@@ -361,19 +362,25 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   }
 
   test("SPARK-19690: do not convert batch aggregation in streaming query to streaming") {
-    val streamInput = MemoryStream[Int]
-    val batchInput = Seq(1, 2, 3, 4, 5)
-        .toDF("value")
-        .withColumn("parity", 'value % 2)
-        .groupBy('parity)
-        .agg(count("*") as 'joinValue)
-    val joinDS = streamInput
-        .toDF()
-        .join(batchInput, 'value === 'parity)
+    withTempDir { dir =>
+      val streamInput = MemoryStream[Int]
+      val batchDF = Seq(1, 2, 3, 4, 5)
+          .toDF("value")
+          .withColumn("parity", 'value % 2)
+          .groupBy('parity)
+          .agg(count("*") as 'joinValue)
+      val joinDF = streamInput
+          .toDF()
+          .join(batchDF, 'value === 'parity)
 
-    testStream(joinDS, Update)(
-      AddData(streamInput, 0, 1, 2, 3),
-      CheckLastBatch((0, 0, 2), (1, 1, 3))
-    )
+      // make sure we're planning an aggregate in the first place
+      assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
+
+      testStream(joinDF, Append)(
+        AddData(streamInput, 0, 1, 2, 3),
+        CheckLastBatch((0, 0, 2), (1, 1, 3)),
+        AddData(streamInput, 0, 1, 2, 3),
+        CheckLastBatch((0, 0, 2), (1, 1, 3)))
+    }
   }
 }
