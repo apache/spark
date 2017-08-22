@@ -211,6 +211,65 @@ for more details on the API.
 </div>
 </div>
 
+## FeatureHasher
+
+Feature hashing projects a set of categorical or numerical features into a feature vector of
+specified dimension (typically substantially smaller than that of the original feature
+space). This is done using the [hashing trick](https://en.wikipedia.org/wiki/Feature_hashing)
+to map features to indices in the feature vector.
+
+The `FeatureHasher` transformer operates on multiple columns. Each column may contain either
+numeric or categorical features. Behavior and handling of column data types is as follows:
+
+- Numeric columns: For numeric features, the hash value of the column name is used to map the
+feature value to its index in the feature vector. Numeric features are never treated as
+categorical, even when they are integers. You must explicitly convert numeric columns containing
+categorical features to strings first.
+- String columns: For categorical features, the hash value of the string "column_name=value"
+is used to map to the vector index, with an indicator value of `1.0`. Thus, categorical features
+are "one-hot" encoded (similarly to using `OneHotEncoder` with `dropLast=false`).
+- Boolean columns: Boolean values are treated in the same way as string columns. That is,
+boolean features are represented as "column_name=true" or "column_name=false", with an indicator
+value of `1.0`.
+
+Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+
+Since a simple modulo is used to transform the hash function to a vector index,
+it is advisable to use a power of two as the numFeatures parameter;
+otherwise the features will not be mapped evenly to the vector indices.
+
+**Examples**
+
+In the following code segment, there are several input columns of different data types to
+illustrate the behavior of the transform to produce a column of feature vectors. The feature
+vectors could then be passed to a learning algorithm.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [FeatureHasher Scala docs](api/scala/index.html#org.apache.spark.ml.feature.FeatureHasher)
+for more details on the API.
+
+{% include_example scala/org/apache/spark/examples/ml/FeatureHasherExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [FeatureHasher Java docs](api/java/org/apache/spark/ml/feature/FeatureHasher.html)
+for more details on the API.
+
+{% include_example java/org/apache/spark/examples/ml/JavaFeatureHasherExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [FeatureHasher Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.FeatureHasher)
+for more details on the API.
+
+{% include_example python/ml/feature_hasher_example.py %}
+</div>
+</div>
+
 # Feature Transformers
 
 ## Tokenizer
