@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
 private[sql] class JacksonGenerator(
-    schema: StructType,
+    childType: DataType,
     writer: Writer,
     options: JSONOptions) {
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
@@ -35,13 +35,31 @@ private[sql] class JacksonGenerator(
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
-  // `ValueWriter`s for all fields of the schema
-  private val rootFieldWriters: Array[ValueWriter] = schema.map(_.dataType).map(makeWriter).toArray
-  // `ValueWriter` for array data storing rows of the schema.
-  private val arrElementWriter: ValueWriter = (arr: SpecializedGetters, i: Int) => {
-    writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
+  private val rootWriter = childType match {
+    case _: StructType => rootFieldWriters(rowSchema)
+    case ArrayType(_: StructType, _) => arrElementWriter(rowSchema)
+    case MapType(_: DataType, _: StructType, _: Boolean) => mapValueWriter(rowSchema)
   }
-  private val mapValueWriter: ValueWriter = makeWriter(schema)
+
+  lazy val rowSchema = childType match {
+    case st: StructType => st
+    case ArrayType(st: StructType, _) => st
+    case MapType(_: DataType, st: StructType, _) => st
+  }
+
+  // `ValueWriter`s for all fields of the schema
+  private def rootFieldWriters(schema: StructType): Array[ValueWriter] = {
+    schema.map(_.dataType).map(makeWriter).toArray
+  }
+
+  // `ValueWriter` for array data storing rows of the schema.
+  private def arrElementWriter(schema: StructType): ValueWriter = {
+    (arr: SpecializedGetters, i: Int) => {
+      writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters(schema)))
+    }
+  }
+
+  private def mapValueWriter(schema: StructType): ValueWriter = makeWriter(schema)
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
@@ -128,7 +146,7 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         val v = row.get(ordinal, dataType)
         sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
-          s"with the type of $dataType to JSON.")
+            s"with the type of $dataType to JSON.")
   }
 
   private def writeObject(f: => Unit): Unit = {
@@ -194,17 +212,22 @@ private[sql] class JacksonGenerator(
    *
    * @param row The row to convert
    */
-  def write(row: InternalRow): Unit = writeObject(writeFields(row, schema, rootFieldWriters))
+  def write(row: InternalRow): Unit = {
+    writeObject(writeFields(row, rowSchema, rootWriter.asInstanceOf[Array[ValueWriter]]))
+  }
 
   /**
    * Transforms multiple `InternalRow`s to JSON array using Jackson
    *
    * @param array The array of rows to convert
    */
-  def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
+  def write(array: ArrayData): Unit = {
+    writeArray(writeArrayData(array, rootWriter.asInstanceOf[ValueWriter]))
+  }
 
-  def write(map: MapData, mapType: MapType): Unit = {
-    writeObject(writeMapData(map, mapType, mapValueWriter))
+  def write(map: MapData): Unit = {
+    writeObject(writeMapData(map, childType.asInstanceOf[MapType],
+      rootWriter.asInstanceOf[ValueWriter]))
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')
