@@ -29,7 +29,7 @@ import org.apache.spark.TestUtils
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry, NoSuchPartitionException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTableType, CatalogUtils}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, CatalogUtils, HiveTableRelation}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
@@ -454,7 +454,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       case LogicalRelation(r: HadoopFsRelation, _, _) =>
         if (!isDataSourceTable) {
           fail(
-            s"${classOf[CatalogRelation].getCanonicalName} is expected, but found " +
+            s"${classOf[HiveTableRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
         }
         userSpecifiedLocation match {
@@ -464,11 +464,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
         assert(catalogTable.provider.get === format)
 
-      case r: CatalogRelation =>
+      case r: HiveTableRelation =>
         if (isDataSourceTable) {
           fail(
             s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
-              s"${classOf[CatalogRelation].getCanonicalName}.")
+              s"${classOf[HiveTableRelation].getCanonicalName}.")
         }
         userSpecifiedLocation match {
           case Some(location) =>
@@ -948,7 +948,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "false") {
       sql("CREATE TABLE explodeTest (key bigInt)")
       table("explodeTest").queryExecution.analyzed match {
-        case SubqueryAlias(_, r: CatalogRelation) => // OK
+        case SubqueryAlias(_, r: HiveTableRelation) => // OK
         case _ =>
           fail("To correctly test the fix of SPARK-5875, explodeTest should be a MetastoreRelation")
       }
@@ -2023,7 +2023,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-21721: Clear FileSystem deleterOnExit cache if path is successfully removed") {
-    withTable("test21721") {
+    val table = "test21721"
+    withTable(table) {
       val deleteOnExitField = classOf[FileSystem].getDeclaredField("deleteOnExit")
       deleteOnExitField.setAccessible(true)
 
@@ -2031,10 +2032,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       val setOfPath = deleteOnExitField.get(fs).asInstanceOf[Set[Path]]
 
       val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-      sql("CREATE TABLE test21721 (key INT, value STRING)")
+      sql(s"CREATE TABLE $table (key INT, value STRING)")
       val pathSizeToDeleteOnExit = setOfPath.size()
 
-      (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto("test1"))
+      (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto(table))
 
       assert(setOfPath.size() == pathSizeToDeleteOnExit)
     }

@@ -25,8 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.HttpClient
+import org.eclipse.jetty.client.api.Response
 import org.eclipse.jetty.client.http.HttpClientTransportOverHTTP
 import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.server._

@@ -22,9 +22,9 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods._
 import org.scalatest.Assertions
 import org.scalatest.exceptions.TestFailedException
 
