@@ -421,7 +421,7 @@ public final class ColumnarBatch {
     this.numRows = numRows;
 
     for (int ordinal : nullFilteredColumns) {
-      if (columns[ordinal].numNulls != 0) {
+      if (columns[ordinal].numNulls() != 0) {
         for (int rowId = 0; rowId < numRows; rowId++) {
           if (!filteredRows[rowId] && columns[ordinal].isNullAt(rowId)) {
             filteredRows[rowId] = true;

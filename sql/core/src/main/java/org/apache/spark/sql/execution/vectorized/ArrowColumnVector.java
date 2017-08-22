@@ -32,10 +32,10 @@ import org.apache.spark.unsafe.types.UTF8String;
 public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
-  private final int valueCount;
   private ArrowColumnVector[] childColumns;
 
   private void ensureAccessible(int index) {
+    int valueCount = accessor.getValueCount();
     if (index < 0 || index >= valueCount) {
       throw new IndexOutOfBoundsException(
         String.format("index: %d, valueCount: %d", index, valueCount));
@@ -43,10 +43,21 @@ public final class ArrowColumnVector extends ColumnVector {
   }
 
   private void ensureAccessible(int index, int count) {
+    int valueCount = accessor.getValueCount();
     if (index < 0 || index + count > valueCount) {
       throw new IndexOutOfBoundsException(
         String.format("index range: [%d, %d), valueCount: %d", index, index + count, valueCount));
     }
+  }
+
+  @Override
+  public int numNulls() {
+    return accessor.getNullCount();
+  }
+
+  @Override
+  public boolean anyNullsSet() {
+    return numNulls() > 0;
   }
 
   @Override
@@ -288,7 +299,7 @@ public final class ArrowColumnVector extends ColumnVector {
   public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
 
   public ArrowColumnVector(ValueVector vector) {
-    super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()));
+    super(ArrowUtils.fromArrowField(vector.getField()));
 
     if (vector instanceof NullableBitVector) {
       accessor = new BooleanAccessor((NullableBitVector) vector);
@@ -329,9 +340,6 @@ public final class ArrowColumnVector extends ColumnVector {
     } else {
       throw new UnsupportedOperationException();
     }
-    valueCount = accessor.getValueCount();
-    numNulls = accessor.getNullCount();
-    anyNullsSet = numNulls > 0;
   }
 
   private abstract static class ArrowVectorAccessor {
@@ -339,14 +347,9 @@ public final class ArrowColumnVector extends ColumnVector {
     private final ValueVector vector;
     private final ValueVector.Accessor nulls;
 
-    private final int valueCount;
-    private final int nullCount;
-
     ArrowVectorAccessor(ValueVector vector) {
       this.vector = vector;
       this.nulls = vector.getAccessor();
-      this.valueCount = nulls.getValueCount();
-      this.nullCount = nulls.getNullCount();
     }
 
     final boolean isNullAt(int rowId) {
@@ -354,11 +357,11 @@ public final class ArrowColumnVector extends ColumnVector {
     }
 
     final int getValueCount() {
-      return valueCount;
+      return nulls.getValueCount();
     }
 
     final int getNullCount() {
-      return nullCount;
+      return nulls.getNullCount();
     }
 
     final void close() {

@@ -82,6 +82,12 @@ public abstract class WritableColumnVector extends ColumnVector {
     throw new RuntimeException(message, cause);
   }
 
+  @Override
+  public int numNulls() { return numNulls; }
+
+  @Override
+  public boolean anyNullsSet() { return anyNullsSet; }
+
   /**
    * Ensures that there is enough storage to store capacity elements. That is, the put() APIs
    * must work for all rowIds < capacity.
@@ -545,10 +551,32 @@ public abstract class WritableColumnVector extends ColumnVector {
   public final void setIsConstant() { isConstant = true; }
 
   /**
+   * Maximum number of rows that can be stored in this column.
+   */
+  protected int capacity;
+
+  /**
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
   protected int MAX_CAPACITY = Integer.MAX_VALUE;
+
+  /**
+   * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
+   */
+  protected int numNulls;
+
+  /**
+   * True if there is at least one NULL byte set. This is an optimization for the writer, to skip
+   * having to clear NULL bits.
+   */
+  protected boolean anyNullsSet;
+
+  /**
+   * True if this column's values are fixed. This means the column values never change, even
+   * across resets.
+   */
+  protected boolean isConstant;
 
   /**
    * Default size of each array length value. This grows as necessary.
@@ -564,12 +592,6 @@ public abstract class WritableColumnVector extends ColumnVector {
    * If this is a nested type (array or struct), the column for the child data.
    */
   protected WritableColumnVector[] childColumns;
-
-  /**
-   * True if this column's values are fixed. This means the column values never change, even
-   * across resets.
-   */
-  protected boolean isConstant;
 
   /**
    * Update the dictionary.
@@ -611,7 +633,8 @@ public abstract class WritableColumnVector extends ColumnVector {
    * type.
    */
   protected WritableColumnVector(int capacity, DataType type) {
-    super(capacity, type);
+    super(type);
+    this.capacity = capacity;
 
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {

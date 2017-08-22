@@ -261,13 +261,13 @@ public abstract class ColumnVector implements AutoCloseable {
   /**
    * Returns the number of nulls in this column.
    */
-  public final int numNulls() { return numNulls; }
+  public abstract int numNulls();
 
   /**
    * Returns true if any of the nulls indicator are set for this column. This can be used
    * as an optimization to prevent setting nulls.
    */
-  public final boolean anyNullsSet() { return anyNullsSet; }
+  public abstract boolean anyNullsSet();
 
   /**
    * Returns the off heap ptr for the arrays backing the NULLs and values buffer. Only valid
@@ -437,25 +437,9 @@ public abstract class ColumnVector implements AutoCloseable {
   public final boolean isArray() { return resultArray != null; }
 
   /**
-   * Maximum number of rows that can be stored in this column.
-   */
-  protected int capacity;
-
-  /**
    * Data type for this column.
    */
   protected DataType type;
-
-  /**
-   * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
-   */
-  protected int numNulls;
-
-  /**
-   * True if there is at least one NULL byte set. This is an optimization for the writer, to skip
-   * having to clear NULL bits.
-   */
-  protected boolean anyNullsSet;
 
   /**
    * Reusable Array holder for getArray().
@@ -495,8 +479,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * Sets up the common state and also handles creating the child columns if this is a nested
    * type.
    */
-  protected ColumnVector(int capacity, DataType type) {
-    this.capacity = capacity;
+  protected ColumnVector(DataType type) {
     this.type = type;
   }
 }
