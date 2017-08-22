@@ -25,6 +25,8 @@ RUN apk upgrade --no-cache && \
     mkdir -p /opt/spark && \
     mkdir -p /opt/spark/work-dir \
     touch /opt/spark/RELEASE && \
+    rm /bin/sh && \
+    ln -sv /bin/bash /bin/sh && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd
 
 COPY jars /opt/spark/jars

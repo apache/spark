@@ -69,6 +69,7 @@ package object constants {
   private[spark] val ENV_MOUNTED_FILES_DIR = "SPARK_MOUNTED_FILES_DIR"
   private[spark] val ENV_PYSPARK_FILES = "PYSPARK_FILES"
   private[spark] val ENV_PYSPARK_PRIMARY = "PYSPARK_PRIMARY"
+  private[spark] val ENV_JAVA_OPT_PREFIX = "SPARK_JAVA_OPT_"
   private[spark] val ENV_MOUNTED_FILES_FROM_SECRET_DIR = "SPARK_MOUNTED_FILES_FROM_SECRET_DIR"
 
   // Bootstrapping dependencies with the init-container
