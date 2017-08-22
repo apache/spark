@@ -40,8 +40,6 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  *      stage, but still many failures over the entire application
  *  * "flaky" executors -- they don't fail every task, but are still faulty enough to merit
  *      blacklisting
- *   * shutting down executors -- executors which are shutting down and should not have new tasks
- *      scheduled.
  *
  * See the design doc on SPARK-8425 for a more in-depth discussion.
  *
