@@ -40,8 +40,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 
-// TODO: merge this with DDLSuite (SPARK-14441)
-class DDLCommandSuite extends PlanTest with SharedSQLContext {
+class DDLParserSuite extends PlanTest with SharedSQLContext {
   private lazy val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
