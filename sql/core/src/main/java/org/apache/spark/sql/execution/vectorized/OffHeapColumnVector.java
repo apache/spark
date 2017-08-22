@@ -64,8 +64,6 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   public OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
 
-    initialize();
-
     nulls = 0;
     data = 0;
     lengthData = 0;

@@ -607,9 +607,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
 
   /**
-   * Initialize child columns.
+   * Sets up the common state and also handles creating the child columns if this is a nested
+   * type.
    */
-  protected void initialize() {
+  protected WritableColumnVector(int capacity, DataType type) {
+    super(capacity, type);
+
     if (type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType
         || DecimalType.isByteArrayDecimalType(type)) {
       DataType childType;
@@ -644,13 +647,5 @@ public abstract class WritableColumnVector extends ColumnVector {
       this.resultArray = null;
       this.resultStruct = null;
     }
-  }
-
-  /**
-   * Sets up the common state and also handles creating the child columns if this is a nested
-   * type.
-   */
-  protected WritableColumnVector(int capacity, DataType type) {
-    super(capacity, type);
   }
 }

@@ -74,7 +74,7 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   public OnHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
-    initialize();
+
     reserveInternal(capacity);
     reset();
   }
