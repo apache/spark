@@ -285,6 +285,9 @@ class LinearRegressionSuite
     val model2 = trainer2.fit(datasetWithOutlier)
 
     /*
+      Using the following Python code to load the data and train the model using
+      scikit-learn package.
+
       import pandas as pd
       import numpy as np
       from sklearn.linear_model import HuberRegressor
@@ -298,8 +301,6 @@ class LinearRegressionSuite
       array([ 4.68998007,  7.19429011])
       >>> huber.intercept_
       6.3002404351083037
-      >>> huber.scale_
-      0.077810159205220747
      */
     val coefficientsPy = Vectors.dense(4.68998007, 7.19429011)
     val interceptPy = 6.30024044
@@ -368,6 +369,9 @@ class LinearRegressionSuite
     val model2 = trainer2.fit(datasetWithOutlier)
 
     /*
+      Using the following Python code to load the data and train the model using
+      scikit-learn package.
+
       import pandas as pd
       import numpy as np
       from sklearn.linear_model import HuberRegressor
@@ -381,8 +385,6 @@ class LinearRegressionSuite
       array([ 6.71756703,  5.08873222])
       >>> huber.intercept_
       0.0
-      >>> huber.scale_
-      2.5560209922722317
      */
     val coefficientsPy = Vectors.dense(6.71756703, 5.08873222)
     val interceptPy = 0.0
@@ -558,6 +560,9 @@ class LinearRegressionSuite
     val model = trainer.fit(datasetWithOutlier)
 
     /*
+      Using the following Python code to load the data and train the model using
+      scikit-learn package.
+
       import pandas as pd
       import numpy as np
       from sklearn.linear_model import HuberRegressor
@@ -571,8 +576,6 @@ class LinearRegressionSuite
       array([ 4.68836213,  7.19283181])
       >>> huber.intercept_
       6.2997900552575956
-      >>> huber.scale_
-      0.078078316418777688
      */
     val coefficientsPy = Vectors.dense(4.68836213, 7.19283181)
     val interceptPy = 6.29979006
@@ -640,6 +643,9 @@ class LinearRegressionSuite
     val model = trainer.fit(datasetWithOutlier)
 
     /*
+      Using the following Python code to load the data and train the model using
+      scikit-learn package.
+
       import pandas as pd
       import numpy as np
       from sklearn.linear_model import HuberRegressor
@@ -653,8 +659,6 @@ class LinearRegressionSuite
       array([ 6.65843427,  5.05270876])
       >>> huber.intercept_
       0.0
-      >>> huber.scale_
-      2.5699129758439119
      */
     val coefficientsPy = Vectors.dense(6.65843427, 5.05270876)
     val interceptPy = 0.0
@@ -1005,6 +1009,7 @@ class LinearRegressionSuite
       (1.0, 0.21, true, true)
     )
 
+    // For leastSquares loss
     for (solver <- Seq("auto", "l-bfgs", "normal");
          (elasticNetParam, regParam, fitIntercept, standardization) <- testParams) {
       val estimator = new LinearRegression()
@@ -1019,6 +1024,22 @@ class LinearRegressionSuite
         outlierRatio = 3)
       MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](
         datasetWithStrongNoise.as[LabeledPoint], estimator, modelEquals, seed)
+    }
+
+    // For huber loss
+    for ((_, regParam, fitIntercept, standardization) <- testParams) {
+      val estimator = new LinearRegression()
+        .setLoss("huber")
+        .setFitIntercept(fitIntercept)
+        .setStandardization(standardization)
+        .setRegParam(regParam)
+      MLTestingUtils.testArbitrarilyScaledWeights[LinearRegressionModel, LinearRegression](
+        datasetWithOutlier.as[LabeledPoint], estimator, modelEquals)
+      MLTestingUtils.testOutliersWithSmallWeights[LinearRegressionModel, LinearRegression](
+        datasetWithOutlier.as[LabeledPoint], estimator, numClasses, modelEquals,
+        outlierRatio = 3)
+      MLTestingUtils.testOversamplingVsWeighting[LinearRegressionModel, LinearRegression](
+        datasetWithOutlier.as[LabeledPoint], estimator, modelEquals, seed)
     }
   }
 
@@ -1171,6 +1192,15 @@ class LinearRegressionSuite
         assert(expected.coefficients === actual.coefficients)
       }
     }
+  }
+
+  test("huber loss model match leastSquares loss for large m") {
+    val trainer1 = new LinearRegression().setLoss("huber").setM(1E5)
+    val model1 = trainer1.fit(datasetWithOutlier)
+    val trainer2 = new LinearRegression()
+    val model2 = trainer2.fit(datasetWithOutlier)
+    assert(model1.coefficients ~== model2.coefficients relTol 1E-3)
+    assert(model1.intercept ~== model2.intercept relTol 1E-3)
   }
 }
 
