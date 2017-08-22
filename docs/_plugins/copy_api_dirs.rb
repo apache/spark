@@ -20,7 +20,7 @@ include FileUtils
 
 if not (ENV['SKIP_API'] == '1')
   if not (ENV['SKIP_SCALADOC'] == '1')
-    # Build Scaladoc for Java/Scala
+    # Build Scaladoc for Scala and Javadoc for Java
 
     puts "Moving to project root and building API docs."
     curr_dir = pwd

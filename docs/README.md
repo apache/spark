@@ -9,8 +9,8 @@ documentation yourself. Why build it yourself? So that you have the docs that co
 whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
-The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala,
-Python and R.
+The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala, Java,
+Python, R and SQL.
 
 You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
 [Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
@@ -54,20 +54,25 @@ You can modify the default Jekyll build as follows:
     $ PRODUCTION=1 jekyll build
 ```
 
-## API Docs (Scaladoc, Sphinx, roxygen2)
+## API Docs (Scaladoc, Javadoc, Sphinx, roxygen2, MkDocs)
 
-You can build just the Spark scaladoc by running `build/sbt unidoc` from the SPARK_PROJECT_ROOT directory.
+You can build just the Spark scaladoc and javadoc by running `build/sbt unidoc` from the `SPARK_PROJECT_ROOT`
+directory.
 
 Similarly, you can build just the PySpark docs by running `make html` from the
-SPARK_PROJECT_ROOT/python/docs directory. Documentation is only generated for classes that are listed as
-public in `__init__.py`. The SparkR docs can be built by running SPARK_PROJECT_ROOT/R/create-docs.sh.
+`SPARK_PROJECT_ROOT/python/docs` directory. Documentation is only generated for classes that are listed as
+public in `__init__.py`. The SparkR docs can be built by running `SPARK_PROJECT_ROOT/R/create-docs.sh`, and
+the SQL docs can be built by running `SPARK_PROJECT_ROOT/sql/create-docs.sh`
+after [building Spark](https://github.com/apache/spark#building-spark) first.
 
-When you run `jekyll` in the `docs` directory, it will also copy over the scaladoc for the various
+When you run `jekyll build` in the `docs` directory, it will also copy over the scaladoc and javadoc for the various
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
 jekyll plugin to run `build/sbt unidoc` before building the site so if you haven't run it (recently) it
-may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the
-PySpark docs using [Sphinx](http://sphinx-doc.org/).
+may take some time as it generates all of the scaladoc and javadoc using [Unidoc](https://github.com/sbt/sbt-unidoc).
+The jekyll plugin also generates the PySpark docs using [Sphinx](http://sphinx-doc.org/), SparkR docs
+using [roxygen2](https://cran.r-project.org/web/packages/roxygen2/index.html) and SQL docs
+using [MkDocs](http://www.mkdocs.org/).
 
-NOTE: To skip the step of building and copying over the Scala, Python, R and SQL API docs, run `SKIP_API=1
+NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
 jekyll`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
-to skip a single step of the corresponding language.
+to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both Scala and Java docs.

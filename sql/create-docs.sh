@@ -37,6 +37,8 @@ if ! hash mkdocs 2>/dev/null; then
   pip install mkdocs
 fi
 
+pushd "$FWDIR" > /dev/null
+
 # Now create the markdown file
 rm -fr docs
 mkdir docs
@@ -47,3 +49,5 @@ echo "Generating markdown files for SQL documentation."
 echo "Generating HTML files for SQL documentation."
 mkdocs build --clean
 rm -fr docs
+
+popd
