@@ -138,7 +138,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
-case class DeterminePartitionedTableStats(
+case class PruneHiveTablePartitions(
     session: SparkSession) extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case filter @ Filter(condition, relation: CatalogRelation)

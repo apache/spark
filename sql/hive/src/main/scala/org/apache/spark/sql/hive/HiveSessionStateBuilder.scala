@@ -94,8 +94,8 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
   override lazy val optimizer: Optimizer =
     new SparkOptimizer(catalog, conf, experimentalMethods) {
       override def postHocOptimizationBatches: Seq[Batch] = Seq(
-        Batch("Determine stats of partitionedTable", Once,
-          new DeterminePartitionedTableStats(session))
+        Batch("Prune Hive Table Partitions", Once,
+          new PruneHiveTablePartitions(session))
       )
 
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
