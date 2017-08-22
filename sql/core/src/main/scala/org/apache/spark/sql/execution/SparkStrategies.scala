@@ -221,12 +221,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   /**
-   * Used to plan aggregation queries that are computed incrementally as part of a
+   * Used to plan streaming aggregation queries that are computed incrementally as part of a
    * [[StreamingQuery]]. Currently this rule is injected into the planner
    * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case _ if !plan.isStreaming => Nil
+
       case EventTimeWatermark(columnName, delay, child) =>
         EventTimeWatermarkExec(columnName, delay, planLater(child)) :: Nil
 
