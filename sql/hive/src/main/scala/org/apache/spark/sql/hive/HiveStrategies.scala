@@ -141,7 +141,7 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
 case class PruneHiveTablePartitions(
     session: SparkSession) extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case filter @ Filter(condition, relation: CatalogRelation)
+    case filter @ Filter(condition, relation: HiveTableRelation)
       if DDLUtils.isHiveTable(relation.tableMeta) && relation.isPartitioned =>
       val predicates = splitConjunctivePredicates(condition)
       val normalizedFilters = predicates.map { e =>
