@@ -130,13 +130,6 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
   }
 
-  /**
-   * Checks whether the Hive metastore is being used
-   */
-  private def isUsingHiveMetastore: Boolean = {
-    conf.getConf(CATALOG_IMPLEMENTATION).toLowerCase(Locale.ROOT) == "hive"
-  }
-
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
     val cacheSize = conf.tableRelationCacheSize
     CacheBuilder.newBuilder().maximumSize(cacheSize).build[QualifiedTableName, LogicalPlan]()
