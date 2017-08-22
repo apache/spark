@@ -1110,7 +1110,7 @@ class SessionCatalog(
   }
 
   /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   * Constructs a [[FunctionBuilder]] based on the provided class that represents a function.
    *
    * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
