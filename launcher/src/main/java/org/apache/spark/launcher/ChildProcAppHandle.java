@@ -179,7 +179,7 @@ class ChildProcAppHandle implements SparkAppHandle {
 
       int ec;
       try {
-        ec = childProc.exitValue();
+        ec = proc.exitValue();
       } catch (Exception e) {
         LOG.log(Level.WARNING, "Exception getting child process exit code, assuming failure.", e);
         ec = 1;
