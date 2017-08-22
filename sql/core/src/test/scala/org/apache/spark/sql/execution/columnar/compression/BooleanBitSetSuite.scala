@@ -18,10 +18,13 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar.{BOOLEAN, NoopColumnStats}
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.types.BooleanType
 
 class BooleanBitSetSuite extends SparkFunSuite {
   import BooleanBitSet._
@@ -103,16 +106,16 @@ class BooleanBitSetSuite extends SparkFunSuite {
     assertResult(BooleanBitSet.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
     val decoder = BooleanBitSet.decoder(buffer, BOOLEAN)
-    val (decodeBuffer, nullsBuffer) = decoder.decompress(values.length)
+    val columnVector = ColumnVector.allocate(values.length, BooleanType, MemoryMode.ON_HEAP)
+    decoder.decompress(columnVector, values.length)
 
     if (values.nonEmpty) {
       values.zipWithIndex.foreach { case (b: Boolean, index: Int) =>
         assertResult(b, s"Wrong ${index}-th decoded boolean value") {
-          if (decodeBuffer.get() == 1) true else false
+          columnVector.getBoolean(index)
         }
       }
     }
-    assert(!decodeBuffer.hasRemaining)
   }
 
   test(s"$BooleanBitSet: empty") {

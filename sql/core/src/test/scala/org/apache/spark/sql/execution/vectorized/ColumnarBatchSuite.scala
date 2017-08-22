@@ -33,6 +33,7 @@ import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.columnar.ColumnAccessor
 import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
@@ -1308,8 +1309,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
@@ -1331,8 +1333,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
@@ -1354,8 +1357,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
@@ -1377,8 +1381,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
@@ -1400,8 +1405,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
@@ -1423,8 +1429,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {
@@ -1446,8 +1453,9 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = new CachedBatchColumnVector(
-      JavaUtils.bufferToArray(columnBuilder.build), 16, dataType)
+    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
+    ColumnAccessor.decompress(columnAccessor, column, 16)
 
     assert(column.isNullAt(0) == true)
     for (i <- 1 until 16) {

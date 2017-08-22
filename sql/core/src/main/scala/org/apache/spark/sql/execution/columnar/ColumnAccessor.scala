@@ -24,6 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -125,7 +126,7 @@ private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
-private[columnar] object ColumnAccessor {
+private[sql] object ColumnAccessor {
   @tailrec
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
@@ -153,15 +154,21 @@ private[columnar] object ColumnAccessor {
     }
   }
 
-  def decompress(columnAccessor: ColumnAccessor, numRows: Int): (ByteBuffer, ByteBuffer) = {
+  def decompress(columnAccessor: ColumnAccessor, columnVector: ColumnVector, numRows: Int): Unit = {
     if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
       val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
-      nativeAccessor.decompress(numRows)
+      nativeAccessor.decompress(columnVector, numRows)
     } else {
-      val buffer = columnAccessor.asInstanceOf[BasicColumnAccessor[_]].getByteBuffer
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
+      val dataBuffer = columnAccessor.asInstanceOf[BasicColumnAccessor[_]].getByteBuffer
+      val nullsBuffer = dataBuffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
-      (buffer, nullsBuffer)
+
+      val numNulls = ByteBufferHelper.getInt(nullsBuffer)
+      for (i <- 0 until numNulls) {
+        val cordinal = ByteBufferHelper.getInt(nullsBuffer)
+        columnVector.putNull(cordinal)
+      }
+      throw new RuntimeException("Not support non-primitive type now")
     }
   }
 }

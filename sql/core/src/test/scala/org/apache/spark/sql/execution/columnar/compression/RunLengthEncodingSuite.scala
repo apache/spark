@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types.AtomicType
 
 class RunLengthEncodingSuite extends SparkFunSuite {
@@ -125,50 +127,43 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       assertResult(RunLengthEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
-      val (decodeBuffer, nullsBuffer) = decoder.decompress(inputSeq.length)
+      val columnVector = ColumnVector.allocate(inputSeq.length, columnType.dataType,
+        MemoryMode.ON_HEAP)
+      decoder.decompress(columnVector, inputSeq.length)
 
       if (inputSeq.nonEmpty) {
-        val numNulls = ByteBufferHelper.getInt(nullsBuffer)
-        var cntNulls = 0
-        var nullPos = if (numNulls == 0) -1 else ByteBufferHelper.getInt(nullsBuffer)
         inputSeq.zipWithIndex.foreach {
           case (expected: Any, index: Int) if expected == nullValue =>
-            assertResult(index, "Wrong null position") {
-              nullPos
-            }
-            decodeBuffer.position(decodeBuffer.position + columnType.defaultSize)
-            cntNulls += 1
-            if (cntNulls < numNulls) {
-              nullPos = ByteBufferHelper.getInt(nullsBuffer)
+            assertResult(true, s"Wrong null ${index}th-position") {
+              columnVector.isNullAt(index)
             }
           case (i: Int, index: Int) =>
             columnType match {
               case BOOLEAN =>
                 assertResult(values(i), s"Wrong ${index}-th decoded boolean value") {
-                  if (decodeBuffer.get() == 1) true else false
+                  columnVector.getBoolean(index)
                 }
               case BYTE =>
                 assertResult(values(i), s"Wrong ${index}-th decoded byte value") {
-                  decodeBuffer.get()
+                  columnVector.getByte(index)
                 }
               case SHORT =>
                 assertResult(values(i), s"Wrong ${index}-th decoded short value") {
-                  ByteBufferHelper.getShort(decodeBuffer)
+                  columnVector.getShort(index)
                 }
               case INT =>
                 assertResult(values(i), s"Wrong ${index}-th decoded int value") {
-                  ByteBufferHelper.getInt(decodeBuffer)
+                  columnVector.getInt(index)
                 }
               case LONG =>
                 assertResult(values(i), s"Wrong ${index}-th decoded long value") {
-                  ByteBufferHelper.getLong(decodeBuffer)
+                  columnVector.getLong(index)
                 }
               case _ => fail("Unsupported type")
             }
           case _ => fail("Unsupported type")
         }
       }
-      assert(!decodeBuffer.hasRemaining)
     }
 
     test(s"$RunLengthEncoding with $typeName: empty column") {

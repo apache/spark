@@ -18,9 +18,11 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types.{AtomicType, IntegralType}
 
 class PassThroughSuite extends SparkFunSuite {
@@ -116,50 +118,43 @@ class PassThroughSuite extends SparkFunSuite {
       assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = PassThrough.decoder(buffer, columnType)
-      val (decodeBuffer, nullsBuffer) = decoder.decompress(input.length)
+      val columnVector = ColumnVector.allocate(input.length, columnType.dataType,
+        MemoryMode.ON_HEAP)
+      decoder.decompress(columnVector, input.length)
 
       if (input.nonEmpty) {
-        val numNulls = ByteBufferHelper.getInt(nullsBuffer)
-        var cntNulls = 0
-        var nullPos = if (numNulls == 0) -1 else ByteBufferHelper.getInt(nullsBuffer)
         input.zipWithIndex.foreach {
           case (expected: Any, index: Int) if expected == nullValue =>
-            assertResult(index, "Wrong null position") {
-              nullPos
-            }
-            decodeBuffer.position(decodeBuffer.position + columnType.defaultSize)
-            cntNulls += 1
-            if (cntNulls < numNulls) {
-              nullPos = ByteBufferHelper.getInt(nullsBuffer)
+            assertResult(true, s"Wrong null ${index}th-position") {
+              columnVector.isNullAt(index)
             }
           case (expected: Byte, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded byte value") {
-              decodeBuffer.get()
+              columnVector.getByte(index)
             }
           case (expected: Short, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded short value") {
-              ByteBufferHelper.getShort(decodeBuffer)
+              columnVector.getShort(index)
             }
           case (expected: Int, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded int value") {
-              ByteBufferHelper.getInt(decodeBuffer)
+              columnVector.getInt(index)
             }
           case (expected: Long, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded long value") {
-              ByteBufferHelper.getLong(decodeBuffer)
+              columnVector.getLong(index)
             }
           case (expected: Float, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded float value") {
-              ByteBufferHelper.getFloat(decodeBuffer)
+              columnVector.getFloat(index)
             }
           case (expected: Double, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded double value") {
-              ByteBufferHelper.getDouble(decodeBuffer)
+              columnVector.getDouble(index)
             }
           case _ => fail("Unsupported type")
         }
       }
-      assert(!decodeBuffer.hasRemaining)
     }
 
     test(s"$PassThrough with $typeName: empty column") {
