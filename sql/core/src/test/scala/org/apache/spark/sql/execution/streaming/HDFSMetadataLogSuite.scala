@@ -259,6 +259,23 @@ class HDFSMetadataLogSuite extends SparkFunSuite with SharedSQLContext {
       fm.rename(path2, path3)
     }
   }
+
+  test("verifyBatchIds") {
+    import HDFSMetadataLog.verifyBatchIds
+    verifyBatchIds(Seq(1L, 2L, 3L), Some(1L), Some(3L))
+    verifyBatchIds(Seq(1L), Some(1L), Some(1L))
+    verifyBatchIds(Seq(1L, 2L, 3L), None, Some(3L))
+    verifyBatchIds(Seq(1L, 2L, 3L), Some(1L), None)
+    verifyBatchIds(Seq(1L, 2L, 3L), None, None)
+
+    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(1L), None))
+    intercept[IllegalStateException](verifyBatchIds(Seq(), None, Some(1L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(), Some(1L), Some(1L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), None))
+    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), None, Some(5L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(2, 3, 4), Some(1L), Some(5L)))
+    intercept[IllegalStateException](verifyBatchIds(Seq(1, 2, 4, 5), Some(1L), Some(5L)))
+  }
 }
 
 /** FakeFileSystem to test fallback of the HDFSMetadataLog from FileContext to FileSystem API */

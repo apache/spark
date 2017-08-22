@@ -514,7 +514,7 @@ new data.
 <tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr>
 <tr>
   <td><code>SaveMode.ErrorIfExists</code> (default)</td>
-  <td><code>"error"</code> (default)</td>
+  <td><code>"error" or "errorifexists"</code> (default)</td>
   <td>
     When saving a DataFrame to a data source, if data already exists,
     an exception is expected to be thrown.
@@ -1307,6 +1307,13 @@ the following case-insensitive options:
        The transaction isolation level, which applies to current connection. It can be one of <code>NONE</code>, <code>READ_COMMITTED</code>, <code>READ_UNCOMMITTED</code>, <code>REPEATABLE_READ</code>, or <code>SERIALIZABLE</code>, corresponding to standard transaction isolation levels defined by JDBC's Connection object, with default of <code>READ_UNCOMMITTED</code>. This option applies only to writing. Please refer the documentation in <code>java.sql.Connection</code>.
      </td>
    </tr>
+
+  <tr>
+     <td><code>sessionInitStatement</code></td>
+     <td>
+       After each database session is opened to the remote DB and before starting to read data, this option executes a custom SQL statement (or a PL/SQL block). Use this to implement session initialization code. Example: <code>option("sessionInitStatement", """BEGIN execute immediate 'alter session set "_serial_direct_read"=true'; END;""")</code>
+     </td>
+  </tr>
 
   <tr>
     <td><code>truncate</code></td>

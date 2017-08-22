@@ -41,7 +41,7 @@ $JAVA_CMD \
   -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
   org.apache.spark.tools.GenerateMIMAIgnore
 
-echo -e "q\n" | build/sbt -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
+echo -e "q\n" | build/sbt -mem 4096 -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
 
 if [ $ret_val != 0 ]; then

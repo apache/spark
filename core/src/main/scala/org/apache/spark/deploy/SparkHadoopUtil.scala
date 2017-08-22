@@ -17,13 +17,13 @@
 
 package org.apache.spark.deploy
 
-import java.io.IOException
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream, File, IOException}
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Comparator, Date, Locale}
 
-import scala.collection.immutable.Map
 import scala.collection.JavaConverters._
+import scala.collection.immutable.Map
 import scala.collection.mutable
 import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
@@ -147,16 +147,26 @@ class SparkHadoopUtil extends Logging {
 
   def isYarnMode(): Boolean = { false }
 
-  def getCurrentUserCredentials(): Credentials = { null }
-
-  def addCurrentUserCredentials(creds: Credentials) {}
-
   def addSecretKeyToUserCredentials(key: String, secret: String) {}
 
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
 
-  def loginUserFromKeytab(principalName: String, keytabFilename: String) {
-    UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+  def getCurrentUserCredentials(): Credentials = {
+    UserGroupInformation.getCurrentUser().getCredentials()
+  }
+
+  def addCurrentUserCredentials(creds: Credentials): Unit = {
+    UserGroupInformation.getCurrentUser.addCredentials(creds)
+  }
+
+  def loginUserFromKeytab(principalName: String, keytabFilename: String): Unit = {
+    if (!new File(keytabFilename).exists()) {
+      throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
+    } else {
+      logInfo("Attempting to login to Kerberos" +
+        s" using principal: ${principalName} and keytab: ${keytabFilename}")
+      UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
+    }
   }
 
   /**
@@ -418,6 +428,21 @@ class SparkHadoopUtil extends Logging {
       s"path=${status.getPath}:${status.getOwner}:${status.getGroup}" +
       s"${if (status.isDirectory) "d" else "-"}$perm")
     false
+  }
+
+  def serialize(creds: Credentials): Array[Byte] = {
+    val byteStream = new ByteArrayOutputStream
+    val dataStream = new DataOutputStream(byteStream)
+    creds.writeTokenStorageToStream(dataStream)
+    byteStream.toByteArray
+  }
+
+  def deserialize(tokenBytes: Array[Byte]): Credentials = {
+    val tokensBuf = new ByteArrayInputStream(tokenBytes)
+
+    val creds = new Credentials()
+    creds.readTokenStorageStream(new DataInputStream(tokensBuf))
+    creds
   }
 }
 

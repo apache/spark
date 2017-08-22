@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.kvstore;
+package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.util.Arrays;
@@ -279,30 +279,6 @@ public class LevelDBSuite {
     @Override
     public int hashCode() {
       return id.hashCode();
-    }
-
-  }
-
-  public static class ArrayKeyIndexType {
-
-    @KVIndex
-    public int[] key;
-
-    @KVIndex("id")
-    public String[] id;
-
-    @Override
-    public boolean equals(Object o) {
-      if (o instanceof ArrayKeyIndexType) {
-        ArrayKeyIndexType other = (ArrayKeyIndexType) o;
-        return Arrays.equals(key, other.key) && Arrays.equals(id, other.id);
-      }
-      return false;
-    }
-
-    @Override
-    public int hashCode() {
-      return key.hashCode();
     }
 
   }

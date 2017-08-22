@@ -19,8 +19,8 @@ package org.apache.spark.streaming.util
 
 import java.nio.ByteBuffer
 import java.util.{Iterator => JIterator}
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer

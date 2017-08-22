@@ -68,6 +68,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
+      createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
   }
 
@@ -2356,18 +2357,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             }.getMessage
             assert(e.contains("Found duplicate column(s)"))
           } else {
-            if (isUsingHiveMetastore) {
-              // hive catalog will still complains that c1 is duplicate column name because hive
-              // identifiers are case insensitive.
-              val e = intercept[AnalysisException] {
-                sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-              }.getMessage
-              assert(e.contains("HiveException"))
-            } else {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-              assert(spark.table("t1").schema
-                .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
-            }
+            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            assert(spark.table("t1").schema ==
+              new StructType().add("c1", IntegerType).add("C1", StringType))
           }
         }
       }

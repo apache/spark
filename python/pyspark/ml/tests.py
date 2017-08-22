@@ -62,6 +62,7 @@ from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegres
     LinearRegression
 from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.tuning import *
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
@@ -122,7 +123,7 @@ class MockTransformer(Transformer, HasFake):
         return dataset
 
 
-class MockUnaryTransformer(UnaryTransformer):
+class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParamsWritable):
 
     shift = Param(Params._dummy(), "shift", "The amount by which to shift " +
                   "data in a DataFrame",
@@ -149,7 +150,7 @@ class MockUnaryTransformer(UnaryTransformer):
     def validateInputType(self, inputType):
         if inputType != DoubleType():
             raise TypeError("Bad input type: {}. ".format(inputType) +
-                            "Requires Integer.")
+                            "Requires Double.")
 
 
 class MockEstimator(Estimator, HasFake):
@@ -376,6 +377,12 @@ class ParamTests(PySparkTestCase):
         self.assertFalse(testParams.isDefined(inputCol))
         with self.assertRaises(KeyError):
             testParams.getInputCol()
+
+        otherParam = Param(Params._dummy(), "otherParam", "Parameter used to test that " +
+                           "set raises an error for a non-member parameter.",
+                           typeConverter=TypeConverters.toString)
+        with self.assertRaises(ValueError):
+            testParams.set(otherParam, "value")
 
         # Since the default is normally random, set it to a known number for debug str
         testParams._setDefault(seed=41)
@@ -1056,7 +1063,7 @@ class PersistenceTest(SparkSessionTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
-        if isinstance(m1, JavaParams):
+        if isinstance(m1, JavaParams) or isinstance(m1, Transformer):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self._compare_params(m1, m2, p)
@@ -1135,6 +1142,35 @@ class PersistenceTest(SparkSessionTestCase):
             except OSError:
                 pass
 
+    def test_python_transformer_pipeline_persistence(self):
+        """
+        Pipeline[MockUnaryTransformer, Binarizer]
+        """
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = self.spark.range(0, 10).toDF('input')
+            tf = MockUnaryTransformer(shiftVal=2)\
+                .setInputCol("input").setOutputCol("shiftedInput")
+            tf2 = Binarizer(threshold=6, inputCol="shiftedInput", outputCol="binarized")
+            pl = Pipeline(stages=[tf, tf2])
+            model = pl.fit(df)
+
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self._compare_pipelines(pl, loaded_pipeline)
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
     def test_onevsrest(self):
         temp_path = tempfile.mkdtemp()
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
@@ -1188,6 +1224,33 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_default_read_write(self):
+        temp_path = tempfile.mkdtemp()
+
+        lr = LogisticRegression()
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+        writer = DefaultParamsWriter(lr)
+
+        savePath = temp_path + "/lr"
+        writer.save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr2 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
+
+        # test overwrite
+        lr.setThreshold(.8)
+        writer.overwrite().save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr3 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr3.uid)
+        self.assertEqual(lr.extractParamMap(), lr3.extractParamMap())
 
 
 class LDATest(SparkSessionTestCase):

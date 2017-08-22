@@ -18,8 +18,8 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
+import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
