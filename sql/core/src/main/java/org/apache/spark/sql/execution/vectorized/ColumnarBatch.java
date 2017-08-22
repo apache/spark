@@ -81,12 +81,19 @@ public final class ColumnarBatch {
     private final ColumnarBatch parent;
     private final int fixedLenRowSize;
     private final ColumnVector[] columns;
+    private final WritableColumnVector[] writableColumns;
 
     // Ctor used if this is a top level row.
     private Row(ColumnarBatch parent) {
       this.parent = parent;
       this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
       this.columns = parent.columns;
+      this.writableColumns = new WritableColumnVector[this.columns.length];
+      for (int i = 0; i < this.columns.length; i++) {
+        if (this.columns[i] instanceof WritableColumnVector) {
+          this.writableColumns[i] = (WritableColumnVector) this.columns[i];
+        }
+      }
     }
 
     // Ctor used if this is a struct.
@@ -94,6 +101,12 @@ public final class ColumnarBatch {
       this.parent = null;
       this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(columns.length);
       this.columns = columns;
+      this.writableColumns = new WritableColumnVector[this.columns.length];
+      for (int i = 0; i < this.columns.length; i++) {
+        if (this.columns[i] instanceof WritableColumnVector) {
+          this.writableColumns[i] = (WritableColumnVector) this.columns[i];
+        }
+      }
     }
 
     /**
@@ -353,8 +366,7 @@ public final class ColumnarBatch {
     }
 
     private WritableColumnVector getColumnAsWritable(int ordinal) {
-      assert (columns[ordinal] instanceof WritableColumnVector);
-      WritableColumnVector column = (WritableColumnVector) columns[ordinal];
+      WritableColumnVector column = writableColumns[ordinal];
       assert (!column.isConstant);
       return column;
     }
