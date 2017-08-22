@@ -28,6 +28,7 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
+  @transient var instancesConstantFeatureFiltered: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -40,6 +41,11 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
       Instance(2.0, 0.3, Vectors.dense(1.0, 0.5))
+    )
+    instancesConstantFeatureFiltered = Array(
+      Instance(0.0, 0.1, Vectors.dense(2.0)),
+      Instance(1.0, 0.5, Vectors.dense(1.0)),
+      Instance(2.0, 0.3, Vectors.dense(0.5))
     )
   }
 
@@ -125,16 +131,16 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       if (math.abs(linearLoss) <= sigma * m) {
         features.toArray.indices.foreach { i =>
           gradientCoef(i) +=
-            0.5 * weight * -2.0 * linearLoss / sigma * (features(i) / featuresStd(i))
+            -1.0 * weight * linearLoss / sigma * (features(i) / featuresStd(i))
         }
-        gradientCoef(2) += 0.5 * weight * -2.0 * linearLoss / sigma
+        gradientCoef(2) += -1.0 * weight * linearLoss / sigma
         gradientCoef(3) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0
         features.toArray.indices.foreach { i =>
-          gradientCoef(i) += 0.5 * weight * sign * 2.0 * m * (features(i) / featuresStd(i))
+          gradientCoef(i) += weight * sign * m * (features(i) / featuresStd(i))
         }
-        gradientCoef(2) += 0.5 * weight * (sign * 2.0 * m)
+        gradientCoef(2) += weight * sign * m
         gradientCoef(3) += 0.5 * weight * (1.0 - m * m)
       }
     }
@@ -146,11 +152,19 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("check with zero standard deviation") {
     val parameters = Vectors.dense(1.0, 2.0, 3.0, 4.0)
+    val parametersFiltered = Vectors.dense(2.0, 3.0, 4.0)
     val aggConstantFeature = getNewAggregator(instancesConstantFeature, parameters,
       fitIntercept = true, m = 1.35)
+    val aggConstantFeatureFiltered = getNewAggregator(instancesConstantFeatureFiltered,
+      parametersFiltered, fitIntercept = true, m = 1.35)
     instances.foreach(aggConstantFeature.add)
+    instancesConstantFeatureFiltered.foreach(aggConstantFeatureFiltered.add)
     // constant features should not affect gradient
-    assert(aggConstantFeature.gradient(0) === 0.0)
-    assert(!aggConstantFeature.gradient(1).isNaN && !aggConstantFeature.gradient(1).isInfinity)
+    def validateGradient(grad: Vector, gradFiltered: Vector): Unit = {
+      assert(grad(0) === 0.0)
+      assert(grad(1) === gradFiltered(0))
+    }
+
+    validateGradient(aggConstantFeature.gradient, aggConstantFeatureFiltered.gradient)
   }
 }

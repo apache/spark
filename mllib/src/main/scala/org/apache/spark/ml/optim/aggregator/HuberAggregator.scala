@@ -112,11 +112,11 @@ private[ml] class HuberAggregator(
         features.foreachActive { (index, value) =>
           if (featuresStd(index) != 0.0 && value != 0.0) {
             gradientSumArray(index) +=
-              0.5 * weight * -2.0 * linearLoss / sigma * (value / featuresStd(index))
+              -1.0 * weight * linearLoss / sigma * (value / featuresStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += 0.5 * weight * -2.0 * linearLoss / sigma
+          gradientSumArray(dim - 2) += -1.0 * weight * linearLoss / sigma
         }
         gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {
@@ -125,11 +125,11 @@ private[ml] class HuberAggregator(
 
         features.foreachActive { (index, value) =>
           if (featuresStd(index) != 0.0 && value != 0.0) {
-            gradientSumArray(index) += 0.5 * weight * sign * 2.0 * m * (value / featuresStd(index))
+            gradientSumArray(index) += weight * sign * m * (value / featuresStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += 0.5 * weight * (sign * 2.0 * m)
+          gradientSumArray(dim - 2) += weight * sign * m
         }
         gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - m * m)
       }
