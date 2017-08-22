@@ -217,7 +217,9 @@ object SparkSubmit extends CommandLineUtils {
    *   (4) the main class for the child
    * Exposed for testing.
    */
-  private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+  private[deploy] def prepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
@@ -320,7 +322,7 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-    val hadoopConf = new HadoopConfiguration()
+    val hadoopConf = conf.getOrElse(new HadoopConfiguration())
     val targetDir = DependencyUtils.createTempDir()
 
     // Resolve glob path for different resources.
@@ -343,31 +345,6 @@ object SparkSubmit extends CommandLineUtils {
       localPyFiles = Option(args.pyFiles).map {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
-    }
-
-    if (clusterManager == YARN) {
-      def isNoneFsFileExist(paths: String): Boolean = {
-        Option(paths).exists { p =>
-          p.split(",").map(_.trim).filter(_.nonEmpty).exists { path =>
-            val url = Utils.resolveURI(path)
-            url.getScheme match {
-              case "http" | "https" | "ftp" => true
-              case _ => false
-            }
-          }
-        }
-      }
-
-      // Spark on YARN doesn't support upload remote resources from http, https or ftp server
-      // directly to distributed cache, so print a warning and exit the process.
-      if (isNoneFsFileExist(args.jars) ||
-        isNoneFsFileExist(args.files) ||
-        isNoneFsFileExist(args.primaryResource) ||
-        isNoneFsFileExist(args.pyFiles) ||
-        isNoneFsFileExist(args.archives)) {
-        printErrorAndExit(
-          "Spark on YARN doesn't support resources on remote http, https or ftp server.")
-      }
     }
 
     // If we're running a python app, set the main class to our specific python runner
