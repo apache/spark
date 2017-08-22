@@ -297,7 +297,7 @@ abstract class UnaryNode extends LogicalPlan {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
         })
-        allConstraints = allConstraints.addMultiExpression(replacedElement)
+        allConstraints = allConstraints.addMultiExpressions(replacedElement)
         allConstraints += EqualNullSafe(e, a.toAttribute)
       case _ => // Don't change.
     }
