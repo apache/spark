@@ -61,7 +61,7 @@ class ExpressionSet protected(
 
   def addMultiExpressions(elems: Set[Expression]): ExpressionSet = {
     val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
-    elems.foreach(newSet.add(_))
+    elems.foreach(newSet.add)
     newSet
   }
 
