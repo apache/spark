@@ -17,8 +17,10 @@ cluster, you may setup a test cluster on your local machine using
 * You must have appropriate permissions to create and list [pods](https://kubernetes.io/docs/user-guide/pods/),
 [ConfigMaps](https://kubernetes.io/docs/tasks/configure-pod-container/configmap/) and
 [secrets](https://kubernetes.io/docs/concepts/configuration/secret/) in your cluster. You can verify that
-you can list these resources by running `kubectl get pods` `kubectl get configmap`, and `kubectl get secrets` which
+you can list these resources by running `kubectl get pods`, `kubectl get configmap`, and `kubectl get secrets` which
 should give you a list of pods and configmaps (if any) respectively.
+  * The service account or credentials used by the driver pods must have appropriate permissions
+    as well for editing pod spec.
 * You must have a spark distribution with Kubernetes support. This may be obtained from the
 [release tarball](https://github.com/apache-spark-on-k8s/spark/releases) or by
 [building Spark with Kubernetes support](../resource-managers/kubernetes/README.md#building-spark-with-kubernetes-support).
@@ -106,6 +108,18 @@ the cluster.
 Finally, notice that in the above example we specify a jar with a specific URI with a scheme of `local://`. This URI is
 the location of the example jar that is already in the Docker image. Using dependencies that are on your machine's local
 disk is discussed below.
+
+When Kubernetes [RBAC](https://kubernetes.io/docs/admin/authorization/rbac/) is enabled,
+the `default` service account used by the driver may not have appropriate pod `edit` permissions
+for launching executor pods. We recommend to add another service account, say `spark`, with
+the necessary privilege. For example:
+
+  kubectl create serviceaccount spark
+  kubectl create clusterrolebinding spark-edit --clusterrole edit  \
+      --serviceaccount default:spark --namespace default
+
+With this, one can add `--conf spark.kubernetes.authenticate.driver.serviceAccountName=spark` to
+the spark-submit command line above to specify the service account to use.
 
 ## Dependency Management
 
