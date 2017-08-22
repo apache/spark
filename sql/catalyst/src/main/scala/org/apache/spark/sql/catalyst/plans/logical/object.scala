@@ -402,7 +402,7 @@ object FlatMapGroupsWithState {
  * @param dataAttributes used to read the data
  * @param outputObjAttr used to define the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
- * @param outputMode the output mode of `func`
+ * @param funcOutputMode the output mode of `func`
  * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
  * @param timeout used to timeout groups that have not received data in a while
  */
@@ -414,13 +414,13 @@ case class FlatMapGroupsWithState(
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     stateEncoder: ExpressionEncoder[Any],
-    outputMode: OutputMode,
+    funcOutputMode: OutputMode,
     isMapGroupsWithState: Boolean = false,
     timeout: GroupStateTimeout,
     child: LogicalPlan) extends UnaryNode with ObjectProducer {
 
   if (isMapGroupsWithState) {
-    assert(outputMode == OutputMode.Update)
+    assert(funcOutputMode == OutputMode.Update)
   }
 }
 

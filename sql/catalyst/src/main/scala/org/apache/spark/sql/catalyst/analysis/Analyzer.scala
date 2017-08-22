@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 
 /**
@@ -2293,7 +2294,7 @@ object CleanupAliases extends Rule[LogicalPlan] {
  */
 object EliminateEventTimeWatermark extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case EventTimeWatermark(_, _, child) if !child.isStreaming => child
+    case EventTimeWatermark(_, _, child) if child.outputMode == OutputMode.Complete() => child
   }
 }
 

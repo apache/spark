@@ -127,7 +127,7 @@ case class ExplainCommand(
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
     val queryExecution =
-      if (logicalPlan.isStreaming) {
+      if (logicalPlan.outputMode == OutputMode.Append()) {
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(

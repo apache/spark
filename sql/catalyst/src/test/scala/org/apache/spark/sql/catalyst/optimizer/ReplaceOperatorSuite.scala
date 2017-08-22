@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Alias
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.streaming.OutputMode
 
 class ReplaceOperatorSuite extends PlanTest {
 
@@ -79,7 +81,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val input = LocalRelation('a.int, 'b.int)
     val attrA = input.output(0)
     val attrB = input.output(1)
-    val query = Deduplicate(Seq(attrA), input, streaming = false) // dropDuplicates("a")
+    val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -95,11 +97,21 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("don't replace streaming Deduplicate") {
-    val input = LocalRelation('a.int, 'b.int)
+    val input = new StreamingLocalRelation(Seq('a.int, 'b.int))
     val attrA = input.output(0)
-    val query = Deduplicate(Seq(attrA), input, streaming = true) // dropDuplicates("a")
+    val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, query)
   }
+}
+
+// Subclass of LocalRelation that's configured as though it's streaming.
+class StreamingLocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+    extends LocalRelation(output, data) {
+  override def outputMode: OutputMode = OutputMode.Append()
+
+  // dummy implementations to work around forbidden case class inheritance
+  override def equals(value: Any): Boolean = true
+  override def hashCode(): Int = 0
 }

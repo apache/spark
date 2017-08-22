@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.streaming.OutputMode
 
 object StreamingRelation {
   def apply(dataSource: DataSource): StreamingRelation = {
@@ -40,7 +41,7 @@ object StreamingRelation {
  */
 case class StreamingRelation(dataSource: DataSource, sourceName: String, output: Seq[Attribute])
   extends LeafNode {
-  override def isStreaming: Boolean = true
+  override def outputMode: OutputMode = OutputMode.Append()
   override def toString: String = sourceName
 }
 
@@ -49,7 +50,7 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
 case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
-  override def isStreaming: Boolean = true
+  override def outputMode: OutputMode = OutputMode.Append()
   override def toString: String = source.toString
 }
 

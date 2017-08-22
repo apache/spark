@@ -53,6 +53,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.streaming.DataStreamWriter
+import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
@@ -515,7 +516,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @InterfaceStability.Evolving
-  def isStreaming: Boolean = logicalPlan.isStreaming
+  def isStreaming: Boolean = logicalPlan.outputMode == OutputMode.Append()
 
   /**
    * Eagerly checkpoint a Dataset and return the new Dataset. Checkpointing can be used to truncate
@@ -2233,7 +2234,8 @@ class Dataset[T] private[sql](
       }
       cols
     }
-    Deduplicate(groupCols, logicalPlan, isStreaming)
+
+    Deduplicate(groupCols, logicalPlan)
   }
 
   /**
