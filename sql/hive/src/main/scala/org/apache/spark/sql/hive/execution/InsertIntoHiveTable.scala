@@ -301,34 +301,35 @@ case class InsertIntoHiveTable(
 
     outputPaths.foreach(outputPath => {
       val fs = outputPath.getFileSystem(conf)
-      val files =
-        fs.listStatus(outputPath)
-          .filterNot(_.getPath.getName == "_SUCCESS")
+      val allFiles = fs.listStatus(outputPath)
+      if (allFiles != null && allFiles.nonEmpty) {
+        val files = allFiles.filterNot(_.getPath.getName == "_SUCCESS")
           .map(_.getPath.getName)
           .sortBy(_.toString)
 
-      var expectedBucketId = 0
-      files.foreach { case file =>
-        getBucketIdFromFilename(file) match {
-          case Some(id) if id == expectedBucketId =>
-            expectedBucketId += 1
-          case Some(_) =>
-            throw new SparkException(
-              s"Potentially missing bucketed output files in temporary bucketed output location. " +
-                s"Aborting job. Output location : $outputPath, files found : " +
-                files.mkString("[", ",", "]"))
-          case None =>
-            throw new SparkException(
-              s"Invalid file found in temporary bucketed output location. Aborting job. " +
-                s"Output location : $outputPath, bad file : $file")
+        var expectedBucketId = 0
+        files.foreach { case file =>
+          getBucketIdFromFilename(file) match {
+            case Some(id) if id == expectedBucketId =>
+              expectedBucketId += 1
+            case Some(_) =>
+              throw new SparkException(
+                s"Potentially missing bucketed output files in temporary bucketed output " +
+                  s"location. Aborting job. Output location : $outputPath, files found : " +
+                  files.mkString("[", ",", "]"))
+            case None =>
+              throw new SparkException(
+                s"Invalid file found in temporary bucketed output location. Aborting job. " +
+                  s"Output location : $outputPath, bad file : $file")
+          }
         }
-      }
 
-      if (expectedBucketId != numBuckets) {
-        throw new SparkException(
-          s"Potentially missing bucketed output files in temporary bucketed output location. " +
-            s"Aborting job. Output location : $outputPath, files found : " +
-            files.mkString("[", ",", "]"))
+        if (expectedBucketId != numBuckets) {
+          throw new SparkException(
+            s"Potentially missing bucketed output files in temporary bucketed output location. " +
+              s"Aborting job. Output location : $outputPath, files found : " +
+              files.mkString("[", ",", "]"))
+        }
       }
     })
   }
