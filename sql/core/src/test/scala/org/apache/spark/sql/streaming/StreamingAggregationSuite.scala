@@ -362,25 +362,23 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   }
 
   test("SPARK-19690: do not convert batch aggregation in streaming query to streaming") {
-    withTempDir { dir =>
-      val streamInput = MemoryStream[Int]
-      val batchDF = Seq(1, 2, 3, 4, 5)
-          .toDF("value")
-          .withColumn("parity", 'value % 2)
-          .groupBy('parity)
-          .agg(count("*") as 'joinValue)
-      val joinDF = streamInput
-          .toDF()
-          .join(batchDF, 'value === 'parity)
+    val streamInput = MemoryStream[Int]
+    val batchDF = Seq(1, 2, 3, 4, 5)
+        .toDF("value")
+        .withColumn("parity", 'value % 2)
+        .groupBy('parity)
+        .agg(count("*") as 'joinValue)
+    val joinDF = streamInput
+        .toDF()
+        .join(batchDF, 'value === 'parity)
 
-      // make sure we're planning an aggregate in the first place
-      assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
+    // make sure we're planning an aggregate in the first place
+    assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
 
-      testStream(joinDF, Append)(
-        AddData(streamInput, 0, 1, 2, 3),
-        CheckLastBatch((0, 0, 2), (1, 1, 3)),
-        AddData(streamInput, 0, 1, 2, 3),
-        CheckLastBatch((0, 0, 2), (1, 1, 3)))
-    }
+    testStream(joinDF, Append)(
+      AddData(streamInput, 0, 1, 2, 3),
+      CheckLastBatch((0, 0, 2), (1, 1, 3)),
+      AddData(streamInput, 0, 1, 2, 3),
+      CheckLastBatch((0, 0, 2), (1, 1, 3)))
   }
 }
