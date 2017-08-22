@@ -274,10 +274,9 @@ class ParquetFileFormat
   }
 
   override def vectorTypes(
-      sparkSession: SparkSession,
-      dataSchema: StructType,
-      partitionSchema: StructType,
-      requiredSchema: StructType): Option[Seq[String]] = {
+      sparkSession: Option[SparkSession],
+      requiredSchema: StructType,
+      partitionSchema: StructType): Option[Seq[String]] = {
     Option(Seq.fill(requiredSchema.fields.length + partitionSchema.fields.length)(
       classOf[OnHeapColumnVector].getName))
   }
