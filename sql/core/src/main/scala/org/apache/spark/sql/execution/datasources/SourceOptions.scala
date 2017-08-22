@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 
 /**
- * Options for the Parquet data source.
+ * Options for the data source.
  */
 class SourceOptions(
      @transient private val parameters: CaseInsensitiveMap[String])
