@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Add, Literal, Stack}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -193,8 +191,12 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-21603 check there is not a too long generated function when threshold is Int.Max") {
+  test("SPARK-21603 check there is not a too long generated function when threshold is Max/-1") {
     withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString) {
+      val ctx = genGroupByCodeGenContext(30)
+      assert(ctx.isTooLongGeneratedFunction === false)
+    }
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "-1") {
       val ctx = genGroupByCodeGenContext(30)
       assert(ctx.isTooLongGeneratedFunction === false)
     }
@@ -205,5 +207,13 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       val ctx = genGroupByCodeGenContext(1)
       assert(ctx.isTooLongGeneratedFunction === true)
     }
+  }
+
+  test("SPARK-21603 `maxLinesPerFunction` must not be negative") {
+    val errMsg = intercept[IllegalArgumentException] {
+      withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "-2") {}
+    }.getMessage
+    assert(errMsg.contains("The maximum must not be a negative integer, " +
+      "-1 to always activate whole-stage codegen."))
   }
 }
