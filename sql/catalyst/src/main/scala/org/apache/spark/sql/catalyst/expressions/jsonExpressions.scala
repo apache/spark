@@ -644,7 +644,7 @@ case class StructsToJson(
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
-    case MapType(kt: DataType, st: StructType, _) => st
+    case MapType(_: DataType, st: StructType, _) => st
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -688,7 +688,7 @@ case class StructsToJson(
       }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
-          s"map with a structs value.")
+          s"map with a struct value.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
