@@ -133,9 +133,9 @@ class TrainValidationSplitSuite
       .setEstimator(lr)
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
-      .setNumParallelEval(1)
+      .setParallelism(1)
     val cvSerialModel = cv.fit(dataset)
-    cv.setNumParallelEval(2)
+    cv.setParallelism(2)
     val cvParallelModel = cv.fit(dataset)
 
     val serialMetrics = cvSerialModel.validationMetrics.sorted

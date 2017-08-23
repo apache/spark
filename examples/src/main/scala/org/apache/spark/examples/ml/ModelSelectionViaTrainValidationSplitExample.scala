@@ -66,7 +66,7 @@ object ModelSelectionViaTrainValidationSplitExample {
       // 80% of the data will be used for training and the remaining 20% for validation.
       .setTrainRatio(0.8)
       // Evaluate up to 2 parameter settings in parallel
-      .setNumParallelEval(2)
+      .setParallelism(2)
 
     // Run train validation split, and choose the best set of parameters.
     val model = trainValidationSplit.fit(training)

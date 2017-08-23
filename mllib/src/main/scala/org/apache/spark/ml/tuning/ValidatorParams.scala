@@ -17,23 +17,18 @@
 
 package org.apache.spark.ml.tuning
 
-import java.util.concurrent.ExecutorService
-
-import com.google.common.util.concurrent.MoreExecutors
 import org.apache.hadoop.fs.Path
 import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, ParamPair, Params, ParamValidators}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.ThreadUtils
 
 
 /**
@@ -73,51 +68,6 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
   /** @group getParam */
   def getEvaluator: Evaluator = $(evaluator)
 
-  /**
-   * param to control the number of models evaluated in parallel
-   * Default: 1
-   *
-   * @group expertParam
-   */
-  val numParallelEval: IntParam = new IntParam(this, "numParallelEval",
-    "max number of models to evaluate in parallel, 1 for serial evaluation",
-    ParamValidators.gtEq(1))
-
-  /** @group getParam */
-  def getNumParallelEval: Int = $(numParallelEval)
-
-  /**
-   * Sets a factory to create an ExecutorService to be used for evaluation thread-pool
-   *
-   * @param executor instance of an ExecutorServiceFactory for using custom ExecutorService
-   */
-  @Experimental
-  @InterfaceStability.Unstable
-  def setExecutorService(executor: ExecutorService): Unit = {
-    customExecutor = executor
-  }
-
-  /**
-   * Get an ExecutorService that will be a custom one, if previously set, or a new thread-pool
-   * with maximum threads set to the param `numParallelEval`. If this param is set to 1, a
-   * same-thread executor will be used to run in serial.
-   */
-  @Experimental
-  @InterfaceStability.Unstable
-  def getExecutorService: (ExecutorService, String) = {
-    (Option(customExecutor), $(numParallelEval)) match {
-      case (Some(executor), _) =>
-        (executor, s"Custom executor [$executor]")
-      case (None, 1) =>
-        (MoreExecutors.sameThreadExecutor(), "Same-thread executor")
-      case (None, n) =>
-        (ThreadUtils.newDaemonCachedThreadPool(s"${this.getClass.getSimpleName}-thread-pool", n),
-          s"Thread-pool with $n threads")
-    }
-  }
-
-  protected var customExecutor: ExecutorService = _
-
   protected def transformSchemaImpl(schema: StructType): StructType = {
     require($(estimatorParamMaps).nonEmpty, s"Validator requires non-empty estimatorParamMaps")
     val firstEstimatorParamMap = $(estimatorParamMaps).head
@@ -136,8 +86,6 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
     instrumentation.logNamedValue("evaluator", $(evaluator).getClass.getCanonicalName)
     instrumentation.logNamedValue("estimatorParamMapsLength", $(estimatorParamMaps).length)
   }
-
-  setDefault(numParallelEval -> 1)
 }
 
 private[ml] object ValidatorParams {

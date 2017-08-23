@@ -20,7 +20,7 @@ package org.apache.spark.ml.tuning
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
 import com.github.fommil.netlib.F2jBLAS
@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.HasParallelism
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -68,7 +69,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 @Since("1.2.0")
 class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   extends Estimator[CrossValidatorModel]
-  with CrossValidatorParams with MLWritable with Logging {
+  with CrossValidatorParams with HasParallelism with MLWritable with Logging {
 
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("cv"))
@@ -95,9 +96,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group setParam */
-  @Since("2.2.0")
-  def setNumParallelEval(value: Int): this.type = set(numParallelEval, value)
+  /** @group expertSetParam */
+  @Since("2.3.0")
+  def setParallelism(value: Int): this.type = set(parallelism, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CrossValidatorModel = {
@@ -109,23 +110,21 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val epm = $(estimatorParamMaps)
     val numModels = epm.length
 
-    // Create execution context (defaults to thread-pool of size $numParallelEval)
-    val (executor, executorDesc) = getExecutorService
-    val executionContext = ExecutionContext.fromExecutorService(executor)
+    // Create execution context based on $(parallelism)
+    val executionContext = getExecutionContext
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(numFolds, seed)
+    instr.logParams(numFolds, seed, parallelism)
     logTuningParams(instr)
 
     // Compute metrics for each model over each split
-    logDebug(s"Running cross-validation with ExecutorService: $executorDesc.")
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
     val metrics = splits.zipWithIndex.map { case ((training, validation), splitIndex) =>
       val trainingDataset = sparkSession.createDataFrame(training, schema).cache()
       val validationDataset = sparkSession.createDataFrame(validation, schema).cache()
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
-      // Fit models in a Future with thread-pool size of '$numParallelEval' or custom executor
+      // Fit models in a Future for training in parallel
       val models = epm.map { paramMap =>
         Future[Model[_]] {
           val model = est.fit(trainingDataset, paramMap)
@@ -133,11 +132,12 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
         } (executionContext)
       }
 
+      // Unpersist training data only when all models have trained
       Future.sequence[Model[_], Iterable](models)(implicitly, executionContext).onComplete { _ =>
         trainingDataset.unpersist()
       } (executionContext)
 
-      // Evaluate models in a Future with thread-pool size of '$numParallelEval' or custom executor
+      // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
       val foldMetricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
         modelFuture.map { model =>
           // TODO: duplicate evaluator to take extra params from input

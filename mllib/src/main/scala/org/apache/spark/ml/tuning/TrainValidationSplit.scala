@@ -20,7 +20,7 @@ package org.apache.spark.ml.tuning
 import java.util.{List => JList}
 
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.language.existentials
 
@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param.shared.HasParallelism
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -65,7 +66,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
 @Since("1.5.0")
 class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[TrainValidationSplitModel]
-  with TrainValidationSplitParams with MLWritable with Logging {
+  with TrainValidationSplitParams with HasParallelism with MLWritable with Logging {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
@@ -90,9 +91,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group setParam */
-  @Since("2.2.0")
-  def setNumParallelEval(value: Int): this.type = set(numParallelEval, value)
+  /** @group expertSetParam */
+  @Since("2.3.0")
+  def setParallelism(value: Int): this.type = set(parallelism, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
@@ -102,21 +103,19 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
 
-    // Create execution context (defaults to thread-pool of size $numParallelEval)
-    val (executor, executorDesc) = getExecutorService
-    val executionContext = ExecutionContext.fromExecutorService(executor)
+    // Create execution context based on $(parallelism)
+    val executionContext = getExecutionContext
 
     val instr = Instrumentation.create(this, dataset)
-    instr.logParams(trainRatio, seed)
+    instr.logParams(trainRatio, seed, parallelism)
     logTuningParams(instr)
 
-    logDebug(s"Running validation with ExecutorService: $executorDesc.")
     val Array(trainingDataset, validationDataset) =
       dataset.randomSplit(Array($(trainRatio), 1 - $(trainRatio)), $(seed))
     trainingDataset.cache()
     validationDataset.cache()
 
-    // Fit models in a Future with thread-pool size of '$numParallelEval' or custom executor
+    // Fit models in a Future for training in parallel
     logDebug(s"Train split with multiple sets of parameters.")
     val models = epm.map { paramMap =>
       Future[Model[_]] {
@@ -125,11 +124,12 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
       } (executionContext)
     }
 
+    // Unpersist training data only when all models have trained
     Future.sequence[Model[_], Iterable](models)(implicitly, executionContext).onComplete { _ =>
       trainingDataset.unpersist()
     } (executionContext)
 
-    // Evaluate models in a Future with thread-pool size of '$numParallelEval' or custom executor
+    // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
     val metricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
       modelFuture.map { model =>
         // TODO: duplicate evaluator to take extra params from input
@@ -142,6 +142,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     // Wait for all metrics to be calculated
     val metrics = metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
 
+    // Unpersist validation set once all metrics have been produced
     validationDataset.unpersist()
 
     logInfo(s"Train validation split metrics: ${metrics.toSeq}")
