@@ -65,8 +65,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   }
 
   /**
-    * Write this buffer to a channel with slice.
-    */
+   * Write this buffer to a channel with slice.
+   */
   def writeWithSlice(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
       val capacity = bytes.limit()
