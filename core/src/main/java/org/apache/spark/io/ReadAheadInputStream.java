@@ -232,9 +232,9 @@ public class ReadAheadInputStream extends InputStream {
   @Override
   public synchronized int available() throws IOException {
     stateChangeLock.lock();
-    int val = activeBuffer.remaining() + readAheadBuffer.remaining();
     // Make sure we have no integer overflow.
-    assert (val > 0);
+    int val = (int) Math.min((long) Integer.MAX_VALUE,
+            (long) activeBuffer.remaining() + readAheadBuffer.remaining());
     stateChangeLock.unlock();
     return val;
   }
