@@ -306,66 +306,66 @@ public final class ColumnarBatch {
 
     @Override
     public void setNullAt(int ordinal) {
-      getColumnAsWritable(ordinal).putNull(rowId);
+      getWritableColumn(ordinal).putNull(rowId);
     }
 
     @Override
     public void setBoolean(int ordinal, boolean value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putBoolean(rowId, value);
     }
 
     @Override
     public void setByte(int ordinal, byte value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putByte(rowId, value);
     }
 
     @Override
     public void setShort(int ordinal, short value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putShort(rowId, value);
     }
 
     @Override
     public void setInt(int ordinal, int value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putInt(rowId, value);
     }
 
     @Override
     public void setLong(int ordinal, long value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putLong(rowId, value);
     }
 
     @Override
     public void setFloat(int ordinal, float value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putFloat(rowId, value);
     }
 
     @Override
     public void setDouble(int ordinal, double value) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putDouble(rowId, value);
     }
 
     @Override
     public void setDecimal(int ordinal, Decimal value, int precision) {
-      WritableColumnVector column = getColumnAsWritable(ordinal);
+      WritableColumnVector column = getWritableColumn(ordinal);
       column.putNotNull(rowId);
       column.putDecimal(rowId, value, precision);
     }
 
-    private WritableColumnVector getColumnAsWritable(int ordinal) {
+    private WritableColumnVector getWritableColumn(int ordinal) {
       WritableColumnVector column = writableColumns[ordinal];
       assert (!column.isConstant);
       return column;
