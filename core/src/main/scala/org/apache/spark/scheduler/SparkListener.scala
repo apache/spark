@@ -125,11 +125,11 @@ case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
 case class SparkListenerNodeBlacklisted(
     time: Long,
     hostId: String,
-    executorFailures: Int)
+    reason: NodeBlacklistReason)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
+case class SparkListenerNodeUnblacklisted(time: Long, hostId: String, reason: NodeUnblacklistReason)
   extends SparkListenerEvent
 
 @DeveloperApi

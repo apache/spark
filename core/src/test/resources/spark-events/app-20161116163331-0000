@@ -64,5 +64,5 @@
 {"Event":"SparkListenerJobEnd","Job ID":0,"Completion Time":1479335617480,"Job Result":{"Result":"JobSucceeded"}}
 {"Event":"org.apache.spark.scheduler.SparkListenerExecutorBlacklisted","time":1479335617478,"executorId":"2","taskFailures":4}
 {"Event":"org.apache.spark.scheduler.SparkListenerExecutorBlacklisted","time":1479335617478,"executorId":"0","taskFailures":4}
-{"Event":"org.apache.spark.scheduler.SparkListenerNodeBlacklisted","time":1479335617478,"hostId":"172.22.0.167","executorFailures":2}
+{"Event":"SparkListenerNodeBlacklisted","time":1479335617478,"hostId":"172.22.0.167","blacklistReason":{"reason":"ExecutorFailures","blacklistedExecutors":["exec1","exec2","exec3"]}}
 {"Event":"SparkListenerApplicationEnd","Timestamp":1479335620587}

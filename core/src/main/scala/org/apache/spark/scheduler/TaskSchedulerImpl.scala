@@ -656,6 +656,14 @@ private[spark] class TaskSchedulerImpl(
     blacklistTrackerOpt.map(_.nodeBlacklist()).getOrElse(scala.collection.immutable.Set())
   }
 
+  def blacklistExecutorsOnHost(host: String, reason: NodeBlacklistReason): Unit = synchronized {
+    blacklistTrackerOpt.foreach(_.addNodeToBlacklist(host, reason))
+  }
+
+  def unblacklistExecutorsOnHost(host: String, reason: NodeUnblacklistReason): Unit = synchronized {
+    blacklistTrackerOpt.foreach(_.removeNodesFromBlacklist(List((host, reason, None))))
+  }
+
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
 

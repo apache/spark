@@ -154,6 +154,11 @@ package object config {
     ConfigBuilder("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val BLACKLIST_DECOMMISSIONING_TIMEOUT_CONF =
+    ConfigBuilder("spark.blacklist.decommissioning.timeout")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createOptional
   // End blacklist confs
 
   private[spark] val UNREGISTER_OUTPUT_ON_HOST_ON_FETCH_FAILURE =

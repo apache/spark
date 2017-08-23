@@ -21,6 +21,7 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
+import scala.collection.immutable.SortedSet
 
 import org.json4s.JsonAST.{JArray, JInt, JString, JValue}
 import org.json4s.JsonDSL._
@@ -85,9 +86,10 @@ class JsonProtocolSuite extends SparkFunSuite {
     val executorBlacklisted = SparkListenerExecutorBlacklisted(executorBlacklistedTime, "exec1", 22)
     val executorUnblacklisted =
       SparkListenerExecutorUnblacklisted(executorUnblacklistedTime, "exec1")
-    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "node1", 33)
+    val nodeBlacklisted = SparkListenerNodeBlacklisted(nodeBlacklistedTime, "host1",
+      ExecutorFailures(SortedSet("exec1", "exec2", "exec3")))
     val nodeUnblacklisted =
-      SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "node1")
+      SparkListenerNodeUnblacklisted(nodeUnblacklistedTime, "host1", BlacklistTimedOut)
     val executorMetricsUpdate = {
       // Use custom accum ID for determinism
       val accumUpdates =
@@ -168,6 +170,14 @@ class JsonProtocolSuite extends SparkFunSuite {
     testTaskEndReason(TaskCommitDenied(2, 3, 4))
     testTaskEndReason(ExecutorLostFailure("100", true, Some("Induced failure")))
     testTaskEndReason(UnknownReason)
+
+    // NodeBlacklistReason
+    testNodeBlacklistReason(ExecutorFailures(SortedSet("exec1", "exec2", "exec3")))
+    testNodeBlacklistReason(NodeDecommissioning)
+
+    // NodeUnblacklistReason
+    testNodeUnblacklistReason(BlacklistTimedOut)
+    testNodeUnblacklistReason(NodeRunning)
 
     // BlockId
     testBlockId(RDDBlockId(1, 2))
@@ -494,6 +504,18 @@ private[spark] object JsonProtocolSuite extends Assertions {
     assertEquals(reason, newReason)
   }
 
+  private def testNodeBlacklistReason(reason: NodeBlacklistReason) {
+    val newReason = JsonProtocol.nodeBlacklistReasonFromJson(
+      JsonProtocol.nodeBlacklistReasonToJson(reason))
+    assertEquals(reason, newReason)
+  }
+
+  private def testNodeUnblacklistReason(reason: NodeUnblacklistReason) {
+    val newReason = JsonProtocol.nodeUnblacklistReasonFromJson(
+      JsonProtocol.nodeUnblacklistReasonToJson(reason))
+    assertEquals(reason, newReason)
+  }
+
   private def testBlockId(blockId: BlockId) {
     val newBlockId = BlockId(blockId.toString)
     assert(blockId === newBlockId)
@@ -548,6 +570,14 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
         assert(e1.executorId === e1.executorId)
+      case (e1: SparkListenerNodeBlacklisted, e2: SparkListenerNodeBlacklisted) =>
+        assert(e1.hostId === e2.hostId)
+        assert(e1.time === e2.time)
+        assertEquals(e1.reason, e2.reason)
+      case (e1: SparkListenerNodeUnblacklisted, e2: SparkListenerNodeUnblacklisted) =>
+        assert(e1.hostId === e2.hostId)
+        assert(e1.time === e2.time)
+        assert(e1.reason === e2.reason)
       case (e1: SparkListenerExecutorMetricsUpdate, e2: SparkListenerExecutorMetricsUpdate) =>
         assert(e1.execId === e2.execId)
         assertSeqEquals[(Long, Int, Int, Seq[AccumulableInfo])](
@@ -690,6 +720,25 @@ private[spark] object JsonProtocolSuite extends Assertions {
         assert(reason1 === reason2)
       case (UnknownReason, UnknownReason) =>
       case _ => fail("Task end reasons don't match in types!")
+    }
+  }
+
+  private def assertEquals(reason1: NodeBlacklistReason, reason2: NodeBlacklistReason) {
+    (reason1, reason2) match {
+      case (NodeDecommissioning, NodeDecommissioning) =>
+      case (ExecutorFailures(blacklistedExecutors1), ExecutorFailures(blacklistedExecutors2)) =>
+        assert(blacklistedExecutors1 === blacklistedExecutors2)
+      case (FetchFailure(host1), FetchFailure(host2)) =>
+        assert(host1 === host2)
+      case _ => fail("Node blacklist reasons don't match in types!")
+    }
+  }
+
+  private def assertEquals(reason1: NodeUnblacklistReason, reason2: NodeUnblacklistReason) {
+    (reason1, reason2) match {
+      case (NodeRunning, NodeRunning) =>
+      case (BlacklistTimedOut, BlacklistTimedOut) =>
+      case _ => fail("Node unblacklist reasons don't match in types!")
     }
   }
 
@@ -2027,18 +2076,24 @@ private[spark] object JsonProtocolSuite extends Assertions {
   private val nodeBlacklistedJsonString =
     s"""
       |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeBlacklisted",
+      |  "Event" : "SparkListenerNodeBlacklisted",
+      |  "hostId" : "host1",
       |  "time" : ${nodeBlacklistedTime},
-      |  "hostId" : "node1",
-      |  "executorFailures" : 33
+      |  "blacklistReason" : {
+      |    "reason" : "ExecutorFailures",
+      |    "blacklistedExecutors" : [ "exec1", "exec2", "exec3" ]
+      |  }
       |}
     """.stripMargin
   private val nodeUnblacklistedJsonString =
     s"""
       |{
-      |  "Event" : "org.apache.spark.scheduler.SparkListenerNodeUnblacklisted",
+      |  "Event" : "SparkListenerNodeUnblacklisted",
+      |  "hostId" : "host1",
       |  "time" : ${nodeUnblacklistedTime},
-      |  "hostId" : "node1"
+      |  "unblacklistReason" : {
+      |    "reason" : "BlacklistTimedOut"
+      |  }
       |}
     """.stripMargin
 }

@@ -482,13 +482,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     }(ThreadUtils.sameThread)
   }
 
-  protected def handleUpdatedHostState(host: String, hostState: HostState.HostState): Unit = {
+  private[scheduler] def handleUpdatedHostState(host: String,
+                                                hostState: HostState.HostState): Unit = {
     hostState match {
       case HostState.Decommissioning =>
-        // TODO: Take action to blacklist executors on the host
+        scheduler.blacklistExecutorsOnHost(host, NodeDecommissioning)
 
       case HostState.Running =>
-        // TODO: Take action to un-blacklist executors on the host
+        scheduler.unblacklistExecutorsOnHost(host, NodeRunning)
 
       case HostState.Decommissioned | HostState.Lost =>
         // TODO: Take action when a node is Decommissioned or Lost

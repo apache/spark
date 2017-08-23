@@ -188,7 +188,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     blacklist.updateBlacklistForSuccessfulTaskSet(0, 0, taskSetBlacklist1.execToFailures)
     assert(blacklist.nodeBlacklist() === Set("hostA"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
-    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA", 2))
+    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA",
+      ExecutorFailures(Set("1", "2"))))
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "2", 4))
 
@@ -202,7 +203,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set())
     verify(listenerBusMock).post(SparkListenerExecutorUnblacklisted(timeout, "2"))
     verify(listenerBusMock).post(SparkListenerExecutorUnblacklisted(timeout, "1"))
-    verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(timeout, "hostA"))
+    verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(timeout, "hostA",
+      BlacklistTimedOut))
 
     // Fail one more task, but executor isn't put back into blacklist since the count of failures
     // on that executor should have been reset to 0.
@@ -248,7 +250,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklist.isExecutorBlacklisted("2"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(t1, "2", 4))
     assert(blacklist.isNodeBlacklisted("hostA"))
-    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(t1, "hostA", 2))
+    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(t1, "hostA",
+      ExecutorFailures(Set("1", "2"))))
 
     // Advance the clock so that executor 1 should no longer be explicitly blacklisted, but
     // everything else should still be blacklisted.
@@ -266,7 +269,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     clock.advance(t1)
     blacklist.applyBlacklistTimeout()
     assert(!blacklist.nodeIdToBlacklistExpiryTime.contains("hostA"))
-    verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(t1 + t2 + t1, "hostA"))
+    verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(t1 + t2 + t1, "hostA",
+      BlacklistTimedOut))
     // Even though unblacklisting a node implicitly unblacklists all of its executors,
     // there will be no SparkListenerExecutorUnblacklisted sent here.
   }
@@ -401,7 +405,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assertEquivalentToSet(blacklist.isExecutorBlacklisted(_), Set("1", "2", "3"))
     verify(listenerBusMock).post(SparkListenerExecutorBlacklisted(0, "3", 2))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
-    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA", 2))
+    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA",
+      ExecutorFailures(Set("1", "3"))))
   }
 
   test("blacklist still respects legacy configs") {
@@ -452,7 +457,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       config.MAX_FAILED_EXEC_PER_NODE_STAGE,
       config.MAX_FAILURES_PER_EXEC,
       config.MAX_FAILED_EXEC_PER_NODE,
-      config.BLACKLIST_TIMEOUT_CONF
+      config.BLACKLIST_TIMEOUT_CONF,
+      config.BLACKLIST_DECOMMISSIONING_TIMEOUT_CONF
     ).foreach { config =>
       conf.set(config.key, "0")
       val excMsg = intercept[IllegalArgumentException] {
@@ -584,5 +590,33 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklist.nodeIdToBlacklistExpiryTime("hostA") ===
       2000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
     assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
+  }
+
+  test("node is blacklisted with NodeDecommissioning reason and gets recovered with time") {
+    blacklist.addNodeToBlacklist("hostA", NodeDecommissioning)
+    assert(blacklist.nodeBlacklist() === Set("hostA"))
+    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
+    verify(listenerBusMock).post(SparkListenerNodeBlacklisted(0, "hostA", NodeDecommissioning))
+
+    val timeout = blacklist.BLACKLIST_DECOMMISSIONING_TIMEOUT_MILLIS + 1
+    clock.advance(timeout)
+    blacklist.applyBlacklistTimeout()
+    assert(blacklist.nodeBlacklist() === Set())
+    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set())
+    verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(timeout, "hostA",
+      BlacklistTimedOut))
+  }
+
+  test("node is unblacklisted with NodeRunning reason") {
+    val now = clock.getTimeMillis()
+    blacklist.addNodeToBlacklist("hostA", NodeDecommissioning)
+    blacklist.addNodeToBlacklist("hostB", ExecutorFailures(Set()))
+    assert(blacklist.nodeBlacklist() === Set("hostA", "hostB"))
+    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA", "hostB"))
+
+    blacklist.removeNodesFromBlacklist(List(("hostA", NodeRunning, Some(now))))
+    assert(blacklist.nodeBlacklist() === Set("hostB"))
+    assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostB"))
+    verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(now, "hostA", NodeRunning))
   }
 }

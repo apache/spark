@@ -61,6 +61,8 @@ private[scheduler] class BlacklistTracker (
   private val MAX_FAILURES_PER_EXEC = conf.get(config.MAX_FAILURES_PER_EXEC)
   private val MAX_FAILED_EXEC_PER_NODE = conf.get(config.MAX_FAILED_EXEC_PER_NODE)
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
+  val BLACKLIST_DECOMMISSIONING_TIMEOUT_MILLIS =
+    BlacklistTracker.getBlacklistDecommissioningTimeout(conf)
   private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
 
   /**
@@ -118,16 +120,9 @@ private[scheduler] class BlacklistTracker (
         }
       }
       val nodesToUnblacklist = nodeIdToBlacklistExpiryTime.filter(_._2 < now).keys
-      if (nodesToUnblacklist.nonEmpty) {
-        // Un-blacklist any nodes that have been blacklisted longer than the blacklist timeout.
-        logInfo(s"Removing nodes $nodesToUnblacklist from blacklist because the blacklist " +
-          s"has timed out")
-        nodesToUnblacklist.foreach { node =>
-          nodeIdToBlacklistExpiryTime.remove(node)
-          listenerBus.post(SparkListenerNodeUnblacklisted(now, node))
-        }
-        _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
-      }
+          .map(node => (node, BlacklistTimedOut, Some(now)))
+      // Un-blacklist any nodes that have been blacklisted longer than the blacklist timeout.
+      removeNodesFromBlacklist(nodesToUnblacklist)
       updateNextExpiryTime()
     }
   }
@@ -190,14 +185,8 @@ private[scheduler] class BlacklistTracker (
       val expiryTimeForNewBlacklists = now + BLACKLIST_TIMEOUT_MILLIS
 
       if (conf.get(config.SHUFFLE_SERVICE_ENABLED)) {
-        if (!nodeIdToBlacklistExpiryTime.contains(host)) {
-          logInfo(s"blacklisting node $host due to fetch failure of external shuffle service")
-
-          nodeIdToBlacklistExpiryTime.put(host, expiryTimeForNewBlacklists)
-          listenerBus.post(SparkListenerNodeBlacklisted(now, host, 1))
-          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+        if (addNodeToBlacklist(host, FetchFailure(host), now)) {
           killExecutorsOnBlacklistedNode(host)
-          updateNextExpiryTime()
         }
       } else if (!executorIdToBlacklistStatus.contains(exec)) {
         logInfo(s"Blacklisting executor $exec due to fetch failure")
@@ -249,18 +238,82 @@ private[scheduler] class BlacklistTracker (
         // node, and potentially put the entire node into a blacklist as well.
         val blacklistedExecsOnNode = nodeToBlacklistedExecs.getOrElseUpdate(node, HashSet[String]())
         blacklistedExecsOnNode += exec
-        // If the node is already in the blacklist, we avoid adding it again with a later expiry
-        // time.
-        if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE &&
-            !nodeIdToBlacklistExpiryTime.contains(node)) {
-          logInfo(s"Blacklisting node $node because it has ${blacklistedExecsOnNode.size} " +
-            s"executors blacklisted: ${blacklistedExecsOnNode}")
-          nodeIdToBlacklistExpiryTime.put(node, expiryTimeForNewBlacklists)
-          listenerBus.post(SparkListenerNodeBlacklisted(now, node, blacklistedExecsOnNode.size))
-          _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
-          killExecutorsOnBlacklistedNode(node)
+        if (blacklistedExecsOnNode.size >= MAX_FAILED_EXEC_PER_NODE) {
+          val blacklistSucceeded = addNodeToBlacklist(node,
+            ExecutorFailures(Set(blacklistedExecsOnNode.toList: _*)), now)
+          if (blacklistSucceeded) {
+            killExecutorsOnBlacklistedNode(node)
+          }
         }
       }
+    }
+  }
+
+  /**
+   * Add nodes to Blacklist, with a specific timeout depending upon the reason. If the node is
+   * already in the Blacklist, it is not added again.
+   * @param node Node to be blacklisted
+   * @param reason Reason for blacklisting the node
+   * @param time Optional start time on which to compute the blacklist expiry time
+   * @return boolean value indicating whether node was added to blacklist or not
+   */
+  def addNodeToBlacklist(node: String, reason: NodeBlacklistReason,
+                         time: Long = clock.getTimeMillis()): Boolean = {
+    // If the node is already in the blacklist, we avoid adding it again with a later expiry time.
+    if (!isNodeBlacklisted(node)) {
+      val blacklistExpiryTime = reason match {
+        case NodeDecommissioning =>
+          val expiryTime = time + BLACKLIST_DECOMMISSIONING_TIMEOUT_MILLIS
+          logInfo(s"Blacklisting node $node with timeout $expiryTime ms because ${reason.message}")
+          expiryTime
+
+        case ExecutorFailures(blacklistedExecutors) =>
+          val expiryTime = time + BLACKLIST_TIMEOUT_MILLIS
+          logInfo(s"Blacklisting node $node with timeout $expiryTime ms because it " +
+            s"has ${blacklistedExecutors.size} executors blacklisted: ${blacklistedExecutors}")
+          expiryTime
+
+        case FetchFailure(host) =>
+          val expiryTime = time + BLACKLIST_TIMEOUT_MILLIS
+          logInfo(s"Blacklisting node $host due to fetch failure of external shuffle service")
+          expiryTime
+      }
+
+      blacklistNodeHelper(node, blacklistExpiryTime)
+      listenerBus.post(SparkListenerNodeBlacklisted(time, node, reason))
+      updateNextExpiryTime()
+      true
+    }
+    else {
+      false
+    }
+  }
+
+  private def blacklistNodeHelper(node: String, blacklistExpiryTimeout: Long): Unit = {
+    nodeIdToBlacklistExpiryTime.put(node, blacklistExpiryTimeout)
+    _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+  }
+
+  private def unblacklistNodesHelper(nodes: Iterable[String]): Unit = {
+    nodeIdToBlacklistExpiryTime --= nodes
+    _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+  }
+
+  /**
+   * @param nodesToRemove List of nodes to unblacklist, with there reason for unblacklisting
+   *                      and an optional time to be passed to Spark Listener indicating the
+   *                      time of unblacklist.
+   */
+  def removeNodesFromBlacklist(nodesToRemove: Iterable[(String, NodeUnblacklistReason,
+    Option[Long])]): Unit = {
+    if (nodesToRemove.nonEmpty) {
+      val blacklistNodesToRemove = nodesToRemove.filter(node => isNodeBlacklisted(node._1))
+      unblacklistNodesHelper(blacklistNodesToRemove.map(_._1))
+      blacklistNodesToRemove.foreach(node => {
+        logInfo(s"Removing node $node from blacklist because ${node._2.message}")
+        listenerBus.post(SparkListenerNodeUnblacklisted(
+          node._3.getOrElse(clock.getTimeMillis()), node._1, node._2))
+      })
     }
   }
 
@@ -373,6 +426,7 @@ private[scheduler] class BlacklistTracker (
 private[scheduler] object BlacklistTracker extends Logging {
 
   private val DEFAULT_TIMEOUT = "1h"
+  private val DEFAULT_DECOMMISSIONING_TIMEOUT = "1h"
 
   /**
    * Returns true if the blacklist is enabled, based on checking the configuration in the following
@@ -407,6 +461,11 @@ private[scheduler] object BlacklistTracker extends Logging {
         Utils.timeStringAsMs(DEFAULT_TIMEOUT)
       }
     }
+  }
+
+  def getBlacklistDecommissioningTimeout(conf: SparkConf): Long = {
+    conf.get(config.BLACKLIST_DECOMMISSIONING_TIMEOUT_CONF)
+      .getOrElse(Utils.timeStringAsMs(DEFAULT_DECOMMISSIONING_TIMEOUT))
   }
 
   /**
@@ -447,6 +506,12 @@ private[scheduler] object BlacklistTracker extends Logging {
         case None =>
           mustBePos(config.BLACKLIST_LEGACY_TIMEOUT_CONF.key, timeout.toString)
       }
+    }
+
+    val blacklistDecommissioningTimeout = getBlacklistDecommissioningTimeout(conf)
+    if (blacklistDecommissioningTimeout <= 0) {
+      mustBePos(config.BLACKLIST_DECOMMISSIONING_TIMEOUT_CONF.key,
+        blacklistDecommissioningTimeout.toString)
     }
 
     val maxTaskFailures = conf.get(config.MAX_TASK_FAILURES)

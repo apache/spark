@@ -17,13 +17,46 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.mockito.Mockito.{verify, when}
+import org.scalatest.mock.MockitoSugar
+
+import org.apache.spark.{HostState, LocalSparkContext, SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.{RpcUtils, SerializableBuffer}
 
-class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext {
+class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with MockitoSugar
+  with LocalSparkContext {
+
+  private var conf: SparkConf = _
+  private var scheduler: TaskSchedulerImpl = _
+  private var schedulerBackend: CoarseGrainedSchedulerBackend = _
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    conf = new SparkConf
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    if (scheduler != null) {
+      scheduler.stop()
+      scheduler = null
+    }
+    if (schedulerBackend != null) {
+      schedulerBackend.stop()
+      schedulerBackend = null
+    }
+  }
+
+  private def setupSchedulerBackend(): Unit = {
+    sc = new SparkContext("local", "test", conf)
+    scheduler = mock[TaskSchedulerImpl]
+    when(scheduler.sc).thenReturn(sc)
+    schedulerBackend = new CoarseGrainedSchedulerBackend(scheduler, mock[RpcEnv])
+  }
 
   test("serialized task larger than max RPC message size") {
-    val conf = new SparkConf
     conf.set("spark.rpc.message.maxSize", "1")
     conf.set("spark.default.parallelism", "1")
     sc = new SparkContext("local-cluster[2, 1, 1024]", "test", conf)
@@ -36,6 +69,15 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     assert(thrown.getMessage.contains("using broadcast variables for large values"))
     val smaller = sc.parallelize(1 to 4).collect()
     assert(smaller.size === 4)
+  }
+
+  test("handle updated node status received") {
+    setupSchedulerBackend()
+    schedulerBackend.handleUpdatedHostState("host1", HostState.Decommissioning)
+    verify(scheduler).blacklistExecutorsOnHost("host1", NodeDecommissioning)
+
+    schedulerBackend.handleUpdatedHostState("host1", HostState.Running)
+    verify(scheduler).unblacklistExecutorsOnHost("host1", NodeRunning)
   }
 
 }

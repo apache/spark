@@ -68,8 +68,8 @@
 {"Event":"SparkListenerJobEnd","Job ID":0,"Completion Time":1479252044931,"Job Result":{"Result":"JobSucceeded"}}
 {"Event":"org.apache.spark.scheduler.SparkListenerExecutorBlacklisted","time":1479252044930,"executorId":"2","taskFailures":4}
 {"Event":"org.apache.spark.scheduler.SparkListenerExecutorBlacklisted","time":1479252044930,"executorId":"0","taskFailures":4}
-{"Event":"org.apache.spark.scheduler.SparkListenerNodeBlacklisted","time":1479252044930,"hostId":"172.22.0.111","executorFailures":2}
+{"Event":"SparkListenerNodeBlacklisted","time":1479252044930,"hostId":"172.22.0.111","blacklistReason":{"reason":"ExecutorFailures","blacklistedExecutors":["exec1","exec2","exec3"]}}
 {"Event":"org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted","time":1479252055635,"executorId":"2"}
 {"Event":"org.apache.spark.scheduler.SparkListenerExecutorUnblacklisted","time":1479252055635,"executorId":"0"}
-{"Event":"org.apache.spark.scheduler.SparkListenerNodeUnblacklisted","time":1479252055635,"hostId":"172.22.0.111"}
+{"Event":"SparkListenerNodeUnblacklisted","time":1479252055635,"hostId":"172.22.0.111","unblacklistReason":{"reason":"BlacklistTimedOut"}}
 {"Event":"SparkListenerApplicationEnd","Timestamp":1479252138874}

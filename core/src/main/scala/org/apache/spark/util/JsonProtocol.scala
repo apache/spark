@@ -100,6 +100,10 @@ private[spark] object JsonProtocol {
         executorMetricsUpdateToJson(metricsUpdate)
       case blockUpdated: SparkListenerBlockUpdated =>
         throw new MatchError(blockUpdated)  // TODO(ekl) implement this
+      case nodeBlacklisted: SparkListenerNodeBlacklisted =>
+        nodeBlacklistedToJson(nodeBlacklisted)
+      case nodeUnblacklisted: SparkListenerNodeUnblacklisted =>
+        nodeUnblacklistedToJson(nodeUnblacklisted)
       case _ => parse(mapper.writeValueAsString(event))
     }
   }
@@ -244,6 +248,20 @@ private[spark] object JsonProtocol {
       ("Stage Attempt ID" -> stageAttemptId) ~
       ("Accumulator Updates" -> JArray(updates.map(accumulableInfoToJson).toList))
     })
+  }
+
+  def nodeBlacklistedToJson(nodeBlacklisted: SparkListenerNodeBlacklisted): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.nodeBlacklisted) ~
+    ("hostId" -> nodeBlacklisted.hostId) ~
+    ("time" -> nodeBlacklisted.time) ~
+    ("blacklistReason" -> nodeBlacklistReasonToJson(nodeBlacklisted.reason))
+  }
+
+  def nodeUnblacklistedToJson(nodeUnblacklisted: SparkListenerNodeUnblacklisted): JValue = {
+    ("Event" -> SPARK_LISTENER_EVENT_FORMATTED_CLASS_NAMES.nodeUnblacklisted) ~
+    ("hostId" -> nodeUnblacklisted.hostId) ~
+    ("time" -> nodeUnblacklisted.time) ~
+    ("unblacklistReason" -> nodeUnblacklistReasonToJson(nodeUnblacklisted.reason))
   }
 
   /** ------------------------------------------------------------------- *
@@ -407,6 +425,24 @@ private[spark] object JsonProtocol {
     ("Reason" -> reason) ~ json
   }
 
+  def nodeBlacklistReasonToJson(nodeBlacklistReason: NodeBlacklistReason): JValue = {
+    val reason = Utils.getFormattedClassName(nodeBlacklistReason)
+    val json: JObject = nodeBlacklistReason match {
+      case ExecutorFailures(blacklistedExecutors) =>
+        ("blacklistedExecutors" -> blacklistedExecutors)
+      case NodeDecommissioning =>
+        Utils.emptyJson
+      case FetchFailure(host) =>
+        ("host" -> host)
+    }
+    ("reason" -> reason) ~ json
+  }
+
+  def nodeUnblacklistReasonToJson(nodeUnblacklistReason: NodeUnblacklistReason): JValue = {
+    val reason = Utils.getFormattedClassName(nodeUnblacklistReason)
+    "reason" -> reason
+  }
+
   def blockManagerIdToJson(blockManagerId: BlockManagerId): JValue = {
     ("Executor ID" -> blockManagerId.executorId) ~
     ("Host" -> blockManagerId.host) ~
@@ -515,6 +551,8 @@ private[spark] object JsonProtocol {
     val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
     val logStart = Utils.getFormattedClassName(SparkListenerLogStart)
     val metricsUpdate = Utils.getFormattedClassName(SparkListenerExecutorMetricsUpdate)
+    val nodeBlacklisted = Utils.getFormattedClassName(SparkListenerNodeBlacklisted)
+    val nodeUnblacklisted = Utils.getFormattedClassName(SparkListenerNodeUnblacklisted)
   }
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
@@ -538,6 +576,8 @@ private[spark] object JsonProtocol {
       case `executorRemoved` => executorRemovedFromJson(json)
       case `logStart` => logStartFromJson(json)
       case `metricsUpdate` => executorMetricsUpdateFromJson(json)
+      case `nodeBlacklisted` => nodeBlacklistedFromJson(json)
+      case `nodeUnblacklisted` => nodeUnBlacklistedFromJson(json)
       case other => mapper.readValue(compact(render(json)), Utils.classForName(other))
         .asInstanceOf[SparkListenerEvent]
     }
@@ -674,6 +714,20 @@ private[spark] object JsonProtocol {
       (taskId, stageId, stageAttemptId, updates)
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
+  }
+
+  def nodeBlacklistedFromJson(json: JValue): SparkListenerNodeBlacklisted = {
+    val host = (json \ "hostId").extract[String]
+    val time = (json \ "time").extract[Long]
+    val reason = nodeBlacklistReasonFromJson(json \ "blacklistReason")
+    SparkListenerNodeBlacklisted(time, host, reason)
+  }
+
+  def nodeUnBlacklistedFromJson(json: JValue): SparkListenerNodeUnblacklisted = {
+    val host = (json \ "hostId").extract[String]
+    val time = (json \ "time").extract[Long]
+    val reason = nodeUnblacklistReasonFromJson(json \ "unblacklistReason")
+    SparkListenerNodeUnblacklisted(time, host, reason)
   }
 
   /** --------------------------------------------------------------------- *
@@ -914,6 +968,42 @@ private[spark] object JsonProtocol {
           exitCausedByApp.getOrElse(true),
           reason)
       case `unknownReason` => UnknownReason
+    }
+  }
+
+  private object NODE_BLACKLIST_REASON_FORMATTED_CLASS_NAMES {
+    val executorFailures = Utils.getFormattedClassName(ExecutorFailures)
+    val nodeDecommissioning = Utils.getFormattedClassName(NodeDecommissioning)
+    val fetchFailure = Utils.getFormattedClassName(FetchFailure)
+  }
+
+  def nodeBlacklistReasonFromJson(json: JValue): NodeBlacklistReason = {
+    import NODE_BLACKLIST_REASON_FORMATTED_CLASS_NAMES._
+
+    (json \ "reason").extract[String] match {
+      case `executorFailures` =>
+        val blacklistedExecutors = (json \ "blacklistedExecutors").extract[List[String]]
+        new ExecutorFailures(Set(blacklistedExecutors: _*))
+
+      case `nodeDecommissioning` => NodeDecommissioning
+
+      case `fetchFailure` =>
+        val host = (json \ "host").extract[String]
+        new FetchFailure(host)
+    }
+  }
+
+  private object NODE_UNBLACKLIST_REASON_FORMATTED_CLASS_NAMES {
+    val blacklistTimedOut = Utils.getFormattedClassName(BlacklistTimedOut)
+    val nodeRunning = Utils.getFormattedClassName(NodeRunning)
+  }
+
+  def nodeUnblacklistReasonFromJson(json: JValue): NodeUnblacklistReason = {
+    import NODE_UNBLACKLIST_REASON_FORMATTED_CLASS_NAMES._
+
+    (json \ "reason").extract[String] match {
+      case `blacklistTimedOut` => BlacklistTimedOut
+      case `nodeRunning` => NodeRunning
     }
   }
 
