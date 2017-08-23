@@ -51,7 +51,7 @@ def _to_java_column(col):
             "Invalid argument, not a string or column: "
             "{0} of type {1}. "
             "For column literals, use 'lit', 'array', 'struct' or 'create_map' "
-            "functions.".format(col, type(col)))
+            "function.".format(col, type(col)))
     return jcol
 
 
