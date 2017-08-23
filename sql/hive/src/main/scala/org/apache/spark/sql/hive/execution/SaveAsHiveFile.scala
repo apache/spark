@@ -62,10 +62,12 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       jobId = java.util.UUID.randomUUID().toString,
       outputPath = outputLocation)
 
+    val fileFormat = new HiveFileFormat(fileSinkConf)
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = plan,
-      fileFormat = new HiveFileFormat(fileSinkConf),
+      fileFormat = fileFormat,
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(outputLocation, Map.empty),
       hadoopConf = hadoopConf,

@@ -2364,18 +2364,20 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         Seq.empty[Row])
 
       // use orc data source to check the data of path is right.
-      sql(
-        s"""
-           |CREATE TEMPORARY TABLE json_source
-           |USING json
-           |OPTIONS (
-           |  PATH '${dir.getCanonicalPath}'
-           |)
-         """.stripMargin)
+      withTempView("orc_source") {
+        sql(
+          s"""
+             |CREATE TEMPORARY TABLE json_source
+             |USING json
+             |OPTIONS (
+             |  PATH '${dir.getCanonicalPath}'
+             |)
+           """.stripMargin)
 
-      checkAnswer(
-        sql("select * from json_source"),
-        sql("SELECT 1 as a, 'c' as b"))
+        checkAnswer(
+          sql("select * from json_source"),
+          sql("SELECT 1 as a, 'c' as b"))
+      }
     }
   }
 

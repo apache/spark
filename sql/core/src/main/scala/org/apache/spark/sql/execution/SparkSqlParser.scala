@@ -1526,17 +1526,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 
-    val path = Option(ctx.path) match {
-      case Some(s) => string(s)
-      case None => ""
-    }
+    val path = Option(ctx.path).map(string).getOrElse("")
 
     if (!path.isEmpty && storage.locationUri.isDefined) {
       throw new ParseException(
         "Directory path and 'path' in OPTIONS are both used to indicate the directory path, " +
           "you can only specify one of them.", ctx)
     }
-    if (path.isEmpty && !storage.locationUri.isDefined) {
+    if (path.isEmpty && storage.locationUri.isEmpty) {
       throw new ParseException(
         "You need to specify directory path or 'path' in OPTIONS, but not both", ctx)
     }

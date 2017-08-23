@@ -42,8 +42,8 @@ case class InsertIntoDataSourceDirCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(innerChildren.length == 1)
-    assert(storage.locationUri.nonEmpty)
-    assert(provider.isDefined)
+    assert(storage.locationUri.nonEmpty, "Directory path is required")
+    assert(provider.isDefined, "Data source is required")
 
     // Create the relation based on the input logical plan: `data`.
     val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
@@ -55,6 +55,7 @@ case class InsertIntoDataSourceDirCommand(
 
     val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists
     try {
+      sparkSession.sessionState.executePlan(dataSource.planForWriting(saveMode, query))
       dataSource.writeAndRead(saveMode, query)
     } catch {
       case ex: AnalysisException =>
