@@ -802,10 +802,7 @@ class SparkSubmitSuite
   test("downloadFile - file doesn't exist") {
     val hadoopConf = new Configuration()
     val tmpDir = Utils.createTempDir()
-    // Set s3a implementation to local file system for testing.
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    // Disable file system impl cache to make sure the test file system is picked up.
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
     intercept[FileNotFoundException] {
       SparkSubmit.downloadFile("s3a:/no/such/file", tmpDir, mutable.Map.empty, hadoopConf)
     }
@@ -826,10 +823,7 @@ class SparkSubmitSuite
     FileUtils.write(jarFile, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    // Set s3a implementation to local file system for testing.
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    // Disable file system impl cache to make sure the test file system is picked up.
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
     val sourcePath = s"s3a://${jarFile.getAbsolutePath}"
     val outputPath =
       SparkSubmit.downloadFile(sourcePath, tmpDir, mutable.Map.empty, hadoopConf)
@@ -844,10 +838,7 @@ class SparkSubmitSuite
     FileUtils.write(jarFile, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    // Set s3a implementation to local file system for testing.
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    // Disable file system impl cache to make sure the test file system is picked up.
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
     val sourcePaths = Seq("/local/file", s"s3a://${jarFile.getAbsolutePath}")
     val outputPaths = SparkSubmit.downloadFileList(
       sourcePaths.mkString(","), tmpDir, mutable.Map.empty, hadoopConf).split(",")
@@ -861,8 +852,7 @@ class SparkSubmitSuite
 
   test("Avoid re-upload remote resources in yarn client mode") {
     val hadoopConf = new Configuration()
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
 
     val tmpDir = Utils.createTempDir()
     val file = File.createTempFile("tmpFile", "", tmpDir)
@@ -935,6 +925,11 @@ class SparkSubmitSuite
     } finally {
       Utils.deleteRecursively(tmpDir)
     }
+  }
+
+  private def updateConfWithFakeS3Fs(conf: Configuration): Unit = {
+    conf.set("fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
+    conf.set("fs.s3a.impl.disable.cache", "true")
   }
 }
 
