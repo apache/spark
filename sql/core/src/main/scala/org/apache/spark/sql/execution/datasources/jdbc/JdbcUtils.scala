@@ -29,6 +29,7 @@ import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -765,6 +766,25 @@ object JdbcUtils extends Logging {
     val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
     val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
     if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+  }
+
+  /**
+   * Parses the user specified customDataFrameColumnTypes option value string, and returns
+   */
+  def parseUserSpecifiedColumnTypes(
+       schema: StructType,
+       columnTypes: String,
+       nameEquality: Resolver): StructType = {
+    val userSchema = CatalystSqlParser.parseTableSchema(columnTypes)
+    // This is resolved by names, only check the column names.
+    userSchema.fieldNames.foreach { col =>
+      schema.find(f => nameEquality(f.name, col)).getOrElse {
+        throw new AnalysisException(
+          s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column $col not found in " +
+            s"schema ${schema.catalogString}")
+      }
+    }
+    userSchema
   }
 
   /**

@@ -111,19 +111,12 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  // This is resolved by names, only check the column names.
   override val schema: StructType = {
     val schema = JDBCRDD.resolveTable(jdbcOptions)
-    val customSchema = jdbcOptions.customSchema
-    if (customSchema.isDefined) {
-      val fieldNames = schema.fieldNames.mkString(",")
-      val customFieldNames = customSchema.get.fieldNames.mkString(",")
-      if ((sqlContext.conf.caseSensitiveAnalysis && fieldNames.equals(customFieldNames)) ||
-        fieldNames.toLowerCase.equals(customFieldNames.toLowerCase)) {
-        customSchema.get
-      } else {
-        throw new IllegalArgumentException(s"Field $customFieldNames does not match $fieldNames.")
-      }
+    val customDataFrameColumnTypes = jdbcOptions.customDataFrameColumnTypes
+    if (customDataFrameColumnTypes.isDefined) {
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, customDataFrameColumnTypes.get,
+        sqlContext.sessionState.conf.resolver)
     } else {
       schema
     }

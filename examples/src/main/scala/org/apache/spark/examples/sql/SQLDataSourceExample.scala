@@ -185,6 +185,10 @@ object SQLDataSourceExample {
     connectionProperties.put("password", "password")
     val jdbcDF2 = spark.read
       .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
+    // Specifying dataframe column data types on read
+    connectionProperties.put("customDataFrameColumnTypes", "id decimal(38, 0), name string")
+    val jdbcDF3 = spark.read
+      .jdbc("jdbc:postgresql:dbserver", "schema.tablename", connectionProperties)
 
     // Saving data to a JDBC source
     jdbcDF.write

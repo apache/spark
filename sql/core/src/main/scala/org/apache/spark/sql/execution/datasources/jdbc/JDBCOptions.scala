@@ -124,10 +124,7 @@ class JDBCOptions(
   // TODO: to reuse the existing partition parameters for those partition specific options
   val createTableOptions = parameters.getOrElse(JDBC_CREATE_TABLE_OPTIONS, "")
   val createTableColumnTypes = parameters.get(JDBC_CREATE_TABLE_COLUMN_TYPES)
-  val customSchema = parameters.get(JDBC_CUSTOM_SCHEMA) match {
-    case Some(value) => Some(StructType.fromString(value))
-    case _ => None
-  }
+  val customDataFrameColumnTypes = parameters.get(JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES)
 
   val batchSize = {
     val size = parameters.getOrElse(JDBC_BATCH_INSERT_SIZE, "1000").toInt
@@ -167,7 +164,7 @@ object JDBCOptions {
   val JDBC_TRUNCATE = newOption("truncate")
   val JDBC_CREATE_TABLE_OPTIONS = newOption("createTableOptions")
   val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
-  val JDBC_CUSTOM_SCHEMA = newOption("customSchema")
+  val JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES = newOption("customDataFrameColumnTypes")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
   val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")

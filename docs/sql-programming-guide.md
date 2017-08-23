@@ -741,24 +741,24 @@ columns, `gender` and `country` as partitioning columns:
 {% highlight text %}
 
 path
-└── to
-    └── table
-        ├── gender=male
-        │   ├── ...
-        │   │
-        │   ├── country=US
-        │   │   └── data.parquet
-        │   ├── country=CN
-        │   │   └── data.parquet
-        │   └── ...
-        └── gender=female
-            ├── ...
-            │
-            ├── country=US
-            │   └── data.parquet
-            ├── country=CN
-            │   └── data.parquet
-            └── ...
+????????? to
+    ????????? table
+        ????????? gender=male
+        ??????? ????????? ...
+        ??????? ???
+        ??????? ????????? country=US
+        ??????? ??????? ????????? data.parquet
+        ??????? ????????? country=CN
+        ??????? ??????? ????????? data.parquet
+        ??????? ????????? ...
+        ????????? gender=female
+         ???? ????????? ...
+         ???? ???
+         ???? ????????? country=US
+         ???? ??????? ????????? data.parquet
+         ???? ????????? country=CN
+         ???? ??????? ????????? data.parquet
+         ???? ????????? ...
 
 {% endhighlight %}
 
@@ -1334,7 +1334,14 @@ the following case-insensitive options:
     <td>
      The database column data types to use instead of the defaults, when creating the table. Data type information should be specified in the same format as CREATE TABLE columns syntax (e.g: <code>"name CHAR(64), comments VARCHAR(1024)")</code>. The specified types should be valid spark sql data types. This option applies only to writing.
     </td>
-  </tr>  
+  </tr>
+
+  <tr>
+    <td><code>customDataFrameColumnTypes</code></td>
+    <td>
+     The DataFrame column data types to use instead of the defaults when reading data from jdbc API. (e.g: <code>"id decimal(38, 0), name string")</code>. The specified types should be valid spark sql data types. This option applies only to reading.
+    </td>
+  </tr>
 </table>
 
 <div class="codetabs">
@@ -1571,7 +1578,7 @@ options.
    `Dataset[Row]`, while Java API users must replace `DataFrame` with `Dataset<Row>`. Both the typed
    transformations (e.g., `map`, `filter`, and `groupByKey`) and untyped transformations (e.g.,
    `select` and `groupBy`) are available on the Dataset class. Since compile-time type-safety in
-   Python and R is not a language feature, the concept of Dataset does not apply to these languages’
+   Python and R is not a language feature, the concept of Dataset does not apply to these languages???
    APIs. Instead, `DataFrame` remains the primary programing abstraction, which is analogous to the
    single-node data frame notion in these languages.
 
@@ -1828,7 +1835,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `CLUSTER BY`
   * `SORT BY`
 * All Hive operators, including:
-  * Relational operators (`=`, `⇔`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
+  * Relational operators (`=`, `???`, `==`, `<>`, `<`, `>`, `>=`, `<=`, etc)
   * Arithmetic operators (`+`, `-`, `*`, `/`, `%`, etc)
   * Logical operators (`AND`, `&&`, `OR`, `||`, etc)
   * Complex type constructors

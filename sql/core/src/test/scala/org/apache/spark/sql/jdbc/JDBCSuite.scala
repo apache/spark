@@ -953,6 +953,60 @@ class JDBCSuite extends SparkFunSuite
     assert(new JDBCOptions(CaseInsensitiveMap(parameters)).asConnectionProperties.isEmpty)
   }
 
+  test("SPARK-16848: jdbc API throws an exception for user specified schema") {
+    val schema = StructType(Seq(
+      StructField("name", StringType, false), StructField("theid", IntegerType, false)))
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    val e1 = intercept[AnalysisException] {
+      spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
+    }.getMessage
+    assert(e1.contains("Please use options to specified schema"))
+
+    val e2 = intercept[AnalysisException] {
+      spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
+    }.getMessage
+    assert(e2.contains("Please use options to specified schema"))
+  }
+
+  test("jdbc API support custom schema") {
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    val props = new Properties()
+    props.put("customDataFrameColumnTypes", "NAME string, THEID bigint")
+    val schema = StructType(Seq(
+      StructField("NAME", StringType, true), StructField("THEID", LongType, true)))
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
+    assert(df.schema.size === 2)
+    assert(df.schema === schema)
+    assert(df.count() === 3)
+  }
+
+  test("jdbc API can reduce column by custom schema") {
+    val props = new Properties()
+    props.put("customDataFrameColumnTypes", "NAME string")
+    val schema = StructType(Seq(StructField("NAME", StringType, true)))
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", props)
+    assert(df.schema.size === 1)
+    assert(df.schema === schema)
+    assert(df.count() === 3)
+  }
+
+  test("jdbc API custom schema DDL-like strings.") {
+    withTempView("people_view") {
+      sql(
+        s"""
+           |CREATE TEMPORARY VIEW people_view
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
+           |customDataFrameColumnTypes 'NAME STRING')
+        """.stripMargin.replaceAll("\n", " "))
+      val schema = StructType(Seq(StructField("NAME", StringType, true)))
+      val df = sql("select * from people_view")
+      assert(df.schema.size === 1)
+      assert(df.schema === schema)
+      assert(df.count() === 3)
+    }
+  }
+
   test("SPARK-15648: teradataDialect StringType data mapping") {
     val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
     assert(teradataDialect.getJDBCType(StringType).
