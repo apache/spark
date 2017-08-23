@@ -24,8 +24,6 @@ RUN apk upgrade --no-cache && \
     apk add --no-cache bash tini && \
     mkdir -p /opt/spark && \
     touch /opt/spark/RELEASE && \
-    rm /bin/sh && \
-    ln -sv /bin/bash /bin/sh && \
     chgrp root /etc/passwd && chmod ug+rw /etc/passwd
 
 COPY jars /opt/spark/jars
