@@ -2314,6 +2314,10 @@ private[spark] object Utils extends Logging {
     org.apache.log4j.Logger.getRootLogger().setLevel(l)
   }
 
+  def getLogLevel(): String = {
+    org.apache.log4j.Logger.getRootLogger().getLevel.toString
+  }
+
   /**
    * config a log4j properties used for testsuite
    */

@@ -22,6 +22,7 @@ import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
+import org.apache.log4j.Level
 import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
@@ -83,6 +84,13 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Successfully registered with driver")
       try {
         executor = new Executor(executorId, hostname, env, userClassPath, isLocal = false)
+        val lastLevel = Utils.getLogLevel()
+        driver match {
+          case Some(driverRef) => driverRef.send(ExecutorLogLevelChanged(executorId, lastLevel,
+              lastLevel))
+          case None => logWarning(s"Drop ExecutorLogLevelChanged because has not yet connected " +
+              s"to driver")        
+        }
       } catch {
         case NonFatal(e) =>
           exitExecutor(1, "Unable to create executor due to " + e.getMessage, e)
@@ -125,6 +133,19 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    case SetLogLevel(level) =>
+      logInfo("set log level: executor " + executorId + " to " + level)
+      val lastLevel = Utils.getLogLevel()
+      Utils.setLogLevel(Level.toLevel(level))
+      if(lastLevel != level) {
+        driver match {
+          case Some(driverRef) => driverRef.send(ExecutorLogLevelChanged(executorId, lastLevel,
+            level))
+          case None => logWarning(s"Drop ExecutorLogLevelChanged because has not yet connected to" +
+            s" driver")
+        }
+      }
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {

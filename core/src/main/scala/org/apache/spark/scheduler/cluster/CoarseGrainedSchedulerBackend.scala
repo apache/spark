@@ -159,6 +159,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
           killExecutors(exec.toSeq, replace = true, force = true)
         }
+      case ExecutorLogLevelChanged(executorId, lastLevel, newLevel) =>
+        listenerBus.post(ExecutorLogLevelChange(executorId, lastLevel, newLevel))
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -238,6 +240,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           hadoopDelegationCreds)
         context.reply(reply)
+
+      case SetExecutorLogLevel(level: String, executorId: String) =>
+        executorDataMap.get(executorId).foreach(_.executorEndpoint.send(SetLogLevel(level)))
     }
 
     // Make fake resource offers on all executors
@@ -398,6 +403,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
     // TODO (prashant) send conf instead of properties
     driverEndpoint = createDriverEndpointRef(properties)
+    val logLevel = Utils.getLogLevel()
+    listenerBus.post(ExecutorLogLevelChange("driver", logLevel, logLevel))
   }
 
   protected def createDriverEndpointRef(
@@ -478,6 +485,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   protected def removeWorker(workerId: String, host: String, message: String): Unit = {
     driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).onFailure {
+      case t => logError(t.getMessage, t)
+    }(ThreadUtils.sameThread)
+  }
+
+  def setExecutorLogLevel(level: String, executorId: String): Unit = {
+    driverEndpoint.ask[Boolean](SetExecutorLogLevel(level, executorId)).onFailure {
       case t => logError(t.getMessage, t)
     }(ThreadUtils.sameThread)
   }

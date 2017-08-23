@@ -148,6 +148,7 @@ private[spark] object ExecutorsPage {
       taskSummary.isBlacklisted,
       maxMem,
       taskSummary.executorLogs,
+      taskSummary.logLevel,
       memoryMetrics
     )
   }

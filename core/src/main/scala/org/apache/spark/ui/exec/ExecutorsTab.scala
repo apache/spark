@@ -17,13 +17,15 @@
 
 package org.apache.spark.ui.exec
 
+import javax.servlet.http.HttpServletRequest
+import org.apache.spark.util.Utils
 import scala.collection.mutable.{LinkedHashMap, ListBuffer}
 
-import org.apache.spark.{Resubmitted, SparkConf, SparkContext}
+import org.apache.spark.{ExceptionFailure, Resubmitted, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
-import org.apache.spark.ui.{SparkUI, SparkUITab}
+import org.apache.spark.ui.{UIUtils, SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
   val listener = parent.executorsListener
@@ -35,6 +37,21 @@ private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "exec
   if (threadDumpEnabled) {
     attachPage(new ExecutorThreadDumpPage(this))
   }
+  def handleSetLogLevel(request: HttpServletRequest): Unit = {
+    if (parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
+      val logLevel = Option(UIUtils.stripXSS(request.getParameter("logLevel")))
+      val executorId = Option(UIUtils.stripXSS(request.getParameter("executorId")))
+      executorId.foreach { id =>
+        {
+          if (id == "driver") {
+            sc.get.setLogLevel(logLevel.get)
+          } else {
+            sc.get.setExecutorLogLevel(logLevel.get, id)
+          }
+        }
+        }
+      }
+   }
 }
 
 private[ui] case class ExecutorTaskSummary(
@@ -53,6 +70,7 @@ private[ui] case class ExecutorTaskSummary(
     var shuffleRead: Long = 0L,
     var shuffleWrite: Long = 0L,
     var executorLogs: Map[String, String] = Map.empty,
+    var logLevel: (String, String) = (null, null),
     var isAlive: Boolean = true,
     var isBlacklisted: Boolean = false
 )
@@ -204,5 +222,20 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
         updateExecutorBlacklist(status.blockManagerId.executorId, false)
       }
     }
+  }
+
+  override def onExecutorLogLevelChange(executorLogLevelChange: ExecutorLogLevelChange): Unit = {
+    executorLogLevelChange match {
+      case ExecutorLogLevelChange(eid, lastLevel, newLevel) =>
+        val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
+        var (originLevel, level) = taskSummary.logLevel
+        if(originLevel == null) {
+          originLevel = lastLevel
+        }
+        level = newLevel
+        taskSummary.logLevel = (originLevel, level)
+      case _ => None
+    }
+
   }
 }

@@ -47,7 +47,17 @@ private[spark] object CoarseGrainedClusterMessages {
   case class KillExecutorsOnHost(host: String)
     extends CoarseGrainedClusterMessage
 
+  case class SetExecutorLogLevel(level: String, executorId: String)
+    extends CoarseGrainedClusterMessage
+
+  case class SetLogLevel(level: String)
+    extends CoarseGrainedClusterMessage
+
+
   sealed trait RegisterExecutorResponse
+
+  case class ExecutorLogLevelChanged(executorId: String, originLevel: String, newLevel: String)
+    extends CoarseGrainedClusterMessage with RegisterExecutorResponse
 
   case object RegisteredExecutor extends CoarseGrainedClusterMessage with RegisterExecutorResponse
 

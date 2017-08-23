@@ -71,6 +71,8 @@ private[spark] trait SparkListenerBus
         listener.onNodeUnblacklisted(nodeUnblacklisted)
       case blockUpdated: SparkListenerBlockUpdated =>
         listener.onBlockUpdated(blockUpdated)
+      case executorLogLevelChange: ExecutorLogLevelChange =>
+        listener.onExecutorLogLevelChange(executorLogLevelChange)
       case _ => listener.onOtherEvent(event)
     }
   }

@@ -21,6 +21,8 @@ import java.io.File
 import java.net.URL
 import java.nio.ByteBuffer
 
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.SetExecutorLogLevel
+import org.apache.spark.util.ThreadUtils
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
@@ -163,4 +165,9 @@ private[spark] class LocalSchedulerBackend(
     }
   }
 
+  def setExecutorLogLevel(level: String, executorId: String): Unit = {
+    localEndpoint.ask[Boolean](SetExecutorLogLevel(level, executorId)).onFailure {
+      case t => logError(t.getMessage, t)
+    }(ThreadUtils.sameThread)
+  }
 }

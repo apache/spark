@@ -164,6 +164,11 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 @DeveloperApi
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
+@DeveloperApi
+case class ExecutorLogLevelChange(executorId: String, lastLevel: String, newLevel: String)
+  extends SparkListenerEvent
+
+
 /**
  * Interface for creating history listeners defined in other modules like SQL, which are used to
  * rebuild the history UI.
@@ -294,6 +299,8 @@ private[spark] trait SparkListenerInterface {
    * Called when other events like SQL-specific events are posted.
    */
   def onOtherEvent(event: SparkListenerEvent): Unit
+
+  def onExecutorLogLevelChange(executorLogLevelChange: ExecutorLogLevelChange): Unit
 }
 
 
@@ -355,4 +362,6 @@ abstract class SparkListener extends SparkListenerInterface {
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = { }
+
+  override def onExecutorLogLevelChange(executorLogLevelChange: ExecutorLogLevelChange): Unit = {}
 }
