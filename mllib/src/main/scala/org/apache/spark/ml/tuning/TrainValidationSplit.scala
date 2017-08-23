@@ -91,7 +91,12 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group expertSetParam */
+  /**
+   * Set the mamixum level of parallelism to evaluate models in parallel.
+   * Default is 1 for serial evaluation
+   *
+   * @group expertSetParam
+   */
   @Since("2.3.0")
   def setParallelism(value: Int): this.type = set(parallelism, value)
 

@@ -39,7 +39,6 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
-
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
@@ -96,7 +95,12 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-  /** @group expertSetParam */
+  /**
+   * Set the mamixum level of parallelism to evaluate models in parallel.
+   * Default is 1 for serial evaluation
+   *
+   * @group expertSetParam
+   */
   @Since("2.3.0")
   def setParallelism(value: Int): this.type = set(parallelism, value)
 

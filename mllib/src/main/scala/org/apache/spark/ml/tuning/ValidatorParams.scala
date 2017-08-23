@@ -30,7 +30,6 @@ import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
 
-
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
