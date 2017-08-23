@@ -33,11 +33,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-<<<<<<< HEAD
-import org.apache.spark.ml.param.shared.HasParallelism
-=======
-import org.apache.spark.ml.param.shared.HasWeightCol
->>>>>>> master
+import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
