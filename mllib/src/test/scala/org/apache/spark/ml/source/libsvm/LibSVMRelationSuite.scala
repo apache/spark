@@ -220,7 +220,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
           .option("lineSep", "^")
           .format("libsvm")
           .load(path1.getAbsolutePath)
-        assert(df.collect().toSet() === readBackDF.collect().toSet())
+        assert(df.collect().toSet === readBackDF.collect().toSet)
       } finally {
         Utils.deleteRecursively(path0)
         Utils.deleteRecursively(path1)
