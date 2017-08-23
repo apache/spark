@@ -26,7 +26,7 @@ import scala.concurrent.Future
 
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
+import org.apache.spark.{ExecutorAllocationClient, HostState, SparkEnv, SparkException, TaskState}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
@@ -480,6 +480,21 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     driverEndpoint.ask[Boolean](RemoveWorker(workerId, host, message)).onFailure {
       case t => logError(t.getMessage, t)
     }(ThreadUtils.sameThread)
+  }
+
+  protected def handleUpdatedHostState(host: String, hostState: HostState.HostState): Unit = {
+    hostState match {
+      case HostState.Decommissioning =>
+        // TODO: Take action to blacklist executors on the host
+
+      case HostState.Running =>
+        // TODO: Take action to un-blacklist executors on the host
+
+      case HostState.Decommissioned | HostState.Lost =>
+        // TODO: Take action when a node is Decommissioned or Lost
+
+      case _ =>
+    }
   }
 
   def sufficientResourcesRegistered(): Boolean = true

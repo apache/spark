@@ -32,15 +32,15 @@ import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{HostState, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RemoveExecutor
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RetrieveLastAllocatedExecutorId
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{HostStatusUpdate,
+RemoveExecutor, RetrieveLastAllocatedExecutorId}
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}
 
 /**
@@ -265,6 +265,23 @@ private[yarn] class YarnAllocator(
     // Poll the ResourceManager. This doubles as a heartbeat if there are no pending container
     // requests.
     val allocateResponse = amClient.allocate(progressIndicator)
+
+    val updatedNodeReports = allocateResponse.getUpdatedNodes
+
+    updatedNodeReports.asScala.foreach(nodeReport => {
+      logInfo("Yarn node state updated for host %s to %s"
+        .format(nodeReport.getNodeId.getHost, nodeReport.getNodeState.name))
+
+      val hostState = HostState.fromYarnState(nodeReport.getNodeState.name)
+      hostState match {
+        case Some(state) =>
+          driverRef.send(HostStatusUpdate(nodeReport.getNodeId.getHost, state))
+
+        case None =>
+          logWarning("Cannot find Host state corresponding to YARN node state %s"
+            .format(nodeReport.getNodeState.name))
+      }
+    })
 
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 

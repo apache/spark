@@ -264,6 +264,10 @@ private[spark] abstract class YarnSchedulerBackend(
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
 
+      case HostStatusUpdate(host, hostState) =>
+        logDebug("Received updated state %s for host %s".format(host, hostState))
+        handleUpdatedHostState(host, hostState)
+
       case r @ RemoveExecutor(executorId, reason) =>
         logWarning(reason.toString)
         driverEndpoint.ask[Boolean](r).onFailure {

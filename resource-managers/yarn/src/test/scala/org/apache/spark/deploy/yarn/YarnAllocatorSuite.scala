@@ -20,19 +20,22 @@ package org.apache.spark.deploy.yarn
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.mockito.{Matchers => MockitoMatchers}
 import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.{HostState, SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.yarn.YarnAllocator._
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.HostStatusUpdate
 import org.apache.spark.util.ManualClock
 
 class MockResolver extends SparkRackResolver {
@@ -83,7 +86,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
   def createAllocator(
       maxExecutors: Int = 5,
-      rmClient: AMRMClient[ContainerRequest] = rmClient): YarnAllocator = {
+      rmClient: AMRMClient[ContainerRequest] = rmClient,
+      driverRef: RpcEndpointRef = mock(classOf[RpcEndpointRef])): YarnAllocator = {
     val args = Array(
       "--jar", "somejar.jar",
       "--class", "SomeClass")
@@ -94,7 +98,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       .set("spark.executor.memory", "2048")
     new YarnAllocator(
       "not used",
-      mock(classOf[RpcEndpointRef]),
+      driverRef,
       conf,
       sparkConfClone,
       rmClient,
@@ -349,5 +353,38 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     clock.advance(50 * 1000L)
     handler.getNumExecutorsFailed should be (0)
+  }
+
+  test("HostStatusUpdate signal on YARN node state change") {
+    val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
+    val mockAllocateResponse = mock(classOf[AllocateResponse])
+    val mockNodeReport1 = mock(classOf[NodeReport])
+    val mockNodeReport2 = mock(classOf[NodeReport])
+    val mockNodeId1 = mock(classOf[NodeId])
+    val mockNodeId2 = mock(classOf[NodeId])
+
+    val nodeState1 = HostState.toYarnState(HostState.Decommissioning)
+    assert(nodeState1.isDefined)
+    val nodeState2 = HostState.toYarnState(HostState.Running)
+    assert(nodeState2.isDefined)
+
+    when(mockNodeId1.getHost).thenReturn("host1")
+    when(mockNodeId2.getHost).thenReturn("host2")
+    when(mockNodeReport1.getNodeState).thenReturn(NodeState.valueOf(nodeState1.get))
+    when(mockNodeReport2.getNodeState).thenReturn(NodeState.valueOf(nodeState2.get))
+    when(mockNodeReport1.getNodeId).thenReturn(mockNodeId1)
+    when(mockNodeReport2.getNodeId).thenReturn(mockNodeId2)
+
+    when(mockAllocateResponse.getUpdatedNodes).thenReturn(List(mockNodeReport1,
+      mockNodeReport2).asJava)
+    when(mockAmClient.allocate(MockitoMatchers.anyFloat())).thenReturn(mockAllocateResponse)
+
+    val driverRef = mock(classOf[RpcEndpointRef])
+    val handler = createAllocator(4, mockAmClient, driverRef)
+
+    handler.allocateResources()
+
+    verify(driverRef).send(HostStatusUpdate("host1", HostState.Decommissioning))
+    verify(driverRef).send(HostStatusUpdate("host2", HostState.Running))
   }
 }

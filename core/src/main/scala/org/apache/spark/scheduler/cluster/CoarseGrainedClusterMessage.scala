@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.HostState.HostState
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
@@ -108,6 +109,9 @@ private[spark] object CoarseGrainedClusterMessages {
       localityAwareTasks: Int,
       hostToLocalTaskCount: Map[String, Int],
       nodeBlacklist: Set[String])
+    extends CoarseGrainedClusterMessage
+
+  case class HostStatusUpdate(host: String, hostState: HostState)
     extends CoarseGrainedClusterMessage
 
   // Check if an executor was force-killed but for a reason unrelated to the running tasks.
