@@ -293,11 +293,10 @@ abstract class UnaryNode extends LogicalPlan {
     projectList.foreach {
       case a @ Alias(e, _) =>
         // For every alias in `projectList`, replace the reference in constraints by its attribute.
-        val replacedElement = allConstraints.map(_ transform {
+        allConstraints ++= allConstraints.map(_ transform {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
         })
-        allConstraints = allConstraints.addMultiExpressions(replacedElement)
         allConstraints += EqualNullSafe(e, a.toAttribute)
       case _ => // Don't change.
     }
