@@ -1389,7 +1389,8 @@ sealed trait LogisticRegressionSummary extends Serializable {
   }
 
   /**
-   * Returns the sequence of labels in ascending order
+   * Returns the sequence of labels in ascending order. This order matches the order used
+   * in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
    *
    * Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
    * training set is missing a label, then all of the arrays over labels
