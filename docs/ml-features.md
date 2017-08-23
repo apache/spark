@@ -242,9 +242,31 @@ otherwise the features will not be mapped evenly to the vector indices.
 
 **Examples**
 
-In the following code segment, there are several input columns of different data types to
-illustrate the behavior of the transform to produce a column of feature vectors. The feature
-vectors could then be passed to a learning algorithm.
+Assume that we have a DataFrame with 4 input columns `real`, `bool`, `stringNum`, and `string`.
+These different data types as input will illustrate the behavior of the transform to produce a
+column of feature vectors.
+
+~~~~
+real| bool|stringNum|string
+----|-----|---------|------
+ 2.2| true|        1|   foo
+ 3.3|false|        2|   bar
+ 4.4|false|        3|   baz
+ 5.5|false|        4|   foo
+~~~~
+
+Then the output of `FeatureHasher.transform` on this DataFrame is:
+
+~~~~
+real|bool |stringNum|string|features
+----|-----|---------|------|-------------------------------------------------------
+2.2 |true |1        |foo   |(262144,[51871, 63643,174475,253195],[1.0,1.0,2.2,1.0])
+3.3 |false|2        |bar   |(262144,[6031,  80619,140467,174475],[1.0,1.0,1.0,3.3])
+4.4 |false|3        |baz   |(262144,[24279,140467,174475,196810],[1.0,1.0,4.4,1.0])
+5.5 |false|4        |foo   |(262144,[63643,140467,168512,174475],[1.0,1.0,1.0,5.5])
+~~~~
+
+The resulting feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
