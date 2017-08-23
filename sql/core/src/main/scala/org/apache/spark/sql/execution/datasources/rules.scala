@@ -385,10 +385,10 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
         case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
-        case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
+        case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema.map(_.name))
-        case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
+        case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
         case _ => i
@@ -428,7 +428,7 @@ object PreReadCheck extends (LogicalPlan => Unit) {
   private def checkNumInputFileBlockSources(e: Expression, operator: LogicalPlan): Int = {
     operator match {
       case _: HiveTableRelation => 1
-      case _ @ LogicalRelation(_: HadoopFsRelation, _, _) => 1
+      case _ @ LogicalRelation(_: HadoopFsRelation, _, _, _) => 1
       case _: LeafNode => 0
       // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
       case u: Union =>
@@ -454,10 +454,10 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _), partition, query, _, _) =>
+      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src, _, _) => src
+          case LogicalRelation(src, _, _, _) => src
         }
         if (srcRelations.contains(relation)) {
           failAnalysis("Cannot insert into table that is also being read from.")

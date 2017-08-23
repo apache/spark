@@ -94,10 +94,10 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
     child transform {
       case plan if plan eq relation =>
         relation match {
-          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
+          case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, isStreaming) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(Nil, Nil)
-            LocalRelation(partAttrs, partitionData.map(_.values))
+            LocalRelation(partAttrs, partitionData.map(_.values), isStreaming)
 
           case relation: HiveTableRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
@@ -130,7 +130,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
   object PartitionedRelation {
 
     def unapply(plan: LogicalPlan): Option[(AttributeSet, LogicalPlan)] = plan match {
-      case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _)
+      case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _)
         if fsRelation.partitionSchema.nonEmpty =>
         val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
         Some((AttributeSet(partAttrs), l))
