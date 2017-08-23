@@ -417,102 +417,108 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     }
   }
 
-  test("executors should be blacklisted after task failure, in spite of locality preferences") {
-    val rescheduleDelay = 300L
-    val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true).
-      set(config.BLACKLIST_TIMEOUT_CONF, rescheduleDelay).
-      // don't wait to jump locality levels in this test
-      set("spark.locality.wait", "0")
+  List(true, false).foreach { decommissioningBlacklistingEnabled =>
+    val blacklistStatusMsgDict = Map(true -> "enabled", false -> "disabled")
+    test("executors should be blacklisted after task failure, in spite of locality preferences " +
+      s"and decommissioning blacklisting " +
+      s"being ${blacklistStatusMsgDict(decommissioningBlacklistingEnabled)}") {
+      val rescheduleDelay = 300L
+      val conf = new SparkConf().
+        set(config.BLACKLIST_ENABLED, true).
+        set(config.BLACKLIST_DECOMMISSIONING_ENABLED, decommissioningBlacklistingEnabled).
+        set(config.BLACKLIST_TIMEOUT_CONF, rescheduleDelay).
+        // don't wait to jump locality levels in this test
+        set("spark.locality.wait", "0")
 
-    sc = new SparkContext("local", "test", conf)
-    // two executors on same host, one on different.
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
-      ("exec1.1", "host1"), ("exec2", "host2"))
-    // affinity to exec1 on host1 - which we will fail.
-    val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
-    val clock = new ManualClock
-    clock.advance(1)
-    // We don't directly use the application blacklist, but its presence triggers blacklisting
-    // within the taskset.
-    val mockListenerBus = mock(classOf[LiveListenerBus])
-    val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
-    val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
+      sc = new SparkContext("local", "test", conf)
+      // two executors on same host, one on different.
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
+        ("exec1.1", "host1"), ("exec2", "host2"))
+      // affinity to exec1 on host1 - which we will fail.
+      val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
+      val clock = new ManualClock
+      clock.advance(1)
+      // We don't directly use the application blacklist, but its presence triggers blacklisting
+      // within the taskset.
+      val mockListenerBus = mock(classOf[LiveListenerBus])
+      val blacklistTrackerOpt = Some(new BlacklistTracker(mockListenerBus, conf, None, clock))
+      val manager = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
 
-    {
-      val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
-      assert(offerResult.isDefined, "Expect resource offer to return a task")
+      {
+        val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
+        assert(offerResult.isDefined, "Expect resource offer to return a task")
 
-      assert(offerResult.get.index === 0)
-      assert(offerResult.get.executorId === "exec1")
+        assert(offerResult.get.index === 0)
+        assert(offerResult.get.executorId === "exec1")
 
-      // Cause exec1 to fail : failure 1
-      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
-      assert(!sched.taskSetsFailed.contains(taskSet.id))
+        // Cause exec1 to fail : failure 1
+        manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+        assert(!sched.taskSetsFailed.contains(taskSet.id))
 
-      // Ensure scheduling on exec1 fails after failure 1 due to blacklist
-      assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL).isEmpty)
-      assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+        // Ensure scheduling on exec1 fails after failure 1 due to blacklist
+        assert(manager.resourceOffer("exec1", "host1", PROCESS_LOCAL).isEmpty)
+        assert(manager.resourceOffer("exec1", "host1", NODE_LOCAL).isEmpty)
+        assert(manager.resourceOffer("exec1", "host1", RACK_LOCAL).isEmpty)
+        assert(manager.resourceOffer("exec1", "host1", ANY).isEmpty)
+      }
+
+      // Run the task on exec1.1 - should work, and then fail it on exec1.1
+      {
+        val offerResult = manager.resourceOffer("exec1.1", "host1", NODE_LOCAL)
+        assert(offerResult.isDefined,
+          "Expect resource offer to return a task for exec1.1, offerResult = " + offerResult)
+
+        assert(offerResult.get.index === 0)
+        assert(offerResult.get.executorId === "exec1.1")
+
+        // Cause exec1.1 to fail : failure 2
+        manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+        assert(!sched.taskSetsFailed.contains(taskSet.id))
+
+        // Ensure scheduling on exec1.1 fails after failure 2 due to blacklist
+        assert(manager.resourceOffer("exec1.1", "host1", NODE_LOCAL).isEmpty)
+      }
+
+      // Run the task on exec2 - should work, and then fail it on exec2
+      {
+        val offerResult = manager.resourceOffer("exec2", "host2", ANY)
+        assert(offerResult.isDefined, "Expect resource offer to return a task")
+
+        assert(offerResult.get.index === 0)
+        assert(offerResult.get.executorId === "exec2")
+
+        // Cause exec2 to fail : failure 3
+        manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+        assert(!sched.taskSetsFailed.contains(taskSet.id))
+
+        // Ensure scheduling on exec2 fails after failure 3 due to blacklist
+        assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
+      }
+
+      // Despite advancing beyond the time for expiring executors from within the blacklist,
+      // we *never* expire from *within* the stage blacklist
+      clock.advance(rescheduleDelay)
+
+      {
+        val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
+        assert(offerResult.isEmpty)
+      }
+
+      {
+        val offerResult = manager.resourceOffer("exec3", "host3", ANY)
+        assert(offerResult.isDefined)
+        assert(offerResult.get.index === 0)
+        assert(offerResult.get.executorId === "exec3")
+
+        assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
+
+        // Cause exec3 to fail : failure 4
+        manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
+      }
+
+      // we have failed the same task 4 times now : task id should now be in taskSetsFailed
+      assert(sched.taskSetsFailed.contains(taskSet.id))
     }
-
-    // Run the task on exec1.1 - should work, and then fail it on exec1.1
-    {
-      val offerResult = manager.resourceOffer("exec1.1", "host1", NODE_LOCAL)
-      assert(offerResult.isDefined,
-        "Expect resource offer to return a task for exec1.1, offerResult = " + offerResult)
-
-      assert(offerResult.get.index === 0)
-      assert(offerResult.get.executorId === "exec1.1")
-
-      // Cause exec1.1 to fail : failure 2
-      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
-      assert(!sched.taskSetsFailed.contains(taskSet.id))
-
-      // Ensure scheduling on exec1.1 fails after failure 2 due to blacklist
-      assert(manager.resourceOffer("exec1.1", "host1", NODE_LOCAL).isEmpty)
-    }
-
-    // Run the task on exec2 - should work, and then fail it on exec2
-    {
-      val offerResult = manager.resourceOffer("exec2", "host2", ANY)
-      assert(offerResult.isDefined, "Expect resource offer to return a task")
-
-      assert(offerResult.get.index === 0)
-      assert(offerResult.get.executorId === "exec2")
-
-      // Cause exec2 to fail : failure 3
-      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
-      assert(!sched.taskSetsFailed.contains(taskSet.id))
-
-      // Ensure scheduling on exec2 fails after failure 3 due to blacklist
-      assert(manager.resourceOffer("exec2", "host2", ANY).isEmpty)
-    }
-
-    // Despite advancing beyond the time for expiring executors from within the blacklist,
-    // we *never* expire from *within* the stage blacklist
-    clock.advance(rescheduleDelay)
-
-    {
-      val offerResult = manager.resourceOffer("exec1", "host1", PROCESS_LOCAL)
-      assert(offerResult.isEmpty)
-    }
-
-    {
-      val offerResult = manager.resourceOffer("exec3", "host3", ANY)
-      assert(offerResult.isDefined)
-      assert(offerResult.get.index === 0)
-      assert(offerResult.get.executorId === "exec3")
-
-      assert(manager.resourceOffer("exec3", "host3", ANY).isEmpty)
-
-      // Cause exec3 to fail : failure 4
-      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
-    }
-
-    // we have failed the same task 4 times now : task id should now be in taskSetsFailed
-    assert(sched.taskSetsFailed.contains(taskSet.id))
   }
 
   test("new executors get added and lost") {
@@ -1100,44 +1106,85 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager3.name === "TaskSet_1.1")
   }
 
-  test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +
-      "or killed tasks") {
-    // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
-    // and killed task.
+  List(true, false).foreach { decommissioningBlacklistingEnabled =>
+    val blacklistStatusMsgDict = Map(true -> "enabled", false -> "disabled")
+    test("don't update blacklist for shuffle-fetch failures, preemption, denied commits, " +
+      "or killed tasks, in spite of decommissioning blacklisting " +
+      s"being ${blacklistStatusMsgDict(decommissioningBlacklistingEnabled)}") {
+      // Setup a taskset, and fail some tasks for a fetch failure, preemption, denied commit,
+      // and killed task.
+      val conf = new SparkConf().
+        set(config.BLACKLIST_ENABLED, true).
+        set(config.BLACKLIST_DECOMMISSIONING_ENABLED, decommissioningBlacklistingEnabled)
+      sc = new SparkContext("local", "test", conf)
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+      val taskSet = FakeTask.createTaskSet(4)
+      val tsm = new TaskSetManager(sched, taskSet, 4)
+      // we need a spy so we can attach our mock blacklist
+      val tsmSpy = spy(tsm)
+      val blacklist = mock(classOf[TaskSetBlacklist])
+      when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+
+      // make some offers to our taskset, to get tasks we will fail
+      val taskDescs = Seq(
+        "exec1" -> "host1",
+        "exec2" -> "host1"
+      ).flatMap { case (exec, host) =>
+        // offer each executor twice (simulating 2 cores per executor)
+        (0 until 2).flatMap{ _ => tsmSpy.resourceOffer(exec, host, TaskLocality.ANY)}
+      }
+      assert(taskDescs.size === 4)
+
+      // now fail those tasks
+      tsmSpy.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
+        FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
+      tsmSpy.handleFailedTask(taskDescs(1).taskId, TaskState.FAILED,
+        ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
+      tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
+        TaskCommitDenied(0, 2, 0))
+      tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED, TaskKilled("test"))
+
+      // Make sure that the blacklist ignored all of the task failures above, since they aren't
+      // the fault of the executor where the task was running.
+      verify(blacklist, never())
+        .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+    }
+  }
+
+  test("don't update blacklist for successful task sets when task execution blacklisting is " +
+    "disabled, in spite of having decommissioning blacklisting enabled") {
     val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true)
+      set(config.BLACKLIST_ENABLED, false).
+      set(config.BLACKLIST_DECOMMISSIONING_ENABLED, true)
+
     sc = new SparkContext("local", "test", conf)
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
-    val taskSet = FakeTask.createTaskSet(4)
-    val tsm = new TaskSetManager(sched, taskSet, 4)
-    // we need a spy so we can attach our mock blacklist
-    val tsmSpy = spy(tsm)
-    val blacklist = mock(classOf[TaskSetBlacklist])
-    when(tsmSpy.taskSetBlacklistHelperOpt).thenReturn(Some(blacklist))
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock
+    clock.advance(1)
+    val mockListenerBus = mock(classOf[LiveListenerBus])
+    // to simulate BLACKLIST_DECOMMISSIONING_ENABLED=true
+    val blacklistTrackerOpt = Some(spy(new BlacklistTracker(mockListenerBus, conf, None, clock)))
+    val tsm = new TaskSetManager(sched, taskSet, 4, blacklistTrackerOpt, clock)
 
-    // make some offers to our taskset, to get tasks we will fail
+    assert(tsm.taskSetBlacklistHelperOpt.isEmpty)
+    // make some offers to our taskset
     val taskDescs = Seq(
       "exec1" -> "host1",
       "exec2" -> "host1"
     ).flatMap { case (exec, host) =>
       // offer each executor twice (simulating 2 cores per executor)
-      (0 until 2).flatMap{ _ => tsmSpy.resourceOffer(exec, host, TaskLocality.ANY)}
+      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
     }
-    assert(taskDescs.size === 4)
 
-    // now fail those tasks
-    tsmSpy.handleFailedTask(taskDescs(0).taskId, TaskState.FAILED,
-      FetchFailed(BlockManagerId(taskDescs(0).executorId, "host1", 12345), 0, 0, 0, "ignored"))
-    tsmSpy.handleFailedTask(taskDescs(1).taskId, TaskState.FAILED,
-      ExecutorLostFailure(taskDescs(1).executorId, exitCausedByApp = false, reason = None))
-    tsmSpy.handleFailedTask(taskDescs(2).taskId, TaskState.FAILED,
-      TaskCommitDenied(0, 2, 0))
-    tsmSpy.handleFailedTask(taskDescs(3).taskId, TaskState.KILLED, TaskKilled("test"))
+    val directTaskResult = new DirectTaskResult[String](null, Seq()) {
+      override def value(resultSer: SerializerInstance): String = ""
+    }
+    tsm.handleSuccessfulTask(taskDescs(0).taskId, directTaskResult)
+    tsm.abort("test")
 
-    // Make sure that the blacklist ignored all of the task failures above, since they aren't
-    // the fault of the executor where the task was running.
-    verify(blacklist, never())
-      .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+    verify(blacklistTrackerOpt.get, never())
+      .updateBlacklistForSuccessfulTaskSet(anyInt(), anyInt(), any())
   }
 
   test("update application blacklist for shuffle-fetch") {

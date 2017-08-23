@@ -85,6 +85,7 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     blacklist = mock[BlacklistTracker]
     val conf = new SparkConf().setMaster("local").setAppName("TaskSchedulerImplSuite")
     conf.set(config.BLACKLIST_ENABLED, true)
+        .set(config.BLACKLIST_DECOMMISSIONING_ENABLED, false)
     sc = new SparkContext(conf)
     taskScheduler =
       new TaskSchedulerImpl(sc, sc.conf.getInt("spark.task.maxFailures", 4)) {
@@ -621,7 +622,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // schedulable on another executor.  However, that executor may fail later on, leaving the
     // first task with no place to run.
     val taskScheduler = setupScheduler(
-      config.BLACKLIST_ENABLED.key -> "true"
+      config.BLACKLIST_ENABLED.key -> "true",
+      config.BLACKLIST_DECOMMISSIONING_ENABLED.key -> "false"
     )
 
     val taskSet = FakeTask.createTaskSet(2)
@@ -672,7 +674,8 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     // available and not bail on the job
 
     val taskScheduler = setupScheduler(
-      config.BLACKLIST_ENABLED.key -> "true"
+      config.BLACKLIST_ENABLED.key -> "true",
+      config.BLACKLIST_DECOMMISSIONING_ENABLED.key -> "false"
     )
 
     val taskSet = FakeTask.createTaskSet(2, (0 until 2).map { _ => Seq(TaskLocation("host0")) }: _*)

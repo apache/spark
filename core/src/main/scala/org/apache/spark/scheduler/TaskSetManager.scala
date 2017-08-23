@@ -96,8 +96,10 @@ private[spark] class TaskSetManager(
   private var calculatedTasks = 0
 
   private[scheduler] val taskSetBlacklistHelperOpt: Option[TaskSetBlacklist] = {
-    blacklistTracker.map { _ =>
-      new TaskSetBlacklist(conf, stageId, clock)
+    if (blacklistTracker.isDefined && BlacklistTracker.isTaskExecutionBlacklistingEnabled(conf)) {
+      Some(new TaskSetBlacklist(conf, stageId, clock))
+    } else {
+      None
     }
   }
 
@@ -519,7 +521,7 @@ private[spark] class TaskSetManager(
   private def maybeFinishTaskSet() {
     if (isZombie && runningTasks == 0) {
       sched.taskSetFinished(this)
-      if (tasksSuccessful == numTasks) {
+      if (taskSetBlacklistHelperOpt.isDefined && tasksSuccessful == numTasks) {
         blacklistTracker.foreach(_.updateBlacklistForSuccessfulTaskSet(
           taskSet.stageId,
           taskSet.stageAttemptId,

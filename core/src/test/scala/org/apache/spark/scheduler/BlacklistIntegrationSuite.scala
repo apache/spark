@@ -44,7 +44,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // according to locality preferences, and so the job fails
   testScheduler("If preferred node is bad, without blacklist job will fail",
     extraConfs = Seq(
-      config.BLACKLIST_ENABLED.key -> "false"
+      config.BLACKLIST_ENABLED.key -> "false",
+      config.BLACKLIST_DECOMMISSIONING_ENABLED.key -> "true"
   )) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
@@ -58,6 +59,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "With default settings, job can succeed despite multiple bad executors on node",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
+      config.BLACKLIST_DECOMMISSIONING_ENABLED.key -> "false",
       config.MAX_TASK_FAILURES.key -> "4",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "5",
@@ -84,6 +86,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
        config.BLACKLIST_ENABLED.key -> "true",
+       config.BLACKLIST_DECOMMISSIONING_ENABLED.key -> "false",
       // just to avoid this test taking too long
       "spark.locality.wait" -> "10ms"
     )
@@ -103,6 +106,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     "SPARK-15865 Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
       config.BLACKLIST_ENABLED.key -> "true",
+      config.BLACKLIST_DECOMMISSIONING_ENABLED.key -> "false",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "1",
       "spark.testing.nCoresPerExecutor" -> "1"

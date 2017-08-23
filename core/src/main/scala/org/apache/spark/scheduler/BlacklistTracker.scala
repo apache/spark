@@ -63,7 +63,11 @@ private[scheduler] class BlacklistTracker (
   val BLACKLIST_TIMEOUT_MILLIS = BlacklistTracker.getBlacklistTimeout(conf)
   val BLACKLIST_DECOMMISSIONING_TIMEOUT_MILLIS =
     BlacklistTracker.getBlacklistDecommissioningTimeout(conf)
-  private val BLACKLIST_FETCH_FAILURE_ENABLED = conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
+  private val TASK_BLACKLISTING_ENABLED = BlacklistTracker.isTaskExecutionBlacklistingEnabled(conf)
+  private val DECOMMISSIONING_BLACKLISTING_ENABLED =
+    BlacklistTracker.isDecommissioningBlacklistingEnabled(conf)
+  private val BLACKLIST_FETCH_FAILURE_ENABLED =
+    BlacklistTracker.isFetchFailureBlacklistingEnabled(conf)
 
   /**
    * A map from executorId to information on task failures.  Tracks the time of each task failure,
@@ -91,13 +95,13 @@ private[scheduler] class BlacklistTracker (
    * successive blacklisted executors on one node.  Nonetheless, it will not grow too large because
    * there cannot be many blacklisted executors on one node, before we stop requesting more
    * executors on that node, and we clean up the list of blacklisted executors once an executor has
-   * been blacklisted for BLACKLIST_TIMEOUT_MILLIS.
+   * been blacklisted for its configured blacklisting timeout.
    */
   val nodeToBlacklistedExecs = new HashMap[String, HashSet[String]]()
 
   /**
-   * Un-blacklists executors and nodes that have been blacklisted for at least
-   * BLACKLIST_TIMEOUT_MILLIS
+   * Un-blacklists executors and nodes that have been blacklisted for at least its configured
+   * blacklisting timeout
    */
   def applyBlacklistTimeout(): Unit = {
     val now = clock.getTimeMillis()
@@ -261,28 +265,32 @@ private[scheduler] class BlacklistTracker (
                          time: Long = clock.getTimeMillis()): Boolean = {
     // If the node is already in the blacklist, we avoid adding it again with a later expiry time.
     if (!isNodeBlacklisted(node)) {
-      val blacklistExpiryTime = reason match {
-        case NodeDecommissioning =>
+      val blacklistExpiryTimeOpt = reason match {
+        case NodeDecommissioning if DECOMMISSIONING_BLACKLISTING_ENABLED =>
           val expiryTime = time + BLACKLIST_DECOMMISSIONING_TIMEOUT_MILLIS
           logInfo(s"Blacklisting node $node with timeout $expiryTime ms because ${reason.message}")
-          expiryTime
+          Some(expiryTime)
 
-        case ExecutorFailures(blacklistedExecutors) =>
+        case ExecutorFailures(blacklistedExecutors) if TASK_BLACKLISTING_ENABLED =>
           val expiryTime = time + BLACKLIST_TIMEOUT_MILLIS
           logInfo(s"Blacklisting node $node with timeout $expiryTime ms because it " +
             s"has ${blacklistedExecutors.size} executors blacklisted: ${blacklistedExecutors}")
-          expiryTime
+          Some(expiryTime)
 
-        case FetchFailure(host) =>
+        case FetchFailure(host) if BLACKLIST_FETCH_FAILURE_ENABLED =>
           val expiryTime = time + BLACKLIST_TIMEOUT_MILLIS
           logInfo(s"Blacklisting node $host due to fetch failure of external shuffle service")
-          expiryTime
+          Some(expiryTime)
+
+        case _ => None
       }
 
-      blacklistNodeHelper(node, blacklistExpiryTime)
-      listenerBus.post(SparkListenerNodeBlacklisted(time, node, reason))
-      updateNextExpiryTime()
-      true
+      blacklistExpiryTimeOpt.fold(false) { blacklistExpiryTime =>
+        blacklistNodeHelper(node, blacklistExpiryTime)
+        listenerBus.post(SparkListenerNodeBlacklisted(time, node, reason))
+        updateNextExpiryTime()
+        true
+      }
     }
     else {
       false
@@ -307,7 +315,11 @@ private[scheduler] class BlacklistTracker (
   def removeNodesFromBlacklist(nodesToRemove: Iterable[(String, NodeUnblacklistReason,
     Option[Long])]): Unit = {
     if (nodesToRemove.nonEmpty) {
-      val blacklistNodesToRemove = nodesToRemove.filter(node => isNodeBlacklisted(node._1))
+      val blacklistNodesToRemove = nodesToRemove.filter{ case (node, reason, _) =>
+        (reason == BlacklistTimedOut ||
+          (reason ==  NodeRunning && DECOMMISSIONING_BLACKLISTING_ENABLED)) &&
+          isNodeBlacklisted(node)
+      }
       unblacklistNodesHelper(blacklistNodesToRemove.map(_._1))
       blacklistNodesToRemove.foreach(node => {
         logInfo(s"Removing node $node from blacklist because ${node._2.message}")
@@ -429,13 +441,36 @@ private[scheduler] object BlacklistTracker extends Logging {
   private val DEFAULT_DECOMMISSIONING_TIMEOUT = "1h"
 
   /**
-   * Returns true if the blacklist is enabled, based on checking the configuration in the following
-   * order:
+   * Returns true if the task execution blacklist, fetch failure blacklist,
+   * or decommission blacklisting are enabled
+   */
+  def isBlacklistEnabled(conf: SparkConf): Boolean = {
+    isFetchFailureBlacklistingEnabled(conf) || isDecommissioningBlacklistingEnabled(conf) ||
+      isTaskExecutionBlacklistingEnabled(conf)
+  }
+
+  /**
+   * Returns true if the fetch failure blacklisting is enabled
+   */
+  def isFetchFailureBlacklistingEnabled(conf: SparkConf): Boolean = {
+    conf.get(config.BLACKLIST_FETCH_FAILURE_ENABLED)
+  }
+
+  /**
+   * Returns true if the decommission blacklisting is enabled
+   */
+  def isDecommissioningBlacklistingEnabled(conf: SparkConf): Boolean = {
+    conf.get(config.BLACKLIST_DECOMMISSIONING_ENABLED)
+  }
+
+  /**
+   * Returns true if the task execution blacklist is enabled, based on checking the configuration
+   * in the following order:
    * 1. Is it specifically enabled or disabled?
    * 2. Is it enabled via the legacy timeout conf?
    * 3. Default is off
    */
-  def isBlacklistEnabled(conf: SparkConf): Boolean = {
+  def isTaskExecutionBlacklistingEnabled(conf: SparkConf): Boolean = {
     conf.get(config.BLACKLIST_ENABLED) match {
       case Some(enabled) =>
         enabled
@@ -523,7 +558,9 @@ private[scheduler] object BlacklistTracker extends Logging {
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
         s"Spark will not be robust to one bad node.  Decrease " +
         s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
-        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
+        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}, " +
+        s"${config.BLACKLIST_DECOMMISSIONING_ENABLED.key} " +
+        s"and ${config.BLACKLIST_FETCH_FAILURE_ENABLED.key}")
     }
   }
 }

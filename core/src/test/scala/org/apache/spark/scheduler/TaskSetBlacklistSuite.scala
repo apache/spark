@@ -25,6 +25,7 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
   test("Blacklisting tasks, executors, and nodes") {
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
+      .set(config.BLACKLIST_DECOMMISSIONING_ENABLED.key, "false")
     val clock = new ManualClock
 
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, clock = clock)
@@ -146,6 +147,7 @@ class TaskSetBlacklistSuite extends SparkFunSuite {
     // lead to any node blacklisting
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
+      .set(config.BLACKLIST_DECOMMISSIONING_ENABLED.key, "false")
     val taskSetBlacklist = new TaskSetBlacklist(conf, stageId = 0, new SystemClock())
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 0)
     taskSetBlacklist.updateBlacklistForFailedTask("hostA", exec = "1", index = 1)

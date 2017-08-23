@@ -41,6 +41,7 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   override def beforeEach(): Unit = {
     conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
+      .set(config.BLACKLIST_DECOMMISSIONING_ENABLED.key, "false")
     scheduler = mockTaskSchedWithConf(conf)
 
     clock.setTime(0)
@@ -411,9 +412,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
   test("blacklist still respects legacy configs") {
     val conf = new SparkConf().setMaster("local")
-    assert(!BlacklistTracker.isBlacklistEnabled(conf))
+    assert(!BlacklistTracker.isTaskExecutionBlacklistingEnabled(conf))
     conf.set(config.BLACKLIST_LEGACY_TIMEOUT_CONF, 5000L)
-    assert(BlacklistTracker.isBlacklistEnabled(conf))
+    assert(BlacklistTracker.isTaskExecutionBlacklistingEnabled(conf))
     assert(5000 === BlacklistTracker.getBlacklistTimeout(conf))
     // the new conf takes precedence, though
     conf.set(config.BLACKLIST_TIMEOUT_CONF, 1000L)
@@ -421,10 +422,10 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
 
     // if you explicitly set the legacy conf to 0, that also would disable blacklisting
     conf.set(config.BLACKLIST_LEGACY_TIMEOUT_CONF, 0L)
-    assert(!BlacklistTracker.isBlacklistEnabled(conf))
+    assert(!BlacklistTracker.isTaskExecutionBlacklistingEnabled(conf))
     // but again, the new conf takes precedence
     conf.set(config.BLACKLIST_ENABLED, true)
-    assert(BlacklistTracker.isBlacklistEnabled(conf))
+    assert(BlacklistTracker.isTaskExecutionBlacklistingEnabled(conf))
     assert(1000 === BlacklistTracker.getBlacklistTimeout(conf))
   }
 
@@ -444,7 +445,9 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
         s"( = ${maxTaskFailures} ).  Though blacklisting is enabled, with this configuration, " +
         s"Spark will not be robust to one bad node.  Decrease " +
         s"${config.MAX_TASK_ATTEMPTS_PER_NODE.key}, increase ${config.MAX_TASK_FAILURES.key}, " +
-        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}")
+        s"or disable blacklisting with ${config.BLACKLIST_ENABLED.key}, " +
+        s"${config.BLACKLIST_DECOMMISSIONING_ENABLED.key} " +
+        s"and ${config.BLACKLIST_FETCH_FAILURE_ENABLED.key}")
     }
 
     conf.remove(config.MAX_TASK_FAILURES)
@@ -593,6 +596,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   test("node is blacklisted with NodeDecommissioning reason and gets recovered with time") {
+    conf.set(config.BLACKLIST_DECOMMISSIONING_ENABLED.key, "true")
+    blacklist = new BlacklistTracker(listenerBusMock, conf, None, clock)
     blacklist.addNodeToBlacklist("hostA", NodeDecommissioning)
     assert(blacklist.nodeBlacklist() === Set("hostA"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostA"))
@@ -608,6 +613,8 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
   }
 
   test("node is unblacklisted with NodeRunning reason") {
+    conf.set(config.BLACKLIST_DECOMMISSIONING_ENABLED.key, "true")
+    blacklist = new BlacklistTracker(listenerBusMock, conf, None, clock)
     val now = clock.getTimeMillis()
     blacklist.addNodeToBlacklist("hostA", NodeDecommissioning)
     blacklist.addNodeToBlacklist("hostB", ExecutorFailures(Set()))
@@ -618,5 +625,41 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     assert(blacklist.nodeBlacklist() === Set("hostB"))
     assertEquivalentToSet(blacklist.isNodeBlacklisted(_), Set("hostB"))
     verify(listenerBusMock).post(SparkListenerNodeUnblacklisted(now, "hostA", NodeRunning))
+  }
+
+  (for {
+    taskExecutionBlacklistingEnabled <- Seq(true, false)
+    decommissioningBlacklistingEnabled <- Seq(true, false)
+  } yield (taskExecutionBlacklistingEnabled, decommissioningBlacklistingEnabled)).foreach {
+    case (taskExecutionBlacklistingEnabled, decommissioningBlacklistingEnabled) =>
+      val blacklistStatusMsgDict = Map(true -> "enforced", false -> "ignored")
+
+      test(s"task execution blacklisting is " +
+          s"${blacklistStatusMsgDict(taskExecutionBlacklistingEnabled)} due to " +
+          s"${config.BLACKLIST_ENABLED.key}=$taskExecutionBlacklistingEnabled, while " +
+          s"decommissioning blacklisting is " +
+          s"${blacklistStatusMsgDict(decommissioningBlacklistingEnabled)} " +
+          s"due to " +
+          s"${config.BLACKLIST_DECOMMISSIONING_ENABLED.key}=$decommissioningBlacklistingEnabled") {
+        conf = conf.set(config.BLACKLIST_ENABLED.key, taskExecutionBlacklistingEnabled.toString).
+          set(config.BLACKLIST_DECOMMISSIONING_ENABLED.key,
+              decommissioningBlacklistingEnabled.toString)
+        blacklist = new BlacklistTracker(listenerBusMock, conf, None, clock)
+
+        val (failingHost, decommissioningHost) = ("hostFailing", "hostDecommissioning")
+        blacklist.addNodeToBlacklist(failingHost, ExecutorFailures(Set()))
+        blacklist.addNodeToBlacklist(decommissioningHost, NodeDecommissioning)
+        val blacklistedHosts = (if (taskExecutionBlacklistingEnabled) {
+          Set(failingHost)
+        } else {
+          Set[String]()
+        }) ++ (if (decommissioningBlacklistingEnabled) {
+          Set(decommissioningHost)
+        } else {
+          Set[String]()
+        })
+        assert(blacklist.nodeBlacklist() === blacklistedHosts)
+        assertEquivalentToSet(blacklist.isNodeBlacklisted(_), blacklistedHosts)
+      }
   }
 }

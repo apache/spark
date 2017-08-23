@@ -155,6 +155,11 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val BLACKLIST_DECOMMISSIONING_ENABLED =
+    ConfigBuilder("spark.blacklist.decommissioning.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val BLACKLIST_DECOMMISSIONING_TIMEOUT_CONF =
     ConfigBuilder("spark.blacklist.decommissioning.timeout")
       .timeConf(TimeUnit.MILLISECONDS)
