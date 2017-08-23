@@ -556,7 +556,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       withTempView("orc_source") {
         sql(
           s"""
-             |CREATE TEMPORARY TABLE orc_source
+             |CREATE TEMPORARY VIEW orc_source
              |USING org.apache.spark.sql.hive.orc
              |OPTIONS (
              |  PATH '${dir.getCanonicalPath}'
@@ -596,20 +596,20 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           Seq.empty[Row])
 
         // use orc data source to check the data of path is right.
-//        withTempView("orc_source") {
-//          sql(
-//            s"""
-//               |CREATE TEMPORARY VIEW orc_source
-//               |USING org.apache.spark.sql.hive.orc
-//               |OPTIONS (
-//               |  PATH '${dir.getCanonicalPath}'
-//               |)
-//             """.stripMargin)
-//
-//          checkAnswer(
-//            sql("select * from orc_source"),
-//            sql("select * from test_insert_table").collect())
-//        }
+        withTempView("orc_source") {
+          sql(
+            s"""
+               |CREATE TEMPORARY VIEW orc_source
+               |USING org.apache.spark.sql.hive.orc
+               |OPTIONS (
+               |  PATH '${dir.getCanonicalPath}'
+               |)
+             """.stripMargin)
+
+          checkAnswer(
+            sql("select * from orc_source"),
+            sql("select * from test_insert_table").collect())
+        }
       }
     }
   }
