@@ -432,25 +432,31 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
   }
 
   test("zero moments") {
-    val input = Seq((1, 2)).toDF("a", "b")
-    checkAnswer(
-      input.agg(stddev('a), stddev_samp('a), stddev_pop('a), variance('a),
-        var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-        Double.NaN, Double.NaN))
+    // In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
+    // goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+    // in a test mode. So, we explicitly turn off whole-stage codegen here.
+    // This guard can be removed if this issue fixed.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val input = Seq((1, 2)).toDF("a", "b")
+      checkAnswer(
+        input.agg(stddev('a), stddev_samp('a), stddev_pop('a), variance('a),
+          var_samp('a), var_pop('a), skewness('a), kurtosis('a)),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
 
-    checkAnswer(
-      input.agg(
-        expr("stddev(a)"),
-        expr("stddev_samp(a)"),
-        expr("stddev_pop(a)"),
-        expr("variance(a)"),
-        expr("var_samp(a)"),
-        expr("var_pop(a)"),
-        expr("skewness(a)"),
-        expr("kurtosis(a)")),
-      Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
-        Double.NaN, Double.NaN))
+      checkAnswer(
+        input.agg(
+          expr("stddev(a)"),
+          expr("stddev_samp(a)"),
+          expr("stddev_pop(a)"),
+          expr("variance(a)"),
+          expr("var_samp(a)"),
+          expr("var_pop(a)"),
+          expr("skewness(a)"),
+          expr("kurtosis(a)")),
+        Row(Double.NaN, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0,
+          Double.NaN, Double.NaN))
+    }
   }
 
   test("null moments") {

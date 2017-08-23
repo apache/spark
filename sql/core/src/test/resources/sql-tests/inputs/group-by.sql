@@ -30,8 +30,15 @@ SELECT a + 2, COUNT(b) FROM testData GROUP BY a + 1;
 SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1;
 
 -- Aggregate with nulls.
+--
+-- In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
+-- goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+-- in a test mode. So, we explicitly turn off whole-stage codegen here.
+-- This guard can be removed if this issue fixed.
+SET spark.sql.codegen.wholeStage=false;
 SELECT SKEWNESS(a), KURTOSIS(a), MIN(a), MAX(a), AVG(a), VARIANCE(a), STDDEV(a), SUM(a), COUNT(a)
 FROM testData;
+SET spark.sql.codegen.wholeStage=true;
 
 -- Aggregate with foldable input and multiple distinct groups.
 SELECT COUNT(DISTINCT b), COUNT(DISTINCT b, c) FROM (SELECT 1 AS a, 2 AS b, 3 AS c) GROUP BY a;

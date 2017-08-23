@@ -21,6 +21,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StringType
 
@@ -95,50 +96,62 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   }
 
   test("sliding window grouping") {
-    val df = Seq(
-      ("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
-
-    checkAnswer(
-      df.groupBy(window($"time", "10 seconds", "3 seconds", "0 second"))
-        .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
-      // 2016-03-27 19:39:27 UTC -> 4 bins
-      // 2016-03-27 19:39:34 UTC -> 3 bins
-      // 2016-03-27 19:39:56 UTC -> 3 bins
-      Seq(
-        Row("2016-03-27 19:39:18", "2016-03-27 19:39:28", 1),
-        Row("2016-03-27 19:39:21", "2016-03-27 19:39:31", 1),
-        Row("2016-03-27 19:39:24", "2016-03-27 19:39:34", 1),
-        Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", 2),
-        Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
-        Row("2016-03-27 19:39:33", "2016-03-27 19:39:43", 1),
-        Row("2016-03-27 19:39:48", "2016-03-27 19:39:58", 1),
-        Row("2016-03-27 19:39:51", "2016-03-27 19:40:01", 1),
-        Row("2016-03-27 19:39:54", "2016-03-27 19:40:04", 1))
-    )
-  }
-
-  test("sliding window projection") {
-    val df = Seq(
+    // In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
+    // goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+    // in a test mode. So, we explicitly turn off whole-stage codegen here.
+    // This guard can be removed if this issue fixed.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = Seq(
         ("2016-03-27 19:39:34", 1, "a"),
         ("2016-03-27 19:39:56", 2, "a"),
         ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
-      .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
-      .orderBy($"window.start".asc, $"value".desc).select("value")
 
-    val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
-    assert(expands.nonEmpty, "Sliding windows require expand")
+      checkAnswer(
+        df.groupBy(window($"time", "10 seconds", "3 seconds", "0 second"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
+        // 2016-03-27 19:39:27 UTC -> 4 bins
+        // 2016-03-27 19:39:34 UTC -> 3 bins
+        // 2016-03-27 19:39:56 UTC -> 3 bins
+        Seq(
+          Row("2016-03-27 19:39:18", "2016-03-27 19:39:28", 1),
+          Row("2016-03-27 19:39:21", "2016-03-27 19:39:31", 1),
+          Row("2016-03-27 19:39:24", "2016-03-27 19:39:34", 1),
+          Row("2016-03-27 19:39:27", "2016-03-27 19:39:37", 2),
+          Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
+          Row("2016-03-27 19:39:33", "2016-03-27 19:39:43", 1),
+          Row("2016-03-27 19:39:48", "2016-03-27 19:39:58", 1),
+          Row("2016-03-27 19:39:51", "2016-03-27 19:40:01", 1),
+          Row("2016-03-27 19:39:54", "2016-03-27 19:40:04", 1))
+      )
+    }
+  }
 
-    checkAnswer(
-      df,
-      // 2016-03-27 19:39:27 UTC -> 4 bins
-      // 2016-03-27 19:39:34 UTC -> 3 bins
-      // 2016-03-27 19:39:56 UTC -> 3 bins
-      Seq(Row(4), Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
-    )
+  test("sliding window projection") {
+    // In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
+    // goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+    // in a test mode. So, we explicitly turn off whole-stage codegen here.
+    // This guard can be removed if this issue fixed.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = Seq(
+          ("2016-03-27 19:39:34", 1, "a"),
+          ("2016-03-27 19:39:56", 2, "a"),
+          ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+        .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
+        .orderBy($"window.start".asc, $"value".desc).select("value")
+
+      val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
+      assert(expands.nonEmpty, "Sliding windows require expand")
+
+      checkAnswer(
+        df,
+        // 2016-03-27 19:39:27 UTC -> 4 bins
+        // 2016-03-27 19:39:34 UTC -> 3 bins
+        // 2016-03-27 19:39:56 UTC -> 3 bins
+        Seq(Row(4), Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
+      )
+    }
   }
 
   test("windowing combined with explode expression") {
@@ -228,29 +241,35 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   }
 
   test("millisecond precision sliding windows") {
-    val df = Seq(
-      ("2016-03-27 09:00:00.41", 3),
-      ("2016-03-27 09:00:00.62", 6),
-      ("2016-03-27 09:00:00.715", 8)).toDF("time", "value")
-    checkAnswer(
-      df.groupBy(window($"time", "200 milliseconds", "40 milliseconds", "0 milliseconds"))
-        .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"counts"),
-      Seq(
-        Row("2016-03-27 09:00:00.24", "2016-03-27 09:00:00.44", 1),
-        Row("2016-03-27 09:00:00.28", "2016-03-27 09:00:00.48", 1),
-        Row("2016-03-27 09:00:00.32", "2016-03-27 09:00:00.52", 1),
-        Row("2016-03-27 09:00:00.36", "2016-03-27 09:00:00.56", 1),
-        Row("2016-03-27 09:00:00.4", "2016-03-27 09:00:00.6", 1),
-        Row("2016-03-27 09:00:00.44", "2016-03-27 09:00:00.64", 1),
-        Row("2016-03-27 09:00:00.48", "2016-03-27 09:00:00.68", 1),
-        Row("2016-03-27 09:00:00.52", "2016-03-27 09:00:00.72", 2),
-        Row("2016-03-27 09:00:00.56", "2016-03-27 09:00:00.76", 2),
-        Row("2016-03-27 09:00:00.6", "2016-03-27 09:00:00.8", 2),
-        Row("2016-03-27 09:00:00.64", "2016-03-27 09:00:00.84", 1),
-        Row("2016-03-27 09:00:00.68", "2016-03-27 09:00:00.88", 1))
-    )
+    // In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
+    // goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+    // in a test mode. So, we explicitly turn off whole-stage codegen here.
+    // This guard can be removed if this issue fixed.
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+      val df = Seq(
+        ("2016-03-27 09:00:00.41", 3),
+        ("2016-03-27 09:00:00.62", 6),
+        ("2016-03-27 09:00:00.715", 8)).toDF("time", "value")
+      checkAnswer(
+        df.groupBy(window($"time", "200 milliseconds", "40 milliseconds", "0 milliseconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"counts"),
+        Seq(
+          Row("2016-03-27 09:00:00.24", "2016-03-27 09:00:00.44", 1),
+          Row("2016-03-27 09:00:00.28", "2016-03-27 09:00:00.48", 1),
+          Row("2016-03-27 09:00:00.32", "2016-03-27 09:00:00.52", 1),
+          Row("2016-03-27 09:00:00.36", "2016-03-27 09:00:00.56", 1),
+          Row("2016-03-27 09:00:00.4", "2016-03-27 09:00:00.6", 1),
+          Row("2016-03-27 09:00:00.44", "2016-03-27 09:00:00.64", 1),
+          Row("2016-03-27 09:00:00.48", "2016-03-27 09:00:00.68", 1),
+          Row("2016-03-27 09:00:00.52", "2016-03-27 09:00:00.72", 2),
+          Row("2016-03-27 09:00:00.56", "2016-03-27 09:00:00.76", 2),
+          Row("2016-03-27 09:00:00.6", "2016-03-27 09:00:00.8", 2),
+          Row("2016-03-27 09:00:00.64", "2016-03-27 09:00:00.84", 1),
+          Row("2016-03-27 09:00:00.68", "2016-03-27 09:00:00.88", 1))
+      )
+    }
   }
 
   private def withTempTable(f: String => Unit): Unit = {
