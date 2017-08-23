@@ -28,8 +28,7 @@ import org.scalatest.Matchers._
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Project, Union}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
@@ -110,6 +109,93 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       df1.union(df2).orderBy("label"),
       Seq(Row(1, new ExamplePoint(1.0, 2.0)), Row(2, new ExamplePoint(3.0, 4.0)))
     )
+  }
+
+  test("union by name") {
+    var df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    var df2 = Seq((3, 1, 2)).toDF("c", "a", "b")
+    val df3 = Seq((2, 3, 1)).toDF("b", "c", "a")
+    val unionDf = df1.unionByName(df2.unionByName(df3))
+    checkAnswer(unionDf,
+      Row(1, 2, 3) :: Row(1, 2, 3) :: Row(1, 2, 3) :: Nil
+    )
+
+    // Check if adjacent unions are combined into a single one
+    assert(unionDf.queryExecution.optimizedPlan.collect { case u: Union => true }.size == 1)
+
+    // Check failure cases
+    df1 = Seq((1, 2)).toDF("a", "c")
+    df2 = Seq((3, 4, 5)).toDF("a", "b", "c")
+    var errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains(
+      "Union can only be performed on tables with the same number of columns, " +
+        "but the first table has 2 columns and the second table has 3 columns"))
+
+    df1 = Seq((1, 2, 3)).toDF("a", "b", "c")
+    df2 = Seq((4, 5, 6)).toDF("a", "c", "d")
+    errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains("""Cannot resolve column name "b" among (a, c, d)"""))
+  }
+
+  test("union by name - type coercion") {
+    var df1 = Seq((1, "a")).toDF("c0", "c1")
+    var df2 = Seq((3, 1L)).toDF("c1", "c0")
+    checkAnswer(df1.unionByName(df2), Row(1L, "a") :: Row(1L, "3") :: Nil)
+
+    df1 = Seq((1, 1.0)).toDF("c0", "c1")
+    df2 = Seq((8L, 3.0)).toDF("c1", "c0")
+    checkAnswer(df1.unionByName(df2), Row(1.0, 1.0) :: Row(3.0, 8.0) :: Nil)
+
+    df1 = Seq((2.0f, 7.4)).toDF("c0", "c1")
+    df2 = Seq(("a", 4.0)).toDF("c1", "c0")
+    checkAnswer(df1.unionByName(df2), Row(2.0, "7.4") :: Row(4.0, "a") :: Nil)
+
+    df1 = Seq((1, "a", 3.0)).toDF("c0", "c1", "c2")
+    df2 = Seq((1.2, 2, "bc")).toDF("c2", "c0", "c1")
+    val df3 = Seq(("def", 1.2, 3)).toDF("c1", "c2", "c0")
+    checkAnswer(df1.unionByName(df2.unionByName(df3)),
+      Row(1, "a", 3.0) :: Row(2, "bc", 1.2) :: Row(3, "def", 1.2) :: Nil
+    )
+  }
+
+  test("union by name - check case sensitivity") {
+    def checkCaseSensitiveTest(): Unit = {
+      val df1 = Seq((1, 2, 3)).toDF("ab", "cd", "ef")
+      val df2 = Seq((4, 5, 6)).toDF("cd", "ef", "AB")
+      checkAnswer(df1.unionByName(df2), Row(1, 2, 3) :: Row(6, 4, 5) :: Nil)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val errMsg2 = intercept[AnalysisException] {
+        checkCaseSensitiveTest()
+      }.getMessage
+      assert(errMsg2.contains("""Cannot resolve column name "ab" among (cd, ef, AB)"""))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkCaseSensitiveTest()
+    }
+  }
+
+  test("union by name - check name duplication") {
+    Seq((true, ("a", "a")), (false, ("aA", "Aa"))).foreach { case (caseSensitive, (c0, c1)) =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        var df1 = Seq((1, 1)).toDF(c0, c1)
+        var df2 = Seq((1, 1)).toDF("c0", "c1")
+        var errMsg = intercept[AnalysisException] {
+          df1.unionByName(df2)
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the left attributes:"))
+        df1 = Seq((1, 1)).toDF("c0", "c1")
+        df2 = Seq((1, 1)).toDF(c0, c1)
+        errMsg = intercept[AnalysisException] {
+          df1.unionByName(df2)
+        }.getMessage
+        assert(errMsg.contains("Found duplicate column(s) in the right attributes:"))
+      }
+    }
   }
 
   test("empty data frame") {
@@ -663,13 +749,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "valueRenamed", "newCol"))
   }
 
-  test("describe") {
-    val describeTestData = Seq(
-      ("Bob", 16, 176),
-      ("Alice", 32, 164),
-      ("David", 60, 192),
-      ("Amy", 24, 180)).toDF("name", "age", "height")
+  private lazy val person2: DataFrame = Seq(
+    ("Bob", 16, 176),
+    ("Alice", 32, 164),
+    ("David", 60, 192),
+    ("Amy", 24, 180)).toDF("name", "age", "height")
 
+  test("describe") {
     val describeResult = Seq(
       Row("count", "4", "4", "4"),
       Row("mean", null, "33.0", "178.0"),
@@ -686,30 +772,97 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
     def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
 
-    val describeTwoCols = describeTestData.describe("name", "age", "height")
-    assert(getSchemaAsSeq(describeTwoCols) === Seq("summary", "name", "age", "height"))
-    checkAnswer(describeTwoCols, describeResult)
-    // All aggregate value should have been cast to string
-    describeTwoCols.collect().foreach { row =>
-      assert(row.get(2).isInstanceOf[String], "expected string but found " + row.get(2).getClass)
-      assert(row.get(3).isInstanceOf[String], "expected string but found " + row.get(3).getClass)
-    }
-
-    val describeAllCols = describeTestData.describe()
+    val describeAllCols = person2.describe()
     assert(getSchemaAsSeq(describeAllCols) === Seq("summary", "name", "age", "height"))
     checkAnswer(describeAllCols, describeResult)
+    // All aggregate value should have been cast to string
+    describeAllCols.collect().foreach { row =>
+      row.toSeq.foreach { value =>
+        if (value != null) {
+          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+        }
+      }
+    }
 
-    val describeOneCol = describeTestData.describe("age")
+    val describeOneCol = person2.describe("age")
     assert(getSchemaAsSeq(describeOneCol) === Seq("summary", "age"))
     checkAnswer(describeOneCol, describeResult.map { case Row(s, _, d, _) => Row(s, d)} )
 
-    val describeNoCol = describeTestData.select("name").describe()
-    assert(getSchemaAsSeq(describeNoCol) === Seq("summary", "name"))
-    checkAnswer(describeNoCol, describeResult.map { case Row(s, n, _, _) => Row(s, n)} )
+    val describeNoCol = person2.select().describe()
+    assert(getSchemaAsSeq(describeNoCol) === Seq("summary"))
+    checkAnswer(describeNoCol, describeResult.map { case Row(s, _, _, _) => Row(s)} )
 
-    val emptyDescription = describeTestData.limit(0).describe()
+    val emptyDescription = person2.limit(0).describe()
     assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
     checkAnswer(emptyDescription, emptyDescribeResult)
+  }
+
+  test("summary") {
+    val summaryResult = Seq(
+      Row("count", "4", "4", "4"),
+      Row("mean", null, "33.0", "178.0"),
+      Row("stddev", null, "19.148542155126762", "11.547005383792516"),
+      Row("min", "Alice", "16", "164"),
+      Row("25%", null, "24.0", "176.0"),
+      Row("50%", null, "24.0", "176.0"),
+      Row("75%", null, "32.0", "180.0"),
+      Row("max", "David", "60", "192"))
+
+    val emptySummaryResult = Seq(
+      Row("count", "0", "0", "0"),
+      Row("mean", null, null, null),
+      Row("stddev", null, null, null),
+      Row("min", null, null, null),
+      Row("25%", null, null, null),
+      Row("50%", null, null, null),
+      Row("75%", null, null, null),
+      Row("max", null, null, null))
+
+    def getSchemaAsSeq(df: DataFrame): Seq[String] = df.schema.map(_.name)
+
+    val summaryAllCols = person2.summary()
+
+    assert(getSchemaAsSeq(summaryAllCols) === Seq("summary", "name", "age", "height"))
+    checkAnswer(summaryAllCols, summaryResult)
+    // All aggregate value should have been cast to string
+    summaryAllCols.collect().foreach { row =>
+      row.toSeq.foreach { value =>
+        if (value != null) {
+          assert(value.isInstanceOf[String], "expected string but found " + value.getClass)
+        }
+      }
+    }
+
+    val summaryOneCol = person2.select("age").summary()
+    assert(getSchemaAsSeq(summaryOneCol) === Seq("summary", "age"))
+    checkAnswer(summaryOneCol, summaryResult.map { case Row(s, _, d, _) => Row(s, d)} )
+
+    val summaryNoCol = person2.select().summary()
+    assert(getSchemaAsSeq(summaryNoCol) === Seq("summary"))
+    checkAnswer(summaryNoCol, summaryResult.map { case Row(s, _, _, _) => Row(s)} )
+
+    val emptyDescription = person2.limit(0).summary()
+    assert(getSchemaAsSeq(emptyDescription) === Seq("summary", "name", "age", "height"))
+    checkAnswer(emptyDescription, emptySummaryResult)
+  }
+
+  test("summary advanced") {
+    val stats = Array("count", "50.01%", "max", "mean", "min", "25%")
+    val orderMatters = person2.summary(stats: _*)
+    assert(orderMatters.collect().map(_.getString(0)) === stats)
+
+    val onlyPercentiles = person2.summary("0.1%", "99.9%")
+    assert(onlyPercentiles.count() === 2)
+
+    val fooE = intercept[IllegalArgumentException] {
+      person2.summary("foo")
+    }
+    assert(fooE.getMessage === "foo is not a recognised statistic")
+
+    val parseE = intercept[IllegalArgumentException] {
+      person2.summary("foo%")
+    }
+    assert(parseE.getMessage === "Unable to parse foo% as a percentile")
   }
 
   test("apply on query results (SPARK-5462)") {
@@ -1014,7 +1167,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-6899: type should match when using codegen") {
-    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2.0)))
+    checkAnswer(decimalData.agg(avg('a)), Row(new java.math.BigDecimal(2)))
   }
 
   test("SPARK-7133: Implement struct, array, and map field accessor") {
@@ -1026,28 +1179,31 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-7551: support backticks for DataFrame attribute resolution") {
-    val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
-    checkAnswer(
-      df.select(df("`a.b`.c.`d..e`.`f`")),
-      Row(1)
-    )
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      val df = spark.read.json(Seq("""{"a.b": {"c": {"d..e": {"f": 1}}}}""").toDS())
+      checkAnswer(
+        df.select(df("`a.b`.c.`d..e`.`f`")),
+        Row(1)
+      )
 
-    val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
-    checkAnswer(
-      df2.select(df2("`a  b`.c.d  e.f")),
-      Row(1)
-    )
+      val df2 = spark.read.json(Seq("""{"a  b": {"c": {"d  e": {"f": 1}}}}""").toDS())
+      checkAnswer(
+        df2.select(df2("`a  b`.c.d  e.f")),
+        Row(1)
+      )
 
-    def checkError(testFun: => Unit): Unit = {
-      val e = intercept[org.apache.spark.sql.AnalysisException] {
-        testFun
+      def checkError(testFun: => Unit): Unit = {
+        val e = intercept[org.apache.spark.sql.AnalysisException] {
+          testFun
+        }
+        assert(e.getMessage.contains("syntax error in attribute name:"))
       }
-      assert(e.getMessage.contains("syntax error in attribute name:"))
+
+      checkError(df("`abc.`c`"))
+      checkError(df("`abc`..d"))
+      checkError(df("`a`.b."))
+      checkError(df("`a.b`.c.`d"))
     }
-    checkError(df("`abc.`c`"))
-    checkError(df("`abc`..d"))
-    checkError(df("`a`.b."))
-    checkError(df("`a.b`.c.`d"))
   }
 
   test("SPARK-7324 dropDuplicates") {
@@ -1123,7 +1279,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq((1, 2, 3), (2, 3, 4), (3, 4, 5)).toDF("column1", "column2", "column1")
         .write.format("parquet").save("temp")
     }
-    assert(e.getMessage.contains("Duplicate column(s)"))
+    assert(e.getMessage.contains("Found duplicate column(s) when inserting into"))
     assert(e.getMessage.contains("column1"))
     assert(!e.getMessage.contains("column2"))
 
@@ -1133,7 +1289,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
         .toDF("column1", "column2", "column3", "column1", "column3")
         .write.format("json").save("temp")
     }
-    assert(f.getMessage.contains("Duplicate column(s)"))
+    assert(f.getMessage.contains("Found duplicate column(s) when inserting into"))
     assert(f.getMessage.contains("column1"))
     assert(f.getMessage.contains("column3"))
     assert(!f.getMessage.contains("column2"))
@@ -1177,7 +1333,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.ofRows(spark, OneRowRelation).createOrReplaceTempView("one_row")
+      Dataset.ofRows(spark, OneRowRelation()).createOrReplaceTempView("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1775,11 +1931,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-17957: outer join + na.fill") {
-    val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
-    val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
-    val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
-    val df3 = Seq((3, 1)).toDF("a", "d")
-    checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      val df1 = Seq((1, 2), (2, 3)).toDF("a", "b")
+      val df2 = Seq((2, 5), (3, 4)).toDF("a", "c")
+      val joinedDf = df1.join(df2, Seq("a"), "outer").na.fill(0)
+      val df3 = Seq((3, 1)).toDF("a", "d")
+      checkAnswer(joinedDf.join(df3, "a"), Row(3, 0, 4, 1))
+    }
   }
 
   test("SPARK-17123: Performing set operations that combine non-scala native types") {
@@ -1813,7 +1971,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
     val df = spark.range(1).selectExpr("CAST(id as DECIMAL) as x").selectExpr("percentile(x, 0.5)")
-    checkAnswer(df, Row(BigDecimal(0.0)) :: Nil)
+    checkAnswer(df, Row(BigDecimal(0)) :: Nil)
   }
 
   test("SPARK-19893: cannot run set operations with map type") {
@@ -1843,5 +2001,32 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .join(df2, df1("x") === df2("x1"), "left_outer")
       .filter($"x1".isNotNull || !$"y".isin("a!"))
       .count
+  }
+
+  testQuietly("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+    val N = 400
+    val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
+    val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
+    val df = spark.createDataFrame(spark.sparkContext.makeRDD(rows), schema)
+
+    val filter = (0 until N)
+      .foldLeft(lit(false))((e, index) => e.or(df.col(df.columns(index)) =!= "string"))
+    df.filter(filter).count
+  }
+
+  test("SPARK-20897: cached self-join should not fail") {
+    // force to plan sort merge join
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+      val df = Seq(1 -> "a").toDF("i", "j")
+      val df1 = df.as("t1")
+      val df2 = df.as("t2")
+      assert(df1.join(df2, $"t1.i" === $"t2.i").cache().count() == 1)
+    }
+  }
+
+  test("order-by ordinal.") {
+    checkAnswer(
+      testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
+      Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
 }

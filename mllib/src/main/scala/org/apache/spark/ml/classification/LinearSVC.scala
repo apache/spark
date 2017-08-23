@@ -42,7 +42,20 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-  with HasThreshold with HasAggregationDepth
+  with HasAggregationDepth with HasThreshold {
+
+  /**
+   * Param for threshold in binary classification prediction.
+   * For LinearSVC, this threshold is applied to the rawPrediction, rather than a probability.
+   * This threshold can be any real number, where Inf will make all predictions 0.0
+   * and -Inf will make all predictions 1.0.
+   * Default: 0.0
+   *
+   * @group param
+   */
+  final override val threshold: DoubleParam = new DoubleParam(this, "threshold",
+    "threshold in binary classification prediction applied to rawPrediction")
+}
 
 /**
  * :: Experimental ::
@@ -51,6 +64,7 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
  *   Linear SVM Classifier</a>
  *
  * This binary classifier optimizes the Hinge Loss using the OWLQN optimizer.
+ * Only supports L2 regularization currently.
  *
  */
 @Since("2.2.0")
@@ -125,7 +139,7 @@ class LinearSVC @Since("2.2.0") (
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
   /**
-   * Set threshold in binary classification, in range [0, 1].
+   * Set threshold in binary classification.
    *
    * @group setParam
    */
@@ -148,7 +162,7 @@ class LinearSVC @Since("2.2.0") (
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
 
-  override protected[classification] def train(dataset: Dataset[_]): LinearSVCModel = {
+  override protected def train(dataset: Dataset[_]): LinearSVCModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {
@@ -264,7 +278,7 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
 
 /**
  * :: Experimental ::
- * SVM Model trained by [[LinearSVC]]
+ * Linear SVM Model trained by [[LinearSVC]]
  */
 @Since("2.2.0")
 @Experimental
@@ -283,6 +297,7 @@ class LinearSVCModel private[classification] (
 
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
+  setDefault(threshold, 0.0)
 
   @Since("2.2.0")
   def setWeightCol(value: Double): this.type = set(threshold, value)
@@ -298,6 +313,10 @@ class LinearSVCModel private[classification] (
   override protected def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(-m, m)
+  }
+
+  override protected def raw2prediction(rawPrediction: Vector): Double = {
+    if (rawPrediction(1) > $(threshold)) 1.0 else 0.0
   }
 
   @Since("2.2.0")

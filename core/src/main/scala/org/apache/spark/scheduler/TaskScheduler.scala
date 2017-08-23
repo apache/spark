@@ -90,6 +90,11 @@ private[spark] trait TaskScheduler {
   def executorLost(executorId: String, reason: ExecutorLossReason): Unit
 
   /**
+   * Process a removed worker
+   */
+  def workerRemoved(workerId: String, host: String, message: String): Unit
+
+  /**
    * Get an application's attempt ID associated with the job.
    *
    * @return An application's Attempt ID

@@ -21,22 +21,18 @@ import java.util.concurrent.TimeUnit;
 
 import scala.concurrent.duration.Duration;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.execution.streaming.OneTimeTrigger$;
 
 /**
- * :: Experimental ::
  * Policy used to indicate how often results should be produced by a [[StreamingQuery]].
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 public class Trigger {
 
   /**
-   * :: Experimental ::
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is 0, the query will run as fast as possible.
    *
@@ -47,7 +43,6 @@ public class Trigger {
   }
 
   /**
-   * :: Experimental ::
    * (Java-friendly)
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is 0, the query will run as fast as possible.
@@ -64,7 +59,6 @@ public class Trigger {
   }
 
   /**
-   * :: Experimental ::
    * (Scala-friendly)
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `duration` is 0, the query will run as fast as possible.
@@ -80,7 +74,6 @@ public class Trigger {
   }
 
   /**
-   * :: Experimental ::
    * A trigger policy that runs a query periodically based on an interval in processing time.
    * If `interval` is effectively 0, the query will run as fast as possible.
    *

@@ -182,6 +182,23 @@ class FramedSerializer(Serializer):
         raise NotImplementedError
 
 
+class ArrowSerializer(FramedSerializer):
+    """
+    Serializes an Arrow stream.
+    """
+
+    def dumps(self, obj):
+        raise NotImplementedError
+
+    def loads(self, obj):
+        import pyarrow as pa
+        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
+        return reader.read_all()
+
+    def __repr__(self):
+        return "ArrowSerializer"
+
+
 class BatchedSerializer(Serializer):
 
     """

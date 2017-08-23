@@ -20,8 +20,8 @@ package org.apache.spark.deploy.mesos
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.util.{IntParam, Utils}
 import org.apache.spark.SparkConf
+import org.apache.spark.util.{IntParam, Utils}
 
 private[mesos] class MesosClusterDispatcherArguments(args: Array[String], conf: SparkConf) {
   var host: String = Utils.localHostName()

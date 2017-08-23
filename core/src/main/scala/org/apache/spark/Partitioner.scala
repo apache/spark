@@ -153,7 +153,7 @@ class RangePartitioner[K : Ordering : ClassTag, V](
           val weight = (1.0 / fraction).toFloat
           candidates ++= reSampled.map(x => (x, weight))
         }
-        RangePartitioner.determineBounds(candidates, partitions)
+        RangePartitioner.determineBounds(candidates, math.min(partitions, candidates.size))
       }
     }
   }

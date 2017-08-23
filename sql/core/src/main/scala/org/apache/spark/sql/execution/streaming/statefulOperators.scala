@@ -17,38 +17,44 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
+import java.util.concurrent.TimeUnit._
+
+import scala.collection.JavaConverters._
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalGroupState, ProcessingTimeTimeout}
+import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.streaming.{OutputMode, StateOperatorProgress}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.util.{CompletionIterator, NextIterator}
 
 
 /** Used to identify the state store for a given operator. */
-case class OperatorStateId(
+case class StatefulOperatorStateInfo(
     checkpointLocation: String,
+    queryRunId: UUID,
     operatorId: Long,
-    batchId: Long)
+    storeVersion: Long)
 
 /**
- * An operator that reads or writes state from the [[StateStore]].  The [[OperatorStateId]] should
- * be filled in by `prepareForExecution` in [[IncrementalExecution]].
+ * An operator that reads or writes state from the [[StateStore]].
+ * The [[StatefulOperatorStateInfo]] should be filled in by `prepareForExecution` in
+ * [[IncrementalExecution]].
  */
 trait StatefulOperator extends SparkPlan {
-  def stateId: Option[OperatorStateId]
+  def stateInfo: Option[StatefulOperatorStateInfo]
 
-  protected def getStateId: OperatorStateId = attachTree(this) {
-    stateId.getOrElse {
+  protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
+    stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
     }
   }
@@ -61,11 +67,59 @@ trait StateStoreReader extends StatefulOperator {
 }
 
 /** An operator that writes to a StateStore. */
-trait StateStoreWriter extends StatefulOperator {
+trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
+
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
-    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"))
+    "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
+    "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to update rows"),
+    "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "total time to remove rows"),
+    "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
+    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state")
+  ) ++ stateStoreCustomMetrics
+
+  /**
+   * Get the progress made by this stateful operator after execution. This should be called in
+   * the driver after this SparkPlan has been executed and metrics have been updated.
+   */
+  def getProgress(): StateOperatorProgress = {
+    new StateOperatorProgress(
+      numRowsTotal = longMetric("numTotalStateRows").value,
+      numRowsUpdated = longMetric("numUpdatedStateRows").value,
+      memoryUsedBytes = longMetric("stateMemory").value)
+  }
+
+  /** Records the duration of running `body` for the next query progress update. */
+  protected def timeTakenMs(body: => Unit): Long = {
+    val startTime = System.nanoTime()
+    val result = body
+    val endTime = System.nanoTime()
+    math.max(NANOSECONDS.toMillis(endTime - startTime), 0)
+  }
+
+  /**
+   * Set the SQL metrics related to the state store.
+   * This should be called in that task after the store has been updated.
+   */
+  protected def setStoreMetrics(store: StateStore): Unit = {
+    val storeMetrics = store.metrics
+    longMetric("numTotalStateRows") += storeMetrics.numKeys
+    longMetric("stateMemory") += storeMetrics.memoryUsedBytes
+    storeMetrics.customMetrics.foreach { case (metric, value) =>
+      longMetric(metric.name) += value
+    }
+  }
+
+  private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
+    val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
+    provider.supportedCustomMetrics.map {
+      case StateStoreCustomSizeMetric(name, desc) =>
+        name -> SQLMetrics.createSizeMetric(sparkContext, desc)
+      case StateStoreCustomTimingMetric(name, desc) =>
+        name -> SQLMetrics.createTimingMetric(sparkContext, desc)
+    }.toMap
+  }
 }
 
 /** An operator that supports watermark. */
@@ -102,12 +156,27 @@ trait WatermarkSupport extends UnaryExecNode {
   }
 
   /** Predicate based on keys that matches data older than the watermark */
-  lazy val watermarkPredicateForKeys: Option[Predicate] =
-    watermarkExpression.map(newPredicate(_, keyExpressions))
+  lazy val watermarkPredicateForKeys: Option[Predicate] = watermarkExpression.flatMap { e =>
+    if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+      Some(newPredicate(e, keyExpressions))
+    } else {
+      None
+    }
+  }
 
   /** Predicate based on the child output that matches data older than the watermark. */
   lazy val watermarkPredicateForData: Option[Predicate] =
     watermarkExpression.map(newPredicate(_, child.output))
+
+  protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
+    if (watermarkPredicateForKeys.nonEmpty) {
+      store.getRange(None, None).foreach { rowPair =>
+        if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
+          store.remove(rowPair.key)
+        }
+      }
+    }
+  }
 }
 
 /**
@@ -116,7 +185,7 @@ trait WatermarkSupport extends UnaryExecNode {
  */
 case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
-    stateId: Option[OperatorStateId],
+    stateInfo: Option[StatefulOperatorStateInfo],
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader {
 
@@ -124,11 +193,10 @@ case class StateStoreRestoreExec(
     val numOutputRows = longMetric("numOutputRows")
 
     child.execute().mapPartitionsWithStateStore(
-      getStateId.checkpointLocation,
-      operatorId = getStateId.operatorId,
-      storeVersion = getStateId.batchId,
+      getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
+      indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
@@ -136,7 +204,7 @@ case class StateStoreRestoreExec(
           val key = getKey(row)
           val savedState = store.get(key)
           numOutputRows += 1
-          row +: savedState.toSeq
+          row +: Option(savedState).toSeq
         }
     }
   }
@@ -151,7 +219,7 @@ case class StateStoreRestoreExec(
  */
 case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
-    stateId: Option[OperatorStateId] = None,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
     outputMode: Option[OutputMode] = None,
     eventTimeWatermark: Option[Long] = None,
     child: SparkPlan)
@@ -163,55 +231,85 @@ case class StateStoreSaveExec(
       "Incorrect planning in IncrementalExecution, outputMode has not been set")
 
     child.execute().mapPartitionsWithStateStore(
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      getStateId.batchId,
+      getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
+      indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         val numOutputRows = longMetric("numOutputRows")
-        val numTotalStateRows = longMetric("numTotalStateRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+        val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+        val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
+        val commitTimeMs = longMetric("commitTimeMs")
 
         outputMode match {
           // Update and output all rows in the StateStore.
           case Some(Complete) =>
-            while (iter.hasNext) {
-              val row = iter.next().asInstanceOf[UnsafeRow]
-              val key = getKey(row)
-              store.put(key.copy(), row.copy())
-              numUpdatedStateRows += 1
+            allUpdatesTimeMs += timeTakenMs {
+              while (iter.hasNext) {
+                val row = iter.next().asInstanceOf[UnsafeRow]
+                val key = getKey(row)
+                store.put(key, row)
+                numUpdatedStateRows += 1
+              }
             }
-            store.commit()
-            numTotalStateRows += store.numKeys()
-            store.iterator().map { case (k, v) =>
+            allRemovalsTimeMs += 0
+            commitTimeMs += timeTakenMs {
+              store.commit()
+            }
+            setStoreMetrics(store)
+            store.iterator().map { rowPair =>
               numOutputRows += 1
-              v.asInstanceOf[InternalRow]
+              rowPair.value
             }
 
           // Update and output only rows being evicted from the StateStore
+          // Assumption: watermark predicates must be non-empty if append mode is allowed
           case Some(Append) =>
-            while (iter.hasNext) {
-              val row = iter.next().asInstanceOf[UnsafeRow]
-              val key = getKey(row)
-              store.put(key.copy(), row.copy())
-              numUpdatedStateRows += 1
+            allUpdatesTimeMs += timeTakenMs {
+              val filteredIter = iter.filter(row => !watermarkPredicateForData.get.eval(row))
+              while (filteredIter.hasNext) {
+                val row = filteredIter.next().asInstanceOf[UnsafeRow]
+                val key = getKey(row)
+                store.put(key, row)
+                numUpdatedStateRows += 1
+              }
             }
 
-            // Assumption: Append mode can be done only when watermark has been specified
-            store.remove(watermarkPredicateForKeys.get.eval _)
-            store.commit()
+            val removalStartTimeNs = System.nanoTime
+            val rangeIter = store.getRange(None, None)
 
-            numTotalStateRows += store.numKeys()
-            store.updates().filter(_.isInstanceOf[ValueRemoved]).map { removed =>
-              numOutputRows += 1
-              removed.value.asInstanceOf[InternalRow]
+            new NextIterator[InternalRow] {
+              override protected def getNext(): InternalRow = {
+                var removedValueRow: InternalRow = null
+                while(rangeIter.hasNext && removedValueRow == null) {
+                  val rowPair = rangeIter.next()
+                  if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
+                    store.remove(rowPair.key)
+                    removedValueRow = rowPair.value
+                  }
+                }
+                if (removedValueRow == null) {
+                  finished = true
+                  null
+                } else {
+                  removedValueRow
+                }
+              }
+
+              override protected def close(): Unit = {
+                allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
+                commitTimeMs += timeTakenMs { store.commit() }
+                setStoreMetrics(store)
+              }
             }
 
           // Update and output modified rows from the StateStore.
           case Some(Update) =>
+
+            val updatesStartTimeNs = System.nanoTime
 
             new Iterator[InternalRow] {
 
@@ -223,12 +321,12 @@ case class StateStoreSaveExec(
 
               override def hasNext: Boolean = {
                 if (!baseIterator.hasNext) {
+                  allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+
                   // Remove old aggregates if watermark specified
-                  if (watermarkPredicateForKeys.nonEmpty) {
-                    store.remove(watermarkPredicateForKeys.get.eval _)
-                  }
-                  store.commit()
-                  numTotalStateRows += store.numKeys()
+                  allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
+                  commitTimeMs += timeTakenMs { store.commit() }
+                  setStoreMetrics(store)
                   false
                 } else {
                   true
@@ -238,7 +336,7 @@ case class StateStoreSaveExec(
               override def next(): InternalRow = {
                 val row = baseIterator.next().asInstanceOf[UnsafeRow]
                 val key = getKey(row)
-                store.put(key.copy(), row.copy())
+                store.put(key, row)
                 numOutputRows += 1
                 numUpdatedStateRows += 1
                 row
@@ -259,7 +357,7 @@ case class StateStoreSaveExec(
 case class StreamingDeduplicateExec(
     keyExpressions: Seq[Attribute],
     child: SparkPlan,
-    stateId: Option[OperatorStateId] = None,
+    stateInfo: Option[StatefulOperatorStateInfo] = None,
     eventTimeWatermark: Option[Long] = None)
   extends UnaryExecNode with StateStoreWriter with WatermarkSupport {
 
@@ -271,29 +369,33 @@ case class StreamingDeduplicateExec(
     metrics // force lazy init at driver
 
     child.execute().mapPartitionsWithStateStore(
-      getStateId.checkpointLocation,
-      getStateId.operatorId,
-      getStateId.batchId,
+      getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
+      indexOrdinal = None,
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
       val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+      val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+      val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
+      val commitTimeMs = longMetric("commitTimeMs")
 
       val baseIterator = watermarkPredicateForData match {
         case Some(predicate) => iter.filter(row => !predicate.eval(row))
         case None => iter
       }
 
+      val updatesStartTimeNs = System.nanoTime
+
       val result = baseIterator.filter { r =>
         val row = r.asInstanceOf[UnsafeRow]
         val key = getKey(row)
         val value = store.get(key)
-        if (value.isEmpty) {
-          store.put(key.copy(), StreamingDeduplicateExec.EMPTY_ROW)
+        if (value == null) {
+          store.put(key, StreamingDeduplicateExec.EMPTY_ROW)
           numUpdatedStateRows += 1
           numOutputRows += 1
           true
@@ -304,9 +406,10 @@ case class StreamingDeduplicateExec(
       }
 
       CompletionIterator[InternalRow, Iterator[InternalRow]](result, {
-        watermarkPredicateForKeys.foreach(f => store.remove(f.eval _))
-        store.commit()
-        numTotalStateRows += store.numKeys()
+        allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+        allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
+        commitTimeMs += timeTakenMs { store.commit() }
+        setStoreMetrics(store)
       })
     }
   }

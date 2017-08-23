@@ -1105,7 +1105,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
             def verify(startId: Option[Int], endId: Int, expected: String*): Unit = {
               val start = startId.map(new FileStreamSourceOffset(_))
               val end = FileStreamSourceOffset(endId)
-              assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
+
+              withSQLConf("spark.sql.streaming.unsupportedOperationCheck" -> "false") {
+                assert(fileSource.getBatch(start, end).as[String].collect().toSeq === expected)
+              }
             }
 
             verify(startId = None, endId = 2, "keep1", "keep2", "keep3")
@@ -1314,6 +1317,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     val metadataLog =
       new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark, dir.getAbsolutePath)
       assert(metadataLog.add(0, Array(FileEntry(s"$scheme:///file1", 100L, 0))))
+      assert(metadataLog.add(1, Array(FileEntry(s"$scheme:///file2", 200L, 0))))
 
       val newSource = new FileStreamSource(spark, s"$scheme:///", "parquet", StructType(Nil), Nil,
         dir.getAbsolutePath, Map.empty)

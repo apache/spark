@@ -109,10 +109,12 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
       SchemaUtils.checkNumericType(schema, $(censorCol))
       SchemaUtils.checkNumericType(schema, $(labelCol))
     }
-    if (hasQuantilesCol) {
+
+    val schemaWithQuantilesCol = if (hasQuantilesCol) {
       SchemaUtils.appendColumn(schema, $(quantilesCol), new VectorUDT)
-    }
-    SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType)
+    } else schema
+
+    SchemaUtils.appendColumn(schemaWithQuantilesCol, $(predictionCol), DoubleType)
   }
 }
 
@@ -552,6 +554,8 @@ private class AFTAggregator(
     val xi = data.features
     val ti = data.label
     val delta = data.censor
+
+    require(ti > 0.0, "The lifetime or label should be  greater than 0.")
 
     val localFeaturesStd = bcFeaturesStd.value
 

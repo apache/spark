@@ -164,7 +164,7 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Eliminate the Project with an empty projectList") {
-    val input = OneRowRelation
+    val input = OneRowRelation()
     val expected = Project(Literal(1).as("1") :: Nil, input).analyze
 
     val query1 =
@@ -266,8 +266,8 @@ class ColumnPruningSuite extends PlanTest {
 
   test("Column pruning on Window with useless aggregate functions") {
     val input = LocalRelation('a.int, 'b.string, 'c.double, 'd.int)
-    val winSpec = windowSpec('a :: Nil, 'b.asc :: Nil, UnspecifiedFrame)
-    val winExpr = windowExpr(count('b), winSpec)
+    val winSpec = windowSpec('a :: Nil, 'd.asc :: Nil, UnspecifiedFrame)
+    val winExpr = windowExpr(count('d), winSpec)
 
     val originalQuery = input.groupBy('a, 'c, 'd)('a, 'c, 'd, winExpr.as('window)).select('a, 'c)
     val correctAnswer = input.select('a, 'c, 'd).groupBy('a, 'c, 'd)('a, 'c).analyze
@@ -321,15 +321,14 @@ class ColumnPruningSuite extends PlanTest {
       Project(Seq($"x.key", $"y.key"),
         Join(
           SubqueryAlias("x", input),
-          BroadcastHint(SubqueryAlias("y", input)), Inner, None)).analyze
+          ResolvedHint(SubqueryAlias("y", input)), Inner, None)).analyze
 
     val optimized = Optimize.execute(query)
 
     val expected =
       Join(
         Project(Seq($"x.key"), SubqueryAlias("x", input)),
-        BroadcastHint(
-          Project(Seq($"y.key"), SubqueryAlias("y", input))),
+        ResolvedHint(Project(Seq($"y.key"), SubqueryAlias("y", input))),
         Inner, None).analyze
 
     comparePlans(optimized, expected)
@@ -350,14 +349,14 @@ class ColumnPruningSuite extends PlanTest {
     val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
     val x = testRelation.subquery('x)
 
-    val query1 = Sample(0.0, 0.6, false, 11L, x)().select('a)
+    val query1 = Sample(0.0, 0.6, false, 11L, x).select('a)
     val optimized1 = Optimize.execute(query1.analyze)
-    val expected1 = Sample(0.0, 0.6, false, 11L, x.select('a))()
+    val expected1 = Sample(0.0, 0.6, false, 11L, x.select('a))
     comparePlans(optimized1, expected1.analyze)
 
-    val query2 = Sample(0.0, 0.6, false, 11L, x)().select('a as 'aa)
+    val query2 = Sample(0.0, 0.6, false, 11L, x).select('a as 'aa)
     val optimized2 = Optimize.execute(query2.analyze)
-    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a))().select('a as 'aa)
+    val expected2 = Sample(0.0, 0.6, false, 11L, x.select('a)).select('a as 'aa)
     comparePlans(optimized2, expected2.analyze)
   }
 

@@ -33,6 +33,7 @@ import com.google.common.base.Objects;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -104,7 +105,7 @@ public class ExternalShuffleBlockResolver {
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
     this.registeredExecutorFile = registeredExecutorFile;
-    int indexCacheEntries = conf.getInt("spark.shuffle.service.index.cache.entries", 1024);
+    String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
     CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
         new CacheLoader<File, ShuffleIndexInformation>() {
           public ShuffleIndexInformation load(File file) throws IOException {
@@ -112,7 +113,13 @@ public class ExternalShuffleBlockResolver {
           }
         };
     shuffleIndexCache = CacheBuilder.newBuilder()
-                                    .maximumSize(indexCacheEntries).build(indexCacheLoader);
+      .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
+      .weigher(new Weigher<File, ShuffleIndexInformation>() {
+        public int weigh(File file, ShuffleIndexInformation indexInfo) {
+          return indexInfo.getSize();
+        }
+      })
+      .build(indexCacheLoader);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);
@@ -150,27 +157,20 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Obtains a FileSegmentManagedBuffer from a shuffle block id. We expect the blockId has the
-   * format "shuffle_ShuffleId_MapId_ReduceId" (from ShuffleBlockId), and additionally make
-   * assumptions about how the hash and sort based shuffles store their data.
+   * Obtains a FileSegmentManagedBuffer from (shuffleId, mapId, reduceId). We make assumptions
+   * about how the hash and sort based shuffles store their data.
    */
-  public ManagedBuffer getBlockData(String appId, String execId, String blockId) {
-    String[] blockIdParts = blockId.split("_");
-    if (blockIdParts.length < 4) {
-      throw new IllegalArgumentException("Unexpected block id format: " + blockId);
-    } else if (!blockIdParts[0].equals("shuffle")) {
-      throw new IllegalArgumentException("Expected shuffle block id, got: " + blockId);
-    }
-    int shuffleId = Integer.parseInt(blockIdParts[1]);
-    int mapId = Integer.parseInt(blockIdParts[2]);
-    int reduceId = Integer.parseInt(blockIdParts[3]);
-
+  public ManagedBuffer getBlockData(
+      String appId,
+      String execId,
+      int shuffleId,
+      int mapId,
+      int reduceId) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     if (executor == null) {
       throw new RuntimeException(
         String.format("Executor is not registered (appId=%s, execId=%s)", appId, execId));
     }
-
     return getSortBasedShuffleBlockData(executor, shuffleId, mapId, reduceId);
   }
 
