@@ -79,9 +79,11 @@ public class ReadAheadInputStream extends InputStream {
    *                                      threshold, an async read is triggered.
    */
   public ReadAheadInputStream(InputStream inputStream, int bufferSizeInBytes, int readAheadThresholdInBytes) {
-    Preconditions.checkArgument(bufferSizeInBytes > 0, "bufferSizeInBytes should be greater than 0");
-    Preconditions.checkArgument(readAheadThresholdInBytes > 0 && readAheadThresholdInBytes < bufferSizeInBytes,
-                                "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes" );
+    Preconditions.checkArgument(bufferSizeInBytes > 0,
+            "bufferSizeInBytes should be greater than 0");
+    Preconditions.checkArgument(readAheadThresholdInBytes > 0 &&
+                    readAheadThresholdInBytes < bufferSizeInBytes,
+            "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes" );
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     this.readAheadThresholdInBytes = readAheadThresholdInBytes;
@@ -231,6 +233,8 @@ public class ReadAheadInputStream extends InputStream {
   public synchronized int available() throws IOException {
     stateChangeLock.lock();
     int val = activeBuffer.remaining() + readAheadBuffer.remaining();
+    // Make sure we have no integer overflow.
+    assert (val > 0);
     stateChangeLock.unlock();
     return val;
   }
