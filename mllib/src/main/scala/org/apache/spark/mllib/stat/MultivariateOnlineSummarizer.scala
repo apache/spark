@@ -215,6 +215,10 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       while (i < len) {
         realVariance(i) = (currM2n(i) + deltaMean(i) * deltaMean(i) * weightSum(i) *
           (totalWeightSum - weightSum(i)) / totalWeightSum) / denominator
+        // Because of numerical error, it is possible to get negative real variance
+        if (realVariance(i) < 0.0) {
+          realVariance(i) = 0.0
+        }
         i += 1
       }
     }

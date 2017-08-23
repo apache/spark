@@ -402,6 +402,24 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(summarizer.count === 6)
   }
 
+  test("summarizer buffer zero variance test (SPARK-21818)") {
+    val summarizer1 = new SummarizerBuffer()
+      .add(Vectors.dense(3.0), 0.7)
+    val summarizer2 = new SummarizerBuffer()
+      .add(Vectors.dense(3.0), 0.4)
+    val summarizer3 = new SummarizerBuffer()
+      .add(Vectors.dense(3.0), 0.5)
+    val summarizer4 = new SummarizerBuffer()
+      .add(Vectors.dense(3.0), 0.4)
+
+    val summarizer = summarizer1
+      .merge(summarizer2)
+      .merge(summarizer3)
+      .merge(summarizer4)
+
+    assert(summarizer.variance(0) >= 0.0)
+  }
+
   test("summarizer buffer merging summarizer with empty summarizer") {
     // If one of two is non-empty, this should return the non-empty summarizer.
     // If both of them are empty, then just return the empty summarizer.
