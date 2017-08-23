@@ -1998,4 +1998,15 @@ class HiveDDLSuite
       sq.stop()
     }
   }
+
+  test("table name with schema") {
+    // regression test for SPARK-11778
+    withDatabase("usrdb") {
+      spark.sql("create schema usrdb")
+      withTable("usrdb.test") {
+        spark.sql("create table usrdb.test(c int)")
+        spark.read.table("usrdb.test")
+      }
+    }
+  }
 }

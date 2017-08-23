@@ -347,16 +347,18 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
       val partitions = repartitioned.glom().collect()
       // assert all elements are present
       assert(repartitioned.collect().sortWith(_ > _).toSeq === input.toSeq.sortWith(_ > _).toSeq)
-      // assert no bucket is overloaded
+      // assert no bucket is overloaded or empty
       for (partition <- partitions) {
         val avg = input.size / finalPartitions
         val maxPossible = avg + initialPartitions
-        assert(partition.length <=  maxPossible)
+        assert(partition.length <= maxPossible)
+        assert(!partition.isEmpty)
       }
     }
 
     testSplitPartitions(Array.fill(100)(1), 10, 20)
     testSplitPartitions(Array.fill(10000)(1) ++ Array.fill(10000)(2), 20, 100)
+    testSplitPartitions(Array.fill(1000)(1), 250, 128)
   }
 
   test("coalesced RDDs") {
