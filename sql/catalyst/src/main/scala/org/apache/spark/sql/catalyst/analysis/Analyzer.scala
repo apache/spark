@@ -1291,6 +1291,12 @@ class Analyzer(
             ListQuery(plan, exprs, exprId, plan.output)
           })
           In(value, Seq(expr))
+        // If IN subquery doesn't need to resolve (e.g., SELECT 1 FROM ...), we still need to fill
+        // its `childOutputs`.
+        case In(value, Seq(l @ ListQuery(sub, _, _, Nil)))
+            if value.resolved && sub.resolved =>
+          val expr = l.copy(childOutputs = sub.output)
+          In(value, Seq(expr))
       }
     }
 
