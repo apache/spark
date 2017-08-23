@@ -53,9 +53,9 @@ are calculated based on the mapped indices. This approach avoids the need to com
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
-of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
+of the hash table. Since a simple modulo is used to transform the hash function to a vector index,
 it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
+not be mapped evenly in the vector. The default feature dimension is `$2^{18} = 262,144$`.
 An optional binary toggle parameter controls term frequency counts. When set to true all nonzero
 frequency counts are set to 1. This is especially useful for discrete probabilistic models that
 model binary, rather than integer, counts.
@@ -65,7 +65,7 @@ model binary, rather than integer, counts.
 
 **IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
 `IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and 
-scales each column. Intuitively, it down-weights columns which appear frequently in a corpus.
+scales each feature. Intuitively, it down-weights features which appear frequently in a corpus.
 
 **Note:** `spark.ml` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
