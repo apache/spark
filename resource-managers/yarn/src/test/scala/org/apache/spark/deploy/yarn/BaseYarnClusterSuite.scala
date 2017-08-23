@@ -28,10 +28,12 @@ import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.apache.commons.lang3.SerializationUtils
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 import org.scalatest.{BeforeAndAfterAll, Matchers}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.time
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
@@ -78,6 +80,28 @@ abstract class BaseYarnClusterSuite
     val logConfFile = new File(logConfDir, "log4j.properties")
     Files.write(LOG4J_CONF, logConfFile, StandardCharsets.UTF_8)
 
+    restartCluster()
+
+    fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
+    hadoopConfDir = new File(tempDir, Client.LOCALIZED_CONF_DIR)
+    assert(hadoopConfDir.mkdir())
+    File.createTempFile("token", ".txt", hadoopConfDir)
+  }
+
+  override def afterAll() {
+    try {
+      yarnCluster.stop()
+    } finally {
+      System.setProperties(oldSystemProperties)
+      super.afterAll()
+    }
+  }
+
+  protected def restartCluster(): Unit = {
+    if (yarnCluster != null) {
+      yarnCluster.stop()
+    }
+
     // Disable the disk utilization check to avoid the test hanging when people's disks are
     // getting full.
     val yarnConf = newYarnConfig()
@@ -113,20 +137,6 @@ abstract class BaseYarnClusterSuite
     }
 
     logInfo(s"RM address in configuration is ${config.get(YarnConfiguration.RM_ADDRESS)}")
-
-    fakeSparkJar = File.createTempFile("sparkJar", null, tempDir)
-    hadoopConfDir = new File(tempDir, Client.LOCALIZED_CONF_DIR)
-    assert(hadoopConfDir.mkdir())
-    File.createTempFile("token", ".txt", hadoopConfDir)
-  }
-
-  override def afterAll() {
-    try {
-      yarnCluster.stop()
-    } finally {
-      System.setProperties(oldSystemProperties)
-      super.afterAll()
-    }
   }
 
   protected def runSpark(
@@ -137,7 +147,9 @@ abstract class BaseYarnClusterSuite
       extraClassPath: Seq[String] = Nil,
       extraJars: Seq[String] = Nil,
       extraConf: Map[String, String] = Map(),
-      extraEnv: Map[String, String] = Map()): SparkAppHandle.State = {
+      extraEnv: Map[String, String] = Map(),
+      numExecutors: Int = 1,
+      executionTimeout: time.Span = 2 minutes): SparkAppHandle.State = {
     val deployMode = if (clientMode) "client" else "cluster"
     val propsFile = createConfFile(extraClassPath = extraClassPath, extraConf = extraConf)
     val env = Map("YARN_CONF_DIR" -> hadoopConfDir.getAbsolutePath()) ++ extraEnv
@@ -152,7 +164,7 @@ abstract class BaseYarnClusterSuite
     launcher.setSparkHome(sys.props("spark.test.home"))
       .setMaster("yarn")
       .setDeployMode(deployMode)
-      .setConf("spark.executor.instances", "1")
+      .setConf("spark.executor.instances", numExecutors.toString)
       .setPropertiesFile(propsFile)
       .addAppArgs(appArgs.toArray: _*)
 
@@ -167,7 +179,7 @@ abstract class BaseYarnClusterSuite
 
     val handle = launcher.startApplication()
     try {
-      eventually(timeout(2 minutes), interval(1 second)) {
+      eventually(timeout(executionTimeout), interval(1 second)) {
         assert(handle.getState().isFinal())
       }
     } finally {
@@ -238,4 +250,30 @@ abstract class BaseYarnClusterSuite
     propsFile.getAbsolutePath()
   }
 
+  protected def getClusterWorkDir: File = yarnCluster.getTestWorkDir
+
+  /**
+   * Gracefully decommissions the only node in the mini YARN cluster, if that
+   * functionality is available in the Hadoop version that it is configured.
+   * Throws an exception in case the decommissioning functionality is not available.
+   * @return the host that will be decommissioned.
+   */
+  protected def gracefullyDecommissionNode(conf: Configuration,
+                                           excludedHostsFile: File,
+                                           decommissionTimeout: time.Span): String = {
+    val resourceManager = yarnCluster.getResourceManager
+    val nodesListManager = resourceManager.getRMContext.getNodesListManager
+    val clusterNodes = Map(resourceManager.getRMContext.getRMNodes.asScala.toSeq : _ *)
+    assert(!clusterNodes.isEmpty)
+    // note the MiniYARNCluster will always have a single node
+    val hostToExclude = clusterNodes.keysIterator.next().getHost
+    Files.append(s"$hostToExclude ${decommissionTimeout.toSeconds}${sys.props("line.separator")}",
+                 excludedHostsFile, StandardCharsets.UTF_8)
+    // use reflection so this compiles for other YARN versions, but fails with a
+    // reflection exception if executed with incompatible versions of YARN
+    nodesListManager.getClass
+      .getMethod("refreshNodes", classOf[Configuration], java.lang.Boolean.TYPE)
+      .invoke(nodesListManager, conf, true.asInstanceOf[java.lang.Object])
+    hostToExclude
+  }
 }
