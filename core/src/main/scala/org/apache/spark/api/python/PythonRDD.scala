@@ -91,6 +91,15 @@ private[spark] object PythonRunner {
 }
 
 /**
+ * Enumerate the type of command that will be sent to the Python worker
+ */
+private[spark] object PythonEvalType {
+  val NON_UDF = 0
+  val SQL_BATCHED_UDF = 1
+  val SQL_VECTORIZED_UDF = 2
+}
+
+/**
  * A helper class to run Python mapPartition/UDFs in Spark.
  *
  * funcs is a list of independent Python functions, each one of them is a list of chained Python
@@ -310,7 +319,7 @@ private[spark] class PythonRunner(
         dataOut.flush()
         // Serialized command:
         if (isUDF) {
-          dataOut.writeInt(1)
+          dataOut.writeInt(PythonEvalType.SQL_BATCHED_UDF)
           dataOut.writeInt(funcs.length)
           funcs.zip(argOffsets).foreach { case (chained, offsets) =>
             dataOut.writeInt(offsets.length)
@@ -324,7 +333,7 @@ private[spark] class PythonRunner(
             }
           }
         } else {
-          dataOut.writeInt(0)
+          dataOut.writeInt(PythonEvalType.NON_UDF)
           val command = funcs.head.funcs.head.command
           dataOut.writeInt(command.length)
           dataOut.write(command)
@@ -382,7 +391,8 @@ private[spark] class PythonRunner(
 }
 
 /** Thrown for exceptions in user Python code. */
-private class PythonException(msg: String, cause: Exception) extends RuntimeException(msg, cause)
+private[spark] class PythonException(msg: String, cause: Exception)
+  extends RuntimeException(msg, cause)
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
@@ -399,7 +409,7 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends RDD[(Long, Array[Byte]
   val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
-private object SpecialLengths {
+private[spark] object SpecialLengths {
   val END_OF_DATA_SECTION = -1
   val PYTHON_EXCEPTION_THROWN = -2
   val TIMING_DATA = -3
