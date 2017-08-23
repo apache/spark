@@ -24,10 +24,10 @@ import scala.collection.mutable
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
+import org.apache.spark.deploy.kubernetes.SparkKubernetesClientFactory
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.submit.submitsteps.{DriverConfigurationStep, KubernetesDriverSpec}
-import org.apache.spark.deploy.kubernetes.SparkKubernetesClientFactory
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 

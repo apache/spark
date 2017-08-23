@@ -87,7 +87,7 @@ options for deployment:
 **Programming Guides:**
 
 * [Quick Start](quick-start.html): a quick introduction to the Spark API; start here!
-* [RDD Programming Guide](programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
+* [RDD Programming Guide](rdd-programming-guide.html): overview of Spark basics - RDDs (core but old API), accumulators, and broadcast variables  
 * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): processing structured data with relational queries (newer API than RDDs)
 * [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
@@ -100,6 +100,7 @@ options for deployment:
 * [Spark Java API (Javadoc)](api/java/index.html)
 * [Spark Python API (Sphinx)](api/python/index.html)
 * [Spark R API (Roxygen2)](api/R/index.html)
+* [Spark SQL, Built-in Functions (MkDocs)](api/sql/index.html)
 
 **Deployment Guides:**
 

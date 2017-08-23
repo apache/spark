@@ -33,11 +33,11 @@ object JoinType {
     case _ =>
       val supported = Seq(
         "inner",
-        "outer", "full", "fullouter",
-        "leftouter", "left",
-        "rightouter", "right",
-        "leftsemi",
-        "leftanti",
+        "outer", "full", "fullouter", "full_outer",
+        "leftouter", "left", "left_outer",
+        "rightouter", "right", "right_outer",
+        "leftsemi", "left_semi",
+        "leftanti", "left_anti",
         "cross")
 
       throw new IllegalArgumentException(s"Unsupported join type '$typ'. " +

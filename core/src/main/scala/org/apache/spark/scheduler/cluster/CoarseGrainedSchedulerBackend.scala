@@ -23,7 +23,6 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Future
-import scala.concurrent.duration.Duration
 
 import org.apache.spark.{ExecutorAllocationClient, SparkEnv, SparkException, TaskState}
 import org.apache.spark.internal.Logging
@@ -427,11 +426,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
    * be called in the yarn-client mode when AM re-registers after a failure.
    * */
   protected def reset(): Unit = {
-    val executors = synchronized {
+    val executors: Set[String] = synchronized {
       requestedTotalExecutors = 0
       numPendingExecutors = 0
       executorsPendingToRemove.clear()
-      Set() ++ executorDataMap.keys
+      executorDataMap.keys.toSet
     }
 
     // Remove all the lingering executors that should be removed but not yet. The reason might be

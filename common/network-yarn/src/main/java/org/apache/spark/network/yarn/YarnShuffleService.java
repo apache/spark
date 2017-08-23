@@ -264,7 +264,6 @@ public class YarnShuffleService extends AuxiliaryService {
     String appId = context.getApplicationId().toString();
     try {
       ByteBuffer shuffleSecret = context.getApplicationDataForService();
-      logger.info("Initializing application {}", appId);
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
         if (db != null) {
@@ -283,7 +282,6 @@ public class YarnShuffleService extends AuxiliaryService {
   public void stopApplication(ApplicationTerminationContext context) {
     String appId = context.getApplicationId().toString();
     try {
-      logger.info("Stopping application {}", appId);
       if (isAuthenticationEnabled()) {
         AppId fullId = new AppId(appId);
         if (db != null) {

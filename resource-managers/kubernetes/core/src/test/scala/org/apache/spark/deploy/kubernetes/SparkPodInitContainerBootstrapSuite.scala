@@ -20,8 +20,8 @@ import io.fabric8.kubernetes.api.model._
 import org.scalatest.BeforeAndAfter
 import scala.collection.JavaConverters._
 
-import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.deploy.kubernetes.constants._
 
 class SparkPodInitContainerBootstrapSuite extends SparkFunSuite with BeforeAndAfter {
   private val INIT_CONTAINER_IMAGE = "spark-init:latest"

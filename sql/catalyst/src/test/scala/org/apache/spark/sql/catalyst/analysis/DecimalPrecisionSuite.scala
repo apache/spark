@@ -22,8 +22,8 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
 import org.apache.spark.sql.types._
@@ -90,8 +90,14 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     checkType(Average(d1), DecimalType(6, 5))
 
     checkType(Add(Add(d1, d2), d1), DecimalType(7, 2))
+    checkType(Add(Add(d1, d1), d1), DecimalType(4, 1))
+    checkType(Add(d1, Add(d1, d1)), DecimalType(4, 1))
     checkType(Add(Add(Add(d1, d2), d1), d2), DecimalType(8, 2))
     checkType(Add(Add(d1, d2), Add(d1, d2)), DecimalType(7, 2))
+    checkType(Subtract(Subtract(d2, d1), d1), DecimalType(7, 2))
+    checkType(Multiply(Multiply(d1, d1), d2), DecimalType(11, 4))
+    checkType(Divide(d2, Add(d1, d1)), DecimalType(10, 6))
+    checkType(Sum(Add(d1, d1)), DecimalType(13, 1))
   }
 
   test("Comparison operations") {

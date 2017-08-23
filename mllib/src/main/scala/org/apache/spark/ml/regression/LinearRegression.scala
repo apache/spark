@@ -27,11 +27,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.optim.WeightedLeastSquares
-import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.optim.aggregator.LeastSquaresAggregator
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
@@ -286,7 +286,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             s"training is not needed.")
         }
         if (handlePersistence) instances.unpersist()
-        val coefficients = Vectors.sparse(numFeatures, Seq())
+        val coefficients = Vectors.sparse(numFeatures, Seq.empty)
         val intercept = yMean
 
         val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
@@ -336,10 +336,11 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
       bcFeaturesStd, bcFeaturesMean)(_)
+    val getFeaturesStd = (j: Int) => if (j >= 0 && j < numFeatures) featuresStd(j) else 0.0
     val regularization = if (effectiveL2RegParam != 0.0) {
       val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
       Some(new L2Regularization(effectiveL2RegParam, shouldApply,
-        if ($(standardization)) None else Some(featuresStd)))
+        if ($(standardization)) None else Some(getFeaturesStd)))
     } else {
       None
     }

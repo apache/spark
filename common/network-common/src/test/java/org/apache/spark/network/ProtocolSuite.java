@@ -56,7 +56,7 @@ public class ProtocolSuite {
         NettyUtils.createFrameDecoder(), MessageDecoder.INSTANCE);
 
     while (!serverChannel.outboundMessages().isEmpty()) {
-      clientChannel.writeOneInbound(serverChannel.readOutbound());
+      clientChannel.writeInbound(serverChannel.readOutbound());
     }
 
     assertEquals(1, clientChannel.inboundMessages().size());
@@ -72,7 +72,7 @@ public class ProtocolSuite {
         NettyUtils.createFrameDecoder(), MessageDecoder.INSTANCE);
 
     while (!clientChannel.outboundMessages().isEmpty()) {
-      serverChannel.writeOneInbound(clientChannel.readOutbound());
+      serverChannel.writeInbound(clientChannel.readOutbound());
     }
 
     assertEquals(1, serverChannel.inboundMessages().size());
@@ -116,8 +116,8 @@ public class ProtocolSuite {
       throws Exception {
 
       ByteArrayWritableChannel channel = new ByteArrayWritableChannel(Ints.checkedCast(in.count()));
-      while (in.transferred() < in.count()) {
-        in.transferTo(channel, in.transferred());
+      while (in.transfered() < in.count()) {
+        in.transferTo(channel, in.transfered());
       }
       out.add(Unpooled.wrappedBuffer(channel.getData()));
     }

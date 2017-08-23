@@ -251,7 +251,7 @@ object SparkEnv extends Logging {
 
     val systemName = if (isDriver) driverSystemName else executorSystemName
     val rpcEnv = RpcEnv.create(systemName, bindAddress, advertiseAddress, port.getOrElse(-1), conf,
-      securityManager, clientMode = !isDriver)
+      securityManager, numUsableCores, !isDriver)
 
     // Figure out which port RpcEnv actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
@@ -428,7 +428,7 @@ object SparkEnv extends Logging {
       if (!conf.contains("spark.scheduler.mode")) {
         Seq(("spark.scheduler.mode", schedulingMode))
       } else {
-        Seq[(String, String)]()
+        Seq.empty[(String, String)]
       }
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 

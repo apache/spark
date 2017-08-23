@@ -1546,10 +1546,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
-      Seq(Row(BigDecimal(2.12321))))
+      Seq(Row(BigDecimal("2.12321"))))
     checkAnswer(
       df.selectExpr("b * a - b"),
-      Seq(Row(BigDecimal(0.12321))))
+      Seq(Row(BigDecimal("0.12321"))))
     checkAnswer(
       df.selectExpr("b * a * b"),
       Seq(Row(d)))
@@ -2657,5 +2657,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
     }
+  }
+
+  test("SPARK-21743: top-most limit should not cause memory leak") {
+    // In unit test, Spark will fail the query if memory leak detected.
+    spark.range(100).groupBy("id").count().limit(1).collect()
   }
 }

@@ -29,12 +29,15 @@ import org.apache.spark.sql.internal.SQLConf
  * A variant of [[HadoopMapReduceCommitProtocol]] that allows specifying the actual
  * Hadoop output committer using an option specified in SQLConf.
  */
-class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String, isAppend: Boolean)
+class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String)
   extends HadoopMapReduceCommitProtocol(jobId, path) with Serializable with Logging {
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
-    val clazz = context.getConfiguration
-      .getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
+    var committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
+
+    val configuration = context.getConfiguration
+    val clazz =
+      configuration.getClass(SQLConf.OUTPUT_COMMITTER_CLASS.key, null, classOf[OutputCommitter])
 
     if (clazz != null) {
       logInfo(s"Using user defined output committer class ${clazz.getCanonicalName}")
@@ -48,17 +51,15 @@ class SQLHadoopMapReduceCommitProtocol(jobId: String, path: String, isAppend: Bo
         // The specified output committer is a FileOutputCommitter.
         // So, we will use the FileOutputCommitter-specified constructor.
         val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
-        ctor.newInstance(new Path(path), context)
+        committer = ctor.newInstance(new Path(path), context)
       } else {
         // The specified output committer is just an OutputCommitter.
         // So, we will use the no-argument constructor.
         val ctor = clazz.getDeclaredConstructor()
-        ctor.newInstance()
+        committer = ctor.newInstance()
       }
-    } else {
-      val committer = context.getOutputFormatClass.newInstance().getOutputCommitter(context)
-      logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
-      committer
     }
+    logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
+    committer
   }
 }

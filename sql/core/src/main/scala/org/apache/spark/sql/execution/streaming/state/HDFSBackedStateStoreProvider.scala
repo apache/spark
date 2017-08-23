@@ -35,7 +35,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.io.LZ4CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SizeEstimator, Utils}
 
 
 /**
@@ -172,7 +172,9 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       }
     }
 
-    override def numKeys(): Long = mapToUpdate.size()
+    override def metrics: StateStoreMetrics = {
+      StateStoreMetrics(mapToUpdate.size(), SizeEstimator.estimate(mapToUpdate), Map.empty)
+    }
 
     /**
      * Whether all updates have been committed
@@ -228,6 +230,10 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   override def close(): Unit = {
     loadedMaps.values.foreach(_.clear())
+  }
+
+  override def supportedCustomMetrics: Seq[StateStoreCustomMetric] = {
+    Nil
   }
 
   override def toString(): String = {
@@ -363,7 +369,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueSize)
+            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+            // This is a workaround for the following:
+            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }
@@ -376,9 +386,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
   private def writeSnapshotFile(version: Long, map: MapType): Unit = {
     val fileToWrite = snapshotFile(version)
+    val tempFile =
+      new Path(fileToWrite.getParent, s"${fileToWrite.getName}.temp-${Random.nextLong}")
     var output: DataOutputStream = null
     Utils.tryWithSafeFinally {
-      output = compressStream(fs.create(fileToWrite, false))
+      output = compressStream(fs.create(tempFile, false))
       val iter = map.entrySet().iterator()
       while(iter.hasNext) {
         val entry = iter.next()
@@ -392,6 +404,12 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
       output.writeInt(-1)
     } {
       if (output != null) output.close()
+    }
+    if (fs.exists(fileToWrite)) {
+      // Skip rename if the file is alreayd created.
+      fs.delete(tempFile, true)
+    } else if (!fs.rename(tempFile, fileToWrite)) {
+      throw new IOException(s"Failed to rename $tempFile to $fileToWrite")
     }
     logInfo(s"Written snapshot file for version $version of $this at $fileToWrite")
   }
@@ -427,7 +445,11 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
             val valueRow = new UnsafeRow(valueSchema.fields.length)
-            valueRow.pointTo(valueRowBuffer, valueSize)
+            // If valueSize in existing file is not multiple of 8, floor it to multiple of 8.
+            // This is a workaround for the following:
+            // Prior to Spark 2.3 mistakenly append 4 bytes to the value row in
+            // `RowBasedKeyValueBatch`, which gets persisted into the checkpoint data
+            valueRow.pointTo(valueRowBuffer, (valueSize / 8) * 8)
             map.put(keyRow, valueRow)
           }
         }

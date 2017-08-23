@@ -72,7 +72,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           execution.TakeOrderedAndProjectExec(
             limit, order, projectList, planLater(child)) :: Nil
         case logical.Limit(IntegerLiteral(limit), child) =>
-          execution.CollectLimitExec(limit, planLater(child)) :: Nil
+          // Normally wrapping child with `LocalLimitExec` here is a no-op, because
+          // `CollectLimitExec.executeCollect` will call `LocalLimitExec.executeTake`, which
+          // calls `child.executeTake`. If child supports whole stage codegen, adding this
+          // `LocalLimitExec` can stop the processing of whole stage codegen and trigger the
+          // resource releasing work, after we consume `limit` rows.
+          execution.CollectLimitExec(limit, LocalLimitExec(limit, planLater(child))) :: Nil
         case other => planLater(other) :: Nil
       }
       case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
@@ -422,7 +427,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.GenerateExec(
           generator, join = join, outer = outer, g.qualifiedGeneratorOutput,
           planLater(child)) :: Nil
-      case logical.OneRowRelation =>
+      case _: logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
