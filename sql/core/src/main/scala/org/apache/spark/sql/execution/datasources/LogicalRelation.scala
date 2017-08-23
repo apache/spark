@@ -30,12 +30,14 @@ import org.apache.spark.util.Utils
 case class LogicalRelation(
     relation: BaseRelation,
     output: Seq[AttributeReference],
-    catalogTable: Option[CatalogTable])
+    catalogTable: Option[CatalogTable],
+    override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any): Boolean = other match {
-    case l @ LogicalRelation(otherRelation, _, _) => relation == otherRelation && output == l.output
+    case l @ LogicalRelation(otherRelation, _, _, isStreaming) =>
+      relation == otherRelation && output == l.output && isStreaming == l.isStreaming
     case _ => false
   }
 
@@ -76,9 +78,9 @@ case class LogicalRelation(
 }
 
 object LogicalRelation {
-  def apply(relation: BaseRelation): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, None)
+  def apply(relation: BaseRelation, isStreaming: Boolean = false): LogicalRelation =
+    LogicalRelation(relation, relation.schema.toAttributes, None, isStreaming)
 
   def apply(relation: BaseRelation, table: CatalogTable): LogicalRelation =
-    LogicalRelation(relation, relation.schema.toAttributes, Some(table))
+    LogicalRelation(relation, relation.schema.toAttributes, Some(table), false)
 }

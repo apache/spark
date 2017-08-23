@@ -19,10 +19,12 @@ package org.apache.spark.sql.streaming
 
 import java.util.{Locale, TimeZone}
 
+import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
@@ -31,12 +33,14 @@ import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.types.StructType
 
 object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
+class StreamingAggregationSuite extends StateStoreMetricsTest
+    with BeforeAndAfterAll with Assertions {
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -355,5 +359,26 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with BeforeAndAfte
       AdvanceManualClock(DateTimeUtils.MILLIS_PER_DAY * 10),
       CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
     )
+  }
+
+  test("SPARK-19690: do not convert batch aggregation in streaming query to streaming") {
+    val streamInput = MemoryStream[Int]
+    val batchDF = Seq(1, 2, 3, 4, 5)
+        .toDF("value")
+        .withColumn("parity", 'value % 2)
+        .groupBy('parity)
+        .agg(count("*") as 'joinValue)
+    val joinDF = streamInput
+        .toDF()
+        .join(batchDF, 'value === 'parity)
+
+    // make sure we're planning an aggregate in the first place
+    assert(batchDF.queryExecution.optimizedPlan match { case _: Aggregate => true })
+
+    testStream(joinDF, Append)(
+      AddData(streamInput, 0, 1, 2, 3),
+      CheckLastBatch((0, 0, 2), (1, 1, 3)),
+      AddData(streamInput, 0, 1, 2, 3),
+      CheckLastBatch((0, 0, 2), (1, 1, 3)))
   }
 }

@@ -569,7 +569,8 @@ class Dataset[T] private[sql](
         logicalPlan.output,
         internalRdd,
         outputPartitioning,
-        physicalPlan.outputOrdering
+        physicalPlan.outputOrdering,
+        isStreaming
       )(sparkSession)).as[T]
   }
 
@@ -2233,7 +2234,7 @@ class Dataset[T] private[sql](
       }
       cols
     }
-    Deduplicate(groupCols, logicalPlan, isStreaming)
+    Deduplicate(groupCols, logicalPlan)
   }
 
   /**
@@ -2993,7 +2994,7 @@ class Dataset[T] private[sql](
    */
   def inputFiles: Array[String] = {
     val files: Seq[String] = queryExecution.optimizedPlan.collect {
-      case LogicalRelation(fsBasedRelation: FileRelation, _, _) =>
+      case LogicalRelation(fsBasedRelation: FileRelation, _, _, _) =>
         fsBasedRelation.inputFiles
       case fr: FileRelation =>
         fr.inputFiles
