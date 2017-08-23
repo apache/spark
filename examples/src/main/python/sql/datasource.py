@@ -179,9 +179,13 @@ def jdbc_dataset_example(spark):
 
     # Specifying dataframe column data types on read
     jdbcDF3 = spark.read \
-        .jdbc("jdbc:postgresql:dbserver", "schema.tablename",
-              properties={"user": "username", "password": "password",
-                  "customDataFrameColumnTypes": "id decimal(38, 0), name string"})
+        .format("jdbc") \
+        .option("url", "jdbc:postgresql:dbserver") \
+        .option("dbtable", "schema.tablename") \
+        .option("user", "username") \
+        .option("password", "password") \
+        .option("customDataFrameColumnTypes", "id decimal(38, 0), name string") \
+        .load()
 
     # Saving data to a JDBC source
     jdbcDF.write \
