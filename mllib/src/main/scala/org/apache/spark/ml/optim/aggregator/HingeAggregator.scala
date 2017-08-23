@@ -22,9 +22,8 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 
 /**
- * HingeAggregator computes the gradient and loss for loss function ("hinge" or
- * "squared_hinge", as used in binary classification for instances in sparse or dense
- * vector in an online fashion.
+ * HingeAggregator computes the gradient and loss for Hinge loss function as used in
+ * binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Two HingeAggregators can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.

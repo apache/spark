@@ -28,6 +28,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   @transient var instances: Array[Instance] = _
   @transient var instancesConstantFeature: Array[Instance] = _
+  @transient var instancesConstantFeatureFiltered: Array[Instance] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -39,7 +40,13 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     instancesConstantFeature = Array(
       Instance(0.0, 0.1, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 0.5, Vectors.dense(1.0, 1.0)),
-      Instance(1.0, 0.3, Vectors.dense(1.0, 0.5)))
+      Instance(1.0, 0.3, Vectors.dense(1.0, 0.5))
+    )
+    instancesConstantFeatureFiltered = Array(
+      Instance(0.0, 0.1, Vectors.dense(2.0)),
+      Instance(1.0, 0.5, Vectors.dense(1.0)),
+      Instance(2.0, 0.3, Vectors.dense(0.5))
+    )
   }
 
    /** Get summary statistics for some data and create a new HingeAggregator. */
@@ -142,9 +149,15 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val intercept = 1.0
     val aggConstantFeatureBinary = getNewAggregator(instancesConstantFeature,
       Vectors.dense(binaryCoefArray ++ Array(intercept)), fitIntercept = true)
-    instances.foreach(aggConstantFeatureBinary.add)
+    instancesConstantFeature.foreach(aggConstantFeatureBinary.add)
+
+    val aggConstantFeatureBinaryFiltered = getNewAggregator(instancesConstantFeatureFiltered,
+      Vectors.dense(binaryCoefArray ++ Array(intercept)), fitIntercept = true)
+    instancesConstantFeatureFiltered.foreach(aggConstantFeatureBinaryFiltered.add)
+
     // constant features should not affect gradient
     assert(aggConstantFeatureBinary.gradient(0) === 0.0)
+    assert(aggConstantFeatureBinary.gradient(1) == aggConstantFeatureBinaryFiltered.gradient(0))
   }
 
 }
