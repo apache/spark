@@ -210,4 +210,13 @@ class ExpressionSetSuite extends SparkFunSuite {
     assert((initialSet - (aLower + 1)).size == 0)
 
   }
+
+  test("add multiple elements to set") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Nil)
+    val setToAddWithSameExpression = ExpressionSet(aUpper + 1 :: aUpper + 2 :: Nil)
+    val setToAdd = ExpressionSet(aUpper + 2 :: aUpper + 3 :: Nil)
+
+    assert((initialSet ++ setToAddWithSameExpression).size == 2)
+    assert((initialSet ++ setToAdd).size == 3)
+  }
 }
