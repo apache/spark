@@ -15,7 +15,6 @@
  * limitations under the License.
  */
 
-// scalastyle:off println
 package org.apache.spark.examples.ml
 
 // $example on$
@@ -49,5 +48,3 @@ object FeatureHasherExample {
     spark.stop()
   }
 }
-// scalastyle:on println
-

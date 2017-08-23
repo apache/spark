@@ -227,15 +227,17 @@ categorical, even when they are integers. You must explicitly convert numeric co
 categorical features to strings first.
 - String columns: For categorical features, the hash value of the string "column_name=value"
 is used to map to the vector index, with an indicator value of `1.0`. Thus, categorical features
-are "one-hot" encoded (similarly to using `OneHotEncoder` with `dropLast=false`).
+are "one-hot" encoded (similarly to using [OneHotEncoder](ml-features.html#onehotencoder) with
+`dropLast=false`).
 - Boolean columns: Boolean values are treated in the same way as string columns. That is,
 boolean features are represented as "column_name=true" or "column_name=false", with an indicator
 value of `1.0`.
 
 Null (missing) values are ignored (implicitly zero in the resulting feature vector).
 
-Since a simple modulo is used to transform the hash function to a vector index,
-it is advisable to use a power of two as the numFeatures parameter;
+The hash function used here is also the [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash)
+used in [HashingTF](ml-features.html#tf-idf). Since a simple modulo is used to transform the hash
+function to a vector index, it is advisable to use a power of two as the numFeatures parameter;
 otherwise the features will not be mapped evenly to the vector indices.
 
 **Examples**
