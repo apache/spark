@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst
 import java.sql.Timestamp
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -28,7 +29,7 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
     val actualSQL = e.sql
     try {
-      assert(actualSQL === expectedSQL)
+      assert(actualSQL == expectedSQL)
     } catch {
       case cause: Throwable =>
         fail(
@@ -65,8 +66,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("attributes") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-
     checkSQL('a.int, "`a`")
     checkSQL(Symbol("foo bar").int, "`foo bar`")
     // Keyword
@@ -74,8 +73,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("binary comparisons") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-
     checkSQL('a.int === 'b.int, "(`a` = `b`)")
     checkSQL('a.int <=> 'b.int, "(`a` <=> `b`)")
     checkSQL('a.int =!= 'b.int, "(NOT (`a` = `b`))")
@@ -93,8 +90,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("logical operators") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-
     checkSQL('a.boolean && 'b.boolean, "(`a` AND `b`)")
     checkSQL('a.boolean || 'b.boolean, "(`a` OR `b`)")
     checkSQL(!'a.boolean, "(NOT `a`)")
@@ -102,8 +97,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("arithmetic expressions") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-
     checkSQL('a.int + 'b.int, "(`a` + `b`)")
     checkSQL('a.int - 'b.int, "(`a` - `b`)")
     checkSQL('a.int * 'b.int, "(`a` * `b`)")
@@ -115,8 +108,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("window specification") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-
     val frame = SpecifiedWindowFrame.defaultWindowFrame(
       hasOrderSpecification = true,
       acceptWindowFrame = true
@@ -149,8 +140,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("interval arithmetic") {
-    import org.apache.spark.sql.catalyst.dsl.expressions._
-
     val interval = Literal(new CalendarInterval(0, CalendarInterval.MICROS_PER_DAY))
 
     checkSQL(
