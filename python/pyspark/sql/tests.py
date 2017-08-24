@@ -704,6 +704,31 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_validate_column_types(self):
+        from pyspark.sql.functions import udf, to_json
+        from pyspark.sql.column import _to_java_column
+
+        self.assertTrue("Column" in _to_java_column("a").getClass().toString())
+        self.assertTrue("Column" in _to_java_column(u"a").getClass().toString())
+        self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
+
+        self.assertRaisesRegexp(
+            TypeError,
+            "Invalid argument, not a string or column",
+            lambda: _to_java_column(1))
+
+        class A():
+            pass
+
+        self.assertRaises(TypeError, lambda: _to_java_column(A()))
+        self.assertRaises(TypeError, lambda: _to_java_column([]))
+
+        self.assertRaisesRegexp(
+            TypeError,
+            "Invalid argument, not a string or column",
+            lambda: udf(lambda x: x)(None))
+        self.assertRaises(TypeError, lambda: to_json(1))
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
