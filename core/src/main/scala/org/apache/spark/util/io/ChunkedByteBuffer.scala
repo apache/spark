@@ -24,9 +24,9 @@ import java.nio.channels.WritableByteChannel
 import com.google.common.primitives.UnsignedBytes
 import io.netty.buffer.{ByteBuf, Unpooled}
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
-import org.apache.spark.SparkEnv
 import org.apache.spark.storage.StorageUtils
 
 /**
@@ -44,7 +44,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
 
   // Chunk size in bytes
   private val bufferWriteChunkSize =
-    Option(SparkEnv.get).map(_.conf.get(BUFFER_WRITE_CHUNK_SIZE))
+    Option(SparkEnv.get).map(_.conf.get(config.BUFFER_WRITE_CHUNK_SIZE))
       .getOrElse(config.BUFFER_WRITE_CHUNK_SIZE.defaultValue.get)
 
   private[this] var disposed: Boolean = false
