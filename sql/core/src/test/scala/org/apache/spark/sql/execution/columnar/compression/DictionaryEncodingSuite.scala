@@ -20,11 +20,10 @@ package org.apache.spark.sql.execution.columnar.compression
 import java.nio.ByteBuffer
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
-import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.AtomicType
 
 class DictionaryEncodingSuite extends SparkFunSuite {
@@ -143,8 +142,7 @@ class DictionaryEncodingSuite extends SparkFunSuite {
       assertResult(DictionaryEncoding.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = DictionaryEncoding.decoder(buffer, columnType)
-      val columnVector = ColumnVector.allocate(inputSeq.length, columnType.dataType,
-        MemoryMode.ON_HEAP)
+      val columnVector = new OnHeapColumnVector(inputSeq.length, columnType.dataType)
       decoder.decompress(columnVector, inputSeq.length)
 
       if (inputSeq.nonEmpty) {

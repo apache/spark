@@ -24,7 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
-import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -154,7 +154,8 @@ private[sql] object ColumnAccessor {
     }
   }
 
-  def decompress(columnAccessor: ColumnAccessor, columnVector: ColumnVector, numRows: Int): Unit = {
+  def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
+      Unit = {
     if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
       val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
       nativeAccessor.decompress(columnVector, numRows)

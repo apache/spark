@@ -18,12 +18,11 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
-import org.apache.spark.sql.execution.vectorized.ColumnVector
-import org.apache.spark.sql.types.{AtomicType, IntegralType}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.types.AtomicType
 
 class PassThroughSuite extends SparkFunSuite {
   val nullValue = -1
@@ -118,8 +117,7 @@ class PassThroughSuite extends SparkFunSuite {
       assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       val decoder = PassThrough.decoder(buffer, columnType)
-      val columnVector = ColumnVector.allocate(input.length, columnType.dataType,
-        MemoryMode.ON_HEAP)
+      val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
       decoder.decompress(columnVector, input.length)
 
       if (input.nonEmpty) {

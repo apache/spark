@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.{ColumnAccessor, NativeColumnAccessor}
-import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types.AtomicType
 
 private[columnar] trait CompressibleColumnAccessor[T <: AtomicType] extends ColumnAccessor {
@@ -40,6 +40,6 @@ private[columnar] trait CompressibleColumnAccessor[T <: AtomicType] extends Colu
     decoder.next(row, ordinal)
   }
 
-  def decompress(columnVector: ColumnVector, capacity: Int): Unit =
+  def decompress(columnVector: WritableColumnVector, capacity: Int): Unit =
     decoder.decompress(columnVector, capacity)
 }

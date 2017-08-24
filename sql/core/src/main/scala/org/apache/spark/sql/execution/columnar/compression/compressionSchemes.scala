@@ -25,7 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.columnar._
-import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 
 
@@ -64,7 +64,7 @@ private[columnar] case object PassThrough extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def decompress(columnVector: ColumnVector, capacity: Int): Unit = {
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
@@ -328,7 +328,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
 
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
 
-    override def decompress(columnVector: ColumnVector, capacity: Int): Unit = {
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
@@ -556,7 +556,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
 
     override def hasNext: Boolean = buffer.hasRemaining
 
-    override def decompress(columnVector: ColumnVector, capacity: Int): Unit = {
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
@@ -686,7 +686,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
 
     override def hasNext: Boolean = visited < count
 
-    override def decompress(columnVector: ColumnVector, capacity: Int): Unit = {
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       val countLocal = count
       var currentWordLocal: Long = 0
       var visitedLocal: Int = 0
@@ -798,7 +798,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
       row.setInt(ordinal, prev)
     }
 
-    override def decompress(columnVector: ColumnVector, capacity: Int): Unit = {
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       var prevLocal: Int = 0
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
@@ -904,7 +904,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
       row.setLong(ordinal, prev)
     }
 
-    override def decompress(columnVector: ColumnVector, capacity: Int): Unit = {
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       var prevLocal: Long = 0
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind

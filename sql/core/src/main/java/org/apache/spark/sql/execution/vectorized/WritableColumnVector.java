@@ -165,6 +165,11 @@ public abstract class WritableColumnVector extends ColumnVector {
   public abstract void putShorts(int rowId, int count, short[] src, int srcIndex);
 
   /**
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   */
+  public abstract void putShorts(int rowId, int count, byte[] src, int srcIndex);
+
+  /**
    * Sets the value at rowId to `value`.
    */
   public abstract void putInt(int rowId, int value);
@@ -178,6 +183,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
    */
   public abstract void putInts(int rowId, int count, int[] src, int srcIndex);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   */
+  public abstract void putInts(int rowId, int count, byte[] src, int srcIndex);
 
   /**
    * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
@@ -199,6 +209,11 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Sets values from [rowId, rowId + count) to [src + srcIndex, src + srcIndex + count)
    */
   public abstract void putLongs(int rowId, int count, long[] src, int srcIndex);
+
+  /**
+   * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])
+   */
+  public abstract void putLongs(int rowId, int count, byte[] src, int srcIndex);
 
   /**
    * Sets values from [rowId, rowId + count) to [src[srcIndex], src[srcIndex + count])

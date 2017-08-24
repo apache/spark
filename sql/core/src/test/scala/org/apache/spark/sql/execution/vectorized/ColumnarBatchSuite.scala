@@ -1309,7 +1309,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
@@ -1333,7 +1333,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
@@ -1357,7 +1357,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
@@ -1381,7 +1381,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
@@ -1405,7 +1405,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
@@ -1429,7 +1429,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
@@ -1453,7 +1453,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnBuilder.appendFrom(row, 0)
     }
 
-    val column = ColumnVector.allocate(16, dataType, MemoryMode.ON_HEAP)
+    val column = allocate(16, dataType, MemoryMode.ON_HEAP)
     val columnAccessor = ColumnAccessor(dataType, columnBuilder.build)
     ColumnAccessor.decompress(columnAccessor, column, 16)
 
