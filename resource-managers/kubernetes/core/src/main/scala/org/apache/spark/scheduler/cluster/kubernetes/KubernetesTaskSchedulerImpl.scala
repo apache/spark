@@ -16,10 +16,10 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, TaskSet, TaskSetManager}
 import org.apache.spark.util.Utils
-import org.apache.spark.SparkContext
 
 private[spark] class KubernetesTaskSchedulerImpl(
     sc: SparkContext,
