@@ -321,7 +321,7 @@ private[yarn] class YarnAllocator(
     val missing = targetNumExecutors - numPendingAllocate -
       numExecutorsStarting.get - numExecutorsRunning.get
 
-    val numberOfRequests = if (rmAvailableContainers > 0) {
+    val numberOfRequests = if (rmAvailableContainers >= 0) {
       math.min(missing, rmAvailableContainers)
     } else {
       missing

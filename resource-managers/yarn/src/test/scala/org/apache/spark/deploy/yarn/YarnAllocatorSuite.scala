@@ -365,6 +365,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val normal = Resource.newInstance(containerMem * 10, containerCpu * 10)
     val lowMem = Resource.newInstance(containerMem * 2, containerCpu * 5)
     val lowCpu = Resource.newInstance(containerMem * 5, containerCpu * 1)
+    val empty = Resource.newInstance(0, 0)
 
     val client = mock(classOf[AMRMClient[ContainerRequest]])
     val response = mock(classOf[AllocateResponse])
@@ -418,6 +419,16 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     allocator.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
     allocator.allocateResources()
     assert(requestCount === 1)
+    requestCount = 0
+
+    // Switch to empty.
+    when(response.getAvailableResources()).thenReturn(empty)
+    allocator.allocateResources()
+    requestCount = 0
+
+    allocator.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    allocator.allocateResources()
+    assert(requestCount === 0)
     requestCount = 0
 
     // Switch back to normal.
