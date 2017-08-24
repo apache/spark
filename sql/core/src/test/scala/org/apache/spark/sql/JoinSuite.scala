@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -24,6 +25,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StructType
 
 
 class JoinSuite extends QueryTest with SharedSQLContext {
@@ -572,5 +574,23 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 2) ::
         Row(3, 1) ::
         Row(3, 2) :: Nil)
+  }
+
+  test("outer broadcast hash join should not throw NPE") {
+    withTempView("v1", "v2") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+        Seq(2 -> 2).toDF("x", "y").createTempView("v1")
+
+        spark.createDataFrame(
+          Seq(Row(1, "a")).asJava,
+          new StructType().add("i", "int", nullable = false).add("j", "string", nullable = false)
+        ).createTempView("v2")
+
+        checkAnswer(
+          sql("select x, y, i, j from v1 left join v2 on x = i and y < length(j)"),
+          Row(2, 2, null, null)
+        )
+      }
+    }
   }
 }

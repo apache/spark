@@ -257,8 +257,8 @@ case class BroadcastHashJoinExec(
       s"""
          |boolean $conditionPassed = true;
          |${eval.trim}
-         |${ev.code}
          |if ($matched != null) {
+         |  ${ev.code}
          |  $conditionPassed = !${ev.isNull} && ${ev.value};
          |}
        """.stripMargin
