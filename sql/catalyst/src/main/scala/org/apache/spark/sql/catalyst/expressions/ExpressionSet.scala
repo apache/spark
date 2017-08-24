@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.mutable
+import scala.collection.{mutable, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
@@ -64,6 +64,12 @@ class ExpressionSet protected(
   override def +(elem: Expression): ExpressionSet = {
     val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
     newSet.add(elem)
+    newSet
+  }
+
+  override def ++(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val newSet = new ExpressionSet(baseSet.clone(), originals.clone())
+    elems.foreach(newSet.add)
     newSet
   }
 
