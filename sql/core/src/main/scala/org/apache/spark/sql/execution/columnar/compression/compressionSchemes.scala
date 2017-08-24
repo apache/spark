@@ -565,24 +565,24 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
       var seenNulls = 0
       columnType.dataType match {
         case _: IntegerType =>
+          val dictionaryIds = columnVector.reserveDictionaryIds(capacity)
+          columnVector.setDictionary(new ColumnDictionary(dictionary.asInstanceOf[Array[AnyRef]]))
           while (pos < capacity) {
             if (pos != nextNullIndex) {
-              val value = dictionary(buffer.getShort()).asInstanceOf[Int]
-              columnVector.putInt(pos, value)
+              dictionaryIds.putInt(pos, buffer.getShort())
             } else {
               seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
+              if (seenNulls < nullCount) nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
               columnVector.putNull(pos)
             }
             pos += 1
           }
         case _: LongType =>
+          val dictionaryIds = columnVector.reserveDictionaryIds(capacity)
+          columnVector.setDictionary(new ColumnDictionary(dictionary.asInstanceOf[Array[AnyRef]]))
           while (pos < capacity) {
             if (pos != nextNullIndex) {
-              val value = dictionary(buffer.getShort()).asInstanceOf[Long]
-              columnVector.putLong(pos, value)
+              dictionaryIds.putInt(pos, buffer.getShort())
             } else {
               seenNulls += 1
               if (seenNulls < nullCount) {
