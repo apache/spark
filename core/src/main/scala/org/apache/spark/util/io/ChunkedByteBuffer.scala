@@ -24,6 +24,7 @@ import java.nio.channels.WritableByteChannel
 import com.google.common.primitives.UnsignedBytes
 import io.netty.buffer.{ByteBuf, Unpooled}
 
+import org.apache.spark.internal.config
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.storage.StorageUtils
 
@@ -40,7 +41,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks != null, "chunks must not be null")
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
-  private val NIO_BUFFER_LIMIT = 64 * 1024 * 1024 // Chunk size in bytes
+  // Chunk size in bytes
+  private val NIO_BUFFER_LIMIT = SparkEnv.get.conf.get(config.STORAGE_NIO_BUFFER_LIMIT)
 
   private[this] var disposed: Boolean = false
 

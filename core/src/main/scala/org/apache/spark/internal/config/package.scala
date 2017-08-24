@@ -336,4 +336,11 @@ package object config {
         "spark.")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val STORAGE_NIO_BUFFER_LIMIT =
+    ConfigBuilder("spark.storage.nioBufferLimit")
+      .internal()
+      .doc("The block size limit when use ChunkedByteBuffer to writeFully bytes.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(64 * 1024 * 1024)
 }
