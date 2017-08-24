@@ -449,17 +449,13 @@ case class JsonTuple(children: Seq[Expression])
             }
 
             val jsonValue = UTF8String.fromBytes(output.toByteArray)
-            row(idx) = jsonValue
-            idx = idx + 1
 
             // SPARK-21804: json_tuple returns null values within repeated columns
             // except the first one; so that we need to check the remaining fields.
-            while (idx < fieldNames.length) {
-              if (fieldNames(idx) == jsonField) {
-                row(idx) = jsonValue
-              }
-              idx = idx + 1
-            }
+            do {
+              row(idx) = jsonValue
+              idx = fieldNames.indexOf(jsonField, idx + 1)
+            } while (idx >= 0)
           }
         }
       }
