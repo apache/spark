@@ -174,32 +174,41 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("SPARK-21289: Support line separator") {
-    // Read
-    Seq("a|b|\nc|", "a|b|\nc").foreach { lines =>
+  def testLineSeparator(lineSep: String): Unit = {
+    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep'") {
+      // Read
+      val values = Seq("a", "b", "\nc")
+      val data = values.mkString(lineSep)
+      val dataWithTrailingLineSep = s"$data$lineSep"
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
+        withTempPath { path =>
+          Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
+          val df = spark.read.option("lineSep", lineSep).text(path.getAbsolutePath)
+          checkAnswer(df, Seq("a", "b", "\nc").toDF())
+        }
+      }
+
+      // Write
       withTempPath { path =>
-        Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
-        val df = spark.read.option("lineSep", "|").text(path.getAbsolutePath)
-        checkAnswer(df, Seq("a", "b", "\nc").toDF())
+        values.toDF().coalesce(1)
+          .write.option("lineSep", lineSep).text(path.getAbsolutePath)
+        val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
+        val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
+        assert(readBack === s"a${lineSep}b${lineSep}\nc${lineSep}")
+      }
+
+      // Roundtrip
+      withTempPath { path =>
+        val df = values.toDF()
+        df.write.option("lineSep", lineSep).text(path.getAbsolutePath)
+        val readBack = spark.read.option("lineSep", lineSep).text(path.getAbsolutePath)
+        checkAnswer(df, readBack)
       }
     }
+  }
 
-    // Write
-    withTempPath { path =>
-      Seq("a", "b", "\nc").toDF().coalesce(1)
-        .write.option("lineSep", "^").text(path.getAbsolutePath)
-      val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
-      val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
-      assert(readBack === "a^b^\nc^")
-    }
-
-    // Roundtrip
-    withTempPath { path =>
-      val df = Seq("a", "b", "\nc").toDF()
-      df.write.option("lineSep", ":").text(path.getAbsolutePath)
-      val readBack = spark.read.option("lineSep", ":").text(path.getAbsolutePath)
-      checkAnswer(df, readBack)
-    }
+  Seq("|", "^", "::", "!!!@3").foreach { lineSep =>
+    testLineSeparator(lineSep)
   }
 
   private def testFile: String = {

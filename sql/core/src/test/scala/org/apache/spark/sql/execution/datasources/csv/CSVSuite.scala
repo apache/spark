@@ -1247,15 +1247,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     )
   }
 
-  test("SPARK-21289: Support line separator") {
-    Seq(false, true).foreach { multiLine =>
+  def testLineSeparator(lineSep: String, multiLine: Boolean): Unit = {
+    test(s"SPARK-21289: Support line separator - lineSep: '$lineSep' and multiLine: $multiLine") {
       // Read
-      Seq("a,b|1,\"a\nd\"|1,f|", "a,b|1,\"a\nd\"|1,f").foreach { lines =>
+      val data = Seq("a,b", "1,\"a\nd\"", "1,f").mkString(lineSep)
+      val dataWithTrailingLineSep = s"$data$lineSep"
+
+      Seq(data, dataWithTrailingLineSep).foreach { lines =>
         withTempPath { path =>
           Files.write(path.toPath, lines.getBytes(StandardCharsets.UTF_8))
           val df = spark.read
             .option("multiLine", multiLine)
-            .option("lineSep", "|")
+            .option("lineSep", lineSep)
             .option("header", true)
             .option("inferSchema", true)
             .csv(path.getAbsolutePath)
@@ -1270,22 +1273,28 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       // Write
       withTempPath { path =>
         Seq("a", "b", "c").toDF().coalesce(1)
-          .write.option("lineSep", "^").csv(path.getAbsolutePath)
+          .write.option("lineSep", lineSep).csv(path.getAbsolutePath)
         val partFile = Utils.recursiveList(path).filter(f => f.getName.startsWith("part-")).head
         val readBack = new String(Files.readAllBytes(partFile.toPath), StandardCharsets.UTF_8)
-        assert(readBack === "a^b^c^")
+        assert(readBack === s"a${lineSep}b${lineSep}c${lineSep}")
       }
 
       // Roundtrip
       withTempPath { path =>
         val df = Seq("a", "b", "c").toDF()
-        df.write.option("lineSep", ":").csv(path.getAbsolutePath)
+        df.write.option("lineSep", lineSep).csv(path.getAbsolutePath)
         val readBack = spark.read
           .option("multiLine", multiLine)
-          .option("lineSep", ":")
+          .option("lineSep", lineSep)
           .csv(path.getAbsolutePath)
         checkAnswer(df, readBack)
       }
+    }
+  }
+
+  Seq("|", "^", "::", "\r\n").foreach { lineSep =>
+    Seq(true, false).foreach { multiLine =>
+      testLineSeparator(lineSep, multiLine)
     }
   }
 }
