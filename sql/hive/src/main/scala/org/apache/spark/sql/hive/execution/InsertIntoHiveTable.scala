@@ -435,6 +435,18 @@ case class InsertIntoHiveTable(
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
 
+    //delete the tmpLocation dir
+    try {
+      val fs = tmpLocation.getFileSystem(hadoopConf)
+      if (fs.delete(tmpLocation, true)) {
+        // If we successfully delete the tmpLocation dir, remove it from FileSystem's cache.
+        fs.cancelDeleteOnExit(tmpLocation)
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(s"Unable to delete tmpLocation directory:" + tmpLocation.toString + "\n" + e)
+    }
+
     // un-cache this table.
     sparkSession.catalog.uncacheTable(table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
