@@ -185,7 +185,6 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
   }
 
-
   def testLineSeparator(lineSep: String): Unit = {
     test(s"SPARK-21289: Support line separator - lineSep: '$lineSep'") {
       val data = Seq(
