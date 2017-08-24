@@ -26,7 +26,7 @@ Function InstallR {
   }
 
   $urlPath = ""
-  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest http://rversions.r-pkg.org/r-release).Content).version
+  $latestVer = $(ConvertFrom-JSON $(Invoke-WebRequest https://rversions.r-pkg.org/r-release-win).Content).version
   If ($rVer -ne $latestVer) {
     $urlPath = ("old/" + $rVer + "/")
   }
@@ -114,7 +114,7 @@ $env:Path += ";$env:HADOOP_HOME\bin"
 Pop-Location
 
 # ========================== R
-$rVer = "3.3.1"
+$rVer = "3.4.1"
 $rToolsVer = "3.4.0"
 
 InstallR

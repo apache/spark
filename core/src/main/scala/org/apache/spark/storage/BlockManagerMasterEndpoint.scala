@@ -19,8 +19,8 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 

@@ -45,7 +45,7 @@ from numpy import abs, all, arange, array, array_equal, inf, ones, tile, zeros
 import inspect
 
 from pyspark import keyword_only, SparkContext
-from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
+from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer, UnaryTransformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
 from pyspark.ml.common import _java2py, _py2java
@@ -62,10 +62,12 @@ from pyspark.ml.regression import DecisionTreeRegressor, GeneralizedLinearRegres
     LinearRegression
 from pyspark.ml.stat import ChiSquareTest
 from pyspark.ml.tuning import *
+from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams, JavaWrapper
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
+from pyspark.sql.types import DoubleType, IntegerType
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
@@ -119,6 +121,36 @@ class MockTransformer(Transformer, HasFake):
         self.dataset_index = dataset.index
         dataset.index += 1
         return dataset
+
+
+class MockUnaryTransformer(UnaryTransformer, DefaultParamsReadable, DefaultParamsWritable):
+
+    shift = Param(Params._dummy(), "shift", "The amount by which to shift " +
+                  "data in a DataFrame",
+                  typeConverter=TypeConverters.toFloat)
+
+    def __init__(self, shiftVal=1):
+        super(MockUnaryTransformer, self).__init__()
+        self._setDefault(shift=1)
+        self._set(shift=shiftVal)
+
+    def getShift(self):
+        return self.getOrDefault(self.shift)
+
+    def setShift(self, shift):
+        self._set(shift=shift)
+
+    def createTransformFunc(self):
+        shiftVal = self.getShift()
+        return lambda x: x + shiftVal
+
+    def outputDataType(self):
+        return DoubleType()
+
+    def validateInputType(self, inputType):
+        if inputType != DoubleType():
+            raise TypeError("Bad input type: {}. ".format(inputType) +
+                            "Requires Double.")
 
 
 class MockEstimator(Estimator, HasFake):
@@ -346,6 +378,12 @@ class ParamTests(PySparkTestCase):
         with self.assertRaises(KeyError):
             testParams.getInputCol()
 
+        otherParam = Param(Params._dummy(), "otherParam", "Parameter used to test that " +
+                           "set raises an error for a non-member parameter.",
+                           typeConverter=TypeConverters.toString)
+        with self.assertRaises(ValueError):
+            testParams.set(otherParam, "value")
+
         # Since the default is normally random, set it to a known number for debug str
         testParams._setDefault(seed=41)
         testParams.setSeed(43)
@@ -417,6 +455,54 @@ class ParamTests(PySparkTestCase):
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
         )
 
+    @staticmethod
+    def check_params(test_self, py_stage, check_params_exist=True):
+        """
+        Checks common requirements for Params.params:
+          - set of params exist in Java and Python and are ordered by names
+          - param parent has the same UID as the object's UID
+          - default param value from Java matches value in Python
+          - optionally check if all params from Java also exist in Python
+        """
+        py_stage_str = "%s %s" % (type(py_stage), py_stage)
+        if not hasattr(py_stage, "_to_java"):
+            return
+        java_stage = py_stage._to_java()
+        if java_stage is None:
+            return
+        test_self.assertEqual(py_stage.uid, java_stage.uid(), msg=py_stage_str)
+        if check_params_exist:
+            param_names = [p.name for p in py_stage.params]
+            java_params = list(java_stage.params())
+            java_param_names = [jp.name() for jp in java_params]
+            test_self.assertEqual(
+                param_names, sorted(java_param_names),
+                "Param list in Python does not match Java for %s:\nJava = %s\nPython = %s"
+                % (py_stage_str, java_param_names, param_names))
+        for p in py_stage.params:
+            test_self.assertEqual(p.parent, py_stage.uid)
+            java_param = java_stage.getParam(p.name)
+            py_has_default = py_stage.hasDefault(p)
+            java_has_default = java_stage.hasDefault(java_param)
+            test_self.assertEqual(py_has_default, java_has_default,
+                                  "Default value mismatch of param %s for Params %s"
+                                  % (p.name, str(py_stage)))
+            if py_has_default:
+                if p.name == "seed":
+                    continue  # Random seeds between Spark and PySpark are different
+                java_default = _java2py(test_self.sc,
+                                        java_stage.clear(java_param).getOrDefault(java_param))
+                py_stage._clear(p)
+                py_default = py_stage.getOrDefault(p)
+                # equality test for NaN is always False
+                if isinstance(java_default, float) and np.isnan(java_default):
+                    java_default = "NaN"
+                    py_default = "NaN" if np.isnan(py_default) else "not NaN"
+                test_self.assertEqual(
+                    java_default, py_default,
+                    "Java default %s != python default %s of param %s for Params %s"
+                    % (str(java_default), str(py_default), p.name, str(py_stage)))
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
@@ -473,6 +559,8 @@ class FeatureTests(SparkSessionTestCase):
                          "Model should inherit the UID from its parent estimator.")
         output = idf0m.transform(dataset)
         self.assertIsNotNone(output.head().idf)
+        # Test that parameters transferred to Python Model
+        ParamTests.check_params(self, idf0m)
 
     def test_ngram(self):
         dataset = self.spark.createDataFrame([
@@ -1025,7 +1113,7 @@ class PersistenceTest(SparkSessionTestCase):
         """
         self.assertEqual(m1.uid, m2.uid)
         self.assertEqual(type(m1), type(m2))
-        if isinstance(m1, JavaParams):
+        if isinstance(m1, JavaParams) or isinstance(m1, Transformer):
             self.assertEqual(len(m1.params), len(m2.params))
             for p in m1.params:
                 self._compare_params(m1, m2, p)
@@ -1104,6 +1192,35 @@ class PersistenceTest(SparkSessionTestCase):
             except OSError:
                 pass
 
+    def test_python_transformer_pipeline_persistence(self):
+        """
+        Pipeline[MockUnaryTransformer, Binarizer]
+        """
+        temp_path = tempfile.mkdtemp()
+
+        try:
+            df = self.spark.range(0, 10).toDF('input')
+            tf = MockUnaryTransformer(shiftVal=2)\
+                .setInputCol("input").setOutputCol("shiftedInput")
+            tf2 = Binarizer(threshold=6, inputCol="shiftedInput", outputCol="binarized")
+            pl = Pipeline(stages=[tf, tf2])
+            model = pl.fit(df)
+
+            pipeline_path = temp_path + "/pipeline"
+            pl.save(pipeline_path)
+            loaded_pipeline = Pipeline.load(pipeline_path)
+            self._compare_pipelines(pl, loaded_pipeline)
+
+            model_path = temp_path + "/pipeline-model"
+            model.save(model_path)
+            loaded_model = PipelineModel.load(model_path)
+            self._compare_pipelines(model, loaded_model)
+        finally:
+            try:
+                rmtree(temp_path)
+            except OSError:
+                pass
+
     def test_onevsrest(self):
         temp_path = tempfile.mkdtemp()
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
@@ -1157,6 +1274,33 @@ class PersistenceTest(SparkSessionTestCase):
             rmtree(path)
         except OSError:
             pass
+
+    def test_default_read_write(self):
+        temp_path = tempfile.mkdtemp()
+
+        lr = LogisticRegression()
+        lr.setMaxIter(50)
+        lr.setThreshold(.75)
+        writer = DefaultParamsWriter(lr)
+
+        savePath = temp_path + "/lr"
+        writer.save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr2 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr2.uid)
+        self.assertEqual(lr.extractParamMap(), lr2.extractParamMap())
+
+        # test overwrite
+        lr.setThreshold(.8)
+        writer.overwrite().save(savePath)
+
+        reader = DefaultParamsReadable.read()
+        lr3 = reader.load(savePath)
+
+        self.assertEqual(lr.uid, lr3.uid)
+        self.assertEqual(lr.extractParamMap(), lr3.extractParamMap())
 
 
 class LDATest(SparkSessionTestCase):
@@ -1562,40 +1706,6 @@ class DefaultValuesTests(PySparkTestCase):
     those in their Scala counterparts.
     """
 
-    def check_params(self, py_stage):
-        import pyspark.ml.feature
-        if not hasattr(py_stage, "_to_java"):
-            return
-        java_stage = py_stage._to_java()
-        if java_stage is None:
-            return
-        for p in py_stage.params:
-            java_param = java_stage.getParam(p.name)
-            py_has_default = py_stage.hasDefault(p)
-            java_has_default = java_stage.hasDefault(java_param)
-            self.assertEqual(py_has_default, java_has_default,
-                             "Default value mismatch of param %s for Params %s"
-                             % (p.name, str(py_stage)))
-            if py_has_default:
-                if p.name == "seed":
-                    return  # Random seeds between Spark and PySpark are different
-                java_default =\
-                    _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
-                py_stage._clear(p)
-                py_default = py_stage.getOrDefault(p)
-                if isinstance(py_stage, pyspark.ml.feature.Imputer) and p.name == "missingValue":
-                    # SPARK-15040 - default value for Imputer param 'missingValue' is NaN,
-                    # and NaN != NaN, so handle it specially here
-                    import math
-                    self.assertTrue(math.isnan(java_default) and math.isnan(py_default),
-                                    "Java default %s and python default %s are not both NaN for "
-                                    "param %s for Params %s"
-                                    % (str(java_default), str(py_default), p.name, str(py_stage)))
-                    return
-                self.assertEqual(java_default, py_default,
-                                 "Java default %s != python default %s of param %s for Params %s"
-                                 % (str(java_default), str(py_default), p.name, str(py_stage)))
-
     def test_java_params(self):
         import pyspark.ml.feature
         import pyspark.ml.classification
@@ -1609,7 +1719,8 @@ class DefaultValuesTests(PySparkTestCase):
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and issubclass(cls, JavaParams)\
                         and not inspect.isabstract(cls):
-                    self.check_params(cls())
+                    # NOTE: disable check_params_exist until there is parity with Scala API
+                    ParamTests.check_params(self, cls(), check_params_exist=False)
 
 
 def _squared_distance(a, b):
@@ -2006,6 +2117,35 @@ class ChiSquareTestTests(SparkSessionTestCase):
         fieldNames = set(field.name for field in res.schema.fields)
         expectedFields = ["pValues", "degreesOfFreedom", "statistics"]
         self.assertTrue(all(field in fieldNames for field in expectedFields))
+
+
+class UnaryTransformerTests(SparkSessionTestCase):
+
+    def test_unary_transformer_validate_input_type(self):
+        shiftVal = 3
+        transformer = MockUnaryTransformer(shiftVal=shiftVal)\
+            .setInputCol("input").setOutputCol("output")
+
+        # should not raise any errors
+        transformer.validateInputType(DoubleType())
+
+        with self.assertRaises(TypeError):
+            # passing the wrong input type should raise an error
+            transformer.validateInputType(IntegerType())
+
+    def test_unary_transformer_transform(self):
+        shiftVal = 3
+        transformer = MockUnaryTransformer(shiftVal=shiftVal)\
+            .setInputCol("input").setOutputCol("output")
+
+        df = self.spark.range(0, 10).toDF('input')
+        df = df.withColumn("input", df.input.cast(dataType="double"))
+
+        transformed_df = transformer.transform(df)
+        results = transformed_df.select("input", "output").collect()
+
+        for res in results:
+            self.assertEqual(res.input + shiftVal, res.output)
 
 
 if __name__ == "__main__":

@@ -22,8 +22,8 @@ import java.net.URI
 import java.nio.file.FileSystems
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 

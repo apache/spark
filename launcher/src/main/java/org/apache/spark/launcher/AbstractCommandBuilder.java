@@ -144,6 +144,7 @@ abstract class AbstractCommandBuilder {
     if (prependClasses || isTesting) {
       String scala = getScalaVersion();
       List<String> projects = Arrays.asList(
+        "common/kvstore",
         "common/network-common",
         "common/network-shuffle",
         "common/network-yarn",
@@ -291,24 +292,14 @@ abstract class AbstractCommandBuilder {
     }
 
     if (propsFile.isFile()) {
-      FileInputStream fd = null;
-      try {
-        fd = new FileInputStream(propsFile);
-        props.load(new InputStreamReader(fd, StandardCharsets.UTF_8));
+      try (InputStreamReader isr = new InputStreamReader(
+          new FileInputStream(propsFile), StandardCharsets.UTF_8)) {
+        props.load(isr);
         for (Map.Entry<Object, Object> e : props.entrySet()) {
           e.setValue(e.getValue().toString().trim());
         }
-      } finally {
-        if (fd != null) {
-          try {
-            fd.close();
-          } catch (IOException e) {
-            // Ignore.
-          }
-        }
       }
     }
-
     return props;
   }
 

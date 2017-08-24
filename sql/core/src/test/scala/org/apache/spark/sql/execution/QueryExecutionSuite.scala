@@ -27,7 +27,7 @@ class QueryExecutionSuite extends SharedSQLContext {
           override def apply(plan: LogicalPlan): Seq[SparkPlan] = Nil
         })
 
-    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation)
+    def qe: QueryExecution = new QueryExecution(spark, OneRowRelation())
 
     // Nothing!
     assert(qe.toString.contains("OneRowRelation"))

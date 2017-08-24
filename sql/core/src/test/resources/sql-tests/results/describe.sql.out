@@ -120,8 +120,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	t                   	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -151,8 +152,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	t                   	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -190,8 +192,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	t                   	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -228,8 +231,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	t                   	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Num Buckets         	2                   	                    
@@ -458,8 +462,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	v                   	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
@@ -480,8 +485,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	v                   	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	VIEW                	                    
 View Text           	SELECT * FROM t     	                    
 View Default Database	default             	                    
