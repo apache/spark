@@ -58,17 +58,6 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def writeFully(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
-      while (bytes.remaining > 0) {
-        channel.write(bytes)
-      }
-    }
-  }
-
-  /**
-   * Write this buffer to a channel with slice.
-   */
-  def writeWithSlice(channel: WritableByteChannel): Unit = {
-    for (bytes <- getChunks()) {
       val capacity = bytes.limit()
       while (bytes.position() < capacity && bytes.remaining() > 0) {
         val ioSize = Math.min(bytes.remaining(), NIO_BUFFER_LIMIT.toInt)

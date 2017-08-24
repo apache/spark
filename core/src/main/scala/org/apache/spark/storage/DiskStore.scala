@@ -93,7 +93,7 @@ private[spark] class DiskStore(
 
   def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
     put(blockId) { channel =>
-      bytes.writeWithSlice(channel)
+      bytes.writeFully(channel)
     }
   }
 

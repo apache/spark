@@ -57,33 +57,6 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
   }
 
-  test("benchmark testing for writeWithSlice()and writeFully()") {
-    val benchmark = new Benchmark("Benchmark writeWithSlice() and writeFully()", 1024 * 1024 * 15)
-    val buffer100 = ByteBuffer.allocate(1024 * 1024 * 100)
-    val buffer30 = ByteBuffer.allocate(1024 * 1024 * 30)
-    val chunkedByteBuffer30m = new ChunkedByteBuffer(Array.fill(10)(buffer30))
-    val chunkedByteBuffer100m = new ChunkedByteBuffer(Array.fill(10)(buffer100))
-
-    benchmark.addCase("Test writeFully() chunks each with 30m for 10 loop", 10) { _ =>
-      chunkedByteBuffer30m.writeFully(
-        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
-    }
-    benchmark.addCase("Test writeWithSlice() chunks each with 30m for 10 loop", 10) { _ =>
-      chunkedByteBuffer30m.writeWithSlice(
-        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
-    }
-
-    benchmark.addCase("Test writeFully() chunks each with 100m for 50 loop", 50) { _ =>
-      chunkedByteBuffer30m.writeFully(
-        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
-    }
-    benchmark.addCase("Test writeWithSlice() chunks each with 100m for 50 loop", 50) { _ =>
-      chunkedByteBuffer30m.writeWithSlice(
-        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
-    }
-    benchmark.run()
-  }
-
   test("toArray()") {
     val empty = ByteBuffer.wrap(Array.empty[Byte])
     val bytes = ByteBuffer.wrap(Array.tabulate(8)(_.toByte))
