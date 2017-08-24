@@ -21,6 +21,7 @@ import java.math.{BigDecimal, BigInteger}
 import java.nio.ByteBuffer
 
 import scala.annotation.tailrec
+import scala.language.existentials
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -141,6 +142,18 @@ private[columnar] sealed abstract class ColumnType[JvmType] {
   def clone(v: JvmType): JvmType = v
 
   override def toString: String = getClass.getSimpleName.stripSuffix("$")
+
+  /**
+   * Extracts a value out of the buffer at the ArrayBuffer's current position
+   * Subclasses should override this method to avoid boxing/unboxing costs whenever possible.
+   */
+  def get(buffer: ArrayBuffer): JvmType
+
+  /**
+   * Store value of type T#InternalType into the given ArrayBuffer at the current position
+   * Subclasses should override this method to avoid boxing/unboxing costs whenever possible.
+   */
+  def put(buffer: ArrayBuffer, value: JvmType): Unit
 }
 
 private[columnar] object NULL extends ColumnType[Any] {
@@ -151,6 +164,8 @@ private[columnar] object NULL extends ColumnType[Any] {
   override def extract(buffer: ByteBuffer): Any = null
   override def setField(row: InternalRow, ordinal: Int, value: Any): Unit = row.setNullAt(ordinal)
   override def getField(row: InternalRow, ordinal: Int): Any = null
+  override def get(buffer: ArrayBuffer): Any = null
+  override def put(buffer: ArrayBuffer, value: Any): Unit = {}
 }
 
 private[columnar] abstract class NativeColumnType[T <: AtomicType](
@@ -191,6 +206,21 @@ private[columnar] object INT extends NativeColumnType(IntegerType, 4) {
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setInt(toOrdinal, from.getInt(fromOrdinal))
   }
+
+  override def get(buffer: ArrayBuffer): Int = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    val value = Platform.getInt(array, buffer.arrayOffset + buffer.pos)
+    buffer.addPos(defaultSize)
+    value
+  }
+
+  override def put(buffer: ArrayBuffer, value: Int): Unit = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    Platform.putInt(array, buffer.arrayOffset + buffer.pos, value)
+    buffer.addPos(defaultSize)
+  }
 }
 
 private[columnar] object LONG extends NativeColumnType(LongType, 8) {
@@ -218,6 +248,21 @@ private[columnar] object LONG extends NativeColumnType(LongType, 8) {
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setLong(toOrdinal, from.getLong(fromOrdinal))
+  }
+
+  override def get(buffer: ArrayBuffer): Long = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    val value = Platform.getLong(array, buffer.arrayOffset + buffer.pos)
+    buffer.addPos(defaultSize)
+    value
+  }
+
+  override def put(buffer: ArrayBuffer, value: Long): Unit = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    Platform.putLong(array, buffer.arrayOffset + buffer.pos, value)
+    buffer.addPos(defaultSize)
   }
 }
 
@@ -247,6 +292,14 @@ private[columnar] object FLOAT extends NativeColumnType(FloatType, 4) {
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setFloat(toOrdinal, from.getFloat(fromOrdinal))
   }
+
+  override def get(buffer: ArrayBuffer): Float = {
+    throw new UnsupportedOperationException("Float is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: Float): Unit = {
+    throw new UnsupportedOperationException("Float is not supported yet")
+  }
 }
 
 private[columnar] object DOUBLE extends NativeColumnType(DoubleType, 8) {
@@ -275,6 +328,14 @@ private[columnar] object DOUBLE extends NativeColumnType(DoubleType, 8) {
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setDouble(toOrdinal, from.getDouble(fromOrdinal))
   }
+
+  override def get(buffer: ArrayBuffer): Double = {
+    throw new UnsupportedOperationException("Double is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: Double): Unit = {
+    throw new UnsupportedOperationException("Double is not supported yet")
+  }
 }
 
 private[columnar] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
@@ -300,6 +361,21 @@ private[columnar] object BOOLEAN extends NativeColumnType(BooleanType, 1) {
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setBoolean(toOrdinal, from.getBoolean(fromOrdinal))
+  }
+
+  override def get(buffer: ArrayBuffer): Boolean = {
+    val array = buffer.array
+    assert(buffer.pos < array.length)
+    val value = Platform.getByte(array, buffer.arrayOffset + buffer.pos)
+    buffer.addPos(defaultSize)
+    value == 1
+  }
+
+  override def put(buffer: ArrayBuffer, value: Boolean): Unit = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    Platform.putByte(array, buffer.arrayOffset + buffer.pos, if (value) 1 else 0)
+    buffer.addPos(defaultSize)
   }
 }
 
@@ -329,6 +405,21 @@ private[columnar] object BYTE extends NativeColumnType(ByteType, 1) {
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setByte(toOrdinal, from.getByte(fromOrdinal))
   }
+
+  override def get(buffer: ArrayBuffer): Byte = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    val value = Platform.getByte(array, buffer.arrayOffset + buffer.pos)
+    buffer.addPos(defaultSize)
+    value
+  }
+
+  override def put(buffer: ArrayBuffer, value: Byte): Unit = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    Platform.putByte(array, buffer.arrayOffset + buffer.pos, value)
+    buffer.addPos(defaultSize)
+  }
 }
 
 private[columnar] object SHORT extends NativeColumnType(ShortType, 2) {
@@ -356,6 +447,21 @@ private[columnar] object SHORT extends NativeColumnType(ShortType, 2) {
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     to.setShort(toOrdinal, from.getShort(fromOrdinal))
+  }
+
+  override def get(buffer: ArrayBuffer): Short = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    val value = Platform.getShort(array, buffer.arrayOffset + buffer.pos)
+    buffer.addPos(defaultSize)
+    value
+  }
+
+  override def put(buffer: ArrayBuffer, value: Short): Unit = {
+    val array = buffer.array
+    assert(buffer.pos < array.length * defaultSize)
+    Platform.putShort(array, buffer.arrayOffset + buffer.pos, value)
+    buffer.addPos(defaultSize)
   }
 }
 
@@ -424,6 +530,14 @@ private[columnar] object STRING
   }
 
   override def clone(v: UTF8String): UTF8String = v.clone()
+
+  override def get(buffer: ArrayBuffer): UTF8String = {
+    throw new UnsupportedOperationException("UTF8String is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: UTF8String): Unit = {
+    throw new UnsupportedOperationException("UTF8String is not supported yet")
+  }
 }
 
 private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
@@ -465,6 +579,14 @@ private[columnar] case class COMPACT_DECIMAL(precision: Int, scale: Int)
 
   override def copyField(from: InternalRow, fromOrdinal: Int, to: InternalRow, toOrdinal: Int) {
     setField(to, toOrdinal, getField(from, fromOrdinal))
+  }
+
+  override def get(buffer: ArrayBuffer): Decimal = {
+    throw new UnsupportedOperationException("Decimal is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: Decimal): Unit = {
+    throw new UnsupportedOperationException("Decimal is not supported yet")
   }
 }
 
@@ -509,6 +631,14 @@ private[columnar] object BINARY extends ByteArrayColumnType[Array[Byte]](16) {
     row.getBinary(ordinal).length + 4
   }
 
+  override def get(buffer: ArrayBuffer): Array[Byte] = {
+    throw new UnsupportedOperationException("Binary is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: Array[Byte]): Unit = {
+    throw new UnsupportedOperationException("Binary is not supported yet")
+  }
+
   def serialize(value: Array[Byte]): Array[Byte] = value
   def deserialize(bytes: Array[Byte]): Array[Byte] = bytes
 }
@@ -528,6 +658,14 @@ private[columnar] case class LARGE_DECIMAL(precision: Int, scale: Int)
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     4 + getField(row, ordinal).toJavaBigDecimal.unscaledValue().bitLength() / 8 + 1
+  }
+
+  override def get(buffer: ArrayBuffer): Decimal = {
+    throw new UnsupportedOperationException("Decimal is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: Decimal): Unit = {
+    throw new UnsupportedOperationException("Decimal is not supported yet")
   }
 
   override def serialize(value: Decimal): Array[Byte] = {
@@ -563,6 +701,14 @@ private[columnar] case class STRUCT(dataType: StructType)
 
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     4 + getField(row, ordinal).getSizeInBytes
+  }
+
+  override def get(buffer: ArrayBuffer): UnsafeRow = {
+    throw new UnsupportedOperationException("Struct is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: UnsafeRow): Unit = {
+    throw new UnsupportedOperationException("Struct is not supported yet")
   }
 
   override def append(value: UnsafeRow, buffer: ByteBuffer): Unit = {
@@ -604,6 +750,14 @@ private[columnar] case class ARRAY(dataType: ArrayType)
     4 + unsafeArray.getSizeInBytes
   }
 
+  override def get(buffer: ArrayBuffer): UnsafeArrayData = {
+    throw new UnsupportedOperationException("Array is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: UnsafeArrayData): Unit = {
+    throw new UnsupportedOperationException("Array is not supported yet")
+  }
+
   override def append(value: UnsafeArrayData, buffer: ByteBuffer): Unit = {
     buffer.putInt(value.getSizeInBytes)
     value.writeTo(buffer)
@@ -641,6 +795,14 @@ private[columnar] case class MAP(dataType: MapType)
   override def actualSize(row: InternalRow, ordinal: Int): Int = {
     val unsafeMap = getField(row, ordinal)
     4 + unsafeMap.getSizeInBytes
+  }
+
+  override def get(buffer: ArrayBuffer): UnsafeMapData = {
+    throw new UnsupportedOperationException("Map is not supported yet")
+  }
+
+  override def put(buffer: ArrayBuffer, value: UnsafeMapData): Unit = {
+    throw new UnsupportedOperationException("Map is not supported yet")
   }
 
   override def append(value: UnsafeMapData, buffer: ByteBuffer): Unit = {
@@ -686,5 +848,54 @@ private[columnar] object ColumnType {
       case other =>
         throw new Exception(s"Unsupported type: ${other.simpleString}")
     }
+  }
+}
+
+case class ArrayBuffer(array: Array[_]) {
+  val (arrayOffset, elementSize) = array match {
+    case _: Array[Boolean] => (Platform.BOOLEAN_ARRAY_OFFSET, 1)
+    case _: Array[Byte] => (Platform.BYTE_ARRAY_OFFSET, 1)
+    case _: Array[Short] => (Platform.SHORT_ARRAY_OFFSET, 2)
+    case _: Array[Int] => (Platform.INT_ARRAY_OFFSET, 4)
+    case _: Array[Long] => (Platform.LONG_ARRAY_OFFSET, 8)
+    case _: Array[Float] => (Platform.FLOAT_ARRAY_OFFSET, 4)
+    case _: Array[Double] => (Platform.DOUBLE_ARRAY_OFFSET, 8)
+    case other => throw new UnsupportedOperationException(s"unsupported type: $other")
+  }
+
+  private var _pos: Int = 0
+
+  def pos(): Int = { _pos }
+
+  def addPos(value: Int): Unit = { _pos += value }
+
+  def remaining(): Int = { array.length * elementSize - _pos}
+
+  def hasRemaining(): Boolean = { remaining > 0 }
+
+  def getInt(): Int = {
+    assert(_pos < array.length * elementSize)
+    val value = Platform.getInt(array, arrayOffset + _pos)
+    _pos += 4
+    value
+  }
+
+  def getLong(): Long = {
+    assert(_pos < array.length * elementSize)
+    val value = Platform.getLong(array, arrayOffset + _pos)
+    _pos += 8
+    value
+  }
+
+  def putInt(value: Int): Unit = {
+    assert(_pos < array.length * elementSize)
+    Platform.putInt(array, arrayOffset + _pos, value)
+    _pos += 4
+  }
+
+  def putLong(value: Long): Unit = {
+    assert(_pos < array.length * elementSize)
+    Platform.putLong(array, arrayOffset + _pos, value)
+    _pos += 8
   }
 }

@@ -303,6 +303,14 @@ public abstract class ColumnVector implements AutoCloseable {
    */
   public abstract void close();
 
+  /**
+   * Compress or decompress data for this column if possible.
+   * Note: After calling compress(), gettter/setter (e.g. getInt) do not work
+   * until decompress() will be called
+   */
+  public abstract void compress();
+  public abstract void decompress();
+
   public void reserve(int requiredCapacity) {
     if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);

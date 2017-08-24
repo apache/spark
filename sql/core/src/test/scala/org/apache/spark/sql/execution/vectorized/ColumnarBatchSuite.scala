@@ -1248,4 +1248,40 @@ class ColumnarBatchSuite extends SparkFunSuite {
         s"vectorized reader"))
     }
   }
+
+  private def getPrivateValue(column : ColumnVector, fieldName : String) : Any = {
+    val cls = classOf[OnHeapColumnVector]
+    val field = cls.getDeclaredField(fieldName)
+    field.setAccessible(true)
+    field.get(column)
+  }
+
+  def performCompressDecompress(column: ColumnVector, dataFieldName: String): Unit = {
+    column.compress()
+    assert(getPrivateValue(column, "compressed").asInstanceOf[Boolean])
+    assert((getPrivateValue(column, dataFieldName) == null))
+    assert((getPrivateValue(column, "compressedData") != null))
+    assert((getPrivateValue(column, "nulls") == null))
+    assert((getPrivateValue(column, "compressedNulls") != null))
+    column.decompress()
+    assert(getPrivateValue(column, "compressed").asInstanceOf[Boolean] == false)
+    assert((getPrivateValue(column, dataFieldName) != null))
+    assert((getPrivateValue(column, "compressedData") == null))
+    assert((getPrivateValue(column, "nulls") != null))
+    assert((getPrivateValue(column, "compressedNulls") == null))
+
+  }
+
+  test("compress and decompress") {
+    val len = 1024
+    // data for RLE
+    val intArray = Array.tabulate(len)(i => (i / (len / 4)))
+    val column = ColumnVector.allocate(1024, IntegerType, MemoryMode.ON_HEAP)
+    (0 until len).foreach(i => column.putInt(i, intArray(i)))
+    performCompressDecompress(column, "intData")
+    (0 until len).foreach(i => assert(column.getInt(i) == intArray(i)))
+    performCompressDecompress(column, "intData")
+    (0 until len).foreach(i => assert(column.getInt(i) == intArray(i)))
+    column.close
+  }
 }
