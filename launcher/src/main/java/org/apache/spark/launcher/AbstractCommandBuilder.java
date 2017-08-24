@@ -136,7 +136,8 @@ abstract class AbstractCommandBuilder {
 
     Set<String> cp = new LinkedHashSet<>();
     addToClassPath(cp, appClassPath);
-
+    addToClassPath(cp, getenv("SPARK_DAEMON_CLASSPATH"));
+    
     addToClassPath(cp, getConfDir());
 
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
