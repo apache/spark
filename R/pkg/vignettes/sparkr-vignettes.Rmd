@@ -27,6 +27,17 @@ vignette: >
  limitations under the License.
 -->
 
+```{r setup, include=FALSE}
+library(knitr)
+opts_hooks$set(eval = function(options) {
+  # override eval to FALSE only on windows
+  if (.Platform$OS.type == "windows") {
+    options$eval = FALSE
+  }
+  options
+})
+```
+
 ## Overview
 
 SparkR is an R package that provides a light-weight frontend to use Apache Spark from R. With Spark `r packageVersion("SparkR")`, SparkR provides a distributed data frame implementation that supports data processing operations like selection, filtering, aggregation etc. and distributed machine learning using [MLlib](http://spark.apache.org/mllib/).
