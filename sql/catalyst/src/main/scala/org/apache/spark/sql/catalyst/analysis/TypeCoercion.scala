@@ -402,7 +402,7 @@ object TypeCoercion {
 
       // Handle type casting required between value expression and subquery output
       // in IN subquery.
-      case i @ In(a, Seq(ListQuery(sub, children, exprId)))
+      case i @ In(a, Seq(ListQuery(sub, children, exprId, _)))
         if !i.resolved && flattenExpr(a).length == sub.output.length =>
         // LHS is the value expression of IN subquery.
         val lhs = flattenExpr(a)
@@ -434,7 +434,8 @@ object TypeCoercion {
             case _ => CreateStruct(castedLhs)
           }
 
-          In(newLhs, Seq(ListQuery(Project(castedRhs, sub), children, exprId)))
+          val newSub = Project(castedRhs, sub)
+          In(newLhs, Seq(ListQuery(newSub, children, exprId, newSub.output)))
         } else {
           i
         }
