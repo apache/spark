@@ -429,9 +429,10 @@ case class Sort(
 
 /** Factory for constructing new `Range` nodes. */
 object Range {
-  def apply(start: Long, end: Long, step: Long, numSlices: Option[Int]): Range = {
+  def apply(start: Long, end: Long, step: Long,
+            numSlices: Option[Int], isStreaming: Boolean = false): Range = {
     val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
-    new Range(start, end, step, numSlices, output)
+    new Range(start, end, step, numSlices, output, isStreaming)
   }
   def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
     Range(start, end, step, Some(numSlices))
@@ -443,7 +444,8 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Option[Int],
-    output: Seq[Attribute])
+    output: Seq[Attribute],
+    override val isStreaming: Boolean)
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
@@ -772,17 +774,19 @@ case class RepartitionByExpression(
 /**
  * A relation with one row. This is used in "SELECT ..." without a from clause.
  */
-case object OneRowRelation extends LeafNode {
+case class OneRowRelation() extends LeafNode {
   override def maxRows: Option[Long] = Some(1)
   override def output: Seq[Attribute] = Nil
   override def computeStats(): Statistics = Statistics(sizeInBytes = 1)
+
+  /** [[org.apache.spark.sql.catalyst.trees.TreeNode.makeCopy()]] does not support 0-arg ctor. */
+  override def makeCopy(newArgs: Array[AnyRef]): OneRowRelation = OneRowRelation()
 }
 
 /** A logical plan for `dropDuplicates`. */
 case class Deduplicate(
     keys: Seq[Attribute],
-    child: LogicalPlan,
-    streaming: Boolean) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
 
   override def output: Seq[Attribute] = child.output
 }

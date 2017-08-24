@@ -22,6 +22,7 @@ import java.util.Properties
 import java.math.BigDecimal
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -255,12 +256,15 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val df = dfRead.filter(dfRead.col("date_type").lt(dt))
       .filter(dfRead.col("timestamp_type").lt(ts))
 
-    val metadata = df.queryExecution.sparkPlan.metadata
-    // The "PushedFilters" part should be exist in Datafrome's
+    val parentPlan = df.queryExecution.executedPlan
+    assert(parentPlan.isInstanceOf[WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[WholeStageCodegenExec]
+    val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
+    // The "PushedFilters" part should exist in Dataframe's
     // physical plan and the existence of right literals in
     // "PushedFilters" is used to prove that the predicates
     // pushing down have been effective.
-    assert(metadata.get("PushedFilters").ne(None))
+    assert(metadata.get("PushedFilters").isDefined)
     assert(metadata("PushedFilters").contains(dt.toString))
     assert(metadata("PushedFilters").contains(ts.toString))
 

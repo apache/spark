@@ -1041,8 +1041,8 @@ streamingDf.join(staticDf, "type", "right_join")  // right outer join with a sta
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-Dataset<Row> staticDf = spark.read. ...;
-Dataset<Row> streamingDf = spark.readStream. ...;
+Dataset<Row> staticDf = spark.read(). ...;
+Dataset<Row> streamingDf = spark.readStream(). ...;
 streamingDf.join(staticDf, "type");         // inner equi-join with a static DF
 streamingDf.join(staticDf, "type", "right_join");  // right outer join with a static DF
 {% endhighlight %}
@@ -1087,7 +1087,7 @@ streamingDf
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-Dataset<Row> streamingDf = spark.readStream. ...;  // columns: guid, eventTime, ...
+Dataset<Row> streamingDf = spark.readStream(). ...;  // columns: guid, eventTime, ...
 
 // Without watermark using guid column
 streamingDf.dropDuplicates("guid");
