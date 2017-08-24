@@ -20,9 +20,9 @@ package org.apache.spark.io
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.util.ByteArrayWritableChannel
+import org.apache.spark.util.Benchmark
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ChunkedByteBufferSuite extends SparkFunSuite {
@@ -54,6 +54,33 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(8)))
     chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
+  }
+
+  test("benchmark testing for writeWithSlice()and writeFully()") {
+    val benchmark = new Benchmark("Benchmark writeWithSlice() and writeFully()", 1024 * 1024 * 15)
+    val buffer100 = ByteBuffer.allocate(1024 * 1024 * 100)
+    val buffer30 = ByteBuffer.allocate(1024 * 1024 * 30)
+    val chunkedByteBuffer30m = new ChunkedByteBuffer(Array.fill(10)(buffer30))
+    val chunkedByteBuffer100m = new ChunkedByteBuffer(Array.fill(10)(buffer100))
+
+    benchmark.addCase("Test writeFully() chunks each with 30m for 10 loop", 10) { _ =>
+      chunkedByteBuffer30m.writeFully(
+        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
+    }
+    benchmark.addCase("Test writeWithSlice() chunks each with 30m for 10 loop", 10) { _ =>
+      chunkedByteBuffer30m.writeWithSlice(
+        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
+    }
+
+    benchmark.addCase("Test writeFully() chunks each with 100m for 50 loop", 50) { _ =>
+      chunkedByteBuffer30m.writeFully(
+        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
+    }
+    benchmark.addCase("Test writeWithSlice() chunks each with 100m for 50 loop", 50) { _ =>
+      chunkedByteBuffer30m.writeWithSlice(
+        new ByteArrayWritableChannel(chunkedByteBuffer30m.size.toInt))
+    }
+    benchmark.run()
   }
 
   test("toArray()") {
