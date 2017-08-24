@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import scala.collection.{GenTraversableOnce, mutable}
+import scala.collection.{mutable, GenTraversableOnce}
 import scala.collection.mutable.ArrayBuffer
 
 object ExpressionSet {
