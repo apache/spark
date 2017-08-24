@@ -20,9 +20,9 @@ package org.apache.spark.io
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.util.ByteArrayWritableChannel
+import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ChunkedByteBufferSuite extends SparkFunSuite {
@@ -54,23 +54,6 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(ByteBuffer.allocate(8)))
     chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
     assert(chunkedByteBuffer.getChunks().head.position() === 0)
-  }
-
-  test("benchmark") {
-    val buffer100 = ByteBuffer.allocate(1024 * 1024 * 100)
-    val buffer30 = ByteBuffer.allocate(1024 * 1024 * 30)
-    val chunkedByteBuffer = new ChunkedByteBuffer(Array.fill(5)(buffer100))
-    var starTime = System.currentTimeMillis()
-    for (i <- 1 to 10) {
-      chunkedByteBuffer.writeFully(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
-    }
-    // scalastyle:off
-    System.out.println(System.currentTimeMillis() - starTime)
-    starTime = System.currentTimeMillis()
-    for (i <- 1 to 10) {
-      chunkedByteBuffer.writeWithSlice(new ByteArrayWritableChannel(chunkedByteBuffer.size.toInt))
-    }
-    System.out.println(System.currentTimeMillis() - starTime)
   }
 
   test("toArray()") {
