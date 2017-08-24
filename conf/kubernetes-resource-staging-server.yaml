@@ -32,7 +32,7 @@ spec:
             name: spark-resource-staging-server-config
       containers:
         - name: spark-resource-staging-server
-          image: kubespark/spark-resource-staging-server:v2.1.0-kubernetes-0.2.0
+          image: kubespark/spark-resource-staging-server:v2.2.0-kubernetes-0.3.0
           resources:
             requests:
               cpu: 100m
