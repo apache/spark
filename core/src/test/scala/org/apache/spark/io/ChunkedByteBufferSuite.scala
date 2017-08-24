@@ -20,6 +20,7 @@ package org.apache.spark.io
 import java.nio.ByteBuffer
 
 import com.google.common.io.ByteStreams
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.util.ByteArrayWritableChannel
 import org.apache.spark.util.Benchmark
