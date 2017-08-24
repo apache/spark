@@ -32,6 +32,7 @@ import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -333,27 +334,75 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
+   * Checks that the current running process can read, write the given file
+   * by using methods of the File objects.
+   *
+   * @param file File to check
+   * @return True if process has read, write and execute access on the path, or false.
+   */
+  protected Boolean checkFileAccess(File file) {
+    if (!file.exists()) {
+      logger.warn("File is not existed: " + file.toString());
+      return false;
+    }
+
+    if (!FileUtil.canRead(file)) {
+      logger.warn("File is not readable: " + file.toString());
+      return false;
+    }
+
+    if (!FileUtil.canWrite(file)) {
+      logger.warn("File is not writable: " + file.toString());
+      return false;
+    }
+
+    if (!FileUtil.canExecute(file)) {
+      logger.warn("File is not executable: " + file.toString());
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Figure out the recovery path and handle moving the DB if YARN NM recovery gets enabled
    * when it previously was not. If YARN NM recovery is enabled it uses that path, otherwise
    * it will uses a YARN local dir.
    */
-  protected File initRecoveryDb(String dbName) {
+  protected File initRecoveryDb(String dbName) throws IOException {
+    Boolean bolRecoveryPathAvailable = true;
+
     if (_recoveryPath != null) {
         File recoveryFile = new File(_recoveryPath.toUri().getPath(), dbName);
-        if (recoveryFile.exists()) {
+
+        bolRecoveryPathAvailable = checkFileAccess(new File(_recoveryPath.toUri().getPath()));
+        logger.info("Recovery path {} ldb available: {}.", _recoveryPath, bolRecoveryPathAvailable);
+
+        if (recoveryFile.exists() && bolRecoveryPathAvailable) {
           return recoveryFile;
         }
     }
+
+    // If recovery path unavailable, no use it any more.
+    if (!bolRecoveryPathAvailable) {
+      logger.warn("Recovery path {} unavailable: set it to null", _recoveryPath);
+      _recoveryPath = null;
+    }
+
     // db doesn't exist in recovery path go check local dirs for it
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
       File f = new File(new Path(dir).toUri().getPath(), dbName);
+      // 1. `_recoveryPath` not exists, `f` should be writable;
+      // 2. `_recoveryPath` exists, `newLoc` should be writable;
       if (f.exists()) {
         if (_recoveryPath == null) {
-          // If NM recovery is not enabled, we should specify the recovery path using NM local
-          // dirs, which is compatible with the old code.
-          _recoveryPath = new Path(dir);
-          return f;
+          if (checkFileAccess(f)) {
+            // If NM recovery is not enabled, we should specify the recovery path using NM local
+            // dirs, which is compatible with the old code.
+            _recoveryPath = new Path(dir);
+            return f;
+          }
         } else {
           // If the recovery path is set then either NM recovery is enabled or another recovery
           // DB has been initialized. If NM recovery is enabled and had set the recovery path
@@ -378,8 +427,24 @@ public class YarnShuffleService extends AuxiliaryService {
         }
       }
     }
+
+    // Find a local_dir which is writable, to avoid creating ldb in a read-only disk.
     if (_recoveryPath == null) {
-      _recoveryPath = new Path(localDirs[0]);
+      for (String dir : localDirs) {
+        File f = new File(dir);
+        if (checkFileAccess(f)) {
+          _recoveryPath = new Path(dir);
+          break;
+        } else {
+          logger.warn("Local dir {} is not reachable.", dir);
+        }
+      }
+    }
+
+    if (_recoveryPath == null) {
+      throw new IOException("Failed to choose a reachable DB recovery path, " +
+              "please check `yarn.nodemanager.local-dirs` and `yarn.nodemanager.recovery.dir` is available " +
+              "in the `yarn-site.xml`.");
     }
 
     return new File(_recoveryPath.toUri().getPath(), dbName);

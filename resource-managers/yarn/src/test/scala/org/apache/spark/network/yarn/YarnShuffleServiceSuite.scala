@@ -369,4 +369,48 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     new ApplicationInitializationContext(user, appId, secret)
   }
 
+  test("SPARK-21660: get the correct init recovery path considering file access") {
+    // Test recovery path is set outside the shuffle service, but is a read-only dir,
+    // if `yarn.nodemanager.local-dirs` has available dir, return the available local dir.
+    s1 = new YarnShuffleService
+    val recoveryDir = Utils.createTempDir()
+    val recoveryPath = new Path(recoveryDir.toURI)
+    Files.setPosixFilePermissions(recoveryDir.toPath, EnumSet.of(OWNER_READ, OWNER_EXECUTE))
+    s1.setRecoveryPath(recoveryPath)
+
+    s1.init(yarnConfig)
+    s1._recoveryPath should be
+    (new Path(yarnConfig.getTrimmedStrings("yarn.nodemanager.local-dirs")(0)))
+    s1.stop()
+
+    // Test recovery path is set inside the shuffle service, but is a read-only dir,
+    // and `yarn.nodemanager.local-dirs` has no available dir, return IOException.
+    s2 = new YarnShuffleService
+    s2.setRecoveryPath(recoveryPath)
+
+    val yarnConfig2 = new YarnConfiguration()
+    yarnConfig2.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
+    yarnConfig2.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
+      classOf[YarnShuffleService].getCanonicalName)
+    yarnConfig2.setInt("spark.shuffle.service.port", 0)
+    yarnConfig2.setBoolean(YarnShuffleService.STOP_ON_FAILURE_KEY, true)
+
+    val localDir2 = Utils.createTempDir()
+    Files.setPosixFilePermissions(localDir2.toPath, EnumSet.of(OWNER_READ, OWNER_EXECUTE))
+    yarnConfig2.set(YarnConfiguration.NM_LOCAL_DIRS, localDir2.getAbsolutePath)
+
+    try {
+      val error = intercept[ServiceStateException] {
+        s2.init(yarnConfig2)
+      }
+      assert(error.getCause.isInstanceOf[IOException])
+    } finally {
+      Files.setPosixFilePermissions(recoveryDir.toPath,
+        EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE))
+      Files.setPosixFilePermissions(localDir2.toPath,
+        EnumSet.of(OWNER_READ, OWNER_WRITE, OWNER_EXECUTE))
+      s2.stop()
+    }
+  }
+
 }
