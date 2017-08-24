@@ -583,7 +583,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: HadoopFsRelation, _, _) => // OK
+            case LogicalRelation(p: HadoopFsRelation, _, _, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }
@@ -1372,6 +1372,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         hiveClient.createTable(tableDesc, ignoreIfExists = false)
 
         checkAnswer(spark.table("old"), Row(1, "a"))
+        checkAnswer(sql("select * from old"), Row(1, "a"))
 
         val expectedSchema = StructType(Seq(
           StructField("i", IntegerType, nullable = true),

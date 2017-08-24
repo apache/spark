@@ -247,7 +247,7 @@ class JDBCSuite extends SparkFunSuite
   // Check whether the tables are fetched in the expected degree of parallelism
   def checkNumPartitions(df: DataFrame, expectedNumPartitions: Int): Unit = {
     val jdbcRelations = df.queryExecution.analyzed.collect {
-      case LogicalRelation(r: JDBCRelation, _, _) => r
+      case LogicalRelation(r: JDBCRelation, _, _, _) => r
     }
     assert(jdbcRelations.length == 1)
     assert(jdbcRelations.head.parts.length == expectedNumPartitions,
@@ -1044,4 +1044,35 @@ class JDBCSuite extends SparkFunSuite
       assert(sql("select * from people_view").count() == 3)
     }
   }
+
+  test("SPARK-21519: option sessionInitStatement, run SQL to initialize the database session.") {
+    val initSQL1 = "SET @MYTESTVAR 21519"
+    val df1 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "(SELECT NVL(@MYTESTVAR, -1))")
+      .option("sessionInitStatement", initSQL1)
+      .load()
+    assert(df1.collect() === Array(Row(21519)))
+
+    val initSQL2 = "SET SCHEMA DUMMY"
+    val df2 = spark.read.format("jdbc")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", "TEST.PEOPLE")
+      .option("sessionInitStatement", initSQL2)
+      .load()
+    val e = intercept[SparkException] {df2.collect()}.getMessage
+    assert(e.contains("""Schema "DUMMY" not found"""))
+
+    sql(
+      s"""
+         |CREATE OR REPLACE TEMPORARY VIEW test_sessionInitStatement
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$urlWithUserAndPass',
+         |dbtable '(SELECT NVL(@MYTESTVAR1, -1), NVL(@MYTESTVAR2, -1))',
+         |sessionInitStatement 'SET @MYTESTVAR1 21519; SET @MYTESTVAR2 1234')
+       """.stripMargin)
+
+      val df3 = sql("SELECT * FROM test_sessionInitStatement")
+      assert(df3.collect() === Array(Row(21519, 1234)))
+    }
 }

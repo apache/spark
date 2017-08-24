@@ -20,10 +20,10 @@ package org.apache.spark.ml.recommendation
 import java.io.File
 import java.util.Random
 
+import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.WrappedArray
-import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}

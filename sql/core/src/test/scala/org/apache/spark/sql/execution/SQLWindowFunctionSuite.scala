@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.TestUtils.assertSpilled
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.TestUtils.assertSpilled
 
 case class WindowData(month: Int, area: String, product: Int)
 
@@ -477,7 +477,8 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
         |WINDOW w1 AS (ORDER BY x ROWS BETWEEN UNBOUNDED PRECEDiNG AND CURRENT RoW)
       """.stripMargin)
 
-    withSQLConf("spark.sql.windowExec.buffer.spill.threshold" -> "1") {
+    withSQLConf("spark.sql.windowExec.buffer.in.memory.threshold" -> "1",
+      "spark.sql.windowExec.buffer.spill.threshold" -> "2") {
       assertSpilled(sparkContext, "test with low buffer spill threshold") {
         checkAnswer(actual, expected)
       }

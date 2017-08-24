@@ -1490,6 +1490,8 @@ class SparkContext(config: SparkConf) extends Logging {
   /**
    * Add a file to be downloaded with this Spark job on every node.
    *
+   * If a file is added during execution, it will not be available until the next TaskSet starts.
+   *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
@@ -1505,6 +1507,8 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
+   *
+   * If a file is added during execution, it will not be available until the next TaskSet starts.
    *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI. To access the file in Spark jobs,
@@ -1792,6 +1796,9 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /**
    * Adds a JAR dependency for all tasks to be executed on this `SparkContext` in the future.
+   *
+   * If a jar is added during execution, it will not be available until the next TaskSet starts.
+   *
    * @param path can be either a local file, a file in HDFS (or other Hadoop-supported filesystems),
    * an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */

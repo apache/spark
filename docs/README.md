@@ -19,7 +19,7 @@ installed. Also install the following libraries:
     $ sudo gem install jekyll jekyll-redirect-from pygments.rb
     $ sudo pip install Pygments
     # Following is needed only for generating API docs
-    $ sudo pip install sphinx pypandoc
+    $ sudo pip install sphinx pypandoc mkdocs
     $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "roxygen2", "testthat", "rmarkdown"), repos="http://cran.stat.ucla.edu/")'
 ```
 (Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0)

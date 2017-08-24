@@ -301,6 +301,68 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
+  ignore("max function length of wholestagecodegen") {
+    val N = 20 << 15
+
+    val benchmark = new Benchmark("max function length of wholestagecodegen", N)
+    def f(): Unit = sparkSession.range(N)
+      .selectExpr(
+        "id",
+        "(id & 1023) as k1",
+        "cast(id & 1023 as double) as k2",
+        "cast(id & 1023 as int) as k3",
+        "case when id > 100 and id <= 200 then 1 else 0 end as v1",
+        "case when id > 200 and id <= 300 then 1 else 0 end as v2",
+        "case when id > 300 and id <= 400 then 1 else 0 end as v3",
+        "case when id > 400 and id <= 500 then 1 else 0 end as v4",
+        "case when id > 500 and id <= 600 then 1 else 0 end as v5",
+        "case when id > 600 and id <= 700 then 1 else 0 end as v6",
+        "case when id > 700 and id <= 800 then 1 else 0 end as v7",
+        "case when id > 800 and id <= 900 then 1 else 0 end as v8",
+        "case when id > 900 and id <= 1000 then 1 else 0 end as v9",
+        "case when id > 1000 and id <= 1100 then 1 else 0 end as v10",
+        "case when id > 1100 and id <= 1200 then 1 else 0 end as v11",
+        "case when id > 1200 and id <= 1300 then 1 else 0 end as v12",
+        "case when id > 1300 and id <= 1400 then 1 else 0 end as v13",
+        "case when id > 1400 and id <= 1500 then 1 else 0 end as v14",
+        "case when id > 1500 and id <= 1600 then 1 else 0 end as v15",
+        "case when id > 1600 and id <= 1700 then 1 else 0 end as v16",
+        "case when id > 1700 and id <= 1800 then 1 else 0 end as v17",
+        "case when id > 1800 and id <= 1900 then 1 else 0 end as v18")
+      .groupBy("k1", "k2", "k3")
+      .sum()
+      .collect()
+
+    benchmark.addCase(s"codegen = F") { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T maxLinesPerFunction = 10000") { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "10000")
+      f()
+    }
+
+    benchmark.addCase(s"codegen = T maxLinesPerFunction = 1500") { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "1500")
+      f()
+    }
+
+    benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_111-b14 on Windows 7 6.1
+    Intel64 Family 6 Model 58 Stepping 9, GenuineIntel
+    max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)  Per Row(ns)  Relative
+    ----------------------------------------------------------------------------------------------
+    codegen = F                                    462 /  533          1.4       704.4     1.0X
+    codegen = T maxLinesPerFunction = 10000       3444 / 3447          0.2      5255.3     0.1X
+    codegen = T maxLinesPerFunction = 1500         447 /  478          1.5       682.1     1.0X
+     */
+  }
+
 
   ignore("cube") {
     val N = 5 << 20

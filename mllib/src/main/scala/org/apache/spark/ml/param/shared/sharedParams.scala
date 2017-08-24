@@ -154,7 +154,7 @@ private[ml] trait HasVarianceCol extends Params {
 }
 
 /**
- * Trait for shared param threshold (default: 0.5).
+ * Trait for shared param threshold.
  */
 private[ml] trait HasThreshold extends Params {
 
