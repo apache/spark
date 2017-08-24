@@ -214,9 +214,9 @@ class ExpressionSetSuite extends SparkFunSuite {
   test("add multiple elements to set") {
     val initialSet = ExpressionSet(aUpper + 1 :: Nil)
     val setToAddWithSameExpression = ExpressionSet(aUpper + 1 :: aUpper + 2 :: Nil)
-    val setToAdd = ExpressionSet(aUpper + 2 :: aUpper + 3 :: Nil)
+    val setToAddWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
 
     assert((initialSet ++ setToAddWithSameExpression).size == 2)
-    assert((initialSet ++ setToAdd).size == 3)
+    assert((initialSet ++ setToAddWithOutSameExpression).size == 3)
   }
 }
