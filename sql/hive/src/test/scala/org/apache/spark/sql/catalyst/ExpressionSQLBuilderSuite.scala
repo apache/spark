@@ -41,8 +41,6 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
     }
   }
 
-  import org.apache.spark.sql.catalyst.dsl.expressions._
-
   test("literal") {
     checkSQL(Literal("foo"), "'foo'")
     checkSQL(Literal("\"foo\""), "'\"foo\"'")
@@ -67,6 +65,8 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("attributes") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
     checkSQL('a.int, "`a`")
     checkSQL(Symbol("foo bar").int, "`foo bar`")
     // Keyword
@@ -74,6 +74,8 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("binary comparisons") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
     checkSQL('a.int === 'b.int, "(`a` = `b`)")
     checkSQL('a.int <=> 'b.int, "(`a` <=> `b`)")
     checkSQL('a.int =!= 'b.int, "(NOT (`a` = `b`))")
@@ -91,6 +93,8 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("logical operators") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
     checkSQL('a.boolean && 'b.boolean, "(`a` AND `b`)")
     checkSQL('a.boolean || 'b.boolean, "(`a` OR `b`)")
     checkSQL(!'a.boolean, "(NOT `a`)")
@@ -98,6 +102,8 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("arithmetic expressions") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
     checkSQL('a.int + 'b.int, "(`a` + `b`)")
     checkSQL('a.int - 'b.int, "(`a` - `b`)")
     checkSQL('a.int * 'b.int, "(`a` * `b`)")
@@ -109,6 +115,8 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("window specification") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
     val frame = SpecifiedWindowFrame.defaultWindowFrame(
       hasOrderSpecification = true,
       acceptWindowFrame = true
@@ -141,6 +149,8 @@ class ExpressionSQLBuilderSuite extends QueryTest with TestHiveSingleton {
   }
 
   test("interval arithmetic") {
+    import org.apache.spark.sql.catalyst.dsl.expressions._
+
     val interval = Literal(new CalendarInterval(0, CalendarInterval.MICROS_PER_DAY))
 
     checkSQL(
