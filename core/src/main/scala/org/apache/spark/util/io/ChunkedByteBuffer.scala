@@ -42,7 +42,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
   // Chunk size in bytes
-  private val NIO_BUFFER_LIMIT = SparkEnv.get.conf.get(config.STORAGE_NIO_BUFFER_LIMIT)
+  private val NIO_BUFFER_LIMIT = SparkEnv.get.conf.get(config.BUFFER_WRITE_CHUNK_SIZE)
 
   private[this] var disposed: Boolean = false
 

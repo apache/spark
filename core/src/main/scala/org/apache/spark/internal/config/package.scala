@@ -321,6 +321,13 @@ package object config {
       .intConf
       .createWithDefault(3)
 
+  private[spark] val BUFFER_WRITE_CHUNK_SIZE =
+    ConfigBuilder("spark.buffer.write.chunkSize")
+      .internal()
+      .doc("The block size limit when use ChunkedByteBuffer to writeFully bytes.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(64 * 1024 * 1024)
+
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
       .internal()
@@ -336,11 +343,4 @@ package object config {
         "spark.")
       .booleanConf
       .createWithDefault(false)
-
-  private[spark] val STORAGE_NIO_BUFFER_LIMIT =
-    ConfigBuilder("spark.storage.nioBufferLimit")
-      .internal()
-      .doc("The block size limit when use ChunkedByteBuffer to writeFully bytes.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(64 * 1024 * 1024)
 }
