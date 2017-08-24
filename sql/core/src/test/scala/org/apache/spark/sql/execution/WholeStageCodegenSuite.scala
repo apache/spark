@@ -213,7 +213,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     val errMsg = intercept[IllegalArgumentException] {
       withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "-2") {}
     }.getMessage
-    assert(errMsg.contains("The maximum must not be a negative integer, " +
-      "-1 to always activate whole-stage codegen."))
+    assert(errMsg.contains("The maximum must not be a negative integer, except for -1 using to " +
+      "always activate whole-stage codegen"))
   }
 }
