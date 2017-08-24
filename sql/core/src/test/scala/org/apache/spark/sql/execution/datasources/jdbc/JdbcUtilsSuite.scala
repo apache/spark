@@ -30,10 +30,6 @@ class JdbcUtilsSuite extends SparkFunSuite {
   val caseInsensitive = org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
 
   test("Parse user specified column types") {
-    assert(JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 string", caseInsensitive) ===
-      StructType(Seq(StructField("C1", StringType, true))))
-    assert(JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C2 string", caseInsensitive) ===
-      StructType(Seq(StructField("C2", StringType, true))))
     assert(
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 date, C2 string", caseInsensitive) ===
       StructType(Seq(StructField("C1", DateType, true), StructField("C2", StringType, true))))
@@ -42,33 +38,50 @@ class JdbcUtilsSuite extends SparkFunSuite {
     assert(
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 date, C2 string", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("C2", StringType, true))))
-    assert(JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 decimal(38, 0)", caseInsensitive) ===
-      StructType(Seq(StructField("c1", DecimalType(38, 0), true))))
+    assert(JdbcUtils.parseUserSpecifiedColumnTypes(
+      schema, "c1 decimal(38, 0), C2 string", caseInsensitive) ===
+      StructType(Seq(StructField("c1", DecimalType(38, 0), true),
+        StructField("C2", StringType, true))))
 
     // Throw AnalysisException
-    val exception1 = intercept[AnalysisException]{
+    val duplicate = intercept[AnalysisException]{
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 date, c1 string", caseInsensitive) ===
+        StructType(Seq(StructField("c1", DateType, true), StructField("c1", StringType, true)))
+    }
+    assert(duplicate.getMessage.contains(
+      "Found duplicate column(s) in the createTableColumnTypes option value"))
+
+    val allColumns = intercept[AnalysisException]{
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 string", caseSensitive) ===
+        StructType(Seq(StructField("C1", DateType, true)))
+    }
+    assert(allColumns.getMessage.contains("Please provide all the columns,"))
+
+    val caseSensitiveColumnNotFound = intercept[AnalysisException]{
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 date, C2 string", caseSensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("C2", StringType, true)))
     }
-    assert(exception1.getMessage.contains(
+    assert(caseSensitiveColumnNotFound.getMessage.contains(
       s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column c1 not found in schema"))
-    val exception2 = intercept[AnalysisException]{
+
+    val caseInsensitiveColumnNotFound = intercept[AnalysisException]{
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 date, C2 string", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
-    assert(exception2.getMessage.contains(
+    assert(caseInsensitiveColumnNotFound.getMessage.contains(
       s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column c3 not found in schema"))
 
     // Throw ParseException
-    val exception3 = intercept[ParseException]{
+    val DataTypeNotSupported = intercept[ParseException]{
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 datee, C2 string", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
-    assert(exception3.getMessage.contains("DataType datee is not supported"))
-    val exception4 = intercept[ParseException]{
+    assert(DataTypeNotSupported.getMessage.contains("DataType datee is not supported"))
+
+    val mismatchedInput = intercept[ParseException]{
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 date. C2 string", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
-    assert(exception4.getMessage.contains("mismatched input '.' expecting"))
+    assert(mismatchedInput.getMessage.contains("mismatched input '.' expecting"))
   }
 }

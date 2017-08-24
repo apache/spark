@@ -184,7 +184,7 @@ def jdbc_dataset_example(spark):
         .option("dbtable", "schema.tablename") \
         .option("user", "username") \
         .option("password", "password") \
-        .option("customDataFrameColumnTypes", "id decimal(38, 0), name string") \
+        .option("customDataFrameColumnTypes", "id DECIMAL(38, 0), name STRING") \
         .load()
 
     # Saving data to a JDBC source

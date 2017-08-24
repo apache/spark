@@ -980,16 +980,6 @@ class JDBCSuite extends SparkFunSuite
     assert(df.count() === 3)
   }
 
-  test("jdbc API can reduce column by custom schema") {
-    val props = new Properties()
-    props.put("customDataFrameColumnTypes", "NAME string")
-    val schema = StructType(Seq(StructField("NAME", StringType, true)))
-    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", props)
-    assert(df.schema.size === 1)
-    assert(df.schema === schema)
-    assert(df.count() === 3)
-  }
-
   test("jdbc API custom schema DDL-like strings.") {
     withTempView("people_view") {
       sql(
@@ -997,11 +987,12 @@ class JDBCSuite extends SparkFunSuite
            |CREATE TEMPORARY VIEW people_view
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
-           |customDataFrameColumnTypes 'NAME STRING')
+           |customDataFrameColumnTypes 'NAME string, THEID int')
         """.stripMargin.replaceAll("\n", " "))
-      val schema = StructType(Seq(StructField("NAME", StringType, true)))
+      val schema = StructType(
+        Seq(StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
       val df = sql("select * from people_view")
-      assert(df.schema.size === 1)
+      assert(df.schema.size === 2)
       assert(df.schema === schema)
       assert(df.count() === 3)
     }
