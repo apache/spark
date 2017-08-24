@@ -23,6 +23,7 @@ FROM openjdk:8-alpine
 RUN apk upgrade --no-cache && \
     apk add --no-cache bash tini && \
     mkdir -p /opt/spark && \
+    mkdir -p /opt/spark/work-dir \
     touch /opt/spark/RELEASE && \
     rm /bin/sh && \
     ln -sv /bin/bash /bin/sh && \
@@ -36,6 +37,6 @@ COPY dockerfiles/spark-base/entrypoint.sh /opt/
 
 ENV SPARK_HOME /opt/spark
 
-WORKDIR /opt/spark
+WORKDIR /opt/spark/work-dir
 
 ENTRYPOINT [ "/opt/entrypoint.sh" ]

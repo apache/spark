@@ -22,22 +22,21 @@ import java.util.Collections
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong, AtomicReference}
 
-import scala.collection.{concurrent, mutable}
-import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
-
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watcher}
 import io.fabric8.kubernetes.client.Watcher.Action
 import org.apache.commons.io.FilenameUtils
+import scala.collection.{concurrent, mutable}
+import scala.collection.JavaConverters._
+import scala.concurrent.{ExecutionContext, Future}
 
 import org.apache.spark.{SparkContext, SparkEnv, SparkException}
 import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, InitContainerResourceStagingServerSecretPlugin, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.InitContainerUtil
+import org.apache.spark.deploy.kubernetes.submit.{InitContainerUtil, MountSmallFilesBootstrap}
 import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClient
@@ -52,6 +51,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     val sc: SparkContext,
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
+    mountSmallFilesBootstrap: Option[MountSmallFilesBootstrap],
     kubernetesClient: KubernetesClient)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
@@ -457,16 +457,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .withValue(cp)
         .build()
     }
-    val executorExtraJavaOptionsEnv = conf
-        .get(org.apache.spark.internal.config.EXECUTOR_JAVA_OPTIONS)
-        .map { opts =>
-          val delimitedOpts = Utils.splitCommandString(opts)
-          delimitedOpts.zipWithIndex.map {
-            case (opt, index) =>
-              new EnvVarBuilder().withName(s"$ENV_JAVA_OPT_PREFIX$index").withValue(opt).build()
-          }
-        }.getOrElse(Seq.empty[EnvVar])
-    val executorEnv = (Seq(
+    val requiredEnv = (Seq(
       (ENV_EXECUTOR_PORT, executorPort.toString),
       (ENV_DRIVER_URL, driverUrl),
       // Executor backend expects integral value for executor cores, so round it up to an int.
@@ -486,7 +477,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .withNewFieldRef("v1", "status.podIP")
           .build())
         .build()
-      ) ++ executorExtraJavaOptionsEnv ++ executorExtraClasspathEnv.toSeq
+      )
     val requiredPorts = Seq(
       (EXECUTOR_PORT_NAME, executorPort),
       (BLOCK_MANAGER_PORT_NAME, blockmanagerPort))
@@ -506,7 +497,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
         .addToLimits("memory", executorMemoryLimitQuantity)
         .addToRequests("cpu", executorCpuQuantity)
       .endResources()
-      .addAllToEnv(executorEnv.asJava)
+      .addAllToEnv(requiredEnv.asJava)
+      .addToEnv(executorExtraClasspathEnv.toSeq: _*)
       .withPorts(requiredPorts.asJava)
       .build()
 
@@ -567,13 +559,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
           .build()
       }
     }.getOrElse(executorPod)
+    val (withMaybeSmallFilesMountedPod, withMaybeSmallFilesMountedContainer) =
+        mountSmallFilesBootstrap.map { bootstrap =>
+          bootstrap.mountSmallFilesSecret(
+            withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer)
+        }.getOrElse((withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer))
     val (executorPodWithInitContainer, initBootstrappedExecutorContainer) =
         executorInitContainerBootstrap.map { bootstrap =>
           val podWithDetachedInitContainer = bootstrap.bootstrapInitContainerAndVolumes(
               PodWithDetachedInitContainer(
-                  withMaybeShuffleConfigPod,
+                  withMaybeSmallFilesMountedPod,
                   new ContainerBuilder().build(),
-                  withMaybeShuffleConfigExecutorContainer))
+                withMaybeSmallFilesMountedContainer))
 
           val resolvedInitContainer = executorMountInitContainerSecretPlugin.map { plugin =>
             plugin.mountResourceStagingServerSecretIntoInitContainer(
@@ -588,7 +585,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
           }.getOrElse(podWithAttachedInitContainer)
 
           (resolvedPodWithMountedSecret, podWithDetachedInitContainer.mainContainer)
-      }.getOrElse((withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer))
+      }.getOrElse((withMaybeSmallFilesMountedPod, withMaybeSmallFilesMountedContainer))
 
     val executorPodWithNodeAffinity = addNodeAffinityAnnotationIfUseful(
         executorPodWithInitContainer, nodeToLocalTaskCount)

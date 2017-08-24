@@ -21,6 +21,4 @@ FROM spark-base
 # command should be invoked from the top level directory of the Spark distribution. E.g.:
 # docker build -t spark-shuffle:latest -f dockerfiles/shuffle-service/Dockerfile .
 
-COPY examples /opt/spark/examples
-
-ENTRYPOINT [ "/opt/entrypoint.sh", "bin/spark-class", "org.apache.spark.deploy.kubernetes.KubernetesExternalShuffleService", "1" ]
+ENTRYPOINT [ "/opt/entrypoint.sh", "/opt/spark/bin/spark-class", "org.apache.spark.deploy.kubernetes.KubernetesExternalShuffleService", "1" ]

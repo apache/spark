@@ -33,32 +33,32 @@ private[spark] class InitContainerBootstrapStep(
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     var currentInitContainerSpec = InitContainerSpec(
-        initContainerProperties = Map.empty[String, String],
-        additionalDriverSparkConf = Map.empty[String, String],
-        initContainer = new ContainerBuilder().build(),
-        driverContainer = driverSpec.driverContainer,
-        podToInitialize = driverSpec.driverPod,
-        initContainerDependentResources = Seq.empty[HasMetadata])
+      initContainerProperties = Map.empty[String, String],
+      additionalDriverSparkConf = Map.empty[String, String],
+      initContainer = new ContainerBuilder().build(),
+      driverContainer = driverSpec.driverContainer,
+      podToInitialize = driverSpec.driverPod,
+      initContainerDependentResources = Seq.empty[HasMetadata])
     for (nextStep <- initContainerConfigurationSteps) {
       currentInitContainerSpec = nextStep.configureInitContainer(currentInitContainerSpec)
     }
     val configMap = PropertiesConfigMapFromScalaMapBuilder.buildConfigMap(
-        initContainerConfigMapName,
-        initContainerConfigMapKey,
-        currentInitContainerSpec.initContainerProperties)
+      initContainerConfigMapName,
+      initContainerConfigMapKey,
+      currentInitContainerSpec.initContainerProperties)
     val resolvedDriverSparkConf = driverSpec.driverSparkConf.clone()
-        .set(EXECUTOR_INIT_CONTAINER_CONFIG_MAP, initContainerConfigMapName)
-        .set(EXECUTOR_INIT_CONTAINER_CONFIG_MAP_KEY, initContainerConfigMapKey)
-        .setAll(currentInitContainerSpec.additionalDriverSparkConf)
+      .set(EXECUTOR_INIT_CONTAINER_CONFIG_MAP, initContainerConfigMapName)
+      .set(EXECUTOR_INIT_CONTAINER_CONFIG_MAP_KEY, initContainerConfigMapKey)
+      .setAll(currentInitContainerSpec.additionalDriverSparkConf)
     val resolvedDriverPod = InitContainerUtil.appendInitContainer(
-        currentInitContainerSpec.podToInitialize, currentInitContainerSpec.initContainer)
+      currentInitContainerSpec.podToInitialize, currentInitContainerSpec.initContainer)
     driverSpec.copy(
-        driverPod = resolvedDriverPod,
-        driverContainer = currentInitContainerSpec.driverContainer,
-        driverSparkConf = resolvedDriverSparkConf,
-        otherKubernetesResources =
-            driverSpec.otherKubernetesResources ++
-                currentInitContainerSpec.initContainerDependentResources ++
-                Seq(configMap))
+      driverPod = resolvedDriverPod,
+      driverContainer = currentInitContainerSpec.driverContainer,
+      driverSparkConf = resolvedDriverSparkConf,
+      otherKubernetesResources =
+        driverSpec.otherKubernetesResources ++
+          currentInitContainerSpec.initContainerDependentResources ++
+          Seq(configMap))
   }
 }
