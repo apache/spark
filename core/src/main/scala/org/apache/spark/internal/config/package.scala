@@ -293,6 +293,13 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val BUFFER_WRITE_CHUNK_SIZE =
+    ConfigBuilder("spark.buffer.write.chunkSize")
+      .internal()
+      .doc("The chunk size during writing out the bytes of ChunkedByteBuffer.")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(64 * 1024 * 1024)
+
   private[spark] val CHECKPOINT_COMPRESS =
     ConfigBuilder("spark.checkpoint.compress")
       .doc("Whether to compress RDD checkpoints. Generally a good idea. Compression will use " +
@@ -320,13 +327,6 @@ package object config {
         "retry for maxAttempts times.")
       .intConf
       .createWithDefault(3)
-
-  private[spark] val BUFFER_WRITE_CHUNK_SIZE =
-    ConfigBuilder("spark.buffer.write.chunkSize")
-      .internal()
-      .doc("The block size limit when use ChunkedByteBuffer to writeFully bytes.")
-      .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
     ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")

@@ -42,7 +42,9 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   require(chunks.forall(_.position() == 0), "chunks' positions must be 0")
 
   // Chunk size in bytes
-  private val NIO_BUFFER_LIMIT = SparkEnv.get.conf.get(config.BUFFER_WRITE_CHUNK_SIZE)
+  private val bufferWriteChunkSize =
+    Option(SparkEnv.get).map(_.conf.get(BUFFER_WRITE_CHUNK_SIZE))
+      .getOrElse(BUFFER_WRITE_CHUNK_SIZE.defaultValue.get)
 
   private[this] var disposed: Boolean = false
 
@@ -60,9 +62,8 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def writeFully(channel: WritableByteChannel): Unit = {
     for (bytes <- getChunks()) {
-      val capacity = bytes.limit()
       while (bytes.remaining() > 0) {
-        val ioSize = Math.min(bytes.remaining(), NIO_BUFFER_LIMIT)
+        val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
         bytes.limit(bytes.position + ioSize)
         channel.write(bytes)
       }
