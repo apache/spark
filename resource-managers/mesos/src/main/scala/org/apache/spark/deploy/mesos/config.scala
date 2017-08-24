@@ -64,13 +64,6 @@ package object config {
       .stringConf
       .createOptional
 
-  private [spark] val DRIVER_FAILOVER_TIMEOUT =
-    ConfigBuilder("spark.mesos.driver.failoverTimeout")
-      .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
-          "during a temporary disconnection, before tearing down all the executors.")
-      .doubleConf
-      .createWithDefault(0.0)
-
   private[spark] val SECRET_NAME =
     ConfigBuilder("spark.mesos.driver.secret.name")
       .doc("A comma-separated list of secret references. Consult the Mesos Secret protobuf for " +
@@ -97,4 +90,11 @@ package object config {
         "Secret protobuf for more information.")
       .stringConf
       .createOptional
+
+  private [spark] val DRIVER_FAILOVER_TIMEOUT =
+    ConfigBuilder("spark.mesos.driver.failoverTimeout")
+      .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
+          "during a temporary disconnection, before tearing down all the executors.")
+      .doubleConf
+      .createWithDefault(0.0)
 }

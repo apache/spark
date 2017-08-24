@@ -40,6 +40,7 @@ import org.apache.spark.util.Utils
 
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.
+ *
  * @param driverDescription Submitted driver description from
  * [[org.apache.spark.deploy.rest.mesos.MesosRestServer]]
  * @param taskId Mesos TaskID generated for the task
@@ -775,7 +776,6 @@ private[spark] class MesosClusterScheduler(
         tasks)
     }
     tasks.foreach { case (offerId, taskInfos) =>
-      logTrace(s"Launching taskInfo\n ${taskInfos.toString}")
       driver.launchTasks(Collections.singleton(offerId), taskInfos.asJava)
     }
 
