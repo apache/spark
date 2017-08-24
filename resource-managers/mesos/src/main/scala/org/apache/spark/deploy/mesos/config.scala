@@ -56,7 +56,7 @@ package object config {
       .stringConf
       .createOptional
 
-  private [spark] val DRIVER_LABELS =
+  private[spark] val DRIVER_LABELS =
     ConfigBuilder("spark.mesos.driver.labels")
       .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs.  Key-value " +
         "pairs should be separated by a colon, and commas used to list more than one." +
@@ -64,10 +64,25 @@ package object config {
       .stringConf
       .createOptional
 
-  private [spark] val DRIVER_FAILOVER_TIMEOUT =
+  private[spark] val DRIVER_FAILOVER_TIMEOUT =
     ConfigBuilder("spark.mesos.driver.failoverTimeout")
       .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
           "during a temporary disconnection, before tearing down all the executors.")
       .doubleConf
       .createWithDefault(0.0)
+
+  private[spark] val NETWORK_NAME =
+    ConfigBuilder("spark.mesos.network.name")
+      .doc("Attach containers to the given named network. If this job is launched " +
+        "in cluster mode, also launch the driver in the given named network.")
+      .stringConf
+      .createOptional
+
+  private[spark] val NETWORK_LABELS =
+    ConfigBuilder("spark.mesos.network.labels")
+      .doc("Network labels to pass to CNI plugins.  This is a comma-separated list " +
+        "of key-value pairs, where each key-value pair has the format key:value. " +
+        "Example: key1:val1,key2:val2")
+      .stringConf
+      .createOptional
 }

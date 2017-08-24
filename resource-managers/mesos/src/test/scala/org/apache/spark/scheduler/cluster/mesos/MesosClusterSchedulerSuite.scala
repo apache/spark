@@ -222,7 +222,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(env.getOrElse("TEST_ENV", null) == "TEST_VAL")
   }
 
-  test("supports spark.mesos.network.name") {
+  test("supports spark.mesos.network.name and spark.mesos.network.labels") {
     setScheduler()
 
     val mem = 1000
@@ -233,7 +233,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         command,
         Map("spark.mesos.executor.home" -> "test",
           "spark.app.name" -> "test",
-          "spark.mesos.network.name" -> "test-network-name"),
+          "spark.mesos.network.name" -> "test-network-name",
+          "spark.mesos.network.labels" -> "key1:val1,key2:val2"),
         "s1",
         new Date()))
 
@@ -246,6 +247,10 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val networkInfos = launchedTasks.head.getContainer.getNetworkInfosList
     assert(networkInfos.size == 1)
     assert(networkInfos.get(0).getName == "test-network-name")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getKey == "key1")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getValue == "val1")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getKey == "key2")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
   test("supports spark.mesos.driver.labels") {
