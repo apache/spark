@@ -97,8 +97,7 @@ private[scheduler] class BlacklistTracker (
    * Blacklists permanently the nodes listed in spark.blacklist.alwaysBlacklistedNodes
    * The blacklist timeout is set to a large value, effectively never expiring.
    */
-  private val permanentlyBlacklistedNodes: Seq[String] =
-    conf.get("spark.blacklist.alwaysBlacklistedNodes", "").split(',').map(_.trim).filter(_ != "")
+  private val permanentlyBlacklistedNodes = BlacklistTracker.getBlacklistedNodes(conf)
   if (permanentlyBlacklistedNodes.nonEmpty) {
     val now = clock.getTimeMillis()
     for (nodeName <- permanentlyBlacklistedNodes) {
@@ -422,6 +421,15 @@ private[scheduler] object BlacklistTracker extends Logging {
       conf.get(config.BLACKLIST_LEGACY_TIMEOUT_CONF).getOrElse {
         Utils.timeStringAsMs(DEFAULT_TIMEOUT)
       }
+    }
+  }
+
+  // Return a set of node names from the config spark.blacklist.alwaysBlacklistedNodes
+  def getBlacklistedNodes(conf: SparkConf): Set[String] = {
+    val listNodes = conf.get(config.BLACKLIST_ALWAYSBLACKLISTEDNODES_CONF)
+    listNodes match {
+      case Some(nodes) => (nodes + ",").split(',').map(_.trim).toSet
+      case None => Set()
     }
   }
 
