@@ -23,18 +23,16 @@ import org.apache.spark.mllib.util.TestingUtils._
 
 class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
-  private def areWithinEpsilon(x: (Double, Double)): Boolean = x._1 ~= (x._2) absTol 1E-5
-
-  private def pairsWithinEpsilon(x: ((Double, Double), (Double, Double))): Boolean =
-    (x._1._1 ~= x._2._1 absTol 1E-5) && (x._1._2 ~= x._2._2 absTol 1E-5)
-
-  private def assertSequencesMatch(left: Seq[Double], right: Seq[Double]): Unit = {
-      assert(left.zip(right).forall(areWithinEpsilon))
+  private def assertSequencesMatch(actual: Seq[Double], expected: Seq[Double]): Unit = {
+    actual.zip(expected).foreach { case (a, e) => assert(a ~== e absTol 1.0e-5) }
   }
 
-  private def assertTupleSequencesMatch(left: Seq[(Double, Double)],
-       right: Seq[(Double, Double)]): Unit = {
-    assert(left.zip(right).forall(pairsWithinEpsilon))
+  private def assertTupleSequencesMatch(actual: Seq[(Double, Double)],
+       expected: Seq[(Double, Double)]): Unit = {
+    actual.zip(expected).foreach { case ((ax, ay), (ex, ey)) =>
+      assert(ax ~== ex absTol 1.0e-5)
+      assert(ay ~== ey absTol 1.0e-5)
+    }
   }
 
   private def validateMetrics(metrics: BinaryClassificationMetrics,
@@ -44,7 +42,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       expectedFMeasures1: Seq[Double],
       expectedFmeasures2: Seq[Double],
       expectedPrecisions: Seq[Double],
-      expectedRecalls: Seq[Double]) = {
+      expectedRecalls: Seq[Double]): Unit = {
 
     assertSequencesMatch(metrics.thresholds().collect(), expectedThresholds)
     assertTupleSequencesMatch(metrics.roc().collect(), expectedROCCurve)
@@ -111,7 +109,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val fpr = Seq(1.0)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
     val pr = recalls.zip(precisions)
-    val prCurve = Seq((0.0, 1.0)) ++ pr
+    val prCurve = Seq((0.0, 0.0)) ++ pr
     val f1 = pr.map {
       case (0, 0) => 0.0
       case (r, p) => 2.0 * (p * r) / (p + r)
