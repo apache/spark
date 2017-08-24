@@ -42,12 +42,16 @@ class BenchmarkWideTable extends BenchmarkBase {
     /**
      * Here are some numbers with different split threshold:
      *
-     *  Split threshold      methods       Rate(M/s)   Per Row(ns)
-     *  10                   400           0.4         2279
-     *  100                  200           0.6         1554
-     *  1k                   37            0.9         1116
-     *  8k                   5             0.5         2025
-     *  64k                  1             0.0        21649
+     *  Split threshold      Rate(M/s)   Per Row(ns)
+     *  10                   0.5         2131.3
+     *  20                   0.5         2073.7
+     *  40                   0.5         2085.2
+     *  64                   0.5         2012.2
+     *  80                   0.5         2112.2
+     *  100                  0.5         1984.0
+     *  128                  0.5         2097.9
+     *  256                  0.5         2038.9
+     *  1024                 0.5         2045.2
      */
   }
 }
