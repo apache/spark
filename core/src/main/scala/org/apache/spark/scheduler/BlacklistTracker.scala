@@ -94,6 +94,22 @@ private[scheduler] class BlacklistTracker (
   val nodeToBlacklistedExecs = new HashMap[String, HashSet[String]]()
 
   /**
+   * Blacklists permanently the nodes listed in spark.blacklist.alwaysBlacklistedNodes
+   * The blacklist timeout is set to a large value, effectively never expiring.
+   */
+  private val permanentlyBlacklistedNodes: Seq[String] =
+    conf.get("spark.blacklist.alwaysBlacklistedNodes", "").split(',').map(_.trim).filter(_ != "")
+  if (permanentlyBlacklistedNodes.nonEmpty) {
+    val now = clock.getTimeMillis()
+    for (nodeName <- permanentlyBlacklistedNodes) {
+      nodeIdToBlacklistExpiryTime.put(nodeName, Long.MaxValue)
+      listenerBus.post(SparkListenerNodeBlacklisted(now, nodeName, 0))
+      logWarning(s"Permanently blacklisted node $nodeName")
+    }
+    _nodeBlacklist.set(nodeIdToBlacklistExpiryTime.keySet.toSet)
+  }
+
+  /**
    * Un-blacklists executors and nodes that have been blacklisted for at least
    * BLACKLIST_TIMEOUT_MILLIS
    */

@@ -585,4 +585,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
       2000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
     assert(blacklist.nextExpiryTime === 1000 + blacklist.BLACKLIST_TIMEOUT_MILLIS)
   }
+
+  test("Nodes can be permanently blacklisted, SPARK-21829") {
+    val blacklistedNodes = "hostA, hostB"
+    conf.set("spark.blacklist.alwaysBlacklistedNodes", blacklistedNodes)
+
+    val allocationClientMock = mock[ExecutorAllocationClient]
+    blacklist = new BlacklistTracker(listenerBusMock, conf, Some(allocationClientMock), clock)
+    for (nodeName <- blacklistedNodes.split(',').map(_.trim)) {
+      assert(blacklist.nodeIdToBlacklistExpiryTime.contains(nodeName))
+      (blacklist.nodeIdToBlacklistExpiryTime.get(nodeName) === Long.MaxValue)
+    }
+  }
 }
