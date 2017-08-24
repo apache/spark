@@ -20,8 +20,8 @@ import java.util.{Collections, UUID}
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, EnvVar, EnvVarBuilder, OwnerReferenceBuilder, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.SparkKubernetesClientFactory
