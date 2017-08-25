@@ -139,12 +139,31 @@ class PropagateEmptyRelationSuite extends PlanTest {
     val query = relation
       .where(false)
       .select('a)
-      .groupBy('a)('a)
       .where('a > 1)
+      .where('a != 200)
       .orderBy('a.asc)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation(output, isStreaming = true)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("don't propagate empty streaming relation through agg") {
+    val output = Seq('a.int)
+    val data = Seq(Row(1))
+    val schema = StructType.fromAttributes(output)
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val relation = LocalRelation(
+      output,
+      data.map(converter(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+
+    val query = relation
+      .groupBy('a)('a)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
   }
