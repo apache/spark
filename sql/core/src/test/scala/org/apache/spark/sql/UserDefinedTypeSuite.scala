@@ -207,10 +207,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
     val df = Seq((1, vec)).toDF("int", "vec")
     assert(vec === df.collect()(0).getAs[UDT.MyDenseVector](1))
     assert(vec === df.take(1)(0).getAs[UDT.MyDenseVector](1))
-    assert(vec === df.limit(1).groupBy('int).agg(first('vec)).collect()(0)
-      .getAs[UDT.MyDenseVector](1))
-    assert(vec === df.orderBy('int).limit(1).groupBy('int).agg(first('vec)).collect()(0)
-      .getAs[UDT.MyDenseVector](1))
+    checkAnswer(df.limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
+    checkAnswer(df.orderBy('int).limit(1).groupBy('int).agg(first('vec)), Row(1, vec))
   }
 
   test("UDTs with JSON") {
