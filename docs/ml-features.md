@@ -53,9 +53,9 @@ are calculated based on the mapped indices. This approach avoids the need to com
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
-of the hash table. Since a simple modulo is used to transform the hash function to a vector index,
-it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly in the vector. The default feature dimension is `$2^{18} = 262,144$`.
+of the hash table. Since a simple modulo on the hashed value is used to determine the vector index,
+it is advisable to use a power of two as the feature dimension, otherwise the features will not
+be mapped evenly to the vector indices. The default feature dimension is `$2^{18} = 262,144$`.
 An optional binary toggle parameter controls term frequency counts. When set to true all nonzero
 frequency counts are set to 1. This is especially useful for discrete probabilistic models that
 model binary, rather than integer, counts.
@@ -236,8 +236,8 @@ value of `1.0`.
 Null (missing) values are ignored (implicitly zero in the resulting feature vector).
 
 The hash function used here is also the [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash)
-used in [HashingTF](ml-features.html#tf-idf). Since a simple modulo is used to transform the hash
-function to a vector index, it is advisable to use a power of two as the numFeatures parameter;
+used in [HashingTF](ml-features.html#tf-idf). Since a simple modulo on the hashed value is used to
+determine the vector index, it is advisable to use a power of two as the numFeatures parameter;
 otherwise the features will not be mapped evenly to the vector indices.
 
 **Examples**

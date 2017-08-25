@@ -53,9 +53,10 @@ import org.apache.spark.util.collection.OpenHashMap
  *
  * Null (missing) values are ignored (implicitly zero in the resulting feature vector).
  *
- * Since a simple modulo is used to transform the hash function to a vector index,
- * it is advisable to use a power of two as the numFeatures parameter;
- * otherwise the features will not be mapped evenly to the vector indices.
+ * The hash function used here is also the MurmurHash 3 used in [[HashingTF]]. Since a simple modulo
+ * on the hashed value is used to determine the vector index, it is advisable to use a power of two
+ * as the numFeatures parameter; otherwise the features will not be mapped evenly to the vector
+ * indices.
  *
  * {{{
  *   val df = Seq(
