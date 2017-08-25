@@ -49,6 +49,30 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
+  def dedupJoin(plan: LogicalPlan): LogicalPlan = {
+    plan transform {
+      case j @ Join(left, right, joinType, joinCond) =>
+        val duplicates = right.outputSet.intersect(left.outputSet)
+        if (duplicates.nonEmpty) {
+          val aliasMap = AttributeMap(duplicates.map { dup =>
+            dup -> Alias(dup, dup.toString)()
+          }.toSeq)
+          val aliasedExpressions = right.output.map { ref =>
+            aliasMap.getOrElse(ref, ref)
+          }
+          val newRight = Project(aliasedExpressions, right)
+          val newJoinCond = joinCond.map { condExpr =>
+            condExpr transform {
+              case a: Attribute => aliasMap.getOrElse(a, a).toAttribute
+            }
+          }
+          Join(left, newRight, joinType, newJoinCond)
+        } else {
+          j
+        }
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Filter(condition, child) =>
       val (withSubquery, withoutSubquery) =
@@ -61,7 +85,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
 
       // Filter the plan by applying left semi and left anti joins.
-      withSubquery.foldLeft(newFilter) {
+      val rewritten = withSubquery.foldLeft(newFilter) {
         case (p, Exists(sub, conditions, _)) =>
           val (joinCond, outerPlan) = rewriteExistentialExpr(conditions, p)
           Join(outerPlan, sub, LeftSemi, joinCond)
@@ -98,6 +122,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
       }
+      dedupJoin(rewritten)
   }
 
   /**
