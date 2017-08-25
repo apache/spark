@@ -222,7 +222,7 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(env.getOrElse("TEST_ENV", null) == "TEST_VAL")
   }
 
-  test("supports spark.mesos.network.name") {
+  test("supports spark.mesos.network.name and spark.mesos.network.labels") {
     setScheduler()
 
     val mem = 1000
@@ -233,7 +233,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
         command,
         Map("spark.mesos.executor.home" -> "test",
           "spark.app.name" -> "test",
-          "spark.mesos.network.name" -> "test-network-name"),
+          "spark.mesos.network.name" -> "test-network-name",
+          "spark.mesos.network.labels" -> "key1:val1,key2:val2"),
         "s1",
         new Date()))
 
@@ -246,6 +247,37 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     val networkInfos = launchedTasks.head.getContainer.getNetworkInfosList
     assert(networkInfos.size == 1)
     assert(networkInfos.get(0).getName == "test-network-name")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getKey == "key1")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getValue == "val1")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getKey == "key2")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
+  }
+
+  test("supports spark.mesos.driver.labels") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test",
+          "spark.mesos.driver.labels" -> "key:value"),
+        "s1",
+        new Date()))
+
+    assert(response.success)
+
+    val offer = Utils.createOffer("o1", "s1", mem, cpu)
+    scheduler.resourceOffers(driver, List(offer).asJava)
+
+    val launchedTasks = Utils.verifyTaskLaunched(driver, "o1")
+    val labels = launchedTasks.head.getLabels
+    assert(labels.getLabelsCount == 1)
+    assert(labels.getLabels(0).getKey == "key")
+    assert(labels.getLabels(0).getValue == "value")
   }
 
   test("can kill supervised drivers") {

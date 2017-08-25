@@ -27,6 +27,7 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix, Vector, Vectors}
+import org.apache.spark.ml.optim.aggregator.LogisticAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -45,6 +46,7 @@ class LogisticRegressionSuite
   @transient var smallMultinomialDataset: Dataset[_] = _
   @transient var binaryDataset: Dataset[_] = _
   @transient var multinomialDataset: Dataset[_] = _
+  @transient var multinomialDatasetWithZeroVar: Dataset[_] = _
   private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
@@ -98,6 +100,23 @@ class LogisticRegressionSuite
       df.cache()
       df
     }
+
+    multinomialDatasetWithZeroVar = {
+      val nPoints = 100
+      val coefficients = Array(
+        -0.57997, 0.912083, -0.371077,
+        -0.16624, -0.84355, -0.048509)
+
+      val xMean = Array(5.843, 3.0)
+      val xVariance = Array(0.6856, 0.0)
+
+      val testData = generateMultinomialLogisticInput(
+        coefficients, xMean, xVariance, addIntercept = true, nPoints, seed)
+
+      val df = sc.parallelize(testData, 4).toDF().withColumn("weight", lit(1.0))
+      df.cache()
+      df
+    }
   }
 
   /**
@@ -111,6 +130,11 @@ class LogisticRegressionSuite
     multinomialDataset.rdd.map { case Row(label: Double, features: Vector, weight: Double) =>
       label + "," + weight + "," + features.toArray.mkString(",")
     }.repartition(1).saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDataset")
+    multinomialDatasetWithZeroVar.rdd.map {
+      case Row(label: Double, features: Vector, weight: Double) =>
+        label + "," + weight + "," + features.toArray.mkString(",")
+    }.repartition(1)
+     .saveAsTextFile("target/tmp/LogisticRegressionSuite/multinomialDatasetWithZeroVar")
   }
 
   test("params") {
@@ -506,8 +530,8 @@ class LogisticRegressionSuite
   test("sparse coefficients in LogisticAggregator") {
     val bcCoefficientsBinary = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val binaryAgg = new LogisticAggregator(bcCoefficientsBinary, bcFeaturesStd, 2,
-      fitIntercept = true, multinomial = false)
+    val binaryAgg = new LogisticAggregator(bcFeaturesStd, 2,
+      fitIntercept = true, multinomial = false)(bcCoefficientsBinary)
     val thrownBinary = withClue("binary logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         binaryAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -516,8 +540,8 @@ class LogisticRegressionSuite
     assert(thrownBinary.getMessage.contains("coefficients only supports dense"))
 
     val bcCoefficientsMulti = spark.sparkContext.broadcast(Vectors.sparse(6, Array(0), Array(1.0)))
-    val multinomialAgg = new LogisticAggregator(bcCoefficientsMulti, bcFeaturesStd, 3,
-      fitIntercept = true, multinomial = true)
+    val multinomialAgg = new LogisticAggregator(bcFeaturesStd, 3,
+      fitIntercept = true, multinomial = true)(bcCoefficientsMulti)
     val thrown = withClue("multinomial logistic aggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         multinomialAgg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -1389,6 +1413,61 @@ class LogisticRegressionSuite
     assert(model2.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
     assert(model2.interceptVector ~== interceptsR relTol 0.05)
     assert(model2.interceptVector.toArray.sum ~== 0.0 absTol eps)
+  }
+
+  test("multinomial logistic regression with zero variance (SPARK-21681)") {
+    val sqlContext = multinomialDatasetWithZeroVar.sqlContext
+    import sqlContext.implicits._
+    val mlr = new LogisticRegression().setFamily("multinomial").setFitIntercept(true)
+      .setElasticNetParam(0.0).setRegParam(0.0).setStandardization(true).setWeightCol("weight")
+
+    val model = mlr.fit(multinomialDatasetWithZeroVar)
+
+    /*
+     Use the following R code to load the data and train the model using glmnet package.
+
+     library("glmnet")
+     data <- read.csv("path", header=FALSE)
+     label = as.factor(data$V1)
+     w = data$V2
+     features = as.matrix(data.frame(data$V3, data$V4))
+     coefficients = coef(glmnet(features, label, weights=w, family="multinomial",
+     alpha = 0, lambda = 0))
+     coefficients
+     $`0`
+     3 x 1 sparse Matrix of class "dgCMatrix"
+                    s0
+             0.2658824
+     data.V3 0.1881871
+     data.V4 .
+
+     $`1`
+     3 x 1 sparse Matrix of class "dgCMatrix"
+                      s0
+              0.53604701
+     data.V3 -0.02412645
+     data.V4  .
+
+     $`2`
+     3 x 1 sparse Matrix of class "dgCMatrix"
+                     s0
+             -0.8019294
+     data.V3 -0.1640607
+     data.V4  .
+    */
+
+    val coefficientsR = new DenseMatrix(3, 2, Array(
+      0.1881871, 0.0,
+      -0.02412645, 0.0,
+      -0.1640607, 0.0), isTransposed = true)
+    val interceptsR = Vectors.dense(0.2658824, 0.53604701, -0.8019294)
+
+    model.coefficientMatrix.colIter.foreach(v => assert(v.toArray.sum ~== 0.0 absTol eps))
+
+    assert(model.coefficientMatrix ~== coefficientsR relTol 0.05)
+    assert(model.coefficientMatrix.toArray.sum ~== 0.0 absTol eps)
+    assert(model.interceptVector ~== interceptsR relTol 0.05)
+    assert(model.interceptVector.toArray.sum ~== 0.0 absTol eps)
   }
 
   test("multinomial logistic regression with intercept without regularization with bound") {
@@ -2581,6 +2660,17 @@ class LogisticRegressionSuite
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }
+  }
+
+  test("string params should be case-insensitive") {
+    val lr = new LogisticRegression()
+    Seq(("AuTo", smallBinaryDataset), ("biNoMial", smallBinaryDataset),
+      ("mulTinomIAl", smallMultinomialDataset)).foreach { case (family, data) =>
+      lr.setFamily(family)
+      assert(lr.getFamily === family)
+      val model = lr.fit(data)
+      assert(model.getFamily === family)
+    }
   }
 }
 

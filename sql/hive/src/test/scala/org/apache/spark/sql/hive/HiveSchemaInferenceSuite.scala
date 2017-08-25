@@ -23,10 +23,10 @@ import scala.util.Random
 
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.datasources.FileStatusCache
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.HiveCaseSensitiveInferenceMode.{Value => InferenceMode, _}
@@ -46,7 +46,7 @@ class HiveSchemaInferenceSuite
 
   override def afterEach(): Unit = {
     super.afterEach()
-    spark.sessionState.catalog.tableRelationCache.invalidateAll()
+    spark.sessionState.catalog.invalidateAllCachedTables()
     FileStatusCache.resetForTesting()
   }
 
@@ -104,7 +104,7 @@ class HiveSchemaInferenceSuite
         identifier = TableIdentifier(table = TEST_TABLE_NAME, database = Option(DATABASE)),
         tableType = CatalogTableType.EXTERNAL,
         storage = CatalogStorageFormat(
-          locationUri = Option(new java.net.URI(dir.getAbsolutePath)),
+          locationUri = Option(dir.toURI),
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,

@@ -333,7 +333,7 @@ trait MesosSchedulerUtils extends Logging {
       try {
         splitter.split(constraintsVal).asScala.toMap.mapValues(v =>
           if (v == null || v.isEmpty) {
-            Set[String]()
+            Set.empty[String]
           } else {
             v.split(',').toSet
           }
@@ -438,7 +438,7 @@ trait MesosSchedulerUtils extends Logging {
     }
   }
 
-  val managedPortNames = List("spark.executor.port", BLOCK_MANAGER_PORT.key)
+  val managedPortNames = List(BLOCK_MANAGER_PORT.key)
 
   /**
    * The values of the non-zero ports to be used by the executor process.

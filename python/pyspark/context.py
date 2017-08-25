@@ -30,7 +30,7 @@ from py4j.protocol import Py4JError
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
+from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
@@ -191,14 +191,11 @@ class SparkContext(object):
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
-        if sys.version_info < (2, 7):
-            warnings.warn("Support for Python 2.6 is deprecated as of Spark 2.0.0")
-
         # Broadcast's __reduce__ method stores Broadcast instances here.
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
         # send.
-        self._pickled_broadcast_vars = set()
+        self._pickled_broadcast_vars = BroadcastPickleRegistry()
 
         SparkFiles._sc = self
         root_dir = SparkFiles.getRootDirectory()
@@ -941,6 +938,12 @@ class SparkContext(object):
         L{setLocalProperty}
         """
         return self._jsc.getLocalProperty(key)
+
+    def setJobDescription(self, value):
+        """
+        Set a human readable description of the current job.
+        """
+        self._jsc.setJobDescription(value)
 
     def sparkUser(self):
         """

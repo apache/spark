@@ -21,14 +21,31 @@ library(SparkR)
 # Turn all warnings into errors
 options("warn" = 2)
 
+if (.Platform$OS.type == "windows") {
+  Sys.setenv(TZ = "GMT")
+}
+
 # Setup global test environment
 # Install Spark first to set SPARK_HOME
 install.spark()
 
 sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
 invisible(lapply(sparkRWhitelistSQLDirs,
                  function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
+sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
+
+sparkRTestMaster <- "local[1]"
+if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+  sparkRTestMaster <- ""
+}
 
 test_package("SparkR")
+
+if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+  # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
+  testthat:::run_tests("SparkR",
+                       file.path(sparkRDir, "pkg", "tests", "fulltests"),
+                       NULL,
+                       "summary")
+}

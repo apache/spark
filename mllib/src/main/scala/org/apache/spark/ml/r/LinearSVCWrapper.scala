@@ -38,9 +38,17 @@ private[r] class LinearSVCWrapper private (
   private val svcModel: LinearSVCModel =
     pipeline.stages(1).asInstanceOf[LinearSVCModel]
 
-  lazy val coefficients: Array[Double] = svcModel.coefficients.toArray
+  lazy val rFeatures: Array[String] = if (svcModel.getFitIntercept) {
+    Array("(Intercept)") ++ features
+  } else {
+    features
+  }
 
-  lazy val intercept: Double = svcModel.intercept
+  lazy val rCoefficients: Array[Double] = if (svcModel.getFitIntercept) {
+    Array(svcModel.intercept) ++ svcModel.coefficients.toArray
+  } else {
+    svcModel.coefficients.toArray
+  }
 
   lazy val numClasses: Int = svcModel.numClasses
 
@@ -71,12 +79,14 @@ private[r] object LinearSVCWrapper
       standardization: Boolean,
       threshold: Double,
       weightCol: String,
-      aggregationDepth: Int
+      aggregationDepth: Int,
+      handleInvalid: String
       ): LinearSVCWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 

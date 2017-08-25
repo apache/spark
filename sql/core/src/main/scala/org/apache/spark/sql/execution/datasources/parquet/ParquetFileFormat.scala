@@ -50,7 +50,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
 class ParquetFileFormat
   extends FileFormat
@@ -220,7 +220,7 @@ class ParquetFileFormat
 
         val needMerged: Seq[FileStatus] =
           if (mergeRespectSummaries) {
-            Seq()
+            Seq.empty
           } else {
             filesByType.data
           }
@@ -479,24 +479,29 @@ object ParquetFileFormat extends Logging {
       partFiles: Seq[FileStatus],
       ignoreCorruptFiles: Boolean): Seq[Footer] = {
     val parFiles = partFiles.par
-    parFiles.tasksupport = new ForkJoinTaskSupport(new ForkJoinPool(8))
-    parFiles.flatMap { currentFile =>
-      try {
-        // Skips row group information since we only need the schema.
-        // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
-        // when it can't read the footer.
-        Some(new Footer(currentFile.getPath(),
-          ParquetFileReader.readFooter(
-            conf, currentFile, SKIP_ROW_GROUPS)))
-      } catch { case e: RuntimeException =>
-        if (ignoreCorruptFiles) {
-          logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
-          None
-        } else {
-          throw new IOException(s"Could not read footer for file: $currentFile", e)
+    val pool = ThreadUtils.newForkJoinPool("readingParquetFooters", 8)
+    parFiles.tasksupport = new ForkJoinTaskSupport(pool)
+    try {
+      parFiles.flatMap { currentFile =>
+        try {
+          // Skips row group information since we only need the schema.
+          // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
+          // when it can't read the footer.
+          Some(new Footer(currentFile.getPath(),
+            ParquetFileReader.readFooter(
+              conf, currentFile, SKIP_ROW_GROUPS)))
+        } catch { case e: RuntimeException =>
+          if (ignoreCorruptFiles) {
+            logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
+            None
+          } else {
+            throw new IOException(s"Could not read footer for file: $currentFile", e)
+          }
         }
-      }
-    }.seq
+      }.seq
+    } finally {
+      pool.shutdown()
+    }
   }
 
   /**

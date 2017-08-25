@@ -25,7 +25,7 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - If `expr1` evaluates to true, then returns `expr2`; otherwise returns `expr3`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1 < 2, 'a', 'b');
        a
@@ -131,8 +131,8 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
          |  $globalValue = ${ev.value};
          |}
          """.stripMargin
-    ctx.addNewFunction(funcName, funcBody)
-    (funcName, globalIsNull, globalValue)
+    val fullFuncName = ctx.addNewFunction(funcName, funcBody)
+    (fullFuncName, globalIsNull, globalValue)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"

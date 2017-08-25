@@ -28,8 +28,6 @@ import org.apache.spark.sql.types.StructType
  * A test suite for Hive view related functionality.
  */
 class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
-  protected override val spark: SparkSession = TestHive.sparkSession
-
   import testImplicits._
 
   test("create a permanent/temp view using a hive, built-in, and permanent user function") {

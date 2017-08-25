@@ -27,7 +27,7 @@ import numpy as np
 
 from py4j.java_gateway import JavaObject
 
-from pyspark.ml.linalg import DenseVector, Vector
+from pyspark.ml.linalg import DenseVector, Vector, Matrix
 from pyspark.ml.util import Identifiable
 
 
@@ -168,6 +168,15 @@ class TypeConverters(object):
             if all(map(lambda v: TypeConverters._is_numeric(v), value)):
                 return DenseVector(value)
         raise TypeError("Could not convert %s to vector" % value)
+
+    @staticmethod
+    def toMatrix(value):
+        """
+        Convert a value to a MLlib Matrix, if possible.
+        """
+        if isinstance(value, Matrix):
+            return value
+        raise TypeError("Could not convert %s to matrix" % value)
 
     @staticmethod
     def toFloat(value):
@@ -374,6 +383,17 @@ class Params(Identifiable):
         that._paramMap = {}
         that._defaultParamMap = {}
         return self._copyValues(that, extra)
+
+    def set(self, param, value):
+        """
+        Sets a parameter in the embedded param map.
+        """
+        self._shouldOwn(param)
+        try:
+            value = param.typeConverter(value)
+        except ValueError as e:
+            raise ValueError('Invalid param value given for param "%s". %s' % (param.name, e))
+        self._paramMap[param] = value
 
     def _shouldOwn(self, param):
         """

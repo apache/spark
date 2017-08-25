@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.StructType
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasInputCol with HasOutputCol {
+  with HasHandleInvalid with HasInputCol with HasOutputCol {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -72,17 +72,12 @@ private[feature] trait QuantileDiscretizerBase extends Params
    * Default: "error"
    * @group param
    */
-  // TODO: SPARK-18619 Make QuantileDiscretizer inherit from HasHandleInvalid.
   @Since("2.1.0")
-  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle " +
-    "invalid entries. Options are skip (filter out rows with invalid values), " +
+  override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "how to handle invalid entries. Options are skip (filter out rows with invalid values), " +
     "error (throw an error), or keep (keep invalid values in a special additional bucket).",
     ParamValidators.inArray(Bucketizer.supportedHandleInvalids))
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
-
-  /** @group getParam */
-  @Since("2.1.0")
-  def getHandleInvalid: String = $(handleInvalid)
 
 }
 

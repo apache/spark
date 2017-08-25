@@ -59,9 +59,9 @@ class AggregateOptimizeSuite extends PlanTest {
   }
 
   test("Remove aliased literals") {
-    val query = testRelation.select('a, Literal(1).as('y)).groupBy('a, 'y)(sum('b))
+    val query = testRelation.select('a, 'b, Literal(1).as('y)).groupBy('a, 'y)(sum('b))
     val optimized = Optimize.execute(analyzer.execute(query))
-    val correctAnswer = testRelation.select('a, Literal(1).as('y)).groupBy('a)(sum('b)).analyze
+    val correctAnswer = testRelation.select('a, 'b, Literal(1).as('y)).groupBy('a)(sum('b)).analyze
 
     comparePlans(optimized, correctAnswer)
   }

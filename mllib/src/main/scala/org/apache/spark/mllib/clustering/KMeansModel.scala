@@ -85,7 +85,10 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
   @Since("0.8.0")
   def computeCost(data: RDD[Vector]): Double = {
     val bcCentersWithNorm = data.context.broadcast(clusterCentersWithNorm)
-    data.map(p => KMeans.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p))).sum()
+    val cost = data
+      .map(p => KMeans.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p))).sum()
+    bcCentersWithNorm.destroy(blocking = false)
+    cost
   }
 
 

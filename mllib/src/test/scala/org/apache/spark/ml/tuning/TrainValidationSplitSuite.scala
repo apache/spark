@@ -19,11 +19,11 @@ package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{ParamMap}
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -95,7 +95,7 @@ class TrainValidationSplitSuite
   }
 
   test("transformSchema should check estimatorParamMaps") {
-    import TrainValidationSplitSuite._
+    import TrainValidationSplitSuite.{MyEstimator, MyEvaluator}
 
     val est = new MyEstimator("est")
     val eval = new MyEvaluator
@@ -134,6 +134,82 @@ class TrainValidationSplitSuite
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.getSeed === tvs2.getSeed)
+
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
+
+    tvs2.getEstimator match {
+      case lr2: LogisticRegression =>
+        assert(lr.uid === lr2.uid)
+        assert(lr.getMaxIter === lr2.getMaxIter)
+      case other =>
+        throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
+          s" LogisticRegression but found ${other.getClass.getName}")
+    }
+  }
+
+  test("read/write: TrainValidationSplit with nested estimator") {
+    val ova = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+    val evaluator = new BinaryClassificationEvaluator()
+      .setMetricName("areaUnderPR")  // not default metric
+    val classifier1 = new LogisticRegression().setRegParam(2.0)
+    val classifier2 = new LogisticRegression().setRegParam(3.0)
+    val paramMaps = new ParamGridBuilder()
+      .addGrid(ova.classifier, Array(classifier1, classifier2))
+      .build()
+    val tvs = new TrainValidationSplit()
+      .setEstimator(ova)
+      .setEvaluator(evaluator)
+      .setTrainRatio(0.5)
+      .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
+
+    val tvs2 = testDefaultReadWrite(tvs, testParams = false)
+
+    assert(tvs.getTrainRatio === tvs2.getTrainRatio)
+    assert(tvs.getSeed === tvs2.getSeed)
+
+    tvs2.getEstimator match {
+      case ova2: OneVsRest =>
+        assert(ova.uid === ova2.uid)
+        val classifier = ova2.getClassifier
+        classifier match {
+          case lr: LogisticRegression =>
+            assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
+              === lr.getMaxIter)
+          case _ =>
+            throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
+              s" LogisticREgression but found ${classifier.getClass.getName}")
+        }
+
+      case other =>
+        throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
+          s" OneVsRest but found ${other.getClass.getName}")
+    }
+
+    ValidatorParamsSuiteHelpers
+      .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
+  }
+
+  test("read/write: Persistence of nested estimator works if parent directory changes") {
+    val ova = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+    val evaluator = new BinaryClassificationEvaluator()
+      .setMetricName("areaUnderPR")  // not default metric
+    val classifier1 = new LogisticRegression().setRegParam(2.0)
+    val classifier2 = new LogisticRegression().setRegParam(3.0)
+    val paramMaps = new ParamGridBuilder()
+      .addGrid(ova.classifier, Array(classifier1, classifier2))
+      .build()
+    val tvs = new TrainValidationSplit()
+      .setEstimator(ova)
+      .setEvaluator(evaluator)
+      .setTrainRatio(0.5)
+      .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
+
+    ValidatorParamsSuiteHelpers.testFileMove(tvs, tempDir)
   }
 
   test("read/write: TrainValidationSplitModel") {
@@ -160,7 +236,7 @@ class TrainValidationSplitSuite
   }
 }
 
-object TrainValidationSplitSuite {
+object TrainValidationSplitSuite extends SparkFunSuite{
 
   abstract class MyModel extends Model[MyModel]
 

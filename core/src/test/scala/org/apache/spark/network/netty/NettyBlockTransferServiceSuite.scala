@@ -80,7 +80,8 @@ class NettyBlockTransferServiceSuite
   private def verifyServicePort(expectedPort: Int, actualPort: Int): Unit = {
     actualPort should be >= expectedPort
     // avoid testing equality in case of simultaneous tests
-    actualPort should be <= (expectedPort + 10)
+    // the default value for `spark.port.maxRetries` is 100 under test
+    actualPort should be <= (expectedPort + 100)
   }
 
   private def createService(port: Int): NettyBlockTransferService = {

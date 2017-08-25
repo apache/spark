@@ -21,7 +21,7 @@ import java.{util => ju}
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.{BeforeAndAfter, Matchers}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -30,12 +30,49 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions.{count, window}
 import org.apache.spark.sql.streaming.OutputMode._
 
-class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Logging {
+class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matchers with Logging {
 
   import testImplicits._
 
   after {
     sqlContext.streams.active.foreach(_.stop())
+  }
+
+  test("EventTimeStats") {
+    val epsilon = 10E-6
+
+    val stats = EventTimeStats(max = 100, min = 10, avg = 20.0, count = 5)
+    stats.add(80L)
+    stats.max should be (100)
+    stats.min should be (10)
+    stats.avg should be (30.0 +- epsilon)
+    stats.count should be (6)
+
+    val stats2 = EventTimeStats(80L, 5L, 15.0, 4)
+    stats.merge(stats2)
+    stats.max should be (100)
+    stats.min should be (5)
+    stats.avg should be (24.0 +- epsilon)
+    stats.count should be (10)
+  }
+
+  test("EventTimeStats: avg on large values") {
+    val epsilon = 10E-6
+    val largeValue = 10000000000L // 10B
+    // Make sure `largeValue` will cause overflow if we use a Long sum to calc avg.
+    assert(largeValue * largeValue != BigInt(largeValue) * BigInt(largeValue))
+    val stats =
+      EventTimeStats(max = largeValue, min = largeValue, avg = largeValue, count = largeValue - 1)
+    stats.add(largeValue)
+    stats.avg should be (largeValue.toDouble +- epsilon)
+
+    val stats2 = EventTimeStats(
+      max = largeValue + 1,
+      min = largeValue,
+      avg = largeValue + 1,
+      count = largeValue)
+    stats.merge(stats2)
+    stats.avg should be ((largeValue + 0.5) +- epsilon)
   }
 
   test("error on bad column") {
@@ -342,6 +379,44 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Loggin
       .filter(_.metadata.contains(EventTimeWatermark.delayKey))
     assert(eventTimeColumns.size === 1)
     assert(eventTimeColumns(0).name === "second")
+  }
+
+  test("EventTime watermark should be ignored in batch query.") {
+    val df = testData
+      .withColumn("eventTime", $"key".cast("timestamp"))
+      .withWatermark("eventTime", "1 minute")
+      .select("eventTime")
+      .as[Long]
+
+    checkDataset[Long](df, 1L to 100L: _*)
+  }
+
+  test("SPARK-21565: watermark operator accepts attributes from replacement") {
+    withTempDir { dir =>
+      dir.delete()
+
+      val df = Seq(("a", 100.0, new java.sql.Timestamp(100L)))
+        .toDF("symbol", "price", "eventTime")
+      df.write.json(dir.getCanonicalPath)
+
+      val input = spark.readStream.schema(df.schema)
+        .json(dir.getCanonicalPath)
+
+      val groupEvents = input
+        .withWatermark("eventTime", "2 seconds")
+        .groupBy("symbol", "eventTime")
+        .agg(count("price") as 'count)
+        .select("symbol", "eventTime", "count")
+      val q = groupEvents.writeStream
+        .outputMode("append")
+        .format("console")
+        .start()
+      try {
+        q.processAllAvailable()
+      } finally {
+        q.stop()
+      }
+    }
   }
 
   private def assertNumStateRows(numTotalRows: Long): AssertOnQuery = AssertOnQuery { q =>

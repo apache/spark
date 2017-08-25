@@ -18,6 +18,7 @@
 package org.apache.spark.launcher;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -33,7 +34,7 @@ class ChildProcAppHandle implements SparkAppHandle {
   private final String secret;
   private final LauncherServer server;
 
-  private Process childProc;
+  private volatile Process childProc;
   private boolean disposed;
   private LauncherConnection connection;
   private List<Listener> listeners;
@@ -95,28 +96,32 @@ class ChildProcAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void kill() {
-    if (!disposed) {
-      disconnect();
-    }
+    disconnect();
     if (childProc != null) {
-      try {
-        childProc.exitValue();
-      } catch (IllegalThreadStateException e) {
+      if (childProc.isAlive()) {
         childProc.destroyForcibly();
-      } finally {
-        childProc = null;
       }
+      childProc = null;
     }
+    setState(State.KILLED);
   }
 
   String getSecret() {
     return secret;
   }
 
-  void setChildProc(Process childProc, String loggerName) {
+  void setChildProc(Process childProc, String loggerName, InputStream logStream) {
     this.childProc = childProc;
-    this.redirector = new OutputRedirector(childProc.getInputStream(), loggerName,
-      SparkLauncher.REDIRECTOR_FACTORY);
+    if (logStream != null) {
+      this.redirector = new OutputRedirector(logStream, loggerName,
+        SparkLauncher.REDIRECTOR_FACTORY, this);
+    } else {
+      // If there is no log redirection, spawn a thread that will wait for the child process
+      // to finish.
+      Thread waiter = SparkLauncher.REDIRECTOR_FACTORY.newThread(this::monitorChild);
+      waiter.setDaemon(true);
+      waiter.start();
+    }
   }
 
   void setConnection(LauncherConnection connection) {
@@ -131,7 +136,7 @@ class ChildProcAppHandle implements SparkAppHandle {
     return connection;
   }
 
-  void setState(State s) {
+  synchronized void setState(State s) {
     if (!state.isFinal()) {
       state = s;
       fireEvent(false);
@@ -141,12 +146,48 @@ class ChildProcAppHandle implements SparkAppHandle {
     }
   }
 
-  void setAppId(String appId) {
+  synchronized void setAppId(String appId) {
     this.appId = appId;
     fireEvent(true);
   }
 
-  private synchronized void fireEvent(boolean isInfoChanged) {
+  /**
+   * Wait for the child process to exit and update the handle's state if necessary, accoding to
+   * the exit code.
+   */
+  void monitorChild() {
+    while (childProc.isAlive()) {
+      try {
+        childProc.waitFor();
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Exception waiting for child process to exit.", e);
+      }
+    }
+
+    synchronized (this) {
+      if (disposed) {
+        return;
+      }
+
+      disconnect();
+
+      int ec;
+      try {
+        ec = childProc.exitValue();
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Exception getting child process exit code, assuming failure.", e);
+        ec = 1;
+      }
+
+      // Only override the success state; leave other fail states alone.
+      if (!state.isFinal() || (ec != 0 && state == State.FINISHED)) {
+        state = State.LOST;
+        fireEvent(false);
+      }
+    }
+  }
+
+  private void fireEvent(boolean isInfoChanged) {
     if (listeners != null) {
       for (Listener l : listeners) {
         if (isInfoChanged) {

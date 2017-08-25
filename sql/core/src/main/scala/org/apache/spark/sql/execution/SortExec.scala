@@ -141,7 +141,7 @@ case class SortExec(
     ctx.addMutableState("scala.collection.Iterator<UnsafeRow>", sortedIterator, "")
 
     val addToSorter = ctx.freshName("addToSorter")
-    ctx.addNewFunction(addToSorter,
+    val addToSorterFuncName = ctx.addNewFunction(addToSorter,
       s"""
         | private void $addToSorter() throws java.io.IOException {
         |   ${child.asInstanceOf[CodegenSupport].produce(ctx, this)}
@@ -160,7 +160,7 @@ case class SortExec(
     s"""
        | if ($needToSort) {
        |   long $spillSizeBefore = $metrics.memoryBytesSpilled();
-       |   $addToSorter();
+       |   $addToSorterFuncName();
        |   $sortedIterator = $sorterVariable.sort();
        |   $sortTime.add($sorterVariable.getSortTimeNanos() / 1000000);
        |   $peakMemory.add($sorterVariable.getPeakMemoryUsage());

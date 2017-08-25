@@ -125,9 +125,9 @@ private[spark] object RpcTimeout {
     var foundProp: Option[(String, String)] = None
     while (itr.hasNext && foundProp.isEmpty) {
       val propKey = itr.next()
-      conf.getOption(propKey).foreach { prop => foundProp = Some(propKey, prop) }
+      conf.getOption(propKey).foreach { prop => foundProp = Some((propKey, prop)) }
     }
-    val finalProp = foundProp.getOrElse(timeoutPropList.head, defaultValue)
+    val finalProp = foundProp.getOrElse((timeoutPropList.head, defaultValue))
     val timeout = { Utils.timeStringAsSeconds(finalProp._2).seconds }
     new RpcTimeout(timeout, finalProp._1)
   }

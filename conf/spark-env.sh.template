@@ -34,7 +34,7 @@
 
 # Options read in YARN client mode
 # - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
-# - SPARK_EXECUTOR_INSTANCES, Number of executors to start (Default: 2)
+# - YARN_CONF_DIR, to point Spark towards YARN configuration files when you use YARN
 # - SPARK_EXECUTOR_CORES, Number of cores for the executors (Default: 1).
 # - SPARK_EXECUTOR_MEMORY, Memory per Executor (e.g. 1000M, 2G) (Default: 1G)
 # - SPARK_DRIVER_MEMORY, Memory for Driver (e.g. 1000M, 2G) (Default: 1G)
@@ -61,3 +61,7 @@
 # - SPARK_IDENT_STRING  A string representing this instance of spark. (Default: $USER)
 # - SPARK_NICENESS      The scheduling priority for daemons. (Default: 0)
 # - SPARK_NO_DAEMONIZE  Run the proposed command in the foreground. It will not output a PID file.
+# Options for native BLAS, like Intel MKL, OpenBLAS, and so on.
+# You might get better performance to enable these options if using native BLAS (see SPARK-21305).
+# - MKL_NUM_THREADS=1        Disable multi-threading of Intel MKL
+# - OPENBLAS_NUM_THREADS=1   Disable multi-threading of OpenBLAS

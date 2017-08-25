@@ -26,9 +26,8 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.scalatest.Assertions
+import org.scalatest.{Assertions, BeforeAndAfterAll}
 import org.scalatest.concurrent.{Eventually, Timeouts}
-import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
@@ -39,9 +38,10 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.streaming.StreamingQueryListener._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -67,7 +67,12 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
  * avoid hanging forever in the case of failures. However, individual suites can change this
  * by overriding `streamingTimeout`.
  */
-trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
+trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with BeforeAndAfterAll {
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    StateStore.stop() // stop the state store maintenance thread and unload store providers
+  }
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
@@ -172,8 +177,10 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
    *
    * @param isFatalError if this is a fatal error. If so, the error should also be caught by
    *                     UncaughtExceptionHandler.
+   * @param assertFailure a function to verify the error.
    */
   case class ExpectFailure[T <: Throwable : ClassTag](
+      assertFailure: Throwable => Unit = _ => {},
       isFatalError: Boolean = false) extends StreamAction {
     val causeClass: Class[T] = implicitly[ClassTag[T]].runtimeClass.asInstanceOf[Class[T]]
     override def toString(): String =
@@ -455,6 +462,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
                     s"\tExpected: ${ef.causeClass}\n\tReturned: $streamThreadDeathCause")
                 streamThreadDeathCause = null
               }
+              ef.assertFailure(exception.getCause)
             } catch {
               case _: InterruptedException =>
               case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>

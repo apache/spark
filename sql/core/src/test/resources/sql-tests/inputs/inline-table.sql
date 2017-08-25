@@ -49,3 +49,6 @@ select * from values ("one", count(1)), ("two", 2) as data(a, b);
 
 -- string to timestamp
 select * from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-12-06 01:00:00.0'), timestamp('1991-12-06 12:00:00.0'))) as data(a, b);
+
+-- cross-join inline tables
+EXPLAIN EXTENDED SELECT * FROM VALUES ('one', 1), ('three', null) CROSS JOIN VALUES ('one', 1), ('three', null);

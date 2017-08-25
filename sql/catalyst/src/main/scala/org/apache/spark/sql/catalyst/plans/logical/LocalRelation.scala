@@ -21,7 +21,6 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StructField, StructType}
 
 object LocalRelation {
@@ -44,7 +43,10 @@ object LocalRelation {
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+case class LocalRelation(output: Seq[Attribute],
+                         data: Seq[InternalRow] = Nil,
+                         // Indicates whether this relation has data from a streaming source.
+                         override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
@@ -67,9 +69,8 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     }
   }
 
-  override def computeStats(conf: SQLConf): Statistics =
-    Statistics(sizeInBytes =
-      output.map(n => BigInt(n.dataType.defaultSize)).sum * data.length)
+  override def computeStats(): Statistics =
+    Statistics(sizeInBytes = output.map(n => BigInt(n.dataType.defaultSize)).sum * data.length)
 
   def toSQL(inlineTableName: String): String = {
     require(data.nonEmpty)

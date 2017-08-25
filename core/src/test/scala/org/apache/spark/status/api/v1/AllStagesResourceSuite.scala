@@ -31,7 +31,7 @@ class AllStagesResourceSuite extends SparkFunSuite {
     val tasks = new LinkedHashMap[Long, TaskUIData]
     taskLaunchTimes.zipWithIndex.foreach { case (time, idx) =>
       tasks(idx.toLong) = TaskUIData(
-        new TaskInfo(idx, idx, 1, time, "", "", TaskLocality.ANY, false), None)
+        new TaskInfo(idx, idx, 1, time, "", "", TaskLocality.ANY, false))
     }
 
     val stageUiData = new StageUIData()

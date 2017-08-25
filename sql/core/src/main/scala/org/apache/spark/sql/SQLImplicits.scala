@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import scala.collection.Map
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -111,93 +112,74 @@ abstract class SQLImplicits extends LowPrioritySQLImplicits {
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newIntSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newIntSeqEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newLongSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newLongSeqEncoder: Encoder[Seq[Long]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newDoubleSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newDoubleSeqEncoder: Encoder[Seq[Double]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newFloatSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newFloatSeqEncoder: Encoder[Seq[Float]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newByteSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newByteSeqEncoder: Encoder[Seq[Byte]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newShortSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newShortSeqEncoder: Encoder[Seq[Short]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newBooleanSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newBooleanSeqEncoder: Encoder[Seq[Boolean]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newStringSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
   def newStringSeqEncoder: Encoder[Seq[String]] = ExpressionEncoder()
 
   /**
    * @since 1.6.1
-   * @deprecated use [[newProductSequenceEncoder]]
+   * @deprecated use [[newSequenceEncoder]]
    */
-  implicit def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
+  def newProductSeqEncoder[A <: Product : TypeTag]: Encoder[Seq[A]] = ExpressionEncoder()
 
   /** @since 2.2.0 */
-  implicit def newIntSequenceEncoder[T <: Seq[Int] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
+  implicit def newSequenceEncoder[T <: Seq[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
-  /** @since 2.2.0 */
-  implicit def newLongSequenceEncoder[T <: Seq[Long] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
+  // Maps
+  /** @since 2.3.0 */
+  implicit def newMapEncoder[T <: Map[_, _] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
-  /** @since 2.2.0 */
-  implicit def newDoubleSequenceEncoder[T <: Seq[Double] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
-  /** @since 2.2.0 */
-  implicit def newFloatSequenceEncoder[T <: Seq[Float] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
-  /** @since 2.2.0 */
-  implicit def newByteSequenceEncoder[T <: Seq[Byte] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
-  /** @since 2.2.0 */
-  implicit def newShortSequenceEncoder[T <: Seq[Short] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
-  /** @since 2.2.0 */
-  implicit def newBooleanSequenceEncoder[T <: Seq[Boolean] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
-  /** @since 2.2.0 */
-  implicit def newStringSequenceEncoder[T <: Seq[String] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
-
-  /** @since 2.2.0 */
-  implicit def newProductSequenceEncoder[T <: Seq[Product] : TypeTag]: Encoder[T] =
-    ExpressionEncoder()
+  /**
+   * Notice that we serialize `Set` to Catalyst array. The set property is only kept when
+   * manipulating the domain objects. The serialization format doesn't keep the set property.
+   * When we have a Catalyst array which contains duplicated elements and convert it to
+   * `Dataset[Set[T]]` by using the encoder, the elements will be de-duplicated.
+   *
+   * @since 2.3.0
+   */
+  implicit def newSetEncoder[T <: Set[_] : TypeTag]: Encoder[T] = ExpressionEncoder()
 
   // Arrays
 

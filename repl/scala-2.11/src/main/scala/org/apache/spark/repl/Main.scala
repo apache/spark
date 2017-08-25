@@ -18,6 +18,7 @@
 package org.apache.spark.repl
 
 import java.io.File
+import java.net.URI
 import java.util.Locale
 
 import scala.tools.nsc.GenericRunnerSettings
@@ -56,7 +57,10 @@ object Main extends Logging {
   // Visible for testing
   private[repl] def doMain(args: Array[String], _interp: SparkILoop): Unit = {
     interp = _interp
-    val jars = Utils.getUserJars(conf, isShell = true).mkString(File.pathSeparator)
+    val jars = Utils.getUserJars(conf, isShell = true)
+      // Remove file:///, file:// or file:/ scheme if exists for each jar
+      .map { x => if (x.startsWith("file:")) new File(new URI(x)).getPath else x }
+      .mkString(File.pathSeparator)
     val interpArguments = List(
       "-Yrepl-class-based",
       "-Yrepl-outdir", s"${outputDir.getAbsolutePath}",
@@ -68,7 +72,7 @@ object Main extends Logging {
 
     if (!hasErrors) {
       interp.process(settings) // Repl starts and goes in loop of R.E.P.L
-      Option(sparkContext).map(_.stop)
+      Option(sparkContext).foreach(_.stop)
     }
   }
 
