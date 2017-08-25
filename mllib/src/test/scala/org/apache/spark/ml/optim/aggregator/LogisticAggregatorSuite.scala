@@ -217,8 +217,6 @@ class LogisticAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     }.sum
     val loss = lossSum / weightSum
 
-
-
     // compute the gradients
     val gradientCoef = new Array[Double](numFeatures)
     var gradientIntercept = 0.0
