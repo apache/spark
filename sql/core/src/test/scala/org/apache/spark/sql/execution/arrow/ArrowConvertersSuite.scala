@@ -1652,9 +1652,9 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     val ctx = TaskContext.empty()
     val payloadIter = ArrowConverters.toPayloadIterator(batch.rowIterator().asScala, schema, 0, ctx)
-    val (rowIter, schemaRead) = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
+    val rowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
 
-    assert(schema.equals(schemaRead))
+    assert(schema.equals(rowIter.schema))
 
     rowIter.zipWithIndex.foreach { case (row, i) =>
       if (i == 10) {

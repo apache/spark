@@ -53,6 +53,17 @@ private[sql] class ArrowPayload private[sql] (payload: Array[Byte]) extends Seri
   def asPythonSerializable: Array[Byte] = payload
 }
 
+/**
+ * Iterator interface to iterate over Arrow record batches and return rows
+ */
+private[sql] trait ArrowRowIterator extends Iterator[InternalRow] {
+
+  /**
+   * Return the schema loaded from the Arrow record batch being iterated over
+   */
+  def schema: StructType
+}
+
 private[sql] object ArrowConverters {
 
   /**
@@ -119,45 +130,26 @@ private[sql] object ArrowConverters {
    */
   private[sql] def fromPayloadIterator(
       payloadIter: Iterator[ArrowPayload],
-      context: TaskContext): (Iterator[InternalRow], StructType) = {
+      context: TaskContext): ArrowRowIterator = {
     val allocator =
       ArrowUtils.rootAllocator.newChildAllocator("fromPayloadIterator", 0, Long.MaxValue)
-    var reader: ArrowFileReader = null
 
-    def nextBatch(): (Iterator[InternalRow], StructType) = {
-      val in = new ByteArrayReadableSeekableByteChannel(payloadIter.next().asPythonSerializable)
-      reader = new ArrowFileReader(in, allocator)
-      reader.loadNextBatch()  // throws IOException
-      val root = reader.getVectorSchemaRoot  // throws IOException
-      val schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
-
-      val columns = root.getFieldVectors.asScala.map { vector =>
-        new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
-      }.toArray
-
-      val batch = new ColumnarBatch(schemaRead, columns, root.getRowCount)
-      batch.setNumRows(root.getRowCount)
-
-      (batch.rowIterator().asScala, schemaRead)
-    }
-
-    var (rowIter, schemaRead) = if (payloadIter.hasNext) {
-      nextBatch()
-    } else {
-      (Iterator.empty, StructType(Seq.empty))
-    }
-
-    val outputIterator = new Iterator[InternalRow] {
+    new ArrowRowIterator {
+      private var reader: ArrowFileReader = null
+      private var schemaRead = StructType(Seq.empty)
+      private var rowIter = if (payloadIter.hasNext) nextBatch() else Iterator.empty
 
       context.addTaskCompletionListener { _ =>
         closeReader()
         allocator.close()
       }
 
+      override def schema: StructType = schemaRead
+
       override def hasNext: Boolean = rowIter.hasNext || {
         closeReader()
         if (payloadIter.hasNext) {
-          rowIter = nextBatch()._1
+          rowIter = nextBatch()
           true
         } else {
           allocator.close()
@@ -173,9 +165,23 @@ private[sql] object ArrowConverters {
           reader = null
         }
       }
-    }
 
-    (outputIterator, schemaRead)
+      private def nextBatch(): Iterator[InternalRow] = {
+        val in = new ByteArrayReadableSeekableByteChannel(payloadIter.next().asPythonSerializable)
+        reader = new ArrowFileReader(in, allocator)
+        reader.loadNextBatch()  // throws IOException
+        val root = reader.getVectorSchemaRoot  // throws IOException
+        schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
+
+        val columns = root.getFieldVectors.asScala.map { vector =>
+          new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
+        }.toArray
+
+        val batch = new ColumnarBatch(schemaRead, columns, root.getRowCount)
+        batch.setNumRows(root.getRowCount)
+        batch.rowIterator().asScala
+      }
+    }
   }
 
   /**
