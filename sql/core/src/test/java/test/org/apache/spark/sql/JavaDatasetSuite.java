@@ -1283,6 +1283,83 @@ public class JavaDatasetSuite implements Serializable {
     ds.collectAsList();
   }
 
+  public enum EnumBean {
+    A("www.elgoog.com"),
+    B("www.google.com");
+
+    private String url;
+
+    EnumBean(String url) {
+      this.url = url;
+    }
+
+    public String getUrl() {
+      return url;
+    }
+
+    public void setUrl(String url) {
+      this.url = url;
+    }
+  }
+
+  @Test
+  public void testEnum() {
+    List<EnumBean> data = Arrays.asList(EnumBean.B);
+    Encoder<EnumBean> encoder = Encoders.bean(EnumBean.class);
+    Dataset<EnumBean> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(ds.collectAsList(), data);
+  }
+
+  public static class BeanWithEnum {
+    EnumBean enumField;
+    String regularField;
+
+    public String getRegularField() {
+      return regularField;
+    }
+
+    public void setRegularField(String regularField) {
+      this.regularField = regularField;
+    }
+
+    public EnumBean getEnumField() {
+      return enumField;
+    }
+
+    public void setEnumField(EnumBean field) {
+      this.enumField = field;
+    }
+
+    public BeanWithEnum(EnumBean enumField, String regularField) {
+      this.enumField = enumField;
+      this.regularField = regularField;
+    }
+
+    public BeanWithEnum() {
+    }
+
+    public String toString() {
+      return "BeanWithEnum(" + enumField  + ", " + regularField + ")";
+    }
+
+    public boolean equals(Object other) {
+      if (other instanceof BeanWithEnum) {
+        BeanWithEnum beanWithEnum = (BeanWithEnum) other;
+        return beanWithEnum.regularField.equals(regularField) && beanWithEnum.enumField.equals(enumField);
+      }
+      return false;
+    }
+  }
+
+  @Test
+  public void testBeanWithEnum() {
+    List<BeanWithEnum> data = Arrays.asList(new BeanWithEnum(EnumBean.A, "mira avenue"),
+            new BeanWithEnum(EnumBean.B, "flower boulevard"));
+    Encoder<BeanWithEnum> encoder = Encoders.bean(BeanWithEnum.class);
+    Dataset<BeanWithEnum> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(ds.collectAsList(), data);
+  }
+
   public static class EmptyBean implements Serializable {}
 
   @Test
