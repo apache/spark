@@ -106,14 +106,14 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              ShuffledHashJoinExec(
-                leftKeys, rightKeys, joinType, BuildRight, boundCondition, left, right)),
+              ShuffledHashJoinExec(leftKeys, rightKeys, leftKeys, rightKeys, joinType, BuildRight,
+                boundCondition, left, right)),
             expectedAnswer,
             sortAnswers = true)
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              createLeftSemiPlusJoin(ShuffledHashJoinExec(
-                leftKeys, rightKeys, leftSemiPlus, BuildRight, boundCondition, left, right))),
+              createLeftSemiPlusJoin(ShuffledHashJoinExec(leftKeys, rightKeys, leftKeys, rightKeys,
+                leftSemiPlus, BuildRight, boundCondition, left, right))),
             expectedAnswer,
             sortAnswers = true)
         }
@@ -144,13 +144,14 @@ class ExistenceJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+              SortMergeJoinExec(leftKeys, rightKeys, leftKeys, rightKeys, joinType, boundCondition,
+                left, right)),
             expectedAnswer,
             sortAnswers = true)
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(left.sqlContext.sessionState.conf).apply(
-              createLeftSemiPlusJoin(SortMergeJoinExec(
-                leftKeys, rightKeys, leftSemiPlus, boundCondition, left, right))),
+              createLeftSemiPlusJoin(SortMergeJoinExec(leftKeys, rightKeys, leftKeys, rightKeys,
+                leftSemiPlus, boundCondition, left, right))),
             expectedAnswer,
             sortAnswers = true)
         }

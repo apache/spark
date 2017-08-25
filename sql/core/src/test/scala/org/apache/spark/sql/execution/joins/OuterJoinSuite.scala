@@ -83,8 +83,8 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
             val buildSide = if (joinType == LeftOuter) BuildRight else BuildLeft
             checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
               EnsureRequirements(spark.sessionState.conf).apply(
-                ShuffledHashJoinExec(
-                  leftKeys, rightKeys, joinType, buildSide, boundCondition, left, right)),
+                ShuffledHashJoinExec(leftKeys, rightKeys, leftKeys, rightKeys, joinType, buildSide,
+                  boundCondition, left, right)),
               expectedAnswer.map(Row.fromTuple),
               sortAnswers = true)
           }
@@ -116,7 +116,8 @@ class OuterJoinSuite extends SparkPlanTest with SharedSQLContext {
         withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
           checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
             EnsureRequirements(spark.sessionState.conf).apply(
-              SortMergeJoinExec(leftKeys, rightKeys, joinType, boundCondition, left, right)),
+              SortMergeJoinExec(leftKeys, rightKeys, leftKeys, rightKeys, joinType, boundCondition,
+                left, right)),
             expectedAnswer.map(Row.fromTuple),
             sortAnswers = true)
         }

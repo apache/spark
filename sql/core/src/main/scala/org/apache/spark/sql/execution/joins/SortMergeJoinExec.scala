@@ -34,8 +34,10 @@ import org.apache.spark.util.collection.BitSet
  * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
-    leftKeys: Seq[Expression],
-    rightKeys: Seq[Expression],
+    leftJoinKeys: Seq[Expression],
+    rightJoinKeys: Seq[Expression],
+    leftDistributionKeys: Seq[Expression],
+    rightDistributionKeys: Seq[Expression],
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
@@ -78,24 +80,26 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    HashClusteredDistribution(leftDistributionKeys) ::
+      HashClusteredDistribution(rightDistributionKeys) ::
+      Nil
 
   override def outputOrdering: Seq[SortOrder] = joinType match {
     // For inner join, orders of both sides keys should be kept.
     case _: InnerLike =>
-      val leftKeyOrdering = getKeyOrdering(leftKeys, left.outputOrdering)
-      val rightKeyOrdering = getKeyOrdering(rightKeys, right.outputOrdering)
+      val leftKeyOrdering = getKeyOrdering(leftJoinKeys, left.outputOrdering)
+      val rightKeyOrdering = getKeyOrdering(rightJoinKeys, right.outputOrdering)
       leftKeyOrdering.zip(rightKeyOrdering).map { case (lKey, rKey) =>
         // Also add the right key and its `sameOrderExpressions`
         SortOrder(lKey.child, Ascending, lKey.sameOrderExpressions + rKey.child ++ rKey
           .sameOrderExpressions)
       }
     // For left and right outer joins, the output is ordered by the streamed input's join keys.
-    case LeftOuter => getKeyOrdering(leftKeys, left.outputOrdering)
-    case RightOuter => getKeyOrdering(rightKeys, right.outputOrdering)
+    case LeftOuter => getKeyOrdering(leftJoinKeys, left.outputOrdering)
+    case RightOuter => getKeyOrdering(rightJoinKeys, right.outputOrdering)
     // There are null rows in both streams, so there is no order.
     case FullOuter => Nil
-    case LeftExistence(_) => getKeyOrdering(leftKeys, left.outputOrdering)
+    case LeftExistence(_) => getKeyOrdering(leftJoinKeys, left.outputOrdering)
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
@@ -122,7 +126,7 @@ case class SortMergeJoinExec(
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    requiredOrders(leftKeys) :: requiredOrders(rightKeys) :: Nil
+    requiredOrders(leftJoinKeys) :: requiredOrders(rightJoinKeys) :: Nil
 
   private def requiredOrders(keys: Seq[Expression]): Seq[SortOrder] = {
     // This must be ascending in order to agree with the `keyOrdering` defined in `doExecute()`.
@@ -130,10 +134,10 @@ case class SortMergeJoinExec(
   }
 
   private def createLeftKeyGenerator(): Projection =
-    UnsafeProjection.create(leftKeys, left.output)
+    UnsafeProjection.create(leftJoinKeys, left.output)
 
   private def createRightKeyGenerator(): Projection =
-    UnsafeProjection.create(rightKeys, right.output)
+    UnsafeProjection.create(rightJoinKeys, right.output)
 
   private def getSpillThreshold: Int = {
     sqlContext.conf.sortMergeJoinExecBufferSpillThreshold
@@ -157,7 +161,7 @@ case class SortMergeJoinExec(
       }
 
       // An ordering that can be used to compare keys from both sides.
-      val keyOrdering = newNaturalAscendingOrdering(leftKeys.map(_.dataType))
+      val keyOrdering = newNaturalAscendingOrdering(leftJoinKeys.map(_.dataType))
       val resultProj: InternalRow => InternalRow = UnsafeProjection.create(output, output)
 
       joinType match {
@@ -398,7 +402,7 @@ case class SortMergeJoinExec(
 
   private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
     vars.zipWithIndex.map { case (ev, i) =>
-      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
+      ctx.addBufferedState(leftJoinKeys(i).dataType, "value", ev.value)
     }
   }
 
@@ -406,7 +410,7 @@ case class SortMergeJoinExec(
     val comparisons = a.zip(b).zipWithIndex.map { case ((l, r), i) =>
       s"""
          |if (comp == 0) {
-         |  comp = ${ctx.genComp(leftKeys(i).dataType, l.value, r.value)};
+         |  comp = ${ctx.genComp(leftJoinKeys(i).dataType, l.value, r.value)};
          |}
        """.stripMargin.trim
     }
@@ -427,9 +431,9 @@ case class SortMergeJoinExec(
     val rightRow = ctx.addMutableState("InternalRow", "rightRow", forceInline = true)
 
     // Create variables for join keys from both sides.
-    val leftKeyVars = createJoinKey(ctx, leftRow, leftKeys, left.output)
+    val leftKeyVars = createJoinKey(ctx, leftRow, leftJoinKeys, left.output)
     val leftAnyNull = leftKeyVars.map(_.isNull).mkString(" || ")
-    val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightKeys, right.output)
+    val rightKeyTmpVars = createJoinKey(ctx, rightRow, rightJoinKeys, right.output)
     val rightAnyNull = rightKeyTmpVars.map(_.isNull).mkString(" || ")
     // Copy the right key as class members so they could be used in next function call.
     val rightKeyVars = copyKeys(ctx, rightKeyTmpVars)

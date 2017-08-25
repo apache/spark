@@ -569,17 +569,32 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     })
   }
 
+  test("SPARK-18067 Avoid shuffling Join's child if join keys are superset of child's " +
+    "partitioning keys") {
+
+    val bucketedTableTestSpec = BucketedTableTestSpec(
+      Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))),
+      numPartitions = 1,
+      expectedShuffle = false)
+
+    Seq(
+      Seq("i", "j", "k"),
+      Seq("i", "k", "j"),
+      Seq("j", "k", "i"),
+      Seq("j", "i", "k"),
+      Seq("k", "j", "i"),
+      Seq("k", "i", "j")
+    ).foreach(joinKeys => {
+      testBucketing(
+        bucketedTableTestSpecLeft = bucketedTableTestSpec,
+        bucketedTableTestSpecRight = bucketedTableTestSpec,
+        joinCondition = joinCondition(joinKeys)
+      )
+    })
+  }
+
   test("SPARK-19122 No re-ordering should happen if set of join columns != set of child's " +
     "partitioning columns") {
-
-    // join predicates is a super set of child's partitioning columns
-    val bucketedTableTestSpec1 =
-      BucketedTableTestSpec(Some(BucketSpec(8, Seq("i", "j"), Seq("i", "j"))), numPartitions = 1)
-    testBucketing(
-      bucketedTableTestSpecLeft = bucketedTableTestSpec1,
-      bucketedTableTestSpecRight = bucketedTableTestSpec1,
-      joinCondition = joinCondition(Seq("i", "j", "k"))
-    )
 
     // child's partitioning columns is a super set of join predicates
     val bucketedTableTestSpec2 =

@@ -32,6 +32,8 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 case class ShuffledHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
+    leftDistributionKeys: Seq[Expression],
+    rightDistributionKeys: Seq[Expression],
     joinType: JoinType,
     buildSide: BuildSide,
     condition: Option[Expression],
@@ -46,7 +48,9 @@ case class ShuffledHashJoinExec(
     "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
 
   override def requiredChildDistribution: Seq[Distribution] =
-    HashClusteredDistribution(leftKeys) :: HashClusteredDistribution(rightKeys) :: Nil
+    HashClusteredDistribution(leftDistributionKeys) ::
+      HashClusteredDistribution(rightDistributionKeys) ::
+      Nil
 
   private def buildHashedRelation(iter: Iterator[InternalRow]): HashedRelation = {
     val buildDataSize = longMetric("buildDataSize")
