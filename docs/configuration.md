@@ -453,9 +453,10 @@ Apart from these, the following properties are also available, and may be useful
     Comma-separated list of Maven coordinates of jars to include on the driver and executor
     classpaths. The coordinates should be groupId:artifactId:version. If <code>spark.jars.ivySettings</code>
     is given artifacts will be resolved according to the configuration in the file, otherwise artifacts
-    will be searched for in the local maven repo, then maven central and finally any additional remote
-    repositories given by the command-line option <code>--repositories</code>. For more details, see
-    <a href="submitting-applications.html#advanced-dependency-management">Advanced Dependency Management</a>.
+    will be searched for in any additional remote repositories given by the command-line option
+    <code>--repositories</code>, then the local maven repo(${user.home}/.m2/repository), finally maven central.
+    For more details, see <a href="submitting-applications.html#advanced-dependency-management">
+    Advanced Dependency Management</a>.
   </td>
 </tr>
 <tr>
@@ -464,6 +465,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of groupId:artifactId, to exclude while resolving the dependencies
     provided in <code>spark.jars.packages</code> to avoid dependency conflicts.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.repositories</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of additional remote repositories to search for the maven coordinates. It is also
+    given by the command-line option <code>--repositories</code>
   </td>
 </tr>
 <tr>

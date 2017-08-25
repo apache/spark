@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, OutputStream, PrintStream}
+import java.io.{File, FileInputStream, OutputStream, PrintStream}
 import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable.ArrayBuffer
@@ -30,6 +30,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.deploy.SparkSubmitUtils.MavenCoordinate
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
@@ -85,8 +86,8 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
     val expected = repos.split(",").map(r => s"$r/")
     resolver.getResolvers.toArray.zipWithIndex.foreach { case (resolver: AbstractResolver, i) =>
       if (1 < i && i < 3) {
-        assert(resolver.getName === s"repo-$i")
-        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i - 1))
+        assert(resolver.getName === s"repo-${i + 1}")
+        assert(resolver.asInstanceOf[IBiblioResolver].getRoot === expected(i))
       }
     }
   }
@@ -253,6 +254,53 @@ class SparkSubmitUtilsSuite extends SparkFunSuite with BeforeAndAfterAll {
       assert(jarPath.indexOf("mylib") >= 0, "should find artifact")
       assert(jarPath.indexOf(tempIvyPath) >= 0, "should be in new ivy path")
       assert(jarPath.indexOf("mydep") >= 0, "should find dependency")
+    }
+  }
+
+  test("search for artifact taking order from user defined repositories to default repositories") {
+    val main = new MavenCoordinate("a", "b", "0.1")
+
+    def isSameFile(left: String, right: String): Boolean = {
+      val leftInput: FileInputStream = new FileInputStream(left)
+      val leftMd5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(leftInput)
+
+      val rightInput: FileInputStream = new FileInputStream(left)
+      val rightMd5 = org.apache.commons.codec.digest.DigestUtils.md5Hex(rightInput)
+
+      leftMd5 == rightMd5
+    }
+
+    var userDefinedRepo = Utils.createTempDir("my_m2")
+    try {
+      IvyTestUtils.withRepository(main, None, Some(userDefinedRepo)) { repo =>
+        IvyTestUtils.withRepository(main, None, Some(SparkSubmitUtils.m2Path)) {
+          defaultRepo =>
+            val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+              main.toString,
+              SparkSubmitUtils.buildIvySettings(Option(repo), None),
+              isTest = false)
+            assert(isSameFile(Seq(userDefinedRepo, main.groupId, main.artifactId, main.version,
+              "b-0.1.jar").mkString(File.separatorChar.toString), jarPath))
+            assert(jarPath.indexOf("b") >= 0, "should find artifact")
+
+        }
+      }
+
+      IvyTestUtils.withRepository(main, None, Some(SparkSubmitUtils.m2Path)) { defaultRepo =>
+        IvyTestUtils.withRepository(main, None, Some(userDefinedRepo)) {
+          repo =>
+            val jarPath = SparkSubmitUtils.resolveMavenCoordinates(
+              main.toString,
+              SparkSubmitUtils.buildIvySettings(Option(repo), None),
+              isTest = false)
+            assert(isSameFile(Seq(SparkSubmitUtils.m2Path.getCanonicalPath, main.groupId,
+              main.artifactId, main.version, "b-0.1.jar").mkString(File.separatorChar.toString),
+              jarPath))
+            assert(jarPath.indexOf("b") >= 0, "should find artifact")
+        }
+      }
+    } finally {
+      Utils.deleteRecursively(userDefinedRepo)
     }
   }
 }

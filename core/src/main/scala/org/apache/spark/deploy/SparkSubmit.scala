@@ -441,7 +441,6 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.deployMode, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -486,7 +485,12 @@ object SparkSubmit extends CommandLineUtils {
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
+      OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.jars.ivy"),
+      OptionAssigner(args.repositories, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.jars.repositories"),
+        OptionAssigner(args.sparkProperties.get("spark.jars.ivySettings").orNull,
+          ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars.ivySettings")
     )
 
     // In client mode, launch the application main class directly
@@ -1186,10 +1190,8 @@ private[spark] object SparkSubmitUtils {
       val cr = new ChainResolver
       cr.setName("user-list")
 
-      // add current default resolver, if any
-      Option(ivySettings.getDefaultResolver).foreach(cr.add)
-
-      // add additional repositories, last resolution in chain takes precedence
+      // before default resolvers, add additional repositories,
+      // last resolution in chain takes precedence
       repositoryList.zipWithIndex.foreach { case (repo, i) =>
         val brr: IBiblioResolver = new IBiblioResolver
         brr.setM2compatible(true)
@@ -1201,6 +1203,9 @@ private[spark] object SparkSubmitUtils {
         printStream.println(s"$repo added as a remote repository with the name: ${brr.getName}")
         // scalastyle:on println
       }
+
+      // add current default resolver, if any
+      Option(ivySettings.getDefaultResolver).foreach(cr.add)
 
       ivySettings.addResolver(cr)
       ivySettings.setDefaultResolver(cr.getName)

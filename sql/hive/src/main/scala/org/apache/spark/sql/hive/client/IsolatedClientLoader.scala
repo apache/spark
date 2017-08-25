@@ -58,7 +58,7 @@ private[hive] object IsolatedClientLoader extends Logging {
     } else {
       val (downloadedFiles, actualHadoopVersion) =
         try {
-          (downloadVersion(resolvedVersion, hadoopVersion, ivyPath), hadoopVersion)
+          (downloadVersion(resolvedVersion, hadoopVersion, sparkConf, ivyPath), hadoopVersion)
         } catch {
           case e: RuntimeException if e.getMessage.contains("hadoop") =>
             // If the error message contains hadoop, it is probably because the hadoop
@@ -69,7 +69,7 @@ private[hive] object IsolatedClientLoader extends Logging {
               "It is recommended to set jars used by Hive metastore client through " +
               "spark.sql.hive.metastore.jars in the production environment.")
             sharesHadoopClasses = false
-            (downloadVersion(resolvedVersion, "2.6.5", ivyPath), "2.6.5")
+            (downloadVersion(resolvedVersion, "2.6.5", sparkConf, ivyPath), "2.6.5")
         }
       resolvedVersions.put((resolvedVersion, actualHadoopVersion), downloadedFiles)
       resolvedVersions((resolvedVersion, actualHadoopVersion))
@@ -100,6 +100,7 @@ private[hive] object IsolatedClientLoader extends Logging {
   private def downloadVersion(
       version: HiveVersion,
       hadoopVersion: String,
+      sparkConf: SparkConf,
       ivyPath: Option[String]): Seq[URL] = {
     val hiveArtifacts = version.extraDeps ++
       Seq("hive-metastore", "hive-exec", "hive-common", "hive-serde")
@@ -107,21 +108,29 @@ private[hive] object IsolatedClientLoader extends Logging {
       Seq("com.google.guava:guava:14.0.1",
         s"org.apache.hadoop:hadoop-client:$hadoopVersion")
 
+    // if repositories contain a local repo, it will not download jars from remote repo
+    val repos: Option[String] = Option(sparkConf.get("spark.jars.repositories", ""))
+      .filterNot(_.isEmpty).map { repo =>
+        Seq(repo, "http://www.datanucleus.org/downloads/maven2").mkString(",")
+    }.orElse(Some("http://www.datanucleus.org/downloads/maven2"))
+
+    val ivyRepoPath = Option(sparkConf.get("spark.jars.ivy", "")).filterNot(_.isEmpty)
+    val ivySettings = Option(sparkConf.get("spark.jars.ivySettings", ""))
+      .filterNot(_.isEmpty).map { ivySettingsFile =>
+      SparkSubmitUtils.loadIvySettings(ivySettingsFile, repos, ivyRepoPath)
+    }.getOrElse {
+      SparkSubmitUtils.buildIvySettings(repos, ivyRepoPath)
+    }
+
     val classpath = quietly {
       SparkSubmitUtils.resolveMavenCoordinates(
         hiveArtifacts.mkString(","),
-        SparkSubmitUtils.buildIvySettings(
-          Some("http://www.datanucleus.org/downloads/maven2"),
-          ivyPath),
+        ivySettings,
         exclusions = version.exclusions)
     }
-    val allFiles = classpath.split(",").map(new File(_)).toSet
 
-    // TODO: Remove copy logic.
-    val tempDir = Utils.createTempDir(namePrefix = s"hive-${version}")
-    allFiles.foreach(f => FileUtils.copyFileToDirectory(f, tempDir))
-    logInfo(s"Downloaded metastore jars to ${tempDir.getCanonicalPath}")
-    tempDir.listFiles().map(_.toURI.toURL)
+    logInfo(s"Downloaded metastore jars location: $classpath")
+    classpath.split(",").map(new File(_).toURI.toURL)
   }
 
   // A map from a given pair of HiveVersion and Hadoop version to jar files.
