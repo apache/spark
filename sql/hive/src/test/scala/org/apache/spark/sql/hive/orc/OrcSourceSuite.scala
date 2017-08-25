@@ -18,12 +18,13 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.util.Locale
 
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -149,7 +150,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
-    assert(new OrcOptions(Map("Orc.Compress" -> "NONE")).compressionCodec == "NONE")
+    val conf = sqlContext.sessionState.conf
+    assert(new OrcOptions(Map("Orc.Compress" -> "NONE"), conf).compressionCodecClassName == "NONE")
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
@@ -192,6 +194,24 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
       hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
       Utils.deleteRecursively(location)
+    }
+  }
+
+  test("SPARK-21839: Add SQL config for ORC compression") {
+    val conf = sqlContext.sessionState.conf
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == "SNAPPY")
+
+    // OrcOptions's parameters have a higher priority than SQL configuration.
+    withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
+      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == "NONE")
+      assert(
+        new OrcOptions(Map("orc.compress" -> "zlib"), conf).compressionCodecClassName == "ZLIB")
+    }
+
+    Seq("SNAPPY", "ZLIB").foreach { c =>
+      withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
+        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == c)
+      }
     }
   }
 }

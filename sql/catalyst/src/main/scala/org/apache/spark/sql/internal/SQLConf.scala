@@ -322,6 +322,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  // We can add LZO after Apache ORC 1.4.0 is used.
+  val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
+    .doc("Sets the compression codec use when writing ORC files. Acceptable values include: " +
+      "uncompressed, snappy, gzip.")
+    .stringConf
+    .transform(_.toLowerCase(Locale.ROOT))
+    .checkValues(Set("uncompressed", "snappy", "zlib"))
+    .createWithDefault("snappy")
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
@@ -997,6 +1006,8 @@ class SQLConf extends Serializable with Logging {
   def maxRecordsPerFile: Long = getConf(MAX_RECORDS_PER_FILE)
 
   def useCompression: Boolean = getConf(COMPRESS_CACHED)
+
+  def orcCompressionCodec: String = getConf(ORC_COMPRESSION)
 
   def parquetCompressionCodec: String = getConf(PARQUET_COMPRESSION)
 
