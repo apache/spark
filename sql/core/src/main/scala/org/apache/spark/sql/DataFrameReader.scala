@@ -410,7 +410,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+      LogicalRDD(schema.toAttributes, parsed, isStreaming = jsonDataset.isStreaming)(sparkSession))
   }
 
   /**
@@ -473,7 +473,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
     Dataset.ofRows(
       sparkSession,
-      LogicalRDD(schema.toAttributes, parsed)(sparkSession))
+      LogicalRDD(schema.toAttributes, parsed, isStreaming = csvDataset.isStreaming)(sparkSession))
   }
 
   /**

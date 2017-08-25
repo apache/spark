@@ -762,7 +762,7 @@ class SparkSubmitSuite
       (Set(jar1.toURI.toString, jar2.toURI.toString))
     sysProps("spark.yarn.dist.files").split(",").toSet should be
       (Set(file1.toURI.toString, file2.toURI.toString))
-    sysProps("spark.submit.pyFiles").split(",").toSet should be
+    sysProps("spark.yarn.dist.pyFiles").split(",").toSet should be
       (Set(pyFile1.getAbsolutePath, pyFile2.getAbsolutePath))
     sysProps("spark.yarn.dist.archives").split(",").toSet should be
       (Set(archive1.toURI.toString, archive2.toURI.toString))
@@ -805,10 +805,7 @@ class SparkSubmitSuite
     val sparkConf = new SparkConf(false)
     val hadoopConf = new Configuration()
     val tmpDir = Utils.createTempDir()
-    // Set s3a implementation to local file system for testing.
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    // Disable file system impl cache to make sure the test file system is picked up.
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
     intercept[FileNotFoundException] {
       DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf,
         new SecurityManager(sparkConf))
@@ -833,10 +830,7 @@ class SparkSubmitSuite
     FileUtils.write(jarFile, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    // Set s3a implementation to local file system for testing.
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    // Disable file system impl cache to make sure the test file system is picked up.
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
     val sourcePath = s"s3a://${jarFile.getAbsolutePath}"
     val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf,
       new SecurityManager(sparkConf))
@@ -852,10 +846,7 @@ class SparkSubmitSuite
     FileUtils.write(jarFile, content)
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    // Set s3a implementation to local file system for testing.
-    hadoopConf.set("fs.s3a.impl", "org.apache.spark.deploy.TestFileSystem")
-    // Disable file system impl cache to make sure the test file system is picked up.
-    hadoopConf.set("fs.s3a.impl.disable.cache", "true")
+    updateConfWithFakeS3Fs(hadoopConf)
     val sourcePaths = Seq("/local/file", s"s3a://${jarFile.getAbsolutePath}")
     val outputPaths = DependencyUtils
       .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf,
@@ -867,6 +858,43 @@ class SparkSubmitSuite
       checkDownloadedFile(sourcePath, outputPath)
       deleteTempOutputFile(outputPath)
     }
+  }
+
+  test("Avoid re-upload remote resources in yarn client mode") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val tmpDir = Utils.createTempDir()
+    val file = File.createTempFile("tmpFile", "", tmpDir)
+    val pyFile = File.createTempFile("tmpPy", ".egg", tmpDir)
+    val mainResource = File.createTempFile("tmpPy", ".py", tmpDir)
+    val tmpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
+    val tmpJarPath = s"s3a://${new File(tmpJar.toURI).getAbsolutePath}"
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", tmpJarPath,
+      "--files", s"s3a://${file.getAbsolutePath}",
+      "--py-files", s"s3a://${pyFile.getAbsolutePath}",
+      s"s3a://$mainResource"
+      )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))._3
+
+    // All the resources should still be remote paths, so that YARN client will not upload again.
+    sysProps("spark.yarn.dist.jars") should be (tmpJarPath)
+    sysProps("spark.yarn.dist.files") should be (s"s3a://${file.getAbsolutePath}")
+    sysProps("spark.yarn.dist.pyFiles") should be (s"s3a://${pyFile.getAbsolutePath}")
+
+    // Local repl jars should be a local path.
+    sysProps("spark.repl.local.jars") should (startWith("file:"))
+
+    // local py files should not be a URI format.
+    sysProps("spark.submit.pyFiles") should (startWith("/"))
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
@@ -907,6 +935,11 @@ class SparkSubmitSuite
     } finally {
       Utils.deleteRecursively(tmpDir)
     }
+  }
+
+  private def updateConfWithFakeS3Fs(conf: Configuration): Unit = {
+    conf.set("fs.s3a.impl", classOf[TestFileSystem].getCanonicalName)
+    conf.set("fs.s3a.impl.disable.cache", "true")
   }
 }
 
@@ -978,9 +1011,22 @@ class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
     new Path(path.toUri.getPath)
   }
 
+  private def toRemote(status: FileStatus): FileStatus = {
+    val path = s"s3a://${status.getPath.toUri.getPath}"
+    status.setPath(new Path(path))
+    status
+  }
+
   override def isFile(path: Path): Boolean = super.isFile(local(path))
 
-  override def listStatus(path: Path): Array[FileStatus] = super.listStatus(local(path))
+  override def globStatus(pathPattern: Path): Array[FileStatus] = {
+    val newPath = new Path(pathPattern.toUri.getPath)
+    super.globStatus(newPath).map(toRemote)
+  }
+
+  override def listStatus(path: Path): Array[FileStatus] = {
+    super.listStatus(local(path)).map(toRemote)
+  }
 
   override def copyToLocalFile(src: Path, dst: Path): Unit = {
     super.copyToLocalFile(local(src), dst)
