@@ -26,54 +26,103 @@ import org.apache.spark.util.Utils
 package object config {
 
   private[spark] val DRIVER_CLASS_PATH =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH)
+      .doc("Extra classpath entries to prepend to the classpath of the driver.")
+      .stringConf.createOptional
 
   private[spark] val DRIVER_JAVA_OPTIONS =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
+      .doc("A string of extra JVM options to pass to the driver. For instance, " +
+        "GC settings or other logging.")
+      .stringConf.createOptional
 
   private[spark] val DRIVER_LIBRARY_PATH =
-    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH)
+      .doc("Set a special library path to use when launching the driver JVM.")
+      .stringConf.createOptional
 
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
-    ConfigBuilder("spark.driver.userClassPathFirst").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.driver.userClassPathFirst")
+      .doc("Whether to give user-added jars precedence over Spark's own jars " +
+        "when loading classes in the driver. This feature can be used to mitigate " +
+        "conflicts between Spark's dependencies and user dependencies. " +
+        "It is currently an experimental feature. This is used in cluster mode only.")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val DRIVER_MEMORY = ConfigBuilder("spark.driver.memory")
+    .doc("Amount of memory to use for the driver process, i.e. " +
+      "where SparkContext is initialized. (e.g. 512m, 1g, 2g).")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
   private[spark] val EXECUTOR_CLASS_PATH =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
+      .doc("Extra classpath entries to prepend to the classpath of executors. " +
+        "This exists primarily for backwards-compatibility with older versions of Spark. " +
+        "Users typically should not need to set this option.")
+      .stringConf.createOptional
 
   private[spark] val EXECUTOR_JAVA_OPTIONS =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
+      .doc("A string of extra JVM options to pass to executors. For instance, " +
+        "GC settings or other logging.")
+      .stringConf.createOptional
 
   private[spark] val EXECUTOR_LIBRARY_PATH =
-    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH).stringConf.createOptional
+    ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH)
+      .doc("Set a special library path to use when launching executor JVM's.")
+      .stringConf.createOptional
 
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
-    ConfigBuilder("spark.executor.userClassPathFirst").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.executor.userClassPathFirst")
+      .doc("Same functionality as spark.driver.userClassPathFirst, " +
+        "but applied to executor instances.")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder("spark.executor.memory")
+    .doc("Amount of memory to use per executor process (e.g. 512m, 1g, 2g, 8g).")
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
   private[spark] val IS_PYTHON_APP = ConfigBuilder("spark.yarn.isPython").internal()
     .booleanConf.createWithDefault(false)
 
-  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus").intConf.createWithDefault(1)
+  private[spark] val CPUS_PER_TASK = ConfigBuilder("spark.task.cpus")
+    .doc("Number of cores to allocate for each task.")
+    .intConf
+    .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.minExecutors").intConf.createWithDefault(0)
+    ConfigBuilder("spark.dynamicAllocation.minExecutors")
+      .doc("Lower bound for the number of executors if dynamic allocation is enabled.")
+      .intConf
+      .createWithDefault(0)
 
   private[spark] val DYN_ALLOCATION_INITIAL_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.initialExecutors")
+      .doc("Initial number of executors to run if dynamic allocation is enabled. " +
+        "If `--num-executors` (or `spark.executor.instances`) is set " +
+        "and larger than this value, " +
+        "it will be used as the initial number of executors.")
       .fallbackConf(DYN_ALLOCATION_MIN_EXECUTORS)
 
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
-    ConfigBuilder("spark.dynamicAllocation.maxExecutors").intConf.createWithDefault(Int.MaxValue)
+    ConfigBuilder("spark.dynamicAllocation.maxExecutors")
+      .doc("Upper bound for the number of executors if dynamic allocation is enabled.")
+      .intConf
+      .createWithDefault(Int.MaxValue)
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
-    ConfigBuilder("spark.shuffle.service.enabled").booleanConf.createWithDefault(false)
+    ConfigBuilder("spark.shuffle.service.enabled")
+      .doc("Enables the external shuffle service. This service preserves " +
+        "the shuffle files written by executors so the executors can be safely removed. " +
+        "This must be enabled if spark.dynamicAllocation.enabled is 'true'. " +
+        "The external shuffle service must be set up in order to enable it. " +
+        "See dynamic allocation configuration and setup documentation for more information.")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val KEYTAB = ConfigBuilder("spark.yarn.keytab")
     .doc("Location of user's keytab.")
@@ -88,6 +137,8 @@ package object config {
     .createOptional
 
   private[spark] val PY_FILES = ConfigBuilder("spark.submit.pyFiles")
+    .doc("Comma-separated list of .zip, .egg, or .py files to place on " +
+      "the PYTHONPATH for Python apps.")
     .internal()
     .stringConf
     .toSequence
@@ -95,52 +146,88 @@ package object config {
 
   private[spark] val MAX_TASK_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
+      .doc("Number of failures of any particular task before giving up on the job. " +
+        "The total number of failures spread across different tasks " +
+        "will not cause the job to fail; " +
+        "a particular task has to fail this number of attempts. " +
+        "Should be greater than or equal to 1. Number of allowed retries = this value - 1.")
       .intConf
       .createWithDefault(4)
 
   // Blacklist confs
   private[spark] val BLACKLIST_ENABLED =
     ConfigBuilder("spark.blacklist.enabled")
+      .doc("If set to 'true', prevent Spark from scheduling tasks on executors " +
+        "that have been blacklisted due to too many task failures. " +
+        "The blacklisting algorithm can be further controlled by " +
+        "the other 'spark.blacklist' configuration options.")
       .booleanConf
       .createOptional
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerExecutor")
+      .doc("For a given task, how many times it can be " +
+        "retried on one executor before the executor is blacklisted for that task.")
       .intConf
       .createWithDefault(1)
 
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.blacklist.task.maxTaskAttemptsPerNode")
+      .doc("For a given task, how many times it can be " +
+        "retried on one node, before the entire node is blacklisted for that task.")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.blacklist.application.maxFailedTasksPerExecutor")
+      .doc("(Experimental) How many different tasks must fail on one executor, " +
+        "in successful task sets, before the executor is blacklisted for the entire application. " +
+        "Blacklisted executors will be automatically added back to the pool of available " +
+        "resources after the timeout specified by spark.blacklist.timeout. " +
+        "Note that with dynamic allocation, though, the executors may get marked " +
+        "as idle and be reclaimed by the cluster manager.")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedTasksPerExecutor")
+      .doc("How many different tasks must fail on one executor, " +
+        "within one stage, before the executor is blacklisted for that stage.")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.blacklist.application.maxFailedExecutorsPerNode")
+      .doc("(Experimental) How many different executors must be blacklisted for " +
+        "the entire application, before the node is blacklisted for the entire application. " +
+        "Blacklisted nodes will be automatically added back to the pool of available resources " +
+        "after the timeout specified by spark.blacklist.timeout. " +
+        "Note that with dynamic allocation, though, the executors on the node may get marked " +
+        "as idle and be reclaimed by the cluster manager.")
       .intConf
       .createWithDefault(2)
 
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.blacklist.stage.maxFailedExecutorsPerNode")
+      .doc("How many different executors are marked as blacklisted for a given stage, " +
+        "before the entire node is marked as failed for the stage.")
       .intConf
       .createWithDefault(2)
 
   private[spark] val BLACKLIST_TIMEOUT_CONF =
     ConfigBuilder("spark.blacklist.timeout")
+      .doc("(Experimental) How long a node or executor is blacklisted for " +
+        "the entire application, before it is unconditionally removed from " +
+        "the blacklist to attempt running new tasks.")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val BLACKLIST_KILL_ENABLED =
     ConfigBuilder("spark.blacklist.killBlacklistedExecutors")
+      .doc("(Experimental) If set to true, allow Spark to automatically kill, " +
+        "and attempt to re-create, executors when they are blacklisted. Note that, " +
+        "when an entire node is added to the blacklist, all of the executors " +
+        "on that node will be killed.")
       .booleanConf
       .createWithDefault(false)
 
@@ -183,15 +270,18 @@ package object config {
     .createOptional
 
   private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
+    .doc("Python binary executable to use for PySpark in driver.")
     .stringConf
     .createOptional
 
   private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
+    .doc("Python binary executable to use for PySpark in both driver and executors.")
     .stringConf
     .createOptional
 
   // To limit memory usage, we only track information for a fixed number of tasks
   private[spark] val UI_RETAINED_TASKS = ConfigBuilder("spark.ui.retainedTasks")
+    .doc("How many tasks the Spark UI and status APIs remember before garbage collecting.")
     .intConf
     .createWithDefault(100000)
 
@@ -200,15 +290,21 @@ package object config {
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
+    .doc("Enable IO encryption. Currently supported by all modes except Mesos. " +
+      "It's recommended that RPC encryption be enabled when using this feature.")
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val IO_ENCRYPTION_KEYGEN_ALGORITHM =
     ConfigBuilder("spark.io.encryption.keygen.algorithm")
+      .doc("The algorithm to use when generating the IO encryption key. " +
+        "The supported algorithms are described in the KeyGenerator section of " +
+        "the Java Cryptography Architecture Standard Algorithm Name Documentation.")
       .stringConf
       .createWithDefault("HmacSHA1")
 
   private[spark] val IO_ENCRYPTION_KEY_SIZE_BITS = ConfigBuilder("spark.io.encryption.keySizeBits")
+    .doc("IO encryption key size in bits. Supported values are 128, 192 and 256.")
     .intConf
     .checkValues(Set(128, 192, 256))
     .createWithDefault(128)
@@ -245,6 +341,10 @@ package object config {
     .createWithDefault(false)
 
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
+    .doc("Application information that will be written into Yarn RM log/HDFS audit log " +
+      "when running on Yarn/HDFS. Its length depends on the Hadoop configuration " +
+      "hadoop.caller.context.max.size. It should be concise, " +
+      "and typically can have up to 50 characters.")
     .stringConf
     .createOptional
 
@@ -280,16 +380,22 @@ package object config {
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
+      .doc("Whether Spark authenticates its internal connections. " +
+        "See spark.authenticate.secret if not running on YARN.")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SASL_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.authenticate.enableSaslEncryption")
+      .doc("Enable encrypted communication when authentication is enabled. " +
+        "This is supported by the block transfer service and the RPC endpoints.")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val NETWORK_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.network.crypto.enabled")
+      .doc("Enable encryption using the commons-crypto library for RPC and " +
+        "block transfer service. Requires spark.authenticate to be enabled.")
       .booleanConf
       .createWithDefault(false)
 
