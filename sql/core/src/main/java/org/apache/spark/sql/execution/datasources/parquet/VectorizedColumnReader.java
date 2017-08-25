@@ -350,7 +350,8 @@ public class VectorizedColumnReader {
    * is guaranteed that num is smaller than the number of values left in the current page.
    */
 
-  private void readBooleanBatch(int rowId, int num, WritableColumnVector column) throws IOException {
+  private void readBooleanBatch(int rowId, int num, WritableColumnVector column)
+      throws IOException {
     assert(column.dataType() == DataTypes.BooleanType);
     defColumn.readBooleans(
         num, column, rowId, maxDefLevel, (VectorizedValuesReader) dataColumn);
