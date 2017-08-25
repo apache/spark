@@ -58,7 +58,7 @@ case class LocalRelation(output: Seq[Attribute],
    * query.
    */
   override final def newInstance(): this.type = {
-    LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
+    LocalRelation(output.map(_.newInstance()), data, isStreaming).asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = {

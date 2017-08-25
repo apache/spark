@@ -39,6 +39,15 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
+  override protected def checkInvariants(
+      result: LogicalPlan,
+      original: LogicalPlan,
+      rule: Rule[LogicalPlan]): Unit = {
+    assert(
+      result.isStreaming == original.isStreaming,
+      s"Rule ${rule.ruleName} changed isStreaming from original ${original.isStreaming}")
+  }
+
   def batches: Seq[Batch] = {
     Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
@@ -738,8 +747,10 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
-    case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
-    case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
+    case Filter(Literal(null, _), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+    case Filter(Literal(false, BooleanType), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>

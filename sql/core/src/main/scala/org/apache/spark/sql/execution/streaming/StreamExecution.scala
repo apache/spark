@@ -631,7 +631,7 @@ class StreamExecution(
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
-          LocalRelation(output)
+          LocalRelation(output, isStreaming = true)
         }
     }
 

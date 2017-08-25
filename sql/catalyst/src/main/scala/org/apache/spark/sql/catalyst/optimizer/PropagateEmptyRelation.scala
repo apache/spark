@@ -38,7 +38,8 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  private def empty(plan: LogicalPlan) = LocalRelation(plan.output, data = Seq.empty)
+  private def empty(plan: LogicalPlan) =
+    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: Union if p.children.forall(isEmptyLocalRelation) =>
