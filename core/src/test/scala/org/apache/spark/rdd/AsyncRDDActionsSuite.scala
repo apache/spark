@@ -20,8 +20,8 @@ package org.apache.spark.rdd
 import java.util.concurrent.Semaphore
 
 import scala.concurrent._
-import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Timeouts

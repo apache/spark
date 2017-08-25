@@ -324,8 +324,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("partitionColumn", "foo")
         .save()
     }.getMessage
-    assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
-      " and 'numPartitions' are required."))
+    assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+      "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+      "'numPartitions'"))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
@@ -467,7 +468,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
         .jdbc(url1, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
-    assert(msg.contains("no viable alternative at input"))
+    assert(msg.contains("extraneous input"))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {

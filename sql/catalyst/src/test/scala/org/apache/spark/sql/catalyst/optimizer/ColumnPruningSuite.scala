@@ -164,7 +164,7 @@ class ColumnPruningSuite extends PlanTest {
   }
 
   test("Eliminate the Project with an empty projectList") {
-    val input = OneRowRelation
+    val input = OneRowRelation()
     val expected = Project(Literal(1).as("1") :: Nil, input).analyze
 
     val query1 =

@@ -35,11 +35,12 @@ class UnsafeCartesianRDD(
     left : RDD[UnsafeRow],
     right : RDD[UnsafeRow],
     numFieldsOfRight: Int,
+    inMemoryBufferThreshold: Int,
     spillThreshold: Int)
   extends CartesianRDD[UnsafeRow, UnsafeRow](left.sparkContext, left, right) {
 
   override def compute(split: Partition, context: TaskContext): Iterator[(UnsafeRow, UnsafeRow)] = {
-    val rowArray = new ExternalAppendOnlyUnsafeRowArray(spillThreshold)
+    val rowArray = new ExternalAppendOnlyUnsafeRowArray(inMemoryBufferThreshold, spillThreshold)
 
     val partition = split.asInstanceOf[CartesianPartition]
     rdd2.iterator(partition.s2, context).foreach(rowArray.add)
@@ -71,9 +72,12 @@ case class CartesianProductExec(
     val leftResults = left.execute().asInstanceOf[RDD[UnsafeRow]]
     val rightResults = right.execute().asInstanceOf[RDD[UnsafeRow]]
 
-    val spillThreshold = sqlContext.conf.cartesianProductExecBufferSpillThreshold
-
-    val pair = new UnsafeCartesianRDD(leftResults, rightResults, right.output.size, spillThreshold)
+    val pair = new UnsafeCartesianRDD(
+      leftResults,
+      rightResults,
+      right.output.size,
+      sqlContext.conf.cartesianProductExecBufferInMemoryThreshold,
+      sqlContext.conf.cartesianProductExecBufferSpillThreshold)
     pair.mapPartitionsWithIndexInternal { (index, iter) =>
       val joiner = GenerateUnsafeRowJoiner.create(left.schema, right.schema)
       val filtered = if (condition.isDefined) {

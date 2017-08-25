@@ -222,7 +222,7 @@ package object config {
   private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
     .doc("Address of driver endpoints.")
     .stringConf
-    .createWithDefault(Utils.localHostName())
+    .createWithDefault(Utils.localCanonicalHostName())
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")

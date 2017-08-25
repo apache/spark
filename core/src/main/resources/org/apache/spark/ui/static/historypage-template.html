@@ -29,26 +29,30 @@
           App Name
         </span>
       </th>
-      <th class="attemptIDSpan">
+      {{#hasMultipleAttempts}}
+      <th>
         <span data-toggle="tooltip" data-placement="top" title="The attempt ID of this application since one application might be launched several times">
           Attempt ID
         </span>
       </th>
+      {{/hasMultipleAttempts}}
       <th>
         <span data-toggle="tooltip" data-placement="top" title="Started time of this application.">
           Started
         </span>
       </th>
-      <th class="completedColumn">
+      {{#showCompletedColumns}}
+      <th>
         <span data-toggle="tooltip" data-placement="top" title="The completed time of this application.">
           Completed
         </span>
       </th>
-      <th class="durationColumn">
+      <th>
         <span data-toggle="tooltip" data-placement="top" title="The duration time of this application.">
           Duration
         </span>
       </th>
+      {{/showCompletedColumns}}
       <th>
         <span data-toggle="tooltip" data-placement="top" title="The Spark user of this application">
           Spark User
@@ -68,13 +72,17 @@
   <tbody>
   {{#applications}}
     <tr>
-      <td class="rowGroupColumn"><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
-      <td class="rowGroupColumn">{{name}}</td>
+      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}><span title="{{id}}"><a href="{{uiroot}}/history/{{id}}/{{num}}/jobs/">{{id}}</a></span></td>
+      <td {{#hasMultipleAttempts}}style="background-color:#fff"{{/hasMultipleAttempts}}>{{name}}</td>
       {{#attempts}}
-      <td class="attemptIDSpan"><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
+      {{#hasMultipleAttempts}}
+      <td><a href="{{uiroot}}/history/{{id}}/{{attemptId}}/jobs/">{{attemptId}}</a></td>
+      {{/hasMultipleAttempts}}
       <td>{{startTime}}</td>
-      <td class="completedColumn">{{endTime}}</td>
-      <td class="durationColumn"><span title="{{duration}}" class="durationClass">{{duration}}</span></td>
+      {{#showCompletedColumns}}
+      <td>{{endTime}}</td>
+      <td><span title="{{durationMillisec}}">{{duration}}</span></td>
+      {{/showCompletedColumns}}
       <td>{{sparkUser}}</td>
       <td>{{lastUpdated}}</td>
       <td><a href="{{log}}" class="btn btn-info btn-mini">Download</a></td>

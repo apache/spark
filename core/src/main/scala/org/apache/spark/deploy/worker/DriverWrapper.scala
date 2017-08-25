@@ -19,7 +19,10 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
+import org.apache.commons.lang3.StringUtils
+
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.{DependencyUtils, SparkSubmit}
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
@@ -51,6 +54,7 @@ object DriverWrapper {
             new MutableURLClassLoader(Array(userJarUrl), currentLoader)
           }
         Thread.currentThread.setContextClassLoader(loader)
+        setupDependencies(loader, userJar)
 
         // Delegate to supplied main class
         val clazz = Utils.classForName(mainClass)
@@ -65,5 +69,24 @@ object DriverWrapper {
         // scalastyle:on println
         System.exit(-1)
     }
+  }
+
+  private def setupDependencies(loader: MutableURLClassLoader, userJar: String): Unit = {
+    val Seq(packagesExclusions, packages, repositories, ivyRepoPath) =
+      Seq("spark.jars.excludes", "spark.jars.packages", "spark.jars.repositories", "spark.jars.ivy")
+        .map(sys.props.get(_).orNull)
+
+    val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(packagesExclusions,
+      packages, repositories, ivyRepoPath)
+    val jars = {
+      val jarsProp = sys.props.get("spark.jars").orNull
+      if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
+        SparkSubmit.mergeFileLists(jarsProp, resolvedMavenCoordinates)
+      } else {
+        jarsProp
+      }
+    }
+    val localJars = DependencyUtils.resolveAndDownloadJars(jars, userJar)
+    DependencyUtils.addJarsToClassPath(localJars, loader)
   }
 }

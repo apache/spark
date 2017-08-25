@@ -19,8 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.Semaphore
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.mockito.Mockito
 import org.scalatest.Matchers

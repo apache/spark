@@ -77,7 +77,8 @@ private[r] object GeneralizedLinearRegressionWrapper
       regParam: Double,
       variancePower: Double,
       linkPower: Double,
-      stringIndexerOrderType: String): GeneralizedLinearRegressionWrapper = {
+      stringIndexerOrderType: String,
+      offsetCol: String): GeneralizedLinearRegressionWrapper = {
   // scalastyle:on
     val rFormula = new RFormula().setFormula(formula)
       .setStringIndexerOrderType(stringIndexerOrderType)
@@ -99,6 +100,7 @@ private[r] object GeneralizedLinearRegressionWrapper
       glr.setLink(link)
     }
     if (weightCol != null) glr.setWeightCol(weightCol)
+    if (offsetCol != null) glr.setOffsetCol(offsetCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, glr))

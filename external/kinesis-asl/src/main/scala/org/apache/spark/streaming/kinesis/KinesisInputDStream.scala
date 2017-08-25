@@ -21,7 +21,6 @@ import scala.reflect.ClassTag
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 import com.amazonaws.services.kinesis.model.Record
-import KinesisReadConfigurations._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.rdd.RDD
@@ -46,6 +45,8 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val dynamoDBCreds: Option[SparkAWSCredentials],
     val cloudWatchCreds: Option[SparkAWSCredentials]
   ) extends ReceiverInputDStream[T](_ssc) {
+
+  import KinesisReadConfigurations._
 
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {

@@ -64,6 +64,10 @@ singleDataType
     : dataType EOF
     ;
 
+singleTableSchema
+    : colTypeList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
@@ -473,11 +477,11 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? tableAlias                   #tableName
-    | '(' queryNoWith ')' sample? tableAlias               #aliasedQuery
-    | '(' relation ')' sample? (AS? strictIdentifier)?     #aliasedRelation
-    | inlineTable                                          #inlineTableDefault2
-    | functionTable                                        #tableValuedFunction
+    : tableIdentifier sample? tableAlias      #tableName
+    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    | '(' relation ')' sample? tableAlias     #aliasedRelation
+    | inlineTable                             #inlineTableDefault2
+    | functionTable                           #tableValuedFunction
     ;
 
 inlineTable
@@ -974,7 +978,7 @@ CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
-    | '\"' ( ~('\"'|'\\') | ('\\' .) )* '\"'
+    | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
     ;
 
 BIGINT_LITERAL
