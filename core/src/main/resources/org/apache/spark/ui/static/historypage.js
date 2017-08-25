@@ -136,6 +136,16 @@ $(document).ready(function() {
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];
           attempt["duration"] = formatDuration(attempt["duration"]);
+          var idStr = id.toString();
+          if(idStr.indexOf("application_") > -1) {
+            attempt["master"] = "yarn";
+          } else if(idStr.indexOf("app-") > -1) {
+            attempt["master"] = "standalone";
+          } else if(idStr.indexOf("local-") > -1) {
+            attempt["master"] = "local";
+          } else {
+            attempt["master"] = "mesos";
+          }
           var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
@@ -163,6 +173,7 @@ $(document).ready(function() {
           "columns": [
             {name: 'appId', type: "appid-numeric"},
             {name: 'appName'},
+            {name: 'master'},
             {name: attemptIdColumnName},
             {name: startedColumnName},
             {name: completedColumnName},
