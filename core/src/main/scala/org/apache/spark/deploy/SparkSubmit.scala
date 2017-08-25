@@ -212,14 +212,20 @@ object SparkSubmit extends CommandLineUtils {
 
   /**
    * Prepare the environment for submitting an application.
-   * This returns a 4-tuple:
-   *   (1) the arguments for the child process,
-   *   (2) a list of classpath entries for the child,
-   *   (3) a map of system properties, and
-   *   (4) the main class for the child
+   *
+   * @param args the parsed SparkSubmitArguments used for environment preparation.
+   * @param conf the Hadoop Configuration, this argument will only be set in unit test.
+   * @return a 4-tuple:
+   *        (1) the arguments for the child process,
+   *        (2) a list of classpath entries for the child,
+   *        (3) a map of system properties, and
+   *        (4) the main class for the child
+   *
    * Exposed for testing.
    */
-  private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+  private[deploy] def prepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
@@ -322,7 +328,7 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-    val hadoopConf = new HadoopConfiguration()
+    val hadoopConf = conf.getOrElse(new HadoopConfiguration())
     val targetDir = DependencyUtils.createTempDir()
 
     // Resolve glob path for different resources.
@@ -332,18 +338,20 @@ object SparkSubmit extends CommandLineUtils {
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
     // In client mode, download remote files.
+    var localPrimaryResource: String = null
+    var localJars: String = null
+    var localPyFiles: String = null
     if (deployMode == CLIENT) {
-      args.primaryResource = Option(args.primaryResource).map {
+      localPrimaryResource = Option(args.primaryResource).map {
         downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
-      args.jars = Option(args.jars).map {
+      localJars = Option(args.jars).map {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
-      args.pyFiles = Option(args.pyFiles).map {
+      localPyFiles = Option(args.pyFiles).map {
         downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
       }.orNull
     }
-
 
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
@@ -353,7 +361,7 @@ object SparkSubmit extends CommandLineUtils {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
+        args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
         if (clusterManager != YARN) {
           // The YARN backend distributes the primary file differently, so don't merge it.
           args.files = mergeFileLists(args.files, args.primaryResource)
@@ -363,8 +371,8 @@ object SparkSubmit extends CommandLineUtils {
         // The YARN backend handles python files differently, so don't merge the lists.
         args.files = mergeFileLists(args.files, args.pyFiles)
       }
-      if (args.pyFiles != null) {
-        sysProps("spark.submit.pyFiles") = args.pyFiles
+      if (localPyFiles != null) {
+        sysProps("spark.submit.pyFiles") = localPyFiles
       }
     }
 
@@ -418,7 +426,7 @@ object SparkSubmit extends CommandLineUtils {
         // If an R file is provided, add it to the child arguments and list of files to deploy.
         // Usage: RRunner <main R file> [app arguments]
         args.mainClass = "org.apache.spark.deploy.RRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
+        args.childArgs = ArrayBuffer(localPrimaryResource) ++ args.childArgs
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
     }
@@ -463,6 +471,7 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
+      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.pyFiles"),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
@@ -486,15 +495,28 @@ object SparkSubmit extends CommandLineUtils {
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
+
+      // An internal option used only for spark-shell to add user jars to repl's classloader,
+      // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
+      // remote jars, so adding a new option to only specify local jars for spark-shell internally.
+      OptionAssigner(localJars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.repl.local.jars")
     )
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
-    // Also add the main application jar and any added jars to classpath in case YARN client
-    // requires these jars.
-    if (deployMode == CLIENT || isYarnCluster) {
+    if (deployMode == CLIENT) {
       childMainClass = args.mainClass
+      if (localPrimaryResource != null && isUserJar(localPrimaryResource)) {
+        childClasspath += localPrimaryResource
+      }
+      if (localJars != null) { childClasspath ++= localJars.split(",") }
+    }
+    // Add the main application jar and any added jars to classpath in case YARN client
+    // requires these jars.
+    // This assumes both primaryResource and user jars are local jars, otherwise it will not be
+    // added to the classpath of YARN client.
+    if (isYarnCluster) {
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
@@ -550,10 +572,6 @@ object SparkSubmit extends CommandLineUtils {
     if (clusterManager == YARN) {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
-      }
-
-      if (args.pyFiles != null) {
-        sysProps("spark.submit.pyFiles") = args.pyFiles
       }
     }
 
