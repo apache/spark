@@ -440,7 +440,7 @@ private[ml] object WeightedLeastSquares {
     /**
      * Weighted population standard deviation of labels.
      */
-    def bStd: Double = math.sqrt(bbSum / wSum - bBar * bBar)
+    def bStd: Double = math.sqrt(math.max(bbSum / wSum - bBar * bBar, 0.0))
 
     /**
      * Weighted mean of (label * features).
