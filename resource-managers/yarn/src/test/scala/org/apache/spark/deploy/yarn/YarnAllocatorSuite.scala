@@ -446,9 +446,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     allocator.allocateResources()
     requestCount = 0
 
-    val pending = (1 to 10).map { i =>
+    val pending = (1 to 10).map { _ =>
       val res = Resource.newInstance(containerMem, containerCpu)
-      new ContainerRequest(res, Array("*"), null, YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
+      new ContainerRequest(res, Array(YarnSparkHadoopUtil.ANY_HOST), null,
+        YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
     }.toList.asJava
     doReturn(List(pending).asJava)
       .when(client)
