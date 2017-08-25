@@ -22,7 +22,7 @@ import java.util.Locale
 import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV}
-import breeze.optimize.{CachedDiffFunction, DiffFunction, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
+import breeze.optimize.{CachedDiffFunction, LBFGS => BreezeLBFGS, LBFGSB => BreezeLBFGSB, OWLQN => BreezeOWLQN}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
@@ -1354,8 +1354,10 @@ private[ml] class MultiClassSummarizer extends Serializable {
 }
 
 /**
+ * :: Experimental ::
  * Abstraction for logistic regression results for a given model.
  */
+@Experimental
 sealed trait LogisticRegressionSummary extends Serializable {
 
   /**
@@ -1472,10 +1474,12 @@ sealed trait LogisticRegressionSummary extends Serializable {
 }
 
 /**
+ * :: Experimental ::
  * Abstraction for multiclass logistic regression training results.
  * Currently, the training summary ignores the training weights except
  * for the objective trace.
  */
+@Experimental
 sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary {
 
   /** objective function (scaled loss + regularization) at each iteration. */
@@ -1489,8 +1493,10 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
 }
 
 /**
+ * :: Experimental ::
  * Abstraction for binary logistic regression results for a given model.
  */
+@Experimental
 sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
 
   private val sparkSession = predictions.sparkSession
@@ -1573,6 +1579,13 @@ sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
   }
 }
 
+/**
+ * :: Experimental ::
+ * Abstraction for binary logistic regression training results.
+ * Currently, the training summary ignores the training weights except
+ * for the objective trace.
+ */
+@Experimental
 sealed trait BinaryLogisticRegressionTrainingSummary extends BinaryLogisticRegressionSummary
   with LogisticRegressionTrainingSummary
 
