@@ -29,10 +29,9 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
+import org.apache.spark.sql.execution.command.{CommandUtils, CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
-import org.apache.spark.sql.hive.client.HiveClientImpl
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -138,11 +137,14 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ *
+ * TODO: merge this with PruneFileSourcePartitions after we completely make hive as a data source.
+ */
 case class PruneHiveTablePartitions(
     session: SparkSession) extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case filter @ Filter(condition, relation: HiveTableRelation)
-      if DDLUtils.isHiveTable(relation.tableMeta) && relation.isPartitioned =>
+    case filter @ Filter(condition, relation: HiveTableRelation) if relation.isPartitioned =>
       val predicates = splitConjunctivePredicates(condition)
       val normalizedFilters = predicates.map { e =>
         e transform {
@@ -162,13 +164,10 @@ case class PruneHiveTablePartitions(
           relation.tableMeta.identifier.table,
           pruningPredicates,
           session.sessionState.conf.sessionLocalTimeZone)
-        val hiveTable = HiveClientImpl.toHiveTable(relation.tableMeta)
-        val partitions = prunedPartitions.map(HiveClientImpl.toHivePartition(_, hiveTable))
         val sizeInBytes = try {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          partitions.map { partition =>
-            val fs: FileSystem = partition.getDataLocation.getFileSystem(hadoopConf)
-            fs.getContentSummary(partition.getDataLocation).getLength
+          prunedPartitions.map { part =>
+            CommandUtils.calculateLocationSize(
+              session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
           }.sum
         } catch {
           case e: IOException =>
