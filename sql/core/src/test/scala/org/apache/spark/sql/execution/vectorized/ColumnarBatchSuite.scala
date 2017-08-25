@@ -1288,8 +1288,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
     val columnVectors = Seq(new ArrowColumnVector(vector1), new ArrowColumnVector(vector2))
 
     val schema = StructType(Seq(StructField("int1", IntegerType), StructField("int2", IntegerType)))
-    val batch = ColumnarBatch.createReadOnly(
-      schema, columnVectors.toArray[ReadOnlyColumnVector], 11)
+    val batch = new ColumnarBatch(schema, columnVectors.toArray[ColumnVector], 11)
+    batch.setNumRows(11)
 
     assert(batch.numCols() == 2)
     assert(batch.numRows() == 11)

@@ -30,7 +30,7 @@ import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ReadOnlyColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -132,11 +132,13 @@ private[sql] object ArrowConverters {
       val schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
 
       val columns = root.getFieldVectors.asScala.map { vector =>
-        new ArrowColumnVector(vector).asInstanceOf[ReadOnlyColumnVector]
+        new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
       }.toArray
 
-      (ColumnarBatch.createReadOnly(schemaRead, columns, root.getRowCount).rowIterator().asScala,
-        schemaRead)
+      val batch = new ColumnarBatch(schemaRead, columns, root.getRowCount)
+      batch.setNumRows(root.getRowCount)
+
+      (batch.rowIterator().asScala, schemaRead)
     }
 
     var (rowIter, schemaRead) = if (payloadIter.hasNext) {

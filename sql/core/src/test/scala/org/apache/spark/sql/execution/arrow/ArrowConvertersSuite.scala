@@ -33,7 +33,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ReadOnlyColumnVector}
+import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -1647,15 +1647,12 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
     val schema = StructType(Seq(StructField("int", IntegerType)))
 
-    val columnarBatch = ColumnarBatch.createReadOnly(
-      schema, Array[ReadOnlyColumnVector](new ArrowColumnVector(vector)), 11)
+    val batch = new ColumnarBatch(schema, Array[ColumnVector](new ArrowColumnVector(vector)), 11)
+    batch.setNumRows(11)
 
-    val context = TaskContext.empty()
-
-    val payloadIter = ArrowConverters.toPayloadIterator(
-      columnarBatch.rowIterator().asScala, schema, 0, context)
-
-    val (rowIter, schemaRead) = ArrowConverters.fromPayloadIterator(payloadIter, context)
+    val ctx = TaskContext.empty()
+    val payloadIter = ArrowConverters.toPayloadIterator(batch.rowIterator().asScala, schema, 0, ctx)
+    val (rowIter, schemaRead) = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
 
     assert(schema.equals(schemaRead))
 
