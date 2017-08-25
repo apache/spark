@@ -143,7 +143,7 @@ object TableConstraint {
     keyColFields.map(_.dataType).foreach {
       case ByteType | ShortType | IntegerType | LongType | FloatType |
            DoubleType | BooleanType | _: DecimalType | TimestampType |
-           DateType | StringType =>
+           DateType | StringType | BinaryType =>
       case otherType => throw new UnsupportedOperationException(
         s"Constraints are not supported for ${otherType.simpleString} data type.")
     }

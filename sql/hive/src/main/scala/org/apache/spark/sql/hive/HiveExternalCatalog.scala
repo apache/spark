@@ -451,7 +451,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       }
       val fks = tableConstraints.foreignKeys
       if (fks.nonEmpty) {
-        constraintProperties += TABLE_NUM_FK_CONSTRAINTS -> fks.size.toString()
+        constraintProperties += TABLE_CONSTRAINT_NUM_FOREIGN_KEYS -> fks.size.toString()
         fks.zipWithIndex.foreach { case (fk, index) =>
           constraintProperties += (s"$TABLE_CONSTRAINT_FOREIGNKEY_PREFIX$index" -> fk.json)
         }
@@ -1322,9 +1322,9 @@ object HiveExternalCatalog {
   val CREATED_SPARK_VERSION = SPARK_SQL_PREFIX + "create.version"
 
   val TABLE_CONSTRAINT_PREFIX = SPARK_SQL_PREFIX + "constraint."
-  val TABLE_CONSTRAINT_PRIMARY_KEY = SPARK_SQL_PREFIX + TABLE_CONSTRAINT_PREFIX + "pk"
-  val TABLE_NUM_FK_CONSTRAINTS = SPARK_SQL_PREFIX + "numFkConstraints"
-  val TABLE_CONSTRAINT_FOREIGNKEY_PREFIX = SPARK_SQL_PREFIX + TABLE_CONSTRAINT_PREFIX + "fk."
+  val TABLE_CONSTRAINT_PRIMARY_KEY = TABLE_CONSTRAINT_PREFIX + "pk"
+  val TABLE_CONSTRAINT_NUM_FOREIGN_KEYS = TABLE_CONSTRAINT_PREFIX + "numForeignKeys"
+  val TABLE_CONSTRAINT_FOREIGNKEY_PREFIX = TABLE_CONSTRAINT_PREFIX + "fk."
 
   // When storing data source tables in hive metastore, we need to set data schema to empty if the
   // schema is hive-incompatible. However we need a hack to preserve existing behavior. Before
@@ -1412,7 +1412,7 @@ object HiveExternalCatalog {
    */
   private def getConstraintsFromTableProperties(table: CatalogTable): Option[TableConstraints] = {
     val primaryKeyJson = table.properties.get(TABLE_CONSTRAINT_PRIMARY_KEY)
-    val numFkConstraints = table.properties.get(TABLE_NUM_FK_CONSTRAINTS)
+    val numFkConstraints = table.properties.get(TABLE_CONSTRAINT_NUM_FOREIGN_KEYS)
     val foreignKeysJson: Seq[String] = if (numFkConstraints.isDefined) {
       (0 until numFkConstraints.get.toInt).flatMap { index =>
         val key = s"$TABLE_CONSTRAINT_FOREIGNKEY_PREFIX$index"
