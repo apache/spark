@@ -413,7 +413,7 @@ private[spark] class MesosClusterScheduler(
     val secrets = getSecrets(desc)
     val secretEnvKeys = {
       if (desc.conf.get(config.SECRET_ENVKEY).isDefined) {
-        desc.conf.get(config.SECRET_ENVKEY).get.split(",").toSeq
+        desc.conf.get(config.SECRET_ENVKEY).get
       } else {
         Seq.empty[String]
       }
@@ -622,8 +622,7 @@ private[spark] class MesosClusterScheduler(
 
     val referenceSecrets: Seq[Secret] = {
       if (desc.conf.get(config.SECRET_NAME).isDefined) {
-        desc.conf.get(config.SECRET_NAME)
-          .get.split(",").map(s => createReferenceSecret(s))
+        desc.conf.get(config.SECRET_NAME).get.map(s => createReferenceSecret(s))
       } else {
         Seq.empty[Secret]
       }
@@ -631,8 +630,7 @@ private[spark] class MesosClusterScheduler(
 
     val valueSecrets: Seq[Secret] = {
       if (desc.conf.get(config.SECRET_VALUE).isDefined) {
-        desc.conf.get(config.SECRET_VALUE)
-          .get.split(",").map(s => createValueSecret(s))
+        desc.conf.get(config.SECRET_VALUE).get.map(s => createValueSecret(s))
       } else {
         Seq.empty[Secret]
       }
@@ -662,11 +660,7 @@ private[spark] class MesosClusterScheduler(
     val secrets = getSecrets(desc)
 
     val secretPaths: Seq[String] = {
-      if (desc.conf.get(config.SECRET_FILENAME).isDefined) {
-        desc.conf.get(config.SECRET_FILENAME).get.split(",").toSeq
-      } else {
-        Seq.empty[String]
-      }
+      desc.conf.get(config.SECRET_FILENAME).getOrElse(Seq.empty[String])
     }
 
     if (illegalSecretInput(secretPaths, secrets)) {

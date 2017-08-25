@@ -69,12 +69,14 @@ package object config {
       .doc("A comma-separated list of secret references. Consult the Mesos Secret protobuf for " +
         "more information.")
       .stringConf
+      .toSequence
       .createOptional
 
   private[spark] val SECRET_VALUE =
     ConfigBuilder("spark.mesos.driver.secret.value")
       .doc("A comma-separated list of secret values.")
       .stringConf
+      .toSequence
       .createOptional
 
   private[spark] val SECRET_ENVKEY =
@@ -82,6 +84,7 @@ package object config {
       .doc("A comma-separated list of the environment variables to contain the secrets." +
         "The environment variable will be set on the driver.")
       .stringConf
+      .toSequence
       .createOptional
 
   private[spark] val SECRET_FILENAME =
@@ -89,9 +92,10 @@ package object config {
       .doc("A comma-seperated list of file paths secret will be written to.  Consult the Mesos " +
         "Secret protobuf for more information.")
       .stringConf
+      .toSequence
       .createOptional
 
-  private [spark] val DRIVER_FAILOVER_TIMEOUT =
+  private[spark] val DRIVER_FAILOVER_TIMEOUT =
     ConfigBuilder("spark.mesos.driver.failoverTimeout")
       .doc("Amount of time in seconds that the master will wait to hear from the driver, " +
           "during a temporary disconnection, before tearing down all the executors.")
