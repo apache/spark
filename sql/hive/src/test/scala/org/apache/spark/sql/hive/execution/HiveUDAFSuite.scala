@@ -26,6 +26,7 @@ import org.apache.hadoop.hive.ql.util.JavaDataModel
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
+import test.org.apache.spark.sql.MyDoubleAvg
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.execution.aggregate.ObjectHashAggregateExec
@@ -84,6 +85,18 @@ class HiveUDAFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       Row(0, Row(1, 1)),
       Row(1, Row(1, 1))
     ))
+  }
+
+  test("call JAVA UDAF") {
+    withTempView("temp") {
+      withUserDefinedFunction("myDoubleAvg" -> false) {
+        spark.range(1, 10).toDF("value").createOrReplaceTempView("temp")
+        sql(s"CREATE FUNCTION myDoubleAvg AS '${classOf[MyDoubleAvg].getName}'")
+        checkAnswer(
+          spark.sql("SELECT default.myDoubleAvg(value) as my_avg from temp"),
+          Row(105.0))
+      }
+    }
   }
 
   test("non-deterministic children expressions of UDAF") {

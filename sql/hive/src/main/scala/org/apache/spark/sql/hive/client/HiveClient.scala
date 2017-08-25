@@ -39,6 +39,12 @@ private[hive] trait HiveClient {
   def getConf(key: String, defaultValue: String): String
 
   /**
+   * Return the associated Hive SessionState of this [[HiveClientImpl]]
+   * @return [[Any]] not SessionState to avoid linkage error
+   */
+  def getState: Any
+
+  /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
    * result in one string.
    */

@@ -87,6 +87,16 @@
     </dependency>
 
     <dependency>
+      <groupId>org.apache.orc</groupId>
+      <artifactId>orc-core</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.orc</groupId>
+      <artifactId>orc-mapreduce</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
     </dependency>
