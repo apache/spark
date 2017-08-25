@@ -45,7 +45,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
   // Chunk size in bytes
   private val bufferWriteChunkSize =
     Option(SparkEnv.get).map(_.conf.get(config.BUFFER_WRITE_CHUNK_SIZE))
-      .getOrElse(config.BUFFER_WRITE_CHUNK_SIZE.defaultValue.get)
+      .getOrElse(config.BUFFER_WRITE_CHUNK_SIZE.defaultValue.get).toInt
 
   private[this] var disposed: Boolean = false
 
@@ -65,7 +65,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
     for (bytes <- getChunks()) {
       while (bytes.remaining() > 0) {
         val ioSize = Math.min(bytes.remaining(), bufferWriteChunkSize)
-        bytes.limit(bytes.position + ioSize.toInt)
+        bytes.limit(bytes.position + ioSize)
         channel.write(bytes)
       }
     }

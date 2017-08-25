@@ -298,6 +298,8 @@ package object config {
       .internal()
       .doc("The chunk size during writing out the bytes of ChunkedByteBuffer.")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ <= Int.MaxValue, "The chunk size during writing out the bytes of" +
+        " ChunkedByteBuffer should not larger than Int.MaxValue.")
       .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val CHECKPOINT_COMPRESS =
