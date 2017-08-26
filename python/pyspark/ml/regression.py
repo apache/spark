@@ -789,6 +789,12 @@ class TreeEnsembleModel(JavaModel):
         return self._call_java("getNumTrees")
 
     @property
+    @since("2.3.0")
+    def getMaxDepth(self):
+        """Maximum depth of the tree (>= 0)."""
+        return self._call_java("getMaxDepth")
+
+    @property
     @since("1.5.0")
     def treeWeights(self):
         """Return the weights for each tree"""
@@ -880,6 +886,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     >>> model_path = temp_path + "/rfr_model"
     >>> model.save(model_path)
     >>> model2 = RandomForestRegressionModel.load(model_path)
+    >>> model.getMaxDepth() == model2.getMaxDepth()
+    True
     >>> model.featureImportances == model2.featureImportances
     True
 
@@ -999,6 +1007,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     >>> model_path = temp_path + "gbtr_model"
     >>> model.save(model_path)
     >>> model2 = GBTRegressionModel.load(model_path)
+    >>> model.getMaxDepth() == model2.getMaxDepth()
+    True
     >>> model.featureImportances == model2.featureImportances
     True
     >>> model.treeWeights == model2.treeWeights
