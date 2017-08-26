@@ -772,7 +772,13 @@ class CodegenContext {
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
-    val maxLines = SQLConf.get.maxCodegenLinesPerFunction
+    val defaultMaxLines = 100
+    val maxLines = if (SparkEnv.get != null) {
+      SparkEnv.get.conf.getInt("spark.sql.codegen.expressions.maxCodegenLinesPerFunction",
+        defaultMaxLines)
+    } else {
+      defaultMaxLines
+    }
     var line = 0
     for (code <- expressions) {
       // We can't know how many bytecode will be generated, so use the line of source code
