@@ -54,6 +54,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   @transient
   final val sqlContext = SparkSession.getActiveSession.map(_.sqlContext).orNull
 
+  // whether we should fallback when hitting compilation errors caused by codegen
+  private val codeGenFallBack = sqlContext == null || sqlContext.conf.codegenFallback
+
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
@@ -370,8 +373,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case e @ (_: JaninoRuntimeException | _: CompileException)
-          if sqlContext == null || sqlContext.conf.wholeStageFallback =>
+      case _ @ (_: JaninoRuntimeException | _: CompileException) if codeGenFallBack =>
         genInterpretedPredicate(expression, inputSchema)
     }
   }

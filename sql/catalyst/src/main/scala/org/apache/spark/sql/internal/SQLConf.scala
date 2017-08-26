@@ -551,9 +551,9 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
-  val WHOLESTAGE_FALLBACK = buildConf("spark.sql.codegen.fallback")
+  val CODEGEN_FALLBACK = buildConf("spark.sql.codegen.fallback")
     .internal()
-    .doc("When true, whole stage codegen could be temporary disabled for the part of query that" +
+    .doc("When true, (whole stage) codegen could be temporary disabled for the part of query that" +
       " fail to compile generated code")
     .booleanConf
     .createWithDefault(true)
@@ -1041,7 +1041,7 @@ class SQLConf extends Serializable with Logging {
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
-  def wholeStageFallback: Boolean = getConf(WHOLESTAGE_FALLBACK)
+  def codegenFallback: Boolean = getConf(CODEGEN_FALLBACK)
 
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
