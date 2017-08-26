@@ -280,7 +280,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   Seq(Some(5), None).foreach { minNumPostShufflePartitions =>
     val testNameNote = minNumPostShufflePartitions match {
-      case Some(numPartitions) => "(minNumPostShufflePartitions: 3)"
+      case Some(numPartitions) => "(minNumPostShufflePartitions: " + numPartitions + ")"
       case None => ""
     }
 
@@ -421,7 +421,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
           case None =>
             assert(exchanges.forall(_.coordinator.isDefined))
-            assert(exchanges.map(_.outputPartitioning.numPartitions).toSet === Set(2, 3))
+            assert(exchanges.map(_.outputPartitioning.numPartitions).toSeq === Seq(2, 2, 2, 3))
         }
       }
 
@@ -473,7 +473,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
           case None =>
             assert(exchanges.forall(_.coordinator.isDefined))
-            assert(exchanges.map(_.outputPartitioning.numPartitions).toSet === Set(5, 3))
+            assert(exchanges.map(_.outputPartitioning.numPartitions).toSeq === Seq(5, 3, 5))
         }
       }
 
