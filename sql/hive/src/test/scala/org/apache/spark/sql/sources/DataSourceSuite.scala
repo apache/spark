@@ -29,10 +29,10 @@ import org.apache.orc.{OrcConf, TypeDescription}
 import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.{OrcInputFormat, OrcOutputFormat}
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgumentFactory}
-import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Data Source qualification as Apache Spark Data Sources.
@@ -41,8 +41,8 @@ import org.apache.spark.sql.test.SharedSQLContext
  */
 class DataSourceSuite
   extends QueryTest
-  with SharedSQLContext
-  with BeforeAndAfterAll {
+  with SQLTestUtils
+  with TestHiveSingleton {
 
   import testImplicits._
 
