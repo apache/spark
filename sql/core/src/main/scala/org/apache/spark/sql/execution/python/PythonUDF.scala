@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.python
 
 import org.apache.spark.api.python.PythonFunction
-import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{Expression, NonSQLExpression, UDFType, Unevaluable}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -29,7 +29,7 @@ case class PythonUDF(
     func: PythonFunction,
     dataType: DataType,
     children: Seq[Expression])
-  extends Expression with Unevaluable with NonSQLExpression {
+  extends Expression with Unevaluable with NonSQLExpression with UDFType {
 
   override def toString: String = s"$name(${children.mkString(", ")})"
 
