@@ -578,8 +578,10 @@ object SQLConf {
       "When the generated function exceeds this threshold, " +
       "the whole-stage codegen is deactivated for this subtree of the current query plan. " +
       "The default value 4000 is the max length of byte code JIT supported " +
-      "for a single function(8000) divided by 2.")
+      "for a single function(8000) divided by 2. Use -1 to disable this.")
     .intConf
+    .checkValue(maxLines => maxLines >= -1, "The maximum must not be a negative integer, " +
+      "except for -1 using to always activate whole-stage codegen")
     .createWithDefault(4000)
 
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
