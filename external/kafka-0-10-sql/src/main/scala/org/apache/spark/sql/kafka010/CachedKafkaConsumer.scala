@@ -132,7 +132,9 @@ private[kafka010] case class CachedKafkaConsumer private(
       }
     }
 
-    if (isFetchComplete) consumerRecord else {
+    if (isFetchComplete) {
+      consumerRecord
+    } else {
       resetFetchedData()
       null
     }
