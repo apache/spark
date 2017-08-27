@@ -42,8 +42,8 @@ private[libsvm] class LibSVMOptions(@transient private val parameters: CaseInsen
       s"`$VECTOR_TYPE`. Expected types are `sparse` and `dense`.")
   }
 
-  val lineSeparator: Option[String] = parameters.get(LINE_SEPARATOR)
-  lineSeparator.foreach(s => require(s.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string."))
+  val lineSeparator: String = parameters.getOrElse(LINE_SEPARATOR, "\n")
+  require(lineSeparator.nonEmpty, s"'$LINE_SEPARATOR' cannot be an empty string.")
 }
 
 private[libsvm] object LibSVMOptions {

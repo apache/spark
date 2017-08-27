@@ -370,8 +370,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
-   * <li>`lineSep` (default is `\r\n` or `\n`): defines the line separator that should
-   * be used for parsing.</li>
+   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -659,8 +659,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following text-specific options to deal with text files:
    * <ul>
-   * <li>`lineSep` (default is `\r\n` or `\n`): defines the line separator that should
-   * be used for parsing.</li>
+   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
    * </ul>
    *
    * @param paths input paths

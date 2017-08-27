@@ -85,8 +85,8 @@ private[sql] class JSONOptions(
 
   val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
 
-  val lineSeparator: Option[String] = parameters.get("lineSep")
-  lineSeparator.foreach(s => require(s.nonEmpty, "'lineSep' cannot be an empty string."))
+  val lineSeparator: String = parameters.getOrElse("lineSep", "\n")
+  require(lineSeparator.nonEmpty, "'lineSep' cannot be an empty string.")
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {

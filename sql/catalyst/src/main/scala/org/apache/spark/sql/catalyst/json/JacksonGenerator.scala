@@ -75,7 +75,7 @@ private[sql] class JacksonGenerator(
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
-  private val lineSep = options.lineSeparator.getOrElse("\n")
+  private val lineSep = options.lineSeparator
 
   private def makeWriter(dataType: DataType): ValueWriter = dataType match {
     case NullType =>

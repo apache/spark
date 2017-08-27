@@ -138,8 +138,8 @@ class CSVOptions(
 
   val quoteAll = getBool("quoteAll", false)
 
-  val lineSeparator: Option[String] = parameters.get("lineSep")
-  lineSeparator.foreach(s => require(s.nonEmpty, "'lineSep' cannot be an empty string."))
+  val lineSeparator: String = parameters.getOrElse("lineSep", "\n")
+  require(lineSeparator.nonEmpty, "'lineSep' cannot be an empty string.")
 
   val inputBufferSize = 128
 
@@ -152,7 +152,9 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
-    lineSeparator.foreach(format.setLineSeparator)
+    if (lineSeparator != "\n") {
+      format.setLineSeparator(lineSeparator)
+    }
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
     writerSettings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceFlagInWrite)
     writerSettings.setNullValue(nullValue)
@@ -170,7 +172,9 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     format.setComment(comment)
-    lineSeparator.foreach(format.setLineSeparator)
+    if (lineSeparator != "\n") {
+      format.setLineSeparator(lineSeparator)
+    }
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)

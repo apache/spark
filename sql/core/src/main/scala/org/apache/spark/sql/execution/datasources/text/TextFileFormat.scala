@@ -133,11 +133,11 @@ class TextFileFormat extends TextBasedFileFormat with DataSourceRegister {
 class TextOutputWriter(
     path: String,
     dataSchema: StructType,
-    lineSeparator: Option[String],
+    lineSeparator: String,
     context: TaskAttemptContext)
   extends OutputWriter {
 
-  private val lineSep = lineSeparator.getOrElse("\n").getBytes(StandardCharsets.UTF_8)
+  private val lineSep = lineSeparator.getBytes(StandardCharsets.UTF_8)
 
   private val writer = CodecStreams.createOutputStream(context, new Path(path))
 

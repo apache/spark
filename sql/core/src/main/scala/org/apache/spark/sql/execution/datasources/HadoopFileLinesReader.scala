@@ -33,7 +33,7 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
  */
 class HadoopFileLinesReader(
     file: PartitionedFile,
-    lineSeparator: Option[String],
+    lineSeparator: String,
     conf: Configuration) extends Iterator[Text] with Closeable {
   private val iterator = {
     val fileSplit = new FileSplit(
@@ -44,9 +44,12 @@ class HadoopFileLinesReader(
       Array.empty)
     val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
     val hadoopAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
-    val reader = lineSeparator
-      .map(sep => new LineRecordReader(sep.getBytes("UTF-8")))
-      .getOrElse(new LineRecordReader())
+    val reader = if (lineSeparator != "\n") {
+      new LineRecordReader(lineSeparator.getBytes("UTF-8"))
+    } else {
+      // This behavior follows Hive. `\n` covers `\r`, `\r\n` and `\n`.
+      new LineRecordReader()
+    }
     reader.initialize(fileSplit, hadoopAttemptContext)
     new RecordReaderIterator(reader)
   }

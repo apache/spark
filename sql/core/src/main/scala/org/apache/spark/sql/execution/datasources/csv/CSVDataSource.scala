@@ -177,9 +177,7 @@ object TextInputCSVDataSource extends CSVDataSource {
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
       options: CSVOptions): Dataset[String] = {
-    val textOptions = options.lineSeparator
-      .map(sep => Map(TextOptions.LINE_SEPARATOR -> sep))
-      .getOrElse(Map.empty[String, String])
+    val textOptions = Map(TextOptions.LINE_SEPARATOR -> options.lineSeparator)
 
     val paths = inputPaths.map(_.getPath.toString)
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {

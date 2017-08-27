@@ -222,8 +222,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * `java.text.SimpleDateFormat`. This applies to timestamp type.</li>
    * <li>`multiLine` (default `false`): parse one record, which may span multiple lines,
    * per file</li>
-   * <li>`lineSep` (default is `\r\n` or `\n`): defines the line separator that should
-   * be used for parsing.</li>
+   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -336,8 +336,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`lineSep` (default is `\r\n` or `\n`): defines the line separator that should
-   * be used for parsing.</li>
+   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
    * </ul>
    *
    * @since 2.0.0
@@ -364,8 +364,8 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    * <ul>
    * <li>`maxFilesPerTrigger` (default: no max limit): sets the maximum number of new files to be
    * considered in every trigger.</li>
-   * <li>`lineSep` (default is `\r\n` or `\n`): defines the line separator that should
-   * be used for parsing.</li>
+   * <li>`lineSep` (default is `\n`, covering `\r`, `\r\n` and `\n`): defines the line separator
+   * that should be used for parsing.</li>
    * </ul>
    *
    * @param path input path

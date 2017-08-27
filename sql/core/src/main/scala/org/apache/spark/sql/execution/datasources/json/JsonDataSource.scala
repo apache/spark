@@ -105,10 +105,8 @@ object TextInputJsonDataSource extends JsonDataSource {
   private def createBaseDataset(
       sparkSession: SparkSession,
       inputPaths: Seq[FileStatus],
-      lineSep: Option[String]): Dataset[String] = {
-    val textOptions = lineSep
-      .map(sep => Map(TextOptions.LINE_SEPARATOR -> sep))
-      .getOrElse(Map.empty[String, String])
+      lineSeparator: String): Dataset[String] = {
+    val textOptions = Map(TextOptions.LINE_SEPARATOR -> lineSeparator)
 
     val paths = inputPaths.map(_.getPath.toString)
     sparkSession.baseRelationToDataFrame(

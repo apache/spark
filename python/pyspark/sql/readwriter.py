@@ -238,7 +238,7 @@ class DataFrameReader(OptionUtils):
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it uses the default value, ``\\r\\n`` or ``\\n``.
+                        set, it uses ``\\n`` by default, covering ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -316,7 +316,7 @@ class DataFrameReader(OptionUtils):
 
         :param paths: string, or list of strings, for input path(s).
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it uses the default value, ``\\r\\n`` or ``\\n``.
+                        set, it uses ``\\n`` by default, covering ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
