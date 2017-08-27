@@ -244,7 +244,7 @@ checkpoints will be created.  If `maxIterations` is large, using
 checkpointing can help reduce shuffle file sizes on disk and help with
 failure recovery.
 * `initialModel`: this parameter, only supported by `OnlineLDAOptimizer`,
-specifies a previously trained LDA model as a start point instead of 
+specifies a previously trained LocalLDAModel as a start point instead of 
 a random initialization. This can be used for incremental learning. 
 
 
