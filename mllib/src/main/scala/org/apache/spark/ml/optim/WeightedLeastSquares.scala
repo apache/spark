@@ -472,7 +472,8 @@ private[ml] object WeightedLeastSquares {
       while (i < triK) {
         val l = j - 2
         val aw = aSum(l) / wSum
-        std(l) = math.sqrt(aaValues(i) / wSum - aw * aw)
+        // We prevent variance from negative value caused by numerical error.
+        std(l) = math.sqrt(math.max(aaValues(i) / wSum - aw * aw, 0.0))
         i += j
         j += 1
       }
@@ -490,7 +491,8 @@ private[ml] object WeightedLeastSquares {
       while (i < triK) {
         val l = j - 2
         val aw = aSum(l) / wSum
-        variance(l) = aaValues(i) / wSum - aw * aw
+        // We prevent variance from negative value caused by numerical error.
+        variance(l) = math.max(aaValues(i) / wSum - aw * aw, 0.0)
         i += j
         j += 1
       }
