@@ -107,10 +107,8 @@ object MLUtils extends Logging {
   private[spark] def parseLibSVMFile(
       sparkSession: SparkSession,
       paths: Seq[String],
-      lineSep: Option[String]): RDD[(Double, Array[Int], Array[Double])] = {
-    val textOptions = lineSep
-      .map(sep => Map(TextOptions.LINE_SEPARATOR -> sep))
-      .getOrElse(Map.empty[String, String])
+      lineSeparator: String): RDD[(Double, Array[Int], Array[Double])] = {
+    val textOptions = Map(TextOptions.LINE_SEPARATOR -> lineSeparator)
 
     val lines = sparkSession.baseRelationToDataFrame(
       DataSource.apply(

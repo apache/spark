@@ -41,11 +41,9 @@ import org.apache.spark.util.SerializableConfiguration
 private[libsvm] class LibSVMOutputWriter(
     path: String,
     dataSchema: StructType,
-    lineSeparator: Option[String],
+    lineSeparator: String,
     context: TaskAttemptContext)
   extends OutputWriter {
-
-  private val lineSep = lineSeparator.getOrElse("\n")
 
   private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
 
@@ -60,7 +58,7 @@ private[libsvm] class LibSVMOutputWriter(
       writer.write(s" ${i + 1}:$v")
     }
 
-    writer.write(lineSep)
+    writer.write(lineSeparator)
   }
 
   override def close(): Unit = {
