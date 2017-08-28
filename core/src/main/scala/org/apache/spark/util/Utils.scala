@@ -138,8 +138,11 @@ private[spark] object Utils extends Logging {
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.close()
+    try {
+      oos.writeObject(o)
+    } finally {
+      oos.close()
+    }
     bos.toByteArray
   }
 
