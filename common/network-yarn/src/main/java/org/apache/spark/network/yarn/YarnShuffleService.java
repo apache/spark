@@ -340,8 +340,7 @@ public class YarnShuffleService extends AuxiliaryService {
 
   /**
    * Figure out the recovery path and handle moving the DB if YARN NM recovery gets enabled
-   * when it previously was not. If YARN NM recovery is enabled it uses that path, otherwise
-   * it will uses a YARN local dir.
+   * and DB exists in the local dir of NM by old version of shuffle service.
    */
   protected File initRecoveryDb(String dbName) {
     Preconditions.checkNotNull(_recoveryPath,
