@@ -30,6 +30,11 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 /**
  * An adaptor from a [[PartitionedFile]] to an [[Iterator]] of [[Text]], which are all of the lines
  * in that file.
+ *
+ * @param file A part (i.e. "block") of a single file that should be read line by line.
+ * @param lineSeparator A line separator that should be used for each line. If the value is `\n`,
+ *                      it covers `\r`, `\r\n` and `\n`.
+ * @param conf Hadoop configuration
  */
 class HadoopFileLinesReader(
     file: PartitionedFile,

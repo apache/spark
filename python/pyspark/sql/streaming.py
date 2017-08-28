@@ -471,7 +471,7 @@ class DataStreamReader(OptionUtils):
                                           characters (ASCII characters with value less than 32,
                                           including tab and line feed characters) or not.
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it uses the default value, ``\\r\\n`` or ``\\n``.
+                        set, it uses ``\\n`` by default, covering ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> json_sdf = spark.readStream.json(tempfile.mkdtemp(), schema = sdf_schema)
         >>> json_sdf.isStreaming
@@ -528,7 +528,7 @@ class DataStreamReader(OptionUtils):
 
         :param paths: string, or list of strings, for input path(s).
         :param lineSep: defines the line separator that should be used for parsing. If None is
-                        set, it uses the default value, ``\\r\\n`` or ``\\n``.
+                        set, it uses ``\\n`` by default, covering ``\\r``, ``\\r\\n`` and ``\\n``.
 
         >>> text_sdf = spark.readStream.text(tempfile.mkdtemp())
         >>> text_sdf.isStreaming
