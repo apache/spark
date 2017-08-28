@@ -233,9 +233,9 @@ private[spark] object HiveUtils extends Logging {
 
   private[hive] def newHiveConfigurations(
       sparkConf: SparkConf = new SparkConf(loadDefaults = true),
-      extraConfig: Map[String, String] = Map.empty,
       classLoader: ClassLoader = null)(
-      hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(sparkConf)): HiveConf = {
+      hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(sparkConf))(
+      extraConfig: Map[String, String] = hiveClientConfigurations(hadoopConf)): HiveConf = {
     val hiveConf = new HiveConf(classOf[SessionState])
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
     // the initial value will be the current thread's context class loader
@@ -255,7 +255,8 @@ private[spark] object HiveUtils extends Logging {
     // has hive-site.xml. So, HiveConf will use that to override its default values.
     // 2: we set all spark confs to this hiveConf.
     // 3: we set all entries in config to this hiveConf.
-    (hiveClientConfigurations(hadoopConf) ++ sparkConf.getAll.toMap ++ extraConfig).foreach {
+    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ sparkConf.getAll.toMap ++ extraConfig).foreach {
       case (k, v) =>
         logDebug(
           s"""

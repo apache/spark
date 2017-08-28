@@ -81,7 +81,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(1)
     }
 
-    val cliConf = HiveUtils.newHiveConfigurations()()
+    val cliConf = HiveUtils.newHiveConfigurations()()()
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in

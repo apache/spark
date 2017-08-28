@@ -136,8 +136,8 @@ private[hive] class HiveClientImpl(
       // its own state by newState()
       val ret = SessionState.get
       if (ret != null) {
-        if (sparkConf.contains(WAREHOUSE_PATH.key)) {
-          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, sparkConf.get(WAREHOUSE_PATH.key))
+        Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
+          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
         }
         ret
       } else {
@@ -153,7 +153,7 @@ private[hive] class HiveClientImpl(
 
   private def newState(): SessionState = {
     val hiveConf =
-      HiveUtils.newHiveConfigurations(sparkConf, extraConfig, initClassLoader)(hadoopConf)
+      HiveUtils.newHiveConfigurations(sparkConf, initClassLoader)(hadoopConf)(extraConfig)
     val state = new SessionState(hiveConf)
     if (clientLoader.cachedHive != null) {
       Hive.set(clientLoader.cachedHive.asInstanceOf[Hive])
