@@ -1613,6 +1613,49 @@ object CodeGenerator extends Logging {
   }
 
   /**
+   * Extracts all the input variables from references and subexpression elimination states
+   * for a given `expr`. This result will be used to split the generated code of
+   * expressions into multiple functions.
+   */
+  def getLocalInputVariableValues(
+      context: CodegenContext,
+      expr: Expression,
+      subExprs: Map[Expression, SubExprEliminationState]): Seq[((String, DataType), Expression)] = {
+    val argMap = mutable.Map[(String, DataType), Expression]()
+    val stack = mutable.Stack[Expression](expr)
+    while (stack.nonEmpty) {
+      stack.pop() match {
+        case e if subExprs.contains(e) =>
+          val exprCode = subExprs(e)
+          val SubExprEliminationState(isNull, value) = exprCode
+          if (value.isInstanceOf[VariableValue]) {
+            argMap += (value.code, e.dataType) -> e
+          }
+          if (isNull.isInstanceOf[VariableValue]) {
+            argMap += (isNull.code, BooleanType) -> e
+          }
+          // Since the children possibly has common expressions, we push them here
+          stack.pushAll(e.children)
+        case ref: BoundReference
+            if context.currentVars != null && context.currentVars(ref.ordinal) != null =>
+          val ExprCode(_, isNull, value) = context.currentVars(ref.ordinal)
+          if (value.isInstanceOf[VariableValue]) {
+            argMap += (value.code, ref.dataType) -> ref
+          }
+          if (isNull.isInstanceOf[VariableValue]) {
+            argMap += (isNull.code, BooleanType) -> ref
+          }
+        case ref: BoundReference =>
+          argMap += (context.INPUT_ROW, ObjectType(classOf[InternalRow])) -> ref
+        case e =>
+          stack.pushAll(e.children)
+      }
+    }
+
+    argMap.toSeq
+  }
+
+  /**
    * Returns the name used in accessor and setter for a Java primitive type.
    */
   def primitiveTypeName(jt: String): String = jt match {
