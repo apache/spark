@@ -22,7 +22,10 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.DataType
 
-// Trait for identifying user-defined functions.
+/**
+ * Common base trait for user-defined functions, including ScalaUDF, ScalaUDAF, PythonUDF,
+ * HiveSimpleUDF, HiveGenericUDF, and HiveUDAFFunction.
+ */
 trait UDFType
 
 /**
