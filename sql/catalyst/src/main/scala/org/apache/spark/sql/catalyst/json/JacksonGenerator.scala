@@ -28,8 +28,17 @@ import org.apache.spark.sql.types._
 
 private[sql] class JacksonGenerator(
     childType: DataType,
+    rowSchema: StructType,
     writer: Writer,
     options: JSONOptions) {
+
+  // In previous version, `JacksonGenerator` is only for `InternalRow` to JSON object.
+  // SPARK-21513 will allow `JacasonGenerator` to support arbitrary `MapType` so that needing
+  // `childType` to check what type is `KeyType` of `MapType`.
+  def this(rowSchema: StructType, writer: Writer, options: JSONOptions) = {
+    this(rowSchema, rowSchema, writer, options)
+  }
+
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
@@ -41,12 +50,6 @@ private[sql] class JacksonGenerator(
     case MapType(_: DataType, _: StructType, _: Boolean) => mapStructValueWriter(rowSchema)
     case MapType(_: DataType, _: DataType, _: Boolean) =>
       makeWriter(childType.asInstanceOf[MapType].valueType)
-  }
-
-  lazy val rowSchema = childType match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
-    case MapType(_: DataType, st: StructType, _) => st
   }
 
   // `ValueWriter`s for all fields of the schema

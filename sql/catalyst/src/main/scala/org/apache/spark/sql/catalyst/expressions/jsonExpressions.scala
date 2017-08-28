@@ -638,7 +638,14 @@ case class StructsToJson(
 
   @transient
   lazy val gen = new JacksonGenerator(
-    child.dataType, writer, new JSONOptions(options, timeZoneId.get))
+    child.dataType, rowSchema, writer, new JSONOptions(options, timeZoneId.get))
+
+  @transient
+  lazy val rowSchema = child.dataType match {
+    case st: StructType => st
+    case ArrayType(st: StructType, _) => st
+    case MapType(_: DataType, st: StructType, _) => st
+  }
 
   // This converts rows to the JSON output according to the given schema.
   @transient
@@ -673,7 +680,7 @@ case class StructsToJson(
     case _: StructType | ArrayType(_: StructType, _) |
          MapType(_: DataType, _: StructType, _: Boolean) =>
       try {
-        JacksonUtils.verifySchema(gen.rowSchema)
+        JacksonUtils.verifySchema(rowSchema)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
