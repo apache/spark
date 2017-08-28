@@ -262,6 +262,9 @@ class DecisionTreeClassifierSuite
       assert(Vectors.dense(rawPred.toArray.map(_ / sum)) === probPred,
         "probability prediction mismatch")
     }
+
+    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+      Vector, DecisionTreeClassificationModel](newTree, newData)
   }
 
   test("training with 1-category categorical feature") {

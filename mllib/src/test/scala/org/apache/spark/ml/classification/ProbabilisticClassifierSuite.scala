@@ -21,7 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Dataset, Row}
 
 final class TestProbabilisticClassificationModel(
     override val uid: String,
@@ -97,7 +97,7 @@ object ProbabilisticClassifierSuite {
   def probabilisticClassifierGenericTest[
       FeaturesType,
       M <: ProbabilisticClassificationModel[FeaturesType, M]](
-    model: M, testData: DataFrame): Unit = {
+    model: M, testData: Dataset[_]): Unit = {
 
     val allColModel = model.copy(ParamMap.empty)
       .setRawPredictionCol("rawPredictionAll")
