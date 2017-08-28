@@ -439,9 +439,12 @@ private[ml] object WeightedLeastSquares {
 
     /**
      * Weighted population standard deviation of labels.
-     * We prevent variance from negative value caused by numerical error.
      */
-    def bStd: Double = math.sqrt(math.max(bbSum / wSum - bBar * bBar, 0.0))
+    def bStd: Double = {
+      // We prevent variance from negative value caused by numerical error.
+      val variance = math.max(bbSum / wSum - bBar * bBar, 0.0)
+      math.sqrt(variance)
+    }
 
     /**
      * Weighted mean of (label * features).
