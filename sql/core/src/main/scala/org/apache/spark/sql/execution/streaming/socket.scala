@@ -29,8 +29,10 @@ import scala.util.{Failure, Success, Try}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSourceProvider}
 import org.apache.spark.sql.types.{StringType, StructField, StructType, TimestampType}
+import org.apache.spark.unsafe.types.UTF8String
 
 
 object TextSocketSource {
@@ -126,8 +128,9 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       batches.slice(sliceStart, sliceEnd)
     }
 
-    import sqlContext.implicits._
-    val rawBatch = sqlContext.createDataset(rawList)
+    val rdd = sqlContext.sparkContext.parallelize(rawList).map(
+        v => InternalRow(UTF8String.fromString(v._1), v._2.getTime()))
+    val rawBatch = sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
 
     // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
     // if requested.
@@ -135,7 +138,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       rawBatch.toDF("value", "timestamp")
     } else {
       // Strip out timestamp
-      rawBatch.select("_1").toDF("value")
+      rawBatch.select("value").toDF()
     }
   }
 
