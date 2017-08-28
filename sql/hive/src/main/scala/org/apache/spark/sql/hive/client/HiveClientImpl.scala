@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
@@ -52,6 +53,7 @@ import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClientImpl._
+import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{CircularBuffer, Utils}
 
@@ -132,14 +134,22 @@ private[hive] class HiveClientImpl(
       // in hive jars, which will turn off isolation, if SessionSate.detachSession is
       // called to remove the current state after that, hive client created later will initialize
       // its own state by newState()
-      Option(SessionState.get).getOrElse(newState())
+      val ret = SessionState.get
+      if (ret != null) {
+        if (sparkConf.contains(WAREHOUSE_PATH.key)) {
+          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, sparkConf.get(WAREHOUSE_PATH.key))
+        }
+        ret
+      } else {
+        newState()
+      }
     }
   }
 
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
-      s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
+      s"(version ${version.fullVersion}) is ${conf.getVar(ConfVars.METASTOREWAREHOUSE)}")
 
   private def newState(): SessionState = {
     val hiveConf = new HiveConf(classOf[SessionState])
