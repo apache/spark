@@ -81,11 +81,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(1)
     }
 
-    val cliConf = new HiveConf(classOf[SessionState])
-    // Override the location of the metastore since this is only used for local execution.
-    HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false).foreach {
-      case (key, value) => cliConf.set(key, value)
-    }
+    val cliConf = HiveUtils.newHiveConfigurations()()
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in
