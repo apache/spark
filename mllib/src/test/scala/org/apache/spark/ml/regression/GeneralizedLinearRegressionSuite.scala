@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.{Instance, OffsetInstance}
-import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.feature.{LabeledPoint, RFormula}
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
@@ -1522,6 +1522,87 @@ class GeneralizedLinearRegressionSuite
     new GeneralizedLinearRegression()
       .setFamily("gaussian")
       .fit(datasetGaussianIdentity.as[LabeledPoint])
+  }
+
+  test("glm summary: feature name") {
+    // dataset1 with no attribute
+    val dataset1 = Seq(
+      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0)),
+      Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(9.0, 4.0, Vectors.dense(3.0, 13.0)),
+      Instance(2.0, 5.0, Vectors.dense(2.0, 3.0))
+    ).toDF()
+
+    // dataset2 with attribute
+    val datasetTmp = Seq(
+      (2.0, 1.0, 0.0, 5.0),
+      (8.0, 2.0, 1.0, 7.0),
+      (3.0, 3.0, 2.0, 11.0),
+      (9.0, 4.0, 3.0, 13.0),
+      (2.0, 5.0, 2.0, 3.0)
+    ).toDF("y", "w", "x1", "x2")
+    val formula = new RFormula().setFormula("y ~ x1 + x2")
+    val dataset2 = formula.fit(datasetTmp).transform(datasetTmp)
+
+    val expectedFeature = Seq(Array("features_0", "features_1"), Array("x1", "x2"))
+
+    var idx = 0
+    for (dataset <- Seq(dataset1, dataset2)) {
+      val model = new GeneralizedLinearRegression().fit(dataset)
+      model.summary.featureNames.zip(expectedFeature(idx))
+        .foreach{ x => assert(x._1 === x._2) }
+      idx += 1
+    }
+  }
+
+  test("glm summary: coefficient with statistics") {
+    /*
+      R code:
+
+      A <- matrix(c(0, 1, 2, 3, 2, 5, 7, 11, 13, 3), 5, 2)
+      b <- c(2, 8, 3, 9, 2)
+      df <- as.data.frame(cbind(A, b))
+      model <- glm(formula = "b ~ .",  data = df)
+      summary(model)
+
+      Coefficients:
+                  Estimate Std. Error t value Pr(>|t|)
+      (Intercept)   0.7903     4.0129   0.197    0.862
+      V1            0.2258     2.1153   0.107    0.925
+      V2            0.4677     0.5815   0.804    0.506
+    */
+    val dataset = Seq(
+      Instance(2.0, 1.0, Vectors.dense(0.0, 5.0)),
+      Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
+      Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
+      Instance(9.0, 4.0, Vectors.dense(3.0, 13.0)),
+      Instance(2.0, 5.0, Vectors.dense(2.0, 3.0))
+    ).toDF()
+
+    val expectedFeature = Seq(Array("features_0", "features_1"),
+      Array("(Intercept)", "features_0", "features_1"))
+    val expectedEstimate = Seq(Vectors.dense(0.2884, 0.538),
+      Vectors.dense(0.7903, 0.2258, 0.4677))
+    val expectedStdError = Seq(Vectors.dense(1.724, 0.3787),
+      Vectors.dense(4.0129, 2.1153, 0.5815))
+
+    var idx = 0
+    for (fitIntercept <- Seq(false, true)) {
+      val trainer = new GeneralizedLinearRegression()
+        .setFamily("gaussian")
+        .setFitIntercept(fitIntercept)
+      val model = trainer.fit(dataset)
+      val coefficientsWithStatistics = model.summary.coefficientsWithStatistics
+
+      coefficientsWithStatistics.map(_._1).zip(expectedFeature(idx)).foreach { x =>
+        assert(x._1 === x._2, "Feature name mismatch in coefficientsWithStatistics") }
+      assert(Vectors.dense(coefficientsWithStatistics.map(_._2)) ~= expectedEstimate(idx)
+        absTol 1E-3, "Coefficients mismatch in coefficientsWithStatistics")
+      assert(Vectors.dense(coefficientsWithStatistics.map(_._3)) ~= expectedStdError(idx)
+        absTol 1E-3, "Standard error mismatch in coefficientsWithStatistics")
+      idx += 1
+    }
   }
 
   test("generalized linear regression: regularization parameter") {

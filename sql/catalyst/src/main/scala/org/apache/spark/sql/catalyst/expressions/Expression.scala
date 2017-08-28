@@ -241,6 +241,10 @@ trait RuntimeReplaceable extends UnaryExpression with Unevaluable {
   override def nullable: Boolean = child.nullable
   override def foldable: Boolean = child.foldable
   override def dataType: DataType = child.dataType
+  // As this expression gets replaced at optimization with its `child" expression,
+  // two `RuntimeReplaceable` are considered to be semantically equal if their "child" expressions
+  // are semantically equal.
+  override lazy val canonicalized: Expression = child.canonicalized
 }
 
 

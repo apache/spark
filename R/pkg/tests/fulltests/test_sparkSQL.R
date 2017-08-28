@@ -1436,6 +1436,14 @@ test_that("column functions", {
   result <- collect(select(df, sort_array(df[[1]])))[[1]]
   expect_equal(result, list(list(1L, 2L, 3L), list(4L, 5L, 6L)))
 
+  # Test map_keys() and map_values()
+  df <- createDataFrame(list(list(map = as.environment(list(x = 1, y = 2)))))
+  result <- collect(select(df, map_keys(df$map)))[[1]]
+  expect_equal(result, list(list("x", "y")))
+
+  result <- collect(select(df, map_values(df$map)))[[1]]
+  expect_equal(result, list(list(1, 2)))
+
   # Test that stats::lag is working
   expect_equal(length(lag(ldeaths, 12)), 72)
 
@@ -2489,7 +2497,7 @@ test_that("read/write text files - compression option", {
   unlink(textPath)
 })
 
-test_that("describe() and summarize() on a DataFrame", {
+test_that("describe() and summary() on a DataFrame", {
   df <- read.json(jsonPath)
   stats <- describe(df, "age")
   expect_equal(collect(stats)[1, "summary"], "count")
@@ -2500,8 +2508,15 @@ test_that("describe() and summarize() on a DataFrame", {
   expect_equal(collect(stats)[5, "age"], "30")
 
   stats2 <- summary(df)
-  expect_equal(collect(stats2)[4, "summary"], "min")
-  expect_equal(collect(stats2)[5, "age"], "30")
+  expect_equal(collect(stats2)[5, "summary"], "25%")
+  expect_equal(collect(stats2)[5, "age"], "30.0")
+
+  stats3 <- summary(df, "min", "max", "55.1%")
+
+  expect_equal(collect(stats3)[1, "summary"], "min")
+  expect_equal(collect(stats3)[2, "summary"], "max")
+  expect_equal(collect(stats3)[3, "summary"], "55.1%")
+  expect_equal(collect(stats3)[3, "age"], "30.0")
 
   # SPARK-16425: SparkR summary() fails on column of type logical
   df <- withColumn(df, "boolean", df$age == 30)
@@ -2734,15 +2749,15 @@ test_that("attach() on a DataFrame", {
   expected_age <- data.frame(age = c(NA, 30, 19))
   expect_equal(head(age), expected_age)
   stat <- summary(age)
-  expect_equal(collect(stat)[5, "age"], "30")
+  expect_equal(collect(stat)[8, "age"], "30")
   age <- age$age + 1
   expect_is(age, "Column")
   rm(age)
   stat2 <- summary(age)
-  expect_equal(collect(stat2)[5, "age"], "30")
+  expect_equal(collect(stat2)[8, "age"], "30")
   detach("df")
   stat3 <- summary(df[, "age", drop = F])
-  expect_equal(collect(stat3)[5, "age"], "30")
+  expect_equal(collect(stat3)[8, "age"], "30")
   expect_error(age)
 })
 
