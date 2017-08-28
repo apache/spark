@@ -151,7 +151,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val conf = sqlContext.sessionState.conf
-    assert(new OrcOptions(Map("Orc.Compress" -> "NONE"), conf).compressionCodecClassName == "NONE")
+    assert(new OrcOptions(Map("Orc.Compress" -> "NONE"), conf).compressionCodec == "NONE")
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
@@ -199,18 +199,18 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = sqlContext.sessionState.conf
-    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == "SNAPPY")
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "SNAPPY")
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
     withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
-      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == "NONE")
+      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
       assert(
-        new OrcOptions(Map("orc.compress" -> "zlib"), conf).compressionCodecClassName == "ZLIB")
+        new OrcOptions(Map("orc.compress" -> "zlib"), conf).compressionCodec == "ZLIB")
     }
 
-    Seq("SNAPPY", "ZLIB").foreach { c =>
+    Seq("NONE", "SNAPPY", "ZLIB").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
-        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodecClassName == c)
+        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == c)
       }
     }
   }

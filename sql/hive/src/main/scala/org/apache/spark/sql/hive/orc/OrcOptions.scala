@@ -36,13 +36,11 @@ private[orc] class OrcOptions(
     this(CaseInsensitiveMap(parameters), sqlConf)
 
   /**
-   * Compression codec to use. By default use the value specified in SQLConf.
+   * Compression codec to use.
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
-  val compressionCodecClassName: String = {
-    // `orc.compress` is a ORC configuration. So, here we respect this as an option but
-    // `compression` has higher precedence than `orc.compress`. It means if both are set,
-    // we will use `compression`.
+  val compressionCodec: String = {
+    // `compression`, `orc.compress`, and `spark.sql.orc.compression.codec` is used in order.
     val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
     val codecName = parameters
       .get("compression")

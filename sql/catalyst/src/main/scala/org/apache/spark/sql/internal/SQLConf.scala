@@ -328,7 +328,7 @@ object SQLConf {
       "uncompressed, snappy, zlib.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("uncompressed", "snappy", "zlib"))
+    .checkValues(Set("none", "uncompressed", "snappy", "zlib"))
     .createWithDefault("snappy")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
