@@ -62,6 +62,10 @@ The history server can be configured as follows:
     <td>JVM options for the history server (default: none).</td>
   </tr>
   <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the history server (default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>
       The public address for the history server. If this is not set, links to application history
