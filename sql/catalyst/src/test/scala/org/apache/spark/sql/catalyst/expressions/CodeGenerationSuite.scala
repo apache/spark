@@ -394,4 +394,22 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       Map("add" -> Literal(1))).genCode(ctx)
     assert(ctx.mutableStates.isEmpty)
   }
+
+  test("SPARK-21870 check if CodegenContext.isJavaIdentifier works correctly") {
+    import CodegenContext.isJavaIdentifier
+    // positive cases
+    assert(isJavaIdentifier("agg_value"))
+    assert(isJavaIdentifier("agg_value1"))
+    assert(isJavaIdentifier("bhj_value4"))
+    assert(isJavaIdentifier("smj_value6"))
+    assert(isJavaIdentifier("rdd_value7"))
+    assert(isJavaIdentifier("scan_isNull"))
+    assert(isJavaIdentifier("test"))
+    // negative cases
+    assert(!isJavaIdentifier("true"))
+    assert(!isJavaIdentifier("false"))
+    assert(!isJavaIdentifier("390239"))
+    assert(!isJavaIdentifier(""""literal""""))
+    assert(!isJavaIdentifier(""""double""""))
+  }
 }
