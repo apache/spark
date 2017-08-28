@@ -36,7 +36,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
@@ -74,8 +73,6 @@ import org.apache.spark.network.yarn.util.HadoopConfigProvider;
  */
 public class YarnShuffleService extends AuxiliaryService {
   private static final Logger logger = LoggerFactory.getLogger(YarnShuffleService.class);
-
-  private static final boolean DEFAULT_NM_RECOVERY_ENABLED = false;
 
   // Port on which the shuffle server listens for fetch requests
   private static final String SPARK_SHUFFLE_SERVICE_PORT_KEY = "spark.shuffle.service.port";
@@ -157,8 +154,6 @@ public class YarnShuffleService extends AuxiliaryService {
     _conf = conf;
 
     boolean stopOnFailure = conf.getBoolean(STOP_ON_FAILURE_KEY, DEFAULT_STOP_ON_FAILURE);
-    boolean recoveryEnabled = conf.getBoolean(YarnConfiguration.NM_RECOVERY_ENABLED,
-      DEFAULT_NM_RECOVERY_ENABLED);
 
     try {
       // In case this NM was killed while there were running spark applications, we need to restore
@@ -166,7 +161,7 @@ public class YarnShuffleService extends AuxiliaryService {
       // If we don't find one, then we choose a file to use to save the state next time.  Even if
       // an application was stopped while the NM was down, we expect yarn to call stopApplication()
       // when it comes back
-      if (recoveryEnabled) {
+      if (_recoveryPath != null) {
         registeredExecutorFile = initRecoveryDb(RECOVERY_FILE_NAME);
       }
 
@@ -178,7 +173,10 @@ public class YarnShuffleService extends AuxiliaryService {
       List<TransportServerBootstrap> bootstraps = Lists.newArrayList();
       boolean authEnabled = conf.getBoolean(SPARK_AUTHENTICATE_KEY, DEFAULT_SPARK_AUTHENTICATE);
       if (authEnabled) {
-        createSecretManager(recoveryEnabled);
+        secretManager = new ShuffleSecretManager();
+        if (_recoveryPath != null) {
+          loadSecretsFromDb();
+        }
         bootstraps.add(new AuthServerBootstrap(transportConf, secretManager));
       }
 
@@ -202,33 +200,29 @@ public class YarnShuffleService extends AuxiliaryService {
     }
   }
 
-  private void createSecretManager(boolean recoveryEnabled) throws IOException {
-    secretManager = new ShuffleSecretManager();
+  private void loadSecretsFromDb() throws IOException {
+    secretsFile = initRecoveryDb(SECRETS_RECOVERY_FILE_NAME);
 
-    if (recoveryEnabled) {
-      secretsFile = initRecoveryDb(SECRETS_RECOVERY_FILE_NAME);
+    // Make sure this is protected in case its not in the NM recovery dir
+    FileSystem fs = FileSystem.getLocal(_conf);
+    fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short) 0700));
 
-      // Make sure this is protected in case its not in the NM recovery dir
-      FileSystem fs = FileSystem.getLocal(_conf);
-      fs.mkdirs(new Path(secretsFile.getPath()), new FsPermission((short) 0700));
-
-      db = LevelDBProvider.initLevelDB(secretsFile, CURRENT_VERSION, mapper);
-      logger.info("Recovery location is: " + secretsFile.getPath());
-      if (db != null) {
-        logger.info("Going to reload spark shuffle data");
-        DBIterator itr = db.iterator();
-        itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
-        while (itr.hasNext()) {
-          Map.Entry<byte[], byte[]> e = itr.next();
-          String key = new String(e.getKey(), StandardCharsets.UTF_8);
-          if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
-            break;
-          }
-          String id = parseDbAppKey(key);
-          ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
-          logger.info("Reloading tokens for app: " + id);
-          secretManager.registerApp(id, secret);
+    db = LevelDBProvider.initLevelDB(secretsFile, CURRENT_VERSION, mapper);
+    logger.info("Recovery location is: " + secretsFile.getPath());
+    if (db != null) {
+      logger.info("Going to reload spark shuffle data");
+      DBIterator itr = db.iterator();
+      itr.seek(APP_CREDS_KEY_PREFIX.getBytes(StandardCharsets.UTF_8));
+      while (itr.hasNext()) {
+        Map.Entry<byte[], byte[]> e = itr.next();
+        String key = new String(e.getKey(), StandardCharsets.UTF_8);
+        if (!key.startsWith(APP_CREDS_KEY_PREFIX)) {
+          break;
         }
+        String id = parseDbAppKey(key);
+        ByteBuffer secret = mapper.readValue(e.getValue(), ByteBuffer.class);
+        logger.info("Reloading tokens for app: " + id);
+        secretManager.registerApp(id, secret);
       }
     }
   }
@@ -332,6 +326,7 @@ public class YarnShuffleService extends AuxiliaryService {
    * overrode and called when Hadoop version is 2.5+ and NM recovery is enabled, otherwise we
    * have to manually call this to set our own recovery path.
    */
+  @Override
   public void setRecoveryPath(Path recoveryPath) {
     _recoveryPath = recoveryPath;
   }

@@ -84,7 +84,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   }
 
   test("executor state kept across NM restart") {
-    yarnConfig.set(YarnConfiguration.NM_RECOVERY_ENABLED, "true")
     s1 = new YarnShuffleService
     s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     // set auth to true to test the secrets recovery
@@ -163,7 +162,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   }
 
   test("removed applications should not be in registered executor file") {
-    yarnConfig.set(YarnConfiguration.NM_RECOVERY_ENABLED, "true")
     s1 = new YarnShuffleService
     s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     yarnConfig.setBoolean(SecurityManager.SPARK_AUTH_CONF, false)
@@ -199,7 +197,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   }
 
   test("shuffle service should be robust to corrupt registered executor file") {
-    yarnConfig.set(YarnConfiguration.NM_RECOVERY_ENABLED, "true")
     s1 = new YarnShuffleService
     s1.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s1.init(yarnConfig)
@@ -261,7 +258,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   test("get correct recovery path") {
     // Test recovery path is set outside the shuffle service, this is to simulate NM recovery
     // enabled scenario, where recovery path will be set by yarn.
-    yarnConfig.set(YarnConfiguration.NM_RECOVERY_ENABLED, "true")
     s1 = new YarnShuffleService
     val recoveryPath = new Path(Utils.createTempDir().toURI)
     s1.setRecoveryPath(recoveryPath)
@@ -277,7 +273,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     // Simulate s1 is running on old version of Hadoop in which recovery file is in the NM local
     // dir.
-    yarnConfig.set(YarnConfiguration.NM_RECOVERY_ENABLED, "true")
     s1 = new YarnShuffleService
     s1.setRecoveryPath(new Path(yarnConfig.getTrimmedStrings(YarnConfiguration.NM_LOCAL_DIRS)(0)))
     // set auth to true to test the secrets recovery
@@ -356,7 +351,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     // Set up a read-only local dir.
     val roDir = Utils.createTempDir()
     Files.setPosixFilePermissions(roDir.toPath(), EnumSet.of(OWNER_READ, OWNER_EXECUTE))
-    yarnConfig.set(YarnConfiguration.NM_RECOVERY_ENABLED, "true")
 
     // Try to start the shuffle service, it should fail.
     val service = new YarnShuffleService()
