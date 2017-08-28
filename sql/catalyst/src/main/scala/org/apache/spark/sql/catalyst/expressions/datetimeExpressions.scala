@@ -1213,6 +1213,73 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
 }
 
 /**
+ * This modifies a timestamp to show how the display time changes going from one timezone to
+ * another, for the same instant in time.
+ *
+ * We intentionally do not provide an ExpressionDescription as this is not meant to be exposed to
+ * users, its only used for internal conversions.
+ */
+private[spark] case class ParquetTimestampCorrection(
+    time: Expression,
+    from: Expression,
+    to: Expression)
+  extends TernaryExpression with ImplicitCastInputTypes {
+
+  // modeled on ToUTCTimestamp + Conv (as an example TernaryExpression)
+
+  // convertTz() does the *opposite* conversion we want, which is why from & to appear reversed
+  // in all the calls to convertTz.  Its used for showing how the display time changes when we go
+  // from one timezone to another.  We want to see how should change the SQLTimestamp value to
+  // ensure the display does *not* change, despite going from one TZ to another.
+
+  override def children: Seq[Expression] = Seq(time, from, to)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType, StringType)
+  override def dataType: DataType = TimestampType
+  override def prettyName: String = "parquet_timestamp_correction"
+
+  override def nullSafeEval(time: Any, from: Any, to: Any): Any = {
+    DateTimeUtils.convertTz(
+      time.asInstanceOf[Long],
+      to.asInstanceOf[UTF8String].toString(),
+      from.asInstanceOf[UTF8String].toString())
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+    if (from.foldable && to.foldable) {
+      val fromTz = from.eval()
+      val toTz = to.eval()
+      if (fromTz == null || toTz == null) {
+        ev.copy(code = s"""
+          |boolean ${ev.isNull} = true;
+          |long ${ev.value} = 0;
+          """.stripMargin)
+      } else {
+        val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        val eval = time.genCode(ctx)
+        ev.copy(code = s"""
+          |${eval.code}
+          |boolean ${ev.isNull} = ${eval.isNull};
+          |long ${ev.value} = 0;
+          |if (!${ev.isNull}) {
+          |  ${ev.value} = $dtu.convertTz(${eval.value}, "$toTz", "$fromTz");
+          |}
+         """.stripMargin)
+      }
+    } else {
+      nullSafeCodeGen(ctx, ev, (time, from, to) =>
+        s"""
+           |${ev.value} = $dtu.convertTz(
+           |  $time,
+           |  $to.toString(),
+           |  $from.toString());
+         """.stripMargin
+      )
+    }
+  }
+}
+
+/**
  * Parses a column to a date based on the given format.
  */
 @ExpressionDescription(

@@ -109,6 +109,11 @@ object DateTimeUtils {
     computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
   }
 
+  lazy val validTimezones = TimeZone.getAvailableIDs().toSet
+  def isValidTimezone(timezoneId: String): Boolean = {
+    validTimezones.contains(timezoneId)
+  }
+
   def newDateFormat(formatString: String, timeZone: TimeZone): DateFormat = {
     val sdf = new SimpleDateFormat(formatString, Locale.US)
     sdf.setTimeZone(timeZone)
@@ -1013,6 +1018,10 @@ object DateTimeUtils {
       }
     }
     guess
+  }
+
+  def convertTz(ts: SQLTimestamp, fromZone: String, toZone: String): SQLTimestamp = {
+    convertTz(ts, getTimeZone(fromZone), getTimeZone(toZone))
   }
 
   /**

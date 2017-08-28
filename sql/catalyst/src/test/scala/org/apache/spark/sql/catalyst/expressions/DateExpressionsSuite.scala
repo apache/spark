@@ -741,4 +741,26 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test("2015-07-24 00:00:00", null, null)
     test(null, null, null)
   }
+
+  test("parquet_timestamp_correction") {
+    def test(t: String, fromTz: String, toTz: String, expected: String): Unit = {
+      checkEvaluation(
+        ParquetTimestampCorrection(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          Literal.create(fromTz, StringType),
+          Literal.create(toTz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+      checkEvaluation(
+        ParquetTimestampCorrection(
+          Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
+          NonFoldableLiteral.create(fromTz, StringType),
+          NonFoldableLiteral.create(toTz, StringType)),
+        if (expected != null) Timestamp.valueOf(expected) else null)
+    }
+    test("2015-07-24 00:00:00", "UTC", "PST", "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", "UTC", "PST", "2015-01-23 16:00:00")
+    test(null, "UTC", "UTC", null)
+    test("2015-07-24 00:00:00", null, null, null)
+    test(null, null, null, null)
+  }
 }

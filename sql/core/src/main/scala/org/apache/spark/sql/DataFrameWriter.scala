@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
@@ -215,6 +216,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def save(path: String): Unit = {
     this.extraOptions += ("path" -> path)
+    val destStr = s"for path $path"
+    ParquetFileFormat.checkTableTz(destStr, extraOptions.toMap)
     save()
   }
 
@@ -266,6 +269,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
+    extraOptions.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY).foreach { tz =>
+      throw new AnalysisException("Cannot provide a table timezone on insert; tried to insert " +
+        s"$tableName with ${ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY}=$tz")
+    }
     insertInto(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
@@ -406,6 +413,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     } else {
       CatalogTableType.MANAGED
     }
+    val props =
+      extraOptions.filterKeys(key => key == ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY).toMap
+    ParquetFileFormat.checkTableTz(tableIdent, props)
 
     val tableDesc = CatalogTable(
       identifier = tableIdent,
@@ -414,7 +424,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       schema = new StructType,
       provider = Some(source),
       partitionColumnNames = partitioningColumns.getOrElse(Nil),
-      bucketSpec = getBucketSpec)
+      bucketSpec = getBucketSpec,
+      properties = props)
 
     runCommand(df.sparkSession, "saveAsTable")(CreateTable(tableDesc, mode, Some(df.logicalPlan)))
   }
