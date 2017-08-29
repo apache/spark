@@ -44,6 +44,13 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
     require(k <= numFeatures,
       s"source vector size $numFeatures must be no less than k=$k")
 
+    val workSize = ( 3
+      * math.min(k, numFeatures) * math.min(k, numFeatures)
+      + math.max(math.max(k, numFeatures), 4 * math.min(k, numFeatures)
+      * math.min(k, numFeatures) + 4 * math.min(k, numFeatures))
+      )
+    require(workSize < (1 << 31), "The param K and numFeatures exceed limit in SVD.")
+
     val mat = new RowMatrix(sources)
     val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
     val densePC = pc match {
