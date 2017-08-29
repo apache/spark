@@ -94,8 +94,8 @@ public class ReadAheadInputStream extends InputStream {
     readAheadBuffer.flip();
   }
 
-  private boolean hasRemaining() {
-    if(activeBuffer.remaining() == 0 && readAheadBuffer.remaining() == 0 && endOfStream) {
+  private boolean isEndOfStream() {
+    if(!activeBuffer.hasRemaining() && !readAheadBuffer.hasRemaining() && endOfStream) {
       return true;
     }
     return  false;
@@ -109,13 +109,11 @@ public class ReadAheadInputStream extends InputStream {
     byteBuffer.position(0);
     byteBuffer.flip();
     readInProgress = true;
+    final byte[] arr = byteBuffer.array();
     stateChangeLock.unlock();
     executorService.execute(new Runnable() {
       @Override
       public void run() {
-        stateChangeLock.lock();
-        byte[] arr = byteBuffer.array();
-        stateChangeLock.unlock();
         // Please note that it is safe to release the lock and read into the read ahead buffer
         // because either of following two conditions will hold - 1. The active buffer has
         // data available to read so the reader will not read from the read ahead buffer.
@@ -139,7 +137,7 @@ public class ReadAheadInputStream extends InputStream {
             endOfStream = true;
           } else if (!handled) {
             readAborted = true;
-            readException = exception;
+            readException = exception != null ? exception: new Exception("Unknown exception in ReadAheadInputStream");
           } else {
             byteBuffer.limit(read);
           }
@@ -215,7 +213,7 @@ public class ReadAheadInputStream extends InputStream {
     if (readAborted) {
       throw new IOException(readException);
     }
-    if (hasRemaining()) {
+    if (isEndOfStream()) {
       return -1;
     }
     len = Math.min(len, activeBuffer.remaining());
