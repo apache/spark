@@ -73,5 +73,6 @@ public class PlatformUtilSuite {
     Assert.assertEquals(
       Platform.getByte(offheap.getBaseObject(), offheap.getBaseOffset()),
       MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+    MemoryAllocator.UNSAFE.free(offheap);
   }
 }
