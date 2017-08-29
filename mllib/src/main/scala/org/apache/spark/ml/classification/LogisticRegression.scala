@@ -483,7 +483,14 @@ class LogisticRegression @Since("1.2.0") (
     this
   }
 
-  protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
+  override protected[spark] def train(dataset: Dataset[_]): LogisticRegressionModel = {
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
+    train(dataset, handlePersistence)
+  }
+
+  protected[spark] def train(
+      dataset: Dataset[_],
+      handlePersistence: Boolean): LogisticRegressionModel = {
     val w = if (!isDefined(weightCol) || $(weightCol).isEmpty) lit(1.0) else col($(weightCol))
     val instances: RDD[Instance] =
       dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd.map {

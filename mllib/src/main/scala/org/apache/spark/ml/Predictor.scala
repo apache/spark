@@ -27,7 +27,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
-import org.apache.spark.storage.StorageLevel
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -86,10 +85,6 @@ abstract class Predictor[
     M <: PredictionModel[FeaturesType, M]]
   extends Estimator[M] with PredictorParams {
 
-  protected[spark] var storageLevel = StorageLevel.NONE
-
-  protected def handlePersistence = storageLevel == StorageLevel.NONE
-
   /** @group setParam */
   def setLabelCol(value: String): Learner = set(labelCol, value).asInstanceOf[Learner]
 
@@ -103,8 +98,6 @@ abstract class Predictor[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-
-    storageLevel = dataset.storageLevel
 
     // Cast LabelCol to DoubleType and keep the metadata.
     val labelMeta = dataset.schema($(labelCol)).metadata
