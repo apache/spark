@@ -49,7 +49,8 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       + math.max(math.max(k, numFeatures), 4 * math.min(k, numFeatures)
       * math.min(k, numFeatures) + 4 * math.min(k, numFeatures))
       )
-    require(workSize < (1 << 31), "The param K and numFeatures is too large for SVD computation.")
+    require(workSize <= Int.MaxValue,
+      "The param K and numFeatures is too large for SVD computation.")
 
     val mat = new RowMatrix(sources)
     val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
