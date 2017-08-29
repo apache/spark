@@ -1356,6 +1356,8 @@ private[ml] class MultiClassSummarizer extends Serializable {
 /**
  * :: Experimental ::
  * Abstraction for logistic regression results for a given model.
+ *
+ * Currently, the summary ignores the instance weights.
  */
 @Experimental
 sealed trait LogisticRegressionSummary extends Serializable {
@@ -1495,6 +1497,8 @@ sealed trait LogisticRegressionTrainingSummary extends LogisticRegressionSummary
 /**
  * :: Experimental ::
  * Abstraction for binary logistic regression results for a given model.
+ *
+ * Currently, the summary ignores the instance weights.
  */
 @Experimental
 sealed trait BinaryLogisticRegressionSummary extends LogisticRegressionSummary {
