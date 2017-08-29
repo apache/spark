@@ -199,18 +199,27 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   test("SPARK-21839: Add SQL config for ORC compression") {
     val conf = sqlContext.sessionState.conf
+    // Test if the default of spark.sql.orc.compression.codec is snappy
     assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "SNAPPY")
 
     // OrcOptions's parameters have a higher priority than SQL configuration.
+    // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
     withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
       assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
-      assert(
-        new OrcOptions(Map("orc.compress" -> "zlib"), conf).compressionCodec == "ZLIB")
+      val map1 = Map("orc.compress" -> "zlib")
+      val map2 = Map("orc.compress" -> "zlib", "compression" -> "lzo")
+      assert(new OrcOptions(map1, conf).compressionCodec == "ZLIB")
+      assert(new OrcOptions(map2, conf).compressionCodec == "LZO")
     }
 
-    Seq("NONE", "SNAPPY", "ZLIB", "LZO").foreach { c =>
+    // Test all the valid options of spark.sql.orc.compression.codec
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
-        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == c)
+        if (c == "UNCOMPRESSED") {
+          assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
+        } else {
+          assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == c)
+        }
       }
     }
   }
