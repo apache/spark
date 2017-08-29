@@ -15,13 +15,14 @@ package org.apache.spark.io;
 
 import com.google.common.base.Preconditions;
 import org.apache.spark.storage.StorageUtils;
+import org.apache.spark.util.ThreadUtils;
 
 import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -48,11 +49,11 @@ public class ReadAheadInputStream extends InputStream {
 
   @GuardedBy("stateChangeLock")
   // true if async read is in progress
-  private boolean isReadInProgress;
+  private boolean readInProgress;
 
   @GuardedBy("stateChangeLock")
   // true if read is aborted due to an exception in reading from underlying input stream.
-  private boolean isReadAborted;
+  private boolean readAborted;
 
   @GuardedBy("stateChangeLock")
   private Exception readException;
@@ -63,7 +64,7 @@ public class ReadAheadInputStream extends InputStream {
 
   private final InputStream underlyingInputStream;
 
-  private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+  private final ExecutorService executorService = ThreadUtils.newDaemonSingleThreadExecutor("read-ahead");
 
   private final Condition asyncReadComplete = stateChangeLock.newCondition();
 
@@ -92,65 +93,69 @@ public class ReadAheadInputStream extends InputStream {
     readAheadBuffer.flip();
   }
 
-  private boolean isEndOfStream() {
+  private boolean hasRemaining() {
     if(activeBuffer.remaining() == 0 && readAheadBuffer.remaining() == 0 && endOfStream) {
       return true;
     }
     return  false;
   }
-
-
   private void readAsync(final ByteBuffer byteBuffer) throws IOException {
     stateChangeLock.lock();
-    if (endOfStream || isReadInProgress) {
+    if (endOfStream || readInProgress) {
       stateChangeLock.unlock();
       return;
     }
     byteBuffer.position(0);
     byteBuffer.flip();
-    isReadInProgress = true;
+    readInProgress = true;
     stateChangeLock.unlock();
-    executorService.execute(() -> {
-      byte[] arr;
-      stateChangeLock.lock();
-      arr = byteBuffer.array();
-      stateChangeLock.unlock();
-      // Please note that it is safe to release the lock and read into the read ahead buffer
-      // because either of following two conditions will hold - 1. The active buffer has
-      // data available to read so the reader will not read from the read ahead buffer.
-      // 2. This is the first time read is called or the active buffer is exhausted,
-      // in that case the reader waits for this async read to complete.
-      // So there is no race condition in both the situations.
-      int nRead = 0;
-      while (nRead == 0) {
+    executorService.execute(new Runnable() {
+      @Override
+      public void run() {
+        stateChangeLock.lock();
+        byte[] arr = byteBuffer.array();
+        stateChangeLock.unlock();
+        // Please note that it is safe to release the lock and read into the read ahead buffer
+        // because either of following two conditions will hold - 1. The active buffer has
+        // data available to read so the reader will not read from the read ahead buffer.
+        // 2. This is the first time read is called or the active buffer is exhausted,
+        // in that case the reader waits for this async read to complete.
+        // So there is no race condition in both the situations.
+        int nRead = 0;
         try {
-          nRead = underlyingInputStream.read(arr);
-          if (nRead < 0) {
-            // We hit end of the underlying input stream
-            break;
+          while (nRead == 0) {
+            try {
+              nRead = underlyingInputStream.read(arr);
+              if (nRead < 0) {
+                // We hit end of the underlying input stream
+                break;
+              }
+            } catch (Exception e) {
+              stateChangeLock.lock();
+              // We hit a read exception, which should be propagated to the reader
+              // in the next read() call.
+              readAborted = true;
+              readException = e;
+              stateChangeLock.unlock();
+              //break;
+            }
           }
-        } catch (Exception e) {
+        } finally {
           stateChangeLock.lock();
-          // We hit a read exception, which should be propagated to the reader
-          // in the next read() call.
-          isReadAborted = true;
-          readException = e;
+          if (nRead < 0) {
+            endOfStream = true;
+          } else {
+            // fill the byte buffer
+            byteBuffer.limit(nRead);
+          }
+          readInProgress = false;
+          signalAsyncReadComplete();
           stateChangeLock.unlock();
         }
       }
-      stateChangeLock.lock();
-      if (nRead < 0) {
-        endOfStream = true;
-      }
-      else {
-        // fill the byte buffer
-        byteBuffer.limit(nRead);
-      }
-      isReadInProgress = false;
-      signalAsyncReadComplete();
-      stateChangeLock.unlock();
     });
   }
+
 
   private void signalAsyncReadComplete() {
     stateChangeLock.lock();
@@ -182,6 +187,12 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public synchronized int read(byte[] b, int offset, int len) throws IOException {
+    if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
+      throw new IndexOutOfBoundsException();
+    }
+    if (len == 0) {
+      return 0;
+    }
     stateChangeLock.lock();
     try {
       len = readInternal(b, offset, len);
@@ -198,21 +209,18 @@ public class ReadAheadInputStream extends InputStream {
    */
   private int readInternal(byte[] b, int offset, int len) throws IOException {
     assert (stateChangeLock.isLocked());
-    if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
-      throw new IndexOutOfBoundsException();
-    }
+
     if (!activeBuffer.hasRemaining()) {
-      if (!isReadInProgress) {
+      if (!readInProgress) {
         // This condition will only be triggered for the first time read is called.
         readAsync(activeBuffer);
       }
       waitForAsyncReadComplete();
     }
-
-    if (isReadAborted) {
+    if (readAborted) {
       throw new IOException(readException);
     }
-    if (isEndOfStream()) {
+    if (hasRemaining()) {
       return -1;
     }
     len = Math.min(len, activeBuffer.remaining());
@@ -241,6 +249,9 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public synchronized long skip(long n) throws IOException {
+    if (n <= 0L) {
+      return 0L;
+    }
     stateChangeLock.lock();
     long skipped;
     try {
@@ -257,10 +268,7 @@ public class ReadAheadInputStream extends InputStream {
    */
   private long skipInternal(long n) throws IOException {
     assert (stateChangeLock.isLocked());
-    if (n <= 0L) {
-      return 0L;
-    }
-    if (isReadInProgress) {
+    if (readInProgress) {
       waitForAsyncReadComplete();
     }
     if (available() >= n) {
@@ -280,13 +288,21 @@ public class ReadAheadInputStream extends InputStream {
     readAheadBuffer.position(0);
     readAheadBuffer.flip();
     long skippedFromInputStream = underlyingInputStream.skip(toSkip);
+    readAsync(activeBuffer);
     return skippedBytes + skippedFromInputStream;
   }
 
   @Override
   public synchronized void close() throws IOException {
     executorService.shutdown();
+    try {
+      executorService.awaitTermination(10, TimeUnit.MILLISECONDS);
+    } catch (InterruptedException e) {
+    }
+    underlyingInputStream.close();
+    stateChangeLock.lock();
     StorageUtils.dispose(activeBuffer);
     StorageUtils.dispose(readAheadBuffer);
+    stateChangeLock.unlock();
   }
 }

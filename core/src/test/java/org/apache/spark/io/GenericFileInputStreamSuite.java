@@ -52,6 +52,8 @@ public abstract class GenericFileInputStreamSuite {
     inputFile.delete();
   }
 
+
+
   @Test
   public void testReadOneByte() throws IOException {
     for (int i = 0; i < randomBytes.length; i++) {
