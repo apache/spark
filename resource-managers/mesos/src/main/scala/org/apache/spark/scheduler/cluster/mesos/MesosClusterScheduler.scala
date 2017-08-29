@@ -613,20 +613,11 @@ private[spark] class MesosClusterScheduler(
         .build()
     }
 
-    val referenceSecrets: Seq[Secret] = {
-      if (desc.conf.get(config.SECRET_NAME).isDefined) {
-        desc.conf.get(config.SECRET_NAME).get.map(s => createReferenceSecret(s))
-      } else {
-        Seq.empty[Secret]
-      }
-    }
+    val referenceSecrets: Seq[Secret] =
+      desc.conf.get(config.SECRET_NAME).getOrElse(Nil).map(s => createReferenceSecret(s))
 
     val valueSecrets: Seq[Secret] = {
-      if (desc.conf.get(config.SECRET_VALUE).isDefined) {
-        desc.conf.get(config.SECRET_VALUE).get.map(s => createValueSecret(s))
-      } else {
-        Seq.empty[Secret]
-      }
+      desc.conf.get(config.SECRET_VALUE).getOrElse(Nil).map(s => createValueSecret(s))
     }
 
     if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
