@@ -141,7 +141,7 @@ private[rest] class StandaloneSubmitRequestServlet(
     val appArgs = request.appArgs
     // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
     val environmentVariables =
-      request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME"))
+      request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
 
     // Construct driver description
     val conf = new SparkConf(false)
