@@ -1265,7 +1265,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  test("create read-only batch") {
+  test("create columnar batch from Arrow column vectors") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
     val vector1 = ArrowUtils.toArrowField("int1", IntegerType, nullable = true)
       .createVector(allocator).asInstanceOf[NullableIntVector]
@@ -1312,7 +1312,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       batch.getRow(100)
     }
 
-    columnVectors.foreach(_.close())
+    batch.close()
     allocator.close()
   }
 }

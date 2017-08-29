@@ -1663,6 +1663,9 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
         assert(row.getInt(0) == i)
       }
     }
+
+    vector.close()
+    allocator.close()
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
