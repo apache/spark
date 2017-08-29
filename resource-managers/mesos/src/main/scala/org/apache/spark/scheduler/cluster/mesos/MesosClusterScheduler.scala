@@ -411,14 +411,7 @@ private[spark] class MesosClusterScheduler(
 
   private def getSecretEnvVar(desc: MesosDriverDescription): List[Variable] = {
     val secrets = getSecrets(desc)
-    val secretEnvKeys = {
-      if (desc.conf.get(config.SECRET_ENVKEY).isDefined) {
-        desc.conf.get(config.SECRET_ENVKEY).get
-      } else {
-        Seq.empty[String]
-      }
-    }
-
+    val secretEnvKeys = desc.conf.get(config.SECRET_ENVKEY).getOrElse(Nil)
     if (illegalSecretInput(secretEnvKeys, secrets)) {
       throw new SparkException(
         s"Need to give equal numbers of secrets and environment keys " +
@@ -658,10 +651,8 @@ private[spark] class MesosClusterScheduler(
 
   private def getSecretVolume(desc: MesosDriverDescription): List[Volume] = {
     val secrets = getSecrets(desc)
-
-    val secretPaths: Seq[String] = {
+    val secretPaths: Seq[String] =
       desc.conf.get(config.SECRET_FILENAME).getOrElse(Seq.empty[String])
-    }
 
     if (illegalSecretInput(secretPaths, secrets)) {
       throw new SparkException(
