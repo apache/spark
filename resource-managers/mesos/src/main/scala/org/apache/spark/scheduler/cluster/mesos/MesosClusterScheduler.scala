@@ -40,7 +40,6 @@ import org.apache.spark.util.Utils
 
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.
- *
  * @param driverDescription Submitted driver description from
  * [[org.apache.spark.deploy.rest.mesos.MesosRestServer]]
  * @param taskId Mesos TaskID generated for the task
@@ -385,8 +384,7 @@ private[spark] class MesosClusterScheduler(
       v => s"$v -Dspark.mesos.driver.frameworkId=${getDriverFrameworkID(desc)}"
     )
 
-    val driverEnv = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.")
-    val env = driverEnv ++ commandEnv
+    val env = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.") ++ commandEnv
 
     val envBuilder = Environment.newBuilder()
 
@@ -643,7 +641,7 @@ private[spark] class MesosClusterScheduler(
   private def getSecretVolume(desc: MesosDriverDescription): List[Volume] = {
     val secrets = getSecrets(desc)
     val secretPaths: Seq[String] =
-      desc.conf.get(config.SECRET_FILENAME).getOrElse(Seq.empty[String])
+      desc.conf.get(config.SECRET_FILENAME).getOrElse(Nil)
 
     if (illegalSecretInput(secretPaths, secrets)) {
       throw new SparkException(
