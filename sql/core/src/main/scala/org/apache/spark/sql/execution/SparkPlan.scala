@@ -57,10 +57,9 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def sparkContext = sqlContext.sparkContext
 
   // whether we should fallback when hitting compilation errors caused by codegen
-  private lazy val codeGenFallBack = sqlContext.conf.codegenFallback
+  private val codeGenFallBack = sqlContext.conf.codegenFallback
 
-  protected lazy val subexpressionEliminationEnabled =
-    sqlContext.conf.subexpressionEliminationEnabled
+  protected val subexpressionEliminationEnabled = sqlContext.conf.subexpressionEliminationEnabled
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
