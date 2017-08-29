@@ -53,7 +53,6 @@ public abstract class GenericFileInputStreamSuite {
   }
 
 
-
   @Test
   public void testReadOneByte() throws IOException {
     for (int i = 0; i < randomBytes.length; i++) {

@@ -18,6 +18,7 @@ import org.apache.spark.storage.StorageUtils;
 import org.apache.spark.util.ThreadUtils;
 
 import javax.annotation.concurrent.GuardedBy;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -121,32 +122,26 @@ public class ReadAheadInputStream extends InputStream {
         // 2. This is the first time read is called or the active buffer is exhausted,
         // in that case the reader waits for this async read to complete.
         // So there is no race condition in both the situations.
-        int nRead = 0;
+        boolean handled = false;
+        int read = 0;
+        Exception exception = new Exception("Unknown exception in ReadAheadInputStream");
         try {
-          while (nRead == 0) {
-            try {
-              nRead = underlyingInputStream.read(arr);
-              if (nRead < 0) {
-                // We hit end of the underlying input stream
-                break;
-              }
-            } catch (Exception e) {
-              stateChangeLock.lock();
-              // We hit a read exception, which should be propagated to the reader
-              // in the next read() call.
-              readAborted = true;
-              readException = e;
-              stateChangeLock.unlock();
-              //break;
-            }
+          while (true) {
+            read = underlyingInputStream.read(arr);
+            if (0 != read) break;
           }
+          handled = true;
+        } catch (Exception ex) {
+          exception = ex;
         } finally {
           stateChangeLock.lock();
-          if (nRead < 0) {
+          if (read < 0 || (exception instanceof EOFException) ) {
             endOfStream = true;
+          } else if (!handled) {
+            readAborted = true;
+            readException = exception;
           } else {
-            // fill the byte buffer
-            byteBuffer.limit(nRead);
+            byteBuffer.limit(read);
           }
           readInProgress = false;
           signalAsyncReadComplete();
@@ -169,6 +164,7 @@ public class ReadAheadInputStream extends InputStream {
   private void waitForAsyncReadComplete() {
     stateChangeLock.lock();
     try {
+      if (readInProgress)
       asyncReadComplete.await();
     } catch (InterruptedException e) {
     } finally {
@@ -209,7 +205,6 @@ public class ReadAheadInputStream extends InputStream {
    */
   private int readInternal(byte[] b, int offset, int len) throws IOException {
     assert (stateChangeLock.isLocked());
-
     if (!activeBuffer.hasRemaining()) {
       if (!readInProgress) {
         // This condition will only be triggered for the first time read is called.
@@ -274,11 +269,21 @@ public class ReadAheadInputStream extends InputStream {
     if (available() >= n) {
       // we can skip from the internal buffers
       int toSkip = (int)n;
-      byte[] temp = new byte[toSkip];
-      while (toSkip > 0) {
-        int skippedBytes = read(temp, 0, toSkip);
-        toSkip -= skippedBytes;
+      if (toSkip <= activeBuffer.remaining()) {
+        // Only skipping from active buffer is sufficient
+        activeBuffer.position(toSkip + activeBuffer.position());
+        return n;
       }
+      // We need to skip from both active buffer and read ahead buffer
+      toSkip -= activeBuffer.remaining();
+      activeBuffer.position(0);
+      activeBuffer.flip();
+      readAheadBuffer.position(toSkip + readAheadBuffer.position());
+      // flip the active and read ahead buffer
+      ByteBuffer temp = activeBuffer;
+      activeBuffer = readAheadBuffer;
+      readAheadBuffer = temp;
+      readAsync(readAheadBuffer);
       return n;
     }
     int skippedBytes = available();
@@ -301,8 +306,12 @@ public class ReadAheadInputStream extends InputStream {
     }
     underlyingInputStream.close();
     stateChangeLock.lock();
-    StorageUtils.dispose(activeBuffer);
-    StorageUtils.dispose(readAheadBuffer);
-    stateChangeLock.unlock();
+    try {
+      StorageUtils.dispose(activeBuffer);
+      StorageUtils.dispose(readAheadBuffer);
+    }
+    finally {
+      stateChangeLock.unlock();
+    }
   }
 }
