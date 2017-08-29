@@ -210,26 +210,28 @@ object Word2VecCBOWSolver extends Logging {
           }
           logInfo(s"Partition: $i_, Average Batch Error = ${errors.sum / batchSize}")
         }
-        Iterator((0, syn0), (1, syn1))
+        Iterator.tabulate(vocabSize) { index =>
+          (index, syn0.slice(index * vectorSize, (index + 1) * vectorSize))
+        } ++ Iterator.tabulate(vocabSize) { index =>
+          (vocabSize + index, syn1.slice(index * vectorSize, (index + 1) * vectorSize))
+        }
       }
 
       val aggedMatrices = partialFits.reduceByKey { case (v1, v2) =>
-        blas.saxpy(vocabSize, 1.0f, v2, 1, v1, 1)
+        blas.saxpy(vectorSize, 1.0f, v2, 1, v1, 1)
         v1
-      }.collect
+      }.collect()
 
-      assert(aggedMatrices.length == 2)
       val norm = 1.0f / numPartitions
-      aggedMatrices.foreach {case (i, syn) =>
-        blas.sscal(syn.length, norm, syn, 0, 1)
-        if (i == 0) {
-          // copy syn0
-          blas.scopy(syn.length, syn, 0, 1, syn0Global, 0, 1)
+      aggedMatrices.foreach {case (index, v) =>
+        blas.sscal(v.length, norm, v, 0, 1)
+        if (index < vocabSize) {
+          Array.copy(v, 0, syn0Global, index * vectorSize, vectorSize)
         } else {
-          // copy syn1
-          blas.scopy(syn.length, syn, 0, 1, syn1Global, 0, 1)
+          Array.copy(v, 0, syn1Global, (index - vocabSize) * vectorSize, vectorSize)
         }
       }
+
       syn0bc.destroy(false)
       syn1bc.destroy(false)
       val timePerIteration = (System.nanoTime() - iterationStartTime) / 1e6
