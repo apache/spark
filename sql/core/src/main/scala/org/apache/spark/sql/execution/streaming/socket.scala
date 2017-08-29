@@ -135,10 +135,10 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
     // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
     // if requested.
     if (includeTimestamp) {
-      rawBatch.toDF("value", "timestamp")
+      rawBatch.select("value", "timestamp")
     } else {
       // Strip out timestamp
-      rawBatch.select("value").toDF()
+      rawBatch.select("value")
     }
   }
 

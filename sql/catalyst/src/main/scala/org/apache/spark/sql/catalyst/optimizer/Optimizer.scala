@@ -45,7 +45,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       rule: Rule[LogicalPlan]): Unit = {
     assert(
       result.isStreaming == original.isStreaming,
-      s"Rule ${rule.ruleName} changed isStreaming from original ${original.isStreaming}:" +
+      s"Rule ${rule.ruleName} changed isStreaming from original ${original.isStreaming}: " +
           s"original:\n$original\nnew:\n$result")
   }
 
