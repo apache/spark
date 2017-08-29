@@ -130,16 +130,7 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
 
     val rdd = sqlContext.sparkContext.parallelize(rawList).map(
         v => InternalRow(UTF8String.fromString(v._1), v._2.getTime()))
-    val rawBatch = sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
-
-    // Underlying MemoryStream has schema (String, Timestamp); strip out the timestamp
-    // if requested.
-    if (includeTimestamp) {
-      rawBatch.select("value", "timestamp")
-    } else {
-      // Strip out timestamp
-      rawBatch.select("value")
-    }
+    sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
   override def commit(end: Offset): Unit = synchronized {
