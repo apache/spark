@@ -1283,13 +1283,13 @@ public class JavaDatasetSuite implements Serializable {
     ds.collectAsList();
   }
 
-  public enum EnumBean {
+  public enum MyEnum {
     A("www.elgoog.com"),
     B("www.google.com");
 
     private String url;
 
-    EnumBean(String url) {
+    MyEnum(String url) {
       this.url = url;
     }
 
@@ -1302,16 +1302,8 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Test
-  public void testEnum() {
-    List<EnumBean> data = Arrays.asList(EnumBean.B);
-    Encoder<EnumBean> encoder = Encoders.bean(EnumBean.class);
-    Dataset<EnumBean> ds = spark.createDataset(data, encoder);
-    Assert.assertEquals(ds.collectAsList(), data);
-  }
-
   public static class BeanWithEnum {
-    EnumBean enumField;
+    MyEnum enumField;
     String regularField;
 
     public String getRegularField() {
@@ -1322,15 +1314,15 @@ public class JavaDatasetSuite implements Serializable {
       this.regularField = regularField;
     }
 
-    public EnumBean getEnumField() {
+    public MyEnum getEnumField() {
       return enumField;
     }
 
-    public void setEnumField(EnumBean field) {
+    public void setEnumField(MyEnum field) {
       this.enumField = field;
     }
 
-    public BeanWithEnum(EnumBean enumField, String regularField) {
+    public BeanWithEnum(MyEnum enumField, String regularField) {
       this.enumField = enumField;
       this.regularField = regularField;
     }
@@ -1353,8 +1345,8 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testBeanWithEnum() {
-    List<BeanWithEnum> data = Arrays.asList(new BeanWithEnum(EnumBean.A, "mira avenue"),
-            new BeanWithEnum(EnumBean.B, "flower boulevard"));
+    List<BeanWithEnum> data = Arrays.asList(new BeanWithEnum(MyEnum.A, "mira avenue"),
+            new BeanWithEnum(MyEnum.B, "flower boulevard"));
     Encoder<BeanWithEnum> encoder = Encoders.bean(BeanWithEnum.class);
     Dataset<BeanWithEnum> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(ds.collectAsList(), data);

@@ -32,7 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.Utils
 
 /**
  * Type-inference utilities for POJOs and Java collections.
@@ -120,8 +119,7 @@ object JavaTypeInference {
         (MapType(keyDataType, valueDataType, nullable), true)
 
       case other if other.isEnum =>
-        (StructType(Seq(StructField(typeToken.getRawType.getSimpleName,
-          StringType, nullable = false))), true)
+        (StringType, true)
 
       case other =>
         if (seenTypeSet.contains(other)) {
@@ -310,9 +308,12 @@ object JavaTypeInference {
           returnNullable = false)
 
       case other if other.isEnum =>
-        StaticInvoke(JavaTypeInference.getClass, ObjectType(other), "deserializeEnumName",
-          expressions.Literal.create(other.getEnumConstants.apply(0), ObjectType(other))
-            :: getPath :: Nil)
+        StaticInvoke(
+          other,
+          ObjectType(other),
+          "valueOf",
+          Invoke(getPath, "toString", ObjectType(classOf[String]), returnNullable = false) :: Nil,
+          returnNullable = false)
 
       case other =>
         val properties = getJavaBeanReadableAndWritableProperties(other)
@@ -354,30 +355,6 @@ object JavaTypeInference {
       case expressions.If(_, _, s: CreateNamedStruct) => s
       case other => CreateNamedStruct(expressions.Literal("value") :: other :: Nil)
     }
-  }
-
-  /** Returns a mapping from enum value to int for given enum type */
-  def enumSerializer[T <: Enum[T]](enum: Class[T]): T => UTF8String = {
-    assert(enum.isEnum)
-    inputObject: T =>
-      UTF8String.fromString(inputObject.name())
-  }
-
-  /** Returns value index for given enum type and value */
-  def serializeEnumName[T <: Enum[T]](enum: UTF8String, inputObject: T): UTF8String = {
-    enumSerializer(Utils.classForName(enum.toString).asInstanceOf[Class[T]])(inputObject)
-  }
-
-  /** Returns a mapping from int to enum value for given enum type */
-  def enumDeserializer[T <: Enum[T]](enum: Class[T]): InternalRow => T = {
-    assert(enum.isEnum)
-    value: InternalRow =>
-      Enum.valueOf(enum, value.getUTF8String(0).toString)
-  }
-
-  /** Returns enum value for given enum type and value index */
-  def deserializeEnumName[T <: Enum[T]](typeDummy: T, inputObject: InternalRow): T = {
-    enumDeserializer(typeDummy.getClass.asInstanceOf[Class[T]])(inputObject)
   }
 
   private def serializerFor(inputObject: Expression, typeToken: TypeToken[_]): Expression = {
@@ -465,9 +442,12 @@ object JavaTypeInference {
           )
 
         case other if other.isEnum =>
-          CreateNamedStruct(expressions.Literal("enum") ::
-          StaticInvoke(JavaTypeInference.getClass, StringType, "serializeEnumName",
-          expressions.Literal.create(other.getName, StringType) :: inputObject :: Nil) :: Nil)
+          StaticInvoke(
+            classOf[UTF8String],
+            StringType,
+            "fromString",
+            Invoke(inputObject, "name", ObjectType(classOf[String]), returnNullable = false) :: Nil,
+            returnNullable = false)
 
         case other =>
           val properties = getJavaBeanReadableAndWritableProperties(other)
