@@ -215,11 +215,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     // Test all the valid options of spark.sql.orc.compression.codec
     Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
-        if (c == "UNCOMPRESSED") {
-          assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
-        } else {
-          assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == c)
-        }
+        val expected = if (c == "UNCOMPRESSED") "NONE" else c
+        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
       }
     }
   }
