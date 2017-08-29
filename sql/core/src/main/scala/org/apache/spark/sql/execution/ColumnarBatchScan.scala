@@ -81,7 +81,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val scanTimeTotalNs = ctx.freshName("scanTime")
     ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
 
-    val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+    val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.freshName("batch")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
 
@@ -89,7 +89,7 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     ctx.addMutableState("int", idx, s"$idx = 0;")
     val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
     val columnVectorClzs = vectorTypes.getOrElse(
-      Seq.fill(colVars.size)("org.apache.spark.sql.execution.vectorized.ColumnVector"))
+      Seq.fill(colVars.size)(classOf[ColumnVector].getName))
     val columnAssigns = colVars.zip(columnVectorClzs).zipWithIndex.map {
       case ((name, columnVectorClz), i) =>
         ctx.addMutableState(columnVectorClz, name, s"$name = null;")

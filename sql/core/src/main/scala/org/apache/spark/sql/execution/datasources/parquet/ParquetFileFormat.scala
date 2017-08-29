@@ -274,7 +274,6 @@ class ParquetFileFormat
   }
 
   override def vectorTypes(
-      sparkSession: Option[SparkSession],
       requiredSchema: StructType,
       partitionSchema: StructType): Option[Seq[String]] = {
     Option(Seq.fill(requiredSchema.fields.length + partitionSchema.fields.length)(

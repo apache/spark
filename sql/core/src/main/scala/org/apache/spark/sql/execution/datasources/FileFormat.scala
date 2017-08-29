@@ -69,7 +69,6 @@ trait FileFormat {
    * if this format supports returning columnar batch.
    */
   def vectorTypes(
-      sparkSession: Option[SparkSession],
       requiredSchema: StructType,
       partitionSchema: StructType): Option[Seq[String]] = {
     None

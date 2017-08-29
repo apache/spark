@@ -176,7 +176,6 @@ case class FileSourceScanExec(
 
   override def vectorTypes: Option[Seq[String]] =
     relation.fileFormat.vectorTypes(
-      sparkSession = Option(relation.sparkSession),
       requiredSchema = requiredSchema,
       partitionSchema = relation.partitionSchema)
 
