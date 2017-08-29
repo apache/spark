@@ -435,10 +435,10 @@ private[spark] class Client(
       val uriStr = uri.toString()
       val fileName = new File(uri.getPath).getName
       if (distributedUris.contains(uriStr)) {
-        logWarning(s"Same path resource $uri added multiple times to distributed cache.")
+        logError(s"Same path resource $uri added multiple times to distributed cache.")
         false
       } else if (distributedNames.contains(fileName)) {
-        logWarning(s"Same name resource $uri added multiple times to distributed cache")
+        logError(s"Same name resource $uri added multiple times to distributed cache")
         false
       } else {
         distributedUris += uriStr
