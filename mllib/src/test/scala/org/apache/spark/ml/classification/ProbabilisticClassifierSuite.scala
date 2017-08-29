@@ -18,10 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 final class TestProbabilisticClassificationModel(
     override val uid: String,
@@ -94,7 +94,13 @@ object ProbabilisticClassifierSuite {
     "thresholds" -> Array(0.4, 0.6)
   )
 
-  def probabilisticClassifierGenericTest[
+  /**
+   * Add test for prediction using the model with all combinations of
+   * output columns (rawPrediction/probability/prediction) turned on/off.
+   * Make sure the output column values match, presumably by comparing vs.
+   * the case with all 3 output columns turned on.
+   */
+  def testPredictMethods[
       FeaturesType,
       M <: ProbabilisticClassificationModel[FeaturesType, M]](
     model: M, testData: Dataset[_]): Unit = {
@@ -134,9 +140,9 @@ object ProbabilisticClassifierSuite {
               probabilitySingle: Vector, probabilityAll: Vector,
               predictionSingle: Double, predictionAll: Double
             ) => {
-              assert(rawPredictionSingle.asInstanceOf[Vector] ~== rawPredictionAll relTol 1E-3)
-              assert(probabilitySingle.asInstanceOf[Vector] ~== probabilityAll relTol 1E-3)
-              assert(predictionSingle.asInstanceOf[Double] ~== predictionAll relTol 1E-3)
+              assert(rawPredictionSingle ~== rawPredictionAll relTol 1E-3)
+              assert(probabilitySingle ~== probabilityAll relTol 1E-3)
+              assert(predictionSingle ~== predictionAll relTol 1E-3)
             }
           }
         }

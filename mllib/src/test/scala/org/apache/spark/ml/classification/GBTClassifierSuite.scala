@@ -220,7 +220,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       case (pred1, pred2) => assert(pred1 === pred2)
     }
 
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, GBTClassificationModel](gbtModel, validationDataset)
   }
 

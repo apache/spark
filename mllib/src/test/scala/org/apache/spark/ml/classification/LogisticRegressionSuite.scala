@@ -497,7 +497,7 @@ class LogisticRegressionSuite
       case (pred1, pred2) => assert(pred1 === pred2)
     }
 
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, LogisticRegressionModel](model, smallMultinomialDataset)
   }
 
@@ -554,7 +554,7 @@ class LogisticRegressionSuite
       case (pred1, pred2) => assert(pred1 === pred2)
     }
 
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, LogisticRegressionModel](model, smallBinaryDataset)
   }
 

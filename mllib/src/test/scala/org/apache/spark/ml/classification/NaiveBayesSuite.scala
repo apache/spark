@@ -161,7 +161,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "multinomial")
 
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, NaiveBayesModel](model, testDataset)
   }
 
@@ -217,7 +217,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "bernoulli")
 
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, NaiveBayesModel](model, testDataset)
   }
 

@@ -263,7 +263,7 @@ class DecisionTreeClassifierSuite
         "probability prediction mismatch")
     }
 
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, DecisionTreeClassificationModel](newTree, newData)
   }
 

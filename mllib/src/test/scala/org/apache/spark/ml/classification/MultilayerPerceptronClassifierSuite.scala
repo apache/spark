@@ -104,7 +104,7 @@ class MultilayerPerceptronClassifierSuite
       case Row(p: Vector, e: Vector) =>
         assert(p ~== e absTol 1e-3)
     }
-    ProbabilisticClassifierSuite.probabilisticClassifierGenericTest[
+    ProbabilisticClassifierSuite.testPredictMethods[
       Vector, MultilayerPerceptronClassificationModel](model, strongDataset)
   }
 
