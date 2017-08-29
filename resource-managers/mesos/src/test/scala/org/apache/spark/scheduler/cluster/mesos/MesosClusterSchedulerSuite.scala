@@ -356,8 +356,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       command,
       Map("spark.mesos.executor.home" -> "test",
         "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.name" -> secretName,
-        "spark.mesos.driver.secret.envkey" -> envKey),
+        "spark.mesos.driver.secret.names" -> secretName,
+        "spark.mesos.driver.secret.envkeys" -> envKey),
       "s1",
       new Date())
     val response = scheduler.submitDriver(driverDesc)
@@ -398,8 +398,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       command,
       Map("spark.mesos.executor.home" -> "test",
         "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.value" -> secretValues,
-        "spark.mesos.driver.secret.envkey" -> envKeys),
+        "spark.mesos.driver.secret.values" -> secretValues,
+        "spark.mesos.driver.secret.envkeys" -> envKeys),
       "s1",
       new Date())
     val response = scheduler.submitDriver(driverDesc)
@@ -440,8 +440,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       command,
       Map("spark.mesos.executor.home" -> "test",
         "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.name" -> secretName,
-        "spark.mesos.driver.secret.filename" -> secretPath),
+        "spark.mesos.driver.secret.names" -> secretName,
+        "spark.mesos.driver.secret.filenames" -> secretPath),
       "s1",
       new Date())
     val response = scheduler.submitDriver(driverDesc)
@@ -476,8 +476,8 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
       command,
       Map("spark.mesos.executor.home" -> "test",
         "spark.app.name" -> "test",
-        "spark.mesos.driver.secret.value" -> secretValues,
-        "spark.mesos.driver.secret.filename" -> secretPath),
+        "spark.mesos.driver.secret.values" -> secretValues,
+        "spark.mesos.driver.secret.filenames" -> secretPath),
       "s1",
       new Date())
     val response = scheduler.submitDriver(driverDesc)
