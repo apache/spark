@@ -39,16 +39,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
-  override protected def checkInvariants(
-      result: LogicalPlan,
-      original: LogicalPlan,
-      rule: Rule[LogicalPlan]): Unit = {
-    assert(
-      result.isStreaming == original.isStreaming,
-      s"Rule ${rule.ruleName} changed isStreaming from original ${original.isStreaming}: " +
-          s"original:\n$original\nnew:\n$result")
-  }
-
   def batches: Seq[Batch] = {
     Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more

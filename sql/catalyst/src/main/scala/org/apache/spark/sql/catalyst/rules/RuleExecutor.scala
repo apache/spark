@@ -63,12 +63,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
   protected def batches: Seq[Batch]
 
-  /** Checks invariants that should hold across rule executions. */
-  protected def checkInvariants(
-      result: TreeType,
-      original: TreeType,
-      rule: Rule[TreeType]): Unit = {}
-
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
    * using the defined execution strategy. Within each batch, rules are also executed serially.
@@ -92,7 +86,6 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             RuleExecutor.timeMap.addAndGet(rule.ruleName, runTime)
 
             if (!result.fastEquals(plan)) {
-              checkInvariants(result, plan, rule)
               logTrace(
                 s"""
                   |=== Applying Rule ${rule.ruleName} ===
