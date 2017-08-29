@@ -312,7 +312,8 @@ object JavaTypeInference {
           other,
           ObjectType(other),
           "valueOf",
-          Invoke(getPath, "toString", ObjectType(classOf[String])) :: Nil)
+          Invoke(getPath, "toString", ObjectType(classOf[String]), returnNullable = false) :: Nil,
+          returnNullable = false)
 
       case other =>
         val properties = getJavaBeanReadableAndWritableProperties(other)
@@ -445,7 +446,7 @@ object JavaTypeInference {
             classOf[UTF8String],
             StringType,
             "fromString",
-            Invoke(inputObject, "name", ObjectType(classOf[String])) :: Nil,
+            Invoke(inputObject, "name", ObjectType(classOf[String]), returnNullable = false) :: Nil,
             returnNullable = false)
 
         case other =>
