@@ -256,6 +256,7 @@ class LogisticRegressionSuite
 
     val blorModel = lr.fit(smallBinaryDataset)
     assert(blorModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(blorModel.summary.asBinary.isInstanceOf[BinaryLogisticRegressionSummary])
     assert(blorModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
 
     val mlorModel = lr.setFamily("multinomial").fit(smallMultinomialDataset)
@@ -263,6 +264,11 @@ class LogisticRegressionSuite
     withClue("cannot get binary summary for multiclass model") {
       intercept[RuntimeException] {
         mlorModel.binarySummary
+      }
+    }
+    withClue("cannot cast summary to binary summary multiclass model") {
+      intercept[RuntimeException] {
+        mlorModel.summary.asBinary
       }
     }
 

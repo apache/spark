@@ -1473,6 +1473,14 @@ sealed trait LogisticRegressionSummary extends Serializable {
   /** Returns weighted averaged f1-measure. */
   @Since("2.3.0")
   def weightedFMeasure: Double = multiclassMetrics.weightedFMeasure(1.0)
+
+  /** Convenient method for casting to binary logistic regression summary */
+  @Since("2.3.0")
+  def asBinary: BinaryLogisticRegressionSummary = this match {
+    case b: BinaryLogisticRegressionSummary => b
+    case _ =>
+      throw new RuntimeException("Cannot cast to a binary summary.")
+  }
 }
 
 /**
