@@ -635,3 +635,9 @@ abstract class TernaryExpression extends Expression {
     }
   }
 }
+
+/**
+ * Common base trait for user-defined functions, including ScalaUDF, ScalaUDAF, PythonUDF,
+ * HiveSimpleUDF, HiveGenericUDF, and HiveUDAFFunction.
+ */
+trait UserDefinedExpression

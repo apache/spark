@@ -23,12 +23,6 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.types.DataType
 
 /**
- * Common base trait for user-defined functions, including ScalaUDF, ScalaUDAF, PythonUDF,
- * HiveSimpleUDF, HiveGenericUDF, and HiveUDAFFunction.
- */
-trait UDFType
-
-/**
  * User-defined function.
  * @param function  The user defined scala function to run.
  *                  Note that if you use primitive parameters, you are not able to check if it is
@@ -53,7 +47,7 @@ case class ScalaUDF(
     udfName: Option[String] = None,
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
-  extends Expression with ImplicitCastInputTypes with NonSQLExpression with UDFType {
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
 
   override def deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

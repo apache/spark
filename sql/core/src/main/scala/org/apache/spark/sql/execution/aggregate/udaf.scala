@@ -328,7 +328,7 @@ case class ScalaUDAF(
   with NonSQLExpression
   with Logging
   with ImplicitCastInputTypes
-  with UDFType {
+  with UserDefinedExpression {
 
   override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
