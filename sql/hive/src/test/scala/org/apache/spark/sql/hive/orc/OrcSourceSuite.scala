@@ -208,7 +208,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
         new OrcOptions(Map("orc.compress" -> "zlib"), conf).compressionCodec == "ZLIB")
     }
 
-    Seq("NONE", "SNAPPY", "ZLIB").foreach { c =>
+    Seq("NONE", "SNAPPY", "ZLIB", "LZO").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == c)
       }

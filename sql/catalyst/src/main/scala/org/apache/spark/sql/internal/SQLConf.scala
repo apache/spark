@@ -322,13 +322,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  // We can add LZO after Apache ORC 1.4.0 is used.
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec use when writing ORC files. Acceptable values include: " +
-      "uncompressed, snappy, zlib.")
+      "none, uncompressed, snappy, zlib, lzo.")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "zlib"))
+    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
