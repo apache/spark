@@ -64,7 +64,11 @@ singleDataType
     : dataType EOF
     ;
 
+<<<<<<< HEAD
 standaloneColTypeList
+=======
+singleTableSchema
+>>>>>>> origin/master
     : colTypeList EOF
     ;
 

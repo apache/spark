@@ -193,7 +193,10 @@
     <jsr305.version>3.0.1</jsr305.version>
     <libthrift.version>0.9.3</libthrift.version>
     <antlr4.version>4.7</antlr4.version>
+<<<<<<< HEAD
     <antlr.version>3.4</antlr.version>
+=======
+>>>>>>> origin/master
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
     <paranamer.version>2.6</paranamer.version>
@@ -2327,7 +2330,7 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
-              <javacArg>-Xlint:all,-serial,-path</javacArg>
+              <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
             </javacArgs>
           </configuration>
         </plugin>
