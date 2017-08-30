@@ -768,7 +768,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
                 val reply = SparkAppConfig(
                   resolvedProperties,
-                  SparkEnv.get.securityManager.getIOEncryptionKey())
+                  SparkEnv.get.securityManager.getIOEncryptionKey(),
+                  hadoopDelegationCreds)
                 context.reply(reply)
               }
           }
