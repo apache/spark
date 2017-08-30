@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
-import java.util.Locale
 
 import org.scalatest.BeforeAndAfterAll
 
