@@ -2480,6 +2480,11 @@ class SQLTests(ReusedPySparkTestCase):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
 
+    # test for SPARK-21534
+    def test_empty_bytearray(self):
+        rdd = self.spark.sql("select unhex('') as xx").rdd.map(lambda x: {"abc": x.xx})
+        self.spark.createDataFrame(rdd).collect()
+
     def test_bucketed_write(self):
         data = [
             (1, "foo", 3.0), (2, "foo", 5.0),
