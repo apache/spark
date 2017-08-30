@@ -73,7 +73,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
     val stagingDir: String = committer match {
       // For FileOutputCommitter it has its own staging path called "work path".
-      case f: FileOutputCommitter => Option(f.getWorkPath.toString).getOrElse(path)
+      case f: FileOutputCommitter =>
+        Option(f.getWorkPath).map(_.toString).getOrElse(path)
       case _ => path
     }
 
