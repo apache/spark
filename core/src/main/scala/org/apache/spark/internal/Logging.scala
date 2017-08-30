@@ -120,6 +120,7 @@ trait Logging {
       val log4j12Initialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
       // scalastyle:off println
       if (!log4j12Initialized) {
+        Logging.defaultSparkLog4jConfig = true
         val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
         Option(Utils.getSparkClassLoader.getResource(defaultLogProps)) match {
           case Some(url) =>
@@ -164,6 +165,7 @@ trait Logging {
 private[spark] object Logging {
   @volatile private var initialized = false
   @volatile private var defaultRootLevel: Level = null
+  @volatile private var defaultSparkLog4jConfig = false
 
   val initLock = new Object()
   try {
@@ -185,7 +187,8 @@ private[spark] object Logging {
    * initialization again.
    */
   def uninitialize(): Unit = initLock.synchronized {
-    if (isLog4j12()) {
+    if (isLog4j12() && defaultSparkLog4jConfig) {
+      defaultSparkLog4jConfig = false
       LogManager.resetConfiguration()
     }
     this.initialized = false
