@@ -573,28 +573,29 @@ class SessionCatalog(
    * If no database is specified, this will first attempt to rename a temporary table with
    * the same name, then, if that does not exist, rename the table in the current database.
    *
-   * This assumes the database specified in `newName` matches the one in `oldName`.
+   * If the database specified in `newName` is different from the one specified in `oldName`,
+   * It will result in moving table across databases.
    */
   def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
-    val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
-    newName.database.map(formatDatabaseName).foreach { newDb =>
-      if (db != newDb) {
-        throw new AnalysisException(
-          s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
-      }
-    }
+    val oldDb = formatDatabaseName(oldName.database.getOrElse(currentDb))
+    val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
 
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
-    if (db == globalTempViewManager.database) {
+    if (oldDb == globalTempViewManager.database || newDb == globalTempViewManager.database) {
+      if (oldDb != newDb) {
+        throw new AnalysisException(
+          s"Cannot change database of table '$oldTableName'")
+      }
       globalTempViewManager.rename(oldTableName, newTableName)
     } else {
-      requireDbExists(db)
       if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
-        requireTableExists(TableIdentifier(oldTableName, Some(db)))
-        requireTableNotExists(TableIdentifier(newTableName, Some(db)))
+        requireDbExists(oldDb)
+        requireDbExists(newDb)
+        requireTableExists(TableIdentifier(oldTableName, Some(oldDb)))
+        requireTableNotExists(TableIdentifier(newTableName, Some(newDb)))
         validateName(newTableName)
-        externalCatalog.renameTable(db, oldTableName, newTableName)
+        externalCatalog.renameTable(oldDb, oldTableName, newDb, newTableName)
       } else {
         if (newName.database.isDefined) {
           throw new AnalysisException(

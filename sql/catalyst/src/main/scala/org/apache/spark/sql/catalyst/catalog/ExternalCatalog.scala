@@ -131,13 +131,21 @@ abstract class ExternalCatalog
       ignoreIfNotExists: Boolean,
       purge: Boolean): Unit
 
-  final def renameTable(db: String, oldName: String, newName: String): Unit = {
-    postToAll(RenameTablePreEvent(db, oldName, newName))
-    doRenameTable(db, oldName, newName)
-    postToAll(RenameTableEvent(db, oldName, newName))
+  final def renameTable(
+      oldDb: String,
+      oldName: String,
+      newDb: String,
+      newName: String): Unit = {
+    postToAll(RenameTablePreEvent(oldDb, oldName, newDb, newName))
+    doRenameTable(oldDb, oldName, newDb, newName)
+    postToAll(RenameTableEvent(oldDb, oldName, newDb, newName))
   }
 
-  protected def doRenameTable(db: String, oldName: String, newName: String): Unit
+  protected def doRenameTable(
+      oldDb: String,
+      oldName: String,
+      newDb: String,
+      newName: String): Unit
 
   /**
    * Alter a table whose database and name match the ones specified in `tableDefinition`, assuming

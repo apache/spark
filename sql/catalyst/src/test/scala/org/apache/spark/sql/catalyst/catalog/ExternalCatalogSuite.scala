@@ -202,24 +202,27 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   test("rename table") {
     val catalog = newBasicCatalog()
     assert(catalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-    catalog.renameTable("db2", "tbl1", "tblone")
+    catalog.renameTable("db2", "tbl1", "db2", "tblone")
     assert(catalog.listTables("db2").toSet == Set("tblone", "tbl2"))
+    catalog.renameTable("db2", "tblone", "db1", "tbl1")
+    assert(catalog.listTables("db2").toSet == Set("tbl2"))
+    assert(catalog.listTables("db1").toSet == Set("tbl1"))
   }
 
   test("rename table when database/table does not exist") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.renameTable("unknown_db", "unknown_table", "unknown_table")
+      catalog.renameTable("unknown_db", "unknown_table", "unknown_db", "unknown_table")
     }
     intercept[AnalysisException] {
-      catalog.renameTable("db2", "unknown_table", "unknown_table")
+      catalog.renameTable("db2", "unknown_table", "db2", "unknown_table")
     }
   }
 
   test("rename table when destination table already exists") {
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
-      catalog.renameTable("db2", "tbl1", "tbl2")
+      catalog.renameTable("db2", "tbl1", "db2", "tbl2")
     }
   }
 
@@ -804,7 +807,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
   test("create/drop/rename table should create/delete/rename the directory") {
     val catalog = newBasicCatalog()
-    val db = catalog.getDatabase("db1")
+    val db1 = catalog.getDatabase("db1")
+    val db2 = catalog.getDatabase("db2")
     val table = CatalogTable(
       identifier = TableIdentifier("my_table", Some("db1")),
       tableType = CatalogTableType.MANAGED,
@@ -814,14 +818,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     )
 
     catalog.createTable(table, ignoreIfExists = false)
-    assert(exists(db.locationUri, "my_table"))
+    assert(exists(db1.locationUri, "my_table"))
 
-    catalog.renameTable("db1", "my_table", "your_table")
-    assert(!exists(db.locationUri, "my_table"))
-    assert(exists(db.locationUri, "your_table"))
+    catalog.renameTable("db1", "my_table", "db1", "your_table")
+    assert(!exists(db1.locationUri, "my_table"))
+    assert(exists(db1.locationUri, "your_table"))
+    catalog.renameTable("db1", "your_table", "db2", "my_table")
+    assert(!exists(db1.locationUri, "your_table"))
+    assert(exists(db2.locationUri, "my_table"))
 
-    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false, purge = false)
-    assert(!exists(db.locationUri, "your_table"))
+    catalog.dropTable("db2", "my_table", ignoreIfNotExists = false, purge = false)
+    assert(!exists(db2.locationUri, "your_table"))
 
     val externalTable = CatalogTable(
       identifier = TableIdentifier("external_table", Some("db1")),
@@ -833,7 +840,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       provider = Some(defaultProvider)
     )
     catalog.createTable(externalTable, ignoreIfExists = false)
-    assert(!exists(db.locationUri, "external_table"))
+    assert(!exists(db1.locationUri, "external_table"))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
