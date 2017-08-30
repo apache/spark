@@ -645,6 +645,7 @@ case class StructsToJson(
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
     case MapType(_: DataType, st: StructType, _) => st
+    case MapType(_: DataType, _: DataType, _) => StructType(Nil)
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -668,7 +669,6 @@ case class StructsToJson(
           getAndReset()
       case MapType(_: DataType, _: DataType, _: Boolean) =>
         (map: Any) =>
-          val mapType = child.dataType.asInstanceOf[MapType]
           gen.write(map.asInstanceOf[MapData])
           getAndReset()
     }
@@ -678,7 +678,7 @@ case class StructsToJson(
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case _: StructType | ArrayType(_: StructType, _) |
-         MapType(_: DataType, _: StructType, _: Boolean) =>
+         MapType(_: DataType, _: DataType, _: Boolean) =>
       try {
         JacksonUtils.verifySchema(rowSchema)
         TypeCheckResult.TypeCheckSuccess
