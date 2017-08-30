@@ -2580,18 +2580,23 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * In YARN mode this method returns a union of the jar files pointed by "spark.jars" and the
-   * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
-   * only the "spark.jars" property.
+   * Return the jar files pointed by the "spark.jars" property. Spark internally will distribute
+   * these jars through file server. In the YARN mode, it will return an empty list, since YARN
+   * has its own mechanism to distribute jars.
    */
-  def getUserJars(conf: SparkConf, isShell: Boolean = false): Seq[String] = {
+  def getUserJars(conf: SparkConf): Seq[String] = {
     val sparkJars = conf.getOption("spark.jars")
-    if (conf.get("spark.master") == "yarn" && isShell) {
-      val yarnJars = conf.getOption("spark.yarn.dist.jars")
-      unionFileLists(sparkJars, yarnJars).toSeq
-    } else {
-      sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
-    }
+    sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+  }
+
+  /**
+   * Return the local jar files which will be added to REPL's classpath. These jar files are
+   * specified by --jars (spark.jars) or --packages, remote jars will be downloaded to local by
+   * SparkSubmit at first.
+   */
+  def getLocalUserJarsForShell(conf: SparkConf): Seq[String] = {
+    val localJars = conf.getOption("spark.repl.local.jars")
+    localJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
   }
 
   private[spark] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
