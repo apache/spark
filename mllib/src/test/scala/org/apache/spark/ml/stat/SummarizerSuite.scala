@@ -501,12 +501,20 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
     }
     summarizer3.add(Vectors.dense(10.0, -10.0), 1e10)
 
+    val summarizer4 = new SummarizerBuffer()
+    summarizer4.add(Vectors.dense(10.0, Double.NaN), 1)
+    summarizer4.add(Vectors.dense(Double.NaN, Double.NaN), 1)
+
     assert(summarizer1.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer1.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
     assert(summarizer2.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
     assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+    assert(summarizer4.max(0).isNaN)
+    assert(summarizer4.max(1).isNaN)
+    assert(summarizer4.min(0).isNaN)
+    assert(summarizer4.min(1).isNaN)
   }
 
   ignore("performance test") {

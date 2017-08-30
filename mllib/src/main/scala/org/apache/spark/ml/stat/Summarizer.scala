@@ -299,11 +299,11 @@ private[ml] object SummaryBuilderImpl extends Logging {
       val localCurrMin = currMin
       instance.foreachActive { (index, value) =>
         if (value != 0.0) {
-          if (localCurrMax != null && localCurrMax(index) < value) {
-            localCurrMax(index) = value
+          if (localCurrMax != null) {
+            localCurrMax(index) = math.max(localCurrMax(index), value)
           }
-          if (localCurrMin != null && localCurrMin(index) > value) {
-            localCurrMin(index) = value
+          if (localCurrMin != null) {
+            localCurrMin(index) = math.min(localCurrMin(index), value)
           }
 
           if (localWeightSum != null) {
