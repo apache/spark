@@ -69,7 +69,7 @@ public class ReadAheadInputStream extends InputStream {
 
   private final Condition asyncReadComplete = stateChangeLock.newCondition();
 
-  private final byte[] oneByte = new byte[1];
+  private static final ThreadLocal<byte[]> oneByte = ThreadLocal.withInitial(() -> new byte[1]);
 
   /**
    * Creates a <code>ReadAheadInputStream</code> with the specified buffer size and read-ahead
@@ -95,7 +95,7 @@ public class ReadAheadInputStream extends InputStream {
   }
 
   private boolean isEndOfStream() {
-    if(!activeBuffer.hasRemaining() && !readAheadBuffer.hasRemaining() && endOfStream) {
+    if (!activeBuffer.hasRemaining() && !readAheadBuffer.hasRemaining() && endOfStream) {
       return true;
     }
     return  false;
@@ -171,16 +171,16 @@ public class ReadAheadInputStream extends InputStream {
   }
 
   @Override
-  public synchronized int read() throws IOException {
-    int val = read(oneByte, 0, 1);
+  public int read() throws IOException {
+    int val = read(oneByte.get(), 0, 1);
     if (val == -1) {
       return -1;
     }
-    return oneByte[0] & 0xFF;
+    return oneByte.get()[0] & 0xFF;
   }
 
   @Override
-  public synchronized int read(byte[] b, int offset, int len) throws IOException {
+  public int read(byte[] b, int offset, int len) throws IOException {
     if (offset < 0 || len < 0 || offset + len < 0 || offset + len > b.length) {
       throw new IndexOutOfBoundsException();
     }
@@ -231,7 +231,7 @@ public class ReadAheadInputStream extends InputStream {
   }
 
   @Override
-  public synchronized int available() throws IOException {
+  public int available() throws IOException {
     stateChangeLock.lock();
     // Make sure we have no integer overflow.
     int val = (int) Math.min((long) Integer.MAX_VALUE,
@@ -241,7 +241,7 @@ public class ReadAheadInputStream extends InputStream {
   }
 
   @Override
-  public synchronized long skip(long n) throws IOException {
+  public long skip(long n) throws IOException {
     if (n <= 0L) {
       return 0L;
     }
@@ -296,7 +296,7 @@ public class ReadAheadInputStream extends InputStream {
   }
 
   @Override
-  public synchronized void close() throws IOException {
+  public void close() throws IOException {
     executorService.shutdown();
     try {
       executorService.awaitTermination(10, TimeUnit.MILLISECONDS);
