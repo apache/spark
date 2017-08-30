@@ -22,18 +22,16 @@ import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-import scala.collection.JavaConverters._
-
 import com.google.common.io.Files
 import org.apache.arrow.memory.RootAllocator
-import org.apache.arrow.vector.{NullableIntVector, VectorLoader, VectorSchemaRoot}
+import org.apache.arrow.vector.{VectorLoader, VectorSchemaRoot}
 import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -1633,39 +1631,29 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
   }
 
   test("roundtrip payloads") {
-    val allocator = ArrowUtils.rootAllocator.newChildAllocator("int", 0, Long.MaxValue)
-    val vector = ArrowUtils.toArrowField("int", IntegerType, nullable = true)
-      .createVector(allocator).asInstanceOf[NullableIntVector]
-    vector.allocateNew()
-    val mutator = vector.getMutator()
+    val inputRows = (0 until 9).map { i =>
+      InternalRow(i)
+    } :+ InternalRow(null)
 
-    (0 until 10).foreach { i =>
-      mutator.setSafe(i, i)
-    }
-    mutator.setNull(10)
-    mutator.setValueCount(11)
-
-    val schema = StructType(Seq(StructField("int", IntegerType)))
-
-    val batch = new ColumnarBatch(schema, Array[ColumnVector](new ArrowColumnVector(vector)), 11)
-    batch.setNumRows(11)
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val payloadIter = ArrowConverters.toPayloadIterator(batch.rowIterator().asScala, schema, 0, ctx)
-    val rowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
+    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, ctx)
+    val outputRowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
 
-    assert(schema.equals(rowIter.schema))
+    assert(schema.equals(outputRowIter.schema))
 
-    rowIter.zipWithIndex.foreach { case (row, i) =>
-      if (i == 10) {
-        assert(row.isNullAt(0))
-      } else {
+    var count = 0
+    outputRowIter.zipWithIndex.foreach { case (row, i) =>
+      if (i != 9) {
         assert(row.getInt(0) == i)
+      } else {
+        assert(row.isNullAt(0))
       }
+      count += 1
     }
 
-    vector.close()
-    allocator.close()
+    assert(count == inputRows.length)
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
