@@ -232,17 +232,11 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         removeWorker(workerId, host, message)
         context.reply(true)
 
-<<<<<<< HEAD
       case RetrieveSparkAppConfig(_) =>
-        val reply = SparkAppConfig(sparkProperties,
-          SparkEnv.get.securityManager.getIOEncryptionKey())
-=======
-      case RetrieveSparkAppConfig =>
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
           hadoopDelegationCreds)
->>>>>>> origin/master
         context.reply(reply)
     }
 

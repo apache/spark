@@ -61,11 +61,7 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
    * definitions which will preserve the correct Hive metadata.
    */
   override def parseTableSchema(sqlText: String): StructType = parse(sqlText) { parser =>
-<<<<<<< HEAD
-    StructType(astBuilder.visitStandaloneColTypeList(parser.standaloneColTypeList()))
-=======
     astBuilder.visitSingleTableSchema(parser.singleTableSchema())
->>>>>>> origin/master
   }
 
   /** Creates LogicalPlan for a given SQL string. */

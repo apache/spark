@@ -84,9 +84,6 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
-<<<<<<< HEAD
-  ignore("Test setWeights by training restart -- ignore palantir/spark") {
-=======
   test("Predicted class probabilities: calibration on toy dataset") {
     val layers = Array[Int](4, 5, 2)
 
@@ -128,8 +125,7 @@ class MultilayerPerceptronClassifierSuite
     }
   }
 
-  test("Test setWeights by training restart") {
->>>>>>> origin/master
+  ignore("Test setWeights by training restart -- ignore palantir/spark") {
     val dataFrame = Seq(
       (Vectors.dense(0.0, 0.0), 0.0),
       (Vectors.dense(0.0, 1.0), 1.0),
