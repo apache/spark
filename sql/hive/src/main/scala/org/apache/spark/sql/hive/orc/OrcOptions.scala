@@ -40,7 +40,8 @@ private[orc] class OrcOptions(
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
-    // `compression`, `orc.compress`, and `spark.sql.orc.compression.codec` is used in order.
+    // `compression`, `orc.compress`, and `spark.sql.orc.compression.codec` are
+    // in order of precedence from highest to lowest.
     val orcCompressionConf = parameters.get(OrcRelation.ORC_COMPRESSION)
     val codecName = parameters
       .get("compression")
