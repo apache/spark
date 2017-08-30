@@ -322,6 +322,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ORC_VECTORIZED_READER_ENABLED =
+    buildConf("spark.sql.orc.vectorizedReader.enabled")
+      .doc("Enables vectorized orc decoding.")
+      .booleanConf
+      .createWithDefault(true)
+
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")
     .booleanConf
@@ -1003,6 +1009,8 @@ class SQLConf extends Serializable with Logging {
   def parquetCacheMetadata: Boolean = getConf(PARQUET_CACHE_METADATA)
 
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
+
+  def orcVectorizedReaderEnabled: Boolean = getConf(ORC_VECTORIZED_READER_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
