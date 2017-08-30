@@ -2383,9 +2383,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_BinaryType_serialization(self):
         # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
+        # The empty bytearray is test for SPARK-21534.
         schema = StructType([StructField('mybytes', BinaryType())])
         data = [[bytearray(b'here is my data')],
-                [bytearray(b'and here is some more')]]
+                [bytearray(b'and here is some more')],
+                [bytearray(b'')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
 
@@ -2479,11 +2481,6 @@ class SQLTests(ReusedPySparkTestCase):
             with self.assertRaises(TypeError):
                 a = array.array(t)
                 self.spark.createDataFrame([Row(myarray=a)]).collect()
-
-    # test for SPARK-21534
-    def test_empty_bytearray(self):
-        rdd = self.spark.sql("select unhex('') as xx").rdd.map(lambda x: {"abc": x.xx})
-        self.spark.createDataFrame(rdd).collect()
 
     def test_bucketed_write(self):
         data = [

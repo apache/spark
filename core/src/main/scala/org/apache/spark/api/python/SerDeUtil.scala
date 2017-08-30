@@ -39,7 +39,7 @@ private[spark] object SerDeUtil extends Logging {
     override def construct(args: Array[Object]): Object = {
       // Deal with an empty byte array pickled by Python 3.
       if (args.length == 0) {
-        Array.empty[Byte]
+        Array.emptyByteArray
       } else {
         super.construct(args)
       }
