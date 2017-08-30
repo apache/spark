@@ -1066,7 +1066,7 @@ class SparkILoop(
       logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
     val jars = {
-      val userJars = Utils.getUserJars(conf, isShell = true)
+      val userJars = Utils.getLocalUserJarsForShell(conf)
       if (userJars.isEmpty) {
         envJars.getOrElse("")
       } else {
