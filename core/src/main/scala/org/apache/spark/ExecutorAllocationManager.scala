@@ -427,6 +427,9 @@ private[spark] class ExecutorAllocationManager(
     } else {
       client.killExecutors(executorIdsToBeRemoved)
     }
+    // [SPARK-21834] killExecutors api reduces the target number of executors.
+    // So we need to update the target with desired value.
+    client.requestTotalExecutors(numExecutorsTarget, localityAwareTasks, hostToLocalTaskCount)
     // reset the newExecutorTotal to the existing number of executors
     newExecutorTotal = numExistingExecutors
     if (testing || executorsRemoved.nonEmpty) {
