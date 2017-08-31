@@ -30,7 +30,7 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce.{OrcInputFormat, OrcOutputFormat}
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgumentFactory}
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{Dataset, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -46,9 +46,32 @@ class DataSourceSuite
 
   import testImplicits._
 
+  var df: Dataset[Row] = _
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     spark.conf.set("spark.sql.session.timeZone", "GMT")
+
+    df = ((
+      false,
+      true,
+      Byte.MinValue,
+      Byte.MaxValue,
+      Short.MinValue,
+      Short.MaxValue,
+      Int.MinValue,
+      Int.MaxValue,
+      Long.MinValue,
+      Long.MaxValue,
+      Float.MinValue,
+      Float.MaxValue,
+      Double.MinValue,
+      Double.MaxValue,
+      Date.valueOf("0001-01-01"),
+      Date.valueOf("9999-12-31"),
+      new Timestamp(-62135769600000L), // 0001-01-01 00:00:00.000
+      new Timestamp(253402300799999L)  // 9999-12-31 23:59:59.999
+    ) :: Nil).toDF()
   }
 
   override def afterAll(): Unit = {
@@ -59,33 +82,22 @@ class DataSourceSuite
     }
   }
 
-  Seq("parquet", "orc").foreach { dataSource =>
+  Seq("parquet", "orc", "json", "csv").foreach { dataSource =>
     test(s"$dataSource - data type value limit") {
       withTempPath { tempDir =>
-        withTable("tab1") {
-          val df = ((
-            false,
-            true,
-            Byte.MinValue,
-            Byte.MaxValue,
-            Short.MinValue,
-            Short.MaxValue,
-            Int.MinValue,
-            Int.MaxValue,
-            Long.MinValue,
-            Long.MaxValue,
-            Float.MinValue,
-            Float.MaxValue,
-            Double.MinValue,
-            Double.MaxValue,
-            Date.valueOf("0001-01-01"),
-            Date.valueOf("9999-12-31"),
-            new Timestamp(-62135769600000L), // 0001-01-01 00:00:00.000
-            new Timestamp(253402300799999L)  // 9999-12-31 23:59:59.999
-          ) :: Nil).toDF()
-          df.write.format(dataSource).save(tempDir.getCanonicalPath)
-          sql(s"CREATE TABLE tab1 USING $dataSource LOCATION '${tempDir.toURI}'")
-          checkAnswer(sql(s"SELECT ${df.schema.fieldNames.mkString(",")} FROM tab1"), df)
+        df.write.format(dataSource).save(tempDir.getCanonicalPath)
+
+        // Use the same schema for saving/loading
+        checkAnswer(
+          spark.read.format(dataSource).schema(df.schema).load(tempDir.getCanonicalPath),
+          df)
+
+        // Use schema inference, but skip text-based format due to its limitation
+        if (Seq("parquet", "orc").contains(dataSource)) {
+          withTable("tab1") {
+            sql(s"CREATE TABLE tab1 USING $dataSource LOCATION '${tempDir.toURI}'")
+            checkAnswer(sql(s"SELECT ${df.schema.fieldNames.mkString(",")} FROM tab1"), df)
+          }
         }
       }
     }
@@ -100,7 +112,7 @@ class DataSourceSuite
       val typeStr = "struct<i:int,s:string>"
       OrcConf.MAPRED_OUTPUT_SCHEMA.setString(conf, typeStr)
       conf.set("mapreduce.output.fileoutputformat.outputdir", dir.getCanonicalPath)
-      conf.setInt(OrcConf.ROW_INDEX_STRIDE.getAttribute(), 1000)
+      conf.setInt(OrcConf.ROW_INDEX_STRIDE.getAttribute, 1000)
       conf.setBoolean(OrcOutputFormat.SKIP_TEMP_DIRECTORY, true)
       val outputFormat = new OrcOutputFormat[OrcStruct]()
       val writer = outputFormat.getRecordWriter(attemptContext)
