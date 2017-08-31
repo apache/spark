@@ -46,13 +46,13 @@ private[spark] class BaseDriverConfigurationStep(
   private val driverLimitCores = submissionSparkConf.get(KUBERNETES_DRIVER_LIMIT_CORES)
 
   // Memory settings
-  private val driverMemoryMb = submissionSparkConf.get(
+  private val driverMemoryMiB = submissionSparkConf.get(
       org.apache.spark.internal.config.DRIVER_MEMORY)
-  private val memoryOverheadMb = submissionSparkConf
+  private val memoryOverheadMiB = submissionSparkConf
       .get(KUBERNETES_DRIVER_MEMORY_OVERHEAD)
-      .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMb).toInt,
-          MEMORY_OVERHEAD_MIN))
-  private val driverContainerMemoryWithOverhead = driverMemoryMb + memoryOverheadMb
+      .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt,
+          MEMORY_OVERHEAD_MIN_MIB))
+  private val driverContainerMemoryWithOverheadMiB = driverMemoryMiB + memoryOverheadMiB
   private val driverDockerImage = submissionSparkConf.get(DRIVER_DOCKER_IMAGE)
 
   override def configureDriver(
@@ -86,10 +86,10 @@ private[spark] class BaseDriverConfigurationStep(
       .withAmount(driverCpuCores)
       .build()
     val driverMemoryQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverMemoryMb}M")
+      .withAmount(s"${driverMemoryMiB}Mi")
       .build()
     val driverMemoryLimitQuantity = new QuantityBuilder(false)
-      .withAmount(s"${driverContainerMemoryWithOverhead}M")
+      .withAmount(s"${driverContainerMemoryWithOverheadMiB}Mi")
       .build()
     val maybeCpuLimitQuantity = driverLimitCores.map { limitCores =>
       ("cpu", new QuantityBuilder(false).withAmount(limitCores).build())
@@ -102,7 +102,7 @@ private[spark] class BaseDriverConfigurationStep(
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()
         .withName(ENV_DRIVER_MEMORY)
-        .withValue(driverContainerMemoryWithOverhead + "m")
+        .withValue(driverContainerMemoryWithOverheadMiB + "M") // JVM treats the "M" unit as "Mi"
         .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_MAIN_CLASS)

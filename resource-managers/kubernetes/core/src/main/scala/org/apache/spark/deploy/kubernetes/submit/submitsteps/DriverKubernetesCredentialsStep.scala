@@ -44,6 +44,7 @@ private[spark] class DriverKubernetesCredentialsStep(
       s"$APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CLIENT_CERT_FILE_CONF_SUFFIX")
   private val maybeMountedCaCertFile = submissionSparkConf.getOption(
       s"$APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX.$CA_CERT_FILE_CONF_SUFFIX")
+  private val driverServiceAccount = submissionSparkConf.get(KUBERNETES_SERVICE_ACCOUNT_NAME)
 
   override def configureDriver(driverSpec: KubernetesDriverSpec): KubernetesDriverSpec = {
     val driverSparkConf = driverSpec.driverSparkConf.clone()
@@ -81,7 +82,16 @@ private[spark] class DriverKubernetesCredentialsStep(
             .endVolume()
           .endSpec()
         .build()
-    }.getOrElse(driverSpec.driverPod)
+    }.getOrElse(
+      driverServiceAccount.map { account =>
+          new PodBuilder(driverSpec.driverPod)
+            .editOrNewSpec()
+              .withServiceAccount(account)
+              .withServiceAccountName(account)
+              .endSpec()
+            .build()
+      }.getOrElse(driverSpec.driverPod)
+    )
     val driverContainerWithMountedSecretVolume = kubernetesCredentialsSecret.map { secret =>
       new ContainerBuilder(driverSpec.driverContainer)
         .addNewVolumeMount()

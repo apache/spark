@@ -20,14 +20,14 @@ kind: DaemonSet
 metadata:
   labels:
     app: spark-shuffle-service
-    spark-version: 2.1.0
+    spark-version: 2.2.0
   name: shuffle
 spec:
   template:
     metadata:
       labels:
         app: spark-shuffle-service
-        spark-version: 2.1.0
+        spark-version: 2.2.0
     spec:
       volumes:
         - name: temp-volume
@@ -38,7 +38,7 @@ spec:
           # This is an official image that is built
           # from the dockerfiles/shuffle directory
           # in the spark distribution.
-          image: kubespark/spark-shuffle:v2.1.0-kubernetes-0.2.0
+          image: kubespark/spark-shuffle:v2.2.0-kubernetes-0.3.0
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: '/tmp'

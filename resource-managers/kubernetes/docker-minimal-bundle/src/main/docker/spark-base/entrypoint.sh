@@ -16,6 +16,9 @@
 # limitations under the License.
 #
 
+# echo commands to the terminal output
+set -x
+
 # Check whether there is a passwd entry for the container UID
 myuid=$(id -u)
 mygid=$(id -g)
