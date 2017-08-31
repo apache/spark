@@ -99,7 +99,8 @@ case class OptimizeMetadataOnlyQuery(
           case l @ LogicalRelation(fsRelation: HadoopFsRelation, _, _) =>
             val partAttrs = getPartitionAttrs(fsRelation.partitionSchema.map(_.name), l)
             val partitionData = fsRelation.location.listFiles(Nil, Nil)
-            LocalRelation(partAttrs, partitionData.map(_.values))
+            // `toArray` forces materialization to make the seq serializable
+            LocalRelation(partAttrs, partitionData.map(_.values).toArray)
 
           case relation: HiveTableRelation =>
             val partAttrs = getPartitionAttrs(relation.tableMeta.partitionColumnNames, relation)
