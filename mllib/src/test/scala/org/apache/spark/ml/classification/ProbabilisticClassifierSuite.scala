@@ -95,10 +95,11 @@ object ProbabilisticClassifierSuite {
   )
 
   /**
-   * Add test for prediction using the model with all combinations of
-   * output columns (rawPrediction/probability/prediction) turned on/off.
-   * Make sure the output column values match, presumably by comparing vs.
-   * the case with all 3 output columns turned on.
+   * Helper for testing that a ProbabilisticClassificationModel computes
+   * the same predictions across all combinations of output columns
+   * (rawPrediction/probability/prediction) turned on/off. Makes sure the
+   * output column values match by comparing vs. the case with all 3 output
+   * columns turned on.
    */
   def testPredictMethods[
       FeaturesType,
