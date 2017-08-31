@@ -173,14 +173,13 @@ class TrainValidationSplitSuite
     tvs2.getEstimator match {
       case ova2: OneVsRest =>
         assert(ova.uid === ova2.uid)
-        val classifier = ova2.getClassifier
-        classifier match {
+        ova2.getClassifier match {
           case lr: LogisticRegression =>
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
               === lr.getMaxIter)
-          case _ =>
+          case other =>
             throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
-              s" LogisticREgression but found ${classifier.getClass.getName}")
+              s" LogisticRegression but found ${other.getClass.getName}")
         }
 
       case other =>

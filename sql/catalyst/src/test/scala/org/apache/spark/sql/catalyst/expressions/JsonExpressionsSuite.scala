@@ -373,6 +373,16 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("2")))
   }
 
+  test("SPARK-21804: json_tuple returns null values within repeated columns except the first one") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f1") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
+  }
+
   val gmtId = Option(DateTimeUtils.TimeZoneGMT.getID)
 
   test("from_json") {
