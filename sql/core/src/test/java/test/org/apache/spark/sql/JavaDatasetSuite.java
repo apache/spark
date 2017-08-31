@@ -1337,7 +1337,8 @@ public class JavaDatasetSuite implements Serializable {
     public boolean equals(Object other) {
       if (other instanceof BeanWithEnum) {
         BeanWithEnum beanWithEnum = (BeanWithEnum) other;
-        return beanWithEnum.regularField.equals(regularField) && beanWithEnum.enumField.equals(enumField);
+        return beanWithEnum.regularField.equals(regularField)
+          && beanWithEnum.enumField.equals(enumField);
       }
       return false;
     }
