@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources._
  */
 case class InsertIntoDataSourceDirCommand(
     storage: CatalogStorageFormat,
-    provider: Option[String],
+    provider: String,
     query: LogicalPlan,
     overwrite: Boolean) extends RunnableCommand {
 
@@ -43,13 +43,13 @@ case class InsertIntoDataSourceDirCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     assert(innerChildren.length == 1)
     assert(storage.locationUri.nonEmpty, "Directory path is required")
-    assert(provider.isDefined, "Data source is required")
+    assert(!provider.isEmpty, "Data source is required")
 
     // Create the relation based on the input logical plan: `data`.
     val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
       sparkSession,
-      className = provider.get,
+      className = provider,
       options = storage.properties ++ pathOption,
       catalogTable = None)
 

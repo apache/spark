@@ -1584,6 +1584,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       compressed = false,
       properties = rowStorage.properties ++ fileStorage.properties)
 
-    (ctx.LOCAL != null, storage, None)
+    (ctx.LOCAL != null, storage, Some(DDLUtils.HIVE_PROVIDER))
   }
 }

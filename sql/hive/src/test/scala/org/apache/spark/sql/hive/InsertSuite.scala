@@ -539,18 +539,14 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withTempDir { dir =>
       val path = dir.toURI.getPath
 
-      checkAnswer(
-        sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' SELECT * FROM src where key < 10"),
-        Seq.empty[Row])
+      sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' SELECT * FROM src where key < 10")
 
-      checkAnswer(
-        sql(
-          s"""
-             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
-             |STORED AS orc
-             |SELECT * FROM src where key < 10
-          """.stripMargin),
-        Seq.empty[Row])
+      sql(
+        s"""
+           |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+           |STORED AS orc
+           |SELECT * FROM src where key < 10
+         """.stripMargin)
 
       // use orc data source to check the data of path is right.
       withTempView("orc_source") {
@@ -570,30 +566,66 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("insert overwrite to dir from temp table") {
+  test("insert overwrite to local dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
 
       withTempDir { dir =>
         val path = dir.toURI.getPath
 
-        checkAnswer(
-          sql(
-            s"""
-               |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
-               |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
-               |SELECT * FROM test_insert_table
-             """.stripMargin),
-          Seq.empty[Row])
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
 
-        checkAnswer(
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+             |STORED AS orc
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        // use orc data source to check the data of path is right.
+        withTempView("orc_source") {
           sql(
             s"""
-               |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
-               |STORED AS orc
-               |SELECT * FROM test_insert_table
-             """.stripMargin),
-          Seq.empty[Row])
+               |CREATE TEMPORARY VIEW orc_source
+               |USING org.apache.spark.sql.hive.orc
+               |OPTIONS (
+               |  PATH '${dir.getCanonicalPath}'
+               |)
+             """.stripMargin)
+
+          checkAnswer(
+            sql("select * from orc_source"),
+            sql("select * from test_insert_table").collect())
+        }
+      }
+    }
+  }
+
+  test("insert overwrite to dir from temp table") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      withTempDir { dir =>
+        val pathUri = dir.toURI
+
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY '${pathUri}'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY '${pathUri}'
+             |STORED AS orc
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
 
         // use orc data source to check the data of path is right.
         withTempView("orc_source") {
