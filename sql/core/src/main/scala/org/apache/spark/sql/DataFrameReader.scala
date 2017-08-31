@@ -410,10 +410,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(schema.toAttributes, parsed, isStreaming = jsonDataset.isStreaming)(sparkSession))
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
   }
 
   /**
@@ -473,10 +470,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         parsedOptions.columnNameOfCorruptRecord)
       iter.flatMap(parser.parse)
     }
-
-    Dataset.ofRows(
-      sparkSession,
-      LogicalRDD(schema.toAttributes, parsed, isStreaming = csvDataset.isStreaming)(sparkSession))
+    sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = csvDataset.isStreaming)
   }
 
   /**
