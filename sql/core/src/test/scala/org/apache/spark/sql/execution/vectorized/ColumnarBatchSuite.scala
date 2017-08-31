@@ -27,11 +27,14 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeProjection}
+import org.apache.spark.sql.execution.columnar.compression.ColumnBuilderHelper
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.unsafe.types.CalendarInterval
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class ColumnarBatchSuite extends SparkFunSuite {
 
@@ -1260,5 +1263,261 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(ex.getMessage.contains(s"Cannot reserve additional contiguous bytes in the " +
         s"vectorized reader"))
     }
+  }
+
+  test("CachedBatch boolean Apis") {
+    val dataType = BooleanType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setBoolean(0, i % 2 == 0)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getBoolean(i) == (i % 2 == 0))
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch byte Apis") {
+    val dataType = ByteType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setByte(0, i.toByte)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getByte(i) == i)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch short Apis") {
+    val dataType = ShortType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setShort(0, i.toShort)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getShort(i) == i)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch int Apis") {
+    val dataType = IntegerType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setInt(0, i)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getInt(i) == i)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch long Apis") {
+    val dataType = LongType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setLong(0, i.toLong)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getLong(i) == i.toLong)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch float Apis") {
+    val dataType = FloatType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setFloat(0, i.toFloat)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getFloat(i) == i.toFloat)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch double Apis") {
+    val dataType = DoubleType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.setDouble(0, i.toDouble)
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getDouble(i) == i.toDouble)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch String type Apis") {
+    val dataType = StringType
+    val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+    val row = new SpecificInternalRow(Array(dataType))
+
+    row.setNullAt(0)
+    columnBuilder.appendFrom(row, 0)
+    for (i <- 1 until 16) {
+      row.update(0, UTF8String.fromString((i % 4).toString))
+      columnBuilder.appendFrom(row, 0)
+    }
+
+    val column = new CachedBatchColumnVector(
+      JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+    // reuse CachedBatchColumnVector
+    for (j <- 0 to 1) {
+      column.initialize
+      assert(column.isNullAt(0) == true)
+      for (i <- 1 until 16) {
+        assert(column.isNullAt(i) == false)
+        assert(column.getUTF8String(i).toString == (i % 4).toString)
+      }
+    }
+    column.close
+  }
+
+  test("CachedBatch access order") {
+    (BooleanType :: IntegerType :: DoubleType :: Nil).foreach { dataType => {
+      val columnBuilder = ColumnBuilderHelper(dataType, 1024, "col", true)
+      val row = new SpecificInternalRow(Array(dataType))
+      for (i <- 0 until 16) {
+        dataType match {
+          case _ : BooleanType => row.setBoolean(0, i % 2 == 0)
+          case _ : IntegerType => row.setInt(0, i)
+          case _ : DoubleType => row.setDouble(0, i)
+        }
+        columnBuilder.appendFrom(row, 0)
+      }
+
+      /* check row access order */
+      val column = new CachedBatchColumnVector(
+        JavaUtils.bufferToArray(columnBuilder.build), 1024, dataType)
+
+      dataType match {
+        case _: BooleanType =>
+          /* Row access may start with non-0 */
+          assert(column.getBoolean(1) == false)
+        case _: IntegerType =>
+          /* Row access order must be equal or ascending, but may not be sequential */
+          assert(column.getInt(0) == 0)
+          assert(column.getInt(2) == 2)
+          assert(column.getInt(2) == 2)
+          assert(column.getInt(5) == 5)
+        case _: DoubleType =>
+          /* Row access order must be ascending */
+          assert(column.getDouble(0) == 0)
+          assert(column.getDouble(1) == 1.0)
+          val e = intercept[UnsupportedOperationException] {
+            column.getDouble(0)
+          }
+          assert(e.getMessage.startsWith("Row access order must be equal or ascending."))
+      }
+      column.close
+    }}
   }
 }
