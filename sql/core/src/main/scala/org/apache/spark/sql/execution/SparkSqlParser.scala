@@ -386,7 +386,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *   [LOCATION path]
    *   [COMMENT table_comment]
    *   [TBLPROPERTIES (property_name=property_value, ...)]
-   *   [AS select_statement];
+   *   [[AS] select_statement];
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
