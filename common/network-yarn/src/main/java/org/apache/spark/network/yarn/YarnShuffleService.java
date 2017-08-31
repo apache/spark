@@ -322,9 +322,8 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
-   * Set the recovery path for shuffle service recovery when NM is restarted. The method will be
-   * overrode and called when Hadoop version is 2.5+ and NM recovery is enabled, otherwise we
-   * have to manually call this to set our own recovery path.
+   * Set the recovery path for shuffle service recovery when NM is restarted. This will be call
+   * by NM if NM recovery is enabled.
    */
   @Override
   public void setRecoveryPath(Path recoveryPath) {
