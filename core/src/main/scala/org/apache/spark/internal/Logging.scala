@@ -187,9 +187,13 @@ private[spark] object Logging {
    * initialization again.
    */
   def uninitialize(): Unit = initLock.synchronized {
-    if (isLog4j12() && defaultSparkLog4jConfig) {
-      defaultSparkLog4jConfig = false
-      LogManager.resetConfiguration()
+    if (isLog4j12()) {
+      if (defaultSparkLog4jConfig) {
+        defaultSparkLog4jConfig = false
+        LogManager.resetConfiguration()
+      } else {
+        LogManager.getRootLogger().setLevel(defaultRootLevel)
+      }
     }
     this.initialized = false
   }
