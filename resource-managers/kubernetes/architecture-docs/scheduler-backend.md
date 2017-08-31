@@ -17,8 +17,7 @@ When a job is running, the scheduler backend configures and creates executor pod
 
 - The pod's container runs a pre-built Docker image containing a Spark distribution (with Kubernetes integration) and 
 invokes the Java runtime with the CoarseGrainedExecutorBackend main class.
-- The scheduler backend specifies environment variables on the executor pod to configure its runtime, p
-articularly for its JVM options, number of cores, heap size, and the driver's hostname.
+- The scheduler backend specifies environment variables on the executor pod to configure its runtime, particularly for its JVM options, number of cores, heap size, and the driver's hostname.
 - The executor container has [resource limits and requests](https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/#resource-requests-and-limits-of-pod-and-container) 
 that are set in accordance to the resource limits specified in the Spark configuration (executor.cores and executor.memory in the application's SparkConf)
 - The executor pods may also be launched into a particular [Kubernetes namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/%5C), 
