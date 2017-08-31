@@ -380,21 +380,6 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     result.asInstanceOf[A]
   }
 
-  /**
-   * Splits the condition expression into small conditions by `And`, and partition them by
-   * deterministic, and finally recombine them by `And`. It returns an expression containing
-   * all deterministic expressions (the first field of the returned Tuple2) and an expression
-   * containing all non-deterministic expressions (the second field of the returned Tuple2).
-   */
-  private def partitionByDeterministic(condition: Expression): (Expression, Expression) = {
-    val andConditions = splitConjunctivePredicates(condition)
-    andConditions.partition(_.deterministic) match {
-      case (deterministic, nondeterministic) =>
-        deterministic.reduceOption(And).getOrElse(Literal(true)) ->
-        nondeterministic.reduceOption(And).getOrElse(Literal(true))
-    }
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
 
     // Push down deterministic projection through UNION ALL
