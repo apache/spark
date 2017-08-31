@@ -1308,10 +1308,6 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
     }
 
-    intercept[java.lang.AssertionError] {
-      batch.getRow(100)
-    }
-
     batch.close()
     allocator.close()
   }
