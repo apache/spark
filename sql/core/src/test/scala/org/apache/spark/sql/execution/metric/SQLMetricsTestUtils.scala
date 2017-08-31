@@ -30,7 +30,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 
-trait SQLMetricsUtils extends SQLTestUtils {
+trait SQLMetricsTestUtils extends SQLTestUtils {
 
   import testImplicits._
 

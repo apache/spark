@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.execution.metric.SQLMetricsUtils
+import org.apache.spark.sql.execution.metric.SQLMetricsTestUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class SQLMetricsSuite extends SQLMetricsUtils with TestHiveSingleton {
+class SQLMetricsSuite extends SQLMetricsTestUtils with TestHiveSingleton {
 
   test("writing data out metrics: hive") {
     testMetricsNonDynamicPartition("hive", "t1")

@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol}
 
-class SQLMetricsSuite extends SparkFunSuite with SQLMetricsUtils with SharedSQLContext {
+class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with SharedSQLContext {
   import testImplicits._
 
 
