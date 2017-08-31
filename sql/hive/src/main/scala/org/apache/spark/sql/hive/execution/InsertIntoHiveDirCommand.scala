@@ -37,6 +37,15 @@ import org.apache.spark.util.Utils
 /**
  * Command for writing the results of `query` to file system.
  *
+ * The syntax of using this command in SQL is:
+ * {{{
+ *   INSERT OVERWRITE [LOCAL] DIRECTORY
+ *   path
+ *   [ROW FORMAT row_format]
+ *   [STORED AS file_format]
+ *   SELECT ...
+ * }}}
+ *
  * @param isLocal whether the path specified in `storage` is a local directory
  * @param storage storage format used to describe how the query result is stored.
  * @param query the logical plan representing data to write to

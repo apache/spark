@@ -2359,7 +2359,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
            | SELECT 1 as a, 'c' as b
          """.stripMargin
 
-        spark.sql(v1)
+      spark.sql(v1)
 
       // use orc data source to check the data of path is right.
       withTempView("orc_source") {

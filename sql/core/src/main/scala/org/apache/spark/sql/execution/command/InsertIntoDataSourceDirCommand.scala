@@ -45,7 +45,7 @@ case class InsertIntoDataSourceDirCommand(
     assert(storage.locationUri.nonEmpty, "Directory path is required")
     assert(!provider.isEmpty, "Data source is required")
 
-    // Create the relation based on the input logical plan: `data`.
+    // Create the relation based on the input logical plan: `query`.
     val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
     val dataSource = DataSource(
       sparkSession,
