@@ -97,8 +97,11 @@ private[spark] class JavaSerializerInstance(
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     val bos = new ByteBufferOutputStream()
     val out = serializeStream(bos)
-    out.writeObject(t)
-    out.close()
+    try {
+      out.writeObject(t)
+    } finally {
+      out.close()
+    }
     bos.toByteBuffer
   }
 
