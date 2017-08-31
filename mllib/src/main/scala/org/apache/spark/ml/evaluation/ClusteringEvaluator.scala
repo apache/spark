@@ -39,10 +39,6 @@ import org.apache.spark.sql.types.IntegerType
  * means that the points in a cluster are close
  * to the other points in the same cluster and
  * far from the points of the other clusters.
- *
- * The implementation follows the proposal explained
- * <a href="https://drive.google.com/file/d/0B0Hyo%5f%5fbG%5f3fdkNvSVNYX2E3ZU0/view">
- * in this document</a>.
  */
 @Experimental
 @Since("2.3.0")
@@ -93,29 +89,33 @@ object ClusteringEvaluator
  * The Silhouette for each point `i` is defined as:
  *
  * <blockquote>
+ *   $$
  *   s_{i} = \frac{b_{i}-a_{i}}{max\{a_{i},b_{i}\}}
+ *   $$
  * </blockquote>
  *
  * which can be rewritten as
  *
  * <blockquote>
- *   s_{i}=\left\{ \begin{tabular}{cc}
- *   $1-\frac{a_{i}}{b_{i}}$ & if $a_{i} \leq b_{i}$ \\
- *   $\frac{b_{i}}{a_{i}}-1$ & if $a_{i} \gt b_{i}$
+ *   $$
+ *   s_{i}= \begin{cases}
+ *   1-\frac{a_{i}}{b_{i}} & \text{if } a_{i} \leq b_{i} \\
+ *   \frac{b_{i}}{a_{i}}-1 & \text{if } a_{i} \gt b_{i} \end{cases}
+ *   $$
  * </blockquote>
  *
- * where `a(i)` is the average dissimilarity of `i` with all other data
- * within the same cluster, `b(i)` is the lowest average dissimilarity
+ * where `$a_{i}$` is the average dissimilarity of `i` with all other data
+ * within the same cluster, `$b_{i}$` is the lowest average dissimilarity
  * of to any other cluster, of which `i` is not a member.
- * `a(i)` can be interpreted as as how well `i` is assigned to its cluster
- * (the smaller the value, the better the assignment), while `b(i)` is
+ * `$a_{i}$` can be interpreted as as how well `i` is assigned to its cluster
+ * (the smaller the value, the better the assignment), while `$b_{i}$` is
  * a measure of how well `i` has not been assigned to its "neighboring cluster",
  * ie. the nearest cluster to `i`.
  *
  * Unfortunately, the naive implementation of the algorithm requires to compute
  * the distance of each couple of points in the dataset. Since the computation of
  * the distance measure takes `D` operations - if `D` is the number of dimensions
- * of each point, the computational complexity of the algorithm is `O(N^2*D)`, where
+ * of each point, the computational complexity of the algorithm is `O(N^2^*D)`, where
  * `N` is the cardinality of the dataset. Of course this is not scalable in `N`,
  * which is the critical number in a Big Data context.
  *
@@ -124,9 +124,10 @@ object ClusteringEvaluator
  * distance measure.
  *
  * With this assumption, the average of the distance of the point `X`
- * to the points `C_{i}` belonging to the cluster `\Gamma` is:
+ * to the points `$C_{i}$` belonging to the cluster `$\Gamma$` is:
  *
  * <blockquote>
+ *   $$
  *   \sum\limits_{i=1}^N d(X, C_{i} )^2 =
  *   \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D (x_{j}-c_{ij})^2 \Big)
  *   = \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D x_{j}^2 +
@@ -134,65 +135,80 @@ object ClusteringEvaluator
  *   = \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 +
  *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2
  *   -2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij}
+ *   $$
  * </blockquote>
  *
- * where `x_{j}` is the `j`-th dimension of the point `X` and
- * `c_{ij} is the `j`-th dimension of the `i`-th point in cluster `\Gamma`.
+ * where `$x_{j}$` is the `j`-th dimension of the point `X` and
+ * `$c_{ij}$` is the `j`-th dimension of the `i`-th point in cluster `$\Gamma$`.
  *
  * Then, the first term of the equation can be rewritten as:
  *
  * <blockquote>
- *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 = N \xi_{X} ,
- *   with \xi_{X} = \sum\limits_{j=1}^D x_{j}^2
+ *   $$
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 = N \xi_{X} \text{ ,
+ *   with } \xi_{X} = \sum\limits_{j=1}^D x_{j}^2
+ *   $$
  * </blockquote>
  *
- * where `\xi_{X}` is fixed for each point and it can be precomputed.
+ * where `$\xi_{X}$` is fixed for each point and it can be precomputed.
  *
  * Moreover, the second term is fixed for each cluster too,
- * thus we can name it `\Psi_{\Gamma}`
+ * thus we can name it `$\Psi_{\Gamma}$`
  *
  * <blockquote>
- *   sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2 =
+ *   $$
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2 =
  *   \sum\limits_{i=1}^N \xi_{C_{i}} = \Psi_{\Gamma}
+ *   $$
  * </blockquote>
  *
  * Last, the third element becomes
  *
  * <blockquote>
+ *   $$
  *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij} =
  *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i}
+ *   $$
  * </blockquote>
  *
  * thus defining the vector
  *
  * <blockquote>
+ *   $$
  *   Y_{\Gamma}:Y_{\Gamma j} = \sum\limits_{i=1}^N c_{ij} , j=0, ..., D
+ *   $$
  * </blockquote>
  *
- * which is fixed for each cluster `\Gamma`, we have
+ * which is fixed for each cluster `$\Gamma$`, we have
  *
  * <blockquote>
+ *   $$
  *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i} =
  *   \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}
+ *   $$
  * </blockquote>
  *
  * In this way, the previous equation becomes
  *
  * <blockquote>
+ *   $$
  *   N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}
+ *   $$
  * </blockquote>
  *
  * and the distance of a point to a cluster can be computed as
  *
  * <blockquote>
+ *   $$
  *   \frac{\sum\limits_{i=1}^N d(X, C_{i} )^2}{N} =
  *   \frac{N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N} =
  *   \xi_{X} + \frac{\Psi_{\Gamma} }{N} - 2 \frac{\sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N}
+ *   $$
  * </blockquote>
  *
- * Thus, it is enough to precompute the constant `\xi_{X}` for each point `X`
- * and the constants `\Psi_{\Gamma}` and `N` and the vector `Y_{\Gamma}` for
- * each cluster `\Gamma`.
+ * Thus, it is enough to precompute the constant `$\xi_{X}$` for each point `X`
+ * and the constants `$\Psi_{\Gamma}$` and `N` and the vector `$Y_{\Gamma}$` for
+ * each cluster `$\Gamma$`.
  *
  * In the implementation, the precomputed values for the clusters
  * are distributed among the worker nodes via broadcasted variables,
