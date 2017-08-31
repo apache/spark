@@ -65,11 +65,6 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     ProjectEstimation.estimate(p).getOrElse(fallback(p))
   }
 
-  override def visitRange(p: logical.Range): Statistics = {
-    val sizeInBytes = LongType.defaultSize * p.numElements
-    Statistics(sizeInBytes = sizeInBytes)
-  }
-
   override def visitRepartition(p: Repartition): Statistics = fallback(p)
 
   override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = fallback(p)
@@ -79,4 +74,6 @@ object BasicStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   override def visitScriptTransform(p: ScriptTransformation): Statistics = fallback(p)
 
   override def visitUnion(p: Union): Statistics = fallback(p)
+
+  override def visitWindow(p: Window): Statistics = fallback(p)
 }

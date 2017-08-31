@@ -27,27 +27,25 @@ import org.apache.spark.unsafe.types.CalendarInterval
 import org.apache.spark.util.AccumulatorV2
 
 /** Class for collecting event time stats with an accumulator */
-case class EventTimeStats(var max: Long, var min: Long, var sum: Long, var count: Long) {
+case class EventTimeStats(var max: Long, var min: Long, var avg: Double, var count: Long) {
   def add(eventTime: Long): Unit = {
     this.max = math.max(this.max, eventTime)
     this.min = math.min(this.min, eventTime)
-    this.sum += eventTime
     this.count += 1
+    this.avg += (eventTime - avg) / count
   }
 
   def merge(that: EventTimeStats): Unit = {
     this.max = math.max(this.max, that.max)
     this.min = math.min(this.min, that.min)
-    this.sum += that.sum
     this.count += that.count
+    this.avg += (that.avg - this.avg) * that.count / this.count
   }
-
-  def avg: Long = sum / count
 }
 
 object EventTimeStats {
   def zero: EventTimeStats = EventTimeStats(
-    max = Long.MinValue, min = Long.MaxValue, sum = 0L, count = 0L)
+    max = Long.MinValue, min = Long.MaxValue, avg = 0.0, count = 0L)
 }
 
 /** Accumulator that collects stats on event time in a batch. */

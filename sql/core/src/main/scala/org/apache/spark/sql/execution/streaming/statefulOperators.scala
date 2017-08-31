@@ -87,8 +87,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     new StateOperatorProgress(
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
-      memoryUsedBytes = longMetric("stateMemory").value,
-      numPartitions = this.sqlContext.conf.numShufflePartitions)
+      memoryUsedBytes = longMetric("stateMemory").value)
   }
 
   /** Records the duration of running `body` for the next query progress update. */
@@ -157,8 +156,13 @@ trait WatermarkSupport extends UnaryExecNode {
   }
 
   /** Predicate based on keys that matches data older than the watermark */
-  lazy val watermarkPredicateForKeys: Option[Predicate] =
-    watermarkExpression.map(newPredicate(_, keyExpressions))
+  lazy val watermarkPredicateForKeys: Option[Predicate] = watermarkExpression.flatMap { e =>
+    if (keyExpressions.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+      Some(newPredicate(e, keyExpressions))
+    } else {
+      None
+    }
+  }
 
   /** Predicate based on the child output that matches data older than the watermark. */
   lazy val watermarkPredicateForData: Option[Predicate] =

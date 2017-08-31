@@ -153,10 +153,14 @@ can find the results of the driver from the Mesos Web UI.
 To use cluster mode, you must start the `MesosClusterDispatcher` in your cluster via the `sbin/start-mesos-dispatcher.sh` script,
 passing in the Mesos master URL (e.g: mesos://host:5050). This starts the `MesosClusterDispatcher` as a daemon running on the host.
 
+By setting the Mesos proxy config property (requires mesos version >= 1.4), `--conf spark.mesos.proxy.baseURL=http://localhost:5050` when launching the dispacther, the mesos sandbox URI for each driver is added to the mesos dispatcher UI.
+
 If you like to run the `MesosClusterDispatcher` with Marathon, you need to run the `MesosClusterDispatcher` in the foreground (i.e: `bin/spark-class org.apache.spark.deploy.mesos.MesosClusterDispatcher`). Note that the `MesosClusterDispatcher` not yet supports multiple instances for HA.
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
 For more information about these configurations please refer to the configurations [doc](configurations.html#deploy).
+
+You can also specify any additional jars required by the `MesosClusterDispatcher` in the classpath by setting the environment variable SPARK_DAEMON_CLASSPATH in spark-env.
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
 to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
@@ -536,6 +540,20 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.network.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Pass network labels to CNI plugins.  This is a comma-separated list
+    of key-value pairs, where each key-value pair has the format key:value.
+    Example:
+
+    <pre>key1:val1,key2:val2</pre>
+    See
+    <a href="http://mesos.apache.org/documentation/latest/cni/#mesos-meta-data-to-cni-plugins">the Mesos CNI docs</a>
+    for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.fetcherCache.enable</code></td>
   <td><code>false</code></td>
   <td>
@@ -543,6 +561,17 @@ See the [configuration page](configuration.html) for information on Spark config
     `spark.mesos.uris`) will be cached by the <a
     href="http://mesos.apache.org/documentation/latest/fetcher/">Mesos
     Fetcher Cache</a>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.failoverTimeout</code></td>
+  <td><code>0.0</code></td>
+  <td>
+    The amount of time (in seconds) that the master will wait for the 
+    driver to reconnect, after being temporarily disconnected, before 
+    it tears down the driver framework by killing all its 
+    executors. The default value is zero, meaning no timeout: if the 
+    driver disconnects, the master immediately tears down the framework.
   </td>
 </tr>
 </table>

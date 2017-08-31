@@ -35,13 +35,13 @@ trait LogicalPlanVisitor[T] {
     case p: LocalLimit => visitLocalLimit(p)
     case p: Pivot => visitPivot(p)
     case p: Project => visitProject(p)
-    case p: Range => visitRange(p)
     case p: Repartition => visitRepartition(p)
     case p: RepartitionByExpression => visitRepartitionByExpr(p)
     case p: ResolvedHint => visitHint(p)
     case p: Sample => visitSample(p)
     case p: ScriptTransformation => visitScriptTransform(p)
     case p: Union => visitUnion(p)
+    case p: Window => visitWindow(p)
     case p: LogicalPlan => default(p)
   }
 
@@ -73,8 +73,6 @@ trait LogicalPlanVisitor[T] {
 
   def visitProject(p: Project): T
 
-  def visitRange(p: Range): T
-
   def visitRepartition(p: Repartition): T
 
   def visitRepartitionByExpr(p: RepartitionByExpression): T
@@ -84,4 +82,6 @@ trait LogicalPlanVisitor[T] {
   def visitScriptTransform(p: ScriptTransformation): T
 
   def visitUnion(p: Union): T
+
+  def visitWindow(p: Window): T
 }
