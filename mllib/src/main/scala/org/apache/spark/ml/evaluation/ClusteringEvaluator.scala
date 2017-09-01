@@ -29,6 +29,7 @@ import org.apache.spark.sql.functions.{avg, col, udf}
 import org.apache.spark.sql.types.IntegerType
 
 /**
+ * :: Experimental ::
  * Evaluator for clustering results.
  * The metric computes the Silhouette measure
  * using the squared Euclidean distance.
