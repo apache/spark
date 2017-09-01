@@ -94,7 +94,10 @@ private[hive] trait HiveClient {
     alterTable(table.database, table.identifier.table, table)
   }
 
-  /** Updates the given table with new metadata, optionally renaming the table or moving table. */
+  /**
+   * Updates the given table with new metadata, optionally renaming the table or
+   * moving across different database.
+   */
   def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
 
   /** Creates a new database with the given name. */
