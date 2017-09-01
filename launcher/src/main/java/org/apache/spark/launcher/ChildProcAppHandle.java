@@ -34,7 +34,7 @@ class ChildProcAppHandle implements SparkAppHandle {
   private final String secret;
   private final LauncherServer server;
 
-  private Process childProc;
+  private volatile Process childProc;
   private boolean disposed;
   private LauncherConnection connection;
   private List<Listener> listeners;
@@ -96,18 +96,14 @@ class ChildProcAppHandle implements SparkAppHandle {
 
   @Override
   public synchronized void kill() {
-    if (!disposed) {
-      disconnect();
-    }
+    disconnect();
     if (childProc != null) {
-      try {
-        childProc.exitValue();
-      } catch (IllegalThreadStateException e) {
+      if (childProc.isAlive()) {
         childProc.destroyForcibly();
-      } finally {
-        childProc = null;
       }
+      childProc = null;
     }
+    setState(State.KILLED);
   }
 
   String getSecret() {
@@ -118,7 +114,13 @@ class ChildProcAppHandle implements SparkAppHandle {
     this.childProc = childProc;
     if (logStream != null) {
       this.redirector = new OutputRedirector(logStream, loggerName,
-        SparkLauncher.REDIRECTOR_FACTORY);
+        SparkLauncher.REDIRECTOR_FACTORY, this);
+    } else {
+      // If there is no log redirection, spawn a thread that will wait for the child process
+      // to finish.
+      Thread waiter = SparkLauncher.REDIRECTOR_FACTORY.newThread(this::monitorChild);
+      waiter.setDaemon(true);
+      waiter.start();
     }
   }
 
@@ -134,7 +136,7 @@ class ChildProcAppHandle implements SparkAppHandle {
     return connection;
   }
 
-  void setState(State s) {
+  synchronized void setState(State s) {
     if (!state.isFinal()) {
       state = s;
       fireEvent(false);
@@ -144,17 +146,63 @@ class ChildProcAppHandle implements SparkAppHandle {
     }
   }
 
-  void setAppId(String appId) {
+  synchronized void setAppId(String appId) {
     this.appId = appId;
     fireEvent(true);
   }
 
-  // Visible for testing.
-  boolean isRunning() {
-    return childProc == null || childProc.isAlive() || (redirector != null && redirector.isAlive());
+  /**
+   * Wait for the child process to exit and update the handle's state if necessary, accoding to
+   * the exit code.
+   */
+  void monitorChild() {
+    Process proc = childProc;
+    if (proc == null) {
+      // Process may have already been disposed of, e.g. by calling kill().
+      return;
+    }
+
+    while (proc.isAlive()) {
+      try {
+        proc.waitFor();
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Exception waiting for child process to exit.", e);
+      }
+    }
+
+    synchronized (this) {
+      if (disposed) {
+        return;
+      }
+
+      disconnect();
+
+      int ec;
+      try {
+        ec = proc.exitValue();
+      } catch (Exception e) {
+        LOG.log(Level.WARNING, "Exception getting child process exit code, assuming failure.", e);
+        ec = 1;
+      }
+
+      State newState = null;
+      if (ec != 0) {
+        // Override state with failure if the current state is not final, or is success.
+        if (!state.isFinal() || state == State.FINISHED) {
+          newState = State.FAILED;
+        }
+      } else if (!state.isFinal()) {
+        newState = State.LOST;
+      }
+
+      if (newState != null) {
+        state = newState;
+        fireEvent(false);
+      }
+    }
   }
 
-  private synchronized void fireEvent(boolean isInfoChanged) {
+  private void fireEvent(boolean isInfoChanged) {
     if (listeners != null) {
       for (Listener l : listeners) {
         if (isInfoChanged) {

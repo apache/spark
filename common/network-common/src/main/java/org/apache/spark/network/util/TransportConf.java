@@ -67,6 +67,10 @@ public class TransportConf {
     return conf.getInt(name, defaultValue);
   }
 
+  public String get(String name, String defaultValue) {
+    return conf.get(name, defaultValue);
+  }
+
   private String getConfKey(String suffix) {
     return "spark." + module + "." + suffix;
   }

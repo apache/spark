@@ -87,7 +87,7 @@ package object config {
     .intConf
     .createOptional
 
-  private[spark] val PY_FILES = ConfigBuilder("spark.submit.pyFiles")
+  private[spark] val PY_FILES = ConfigBuilder("spark.yarn.dist.pyFiles")
     .internal()
     .stringConf
     .toSequence
@@ -222,7 +222,7 @@ package object config {
   private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
     .doc("Address of driver endpoints.")
     .stringConf
-    .createWithDefault(Utils.localHostName())
+    .createWithDefault(Utils.localCanonicalHostName())
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
@@ -292,6 +292,15 @@ package object config {
     ConfigBuilder("spark.network.crypto.enabled")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val BUFFER_WRITE_CHUNK_SIZE =
+    ConfigBuilder("spark.buffer.write.chunkSize")
+      .internal()
+      .doc("The chunk size during writing out the bytes of ChunkedByteBuffer.")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ <= Int.MaxValue, "The chunk size during writing out the bytes of" +
+        " ChunkedByteBuffer should not larger than Int.MaxValue.")
+      .createWithDefault(64 * 1024 * 1024)
 
   private[spark] val CHECKPOINT_COMPRESS =
     ConfigBuilder("spark.checkpoint.compress")

@@ -455,7 +455,7 @@ case class DataSource(
 
     val fileIndex = catalogTable.map(_.identifier).map { tableIdent =>
       sparkSession.table(tableIdent).queryExecution.analyzed.collect {
-        case LogicalRelation(t: HadoopFsRelation, _, _) => t.location
+        case LogicalRelation(t: HadoopFsRelation, _, _, _) => t.location
       }.head
     }
     // For partitioned relation r, r.schema's column ordering can be different from the column
