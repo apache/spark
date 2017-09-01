@@ -2666,29 +2666,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-21652: rule confliction of InferFiltersFromConstraints and ConstantPropagation") {
-    // Under test environment, throws Exception if the max iteration number is reached for an
-    // optimization batch.
-    val isTesting = Utils.isTesting
-    try {
-      if (!isTesting) {
-        System.setProperty("spark.testing", "true")
-      }
-
-      withTempView("t1", "t2") {
-        Seq((1, 1)).toDF("col1", "col2").createOrReplaceTempView("t1")
-        Seq(1, 2).toDF("col").createOrReplaceTempView("t2")
-        val df = sql(
-          """
-            |SELECT *
-            |FROM t1, t2
-            |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
-          """.stripMargin)
-        checkAnswer(df, Row(1, 1, 1))
-      }
-    } finally {
-      if (!isTesting) {
-        System.clearProperty("spark.testing")
-      }
+    withTempView("t1", "t2") {
+      Seq((1, 1)).toDF("col1", "col2").createOrReplaceTempView("t1")
+      Seq(1, 2).toDF("col").createOrReplaceTempView("t2")
+      val df = sql(
+        """
+          |SELECT *
+          |FROM t1, t2
+          |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
+        """.stripMargin)
+      checkAnswer(df, Row(1, 1, 1))
     }
   }
 }
