@@ -87,11 +87,18 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+    if (System.getProperty("scala-2.12") == "") {
+      // To activate scala-2.10 profile, replace empty property value to non-empty value
+      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
+      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
+      System.setProperty("scala-2.12", "true")
+    }
+    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -747,7 +754,12 @@ object CopyDependencies {
 object TestSettings {
   import BuildCommons._
 
-  private val scalaBinaryVersion = "2.11"
+  private val scalaBinaryVersion =
+    if (System.getProperty("scala-2.12") == "true") {
+      "2.12"
+    } else {
+      "2.11"
+    }
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
