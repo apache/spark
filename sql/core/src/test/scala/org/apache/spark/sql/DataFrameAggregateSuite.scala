@@ -433,7 +433,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
   test("zero moments") {
     // In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
-    // goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+    // goes over `hugeMethodLimit`, Spark fails to compile the methods and the execution also fails
     // in a test mode. So, we explicitly turn off whole-stage codegen here.
     // This guard can be removed if this issue fixed.
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {

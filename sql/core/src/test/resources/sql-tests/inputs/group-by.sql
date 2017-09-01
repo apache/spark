@@ -32,7 +32,7 @@ SELECT a + 1 + 1, COUNT(b) FROM testData GROUP BY a + 1;
 -- Aggregate with nulls.
 --
 -- In SPARK-21871, we added code to check the bytecode size of gen'd methods. If the size
--- goes over `HugeMethodLimit`, Spark fails to compile the methods and the execution also fails
+-- goes over `hugeMethodLimit`, Spark fails to compile the methods and the execution also fails
 -- in a test mode. So, we explicitly turn off whole-stage codegen here.
 -- This guard can be removed if this issue fixed.
 SET spark.sql.codegen.wholeStage=false;
