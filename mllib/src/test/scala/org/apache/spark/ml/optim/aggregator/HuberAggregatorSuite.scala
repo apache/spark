@@ -54,17 +54,17 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       instances: Array[Instance],
       parameters: Vector,
       fitIntercept: Boolean,
-      m: Double): HuberAggregator = {
+      epsilon: Double): HuberAggregator = {
     val (featuresSummarizer, _) = getRegressionSummarizers(instances)
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcParameters = spark.sparkContext.broadcast(parameters)
-    new HuberAggregator(fitIntercept, m, bcFeaturesStd)(bcParameters)
+    new HuberAggregator(fitIntercept, epsilon, bcFeaturesStd)(bcParameters)
   }
 
   test("aggregator add method should check input size") {
     val parameters = Vectors.dense(1.0, 2.0, 3.0, 4.0)
-    val agg = getNewAggregator(instances, parameters, fitIntercept = true, m = 1.35)
+    val agg = getNewAggregator(instances, parameters, fitIntercept = true, epsilon = 1.35)
     withClue("HuberAggregator features dimension must match parameters dimension") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(2.0)))
@@ -74,7 +74,7 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("negative weight") {
     val parameters = Vectors.dense(1.0, 2.0, 3.0, 4.0)
-    val agg = getNewAggregator(instances, parameters, fitIntercept = true, m = 1.35)
+    val agg = getNewAggregator(instances, parameters, fitIntercept = true, epsilon = 1.35)
     withClue("HuberAggregator does not support negative instance weights.") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, -1.0, Vectors.dense(2.0, 1.0)))
@@ -86,9 +86,9 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val paramWithIntercept = Vectors.dense(1.0, 2.0, 3.0, 4.0)
     val paramWithoutIntercept = Vectors.dense(1.0, 2.0, 4.0)
     val aggIntercept = getNewAggregator(instances, paramWithIntercept,
-      fitIntercept = true, m = 1.35)
+      fitIntercept = true, epsilon = 1.35)
     val aggNoIntercept = getNewAggregator(instances, paramWithoutIntercept,
-      fitIntercept = false, m = 1.35)
+      fitIntercept = false, epsilon = 1.35)
     instances.foreach(aggIntercept.add)
     instances.foreach(aggNoIntercept.add)
 
@@ -101,10 +101,10 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val numFeatures = 2
     val (featuresSummarizer, _) = getRegressionSummarizers(instances)
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
-    val m = 1.35
+    val epsilon = 1.35
     val weightSum = instances.map(_.weight).sum
 
-    val agg = getNewAggregator(instances, parameters, fitIntercept = true, m)
+    val agg = getNewAggregator(instances, parameters, fitIntercept = true, epsilon)
     instances.foreach(agg.add)
 
     // compute expected loss sum
@@ -115,10 +115,10 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val lossSum = instances.map { case Instance(label, weight, features) =>
       val margin = BLAS.dot(Vectors.dense(stdCoef), features) + intercept
       val linearLoss = label - margin
-      if (math.abs(linearLoss) <= sigma * m) {
+      if (math.abs(linearLoss) <= sigma * epsilon) {
         0.5 * weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
       } else {
-        0.5 * weight * (sigma + 2.0 * m * math.abs(linearLoss) - sigma * m * m)
+        0.5 * weight * (sigma + 2.0 * epsilon * math.abs(linearLoss) - sigma * epsilon * epsilon)
       }
     }.sum
     val loss = lossSum / weightSum
@@ -128,7 +128,7 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     instances.foreach { case Instance(label, weight, features) =>
       val margin = BLAS.dot(Vectors.dense(stdCoef), features) + intercept
       val linearLoss = label - margin
-      if (math.abs(linearLoss) <= sigma * m) {
+      if (math.abs(linearLoss) <= sigma * epsilon) {
         features.toArray.indices.foreach { i =>
           gradientCoef(i) +=
             -1.0 * weight * linearLoss / sigma * (features(i) / featuresStd(i))
@@ -138,10 +138,10 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0
         features.toArray.indices.foreach { i =>
-          gradientCoef(i) += weight * sign * m * (features(i) / featuresStd(i))
+          gradientCoef(i) += weight * sign * epsilon * (features(i) / featuresStd(i))
         }
-        gradientCoef(2) += weight * sign * m
-        gradientCoef(3) += 0.5 * weight * (1.0 - m * m)
+        gradientCoef(2) += weight * sign * epsilon
+        gradientCoef(3) += 0.5 * weight * (1.0 - epsilon * epsilon)
       }
     }
     val gradient = Vectors.dense(gradientCoef.map(_ / weightSum))
@@ -154,9 +154,9 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     val parameters = Vectors.dense(1.0, 2.0, 3.0, 4.0)
     val parametersFiltered = Vectors.dense(2.0, 3.0, 4.0)
     val aggConstantFeature = getNewAggregator(instancesConstantFeature, parameters,
-      fitIntercept = true, m = 1.35)
+      fitIntercept = true, epsilon = 1.35)
     val aggConstantFeatureFiltered = getNewAggregator(instancesConstantFeatureFiltered,
-      parametersFiltered, fitIntercept = true, m = 1.35)
+      parametersFiltered, fitIntercept = true, epsilon = 1.35)
     instances.foreach(aggConstantFeature.add)
     instancesConstantFeatureFiltered.foreach(aggConstantFeatureFiltered.add)
     // constant features should not affect gradient

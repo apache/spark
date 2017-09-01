@@ -162,7 +162,7 @@ class LinearRegressionSuite
     assert(lir.getStandardization)
     assert(lir.getSolver === "auto")
     assert(lir.getLoss === "leastSquares")
-    assert(lir.getM === 1.35)
+    assert(lir.getEpsilon === 1.35)
     val model = lir.fit(datasetWithDenseFeature)
 
     MLTestingUtils.checkCopyAndUids(lir, model)
@@ -1212,7 +1212,7 @@ class LinearRegressionSuite
   }
 
   test("huber loss model match leastSquares loss for large m") {
-    val trainer1 = new LinearRegression().setLoss("huber").setM(1E5)
+    val trainer1 = new LinearRegression().setLoss("huber").setEpsilon(1E5)
     val model1 = trainer1.fit(datasetWithOutlier)
     val trainer2 = new LinearRegression()
     val model2 = trainer2.fit(datasetWithOutlier)

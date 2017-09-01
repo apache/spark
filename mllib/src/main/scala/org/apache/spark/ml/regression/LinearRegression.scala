@@ -84,19 +84,19 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 
   /**
    * The shape parameter to control the amount of robustness. Must be &gt; 1.0.
-   * At larger values of M, the huber criterion becomes more similar to least squares regression;
-   * for small values of M, the criterion is more similar to L1 regression.
+   * At larger values of epsilon, the huber criterion becomes more similar to least squares
+   * regression; for small values of epsilon, the criterion is more similar to L1 regression.
    * Default is 1.35 to get as much robustness as possible while retaining
    * 95% statistical efficiency for normally distributed data.
    * Only valid when "loss" is "huber".
    */
   @Since("2.3.0")
-  final val m = new DoubleParam(this, "m", "The shape parameter to control the amount of " +
-    "robustness. Must be > 1.0.", ParamValidators.gt(1.0))
+  final val epsilon = new DoubleParam(this, "epsilon", "The shape parameter to control the " +
+    "amount of robustness. Must be > 1.0.", ParamValidators.gt(1.0))
 
   /** @group getParam */
   @Since("2.3.0")
-  def getM: Double = $(m)
+  def getEpsilon: Double = $(epsilon)
 
   override protected def validateAndTransformSchema(
       schema: StructType,
@@ -262,14 +262,14 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   setDefault(loss -> LeastSquares)
 
   /**
-   * Sets the value of param [[m]].
+   * Sets the value of param [[epsilon]].
    * Default is 1.35.
    *
    * @group setParam
    */
   @Since("2.3.0")
-  def setM(value: Double): this.type = set(m, value)
-  setDefault(m -> 1.35)
+  def setEpsilon(value: Double): this.type = set(epsilon, value)
+  setDefault(epsilon -> 1.35)
 
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
@@ -415,7 +415,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
           bcFeaturesStd, bcFeaturesMean)(_)
         new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
       case Huber =>
-        val getAggregatorFunc = new HuberAggregator($(fitIntercept), $(m), bcFeaturesStd)(_)
+        val getAggregatorFunc = new HuberAggregator($(fitIntercept), $(epsilon), bcFeaturesStd)(_)
         new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
     }
 

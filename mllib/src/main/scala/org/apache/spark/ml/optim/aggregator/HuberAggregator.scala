@@ -58,7 +58,7 @@ import org.apache.spark.ml.linalg.Vector
  * It is advised to set the parameter $\epsilon$ to 1.35 to achieve 95% statistical efficiency.
  *
  * @param fitIntercept Whether to fit an intercept term.
- * @param m The shape parameter to control the amount of robustness.
+ * @param epsilon The shape parameter to control the amount of robustness.
  * @param bcFeaturesStd The broadcast standard deviation values of the features.
  * @param bcParameters including three parts: the regression coefficients corresponding
  *                     to the features, the intercept (if fitIntercept is ture)
@@ -66,7 +66,7 @@ import org.apache.spark.ml.linalg.Vector
  */
 private[ml] class HuberAggregator(
     fitIntercept: Boolean,
-    m: Double,
+    epsilon: Double,
     bcFeaturesStd: Broadcast[Array[Double]])(bcParameters: Broadcast[Vector])
   extends DifferentiableLossAggregator[Instance, HuberAggregator] {
 
@@ -106,7 +106,7 @@ private[ml] class HuberAggregator(
       }
       val linearLoss = label - margin
 
-      if (math.abs(linearLoss) <= sigma * m) {
+      if (math.abs(linearLoss) <= sigma * epsilon) {
         lossSum += 0.5 * weight * (sigma +  math.pow(linearLoss, 2.0) / sigma)
 
         features.foreachActive { (index, value) =>
@@ -121,17 +121,18 @@ private[ml] class HuberAggregator(
         gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0
-        lossSum += 0.5 * weight * (sigma + 2.0 * m * math.abs(linearLoss) - sigma * m * m)
+        lossSum += 0.5 * weight *
+          (sigma + 2.0 * epsilon * math.abs(linearLoss) - sigma * epsilon * epsilon)
 
         features.foreachActive { (index, value) =>
           if (featuresStd(index) != 0.0 && value != 0.0) {
-            gradientSumArray(index) += weight * sign * m * (value / featuresStd(index))
+            gradientSumArray(index) += weight * sign * epsilon * (value / featuresStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += weight * sign * m
+          gradientSumArray(dim - 2) += weight * sign * epsilon
         }
-        gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - m * m)
+        gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - epsilon * epsilon)
       }
 
       weightSum += weight
