@@ -33,7 +33,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 
 class SQLQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
