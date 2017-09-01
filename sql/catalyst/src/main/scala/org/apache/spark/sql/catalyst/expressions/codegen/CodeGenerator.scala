@@ -1021,7 +1021,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 
 object CodeGenerator extends Logging {
 
-  // This is the value of `HugeMethodLimit` in the OpenJDK JVM settings.
+  // This is the value of HugeMethodLimit in the OpenJDK JVM settings
   val DEFAULT_OPENJDK_JVM_HUGE_METHOD_LIMIT = 8000
 
   /**

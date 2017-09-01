@@ -208,7 +208,9 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-21871 turn off whole-stage codegen if bytecode size goes over hugeMethodLimit") {
-    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString) {
+    withSQLConf(
+        SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString,
+        SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "8000") {
       val (_, code) = genGroupByCodeGenContext(20)
       val errMsg = intercept[IllegalArgumentException] {
         CodeGenerator.compile(code)
