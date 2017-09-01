@@ -117,10 +117,9 @@ object Word2VecCBOWSolver extends Logging {
         val unigramTable = unigramTableBroadcast.value
 
         // initialize intermediate arrays
-        val contextVector = new Array[Float](vectorSize)
+        val contextVec = new Array[Float](vectorSize)
         val l2Vectors = new Array[Float](vectorSize * (negativeSamples + 1))
         val gb = new Array[Float](negativeSamples + 1)
-        val hiddenLayerUpdate = new Array[Float](vectorSize * (negativeSamples + 1))
         val neu1e = new Array[Float](vectorSize)
         val wordIndices = new Array[Int](negativeSamples + 1)
 
@@ -150,53 +149,36 @@ object Word2VecCBOWSolver extends Logging {
 
           val errors = for ((contextIds, word) <- batch) yield {
             // initialize vectors to 0
-            zeroVector(contextVector)
+            zeroVector(contextVec)
             zeroVector(l2Vectors)
             zeroVector(gb)
-            zeroVector(hiddenLayerUpdate)
             zeroVector(neu1e)
 
             val scale = 1.0f / contextIds.length
 
             // feed forward
             contextIds.foreach { c =>
-              blas.saxpy(vectorSize, scale, syn0, c * vectorSize, 1, contextVector, 0, 1)
+              blas.saxpy(vectorSize, scale, syn0, c * vectorSize, 1, contextVec, 0, 1)
             }
 
             generateNegativeSamples(random, word, unigramTable, negativeSamples, wordIndices)
 
-            wordIndices.view.zipWithIndex.foreach { case (wordId, i) =>
-              blas.scopy(vectorSize, syn1, vectorSize * wordId, 1, l2Vectors, vectorSize * i, 1)
+            Iterator.range(0, wordIndices.length).foreach { i =>
+              Array.copy(syn1, vectorSize * wordIndices(i), l2Vectors, vectorSize * i, vectorSize)
             }
 
             val rows = negativeSamples + 1
             val cols = vectorSize
-            blas
-              .sgemv("T", cols, rows, 1.0f, l2Vectors, 0, cols, contextVector, 0, 1, 0.0f, gb, 0, 1)
+            blas.sgemv("T", cols, rows, 1.0f, l2Vectors, 0, cols, contextVec, 0, 1, 0.0f, gb, 0, 1)
 
-            {
-              var i = 0
-              while(i < gb.length) {
-                val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
-                val err = (negLabels(i) - v) * alpha
-                gb.update(i, err)
-                i+=1
-              }
-            }
-
-            // update for hidden -> output layer
-            blas.sger(cols, rows, 1.0f, contextVector, 1, gb, 1, hiddenLayerUpdate, cols)
-
-            // update hidden -> output layer, syn1
-            wordIndices.view.zipWithIndex.foreach { case (w, i) =>
-              blas.saxpy(vectorSize,
-                1.0f,
-                hiddenLayerUpdate,
-                i * vectorSize,
-                1,
-                syn1,
-                w * vectorSize,
-                1)
+            Iterator.range(0, gb.length).foreach { i =>
+              val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
+              val err = (negLabels(i) - v) * alpha
+              // computing error gradient
+              gb.update(i, err)
+              val wordId = wordIndices(i)
+              // update hidden -> output layer, syn1
+              blas.saxpy(vectorSize, err, contextVec, 0, 1, syn1, wordId * vectorSize, 1)
             }
 
             // update for word vectors
