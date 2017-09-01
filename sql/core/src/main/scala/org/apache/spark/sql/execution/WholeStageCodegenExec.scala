@@ -158,9 +158,11 @@ trait CodegenSupport extends SparkPlan {
     // 2. The output variables are not empty. If it's empty, we don't bother to do that.
     // 3. We don't use row variable. The construction of row uses deferred variable evaluation. We
     //    can't do it.
+    // 4. The number of output variables must less than maximum number of parameters in Java method
+    //    declaration.
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val consumeFunc =
-      if (row == null && outputVars.nonEmpty && requireAllOutput) {
+      if (row == null && outputVars.nonEmpty && requireAllOutput && outputVars.length < 255) {
         constructDoConsumeFunction(ctx, inputVars)
       } else {
         parent.doConsume(ctx, inputVars, rowVar)
