@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
@@ -54,15 +55,12 @@ class ClusteringEvaluatorSuite
     0.6564679231
   */
   test("squared euclidean Silhouette") {
-    val result = BigDecimal(0.6564679231)
     val iris = ClusteringEvaluatorSuite.irisDataset(spark)
     val evaluator = new ClusteringEvaluator()
         .setFeaturesCol("features")
         .setPredictionCol("label")
-    val actual = BigDecimal(evaluator.evaluate(iris))
-      .setScale(10, BigDecimal.RoundingMode.HALF_UP)
 
-    assertResult(result)(actual)
+    assert(evaluator.evaluate(iris) ~== 0.6564679231 relTol 1e-10)
   }
 
 }
