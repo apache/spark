@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.TASK_SIZE_THRESHOLD_TO_WARN
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -63,6 +64,9 @@ private[spark] class TaskSetManager(
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
   val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
+
+  // Threshold for task size in bytes (default is 100KB)
+  val taskSizeThresholdToWarn = conf.get(TASK_SIZE_THRESHOLD_TO_WARN)
 
   // Limit of bytes for total size of results (default is 1GB)
   val maxResultSize = Utils.getMaxResultSize(conf)
@@ -483,12 +487,11 @@ private[spark] class TaskSetManager(
             abort(s"$msg Exception during serialization: $e")
             throw new TaskNotSerializableException(e)
         }
-        if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
-          !emittedTaskSizeWarning) {
+        if (serializedTask.limit > taskSizeThresholdToWarn && !emittedTaskSizeWarning) {
           emittedTaskSizeWarning = true
           logWarning(s"Stage ${task.stageId} contains a task of very large size " +
             s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
-            s"${TaskSetManager.TASK_SIZE_TO_WARN_KB} KB.")
+            s"${taskSizeThresholdToWarn / 1024} KB.")
         }
         addRunningTask(taskId)
 
@@ -1028,10 +1031,4 @@ private[spark] class TaskSetManager(
   def executorAdded() {
     recomputeLocality()
   }
-}
-
-private[spark] object TaskSetManager {
-  // The user will be warned if any stages contain a task that has a serialized size greater than
-  // this.
-  val TASK_SIZE_TO_WARN_KB = 100
 }
