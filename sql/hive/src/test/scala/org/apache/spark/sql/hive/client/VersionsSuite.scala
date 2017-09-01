@@ -232,10 +232,47 @@ class VersionsSuite extends SparkFunSuite with Logging {
       assert(client.getTable("default", "src").properties.contains("changed"))
     }
 
-    test(s"$version: alterTable(tableName: String, table: CatalogTable)") {
+    test(s"$version: alterTable(dbName: String, tableName: String, table: CatalogTable)") {
       val newTable = client.getTable("default", "src").copy(properties = Map("changedAgain" -> ""))
-      client.alterTable("src", newTable)
+      client.alterTable("default", "src", newTable)
       assert(client.getTable("default", "src").properties.contains("changedAgain"))
+    }
+
+    test(s"$version: alterTable - rename") {
+      val newTable = client.getTable("default", "src")
+        .copy(identifier = TableIdentifier("tgt", database = Some("default")))
+      assert(!client.tableExists("default", "tgt"))
+
+      client.alterTable("default", "src", newTable)
+
+      assert(client.tableExists("default", "tgt"))
+      assert(!client.tableExists("default", "src"))
+    }
+
+    test(s"$version: alterTable - change database") {
+      val tempDB = CatalogDatabase(
+        "temporary", description = "test create", tempDatabasePath, Map())
+      client.createDatabase(tempDB, ignoreIfExists = true)
+
+      val newTable = client.getTable("default", "tgt")
+        .copy(identifier = TableIdentifier("tgt", database = Some("temporary")))
+      assert(!client.tableExists("temporary", "tgt"))
+
+      client.alterTable("default", "tgt", newTable)
+
+      assert(client.tableExists("temporary", "tgt"))
+      assert(!client.tableExists("default", "tgt"))
+    }
+
+    test(s"$version: alterTable - change database and table names") {
+      val newTable = client.getTable("temporary", "tgt")
+        .copy(identifier = TableIdentifier("src", database = Some("default")))
+      assert(!client.tableExists("default", "src"))
+
+      client.alterTable("temporary", "tgt", newTable)
+
+      assert(client.tableExists("default", "src"))
+      assert(!client.tableExists("temporary", "tgt"))
     }
 
     test(s"$version: listTables(database)") {
