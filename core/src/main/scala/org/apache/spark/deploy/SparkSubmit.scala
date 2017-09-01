@@ -352,6 +352,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
     var localJars: String = null
     var localPyFiles: String = null
     if (deployMode == CLIENT) {
+      // This security manager will not need an auth secret, but set a dummy value in case
+      // spark.authenticate is enabled, otherwise an exception is thrown.
+      sparkConf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
       val secMgr = new SecurityManager(sparkConf)
       localPrimaryResource = Option(args.primaryResource).map {
         downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
