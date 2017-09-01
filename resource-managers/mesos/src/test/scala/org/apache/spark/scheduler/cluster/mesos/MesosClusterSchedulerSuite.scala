@@ -27,7 +27,7 @@ import org.apache.mesos.SchedulerDriver
 import org.apache.mesos.protobuf.ByteString
 import org.mockito.{ArgumentCaptor, Matchers}
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.Command
