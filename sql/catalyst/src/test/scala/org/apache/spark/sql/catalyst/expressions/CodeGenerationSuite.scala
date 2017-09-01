@@ -19,14 +19,15 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.Timestamp
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, CreateExternalRow, GetExternalRowField, ValidateExternalType}
+import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ThreadUtils
@@ -34,7 +35,7 @@ import org.apache.spark.util.ThreadUtils
 /**
  * Additional tests for code generation.
  */
-class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
+class CodeGenerationSuite extends PlanTest with ExpressionEvalHelper {
 
   test("multithreaded eval") {
     import scala.concurrent._
@@ -98,19 +99,23 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
-    var strExpr: Expression = Literal("abc")
-    for (_ <- 1 to 150) {
-      strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
-    }
+    // Set the max value at `WHOLESTAGE_HUGE_METHOD_LIMIT` to compile gen'd code by janino
+    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+      var strExpr: Expression = Literal("abc")
+      for (_ <- 1 to 150) {
+        strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
+      }
 
-    val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
-    val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(null).toSeq(expressions.map(_.dataType))
-    assert(actual.length == 1)
-    val expected = UTF8String.fromString("abc")
+      val expressions = Seq(If(EqualTo(strExpr, strExpr), strExpr, strExpr))
+      val plan = GenerateMutableProjection.generate(expressions)
+      val actual = plan(null).toSeq(expressions.map(_.dataType))
+      assert(actual.length == 1)
+      val expected = UTF8String.fromString("abc")
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
-      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+        fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, " +
+          s"expected: $expected")
+      }
     }
   }
 
@@ -128,18 +133,22 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-14793: split wide map creation into blocks due to JVM code size limit") {
-    val length = 5000
-    val expressions = Seq(CreateMap(
-      List.fill(length)(EqualTo(Literal(1), Literal(1))).zipWithIndex.flatMap {
-        case (expr, i) => Seq(Literal(i), expr)
-      }))
-    val plan = GenerateMutableProjection.generate(expressions)
-    val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
-    assert(actual.length == 1)
-    val expected = ArrayBasedMapData((0 until length).toArray, Array.fill(length)(true))
+    // Set the max value at `WHOLESTAGE_HUGE_METHOD_LIMIT` to compile gen'd code by janino
+    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+      val length = 5000
+      val expressions = Seq(CreateMap(
+        List.fill(length)(EqualTo(Literal(1), Literal(1))).zipWithIndex.flatMap {
+          case (expr, i) => Seq(Literal(i), expr)
+        }))
+      val plan = GenerateMutableProjection.generate(expressions)
+      val actual = plan(new GenericInternalRow(length)).toSeq(expressions.map(_.dataType))
+      assert(actual.length == 1)
+      val expected = ArrayBasedMapData((0 until length).toArray, Array.fill(length)(true))
 
-    if (!checkResult(actual.head, expected, expressions.head.dataType)) {
-      fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, expected: $expected")
+      if (!checkResult(actual.head, expected, expressions.head.dataType)) {
+        fail(s"Incorrect Evaluation: expressions: $expressions, actual: $actual, " +
+          "expected: $expected")
+      }
     }
   }
 

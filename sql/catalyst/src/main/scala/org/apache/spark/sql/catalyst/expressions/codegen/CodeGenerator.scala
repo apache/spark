@@ -1097,7 +1097,7 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    // Check if compiled code has a too large function.
+    // Check if compiled code has a too large function
     methodsToByteCodeSize.foreach { case (name, byteCodeSize) =>
       if (byteCodeSize > SQLConf.get.hugeMethodLimit) {
         val clazzName = evaluator.getClazz.getSimpleName

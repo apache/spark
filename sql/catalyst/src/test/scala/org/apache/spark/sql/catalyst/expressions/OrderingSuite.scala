@@ -19,15 +19,17 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.math._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateOrdering, LazilyGeneratedOrdering}
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
+class OrderingSuite extends PlanTest with ExpressionEvalHelper {
 
   def compareArrays(a: Seq[Any], b: Seq[Any], expected: Int): Unit = {
     test(s"compare two arrays: a = $a, b = $b") {
@@ -129,13 +131,17 @@ class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KB") {
-    val sortOrder = Literal("abc").asc
+    // To just check if janino can compile gen'd code, we set the max value at
+    // `WHOLESTAGE_HUGE_METHOD_LIMIT` explicitly.
+    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+      val sortOrder = Literal("abc").asc
 
-    // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
-    GenerateOrdering.generate(Array.fill(40)(sortOrder))
+      // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
+      GenerateOrdering.generate(Array.fill(40)(sortOrder))
 
-    // verify that we can support up to 5000 ordering comparisons, which should be sufficient
-    GenerateOrdering.generate(Array.fill(5000)(sortOrder))
+      // verify that we can support up to 5000 ordering comparisons, which should be sufficient
+      GenerateOrdering.generate(Array.fill(5000)(sortOrder))
+    }
   }
 
   test("SPARK-21344: BinaryType comparison does signed byte array comparison") {
