@@ -511,7 +511,8 @@ object Equality {
   usage = "expr1 _FUNC_ expr2 - Returns true if `expr1` equals `expr2`, or false otherwise.",
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type or can be casted to a common type.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be used in equality comparison.
   """,
   examples = """
     Examples:
@@ -545,7 +546,8 @@ case class EqualTo(left: Expression, right: Expression)
   """,
   arguments = """
     Arguments:
-      * expr1, expr2 - the two expressions must be same type or can be casted to a common type.
+      * expr1, expr2 - the two expressions must be same type or can be casted to a common type,
+          and must be a type that can be used in equality comparison.
   """,
   examples = """
     Examples:
