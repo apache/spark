@@ -275,44 +275,6 @@ class LinearRegressionSuite
     }
   }
 
-  test("linear regression (huber loss) with intercept without regularization") {
-    val trainer1 = (new LinearRegression).setLoss("huber")
-      .setFitIntercept(true).setStandardization(true)
-    val trainer2 = (new LinearRegression).setLoss("huber")
-      .setFitIntercept(true).setStandardization(false)
-
-    val model1 = trainer1.fit(datasetWithOutlier)
-    val model2 = trainer2.fit(datasetWithOutlier)
-
-    /*
-      Using the following Python code to load the data and train the model using
-      scikit-learn package.
-
-      import pandas as pd
-      import numpy as np
-      from sklearn.linear_model import HuberRegressor
-      df = pd.read_csv("path", header = None)
-      X = df[df.columns[1:3]]
-      y = np.array(df[df.columns[0]])
-      huber = HuberRegressor(fit_intercept=True, alpha=0.0, max_iter=100, epsilon=1.35)
-      huber.fit(X, y)
-
-      >>> huber.coef_
-      array([ 4.68998007,  7.19429011])
-      >>> huber.intercept_
-      6.3002404351083037
-     */
-    val coefficientsPy = Vectors.dense(4.68998007, 7.19429011)
-    val interceptPy = 6.30024044
-
-    assert(model1.coefficients ~= coefficientsPy relTol 1E-3)
-    assert(model1.intercept ~== interceptPy relTol 1E-3)
-
-    // Without regularization, with or without standardization will converge to the same solution.
-    assert(model2.coefficients ~= coefficientsPy relTol 1E-3)
-    assert(model2.intercept ~== interceptPy relTol 1E-3)
-  }
-
   test("linear regression without intercept without regularization") {
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer1 = (new LinearRegression).setFitIntercept(false).setSolver(solver)
@@ -357,44 +319,6 @@ class LinearRegressionSuite
       assert(modelWithoutIntercept2.intercept ~== 0 absTol 1E-3)
       assert(modelWithoutIntercept2.coefficients ~= coefficientsWithoutInterceptR relTol 1E-3)
     }
-  }
-
-  test("linear regression (huber loss) without intercept without regularization") {
-    val trainer1 = (new LinearRegression).setLoss("huber")
-      .setFitIntercept(false).setStandardization(true)
-    val trainer2 = (new LinearRegression).setLoss("huber")
-      .setFitIntercept(false).setStandardization(false)
-
-    val model1 = trainer1.fit(datasetWithOutlier)
-    val model2 = trainer2.fit(datasetWithOutlier)
-
-    /*
-      Using the following Python code to load the data and train the model using
-      scikit-learn package.
-
-      import pandas as pd
-      import numpy as np
-      from sklearn.linear_model import HuberRegressor
-      df = pd.read_csv("path", header = None)
-      X = df[df.columns[1:3]]
-      y = np.array(df[df.columns[0]])
-      huber = HuberRegressor(fit_intercept=False, alpha=0.0, max_iter=100, epsilon=1.35)
-      huber.fit(X, y)
-
-      >>> huber.coef_
-      array([ 6.71756703,  5.08873222])
-      >>> huber.intercept_
-      0.0
-     */
-    val coefficientsPy = Vectors.dense(6.71756703, 5.08873222)
-    val interceptPy = 0.0
-
-    assert(model1.coefficients ~= coefficientsPy relTol 1E-3)
-    assert(model1.intercept === interceptPy)
-
-    // Without regularization, with or without standardization will converge to the same solution.
-    assert(model2.coefficients ~= coefficientsPy relTol 1E-3)
-    assert(model2.intercept === interceptPy)
   }
 
   test("linear regression with intercept with L1 regularization") {
@@ -552,38 +476,6 @@ class LinearRegressionSuite
     }
   }
 
-  test("linear regression (huber loss) with intercept with L2 regularization") {
-    // Since Python scikit-learn does not support standardization, we can not compare that case.
-    val trainer = (new LinearRegression).setLoss("huber")
-      .setFitIntercept(true).setRegParam(2.1 / 1000).setStandardization(false)
-
-    val model = trainer.fit(datasetWithOutlier)
-
-    /*
-      Using the following Python code to load the data and train the model using
-      scikit-learn package.
-
-      import pandas as pd
-      import numpy as np
-      from sklearn.linear_model import HuberRegressor
-      df = pd.read_csv("path", header = None)
-      X = df[df.columns[1:3]]
-      y = np.array(df[df.columns[0]])
-      huber = HuberRegressor(fit_intercept=True, alpha=2.1, max_iter=100, epsilon=1.35)
-      huber.fit(X, y)
-
-      >>> huber.coef_
-      array([ 4.68836213,  7.19283181])
-      >>> huber.intercept_
-      6.2997900552575956
-     */
-    val coefficientsPy = Vectors.dense(4.68836213, 7.19283181)
-    val interceptPy = 6.29979006
-
-    assert(model.coefficients ~= coefficientsPy relTol 1E-3)
-    assert(model.intercept ~== interceptPy relTol 1E-3)
-  }
-
   test("linear regression without intercept with L2 regularization") {
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val trainer1 = (new LinearRegression).setElasticNetParam(0.0).setRegParam(2.3)
@@ -633,38 +525,6 @@ class LinearRegressionSuite
           assert(prediction1 ~== prediction2 relTol 1E-5)
       }
     }
-  }
-
-  test("linear regression (huber loss) without intercept with L2 regularization") {
-    // Since Python scikit-learn does not support standardization, we can not compare that case.
-    val trainer = (new LinearRegression).setLoss("huber")
-      .setFitIntercept(false).setRegParam(2.1 / 1000).setStandardization(false)
-
-    val model = trainer.fit(datasetWithOutlier)
-
-    /*
-      Using the following Python code to load the data and train the model using
-      scikit-learn package.
-
-      import pandas as pd
-      import numpy as np
-      from sklearn.linear_model import HuberRegressor
-      df = pd.read_csv("path", header = None)
-      X = df[df.columns[1:3]]
-      y = np.array(df[df.columns[0]])
-      huber = HuberRegressor(fit_intercept=False, alpha=2.1, max_iter=100, epsilon=1.35)
-      huber.fit(X, y)
-
-      >>> huber.coef_
-      array([ 6.65843427,  5.05270876])
-      >>> huber.intercept_
-      0.0
-     */
-    val coefficientsPy = Vectors.dense(6.65843427, 5.05270876)
-    val interceptPy = 0.0
-
-    assert(model.coefficients ~= coefficientsPy relTol 1E-3)
-    assert(model.intercept === interceptPy)
   }
 
   test("linear regression with intercept with ElasticNet regularization") {
@@ -1192,6 +1052,163 @@ class LinearRegressionSuite
         assert(expected.coefficients === actual.coefficients)
       }
     }
+  }
+
+  test("linear regression (huber loss) with intercept without regularization") {
+    val trainer1 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(true).setStandardization(true)
+    val trainer2 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(true).setStandardization(false)
+
+    val model1 = trainer1.fit(datasetWithOutlier)
+    val model2 = trainer2.fit(datasetWithOutlier)
+
+    /*
+      Using the following Python code to load the data and train the model using
+      scikit-learn package.
+
+      import pandas as pd
+      import numpy as np
+      from sklearn.linear_model import HuberRegressor
+      df = pd.read_csv("path", header = None)
+      X = df[df.columns[1:3]]
+      y = np.array(df[df.columns[0]])
+      huber = HuberRegressor(fit_intercept=True, alpha=0.0, max_iter=100, epsilon=1.35)
+      huber.fit(X, y)
+
+      >>> huber.coef_
+      array([ 4.68998007,  7.19429011])
+      >>> huber.intercept_
+      6.3002404351083037
+     */
+    val coefficientsPy = Vectors.dense(4.68998007, 7.19429011)
+    val interceptPy = 6.30024044
+
+    assert(model1.coefficients ~= coefficientsPy relTol 1E-3)
+    assert(model1.intercept ~== interceptPy relTol 1E-3)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.coefficients ~= coefficientsPy relTol 1E-3)
+    assert(model2.intercept ~== interceptPy relTol 1E-3)
+  }
+
+  test("linear regression (huber loss) without intercept without regularization") {
+    val trainer1 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(false).setStandardization(true)
+    val trainer2 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(false).setStandardization(false)
+
+    val model1 = trainer1.fit(datasetWithOutlier)
+    val model2 = trainer2.fit(datasetWithOutlier)
+
+    /*
+      huber = HuberRegressor(fit_intercept=False, alpha=0.0, max_iter=100, epsilon=1.35)
+      huber.fit(X, y)
+
+      >>> huber.coef_
+      array([ 6.71756703,  5.08873222])
+      >>> huber.intercept_
+      0.0
+     */
+    val coefficientsPy = Vectors.dense(6.71756703, 5.08873222)
+    val interceptPy = 0.0
+
+    assert(model1.coefficients ~= coefficientsPy relTol 1E-3)
+    assert(model1.intercept === interceptPy)
+
+    // Without regularization, with or without standardization will converge to the same solution.
+    assert(model2.coefficients ~= coefficientsPy relTol 1E-3)
+    assert(model2.intercept === interceptPy)
+  }
+
+  test("linear regression (huber loss) with intercept with L2 regularization") {
+    val trainer1 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(true).setRegParam(0.21).setStandardization(true)
+    val trainer2 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(true).setRegParam(0.21).setStandardization(false)
+
+    val model1 = trainer1.fit(datasetWithOutlier)
+    val model2 = trainer2.fit(datasetWithOutlier)
+
+    /*
+      Since scikit-learn HuberRegressor does not support standardization,
+      we do it manually out of the estimator.
+
+      xStd = np.std(X, axis=0)
+      scaledX = X / xStd
+      huber = HuberRegressor(fit_intercept=True, alpha=210, max_iter=100, epsilon=1.35)
+      huber.fit(scaledX, y)
+
+      >>> np.array(huber.coef_ / xStd)
+      array([ 1.97732633,  3.38816722])
+      >>> huber.intercept_
+      3.7527581430531227
+     */
+    val coefficientsPy1 = Vectors.dense(1.97732633, 3.38816722)
+    val interceptPy1 = 3.75275814
+
+    assert(model1.coefficients ~= coefficientsPy1 relTol 1E-2)
+    assert(model1.intercept ~== interceptPy1 relTol 1E-2)
+
+    /*
+      huber = HuberRegressor(fit_intercept=True, alpha=210, max_iter=100, epsilon=1.35)
+      huber.fit(X, y)
+
+      >>> huber.coef_
+      array([ 1.73346444,  3.63746999])
+      >>> huber.intercept_
+      4.3017134790781739
+     */
+    val coefficientsPy2 = Vectors.dense(1.73346444, 3.63746999)
+    val interceptPy2 = 4.30171347
+
+    assert(model2.coefficients ~= coefficientsPy2 relTol 1E-3)
+    assert(model2.intercept ~== interceptPy2 relTol 1E-3)
+  }
+
+  test("linear regression (huber loss) without intercept with L2 regularization") {
+    val trainer1 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(false).setRegParam(0.21).setStandardization(true)
+    val trainer2 = (new LinearRegression).setLoss("huber")
+      .setFitIntercept(false).setRegParam(0.21).setStandardization(false)
+
+    val model1 = trainer1.fit(datasetWithOutlier)
+    val model2 = trainer2.fit(datasetWithOutlier)
+
+    /*
+      Since scikit-learn HuberRegressor does not support standardization,
+      we do it manually out of the estimator.
+
+      xStd = np.std(X, axis=0)
+      scaledX = X / xStd
+      huber = HuberRegressor(fit_intercept=False, alpha=210, max_iter=100, epsilon=1.35)
+      huber.fit(scaledX, y)
+
+      >>> np.array(huber.coef_ / xStd)
+      array([ 2.59679008,  2.26973102])
+      >>> huber.intercept_
+      0.0
+     */
+    val coefficientsPy1 = Vectors.dense(2.59679008, 2.26973102)
+    val interceptPy1 = 0.0
+
+    assert(model1.coefficients ~= coefficientsPy1 relTol 1E-2)
+    assert(model1.intercept === interceptPy1)
+
+    /*
+      huber = HuberRegressor(fit_intercept=False, alpha=210, max_iter=100, epsilon=1.35)
+      huber.fit(X, y)
+
+      >>> huber.coef_
+      array([ 2.28423908,  2.25196887])
+      >>> huber.intercept_
+      0.0
+     */
+    val coefficientsPy2 = Vectors.dense(2.28423908, 2.25196887)
+    val interceptPy2 = 0.0
+
+    assert(model2.coefficients ~= coefficientsPy2 relTol 1E-3)
+    assert(model2.intercept === interceptPy2)
   }
 
   test("huber loss model match leastSquares loss for large m") {
