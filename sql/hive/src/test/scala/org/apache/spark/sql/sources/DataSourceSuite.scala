@@ -20,14 +20,14 @@ package org.apache.spark.sql.sources
 import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{IntWritable, NullWritable, Text}
+import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
-import org.apache.orc.{OrcConf, TypeDescription}
+import org.apache.orc.OrcConf
 import org.apache.orc.mapred.OrcStruct
-import org.apache.orc.mapreduce.{OrcInputFormat, OrcOutputFormat}
+import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgumentFactory}
 
 import org.apache.spark.sql.{Dataset, QueryTest, Row}
@@ -103,46 +103,40 @@ class DataSourceSuite
     }
   }
 
-  // This is a port from TestMapreduceOrcOutputFormat.java of Apache ORC
   test("orc - predicate push down") {
     withTempDir { dir =>
+      dir.delete()
+
+      // write 4000 rows with the integer and the string in a single orc file
+      spark
+        .range(4000)
+        .map(i => (i, s"$i"))
+        .toDF("i", "s")
+        .repartition(1)
+        .write
+        .option(OrcConf.ROW_INDEX_STRIDE.getAttribute, 1000)
+        .orc(dir.getCanonicalPath)
+      val fileName = dir.list().find(_.endsWith(".orc"))
+      assert(fileName.isDefined)
+
+      // Predicate Push-down: BETWEEN 1500 AND 1999
       val conf = new JobConf()
       val id = new TaskAttemptID("jt", 0, TaskType.MAP, 0, 0)
       val attemptContext = new TaskAttemptContextImpl(conf, id)
-      val typeStr = "struct<i:int,s:string>"
-      OrcConf.MAPRED_OUTPUT_SCHEMA.setString(conf, typeStr)
-      conf.set("mapreduce.output.fileoutputformat.outputdir", dir.getCanonicalPath)
-      conf.setInt(OrcConf.ROW_INDEX_STRIDE.getAttribute, 1000)
-      conf.setBoolean(OrcOutputFormat.SKIP_TEMP_DIRECTORY, true)
-      val outputFormat = new OrcOutputFormat[OrcStruct]()
-      val writer = outputFormat.getRecordWriter(attemptContext)
-
-      // write 4000 rows with the integer and the binary string
-      val row = OrcStruct.createValue(TypeDescription.fromString(typeStr)).asInstanceOf[OrcStruct]
-      val nada = NullWritable.get()
-
-      for(r <- 0 until 4000) {
-        row.setFieldValue(0, new IntWritable(r))
-        row.setFieldValue(1, new Text(Integer.toBinaryString(r)))
-        writer.write(nada, row)
-      }
-      writer.close(attemptContext)
-
       OrcInputFormat.setSearchArgument(conf,
         SearchArgumentFactory.newBuilder()
           .between("i", PredicateLeaf.Type.LONG, 1500L, 1999L)
           .build(), Array[String](null, "i", "s"))
-
-      val split = new FileSplit(
-        new Path(dir.getCanonicalPath, "part-m-00000.orc"), 0, 1000000, Array[String]())
+      val path = new Path(dir.getCanonicalPath, fileName.get)
+      val split = new FileSplit(path, 0, Int.MaxValue, Array[String]())
       val reader = new OrcInputFormat[OrcStruct]().createRecordReader(split, attemptContext)
 
       // the sarg should cause it to skip over the rows except 1000 to 2000
       for(r <- 1000 until 2000) {
         assert(reader.nextKeyValue())
         val row = reader.getCurrentValue
-        assert(r == row.getFieldValue(0).asInstanceOf[IntWritable].get)
-        assert(Integer.toBinaryString(r) == row.getFieldValue(1).toString)
+        assert(r == row.getFieldValue(0).asInstanceOf[LongWritable].get)
+        assert(r.toString == row.getFieldValue(1).toString)
       }
       assert(!reader.nextKeyValue())
       reader.close()
