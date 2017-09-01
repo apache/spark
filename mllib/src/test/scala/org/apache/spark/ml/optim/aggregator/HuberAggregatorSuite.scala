@@ -162,7 +162,7 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     // constant features should not affect gradient
     def validateGradient(grad: Vector, gradFiltered: Vector): Unit = {
       assert(grad(0) === 0.0)
-      assert(grad(1) === gradFiltered(0))
+      assert(grad(1) ~== gradFiltered(0) relTol 0.01)
     }
 
     validateGradient(aggConstantFeature.gradient, aggConstantFeatureFiltered.gradient)

@@ -160,9 +160,9 @@ class LinearRegressionSuite
     assert(lir.getElasticNetParam === 0.0)
     assert(lir.getFitIntercept)
     assert(lir.getStandardization)
-    assert(lir.getSolver == "auto")
-    assert(lir.getLoss == "leastSquares")
-    assert(lir.getM == 1.35)
+    assert(lir.getSolver === "auto")
+    assert(lir.getLoss === "leastSquares")
+    assert(lir.getM === 1.35)
     val model = lir.fit(datasetWithDenseFeature)
 
     MLTestingUtils.checkCopyAndUids(lir, model)
