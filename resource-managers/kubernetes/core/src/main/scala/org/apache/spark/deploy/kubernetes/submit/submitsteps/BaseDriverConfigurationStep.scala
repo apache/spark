@@ -48,6 +48,9 @@ private[spark] class BaseDriverConfigurationStep(
   // Memory settings
   private val driverMemoryMiB = submissionSparkConf.get(
       org.apache.spark.internal.config.DRIVER_MEMORY)
+  private val driverMemoryString = submissionSparkConf.get(
+      org.apache.spark.internal.config.DRIVER_MEMORY.key,
+      org.apache.spark.internal.config.DRIVER_MEMORY.defaultValueString)
   private val memoryOverheadMiB = submissionSparkConf
       .get(KUBERNETES_DRIVER_MEMORY_OVERHEAD)
       .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * driverMemoryMiB).toInt,
@@ -102,7 +105,7 @@ private[spark] class BaseDriverConfigurationStep(
       .addToEnv(driverExtraClasspathEnv.toSeq: _*)
       .addNewEnv()
         .withName(ENV_DRIVER_MEMORY)
-        .withValue(driverContainerMemoryWithOverheadMiB + "M") // JVM treats the "M" unit as "Mi"
+        .withValue(driverMemoryString)
         .endEnv()
       .addNewEnv()
         .withName(ENV_DRIVER_MAIN_CLASS)

@@ -85,7 +85,7 @@ are set up as described above:
       --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.2.0-kubernetes-0.3.0 \
       --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.2.0-kubernetes-0.3.0 \
       --conf spark.kubernetes.initcontainer.docker.image=kubespark/spark-init:v2.2.0-kubernetes-0.3.0 \
-      local:///opt/spark/examples/jars/spark_examples_2.11-2.2.0.jar
+      local:///opt/spark/examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar
 
 The Spark master, specified either via passing the `--master` command line argument to `spark-submit` or by setting
 `spark.master` in the application's configuration, must be a URL with the format `k8s://<api_server_url>`. Prefixing the
@@ -147,7 +147,7 @@ and then you can compute the value of Pi as follows:
       --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.2.0-kubernetes-0.3.0 \
       --conf spark.kubernetes.initcontainer.docker.image=kubespark/spark-init:v2.2.0-kubernetes-0.3.0 \
       --conf spark.kubernetes.resourceStagingServer.uri=http://<address-of-any-cluster-node>:31000 \
-      examples/jars/spark_examples_2.11-2.2.0.jar
+      examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar
 
 The Docker image for the resource staging server may also be built from source, in a similar manner to the driver
 and executor images. The Dockerfile is provided in `dockerfiles/resource-staging-server/Dockerfile`.
@@ -189,7 +189,7 @@ If our local proxy were listening on port 8001, we would have our submission loo
       --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:v2.2.0-kubernetes-0.3.0 \
       --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:v2.2.0-kubernetes-0.3.0 \
       --conf spark.kubernetes.initcontainer.docker.image=kubespark/spark-init:v2.2.0-kubernetes-0.3.0 \
-      local:///opt/spark/examples/jars/spark_examples_2.11-2.2.0.jar
+      local:///opt/spark/examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar
 
 Communication between Spark and Kubernetes clusters is performed using the fabric8 kubernetes-client library.
 The above mechanism using `kubectl proxy` can be used when we have authentication providers that the fabric8
@@ -252,7 +252,7 @@ the command may then look like the following:
       --conf spark.shuffle.service.enabled=true \
       --conf spark.kubernetes.shuffle.namespace=default \
       --conf spark.kubernetes.shuffle.labels="app=spark-shuffle-service,spark-version=2.2.0" \
-      local:///opt/spark/examples/jars/spark_examples_2.11-2.2.0.jar 10 400000 2
+      local:///opt/spark/examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar 10 400000 2
 
 ## Advanced
 
@@ -334,7 +334,7 @@ communicate with the resource staging server over TLS. The trustStore can be set
       --conf spark.kubernetes.resourceStagingServer.uri=https://<address-of-any-cluster-node>:31000 \
       --conf spark.ssl.kubernetes.resourceStagingServer.enabled=true \
       --conf spark.ssl.kubernetes.resourceStagingServer.clientCertPem=/home/myuser/cert.pem \
-      examples/jars/spark_examples_2.11-2.2.0.jar
+      examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar
 
 ### Spark Properties
 
