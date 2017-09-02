@@ -502,6 +502,9 @@ class LogisticRegressionSuite
     resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
       case (pred1, pred2) => assert(pred1 === pred2)
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, LogisticRegressionModel](model, smallMultinomialDataset)
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
@@ -556,6 +559,9 @@ class LogisticRegressionSuite
     resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
       case (pred1, pred2) => assert(pred1 === pred2)
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, LogisticRegressionModel](model, smallBinaryDataset)
   }
 
   test("coefficients and intercept methods") {
