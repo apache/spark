@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._

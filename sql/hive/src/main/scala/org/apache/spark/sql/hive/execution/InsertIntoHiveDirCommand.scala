@@ -17,23 +17,21 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.util.Properties
-
 import scala.language.existentials
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred._
-import org.apache.spark.sql.catalyst.TableIdentifier
+
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive.client.HiveClientImpl
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
 
 /**
  * Command for writing the results of `query` to file system.
