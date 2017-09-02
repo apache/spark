@@ -117,4 +117,12 @@ class OptimizeMetadataOnlyQuerySuite extends QueryTest with SharedSQLContext {
     "select partcol1, max(partcol2) from srcpart where partcol1 = 0 group by rollup (partcol1)",
     "select partcol2 from (select partcol2 from srcpart where partcol1 = 0 union all " +
       "select partcol2 from srcpart where partcol1 = 1) t group by partcol2")
+
+  test("SPARK-21884 Fix StackOverflowError on MetadataOnlyQuery") {
+    withTable("t_1000") {
+      sql("CREATE TABLE t_1000 (a INT, p INT) USING PARQUET PARTITIONED BY (p)")
+      (1 to 1000).foreach(p => sql(s"ALTER TABLE t_1000 ADD PARTITION (p=$p)"))
+      sql("SELECT COUNT(DISTINCT p) FROM t_1000").collect()
+    }
+  }
 }
