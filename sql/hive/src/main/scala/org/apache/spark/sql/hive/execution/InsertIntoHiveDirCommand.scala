@@ -20,18 +20,19 @@ package org.apache.spark.sql.hive.execution
 import java.util.Properties
 
 import scala.language.existentials
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred._
-
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.hive.client.HiveClientImpl
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
 /**
@@ -63,28 +64,40 @@ case class InsertIntoHiveDirCommand(
     assert(children.length == 1)
     assert(storage.locationUri.nonEmpty)
 
-    val Array(cols, types) = children.head.output.foldLeft(Array("", "")) { case (r, a) =>
-      r(0) = r(0) + a.name + ","
-      r(1) = r(1) + a.dataType.catalogString + ":"
-      r
-    }
+//    val Array(cols, types) = children.head.output.foldLeft(Array("", "")) { case (r, a) =>
+//      r(0) = r(0) + a.name + ","
+//      r(1) = r(1) + a.dataType.catalogString + ":"
+//      r
+//    }
+//
+//    val properties = new Properties()
+//    properties.put("columns", cols.dropRight(1))
+//    properties.put("columns.types", types.dropRight(1))
+//    properties.put(serdeConstants.SERIALIZATION_LIB,
+//      storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
+//
+//    import scala.collection.JavaConverters._
+//    properties.putAll(storage.properties.asJava)
+//
+//    val tableDesc = new TableDesc(
+//      Utils.classForName(storage.inputFormat.get).asInstanceOf[Class[_ <: InputFormat[_, _]]],
+//      Utils.classForName(storage.outputFormat.get),
+//      properties
+//    )
 
-    val properties = new Properties()
-    properties.put("columns", cols.dropRight(1))
-    properties.put("columns.types", types.dropRight(1))
-
-    val sqlContext = sparkSession.sqlContext
-
-    properties.put(serdeConstants.SERIALIZATION_LIB,
+    val hiveTable = HiveClientImpl.toHiveTable(CatalogTable(
+      identifier = TableIdentifier(storage.locationUri.get.toString, Some("default")),
+      tableType = org.apache.spark.sql.catalyst.catalog.CatalogTableType.VIEW,
+      storage = storage,
+      schema = query.schema
+    ))
+    hiveTable.getMetadata.put(serdeConstants.SERIALIZATION_LIB,
       storage.serde.getOrElse(classOf[LazySimpleSerDe].getName))
 
-    import scala.collection.JavaConverters._
-    properties.putAll(storage.properties.asJava)
-
-    var tableDesc = new TableDesc(
-      Utils.classForName(storage.inputFormat.get).asInstanceOf[Class[_ <: InputFormat[_, _]]],
-      Utils.classForName(storage.outputFormat.get),
-      properties
+    val tableDesc = new TableDesc(
+      hiveTable.getInputFormatClass,
+      hiveTable.getOutputFormatClass,
+      hiveTable.getMetadata
     )
 
     val hadoopConf = sparkSession.sessionState.newHadoopConf()

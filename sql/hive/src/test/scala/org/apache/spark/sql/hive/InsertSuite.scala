@@ -645,4 +645,21 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       }
     }
   }
+
+  test("insert overwrite to dir to illegal path") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      val e = intercept[IllegalArgumentException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY 'abc://a'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+      }.getMessage
+
+      assert(e.contains("Wrong FS: abc://a, expected: file:///"))
+    }
+  }
 }

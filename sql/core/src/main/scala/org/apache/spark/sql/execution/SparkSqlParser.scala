@@ -1523,6 +1523,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    */
   override def visitInsertOverwriteDir(
       ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
+    if (ctx.LOCAL != null) {
+      throw new ParseException(
+        "LOCAL is not supported in INSERT OVERWRITE DIRECTORY to data source", ctx)
+    }
+
     val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
     var storage = DataSource.buildStorageFormatFromOptions(options)
 

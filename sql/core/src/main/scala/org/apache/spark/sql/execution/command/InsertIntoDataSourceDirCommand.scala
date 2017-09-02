@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import org.apache.hadoop.fs.FileSystem
+import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -52,11 +54,18 @@ case class InsertIntoDataSourceDirCommand(
 
     // Create the relation based on the input logical plan: `query`.
     val pathOption = storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
+
     val dataSource = DataSource(
       sparkSession,
       className = provider,
       options = storage.properties ++ pathOption,
       catalogTable = None)
+
+    val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+    if (!isFileFormat) {
+      throw new SparkException(
+        "Only Data Sources providing FileFormat are supported.")
+    }
 
     val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists
     try {

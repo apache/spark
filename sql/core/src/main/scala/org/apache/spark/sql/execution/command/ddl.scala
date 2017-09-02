@@ -22,18 +22,17 @@ import java.util.Locale
 import scala.collection.{GenMap, GenSeq}
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.util.control.NonFatal
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
-
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
@@ -846,6 +845,21 @@ object DDLUtils {
             s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
         case _ =>
       }
+    }
+  }
+
+
+  /**
+   * Throws exception if outputPath tries to overwrite inputpath.
+   */
+  def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
+    val inputPaths = query.collect {
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
+    }.flatten
+
+    if (inputPaths.contains(outputPath)) {
+      throw new AnalysisException(
+        "Cannot overwrite a path that is also being read from.")
     }
   }
 }
