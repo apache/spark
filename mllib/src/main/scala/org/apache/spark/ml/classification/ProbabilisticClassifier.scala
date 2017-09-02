@@ -248,8 +248,9 @@ private[ml] object ProbabilisticClassificationModel {
     } else {
       var i = 0
       val size = v.size
+      val value = 1.0 / size
       while (i < size) {
-        v.values(i) = 1.0 / size
+        v.values(i) = value
         i += 1
       }
     }
