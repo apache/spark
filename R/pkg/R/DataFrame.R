@@ -2714,12 +2714,12 @@ setMethod("unionAll",
             union(x, y)
           })
 
-#' Return a new SparkDataFrame containing the union of rows
+#' Return a new SparkDataFrame containing the union of rows, matched by column names
 #'
 #' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
-#' and another SparkDataFrame. This is different from both \code{UNION ALL} and
-#' \code{UNION DISTINCT} in SQL as column positions are not taken into account.
-#' Input SparkDataFrames can have different data types in the schema.
+#' and another SparkDataFrame. This is different from \code{union} function, and both
+#' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
+#' into account. Input SparkDataFrames can have different data types in the schema.
 #'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #' This function resolves columns by name (not by position).
