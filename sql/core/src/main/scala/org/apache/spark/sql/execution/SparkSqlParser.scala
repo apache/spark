@@ -385,7 +385,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *   ]
    *   [LOCATION path]
    *   [COMMENT table_comment]
-   *   [AS select_statement];
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [[AS] select_statement];
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -400,6 +401,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       Option(ctx.partitionColumnNames)
         .map(visitIdentifierList(_).toArray)
         .getOrElse(Array.empty[String])
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
@@ -410,7 +412,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI(_)))
+    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -426,6 +428,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(provider),
       partitionColumnNames = partitionColumnNames,
       bucketSpec = bucketSpec,
+      properties = properties,
       comment = Option(ctx.comment).map(string))
 
     // Determine the storage mode.
