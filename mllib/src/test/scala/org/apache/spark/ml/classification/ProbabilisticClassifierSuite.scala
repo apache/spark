@@ -23,6 +23,7 @@ import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
+
 final class TestProbabilisticClassificationModel(
     override val uid: String,
     override val numFeatures: Int,
@@ -78,6 +79,19 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
     }
     intercept[IllegalArgumentException] {
       new TestProbabilisticClassificationModel("myuid", 2, 2).setThresholds(Array(-0.1, 0.1))
+    }
+  }
+
+  test("normalizeToProbabilitiesInPlace") {
+    val vec1 = Vectors.dense(1.0, 2.0, 3.0).toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec1)
+    assert(vec1 ~== Vectors.dense(1.0 / 6, 2.0 / 6, 3.0 / 6) relTol 1e-3)
+
+    // all-0 input test
+    val vec2 = Vectors.dense(0.0, 0.0, 0.0).toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec2)
+    vec2.toArray.foreach { v =>
+      assert(v ~== 1.0 / 3 relTol 1e-3)
     }
   }
 }

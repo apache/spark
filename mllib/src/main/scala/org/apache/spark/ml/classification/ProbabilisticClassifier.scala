@@ -230,8 +230,8 @@ private[ml] object ProbabilisticClassificationModel {
    * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
    *
    * The input raw predictions should be nonnegative.
-   * The output vector sums to 1, unless the input vector is all-0 (in which case the output is
-   * all-0 too).
+   * The output vector sums to 1, when the input vector is all-0, the output values will be all
+   * equal to 1 / size.
    *
    * NOTE: This is NOT applicable to all models, only ones which effectively use class
    *       instance counts for raw predictions.
@@ -243,6 +243,13 @@ private[ml] object ProbabilisticClassificationModel {
       val size = v.size
       while (i < size) {
         v.values(i) /= sum
+        i += 1
+      }
+    } else {
+      var i = 0
+      val size = v.size
+      while (i < size) {
+        v.values(i) = 1.0 / size
         i += 1
       }
     }
