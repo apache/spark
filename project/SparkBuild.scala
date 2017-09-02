@@ -30,7 +30,7 @@ import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.simplytyped.Antlr4Plugin._
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
 import com.typesafe.tools.mima.plugin.MimaKeys
-import org.scalastyle.sbt.ScalastylePlugin._
+import org.scalastyle.sbt.ScalastylePlugin.autoImport._
 import org.scalastyle.sbt.Tasks
 
 import spray.revolver.RevolverPlugin._
@@ -87,11 +87,18 @@ object SparkBuild extends PomBuild {
   val projectsMap: Map[String, Seq[Setting[_]]] = Map.empty
 
   override val profiles = {
-    Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+    if (System.getProperty("scala-2.12") == "") {
+      // To activate scala-2.10 profile, replace empty property value to non-empty value
+      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
+      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
+      System.setProperty("scala-2.12", "true")
+    }
+    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -116,7 +123,7 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
     .settings(
-      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.8.0"
+      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.9.0"
     )
 
   lazy val scalaStyleOnCompile = taskKey[Unit]("scalaStyleOnCompile")
@@ -474,6 +481,7 @@ object OldDeps {
 
 object Catalyst {
   lazy val settings = antlr4Settings ++ Seq(
+    antlr4Version in Antlr4 := "4.7",
     antlr4PackageName in Antlr4 := Some("org.apache.spark.sql.catalyst.parser"),
     antlr4GenListener in Antlr4 := true,
     antlr4GenVisitor in Antlr4 := true
@@ -746,7 +754,12 @@ object CopyDependencies {
 object TestSettings {
   import BuildCommons._
 
-  private val scalaBinaryVersion = "2.11"
+  private val scalaBinaryVersion =
+    if (System.getProperty("scala-2.12") == "true") {
+      "2.12"
+    } else {
+      "2.11"
+    }
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,

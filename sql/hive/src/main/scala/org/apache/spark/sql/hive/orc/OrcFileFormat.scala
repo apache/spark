@@ -68,7 +68,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val orcOptions = new OrcOptions(options)
+    val orcOptions = new OrcOptions(options, sparkSession.sessionState.conf)
 
     val configuration = job.getConfiguration
 

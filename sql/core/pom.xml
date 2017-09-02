@@ -87,6 +87,16 @@
     </dependency>
 
     <dependency>
+      <groupId>org.apache.orc</groupId>
+      <artifactId>orc-core</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.orc</groupId>
+      <artifactId>orc-mapreduce</artifactId>
+      <classifier>${orc.classifier}</classifier>
+    </dependency>
+    <dependency>
       <groupId>org.apache.parquet</groupId>
       <artifactId>parquet-column</artifactId>
     </dependency>
@@ -101,7 +111,6 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>${fasterxml.jackson.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.arrow</groupId>

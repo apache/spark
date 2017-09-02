@@ -364,7 +364,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("foreachPartition") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.longAccumulator
-    ds.foreachPartition(_.foreach(v => acc.add(v._2)))
+    ds.foreachPartition((it: Iterator[(String, Int)]) => it.foreach(v => acc.add(v._2)))
     assert(acc.value == 6)
   }
 

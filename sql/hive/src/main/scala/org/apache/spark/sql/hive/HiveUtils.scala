@@ -24,14 +24,15 @@ import java.sql.Timestamp
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-import scala.collection.mutable.HashMap
 import scala.collection.JavaConverters._
+import scala.collection.mutable.HashMap
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 import org.apache.hadoop.util.VersionInfo
 
@@ -231,6 +232,22 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
+   * Check current Thread's SessionState type
+   * @return true when SessionState.get returns an instance of CliSessionState,
+   *         false when it gets non-CliSessionState instance or null
+   */
+  def isCliSessionState(): Boolean = {
+    val state = SessionState.get
+    var temp: Class[_] = if (state != null) state.getClass else null
+    var found = false
+    while (temp != null && !found) {
+      found = temp.getName == "org.apache.hadoop.hive.cli.CliSessionState"
+      temp = temp.getSuperclass
+    }
+    found
+  }
+
+  /**
    * Create a [[HiveClient]] used for execution.
    *
    * Currently this must always be Hive 13 as this is the version of Hive that is packaged
@@ -313,7 +330,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopConf = hadoopConf,
         execJars = jars.toSeq,
         config = configurations,
-        isolationOn = true,
+        isolationOn = !isCliSessionState(),
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {

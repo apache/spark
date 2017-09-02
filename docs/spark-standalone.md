@@ -150,6 +150,10 @@ You can optionally configure the cluster further by setting environment variable
     <td>JVM options for the Spark master and worker daemons themselves in the form "-Dx=y" (default: none).</td>
   </tr>
   <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the Spark master and worker daemons themselves (default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>The public DNS name of the Spark master and workers (default: none).</td>
   </tr>

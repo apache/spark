@@ -138,6 +138,8 @@ class JDBCOptions(
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
     }
+  // An option to execute custom SQL before fetching data from the remote DB
+  val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
 }
 
 object JDBCOptions {
@@ -161,4 +163,5 @@ object JDBCOptions {
   val JDBC_CREATE_TABLE_COLUMN_TYPES = newOption("createTableColumnTypes")
   val JDBC_BATCH_INSERT_SIZE = newOption("batchsize")
   val JDBC_TXN_ISOLATION_LEVEL = newOption("isolationLevel")
+  val JDBC_SESSION_INIT_STATEMENT = newOption("sessionInitStatement")
 }
