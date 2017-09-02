@@ -35,10 +35,10 @@ GROUP BY course, earnings GROUPING SETS((), (course), (course, earnings)) ORDER 
 
 -- GROUPING/GROUPING_ID
 SELECT course, year, GROUPING(course), GROUPING(year), GROUPING_ID(course, year) FROM courseSales
-GROUP BY CUBE(course, year) ORDER BY grouping__id, course, year;
+GROUP BY CUBE(course, year);
 SELECT course, year, GROUPING(course) FROM courseSales GROUP BY course, year;
 SELECT course, year, GROUPING_ID(course, year) FROM courseSales GROUP BY course, year;
-SELECT course, year, grouping__id FROM courseSales GROUP BY CUBE(course, year);
+SELECT course, year, grouping__id FROM courseSales GROUP BY CUBE(course, year) ORDER BY grouping__id, course, year;
 
 -- GROUPING/GROUPING_ID in having clause
 SELECT course, year FROM courseSales GROUP BY CUBE(course, year)
