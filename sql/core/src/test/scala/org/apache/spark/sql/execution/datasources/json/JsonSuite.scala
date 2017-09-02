@@ -2051,9 +2051,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       .add("field", ByteType)
       .add("_corrupt_record", StringType)
 
-    val dfFromFile = spark.read.schema(schema).json(file.getAbsolutePath)
-    assert(dfFromFile.filter($"_corrupt_record".isNotNull).count() == 1)
-    assert(dfFromFile.filter($"_corrupt_record".isNull).count() == 2)
+    val errMsg = intercept[SparkException] {
+      spark.read
+        .schema(schema)
+        .json(file.getAbsolutePath)
+        .select("_corrupt_record")
+        .show()
+    }.getMessage
+    assert(errMsg.contains("'_corrupt_record' must be selected along with input schema."))
 
     Utils.deleteRecursively(tempDir)
   }
