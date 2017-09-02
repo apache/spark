@@ -114,10 +114,6 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     }
 
     (file: PartitionedFile) => {
-      // SPARK-21610: when the `requiredSchema` only contains `_corrupt_record`,
-      // the derived `actualSchema` is empty and the `_corrupt_record` are all null for all rows.
-      // When users requires only `_corrupt_record`, we assume that the corrupt records are required
-      // for all json fields, i.g., all items in dataSchema.
       if (actualSchema.isEmpty && requiredSchema.length == 1 &&
         requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
         throw new AnalysisException(
