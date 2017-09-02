@@ -90,30 +90,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create an [[AnalyzeTableCommand]] command or an [[AnalyzeColumnCommand]] command.
-   * Example SQL for analyzing table :
+   * Create an [[AnalyzeTableCommand]] command, or an [[AnalyzePartitionCommand]]
+   * or an [[AnalyzeColumnCommand]] command.
+   * Example SQL for analyzing a table or a set of partitions :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS [NOSCAN];
+   *   ANALYZE TABLE [db_name.]tablename [PARTITION (partcol1[=val1], partcol2[=val2], ...)]
+   *   COMPUTE STATISTICS [NOSCAN];
    * }}}
+   *
    * Example SQL for analyzing columns :
    * {{{
-   *   ANALYZE TABLE table COMPUTE STATISTICS FOR COLUMNS column1, column2;
+   *   ANALYZE TABLE [db_name.]tablename COMPUTE STATISTICS FOR COLUMNS column1, column2;
    * }}}
    */
   override def visitAnalyze(ctx: AnalyzeContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.partitionSpec != null) {
-      logWarning(s"Partition specification is ignored: ${ctx.partitionSpec.getText}")
+    if (ctx.identifier != null &&
+        ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
+      throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
     }
-    if (ctx.identifier != null) {
-      if (ctx.identifier.getText.toLowerCase(Locale.ROOT) != "noscan") {
-        throw new ParseException(s"Expected `NOSCAN` instead of `${ctx.identifier.getText}`", ctx)
+
+    val table = visitTableIdentifier(ctx.tableIdentifier)
+    if (ctx.identifierSeq() == null) {
+      if (ctx.partitionSpec != null) {
+        AnalyzePartitionCommand(table, visitPartitionSpec(ctx.partitionSpec),
+          noscan = ctx.identifier != null)
+      } else {
+        AnalyzeTableCommand(table, noscan = ctx.identifier != null)
       }
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier))
-    } else if (ctx.identifierSeq() == null) {
-      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier), noscan = false)
     } else {
+      if (ctx.partitionSpec != null) {
+        logWarning("Partition specification is ignored when collecting column statistics: " +
+          ctx.partitionSpec.getText)
+      }
       AnalyzeColumnCommand(
-        visitTableIdentifier(ctx.tableIdentifier),
+        table,
         visitIdentifierSeq(ctx.identifierSeq()))
     }
   }
@@ -230,11 +240,25 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
   }
 
   /**
-   * Create a [[RefreshTable]] logical plan.
+   * Create a [[RefreshResource]] logical plan.
    */
   override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
-    val resourcePath = remainder(ctx.REFRESH.getSymbol).trim
-    RefreshResource(resourcePath)
+    val path = if (ctx.STRING != null) string(ctx.STRING) else extractUnquotedResourcePath(ctx)
+    RefreshResource(path)
+  }
+
+  private def extractUnquotedResourcePath(ctx: RefreshResourceContext): String = withOrigin(ctx) {
+    val unquotedPath = remainder(ctx.REFRESH.getSymbol).trim
+    validate(
+      unquotedPath != null && !unquotedPath.isEmpty,
+      "Resource paths cannot be empty in REFRESH statements. Use / to match everything",
+      ctx)
+    val forbiddenSymbols = Seq(" ", "\n", "\r", "\t")
+    validate(
+      !forbiddenSymbols.exists(unquotedPath.contains(_)),
+      "REFRESH statements cannot contain ' ', '\\n', '\\r', '\\t' inside unquoted resource paths",
+      ctx)
+    unquotedPath
   }
 
   /**
@@ -290,7 +314,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         codegen = ctx.CODEGEN != null,
         cost = ctx.COST != null)
     } else {
-      ExplainCommand(OneRowRelation)
+      ExplainCommand(OneRowRelation())
     }
   }
 
@@ -361,7 +385,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *   ]
    *   [LOCATION path]
    *   [COMMENT table_comment]
-   *   [AS select_statement];
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [[AS] select_statement];
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -376,6 +401,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       Option(ctx.partitionColumnNames)
         .map(visitIdentifierList(_).toArray)
         .getOrElse(Array.empty[String])
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
@@ -386,7 +412,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI(_)))
+    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -402,6 +428,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(provider),
       partitionColumnNames = partitionColumnNames,
       bucketSpec = bucketSpec,
+      properties = properties,
       comment = Option(ctx.comment).map(string))
 
     // Determine the storage mode.
@@ -673,8 +700,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *
    * For example:
    * {{{
-   *   CREATE [TEMPORARY] FUNCTION [db_name.]function_name AS class_name
-   *    [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
+   *   CREATE [OR REPLACE] [TEMPORARY] FUNCTION [IF NOT EXISTS] [db_name.]function_name
+   *   AS class_name [USING JAR|FILE|ARCHIVE 'file_uri' [, JAR|FILE|ARCHIVE 'file_uri']];
    * }}}
    */
   override def visitCreateFunction(ctx: CreateFunctionContext): LogicalPlan = withOrigin(ctx) {
@@ -695,7 +722,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       functionIdentifier.funcName,
       string(ctx.className),
       resources,
-      ctx.TEMPORARY != null)
+      ctx.TEMPORARY != null,
+      ctx.EXISTS != null,
+      ctx.REPLACE != null)
   }
 
   /**

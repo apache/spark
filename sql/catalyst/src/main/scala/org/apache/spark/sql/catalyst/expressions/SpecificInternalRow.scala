@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
 
 /**
@@ -219,17 +218,6 @@ final class SpecificInternalRow(val values: Array[MutableValue]) extends BaseGen
   }
 
   override def isNullAt(i: Int): Boolean = values(i).isNull
-
-  override def copy(): InternalRow = {
-    val newValues = new Array[Any](values.length)
-    var i = 0
-    while (i < values.length) {
-      newValues(i) = values(i).boxed
-      i += 1
-    }
-
-    new GenericInternalRow(newValues)
-  }
 
   override protected def genericGet(i: Int): Any = values(i).boxed
 

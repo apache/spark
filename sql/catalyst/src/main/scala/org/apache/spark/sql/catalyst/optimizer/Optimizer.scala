@@ -34,12 +34,13 @@ import org.apache.spark.sql.types._
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
  * Optimizers can override this.
  */
-abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
+abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
 
-  protected val fixedPoint = FixedPoint(conf.optimizerMaxIterations)
+  protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
   def batches: Seq[Batch] = {
+    Batch("Eliminate Distinct", Once, EliminateDistinct) ::
     // Technically some of the rules in Finish Analysis are not optimizer rules and belong more
     // in the analyzer, because they are needed for correctness (e.g. ComputeCurrentTime).
     // However, because we also use the analyzer to canonicalized queries (for view definition),
@@ -76,11 +77,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
     Batch("Operator Optimizations", fixedPoint, Seq(
       // Operator push down
       PushProjectionThroughUnion,
-      ReorderJoin(conf),
+      ReorderJoin,
       EliminateOuterJoin,
       PushPredicateThroughJoin,
       PushDownPredicate,
-      LimitPushDown(conf),
+      LimitPushDown,
       ColumnPruning,
       InferFiltersFromConstraints,
       // Operator combine
@@ -91,10 +92,10 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineLimits,
       CombineUnions,
       // Constant folding and strength reduction
-      NullPropagation(conf),
+      NullPropagation,
       ConstantPropagation,
       FoldablePropagation,
-      OptimizeIn(conf),
+      OptimizeIn,
       ConstantFolding,
       ReorderAssociativeOperator,
       LikeSimplification,
@@ -116,11 +117,11 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       CombineConcats) ++
       extendedOperatorOptimizationRules: _*) ::
     Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts(conf)) ::
+      CheckCartesianProducts) ::
     Batch("Join Reorder", Once,
-      CostBasedJoinReorder(conf)) ::
+      CostBasedJoinReorder) ::
     Batch("Decimal Optimizations", fixedPoint,
-      DecimalAggregates(conf)) ::
+      DecimalAggregates) ::
     Batch("Object Expressions Optimization", fixedPoint,
       EliminateMapObjects,
       CombineTypedFilters) ::
@@ -128,7 +129,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
     Batch("OptimizeCodegen", Once,
-      OptimizeCodegen(conf)) ::
+      OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
       RewritePredicateSubquery,
       CollapseProject) :: Nil
@@ -152,6 +153,20 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
 }
 
 /**
+ * Remove useless DISTINCT for MAX and MIN.
+ * This rule should be applied before RewriteDistinctAggregates.
+ */
+object EliminateDistinct extends Rule[LogicalPlan] {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressions  {
+    case ae: AggregateExpression if ae.isDistinct =>
+      ae.aggregateFunction match {
+        case _: Max | _: Min => ae.copy(isDistinct = false)
+        case _ => ae
+      }
+  }
+}
+
+/**
  * An optimizer used in test code.
  *
  * To ensure extendability, we leave the standard rules in the abstract optimizer rules, while
@@ -163,8 +178,7 @@ class SimpleTestOptimizer extends Optimizer(
   new SessionCatalog(
     new InMemoryCatalog,
     EmptyFunctionRegistry,
-    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)),
-  new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true))
+    new SQLConf().copy(SQLConf.CASE_SENSITIVE -> true)))
 
 /**
  * Remove redundant aliases from a query plan. A redundant alias is an alias that does not change
@@ -273,7 +287,7 @@ object RemoveRedundantProject extends Rule[LogicalPlan] {
 /**
  * Pushes down [[LocalLimit]] beneath UNION ALL and beneath the streamed inputs of outer joins.
  */
-case class LimitPushDown(conf: SQLConf) extends Rule[LogicalPlan] {
+object LimitPushDown extends Rule[LogicalPlan] {
 
   private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
     plan match {
@@ -364,21 +378,6 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     // We must promise the compiler that we did not discard the names in the case of project
     // expressions.  This is safe since the only transformation is from Attribute => Attribute.
     result.asInstanceOf[A]
-  }
-
-  /**
-   * Splits the condition expression into small conditions by `And`, and partition them by
-   * deterministic, and finally recombine them by `And`. It returns an expression containing
-   * all deterministic expressions (the first field of the returned Tuple2) and an expression
-   * containing all non-deterministic expressions (the second field of the returned Tuple2).
-   */
-  private def partitionByDeterministic(condition: Expression): (Expression, Expression) = {
-    val andConditions = splitConjunctivePredicates(condition)
-    andConditions.partition(_.deterministic) match {
-      case (deterministic, nondeterministic) =>
-        deterministic.reduceOption(And).getOrElse(Literal(true)) ->
-        nondeterministic.reduceOption(And).getOrElse(Literal(true))
-    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -853,6 +852,25 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         filter
       }
 
+    case filter @ Filter(condition, watermark: EventTimeWatermark) =>
+      // We can only push deterministic predicates which don't reference the watermark attribute.
+      // We could in theory span() only on determinism and pull out deterministic predicates
+      // on the watermark separately. But it seems unnecessary and a bit confusing to not simply
+      // use the prefix as we do for nondeterminism in other cases.
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(
+        p => p.deterministic && !p.references.contains(watermark.eventTime))
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduceLeft(And)
+        val newWatermark = watermark.copy(child = Filter(pushDownPredicate, watermark.child))
+        // If there is no more filter to stay up, just eliminate the filter.
+        // Otherwise, create "Filter(stayUp) <- watermark <- Filter(pushDownPredicate)".
+        if (stayUp.isEmpty) newWatermark else Filter(stayUp.reduceLeft(And), newWatermark)
+      } else {
+        filter
+      }
+
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
@@ -1062,8 +1080,7 @@ object CombineLimits extends Rule[LogicalPlan] {
  * the join between R and S is not a cartesian product and therefore should be allowed.
  * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
  */
-case class CheckCartesianProducts(conf: SQLConf)
-    extends Rule[LogicalPlan] with PredicateHelper {
+object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   /**
    * Check if a join is a cartesian product. Returns true if
    * there are no join conditions involving references from both left and right.
@@ -1075,7 +1092,7 @@ case class CheckCartesianProducts(conf: SQLConf)
   }
 
   def apply(plan: LogicalPlan): LogicalPlan =
-    if (conf.crossJoinEnabled) {
+    if (SQLConf.get.crossJoinEnabled) {
       plan
     } else plan transform {
       case j @ Join(left, right, Inner | LeftOuter | RightOuter | FullOuter, condition)
@@ -1097,7 +1114,7 @@ case class CheckCartesianProducts(conf: SQLConf)
  * This uses the same rules for increasing the precision and scale of the output as
  * [[org.apache.spark.sql.catalyst.analysis.DecimalPrecision]].
  */
-case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
+object DecimalAggregates extends Rule[LogicalPlan] {
   import Decimal.MAX_LONG_DIGITS
 
   /** Maximum number of decimal digits representable precisely in a Double */
@@ -1115,7 +1132,7 @@ case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
             we.copy(windowFunction = ae.copy(aggregateFunction = Average(UnscaledValue(e))))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
 
         case _ => we
       }
@@ -1127,7 +1144,7 @@ case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
           val newAggExpr = ae.copy(aggregateFunction = Average(UnscaledValue(e)))
           Cast(
             Divide(newAggExpr, Literal.create(math.pow(10.0, scale), DoubleType)),
-            DecimalType(prec + 4, scale + 4), Option(conf.sessionLocalTimeZone))
+            DecimalType(prec + 4, scale + 4), Option(SQLConf.get.sessionLocalTimeZone))
 
         case _ => ae
       }
@@ -1139,15 +1156,18 @@ case class DecimalAggregates(conf: SQLConf) extends Rule[LogicalPlan] {
  * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
  * another LocalRelation.
  *
- * This is relatively simple as it currently handles only a single case: Project.
+ * This is relatively simple as it currently handles only 2 single case: Project and Limit.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data))
+    case Project(projectList, LocalRelation(output, data, isStreaming))
         if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      LocalRelation(projectList.map(_.toAttribute), data.map(projection), isStreaming)
+
+    case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
+      LocalRelation(output, data.take(limit), isStreaming)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
@@ -1172,7 +1192,7 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Deduplicate(keys, child, streaming) if !streaming =>
+    case Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {

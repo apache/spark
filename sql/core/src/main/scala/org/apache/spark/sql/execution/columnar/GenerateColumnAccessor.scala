@@ -56,7 +56,6 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalR
   // all other methods inherited from GenericMutableRow are not need
   override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
   override def numFields: Int = throw new UnsupportedOperationException
-  override def copy(): InternalRow = throw new UnsupportedOperationException
 }
 
 /**
@@ -193,8 +192,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.columnIndexes = columnIndexes;
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public boolean hasNext() {
           if (currentRow < numRowsInBatch) {
             return true;
@@ -223,8 +220,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           return unsafeRow;
         }
 
-        ${ctx.initNestedClasses()}
-        ${ctx.declareNestedClasses()}
+        ${ctx.declareAddedFunctions()}
       }"""
 
     val code = CodeFormatter.stripOverlappingComments(

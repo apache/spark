@@ -22,11 +22,18 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 
 /**
+<<<<<<< HEAD
  * LinearSVCAggregator computes the gradient and loss for loss function ("hinge" or
  * "squared_hinge", as used in binary classification for instances in sparse or dense
  * vector in an online fashion.
  *
  * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
+=======
+ * HingeAggregator computes the gradient and loss for Hinge loss function as used in
+ * binary classification for instances in sparse or dense vector in an online fashion.
+ *
+ * Two HingeAggregators can be merged together to have a summary of loss and gradient of
+>>>>>>> upstream/master
  * the corresponding joint dataset.
  *
  * This class standardizes feature values during computation using bcFeaturesStd.
@@ -50,6 +57,7 @@ private[ml] class HingeAggregator(
   protected override val dim: Int = numFeaturesPlusIntercept
 
   /**
+<<<<<<< HEAD
    * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
    * of the objective function.
    *
@@ -58,6 +66,19 @@ private[ml] class HingeAggregator(
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
+=======
+   * Add a new training instance to this HingeAggregator, and update the loss and gradient
+   * of the objective function.
+   *
+   * @param instance The instance of data point to be added.
+   * @return This HingeAggregator object.
+   */
+  def add(instance: Instance): this.type = {
+    instance match { case Instance(label, weight, features) =>
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
+>>>>>>> upstream/master
 
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value

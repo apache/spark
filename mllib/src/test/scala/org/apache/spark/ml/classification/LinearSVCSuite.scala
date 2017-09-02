@@ -25,8 +25,13 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+<<<<<<< HEAD
 import org.apache.spark.ml.optim.aggregator.SquaredHingeAggregator
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
+=======
+import org.apache.spark.ml.optim.aggregator.HingeAggregator
+import org.apache.spark.ml.param.ParamsSuite
+>>>>>>> upstream/master
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -187,10 +192,14 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(model2.intercept !== 0.0)
   }
 
-  test("sparse coefficients in SVCAggregator") {
+  test("sparse coefficients in HingeAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
+<<<<<<< HEAD
     val agg = new SquaredHingeAggregator(bcFeaturesStd, true)(bcCoefficients)
+=======
+    val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
+>>>>>>> upstream/master
     val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))

@@ -20,10 +20,13 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.{Column, Dataset, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.{Add, Literal, Stack}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
+import org.apache.spark.sql.execution.joins.SortMergeJoinExec
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions.{avg, broadcast, col, max}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
@@ -126,5 +129,81 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
       .selectExpr("named_struct('a', id, 'b', id) as col1",
         "named_struct('a',id+2, 'b',id+2) as col2")
       .filter("col1 = col2").count()
+  }
+
+  test("SPARK-21441 SortMergeJoin codegen with CodegenFallback expressions should be disabled") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
+      import testImplicits._
+
+      val df1 = Seq((1, 1), (2, 2), (3, 3)).toDF("key", "int")
+      val df2 = Seq((1, "1"), (2, "2"), (3, "3")).toDF("key", "str")
+
+      val df = df1.join(df2, df1("key") === df2("key"))
+        .filter("int = 2 or reflect('java.lang.Integer', 'valueOf', str) = 1")
+        .select("int")
+
+      val plan = df.queryExecution.executedPlan
+      assert(!plan.find(p =>
+        p.isInstanceOf[WholeStageCodegenExec] &&
+          p.asInstanceOf[WholeStageCodegenExec].child.children(0)
+            .isInstanceOf[SortMergeJoinExec]).isDefined)
+      assert(df.collect() === Array(Row(1), Row(2)))
+    }
+  }
+
+  def genGroupByCodeGenContext(caseNum: Int): CodegenContext = {
+    val caseExp = (1 to caseNum).map { i =>
+      s"case when id > $i and id <= ${i + 1} then 1 else 0 end as v$i"
+    }.toList
+    val keyExp = List(
+      "id",
+      "(id & 1023) as k1",
+      "cast(id & 1023 as double) as k2",
+      "cast(id & 1023 as int) as k3")
+
+    val ds = spark.range(10)
+      .selectExpr(keyExp:::caseExp: _*)
+      .groupBy("k1", "k2", "k3")
+      .sum()
+    val plan = ds.queryExecution.executedPlan
+
+    val wholeStageCodeGenExec = plan.find(p => p match {
+      case wp: WholeStageCodegenExec => wp.child match {
+        case hp: HashAggregateExec if (hp.child.isInstanceOf[ProjectExec]) => true
+        case _ => false
+      }
+      case _ => false
+    })
+
+    assert(wholeStageCodeGenExec.isDefined)
+    wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._1
+  }
+
+  test("SPARK-21603 check there is a too long generated function") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "1500") {
+      val ctx = genGroupByCodeGenContext(30)
+      assert(ctx.isTooLongGeneratedFunction === true)
+    }
+  }
+
+  test("SPARK-21603 check there is not a too long generated function") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "1500") {
+      val ctx = genGroupByCodeGenContext(1)
+      assert(ctx.isTooLongGeneratedFunction === false)
+    }
+  }
+
+  test("SPARK-21603 check there is not a too long generated function when threshold is Int.Max") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString) {
+      val ctx = genGroupByCodeGenContext(30)
+      assert(ctx.isTooLongGeneratedFunction === false)
+    }
+  }
+
+  test("SPARK-21603 check there is a too long generated function when threshold is 0") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "0") {
+      val ctx = genGroupByCodeGenContext(1)
+      assert(ctx.isTooLongGeneratedFunction === true)
+    }
   }
 }

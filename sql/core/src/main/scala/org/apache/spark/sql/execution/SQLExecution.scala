@@ -22,14 +22,11 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
-  SparkListenerSQLExecutionStart}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd, SparkListenerSQLExecutionStart}
 
 object SQLExecution {
 
   val EXECUTION_ID_KEY = "spark.sql.execution.id"
-
-  private val IGNORE_NESTED_EXECUTION_ID = "spark.sql.execution.ignoreNestedExecutionId"
 
   private val _nextExecutionId = new AtomicLong(0)
 
@@ -45,10 +42,8 @@ object SQLExecution {
 
   private[sql] def checkSQLExecutionId(sparkSession: SparkSession): Unit = {
     val sc = sparkSession.sparkContext
-    val isNestedExecution = sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID) != null
-    val hasExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY) != null
     // only throw an exception during tests. a missing execution ID should not fail a job.
-    if (testing && !isNestedExecution && !hasExecutionId) {
+    if (testing && sc.getLocalProperty(EXECUTION_ID_KEY) == null) {
       // Attention testers: when a test fails with this exception, it means that the action that
       // started execution of a query didn't call withNewExecutionId. The execution ID should be
       // set by calling withNewExecutionId in the action that begins execution, like
@@ -66,56 +61,27 @@ object SQLExecution {
       queryExecution: QueryExecution)(body: => T): T = {
     val sc = sparkSession.sparkContext
     val oldExecutionId = sc.getLocalProperty(EXECUTION_ID_KEY)
-    if (oldExecutionId == null) {
-      val executionId = SQLExecution.nextExecutionId
-      sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
-      executionIdToQueryExecution.put(executionId, queryExecution)
-      try {
-        // sparkContext.getCallSite() would first try to pick up any call site that was previously
-        // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
-        // streaming queries would give us call site like "run at <unknown>:0"
-        val callSite = sparkSession.sparkContext.getCallSite()
+    val executionId = SQLExecution.nextExecutionId
+    sc.setLocalProperty(EXECUTION_ID_KEY, executionId.toString)
+    executionIdToQueryExecution.put(executionId, queryExecution)
+    try {
+      // sparkContext.getCallSite() would first try to pick up any call site that was previously
+      // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
+      // streaming queries would give us call site like "run at <unknown>:0"
+      val callSite = sparkSession.sparkContext.getCallSite()
 
-        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
-          executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
-          SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
-        try {
-          body
-        } finally {
-          sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
-            executionId, System.currentTimeMillis()))
-        }
-      } finally {
-        executionIdToQueryExecution.remove(executionId)
-        sc.setLocalProperty(EXECUTION_ID_KEY, null)
-      }
-    } else if (sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID) != null) {
-      // If `IGNORE_NESTED_EXECUTION_ID` is set, just ignore the execution id while evaluating the
-      // `body`, so that Spark jobs issued in the `body` won't be tracked.
+      sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionStart(
+        executionId, callSite.shortForm, callSite.longForm, queryExecution.toString,
+        SparkPlanInfo.fromSparkPlan(queryExecution.executedPlan), System.currentTimeMillis()))
       try {
-        sc.setLocalProperty(EXECUTION_ID_KEY, null)
         body
       } finally {
-        sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
+        sparkSession.sparkContext.listenerBus.post(SparkListenerSQLExecutionEnd(
+          executionId, System.currentTimeMillis()))
       }
-    } else {
-      // Don't support nested `withNewExecutionId`. This is an example of the nested
-      // `withNewExecutionId`:
-      //
-      // class DataFrame {
-      //   def foo: T = withNewExecutionId { something.createNewDataFrame().collect() }
-      // }
-      //
-      // Note: `collect` will call withNewExecutionId
-      // In this case, only the "executedPlan" for "collect" will be executed. The "executedPlan"
-      // for the outer DataFrame won't be executed. So it's meaningless to create a new Execution
-      // for the outer DataFrame. Even if we track it, since its "executedPlan" doesn't run,
-      // all accumulator metrics will be 0. It will confuse people if we show them in Web UI.
-      //
-      // A real case is the `DataFrame.count` method.
-      throw new IllegalArgumentException(s"$EXECUTION_ID_KEY is already set, please wrap your " +
-        "action with SQLExecution.ignoreNestedExecutionId if you don't want to track the Spark " +
-        "jobs issued by the nested execution.")
+    } finally {
+      executionIdToQueryExecution.remove(executionId)
+      sc.setLocalProperty(EXECUTION_ID_KEY, oldExecutionId)
     }
   }
 
@@ -131,22 +97,6 @@ object SQLExecution {
       body
     } finally {
       sc.setLocalProperty(SQLExecution.EXECUTION_ID_KEY, oldExecutionId)
-    }
-  }
-
-  /**
-   * Wrap an action which may have nested execution id. This method can be used to run an execution
-   * inside another execution, e.g., `CacheTableCommand` need to call `Dataset.collect`. Note that,
-   * all Spark jobs issued in the body won't be tracked in UI.
-   */
-  def ignoreNestedExecutionId[T](sparkSession: SparkSession)(body: => T): T = {
-    val sc = sparkSession.sparkContext
-    val allowNestedPreviousValue = sc.getLocalProperty(IGNORE_NESTED_EXECUTION_ID)
-    try {
-      sc.setLocalProperty(IGNORE_NESTED_EXECUTION_ID, "true")
-      body
-    } finally {
-      sc.setLocalProperty(IGNORE_NESTED_EXECUTION_ID, allowNestedPreviousValue)
     }
   }
 }

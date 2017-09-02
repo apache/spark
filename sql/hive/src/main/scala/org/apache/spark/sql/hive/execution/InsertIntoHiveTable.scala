@@ -27,22 +27,22 @@ import scala.util.control.NonFatal
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
-import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.ErrorMsg
+import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.command.{CommandUtils, DataWritingCommand}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.sql.hive.client.{HiveClientImpl, HiveVersion}
-import org.apache.spark.SparkException
 
 
 /**
@@ -80,7 +80,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends RunnableCommand {
+    ifPartitionNotExists: Boolean) extends DataWritingCommand {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
@@ -335,8 +335,7 @@ case class InsertIntoHiveTable(
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
-      outputPath = tmpLocation.toString,
-      isAppend = false)
+      outputPath = tmpLocation.toString)
 
     val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
       query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
@@ -354,7 +353,7 @@ case class InsertIntoHiveTable(
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
-      refreshFunction = _ => (),
+      statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
 
     if (partition.nonEmpty) {
@@ -424,7 +423,13 @@ case class InsertIntoHiveTable(
     // Attempt to delete the staging directory and the inclusive files. If failed, the files are
     // expected to be dropped at the normal termination of VM since deleteOnExit is used.
     try {
-      createdTempDir.foreach { path => path.getFileSystem(hadoopConf).delete(path, true) }
+      createdTempDir.foreach { path =>
+        val fs = path.getFileSystem(hadoopConf)
+        if (fs.delete(path, true)) {
+          // If we successfully delete the staging directory, remove it from FileSystem's cache.
+          fs.cancelDeleteOnExit(path)
+        }
+      }
     } catch {
       case NonFatal(e) =>
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
@@ -433,6 +438,8 @@ case class InsertIntoHiveTable(
     // un-cache this table.
     sparkSession.catalog.uncacheTable(table.identifier.quotedString)
     sparkSession.sessionState.catalog.refreshTable(table.identifier)
+
+    CommandUtils.updateTableStats(sparkSession, table)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

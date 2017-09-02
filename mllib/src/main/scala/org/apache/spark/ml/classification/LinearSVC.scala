@@ -30,7 +30,11 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
+<<<<<<< HEAD
 import org.apache.spark.ml.optim.aggregator.{HingeAggregator, SquaredHingeAggregator}
+=======
+import org.apache.spark.ml.optim.aggregator.HingeAggregator
+>>>>>>> upstream/master
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -44,6 +48,7 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
+<<<<<<< HEAD
   with HasAggregationDepth with HasSolver {
 
   /**
@@ -65,6 +70,9 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
   /** @group getParam */
   @Since("2.3.0")
   def getLoss: String = $(loss)
+=======
+  with HasAggregationDepth with HasThreshold {
+>>>>>>> upstream/master
 
   /**
    * Param for threshold in binary classification prediction.
@@ -75,11 +83,8 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
    *
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold",
+  final override val threshold: DoubleParam = new DoubleParam(this, "threshold",
     "threshold in binary classification prediction applied to rawPrediction")
-
-  /** @group getParam */
-  def getThreshold: Double = $(threshold)
 }
 
 /**
@@ -269,8 +274,23 @@ class LinearSVC @Since("2.2.0") (
       }
 
       val featuresStd = summarizer.variance.toArray.map(math.sqrt)
+      val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
+<<<<<<< HEAD
+=======
+      val regularization = if (regParamL2 != 0.0) {
+        val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
+        Some(new L2Regularization(regParamL2, shouldApply,
+          if ($(standardization)) None else Some(getFeaturesStd)))
+      } else {
+        None
+      }
+
+      val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
+      val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
+        $(aggregationDepth))
+>>>>>>> upstream/master
 
       val regularization = if (regParamL2 != 0.0) {
         val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
@@ -463,4 +483,7 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     }
   }
 }
+<<<<<<< HEAD
 
+=======
+>>>>>>> upstream/master
