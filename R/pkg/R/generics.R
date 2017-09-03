@@ -769,6 +769,10 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
 
+#' @rdname unionByName
+#' @export
+setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
+
 #' @rdname unpersist
 #' @export
 setGeneric("unpersist", function(x, ...) { standardGeneric("unpersist") })
