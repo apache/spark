@@ -25,13 +25,8 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
 import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
-<<<<<<< HEAD
-import org.apache.spark.ml.optim.aggregator.SquaredHingeAggregator
-import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
-=======
-import org.apache.spark.ml.optim.aggregator.HingeAggregator
+import org.apache.spark.ml.optim.aggregator.{HingeAggregator, SquaredHingeAggregator}
 import org.apache.spark.ml.param.ParamsSuite
->>>>>>> upstream/master
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -114,7 +109,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val lsvc = new LinearSVC()
     assert(lsvc.getRegParam === 0.0)
     assert(lsvc.getMaxIter === 100)
-    assert(lsvc.getLoss === "squared_hinge")
     assert(lsvc.getFitIntercept)
     assert(lsvc.getTol === 1E-6)
     assert(lsvc.getStandardization)
@@ -126,11 +120,11 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
     assert(lsvc.getSolver === "l-bfgs")
+    assert(lsvc.getLoss === "squared_hinge")
     val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
     model.transform(smallBinaryDataset)
       .select("label", "prediction", "rawPrediction")
       .collect()
-    assert(model.getLoss === "squared_hinge")
     assert(model.getThreshold === 0.0)
     assert(model.getFeaturesCol === "features")
     assert(model.getPredictionCol === "prediction")
@@ -195,11 +189,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("sparse coefficients in HingeAggregator") {
     val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
     val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-<<<<<<< HEAD
-    val agg = new SquaredHingeAggregator(bcFeaturesStd, true)(bcCoefficients)
-=======
     val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
->>>>>>> upstream/master
     val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
@@ -377,7 +367,6 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 object LinearSVCSuite {
 
   val allParamSettings: Map[String, Any] = Map(
-    "loss" -> "squared_hinge",
     "regParam" -> 0.01,
     "maxIter" -> 2,  // intentionally small
     "fitIntercept" -> true,
@@ -387,7 +376,8 @@ object LinearSVCSuite {
     "predictionCol" -> "myPredict",
     "rawPredictionCol" -> "myRawPredict",
     "aggregationDepth" -> 3,
-    "solver" -> "owlqn"
+    "solver" -> "owlqn",
+    "loss" -> "squared_hinge"
   )
 
   // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)

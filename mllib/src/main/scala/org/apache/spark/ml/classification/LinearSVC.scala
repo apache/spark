@@ -30,11 +30,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
-<<<<<<< HEAD
 import org.apache.spark.ml.optim.aggregator.{HingeAggregator, SquaredHingeAggregator}
-=======
-import org.apache.spark.ml.optim.aggregator.HingeAggregator
->>>>>>> upstream/master
 import org.apache.spark.ml.optim.loss.{L2Regularization, RDDLossFunction}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -48,8 +44,7 @@ import org.apache.spark.sql.functions.{col, lit}
 /** Params for linear SVM Classifier. */
 private[classification] trait LinearSVCParams extends ClassifierParams with HasRegParam
   with HasMaxIter with HasFitIntercept with HasTol with HasStandardization with HasWeightCol
-<<<<<<< HEAD
-  with HasAggregationDepth with HasSolver {
+  with HasAggregationDepth with HasThreshold with HasSolver {
 
   /**
    * Specifies the loss function. Currently "hinge" and "squared_hinge" are supported.
@@ -65,14 +60,10 @@ private[classification] trait LinearSVCParams extends ClassifierParams with HasR
     "function. hinge is the standard SVM loss while squared_hinge is the square of the hinge loss.",
     (s: String) => LinearSVC.supportedLoss.contains(s.toLowerCase(Locale.ROOT)))
 
-  setDefault(loss -> "squared_hinge")
-
   /** @group getParam */
   @Since("2.3.0")
   def getLoss: String = $(loss)
-=======
-  with HasAggregationDepth with HasThreshold {
->>>>>>> upstream/master
+
 
   /**
    * Param for threshold in binary classification prediction.
@@ -201,6 +192,7 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.3.0")
   def setLoss(value: String): this.type = set(loss, value)
+  setDefault(loss -> "squared_hinge")
 
   /**
    * Set solver for LinearSVC. Supported options: "l-bfgs" and "owlqn" (case insensitve).
@@ -277,25 +269,10 @@ class LinearSVC @Since("2.2.0") (
       val getFeaturesStd = (j: Int) => featuresStd(j)
       val regParamL2 = $(regParam)
       val bcFeaturesStd = instances.context.broadcast(featuresStd)
-<<<<<<< HEAD
-=======
       val regularization = if (regParamL2 != 0.0) {
         val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
         Some(new L2Regularization(regParamL2, shouldApply,
           if ($(standardization)) None else Some(getFeaturesStd)))
-      } else {
-        None
-      }
-
-      val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
-      val costFun = new RDDLossFunction(instances, getAggregatorFunc, regularization,
-        $(aggregationDepth))
->>>>>>> upstream/master
-
-      val regularization = if (regParamL2 != 0.0) {
-        val shouldApply = (idx: Int) => idx >= 0 && idx < numFeatures
-        Some(new L2Regularization(regParamL2, shouldApply,
-          if ($(standardization)) None else Some(featuresStd)))
       } else {
         None
       }
@@ -483,7 +460,3 @@ object LinearSVCModel extends MLReadable[LinearSVCModel] {
     }
   }
 }
-<<<<<<< HEAD
-
-=======
->>>>>>> upstream/master

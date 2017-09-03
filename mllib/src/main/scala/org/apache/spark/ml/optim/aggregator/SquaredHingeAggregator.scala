@@ -22,11 +22,10 @@ import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 
 /**
- * LinearSVCAggregator computes the gradient and loss for loss function ("hinge" or
- * "squared_hinge", as used in binary classification for instances in sparse or dense
- * vector in an online fashion.
+ * SquaredHingeAggregator computes the gradient and loss for squared Hinge loss function, as used in
+ * binary classification for instances in sparse or dense vector in an online fashion.
  *
- * Two LinearSVCAggregator can be merged together to have a summary of loss and gradient of
+ * Two SquaredHingeAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
  *
  * This class standardizes feature values during computation using bcFeaturesStd.
@@ -50,14 +49,17 @@ private[ml] class SquaredHingeAggregator(
   protected override val dim: Int = numFeaturesPlusIntercept
 
   /**
-   * Add a new training instance to this LinearSVCAggregator, and update the loss and gradient
+   * Add a new training instance to this SquaredHingeAggregator, and update the loss and gradient
    * of the objective function.
    *
    * @param instance The instance of data point to be added.
-   * @return This LinearSVCAggregator object.
+   * @return This SquaredHingeAggregator object.
    */
   def add(instance: Instance): this.type = {
     instance match { case Instance(label, weight, features) =>
+      require(numFeatures == features.size, s"Dimensions mismatch when adding new instance." +
+        s" Expecting $numFeatures but got ${features.size}.")
+      require(weight >= 0.0, s"instance weight, $weight has to be >= 0.0")
 
       if (weight == 0.0) return this
       val localFeaturesStd = bcFeaturesStd.value
@@ -74,8 +76,8 @@ private[ml] class SquaredHingeAggregator(
         if (fitIntercept) sum += localCoefficients(numFeaturesPlusIntercept - 1)
         sum
       }
-      // Our loss function with {0, 1} labels is max(0, 1 - (2y - 1) (f_w(x)))
-      // Therefore the gradient is -(2y - 1)*x
+      // Our loss function with {0, 1} labels is (max(0, 1 - (2y - 1) (f_w(x))))^2
+      // Therefore the gradient is 2 * ((2y - 1) f_w(x) - 1) * (2y - 1) * x
       val labelScaled = 2 * label - 1.0
       val loss = if (1.0 > labelScaled * dotProduct) {
         val hingeLoss = 1.0 - labelScaled * dotProduct
@@ -85,7 +87,7 @@ private[ml] class SquaredHingeAggregator(
       }
 
       if (1.0 > labelScaled * dotProduct) {
-        val gradientScale = (labelScaled * dotProduct - 1) * labelScaled * 2
+        val gradientScale = (labelScaled * dotProduct - 1) * labelScaled * 2 * weight
         features.foreachActive { (index, value) =>
           if (localFeaturesStd(index) != 0.0 && value != 0.0) {
             localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)

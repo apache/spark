@@ -22,7 +22,7 @@ import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
+class SquaredHingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import DifferentiableLossAggregatorSuite.getClassificationSummarizers
 
@@ -49,44 +49,44 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     )
   }
 
-   /** Get summary statistics for some data and create a new HingeAggregator. */
+   /** Get summary statistics for some data and create a new SquaredHingeAggregator. */
   private def getNewAggregator(
       instances: Array[Instance],
       coefficients: Vector,
-      fitIntercept: Boolean): HingeAggregator = {
+      fitIntercept: Boolean): SquaredHingeAggregator = {
     val (featuresSummarizer, ySummarizer) =
       DifferentiableLossAggregatorSuite.getClassificationSummarizers(instances)
     val featuresStd = featuresSummarizer.variance.toArray.map(math.sqrt)
     val bcFeaturesStd = spark.sparkContext.broadcast(featuresStd)
     val bcCoefficients = spark.sparkContext.broadcast(coefficients)
-    new HingeAggregator(bcFeaturesStd, fitIntercept)(bcCoefficients)
+    new SquaredHingeAggregator(bcFeaturesStd, fitIntercept)(bcCoefficients)
   }
 
-  test("aggregator add method input size") {
+  test("SquaredHingeAggregator check add method input size") {
     val coefArray = Array(1.0, 2.0)
     val interceptArray = Array(2.0)
     val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ interceptArray),
       fitIntercept = true)
-    withClue("HingeAggregator features dimension must match coefficients dimension") {
+    withClue("SquaredHingeAggregator features dimension must match coefficients dimension") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, 1.0, Vectors.dense(2.0)))
       }
     }
   }
 
-  test("negative weight") {
+  test("SquaredHingeAggregator negative weight") {
     val coefArray = Array(1.0, 2.0)
     val interceptArray = Array(2.0)
     val agg = getNewAggregator(instances, Vectors.dense(coefArray ++ interceptArray),
       fitIntercept = true)
-    withClue("HingeAggregator does not support negative instance weights") {
+    withClue("SquaredHingeAggregator does not support negative instance weights") {
       intercept[IllegalArgumentException] {
         agg.add(Instance(1.0, -1.0, Vectors.dense(2.0, 1.0)))
       }
     }
   }
 
-  test("check sizes") {
+  test("SquaredHingeAggregator check sizes") {
     val rng = new scala.util.Random
     val numFeatures = instances.head.features.size
     val coefWithIntercept = Vectors.dense(Array.fill(numFeatures + 1)(rng.nextDouble))
@@ -101,7 +101,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(aggNoIntercept.gradient.size === numFeatures)
   }
 
-  test("check correctness") {
+  test("SquaredHingeAggregator check correctness") {
     val coefArray = Array(1.0, 2.0)
     val intercept = 1.0
     val numFeatures = instances.head.features.size
@@ -119,7 +119,8 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       val margin = BLAS.dot(Vectors.dense(stdCoef), f) + intercept
       val labelScaled = 2 * l - 1.0
       if (1.0 > labelScaled * margin) {
-        (1.0 - labelScaled * margin) * w
+        val hingeLoss = 1.0 - labelScaled * margin
+        hingeLoss * hingeLoss * w
       } else {
         0.0
       }
@@ -132,10 +133,11 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     instances.foreach { case Instance(l, w, f) =>
       val margin = BLAS.dot(f, Vectors.dense(stdCoef)) + intercept
       if (1.0 > (2 * l - 1.0) * margin) {
+        val gradientScale = ((2 * l - 1) * margin - 1) * (2 * l - 1) * 2
         gradientCoef.indices.foreach { i =>
-          gradientCoef(i) += f(i) * -(2 * l - 1.0) * w / featuresStd(i)
+          gradientCoef(i) += f(i) * gradientScale * w / featuresStd(i)
         }
-        gradientIntercept += -(2 * l - 1.0) * w
+        gradientIntercept += gradientScale * w
       }
     }
     val gradient = Vectors.dense((gradientCoef ++ Array(gradientIntercept)).map(_ / weightSum))
@@ -152,7 +154,7 @@ class HingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
     instancesConstantFeature.foreach(aggConstantFeatureBinary.add)
 
     val aggConstantFeatureBinaryFiltered = getNewAggregator(instancesConstantFeatureFiltered,
-      Vectors.dense(binaryCoefArray ++ Array(intercept)), fitIntercept = true)
+      Vectors.dense(binaryCoefArray.tail ++ Array(intercept)), fitIntercept = true)
     instancesConstantFeatureFiltered.foreach(aggConstantFeatureBinaryFiltered.add)
 
     // constant features should not affect gradient

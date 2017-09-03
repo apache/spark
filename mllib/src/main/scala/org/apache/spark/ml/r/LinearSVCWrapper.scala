@@ -80,12 +80,9 @@ private[r] object LinearSVCWrapper
       threshold: Double,
       weightCol: String,
       aggregationDepth: Int,
-<<<<<<< HEAD
+      handleInvalid: String,
       solver: String,
       loss: String
-=======
-      handleInvalid: String
->>>>>>> upstream/master
       ): LinearSVCWrapper = {
 
     val rFormula = new RFormula()
