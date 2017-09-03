@@ -19,25 +19,17 @@ package org.apache.spark.sql.sources
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.LongWritable
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
-import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.OrcConf
-import org.apache.orc.mapred.OrcStruct
-import org.apache.orc.mapreduce.OrcInputFormat
-import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgumentFactory}
 
 import org.apache.spark.sql.{Dataset, QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
  * Data Source qualification as Apache Spark Data Sources.
- * - Apache Spark Data Type Value Limits
- * - Predicate Push Down
+ * - Apache Spark Data Type Value Limits: CSV, JSON, ORC, Parquet
+ * - Predicate Push Down: ORC
  */
 class DataSourceSuite
   extends QueryTest
@@ -84,18 +76,18 @@ class DataSourceSuite
 
   Seq("parquet", "orc", "json", "csv").foreach { dataSource =>
     test(s"$dataSource - data type value limit") {
-      withTempPath { tempDir =>
-        df.write.format(dataSource).save(tempDir.getCanonicalPath)
+      withTempPath { dir =>
+        df.write.format(dataSource).save(dir.getCanonicalPath)
 
         // Use the same schema for saving/loading
         checkAnswer(
-          spark.read.format(dataSource).schema(df.schema).load(tempDir.getCanonicalPath),
+          spark.read.format(dataSource).schema(df.schema).load(dir.getCanonicalPath),
           df)
 
         // Use schema inference, but skip text-based format due to its limitation
         if (Seq("parquet", "orc").contains(dataSource)) {
           withTable("tab1") {
-            sql(s"CREATE TABLE tab1 USING $dataSource LOCATION '${tempDir.toURI}'")
+            sql(s"CREATE TABLE tab1 USING $dataSource LOCATION '${dir.toURI}'")
             checkAnswer(sql(s"SELECT ${df.schema.fieldNames.mkString(",")} FROM tab1"), df)
           }
         }
@@ -103,43 +95,31 @@ class DataSourceSuite
     }
   }
 
-  test("orc - predicate push down") {
-    withTempDir { dir =>
-      dir.delete()
+  Seq("orc").foreach { dataSource =>
+    test(s"$dataSource - predicate push down") {
+      withSQLConf(
+        SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+        withTempPath { dir =>
+          // write 4000 rows with the integer and the string in a single orc file with stride 1000
+          spark
+            .range(4000)
+            .map(i => (i, s"$i"))
+            .toDF("i", "s")
+            .repartition(1)
+            .write
+            .option(OrcConf.ROW_INDEX_STRIDE.getAttribute, 1000)
+            // TODO: Add Parquet option, too.
+            .format(dataSource)
+            .save(dir.getCanonicalPath)
 
-      // write 4000 rows with the integer and the string in a single orc file
-      spark
-        .range(4000)
-        .map(i => (i, s"$i"))
-        .toDF("i", "s")
-        .repartition(1)
-        .write
-        .option(OrcConf.ROW_INDEX_STRIDE.getAttribute, 1000)
-        .orc(dir.getCanonicalPath)
-      val fileName = dir.list().find(_.endsWith(".orc"))
-      assert(fileName.isDefined)
-
-      // Predicate Push-down: BETWEEN 1500 AND 1999
-      val conf = new JobConf()
-      val id = new TaskAttemptID("jt", 0, TaskType.MAP, 0, 0)
-      val attemptContext = new TaskAttemptContextImpl(conf, id)
-      OrcInputFormat.setSearchArgument(conf,
-        SearchArgumentFactory.newBuilder()
-          .between("i", PredicateLeaf.Type.LONG, 1500L, 1999L)
-          .build(), Array[String](null, "i", "s"))
-      val path = new Path(dir.getCanonicalPath, fileName.get)
-      val split = new FileSplit(path, 0, Int.MaxValue, Array[String]())
-      val reader = new OrcInputFormat[OrcStruct]().createRecordReader(split, attemptContext)
-
-      // the sarg should cause it to skip over the rows except 1000 to 2000
-      for(r <- 1000 until 2000) {
-        assert(reader.nextKeyValue())
-        val row = reader.getCurrentValue
-        assert(r == row.getFieldValue(0).asInstanceOf[LongWritable].get)
-        assert(r.toString == row.getFieldValue(1).toString)
+          val df = spark.read.format(dataSource).load(dir.getCanonicalPath)
+            .where(s"i BETWEEN 1500 AND 1999")
+          // skip over the rows except 1000 to 2000
+          val answer = spark.range(1000, 2000).map(i => (i, s"$i")).toDF("i", "s")
+          checkAnswer(stripSparkFilter(df), answer)
+        }
       }
-      assert(!reader.nextKeyValue())
-      reader.close()
     }
   }
 }
