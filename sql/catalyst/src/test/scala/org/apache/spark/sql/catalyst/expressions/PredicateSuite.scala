@@ -123,7 +123,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, null) ::
       (null, null, null) :: Nil)
 
-  test("IN") {
+  test("basic IN predicate test") {
     checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
       Literal(2))), null)
     checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType),
@@ -151,29 +151,63 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
 
-    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
-      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.foreach { t =>
-      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
-      val inputData = Seq.fill(10) {
-        val value = dataGen.apply()
-        value match {
-          case d: Double if d.isNaN => 0.0d
-          case f: Float if f.isNaN => 0.0f
-          case _ => value
+  }
+
+  test("IN with different types") {
+    def testWithRandomDataGeneration(dataType: DataType, nullable: Boolean): Unit = {
+      val dataGen = RandomDataGenerator.forType(dataType, nullable = nullable)
+      if (dataGen.isDefined) {
+        val inputData = Seq.fill(10) {
+          val value = dataGen.get.apply()
+          value match {
+            case d: Double if d.isNaN => 0.0d
+            case f: Float if f.isNaN => 0.0f
+            case _ => value
+          }
         }
+        val input = inputData.map(NonFoldableLiteral.create(_, dataType))
+        val expected = if (inputData(0) == null) {
+          null
+        } else if (inputData.slice(1, 10).contains(inputData(0))) {
+          true
+        } else if (inputData.slice(1, 10).contains(null)) {
+          null
+        } else {
+          false
+        }
+        checkEvaluation(In(input(0), input.slice(1, 10)), expected)
       }
-      val input = inputData.map(NonFoldableLiteral.create(_, t))
-      val expected = if (inputData(0) == null) {
-        null
-      } else if (inputData.slice(1, 10).contains(inputData(0))) {
-        true
-      } else if (inputData.slice(1, 10).contains(null)) {
-        null
-      } else {
-        false
-      }
-      checkEvaluation(In(input(0), input.slice(1, 10)), expected)
+    }
+
+    val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>
+      RandomDataGenerator.forType(t).isDefined && !t.isInstanceOf[DecimalType]
+    } ++ Seq(DecimalType.USER_DEFAULT)
+
+    val atomicArrayTypes = atomicTypes.map(ArrayType(_, containsNull = true))
+
+    // Basic types:
+    for (
+        dataType <- atomicTypes;
+        nullable <- Seq(true, false)) {
+      testWithRandomDataGeneration(dataType, nullable)
+    }
+
+    // Array types:
+    for (
+        arrayType <- atomicArrayTypes;
+        nullable <- Seq(true, false)
+        if RandomDataGenerator.forType(arrayType.elementType, arrayType.containsNull).isDefined) {
+      testWithRandomDataGeneration(arrayType, nullable)
+    }
+
+    // Struct types:
+    for (
+        colOneType <- atomicTypes;
+        colTwoType <- atomicTypes;
+        nullable <- Seq(true, false)) {
+      val structType = StructType(
+        StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
+      testWithRandomDataGeneration(structType, nullable)
     }
   }
 

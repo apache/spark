@@ -1,9 +1,3 @@
--- In
-select 1 in(1, 2, 3);
-select 1 in(2, 3, 4);
-select named_struct('a', 1, 'b', 2) in(named_struct('a', 1, 'b', 1), named_struct('a', 1, 'b', 3));
-select named_struct('a', 1, 'b', 2) in(named_struct('a', 1, 'b', 2), named_struct('a', 1, 'b', 3));
-
 -- EqualTo
 select 1 = 1;
 select 1 = '1';
