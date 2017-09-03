@@ -113,18 +113,19 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       }
     }
 
+    if (requiredSchema.length == 1 &&
+      requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      throw new AnalysisException(
+        s"""
+           |'${parsedOptions.columnNameOfCorruptRecord}' cannot be selected alone without other
+           |data columns. If you want to select corrupt records only, cache or save the Dataset
+           |before executing queries. For example:
+           |df.cache() then
+           |df.select("${parsedOptions.columnNameOfCorruptRecord}")
+         """.stripMargin.replaceAll(System.lineSeparator(), " "))
+    }
+
     (file: PartitionedFile) => {
-      if (actualSchema.isEmpty && requiredSchema.length == 1 &&
-        requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
-        throw new AnalysisException(
-          s"""
-             |'${parsedOptions.columnNameOfCorruptRecord}' must be selected along with input schema.
-             |If you want to select corrupt records only, cache or save the Dataset before executing queries.
-             |For example:
-             |df.cache()
-             |df.select("${parsedOptions.columnNameOfCorruptRecord}")
-         """.stripMargin)
-      }
       val parser = new JacksonParser(actualSchema, parsedOptions)
       JsonDataSource(parsedOptions).readFile(
         broadcastedHadoopConf.value.value,
