@@ -17,12 +17,14 @@
 
 package org.apache.spark.broadcast
 
+import java.io.IOException
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Utils
 
 private[spark] class BroadcastManager(
     val isDriver: Boolean,
@@ -32,6 +34,13 @@ private[spark] class BroadcastManager(
 
   private var initialized = false
   private var broadcastFactory: BroadcastFactory = null
+  private val maxRetries = {
+    if (Utils.getConfiguredLocalDirs(conf).length > 1) {
+      conf.getInt("spark.broadcast.maxRetries", 3)
+    } else {
+      1
+    }
+  }
 
   initialize()
 
@@ -53,7 +62,18 @@ private[spark] class BroadcastManager(
   private val nextBroadcastId = new AtomicLong(0)
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean): Broadcast[T] = {
-    broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
+    var lastException: Exception = null
+    for(attempt <- 1 to maxRetries) {
+      try {
+        return broadcastFactory.newBroadcast[T](value_, isLocal,
+          nextBroadcastId.getAndIncrement())
+      } catch {
+        case e: IOException =>
+          lastException = e
+          logWarning(s"Failed to create a new broadcast in $attempt attempts", e)
+      }
+    }
+    throw new SparkException(s"Error creating a new broadcast", lastException)
   }
 
   def unbroadcast(id: Long, removeFromDriver: Boolean, blocking: Boolean) {
