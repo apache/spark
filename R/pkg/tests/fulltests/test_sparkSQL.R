@@ -1118,7 +1118,7 @@ test_that("sample on a DataFrame", {
 
   # nolint start
   # Test base::sample is working
-  #expect_equal(length(sample(1:12)), 12)
+  expect_equal(length(sample(1:12)), 12)
   # nolint end
 })
 
