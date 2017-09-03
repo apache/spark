@@ -329,6 +329,8 @@ private[spark] class MemoryStore(
     val initialMemoryThreshold = unrollMemoryThreshold
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
+    // Memory to request as a multiple of current reserved size
+    val memoryGrowthFactor = 1.5
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
     val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
@@ -359,7 +361,7 @@ private[spark] class MemoryStore(
 
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
+        val amountToRequest = (bbos.size * memoryGrowthFactor - unrollMemoryUsedByThisBlock).toLong
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
@@ -375,10 +377,16 @@ private[spark] class MemoryStore(
 
     // Make sure that we have enough memory to store the block. By this point, it is possible that
     // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
-    // perform one final call to attempt to allocate additional memory if necessary.
+    // perform one final call to attempt to allocate additional memory if necessary. If the task
+    // reserved more memory than it needed, then release the extra memory that will not be used.
     if (keepUnrolling) {
       serializationStream.close()
-      reserveAdditionalMemoryIfNecessary()
+      if (bbos.size < unrollMemoryUsedByThisBlock) {
+        val excessUnrollMemory = unrollMemoryUsedByThisBlock - bbos.size
+        releaseUnrollMemoryForThisTask(memoryMode, excessUnrollMemory)
+      } else {
+        reserveAdditionalMemoryIfNecessary()
+      }
     }
 
     if (keepUnrolling) {
