@@ -39,11 +39,6 @@ private[ml] trait HasParallelism extends Params {
   /** @group expertGetParam */
   def getParallelism: Int = $(parallelism)
 
-  /** @group expertSetParam */
-  def setParallelism(value: Int): this.type = {
-    set(parallelism, value)
-  }
-
   private[ml] def getExecutionContext: ExecutionContext = {
     getParallelism match {
       case 1 =>
