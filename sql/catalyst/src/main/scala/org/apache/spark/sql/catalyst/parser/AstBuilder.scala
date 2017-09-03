@@ -196,9 +196,9 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     assert(ctx.children.size == 1)
 
     ctx.getChild(0) match {
-      case c if c. isInstanceOf[InsertIntoTableContext] =>
+      case c : InsertIntoTableContext =>
         withInsertIntoTable(c.asInstanceOf[InsertIntoTableContext], query)
-      case c if c.isInstanceOf[InsertOverwriteDirectoryContext] =>
+      case c : InsertOverwriteDirectoryContext =>
         withInsertOverwriteDirectory(c.asInstanceOf[InsertOverwriteDirectoryContext], query)
     }
   }
