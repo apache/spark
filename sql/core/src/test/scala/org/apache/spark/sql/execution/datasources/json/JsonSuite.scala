@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import java.io.{File, FileOutputStream, OutputStreamWriter, StringWriter}
+import java.io.{File, StringWriter}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.util.Locale
@@ -2039,24 +2039,14 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     "from a file") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val writer = new OutputStreamWriter(new FileOutputStream(path), StandardCharsets.UTF_8)
       val data =
         """{"field": 1}
           |{"field": 2}
           |{"field": "3"}""".stripMargin
-      writer.write(data)
-      writer.close()
-
-      val schema = new StructType()
-        .add("field", ByteType)
-        .add("_corrupt_record", StringType)
+      sparkContext.parallelize(data, 1).saveAsTextFile(path)
 
       val errMsg = intercept[SparkException] {
-        spark.read
-          .schema(schema)
-          .json(path)
-          .select("_corrupt_record")
-          .show()
+        spark.read.json(path).select("_corrupt_record").collect()
       }.getMessage
       assert(errMsg.contains("'_corrupt_record' must be selected along with input schema."))
     }

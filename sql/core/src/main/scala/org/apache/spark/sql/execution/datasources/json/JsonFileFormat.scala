@@ -119,7 +119,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
         throw new AnalysisException(
           s"""
              |'${parsedOptions.columnNameOfCorruptRecord}' must be selected along with input schema.
-             |If you want to select corrupt records only, cache DataFrame before executing queries.
+             |If you want to select corrupt records only, cache or save the Dataset before executing queries.
              |For example:
              |df.cache()
              |df.select("${parsedOptions.columnNameOfCorruptRecord}")
