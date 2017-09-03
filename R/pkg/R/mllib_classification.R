@@ -123,7 +123,8 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
             jobj <- callJStatic("org.apache.spark.ml.r.LinearSVCWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam), as.integer(maxIter),
                                 as.numeric(tol), as.logical(standardization), as.numeric(threshold),
-                                weightCol, as.integer(aggregationDepth), handleInvalid, solver, loss)
+                                weightCol, as.integer(aggregationDepth), handleInvalid, solver,
+                                loss)
             new("LinearSVCModel", jobj = jobj)
           })
 
