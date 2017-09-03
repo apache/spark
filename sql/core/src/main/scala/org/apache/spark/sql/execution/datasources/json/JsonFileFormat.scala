@@ -116,13 +116,13 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (requiredSchema.length == 1 &&
       requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
       throw new AnalysisException(
-        s"""
-           |'${parsedOptions.columnNameOfCorruptRecord}' cannot be selected alone without other
-           |data columns. If you want to select corrupt records only, cache or save the Dataset
-           |before executing queries. For example:
-           |df.cache() then
-           |df.select("${parsedOptions.columnNameOfCorruptRecord}")
-         """.stripMargin.replaceAll(System.lineSeparator(), " "))
+        s"'${parsedOptions.columnNameOfCorruptRecord}' cannot be selected alone without other " +
+        "data columns, because its content is completely derived from the data columns parsed.\n" +
+        "If you want to select corrupt records only, cache or save the Dataset " +
+        "before executing queries, as this parses all fields under the hood. For example: \n" +
+        "df.cache()\n" +
+        s"""df.select("${parsedOptions.columnNameOfCorruptRecord}")"""
+      )
     }
 
     (file: PartitionedFile) => {

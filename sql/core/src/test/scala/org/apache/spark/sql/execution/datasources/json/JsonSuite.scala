@@ -2043,7 +2043,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         """{"field": 1}
           |{"field": 2}
           |{"field": "3"}""".stripMargin
-      sparkContext.parallelize(Seq(data), 1).saveAsTextFile(path)
+      Seq(data).toDF().repartition(1).write.text(path)
 
       val schema = new StructType()
         .add("field", ByteType)
@@ -2053,7 +2053,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         spark.read.schema(schema).json(path).select("_corrupt_record").collect()
       }.getMessage
       assert(errMsg.contains(
-        "'_corrupt_record' cannot be selected alone without other data columns."))
+        "'_corrupt_record' cannot be selected alone without other data columns"))
     }
   }
 }
