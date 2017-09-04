@@ -14,15 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 import itertools
 import numpy as np
+
+from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java
 from pyspark.ml.param import Params, Param, TypeConverters
-from pyspark.ml.param.shared import HasSeed
+from pyspark.ml.param.shared import HasSeed, HasParallelism
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
@@ -170,7 +171,7 @@ class ValidatorParams(HasSeed):
         return java_estimator, java_epms, java_evaluator
 
 
-class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
+class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
     """
 
     K-fold cross validation performs model selection by splitting the dataset into a set of
@@ -193,7 +194,8 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+    ...     parallelism=2)
     >>> cvModel = cv.fit(dataset)
     >>> cvModel.avgMetrics[0]
     0.5
@@ -208,23 +210,23 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                 seed=None):
+                 seed=None, parallelism=1):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                 seed=None)
+                 seed=None, parallelism=1)
         """
         super(CrossValidator, self).__init__()
-        self._setDefault(numFolds=3)
+        self._setDefault(numFolds=3, parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("1.4.0")
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
-                  seed=None):
+                  seed=None, parallelism=1):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
-                  seed=None):
+                  seed=None, parallelism=1):
         Sets params for cross validator.
         """
         kwargs = self._input_kwargs
@@ -255,18 +257,23 @@ class CrossValidator(Estimator, ValidatorParams, MLReadable, MLWritable):
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
+
+        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+
         for i in range(nFolds):
             validateLB = i * h
             validateUB = (i + 1) * h
             condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
-            validation = df.filter(condition)
+            validation = df.filter(condition).cache()
             train = df.filter(~condition)
-            models = est.fit(train, epm)
-            for j in range(numModels):
-                model = models[j]
+
+            def singleTrain(index):
+                model = est.fit(train, epm[index])
                 # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, epm[j]))
-                metrics[j] += metric/nFolds
+                metric = eva.evaluate(model.transform(validation, epm[index]))
+                metrics[index] += metric/nFolds
+
+            pool.map(singleTrain, range(numModels))
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
@@ -427,7 +434,7 @@ class CrossValidatorModel(Model, ValidatorParams, MLReadable, MLWritable):
         return _java_obj
 
 
-class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
+class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadable, MLWritable):
     """
     .. note:: Experimental
 
@@ -448,7 +455,8 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
     >>> lr = LogisticRegression()
     >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
     >>> evaluator = BinaryClassificationEvaluator()
-    >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator,
+    ...     parallelism=2)
     >>> tvsModel = tvs.fit(dataset)
     >>> evaluator.evaluate(tvsModel.transform(dataset))
     0.8333...
@@ -461,23 +469,23 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
 
     @keyword_only
     def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                 seed=None):
+                 parallelism=1, seed=None):
         """
         __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                 seed=None)
+                 parallelism=1, seed=None)
         """
         super(TrainValidationSplit, self).__init__()
-        self._setDefault(trainRatio=0.75)
+        self._setDefault(trainRatio=0.75, parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @since("2.0.0")
     @keyword_only
     def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
-                  seed=None):
+                  parallelism=1, seed=None):
         """
         setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
-                  seed=None):
+                  parallelism=1, seed=None):
         Sets params for the train validation split.
         """
         kwargs = self._input_kwargs
@@ -508,13 +516,17 @@ class TrainValidationSplit(Estimator, ValidatorParams, MLReadable, MLWritable):
         df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
         condition = (df[randCol] >= tRatio)
-        validation = df.filter(condition)
-        train = df.filter(~condition)
-        models = est.fit(train, epm)
-        for j in range(numModels):
-            model = models[j]
-            metric = eva.evaluate(model.transform(validation, epm[j]))
-            metrics[j] += metric
+        validation = df.filter(condition).cache()
+        train = df.filter(~condition).cache()
+
+        def singleTrain(index):
+            model = est.fit(train, epm[index])
+            metric = eva.evaluate(model.transform(validation, epm[index]))
+            metrics[index] += metric
+
+        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+        pool.map(singleTrain, range(numModels))
+
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
         else:
