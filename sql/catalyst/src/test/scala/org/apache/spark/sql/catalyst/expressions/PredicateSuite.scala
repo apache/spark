@@ -123,7 +123,7 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
       (null, false, null) ::
       (null, null, null) :: Nil)
 
-  test("IN") {
+  test("basic IN predicate test") {
     checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType), Seq(Literal(1),
       Literal(2))), null)
     checkEvaluation(In(NonFoldableLiteral.create(null, IntegerType),
@@ -151,19 +151,32 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^Ba*n"))), true)
     checkEvaluation(In(Literal("^Ba*n"), Seq(Literal("aa"), Literal("^n"))), false)
 
-    val primitiveTypes = Seq(IntegerType, FloatType, DoubleType, StringType, ByteType, ShortType,
-      LongType, BinaryType, BooleanType, DecimalType.USER_DEFAULT, TimestampType)
-    primitiveTypes.foreach { t =>
-      val dataGen = RandomDataGenerator.forType(t, nullable = true).get
+  }
+
+  test("IN with different types") {
+    def testWithRandomDataGeneration(dataType: DataType, nullable: Boolean): Unit = {
+      val maybeDataGen = RandomDataGenerator.forType(dataType, nullable = nullable)
+      // Actually we won't pass in unsupported data types, this is a safety check.
+      val dataGen = maybeDataGen.getOrElse(
+        fail(s"Failed to create data generator for type $dataType"))
       val inputData = Seq.fill(10) {
         val value = dataGen.apply()
-        value match {
+        def cleanData(value: Any) = value match {
           case d: Double if d.isNaN => 0.0d
           case f: Float if f.isNaN => 0.0f
           case _ => value
         }
+        value match {
+          case s: Seq[_] => s.map(cleanData(_))
+          case m: Map[_, _] =>
+            val pair = m.unzip
+            val newKeys = pair._1.map(cleanData(_))
+            val newValues = pair._2.map(cleanData(_))
+            newKeys.zip(newValues).toMap
+          case _ => cleanData(value)
+        }
       }
-      val input = inputData.map(NonFoldableLiteral.create(_, t))
+      val input = inputData.map(NonFoldableLiteral.create(_, dataType))
       val expected = if (inputData(0) == null) {
         null
       } else if (inputData.slice(1, 10).contains(inputData(0))) {
@@ -174,6 +187,55 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
         false
       }
       checkEvaluation(In(input(0), input.slice(1, 10)), expected)
+    }
+
+    val atomicTypes = DataTypeTestUtils.atomicTypes.filter { t =>
+      RandomDataGenerator.forType(t).isDefined && !t.isInstanceOf[DecimalType]
+    } ++ Seq(DecimalType.USER_DEFAULT)
+
+    val atomicArrayTypes = atomicTypes.map(ArrayType(_, containsNull = true))
+
+    // Basic types:
+    for (
+        dataType <- atomicTypes;
+        nullable <- Seq(true, false)) {
+      testWithRandomDataGeneration(dataType, nullable)
+    }
+
+    // Array types:
+    for (
+        arrayType <- atomicArrayTypes;
+        nullable <- Seq(true, false)
+        if RandomDataGenerator.forType(arrayType.elementType, arrayType.containsNull).isDefined) {
+      testWithRandomDataGeneration(arrayType, nullable)
+    }
+
+    // Struct types:
+    for (
+        colOneType <- atomicTypes;
+        colTwoType <- atomicTypes;
+        nullable <- Seq(true, false)) {
+      val structType = StructType(
+        StructField("a", colOneType) :: StructField("b", colTwoType) :: Nil)
+      testWithRandomDataGeneration(structType, nullable)
+    }
+
+    // Map types: not supported
+    for (
+        keyType <- atomicTypes;
+        valueType <- atomicTypes;
+        nullable <- Seq(true, false)) {
+      val mapType = MapType(keyType, valueType)
+      val e = intercept[Exception] {
+        testWithRandomDataGeneration(mapType, nullable)
+      }
+      if (e.getMessage.contains("Code generation of")) {
+        // If the `value` expression is null, `eval` will be short-circuited.
+        // Codegen version evaluation will be run then.
+        assert(e.getMessage.contains("cannot generate equality code for un-comparable type"))
+      } else {
+        assert(e.getMessage.contains("Exception evaluating"))
+      }
     }
   }
 
