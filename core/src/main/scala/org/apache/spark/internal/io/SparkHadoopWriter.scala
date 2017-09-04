@@ -112,11 +112,12 @@ object SparkHadoopWriter extends Logging {
       jobTrackerId, sparkStageId, sparkPartitionId, sparkAttemptNumber)
     committer.setupTask(taskContext)
 
-    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
-
     // Initiate the writer.
     config.initWriter(taskContext, sparkPartitionId)
     var recordsWritten = 0L
+    
+    // Initialize callback function after the writer.
+    val (outputMetrics, callback) = initHadoopOutputMetrics(context)
 
     // Write all rows in RDD partition.
     try {
