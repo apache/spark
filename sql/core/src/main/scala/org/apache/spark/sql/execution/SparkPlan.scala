@@ -56,10 +56,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   protected def sparkContext = sqlContext.sparkContext
 
-  // whether we should fallback when hitting compilation errors caused by codegen
-  private val codeGenFallBack = sqlContext.conf.codegenFallback
+  // sqlContext will be null when SparkPlan nodes are created without the active sessions.
+  // So far, this only happens in the test cases.
+  val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
+    sqlContext.conf.subexpressionEliminationEnabled
+  } else {
+    false
+  }
 
-  protected val subexpressionEliminationEnabled = sqlContext.conf.subexpressionEliminationEnabled
+  // whether we should fallback when hitting compilation errors caused by codegen
+  private val codeGenFallBack = (sqlContext == null) || sqlContext.conf.codegenFallback
 
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
