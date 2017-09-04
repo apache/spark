@@ -39,7 +39,8 @@ import org.apache.spark.storage.StorageLevel
  * Params for isotonic regression.
  */
 private[regression] trait IsotonicRegressionBase extends Params with HasFeaturesCol
-  with HasLabelCol with HasPredictionCol with HasWeightCol with Logging {
+  with HasLabelCol with HasPredictionCol with HasWeightCol with HasHandlePersistence
+  with Logging {
 
   /**
    * Param for whether the output sequence should be isotonic/increasing (true) or
@@ -157,6 +158,10 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
   @Since("1.5.0")
   def setFeatureIndex(value: Int): this.type = set(featureIndex, value)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
+
   @Since("1.5.0")
   override def copy(extra: ParamMap): IsotonicRegression = defaultCopy(extra)
 
@@ -165,8 +170,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     transformSchema(dataset.schema, logging = true)
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val instances = extractWeightedLabeledPoints(dataset)
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+    if ($(handlePersistence)) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, weightCol, predictionCol, featureIndex, isotonic)
@@ -175,7 +179,7 @@ class IsotonicRegression @Since("1.5.0") (@Since("1.5.0") override val uid: Stri
     val isotonicRegression = new MLlibIsotonicRegression().setIsotonic($(isotonic))
     val oldModel = isotonicRegression.run(instances)
 
-    if (handlePersistence) instances.unpersist()
+    if ($(handlePersistence)) instances.unpersist()
 
     val model = copyValues(new IsotonicRegressionModel(uid, oldModel).setParent(this))
     instr.logSuccess(model)

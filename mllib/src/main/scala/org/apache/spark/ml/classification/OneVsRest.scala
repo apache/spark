@@ -32,7 +32,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-import org.apache.spark.ml.param.shared.HasWeightCol
+import org.apache.spark.ml.param.shared.{HasHandlePersistence, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -53,7 +53,7 @@ private[ml] trait ClassifierTypeTrait {
  * Params for [[OneVsRest]].
  */
 private[ml] trait OneVsRestParams extends PredictorParams
-  with ClassifierTypeTrait with HasWeightCol {
+  with ClassifierTypeTrait with HasWeightCol with HasHandlePersistence {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
@@ -65,6 +65,10 @@ private[ml] trait OneVsRestParams extends PredictorParams
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
 }
 
 private[ml] object OneVsRestParams extends ClassifierTypeTrait {
@@ -161,9 +165,9 @@ final class OneVsRestModel private[ml] (
     val initUDF = udf { () => Map[Int, Double]() }
     val newDataset = dataset.withColumn(accColName, initUDF())
 
-    // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+    if ($(handlePersistence)) {
+      newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     // update the accumulator column with the result of prediction of models
     val aggregatedDataset = models.zipWithIndex.foldLeft[DataFrame](newDataset) {
@@ -186,7 +190,9 @@ final class OneVsRestModel private[ml] (
         updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
     }
 
-    if (handlePersistence) newDataset.unpersist()
+    if ($(handlePersistence)) {
+      newDataset.unpersist()
+    }
 
     // output the index of the classifier with highest confidence as prediction
     val labelUDF = udf { (predictions: Map[Int, Double]) =>
@@ -340,10 +346,9 @@ final class OneVsRest @Since("1.4.0") (
       dataset.select($(labelCol), $(featuresCol))
     }
 
-    // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
-
+    if ($(handlePersistence)) {
+      multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
     // create k columns, one for each binary classifier.
     val models = Range(0, numClasses).par.map { index =>
@@ -367,7 +372,9 @@ final class OneVsRest @Since("1.4.0") (
     }.toArray[ClassificationModel[_, _]]
     instr.logNumFeatures(models.head.numFeatures)
 
-    if (handlePersistence) multiclassLabeled.unpersist()
+    if ($(handlePersistence)) {
+      multiclassLabeled.unpersist()
+    }
 
     // extract label metadata from label column if present, or create a nominal attribute
     // to output the number of labels
