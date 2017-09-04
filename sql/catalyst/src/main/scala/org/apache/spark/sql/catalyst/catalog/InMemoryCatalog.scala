@@ -272,6 +272,8 @@ class InMemoryCatalog(
     requireTableExists(oldDb, oldName)
     requireTableNotExists(newDb, newName)
     val oldDesc = catalog(oldDb).tables(oldName)
+    // Update description of old table with information of new table.
+    // Put the description into catalog finally.
     oldDesc.table = oldDesc.table.copy(identifier = TableIdentifier(newName, Some(newDb)))
     if (oldDesc.table.tableType == CatalogTableType.MANAGED) {
       assert(oldDesc.table.storage.locationUri.isDefined,
@@ -289,6 +291,7 @@ class InMemoryCatalog(
       }
       oldDesc.table = oldDesc.table.withNewStorage(locationUri = Some(newDir.toUri))
     }
+
     catalog(newDb).tables.put(newName, oldDesc)
     catalog(oldDb).tables.remove(oldName)
   }

@@ -241,7 +241,8 @@ class HiveExternalCatalogBackwardCompatibilitySuite extends QueryTest
   test("make sure we can rename table created by old version of Spark") {
     for ((tbl, expectedSchema) <- rawTablesAndExpectations) {
       val newName = tbl.identifier.table + "_renamed"
-      sql(s"ALTER TABLE ${tbl.identifier} RENAME TO $newName")
+      val dbName = tbl.identifier.database.get
+      sql(s"ALTER TABLE ${tbl.identifier} RENAME TO $dbName.$newName")
 
       val readBack = getTableMetadata(newName)
       assert(readBack.schema.sameType(expectedSchema))

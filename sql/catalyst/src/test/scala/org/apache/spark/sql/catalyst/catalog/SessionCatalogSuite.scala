@@ -385,16 +385,19 @@ abstract class SessionCatalogSuite extends AnalysisTest {
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("table_two"))
 
       // Renaming "db2.tblone" to "db1.tblones" should fail because table cannot be found.
-      intercept[AnalysisException] {
+      val thrown1 = intercept[AnalysisException] {
         catalog.renameTable(
           TableIdentifier("tblone", Some("db2")), TableIdentifier("tblones", Some("db1")))
       }
+      assert(thrown1.getMessage.contains("Table or view 'tblone' not found in database 'db2'"))
       // The new table already exists
-      intercept[TableAlreadyExistsException] {
+      val thrown2 = intercept[TableAlreadyExistsException] {
         catalog.renameTable(
           TableIdentifier("tblone", Some("db1")),
           TableIdentifier("table_two", Some("db2")))
       }
+      assert(thrown2.getMessage.contains(
+        "Table or view 'table_two' already exists in database 'db2'"))
     }
   }
 
@@ -436,31 +439,34 @@ abstract class SessionCatalogSuite extends AnalysisTest {
     }
   }
 
-  test("rename global temp table") {
+  test("rename global temp view") {
     withBasicCatalog { catalog =>
       val globalTempTable = Range(1, 10, 2, 10)
       catalog.createGlobalTempView("tbl1", globalTempTable, overrideIfExists = false)
       assert(catalog.getGlobalTempView("tbl1") == Option(globalTempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2"))
-      // If database is not specified, global temp table will not be renamed
+      // If database is not specified, global temp view will not be renamed
       catalog.setCurrentDatabase("db1")
-      intercept[AnalysisException] {
+      val thrown1 = intercept[AnalysisException] {
         catalog.renameTable(TableIdentifier("tbl1"), TableIdentifier("tblone"))
       }
+      assert(thrown1.getMessage.contains("Table or view 'tbl1' not found in database 'db1'"))
       catalog.setCurrentDatabase("db2")
       catalog.renameTable(TableIdentifier("tbl1"), TableIdentifier("tblone"))
       assert(catalog.getGlobalTempView("tbl1") == Option(globalTempTable))
       assert(catalog.externalCatalog.listTables("db2").toSet == Set("tblone", "tbl2"))
-      // Moving global temp table to another database is forbidden
-      intercept[AnalysisException] {
+      // Moving global temp view to another database is forbidden
+      val thrown2 = intercept[AnalysisException] {
         catalog.renameTable(
           TableIdentifier("tbl1", Some("global_temp")), TableIdentifier("tbl3", Some("db2")))
       }
-      // Moving table from database to be a global temp table is forbidden
-      intercept[AnalysisException] {
+      assert(thrown2.getMessage.contains("Cannot change database of table 'tbl1'"))
+      // Moving table from regular database to be a global temp view is forbidden
+      val thrown3 = intercept[AnalysisException] {
         catalog.renameTable(
           TableIdentifier("tbl2", Some("db2")), TableIdentifier("tbltwo", Some("global_temp")))
       }
+      assert(thrown3.getMessage.contains("Cannot change database of table 'tbl2'"))
       catalog.renameTable(
         TableIdentifier("tbl1", Some("global_temp")),
         TableIdentifier("tblone", Some("global_temp")))
