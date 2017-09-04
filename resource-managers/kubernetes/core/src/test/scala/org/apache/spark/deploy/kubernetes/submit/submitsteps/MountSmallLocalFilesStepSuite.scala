@@ -32,7 +32,7 @@ import org.apache.spark.deploy.kubernetes.constants._
 import org.apache.spark.deploy.kubernetes.submit.MountSmallFilesBootstrap
 import org.apache.spark.util.Utils
 
-private[spark] class MountSmallLocalFilesStepTest extends SparkFunSuite with BeforeAndAfter {
+private[spark] class MountSmallLocalFilesStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   private val FIRST_TEMP_FILE_NAME = "file1.txt"
   private val SECOND_TEMP_FILE_NAME = "file2.txt"
@@ -56,11 +56,11 @@ private[spark] class MountSmallLocalFilesStepTest extends SparkFunSuite with Bef
 
   test("Local files should be added to the secret.") {
     val firstTempFile = createTempFileWithContents(
-      tempFolder, FIRST_TEMP_FILE_NAME, FIRST_TEMP_FILE_CONTENTS)
+        tempFolder, FIRST_TEMP_FILE_NAME, FIRST_TEMP_FILE_CONTENTS)
     val secondTempFile = createTempFileWithContents(
         tempFolder, SECOND_TEMP_FILE_NAME, SECOND_TEMP_FILE_CONTENTS)
     val sparkFiles = Seq(
-        firstTempFile.getAbsolutePath,
+        s"file://${firstTempFile.getAbsolutePath}",
         secondTempFile.getAbsolutePath,
         REMOTE_FILE_URI)
     val configurationStep = new MountSmallLocalFilesStep(
