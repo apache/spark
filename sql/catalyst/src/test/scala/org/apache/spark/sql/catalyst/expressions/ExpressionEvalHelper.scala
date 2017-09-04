@@ -50,7 +50,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     val resolver = ResolveTimeZone(new SQLConf)
     val expr = resolver.resolveTimeZones(serializer.deserialize(serializer.serialize(expression)))
     val catalystValue = CatalystTypeConverters.convertToCatalyst(expected)
-  //  checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
+    checkEvaluationWithoutCodegen(expr, catalystValue, inputRow)
     checkEvaluationWithGeneratedMutableProjection(expr, catalystValue, inputRow)
     if (GenerateUnsafeProjection.canSupport(expr.dataType)) {
       checkEvalutionWithUnsafeProjection(expr, catalystValue, inputRow)
