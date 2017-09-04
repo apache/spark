@@ -2000,4 +2000,13 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assert(setOfPath.size() == pathSizeToDeleteOnExit)
     }
   }
+
+  test("SPARK-21912 Creating ORC datasource table should check invalid column names") {
+    withTable("orc1") {
+      val m = intercept[AnalysisException] {
+        sql("CREATE TABLE orc1 USING ORC AS SELECT 1 `a b`")
+      }.getMessage
+      assert(m.contains("""Attribute name "a b" contains invalid character(s)"""))
+    }
+  }
 }

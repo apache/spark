@@ -34,12 +34,12 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
-import org.apache.spark.sql.sources.{Filter, _}
+import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -82,6 +82,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           classOf[OrcOutputFormat],
           classOf[MapRedOutputFormat[_, _]])
     }
+
+    dataSchema.map(_.name).foreach(checkFieldName)
 
     new OutputWriterFactory {
       override def newInstance(
@@ -167,6 +169,16 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
           recordsIterator)
       }
+    }
+  }
+
+  private def checkFieldName(name: String): Unit = {
+    // ,;{}()\n\t= and space are special characters in ORC schema
+    if (name.matches(".*[ ,;{}()\n\t=].*")) {
+      throw new AnalysisException(
+        s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
+           |Please use alias to rename it.
+         """.stripMargin.split("\n").mkString(" ").trim)
     }
   }
 }
