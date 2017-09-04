@@ -274,6 +274,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
                 metrics[index] += metric/nFolds
 
             pool.map(singleTrain, range(numModels))
+            validation.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
@@ -526,6 +527,8 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         pool.map(singleTrain, range(numModels))
+        train.unpersist()
+        validation.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
