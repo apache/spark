@@ -26,8 +26,6 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -187,56 +185,54 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
     Utils.initDaemon(log)
 
-    SparkHadoopUtil.get.runAsSparkUser { () =>
-      // Debug code
-      Utils.checkHost(hostname)
+    // Debug code
+    Utils.checkHost(hostname)
 
-      // Bootstrap to fetch the driver's Spark properties.
-      val executorConf = new SparkConf
-      val fetcher = RpcEnv.create(
-        "driverPropsFetcher",
-        hostname,
-        -1,
-        executorConf,
-        new SecurityManager(executorConf),
-        clientMode = true)
-      val driver = fetcher.setupEndpointRefByURI(driverUrl)
-      val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
-      val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
-      fetcher.shutdown()
+    // Bootstrap to fetch the driver's Spark properties.
+    val executorConf = new SparkConf
+    val fetcher = RpcEnv.create(
+      "driverPropsFetcher",
+      hostname,
+      -1,
+      executorConf,
+      new SecurityManager(executorConf),
+      clientMode = true)
+    val driver = fetcher.setupEndpointRefByURI(driverUrl)
+    val cfg = driver.askSync[SparkAppConfig](RetrieveSparkAppConfig)
+    val props = cfg.sparkProperties ++ Seq[(String, String)](("spark.app.id", appId))
+    fetcher.shutdown()
 
-      // Create SparkEnv using properties we fetched from the driver.
-      val driverConf = new SparkConf()
-      for ((key, value) <- props) {
-        // this is required for SSL in standalone mode
-        if (SparkConf.isExecutorStartupConf(key)) {
-          driverConf.setIfMissing(key, value)
-        } else {
-          driverConf.set(key, value)
-        }
+    // Create SparkEnv using properties we fetched from the driver.
+    val driverConf = new SparkConf()
+    for ((key, value) <- props) {
+      // this is required for SSL in standalone mode
+      if (SparkConf.isExecutorStartupConf(key)) {
+        driverConf.setIfMissing(key, value)
+      } else {
+        driverConf.set(key, value)
       }
-      if (driverConf.contains("spark.yarn.credentials.file")) {
-        logInfo("Will periodically update credentials from: " +
-          driverConf.get("spark.yarn.credentials.file"))
-        SparkHadoopUtil.get.startCredentialUpdater(driverConf)
-      }
-
-      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
-        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
-        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
-      }
-
-      val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
-
-      env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
-        env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))
-      workerUrl.foreach { url =>
-        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
-      }
-      env.rpcEnv.awaitTermination()
-      SparkHadoopUtil.get.stopCredentialUpdater()
     }
+    if (driverConf.contains("spark.yarn.credentials.file")) {
+      logInfo("Will periodically update credentials from: " +
+        driverConf.get("spark.yarn.credentials.file"))
+      SparkHadoopUtil.get.startCredentialUpdater(driverConf)
+    }
+
+    cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
+      val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
+      SparkHadoopUtil.get.addCurrentUserCredentials(creds)
+    }
+
+    val env = SparkEnv.createExecutorEnv(
+      driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
+
+    env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
+      env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))
+    workerUrl.foreach { url =>
+      env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
+    }
+    env.rpcEnv.awaitTermination()
+    SparkHadoopUtil.get.stopCredentialUpdater()
   }
 
   def main(args: Array[String]) {
