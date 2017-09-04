@@ -2614,9 +2614,12 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive information in the given string.
    */
   def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || !conf.contains(STRING_REDACTION_PATTERN)) return text
-    val regex = conf.get(STRING_REDACTION_PATTERN).get
-    regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
+      text
+    } else {
+      val regex = conf.get(STRING_REDACTION_PATTERN).get
+      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+    }
   }
 
   private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {
