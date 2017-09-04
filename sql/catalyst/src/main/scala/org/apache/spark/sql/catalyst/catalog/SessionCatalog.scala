@@ -570,11 +570,12 @@ class SessionCatalog(
    * Rename a table.
    *
    * If the database specified in `newName` is different from the one specified in `oldName`,
-   * It will result in moving table across databases.
+   * It results in moving table across databases.
    *
-   * If no database is specified, this will first attempt to rename a temporary table with
-   * the same name, then, if that does not exist, current database will be used for locating
-   * `oldName` or `newName`.
+   * If no database is specified in `oldName`, this will first attempt to rename a temporary table
+   * with the same name, then, if that does not exist, rename the table in the current database.
+   *
+   * If no database is specified in `newName`, current database will be used.
    *
    */
   def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
