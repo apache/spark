@@ -57,10 +57,29 @@ class KafkaRDD[
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
   override def getPartitions: Array[Partition] = {
-    offsetRanges.zipWithIndex.map { case (o, i) =>
-        val (host, port) = leaders(TopicAndPartition(o.topic, o.partition))
-        new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, host, port)
-    }.toArray
+    val subconcurrency = if (kafkaParams.contains("topic.partition.subconcurrency"))
+                              kafkaParams.get("topic.partition.subconcurrency").asInstanceOf[String].toInt
+                         else 1
+    val numPartitions = offsetRanges.length
+    val kafkaRDDPartitionArray = new Array[Partition](subconcurrency * numPartitions)
+    for (i <- 0 until numPartitions) {
+      val offsetRange = offsetRanges(i)
+      val (host, port) = leaders(TopicAndPartition(offsetRange.topic, offsetRange.partition))
+      val step = (offsetRange.untilOffset - offsetRange.fromOffset) / subconcurrency
+
+      var from = -1L
+      var until = -1L
+      for (j <- 0 until subconcurrency) {
+        from = offsetRange.fromOffset + j * step
+        until = offsetRange.fromOffset + (j + 1) * step - 1
+        if (j == subconcurrency) {
+          until = offsetRange.untilOffset
+        }
+        kafkaRDDPartitionArray(i * subconcurrency + j) = new KafkaRDDPartition(i,
+          offsetRange.topic, offsetRange.partition, from, until, host, port)
+      }
+    }
+    kafkaRDDPartitionArray
   }
 
   override def count(): Long = offsetRanges.map(_.count).sum
