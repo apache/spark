@@ -1127,10 +1127,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
-      val (outputMetrics, callback) = SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
-
       writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
+      
+      val (outputMetrics, callback) = SparkHadoopWriterUtils.initHadoopOutputMetrics(context)
       var recordsWritten = 0L
 
       Utils.tryWithSafeFinallyAndFailureCallbacks {
