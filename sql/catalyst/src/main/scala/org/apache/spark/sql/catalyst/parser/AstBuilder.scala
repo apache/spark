@@ -179,6 +179,12 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   }
 
   /**
+   * Parameters used for writing query to a table:
+   *   (tableIdentifier, partitionKeys, overwrite, exists).
+   */
+  type InsertTableParams = (TableIdentifier, Map[String, Option[String]], Boolean, Boolean)
+
+  /**
    * Parameters used for writing query to a directory: (isLocal, CatalogStorageFormat, provider).
    */
   type InsertDirParams = (Boolean, CatalogStorageFormat, Option[String])
@@ -193,26 +199,40 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
   private def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    assert(ctx.children.size == 1)
-
-    ctx.getChild(0) match {
+    ctx match {
       case table : InsertIntoTableContext =>
-        withInsertIntoTable(table, query)
+        val (tableIdent, partitionKeys, overwrite, exists) = visitInsertIntoTable(table)
+        InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, overwrite, exists)
+      case table : InsertOverwriteTableContext =>
+        val (tableIdent, partitionKeys, overwrite, exists) = visitInsertOverwriteTable(table)
+        InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, overwrite, exists)
       case dir: InsertOverwriteDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
       case hiveDir: InsertOverwriteHiveDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteHiveDir(hiveDir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
+      case _ =>
+        throw new ParseException("Invalid InsertIntoContext", ctx)
     }
   }
 
   /**
-   * Add an INSERT INTO [TABLE]/INSERT OVERWRITE TABLE operation to the logical plan.
+   * Add an INSERT INTO TABLE operation to the logical plan.
    */
-  private def withInsertIntoTable(
-      ctx: InsertIntoTableContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
+  override def visitInsertIntoTable(
+      ctx: InsertIntoTableContext): InsertTableParams = withOrigin(ctx) {
+    val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
+    val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
+
+    (tableIdent, partitionKeys, false, false)
+  }
+
+  /**
+   * Add an INSERT OVERWRITE TABLE operation to the logical plan.
+   */
+  override def visitInsertOverwriteTable(
+      ctx: InsertOverwriteTableContext): InsertTableParams = withOrigin(ctx) {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
@@ -222,12 +242,7 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
         "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
     }
 
-    InsertIntoTable(
-      UnresolvedRelation(tableIdent),
-      partitionKeys,
-      query,
-      ctx.OVERWRITE != null,
-      ctx.EXISTS != null)
+    (tableIdent, partitionKeys, ctx.OVERWRITE() != null, ctx.EXISTS() != null)
   }
 
   /**
