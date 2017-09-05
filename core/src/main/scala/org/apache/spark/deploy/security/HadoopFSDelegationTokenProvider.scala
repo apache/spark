@@ -90,8 +90,7 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
   private def fetchDelegationTokens(
       renewer: String,
       filesystems: Set[FileSystem],
-      creds :Credentials): Credentials = {
-
+      creds: Credentials): Credentials = {
 
     filesystems.foreach { fs =>
       logInfo("getting token for: " + fs)
