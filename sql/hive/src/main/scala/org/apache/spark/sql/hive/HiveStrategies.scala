@@ -31,8 +31,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
 import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions, ParquetSchemaConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -146,27 +145,18 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
  * `PreprocessTableInsertion`.
  */
 object HiveAnalysis extends Rule[LogicalPlan] {
-  private def checkFieldNames(table: CatalogTable): Unit = {
-    val serde = table.storage.serde
-    if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
-      OrcFileFormat.checkFieldNames(table.dataSchema)
-    } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde) {
-      ParquetSchemaConverter.checkFieldNames(table.dataSchema)
-    }
-  }
-
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
-      checkFieldNames(r.tableMeta)
+      DDLUtils.checkFieldNames(r.tableMeta)
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite, ifPartitionNotExists)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
-      checkFieldNames(tableDesc)
+      DDLUtils.checkFieldNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      checkFieldNames(tableDesc)
+      DDLUtils.checkFieldNames(tableDesc)
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
   }
 }

@@ -34,6 +34,9 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
@@ -846,6 +849,26 @@ object DDLUtils {
             s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
         case _ =>
       }
+    }
+  }
+
+  private[sql] def checkFieldNames(table: CatalogTable): Unit = {
+    table.provider.get.toLowerCase(Locale.ROOT) match {
+      case "hive" =>
+        val serde = table.storage.serde
+        if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
+          OrcFileFormat.checkFieldNames(table.dataSchema)
+        } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde) {
+          ParquetSchemaConverter.checkFieldNames(table.dataSchema)
+        }
+
+      case "parquet" =>
+        ParquetSchemaConverter.checkFieldNames(table.dataSchema)
+
+      case "orc" =>
+        OrcFileFormat.checkFieldNames(table.dataSchema)
+
+      case _ =>
     }
   }
 }
