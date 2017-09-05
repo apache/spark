@@ -44,7 +44,7 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
       creds: Credentials): Option[Long] = {
 
     val fsToGetTokens = fileSystems(hadoopConf)
-    val newCreds = fetchDelegationTokens(
+    val fetchCreds = fetchDelegationTokens(
       getTokenRenewer(hadoopConf),
       fsToGetTokens,
       creds)
@@ -56,7 +56,7 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
 
     // Get the time of next renewal.
     val nextRenewalDate = tokenRenewalInterval.flatMap { interval =>
-      val nextRenewalDates = newCreds.getAllTokens.asScala
+      val nextRenewalDates = fetchCreds.getAllTokens.asScala
         .filter(_.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier])
         .map { token =>
           val identifier = token
@@ -67,7 +67,6 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
       if (nextRenewalDates.isEmpty) None else Some(nextRenewalDates.min)
     }
 
-    creds.addAll(newCreds)
     nextRenewalDate
   }
 
@@ -109,12 +108,12 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
-    val newCreds = fetchDelegationTokens(
+    val fetchCreds = fetchDelegationTokens(
       UserGroupInformation.getCurrentUser.getUserName,
       filesystems,
       creds)
 
-    val renewIntervals = newCreds.getAllTokens.asScala.filter {
+    val renewIntervals = fetchCreds.getAllTokens.asScala.filter {
       _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
     }.flatMap { token =>
       Try {
