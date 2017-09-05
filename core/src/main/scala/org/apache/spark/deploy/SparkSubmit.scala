@@ -499,7 +499,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         sysProp = "spark.executor.memory"),
       OptionAssigner(args.totalExecutorCores, STANDALONE | MESOS, ALL_DEPLOY_MODES,
         sysProp = "spark.cores.max"),
-      OptionAssigner(args.files, LOCAL | STANDALONE | MESOS, ALL_DEPLOY_MODES,
+      OptionAssigner(args.files, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "spark.files"),
       OptionAssigner(args.jars, LOCAL, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.jars, STANDALONE | MESOS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),

@@ -387,7 +387,7 @@ object SparkEnv extends Logging {
     // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
-    if (isDriver) {
+    if (isDriver && conf.get("spark.submit.deployMode", "client") == "client") {
       val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
       envInstance.driverTmpDir = Some(sparkFilesDir)
     }
