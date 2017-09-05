@@ -79,11 +79,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
+      InferFiltersFromConstraints,
+      BooleanSimplification,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
       ColumnPruning,
-      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
