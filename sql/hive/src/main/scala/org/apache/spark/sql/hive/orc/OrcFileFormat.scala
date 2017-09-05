@@ -32,6 +32,7 @@ import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
+import org.apache.orc.TypeDescription
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql._
@@ -173,12 +174,14 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
   }
 
   private def checkFieldName(name: String): Unit = {
-    // ,;{}()\n\t= and space are special characters in ORC schema
-    if (name.matches(".*[ ,;{}()\n\t=].*")) {
-      throw new AnalysisException(
-        s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
-           |Please use alias to rename it.
-         """.stripMargin.split("\n").mkString(" ").trim)
+    try {
+      TypeDescription.fromString(s"struct<$name:int>")
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new AnalysisException(
+          s"""Attribute name "$name" contains invalid character(s).
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" ").trim)
     }
   }
 }
