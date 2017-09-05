@@ -32,13 +32,13 @@ import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
-import org.apache.orc.TypeDescription
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -84,7 +84,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           classOf[MapRedOutputFormat[_, _]])
     }
 
-    dataSchema.map(_.name).foreach(checkFieldName)
+    dataSchema.map(_.name).foreach(OrcFileFormat.checkFieldName)
 
     new OutputWriterFactory {
       override def newInstance(
@@ -170,18 +170,6 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
           recordsIterator)
       }
-    }
-  }
-
-  private def checkFieldName(name: String): Unit = {
-    try {
-      TypeDescription.fromString(s"struct<$name:int>")
-    } catch {
-      case _: IllegalArgumentException =>
-        throw new AnalysisException(
-          s"""Attribute name "$name" contains invalid character(s).
-             |Please use alias to rename it.
-           """.stripMargin.split("\n").mkString(" ").trim)
     }
   }
 }

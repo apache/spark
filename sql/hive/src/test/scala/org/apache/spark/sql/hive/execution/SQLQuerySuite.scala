@@ -2001,13 +2001,20 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-21912 Creating ORC datasource table should check invalid column names") {
+  test("SPARK-21912 Creating ORC/Parquet datasource table should check invalid column names") {
     withTable("orc1") {
-      Seq(" ", "?", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-        val m = intercept[AnalysisException] {
-          sql(s"CREATE TABLE orc1 USING ORC AS SELECT 1 `column$name`")
-        }.getMessage
-        assert(m.contains(s"contains invalid character(s)"))
+      Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+        Seq("ORC", "PARQUET").foreach { dataSource =>
+          val m = intercept[AnalysisException] {
+            sql(s"CREATE TABLE orc1(`column$name` INT) USING $dataSource")
+          }.getMessage
+          assert(m.contains(s"contains invalid character(s)"))
+
+          val m2 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE orc1 USING $dataSource AS SELECT 1 `column$name`")
+          }.getMessage
+          assert(m2.contains(s"contains invalid character(s)"))
+        }
       }
     }
   }

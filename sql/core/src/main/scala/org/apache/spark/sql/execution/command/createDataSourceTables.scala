@@ -23,6 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.sources.BaseRelation
 
 /**
@@ -83,6 +85,13 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
         case r: HadoopFsRelation => r.partitionSchema.fieldNames.toSeq
         case _ => Nil
       }
+    }
+
+    table.provider.get.toLowerCase match {
+      case "parquet" =>
+        dataSource.schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
+      case "orc" =>
+        dataSource.schema.map(_.name).foreach(OrcFileFormat.checkFieldName)
     }
 
     val newTable = table.copy(
