@@ -36,7 +36,7 @@ private[sql] class JacksonGenerator(
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
-  
+
   // `JackGenerator` only supports to write out a struct, an array of struct or an arbitrary map
   rowSchema match {
     case _: StructType | _: MapType =>
