@@ -367,6 +367,42 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }.orNull
     }
 
+    if (clusterManager == YARN) {
+      // This security manager will not need an auth secret, but set a dummy value in case
+      // spark.authenticate is enabled, otherwise an exception is thrown.
+      sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
+      val secMgr = new SecurityManager(sparkConf)
+
+      def downloadHttpResource(resource: String): String = {
+        val uri = Utils.resolveURI(resource)
+        uri.getScheme match {
+          case "local" | "file" => resource
+          case "http" | "https" | "ftp" =>
+            if (deployMode == CLIENT) {
+              val fileName = new Path(uri).getName
+              new File(targetDir, fileName).toURI.toString
+            } else {
+              downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
+            }
+          case _ => uri.toString
+        }
+      }
+
+      args.primaryResource = Option(args.primaryResource).map { downloadHttpResource }.orNull
+      args.files = Option(args.files).map { files =>
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+      }.orNull
+      args.pyFiles = Option(args.pyFiles).map { files =>
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+      }.orNull
+      args.jars = Option(args.jars).map { files =>
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+      }.orNull
+      args.archives = Option(args.archives).map { files =>
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+      }.orNull
+    }
+
     // If we're running a python app, set the main class to our specific python runner
     if (args.isPython && deployMode == CLIENT) {
       if (args.primaryResource == PYSPARK_SHELL) {

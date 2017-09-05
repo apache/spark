@@ -897,6 +897,39 @@ class SparkSubmitSuite
     sysProps("spark.submit.pyFiles") should (startWith("/"))
   }
 
+  test("handle remote http(s) resources in yarn mode") {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+
+    val tmpDir = Utils.createTempDir()
+    val mainResource = File.createTempFile("tmpPy", ".py", tmpDir)
+    val tmpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
+    val tmpJarPath = s"s3a://${new File(tmpJar.toURI).getAbsolutePath}"
+    // This assumes UT environment could access external network.
+    val remoteHttpJar =
+      "http://central.maven.org/maven2/io/netty/netty-all/4.0.51.Final/netty-all-4.0.51.Final.jar"
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", s"$tmpJarPath,$remoteHttpJar",
+      s"s3a://$mainResource"
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))._3
+
+    // Resources in S3 should still be remote path, but remote http resource will be downloaded
+    // to local.
+    val jars = sysProps("spark.yarn.dist.jars").split(",").toSet
+    jars.contains(tmpJarPath) should be (true)
+    val nettyJar = jars.filter(_.contains("netty"))
+    nettyJar.size should be (1)
+    nettyJar.head should startWith("file:")
+  }
+
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
