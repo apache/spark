@@ -1003,6 +1003,11 @@ class CheckpointTests(unittest.TestCase):
         self.ssc.stop(True, True)
 
 
+# Must be same as the variable and condition defined in modules.py
+kafka_test_environ_var = "ENABLE_KAFKA_TESTS"
+are_kafka_tests_enabled = os.environ.get(kafka_test_environ_var) == '1'
+
+
 class KafkaStreamTests(PySparkStreamingTestCase):
     timeout = 20  # seconds
     duration = 1
@@ -1038,6 +1043,12 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_stream(self):
         """Test the Python Kafka stream API."""
+        if not are_kafka_tests_enabled:
+            sys.stderr.write(
+                "Skipped test_kafka_stream (enable by setting environment variable %s=1"
+                % kafka_test_environ_var)
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 3, "b": 5, "c": 10}
 
@@ -1051,6 +1062,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_direct_stream(self):
         """Test the Python direct Kafka stream API."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -1064,6 +1078,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_direct_stream_from_offset(self):
         """Test the Python direct Kafka stream API with start offset specified."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         fromOffsets = {TopicAndPartition(topic, 0): long(0)}
@@ -1077,6 +1094,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_rdd(self):
         """Test the Python direct Kafka RDD API."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2}
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
@@ -1089,6 +1109,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_rdd_with_leaders(self):
         """Test the Python direct Kafka RDD API with leaders."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
@@ -1103,6 +1126,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_rdd_get_offsetRanges(self):
         """Test Python direct Kafka RDD get OffsetRanges."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 3, "b": 4, "c": 5}
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
@@ -1115,6 +1141,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_direct_stream_foreach_get_offsetRanges(self):
         """Test the Python direct Kafka stream foreachRDD get offsetRanges."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -1139,6 +1168,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_direct_stream_transform_get_offsetRanges(self):
         """Test the Python direct Kafka stream transform get offsetRanges."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -1165,6 +1197,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
         self.assertEqual(offsetRanges, [OffsetRange(topic, 0, long(0), long(6))])
 
     def test_topic_and_partition_equality(self):
+        if not are_kafka_tests_enabled:
+            return
+
         topic_and_partition_a = TopicAndPartition("foo", 0)
         topic_and_partition_b = TopicAndPartition("foo", 0)
         topic_and_partition_c = TopicAndPartition("bar", 0)
@@ -1176,6 +1211,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_direct_stream_transform_with_checkpoint(self):
         """Test the Python direct Kafka stream transform with checkpoint correctly recovered."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -1224,6 +1262,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_rdd_message_handler(self):
         """Test Python direct Kafka RDD MessageHandler."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 1, "c": 2}
         offsetRanges = [OffsetRange(topic, 0, long(0), long(sum(sendData.values())))]
@@ -1240,6 +1281,9 @@ class KafkaStreamTests(PySparkStreamingTestCase):
 
     def test_kafka_direct_stream_message_handler(self):
         """Test the Python direct Kafka stream MessageHandler."""
+        if not are_kafka_tests_enabled:
+            return
+
         topic = self._randomTopic()
         sendData = {"a": 1, "b": 2, "c": 3}
         kafkaParams = {"metadata.broker.list": self._kafkaTestUtils.brokerAddress(),
@@ -1516,7 +1560,7 @@ def search_kinesis_asl_assembly_jar():
         return jars[0]
 
 
-# Must be same as the variable and condition defined in KinesisTestUtils.scala
+# Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 

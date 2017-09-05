@@ -90,6 +90,13 @@ like ZooKeeper and Hadoop itself.
 ## Building with Mesos support
 
     ./build/mvn -Pmesos -DskipTests clean package
+    
+## Building with Kafka 0.8 support
+
+Kafka 0.8 support must be explicitly enabled with the `kafka-0-8` profile.
+Kafka 0.10 support is still automatically built.
+
+    ./build/mvn -Pkafka-0-8 -DskipTests clean package
 
 ## Building submodules individually
 
