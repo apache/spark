@@ -158,6 +158,7 @@ private[yarn] class YarnAllocator(
   private[yarn] val containerPlacementStrategy =
     new LocalityPreferredContainerPlacementStrategy(sparkConf, conf, resource, resolver)
 
+  private[yarn] val completedContainerIdSet: HashSet[ContainerId] = new HashSet[ContainerId]()
   /**
    * Use a different clock for YarnAllocator. This is mainly used for testing.
    */
@@ -565,10 +566,11 @@ private[yarn] class YarnAllocator(
       val alreadyReleased = releasedContainers.remove(containerId)
       val hostOpt = allocatedContainerToHostMap.get(containerId)
       val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")
-      val exitReason = if (!alreadyReleased) {
+      val exitReason = if (!alreadyReleased && !completedContainerIdSet.contains(containerId)) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
         numExecutorsRunning.decrementAndGet()
+        completedContainerIdSet += containerId
         logInfo("Completed container %s%s (state: %s, exit status: %s)".format(
           containerId,
           onHostStr,
