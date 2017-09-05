@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query 3
-CREATE TABLE showcolumn2 (price int, qty int, year int, month int) USING json partitioned by (year, month)
+CREATE TABLE showcolumn2 (price int, qty int, year int, month int) USING parquet partitioned by (year, month)
 -- !query 3 schema
 struct<>
 -- !query 3 output

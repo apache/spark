@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
 import java.util.concurrent.Callable
 
 import org.apache.spark.internal.Logging
@@ -34,6 +35,8 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -128,12 +131,24 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     projectList
   }
 
+  private def checkFieldNames(table: CatalogTable): Unit = {
+    table.provider.get.toLowerCase(Locale.ROOT) match {
+      case "parquet" =>
+        ParquetSchemaConverter.checkFieldNames(table.dataSchema)
+      case "orc" =>
+        OrcFileFormat.checkFieldNames(table.dataSchema)
+      case _ =>
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case CreateTable(tableDesc, mode, None) if DDLUtils.isDatasourceTable(tableDesc) =>
+      checkFieldNames(tableDesc)
       CreateDataSourceTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query))
         if query.resolved && DDLUtils.isDatasourceTable(tableDesc) =>
+      checkFieldNames(tableDesc.copy(schema = query.schema))
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query)
 
     case InsertIntoTable(l @ LogicalRelation(_: InsertableRelation, _, _, _),

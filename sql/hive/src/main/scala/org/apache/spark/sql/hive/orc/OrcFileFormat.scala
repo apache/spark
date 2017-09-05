@@ -34,12 +34,12 @@ import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
-import org.apache.spark.sql.sources._
+import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -82,8 +82,6 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           classOf[OrcOutputFormat],
           classOf[MapRedOutputFormat[_, _]])
     }
-
-    org.apache.spark.sql.execution.datasources.orc.OrcFileFormat.checkFieldNames(dataSchema)
 
     new OutputWriterFactory {
       override def newInstance(

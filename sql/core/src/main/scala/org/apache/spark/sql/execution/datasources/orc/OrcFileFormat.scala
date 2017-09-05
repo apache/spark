@@ -23,7 +23,7 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.types.StructType
 
 private[sql] object OrcFileFormat {
-  def checkFieldName(name: String): Unit = {
+  private def checkFieldName(name: String): Unit = {
     try {
       TypeDescription.fromString(s"struct<$name:int>")
     } catch {
