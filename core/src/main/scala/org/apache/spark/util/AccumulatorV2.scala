@@ -23,10 +23,10 @@ import java.util.{ArrayList, Collections}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.collection.JavaConverters._
-
-import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
+import org.apache.spark.InternalAccumulator
+import org.apache.spark.SparkContext
+import org.apache.spark.TaskContext
 
 
 private[spark] case class AccumulatorMetadata(
