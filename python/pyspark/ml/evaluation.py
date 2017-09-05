@@ -20,12 +20,13 @@ from abc import abstractmethod, ABCMeta
 from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
-from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
+from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol, \
+    HasFeaturesCol
 from pyspark.ml.common import inherit_doc
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
-           'MulticlassClassificationEvaluator']
+           'MulticlassClassificationEvaluator', 'ClusteringEvaluator']
 
 
 @inherit_doc
@@ -324,6 +325,64 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         setParams(self, predictionCol="prediction", labelCol="label", \
                   metricName="f1")
         Sets params for multiclass classification evaluator.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
+
+
+@inherit_doc
+class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
+                                        JavaMLReadable, JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Evaluator for Clustering results, which expects two input
+    columns: prediction and features.
+
+    >>> from sklearn import datasets
+    >>> from pyspark.sql.types import *
+    >>> from pyspark.ml.linalg import Vectors, VectorUDT
+    >>> from pyspark.ml.evaluation import ClusteringEvaluator
+    ...
+    >>> iris = datasets.load_iris()
+    >>> iris_rows = [(Vectors.dense(x), int(iris.target[i]))
+    ...     for i, x in enumerate(iris.data)]
+    >>> schema = StructType([
+    ...    StructField("features", VectorUDT(), True),
+    ...    StructField("cluster_id", IntegerType(), True)])
+    >>> rdd = spark.sparkContext.parallelize(iris_rows)
+    >>> dataset = spark.createDataFrame(rdd, schema)
+    ...
+    >>> evaluator = ClusteringEvaluator(predictionCol="cluster_id")
+    >>> evaluator.evaluate(dataset)
+    0.656...
+    >>> ce_path = temp_path + "/ce"
+    >>> evaluator.save(ce_path)
+    >>> evaluator2 = ClusteringEvaluator.load(ce_path)
+    >>> str(evaluator2.getPredictionCol())
+    'cluster_id'
+
+    .. versionadded:: 2.3.0
+    """
+
+    @keyword_only
+    def __init__(self, predictionCol="prediction", featuresCol="features"):
+        """
+        __init__(self, predictionCol="prediction", featuresCol="features")
+        """
+        super(ClusteringEvaluator, self).__init__()
+        self._java_obj = self._new_java_obj(
+            "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid)
+        self._setDefault(predictionCol="prediction", featuresCol="features")
+        kwargs = self._input_kwargs
+        self._set(**kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, predictionCol="prediction", featuresCol="features"):
+        """
+        setParams(self, predictionCol="prediction", featuresCol="features")
+        Sets params for clustering evaluator.
         """
         kwargs = self._input_kwargs
         return self._set(**kwargs)
