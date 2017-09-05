@@ -733,7 +733,7 @@ SELECT * FROM parquetTable
 
 Table partitioning is a common optimization approach used in systems like Hive. In a partitioned
 table, data are usually stored in different directories, with partitioning column values encoded in
-the path of each partition directory. The Parquet data source is now able to discover and infer
+the path of each partition directory. The Parquet/ORC data sources are able to discover and infer
 partitioning information automatically. For example, we can store all our previously used
 population data into a partitioned table using the following directory structure, with two extra
 columns, `gender` and `country` as partitioning columns:
@@ -762,8 +762,8 @@ path
 
 {% endhighlight %}
 
-By passing `path/to/table` to either `SparkSession.read.parquet` or `SparkSession.read.load`, Spark SQL
-will automatically extract the partitioning information from the paths.
+By passing `path/to/table` to either `SparkSession.read.parquet`, `SparkSession.read.orc`, or `SparkSession.read.load`,
+Spark SQL will automatically extract the partitioning information from the paths.
 Now the schema of the returned DataFrame becomes:
 
 {% highlight text %}
@@ -784,7 +784,7 @@ can be configured by `spark.sql.sources.partitionColumnTypeInference.enabled`, w
 
 Starting from Spark 1.6.0, partition discovery only finds partitions under the given paths
 by default. For the above example, if users pass `path/to/table/gender=male` to either
-`SparkSession.read.parquet` or `SparkSession.read.load`, `gender` will not be considered as a
+`SparkSession.read.parquet`, `SparkSession.read.orc`, or `SparkSession.read.load`, `gender` will not be considered as a
 partitioning column. If users need to specify the base path that partition discovery
 should start with, they can set `basePath` in the data source options. For example,
 when `path/to/table/gender=male` is the path of the data and
