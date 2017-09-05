@@ -19,16 +19,15 @@ struct<>
 
 
 -- !query 2
-CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING parquet
+CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING json
 -- !query 2 schema
 struct<>
 -- !query 2 output
-org.apache.spark.sql.AnalysisException
-Attribute name "col 2" contains invalid character(s) among " ,;{}()\n\t=". Please use alias to rename it.;
+
 
 
 -- !query 3
-CREATE TABLE showcolumn2 (price int, qty int, year int, month int) USING parquet partitioned by (year, month)
+CREATE TABLE showcolumn2 (price int, qty int, year int, month int) USING json partitioned by (year, month)
 -- !query 3 schema
 struct<>
 -- !query 3 output
@@ -36,7 +35,7 @@ struct<>
 
 
 -- !query 4
-CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING parquet
+CREATE TEMPORARY VIEW showColumn3 (col3 int, `col 4` int) USING json
 -- !query 4 schema
 struct<>
 -- !query 4 output
@@ -54,28 +53,28 @@ struct<>
 -- !query 6
 SHOW COLUMNS IN showcolumn1
 -- !query 6 schema
-struct<>
+struct<col_name:string>
 -- !query 6 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'showcolumn1' not found in database 'showdb';
+col 2
+col1
 
 
 -- !query 7
 SHOW COLUMNS IN showdb.showcolumn1
 -- !query 7 schema
-struct<>
+struct<col_name:string>
 -- !query 7 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'showcolumn1' not found in database 'showdb';
+col 2
+col1
 
 
 -- !query 8
 SHOW COLUMNS IN showcolumn1 FROM showdb
 -- !query 8 schema
-struct<>
+struct<col_name:string>
 -- !query 8 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'showcolumn1' not found in database 'showdb';
+col 2
+col1
 
 
 -- !query 9
@@ -101,10 +100,10 @@ Table or view 'badtable' not found in database 'showdb';
 -- !query 11
 SHOW COLUMNS IN showdb.showcolumn1 from SHOWDB
 -- !query 11 schema
-struct<>
+struct<col_name:string>
 -- !query 11 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'showcolumn1' not found in database 'showdb';
+col 2
+col1
 
 
 -- !query 12
@@ -175,8 +174,7 @@ DROP TABLE showcolumn1
 -- !query 19 schema
 struct<>
 -- !query 19 output
-org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-Table or view 'showcolumn1' not found in database 'showdb';
+
 
 
 -- !query 20
