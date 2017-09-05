@@ -128,9 +128,9 @@ class TextSocketSource(host: String, port: Int, includeTimestamp: Boolean, sqlCo
       batches.slice(sliceStart, sliceEnd)
     }
 
-    val rdd = sqlContext.sparkContext.
-      parallelize(rawList).
-      map { case (v, ts) => InternalRow(UTF8String.fromString(v), ts.getTime) }
+    val rdd = sqlContext.sparkContext
+      .parallelize(rawList)
+      .map { case (v, ts) => InternalRow(UTF8String.fromString(v), ts.getTime) }
     sqlContext.internalCreateDataFrame(rdd, schema, isStreaming = true)
   }
 
