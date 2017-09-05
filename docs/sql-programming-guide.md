@@ -733,7 +733,7 @@ SELECT * FROM parquetTable
 
 Table partitioning is a common optimization approach used in systems like Hive. In a partitioned
 table, data are usually stored in different directories, with partitioning column values encoded in
-the path of each partition directory. All built-in data sources (including TEXT/CSV/JSON/ORC/Parquet)
+the path of each partition directory. All built-in file sources (including Text/CSV/JSON/ORC/Parquet)
 are able to discover and infer partitioning information automatically.
 For example, we can store all our previously used
 population data into a partitioned table using the following directory structure, with two extra
