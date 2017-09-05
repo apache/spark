@@ -103,7 +103,7 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
   private def getTokenRenewalInterval(
       hadoopConf: Configuration,
       filesystems: Set[FileSystem],
-      creds:Credentials): Option[Long] = {
+      creds: Credentials): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
