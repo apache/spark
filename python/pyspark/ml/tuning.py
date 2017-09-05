@@ -271,9 +271,11 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
                 model = est.fit(train, epm[index])
                 # TODO: duplicate evaluator to take extra params from input
                 metric = eva.evaluate(model.transform(validation, epm[index]))
-                metrics[index] += metric/nFolds
+                return metric
 
-            pool.map(singleTrain, range(numModels))
+            currentFoldMetrics = pool.map(singleTrain, range(numModels))
+            for k in range(numModels):
+                metrics[k] += (currentFoldMetrics[k] / nFolds)
             validation.unpersist()
 
         if eva.isLargerBetter():
@@ -515,7 +517,6 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
-        metrics = [0.0] * numModels
         condition = (df[randCol] >= tRatio)
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
@@ -523,10 +524,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         def singleTrain(index):
             model = est.fit(train, epm[index])
             metric = eva.evaluate(model.transform(validation, epm[index]))
-            metrics[index] += metric
+            return metric
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        pool.map(singleTrain, range(numModels))
+        metrics = pool.map(singleTrain, range(numModels))
         train.unpersist()
         validation.unpersist()
 
