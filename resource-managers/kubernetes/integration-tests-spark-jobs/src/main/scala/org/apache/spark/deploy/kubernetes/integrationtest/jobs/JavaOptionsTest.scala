@@ -29,12 +29,13 @@ private[spark] object JavaOptionsTest {
 
   def main(args: Array[String]): Unit = {
     // scalastyle:off println
-    if (args.length != 1) {
+    if (args.length != 2) {
       println(s"Invalid arguments: ${args.mkString(",")}." +
-        s"Usage: JavaOptionsTest <driver-java-options-list-file>")
+        s"Usage: JavaOptionsTest <driver-java-options-list-file> <executor-java-options-list-file>")
       System.exit(1)
     }
     val expectedDriverJavaOptions = loadPropertiesFromFile(args(0))
+    val expectedExecutorJavaOptions = loadPropertiesFromFile(args(1))
     val nonMatchingDriverOptions = expectedDriverJavaOptions.filter {
       case (optKey, optValue) => System.getProperty(optKey) != optValue
     }
@@ -42,15 +43,37 @@ private[spark] object JavaOptionsTest {
       println(s"The driver's JVM options did not match. Expected $expectedDriverJavaOptions." +
         s" But these options did not match: $nonMatchingDriverOptions.")
       val sysProps = Maps.fromProperties(System.getProperties).asScala
-      println("System properties are:")
+      println("Driver system properties are:")
       for (prop <- sysProps) {
         println(s"Key: ${prop._1}, Value: ${prop._2}")
       }
       System.exit(1)
     }
 
-    // TODO support spark.executor.extraJavaOptions and test here.
-    println(s"All expected JVM options were present on the driver and executors.")
+    val spark = SparkSession.builder().getOrCreate().sparkContext
+    try {
+      val nonMatchingExecutorOptions = spark.parallelize(Seq(0)).flatMap { _ =>
+        expectedExecutorJavaOptions.filter {
+          case (optKey, optValue) => System.getProperty(optKey) != optValue
+        }
+      }.collectAsMap()
+      if (nonMatchingExecutorOptions.nonEmpty) {
+        val executorSysProps = spark.parallelize(Seq(0)).flatMap { _ =>
+          Maps.fromProperties(System.getProperties).asScala
+        }.collectAsMap()
+        println(s"The executor's JVM options did not match. Expected" +
+          s" $expectedExecutorJavaOptions. But these options did not" +
+          s" match: $nonMatchingExecutorOptions.")
+        println("Executor system properties are:")
+        for (prop <- executorSysProps) {
+          println(s"Key: ${prop._1}, Value: ${prop._2}")
+        }
+      } else {
+        println("All expected JVM options were present on the driver and executors.")
+      }
+    } finally {
+      spark.stop()
+    }
     // scalastyle:on println
   }
 
