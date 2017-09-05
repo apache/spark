@@ -43,7 +43,7 @@ class HiveCliSessionStateSuite extends SparkFunSuite {
       val sparkConf = new SparkConf()
       val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
       val s2 = HiveUtils.newClientForMetadata(sparkConf, hadoopConf).getState
-      assert(s1 === s2)
+      assert(s1 != s2)
       assert(s2.isInstanceOf[CliSessionState])
     }
   }
