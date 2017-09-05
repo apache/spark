@@ -32,6 +32,8 @@ import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, SchemaRequiredDataSourceV2}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -180,13 +182,45 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         "read files of Hive data source directly.")
     }
 
-    sparkSession.baseRelationToDataFrame(
-      DataSource.apply(
-        sparkSession,
-        paths = paths,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap).resolveRelation())
+    val cls = DataSource.lookupDataSource(source)
+    val isDataSourceV2 = classOf[DataSourceV2].isAssignableFrom(cls) ||
+      classOf[SchemaRequiredDataSourceV2].isAssignableFrom(cls)
+    if (isDataSourceV2) {
+      val dataSource = cls.newInstance()
+      val options = new DataSourceV2Options(extraOptions.asJava)
+
+      val reader = (cls.newInstance(), userSpecifiedSchema) match {
+        case (ds: SchemaRequiredDataSourceV2, Some(schema)) =>
+          ds.createReader(schema, options)
+
+        case (ds: DataSourceV2, None) =>
+          ds.createReader(options)
+
+        case (_: SchemaRequiredDataSourceV2, None) =>
+          throw new AnalysisException(s"A schema needs to be specified when using $dataSource.")
+
+        case (ds: DataSourceV2, Some(schema)) =>
+          val reader = ds.createReader(options)
+          if (reader.readSchema() != schema) {
+            throw new AnalysisException(s"$ds does not allow user-specified schemas.")
+          }
+          reader
+
+        case _ =>
+          throw new AnalysisException(s"$cls is not a valid Spark SQL Data Source.")
+      }
+
+      Dataset.ofRows(sparkSession, DataSourceV2Relation(reader))
+    } else {
+      // Code path for data source v1.
+      sparkSession.baseRelationToDataFrame(
+        DataSource.apply(
+          sparkSession,
+          paths = paths,
+          userSpecifiedSchema = userSpecifiedSchema,
+          className = source,
+          options = extraOptions.toMap).resolveRelation())
+    }
   }
 
   /**
