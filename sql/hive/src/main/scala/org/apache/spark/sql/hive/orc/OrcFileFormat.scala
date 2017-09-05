@@ -83,8 +83,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           classOf[MapRedOutputFormat[_, _]])
     }
 
-    dataSchema.map(_.name).foreach(
-      org.apache.spark.sql.execution.datasources.orc.OrcFileFormat.checkFieldName)
+    org.apache.spark.sql.execution.datasources.orc.OrcFileFormat.checkFieldNames(dataSchema)
 
     new OutputWriterFactory {
       override def newInstance(

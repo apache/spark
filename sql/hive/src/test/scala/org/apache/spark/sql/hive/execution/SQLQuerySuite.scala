@@ -2002,18 +2002,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("SPARK-21912 Creating ORC/Parquet datasource table should check invalid column names") {
-    withTable("orc1") {
+    withTable("t21912") {
       Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-        Seq("ORC", "PARQUET").foreach { dataSource =>
+        Seq("ORC", "PARQUET").foreach { source =>
           val m = intercept[AnalysisException] {
-            sql(s"CREATE TABLE orc1(`column$name` INT) USING $dataSource")
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
           assert(m.contains(s"contains invalid character(s)"))
 
           val m2 = intercept[AnalysisException] {
-            sql(s"CREATE TABLE orc1 USING $dataSource AS SELECT 1 `column$name`")
+            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
           }.getMessage
           assert(m2.contains(s"contains invalid character(s)"))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+            val m3 = intercept[AnalysisException] {
+              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
+            }.getMessage
+            assert(m3.contains(s"contains invalid character(s)"))
+          }
         }
       }
     }

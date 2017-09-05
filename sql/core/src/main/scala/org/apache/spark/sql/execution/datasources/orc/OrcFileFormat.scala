@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import org.apache.orc.TypeDescription
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.types.StructType
 
 private[sql] object OrcFileFormat {
   def checkFieldName(name: String): Unit = {
@@ -32,5 +33,10 @@ private[sql] object OrcFileFormat {
              |Please use alias to rename it.
            """.stripMargin.split("\n").mkString(" ").trim)
     }
+  }
+
+  def checkFieldNames(schema: StructType): StructType = {
+    schema.fieldNames.foreach(checkFieldName)
+    schema
   }
 }

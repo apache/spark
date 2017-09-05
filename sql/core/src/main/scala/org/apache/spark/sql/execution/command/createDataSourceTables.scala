@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import java.net.URI
+import java.util.Locale
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
@@ -87,11 +88,11 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       }
     }
 
-    table.provider.get.toLowerCase match {
+    table.provider.get.toLowerCase(Locale.ROOT) match {
       case "parquet" =>
-        table.dataSchema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
+        ParquetSchemaConverter.checkFieldNames(table.dataSchema)
       case "orc" =>
-        table.dataSchema.map(_.name).foreach(OrcFileFormat.checkFieldName)
+        OrcFileFormat.checkFieldNames(table.dataSchema)
       case _ =>
     }
 
