@@ -2361,21 +2361,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
       spark.sql(v1)
 
-      // use orc data source to check the data of path is right.
-      withTempView("orc_source") {
-        sql(
-          s"""
-             |CREATE TEMPORARY TABLE json_source
-             |USING json
-             |OPTIONS (
-             |  PATH '${dir.getCanonicalPath}'
-             |)
-           """.stripMargin)
-
-        checkAnswer(
-          sql("select * from json_source"),
-          sql("SELECT 1 as a, 'c' as b"))
-      }
+      checkAnswer(
+        spark.read.json(dir.getCanonicalPath),
+        sql("SELECT 1 as a, 'c' as b"))
     }
   }
 

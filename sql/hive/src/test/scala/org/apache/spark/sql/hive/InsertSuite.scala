@@ -561,7 +561,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
         checkAnswer(
           sql("select * from orc_source"),
-          sql("select * from src where key < 10").collect())
+          sql("select * from src where key < 10"))
       }
     }
   }
@@ -588,20 +588,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            """.stripMargin)
 
         // use orc data source to check the data of path is right.
-        withTempView("orc_source") {
-          sql(
-            s"""
-               |CREATE TEMPORARY VIEW orc_source
-               |USING org.apache.spark.sql.hive.orc
-               |OPTIONS (
-               |  PATH '${dir.getCanonicalPath}'
-               |)
-             """.stripMargin)
-
-          checkAnswer(
-            sql("select * from orc_source"),
-            sql("select * from test_insert_table").collect())
-        }
+        checkAnswer(
+          spark.read.orc(dir.getCanonicalPath),
+          sql("select * from test_insert_table"))
       }
     }
   }
@@ -628,20 +617,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
            """.stripMargin)
 
         // use orc data source to check the data of path is right.
-        withTempView("orc_source") {
-          sql(
-            s"""
-               |CREATE TEMPORARY VIEW orc_source
-               |USING org.apache.spark.sql.hive.orc
-               |OPTIONS (
-               |  PATH '${dir.getCanonicalPath}'
-               |)
-             """.stripMargin)
-
-          checkAnswer(
-            sql("select * from orc_source"),
-            sql("select * from test_insert_table").collect())
-        }
+        checkAnswer(
+          spark.read.orc(dir.getCanonicalPath),
+          sql("select * from test_insert_table"))
       }
     }
   }
