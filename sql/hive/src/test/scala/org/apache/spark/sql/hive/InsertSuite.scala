@@ -662,4 +662,44 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       assert(e.contains("Wrong FS: abc://a, expected: file:///"))
     }
   }
+
+  test("insert overwrite to dir with mixed syntax") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      val e = intercept[ParseException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY 'file://tmp'
+             |USING json
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+      }.getMessage
+
+      assert(e.contains("mismatched input 'ROW'"))
+    }
+  }
+
+  test("insert overwrite to dir with multi inserts") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      val e = intercept[ParseException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY 'file://tmp2'
+             |USING json
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+             |INSERT OVERWRITE DIRECTORY 'file://tmp2'
+             |USING json
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+      }.getMessage
+
+      assert(e.contains("mismatched input 'ROW'"))
+    }
+  }
 }

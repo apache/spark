@@ -63,7 +63,7 @@ case class InsertIntoDataSourceDirCommand(
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
     if (!isFileFormat) {
       throw new SparkException(
-        "Only Data Sources providing FileFormat are supported.")
+        "Only Data Sources providing FileFormat are supported: " + dataSource.providingClass)
     }
 
     val saveMode = if (overwrite) SaveMode.Overwrite else SaveMode.ErrorIfExists

@@ -196,25 +196,15 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
     assert(ctx.children.size == 1)
 
     ctx.getChild(0) match {
-      case c : InsertIntoTableContext =>
-        withInsertIntoTable(c.asInstanceOf[InsertIntoTableContext], query)
-      case c : InsertOverwriteDirectoryContext =>
-        withInsertOverwriteDirectory(c.asInstanceOf[InsertOverwriteDirectoryContext], query)
+      case table : InsertIntoTableContext =>
+        withInsertIntoTable(table, query)
+      case dir: InsertOverwriteDirContext =>
+        val (isLocal, storage, provider) = visitInsertOverwriteDir(dir)
+        InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
+      case hiveDir: InsertOverwriteHiveDirContext =>
+        val (isLocal, storage, provider) = visitInsertOverwriteHiveDir(hiveDir)
+        InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
     }
-  }
-
-  /**
-   * Add an INSERT OVERWRITE [LOCAL] DIRECTORY operation to the logical plan
-   */
-  private def withInsertOverwriteDirectory(
-      ctx: InsertOverwriteDirectoryContext,
-      query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val (isLocal, storage, provider) = ctx match {
-      case dir: InsertOverwriteDirContext => visitInsertOverwriteDir(dir)
-      case hiveDir: InsertOverwriteHiveDirContext => visitInsertOverwriteHiveDir(hiveDir)
-    }
-
-    InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
   }
 
   /**
