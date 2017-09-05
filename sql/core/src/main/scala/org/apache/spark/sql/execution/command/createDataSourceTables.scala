@@ -89,9 +89,10 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
 
     table.provider.get.toLowerCase match {
       case "parquet" =>
-        dataSource.schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
+        table.dataSchema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
       case "orc" =>
-        dataSource.schema.map(_.name).foreach(OrcFileFormat.checkFieldName)
+        table.dataSchema.map(_.name).foreach(OrcFileFormat.checkFieldName)
+      case _ =>
     }
 
     val newTable = table.copy(

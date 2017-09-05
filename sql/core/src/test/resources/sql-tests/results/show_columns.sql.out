@@ -23,7 +23,8 @@ CREATE TABLE showcolumn1 (col1 int, `col 2` int) USING parquet
 -- !query 2 schema
 struct<>
 -- !query 2 output
-
+org.apache.spark.sql.AnalysisException
+Attribute name "col 2" contains invalid character(s) among " ,;{}()\n\t=". Please use alias to rename it.;
 
 
 -- !query 3
@@ -53,28 +54,28 @@ struct<>
 -- !query 6
 SHOW COLUMNS IN showcolumn1
 -- !query 6 schema
-struct<col_name:string>
+struct<>
 -- !query 6 output
-col 2
-col1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+Table or view 'showcolumn1' not found in database 'showdb';
 
 
 -- !query 7
 SHOW COLUMNS IN showdb.showcolumn1
 -- !query 7 schema
-struct<col_name:string>
+struct<>
 -- !query 7 output
-col 2
-col1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+Table or view 'showcolumn1' not found in database 'showdb';
 
 
 -- !query 8
 SHOW COLUMNS IN showcolumn1 FROM showdb
 -- !query 8 schema
-struct<col_name:string>
+struct<>
 -- !query 8 output
-col 2
-col1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+Table or view 'showcolumn1' not found in database 'showdb';
 
 
 -- !query 9
@@ -100,10 +101,10 @@ Table or view 'badtable' not found in database 'showdb';
 -- !query 11
 SHOW COLUMNS IN showdb.showcolumn1 from SHOWDB
 -- !query 11 schema
-struct<col_name:string>
+struct<>
 -- !query 11 output
-col 2
-col1
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+Table or view 'showcolumn1' not found in database 'showdb';
 
 
 -- !query 12
@@ -174,7 +175,8 @@ DROP TABLE showcolumn1
 -- !query 19 schema
 struct<>
 -- !query 19 output
-
+org.apache.spark.sql.catalyst.analysis.NoSuchTableException
+Table or view 'showcolumn1' not found in database 'showdb';
 
 
 -- !query 20
