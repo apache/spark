@@ -179,11 +179,11 @@ class SourceProgress protected[sql](
     }
 
     ("description" -> JString(description)) ~
-    ("startOffset" -> tryParse(startOffset)) ~
-    ("endOffset" -> tryParse(endOffset)) ~
-    ("numInputRows" -> JInt(numInputRows)) ~
-    ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
-    ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
+      ("startOffset" -> tryParse(startOffset)) ~
+      ("endOffset" -> tryParse(endOffset)) ~
+      ("numInputRows" -> JInt(numInputRows)) ~
+      ("inputRowsPerSecond" -> safeDoubleToJValue(inputRowsPerSecond)) ~
+      ("processedRowsPerSecond" -> safeDoubleToJValue(processedRowsPerSecond))
   }
 
   private def tryParse(json: String) = try {
@@ -202,7 +202,7 @@ class SourceProgress protected[sql](
  */
 @InterfaceStability.Evolving
 class SinkProgress protected[sql](
-  val description: String) extends Serializable {
+    val description: String) extends Serializable {
 
   /** The compact JSON representation of this progress. */
   def json: String = compact(render(jsonValue))
@@ -213,6 +213,6 @@ class SinkProgress protected[sql](
   override def toString: String = prettyJson
 
   private[sql] def jsonValue: JValue = {
-    "description" -> JString(description)
+    ("description" -> JString(description))
   }
 }
