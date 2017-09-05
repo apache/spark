@@ -22,49 +22,45 @@ import java.io.Writer
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
 private[sql] class JacksonGenerator(
-    childType: DataType,
-    rowSchema: StructType,
+    rowSchema: DataType,
     writer: Writer,
     options: JSONOptions) {
-
-  // In previous version, `JacksonGenerator` is only for `InternalRow` to JSON object.
-  // SPARK-21513 will allow `JacasonGenerator` to support arbitrary `MapType` so that needing
-  // `childType` to check what type is `KeyType` of `MapType`.
-  def this(rowSchema: StructType, writer: Writer, options: JSONOptions) = {
-    this(rowSchema, rowSchema, writer, options)
-  }
 
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
-
-  private val rootWriter = childType match {
-    case _: StructType => rootFieldWriters(rowSchema)
-    case ArrayType(_: StructType, _) => arrElementWriter(rowSchema)
-    case MapType(_: DataType, _: StructType, _: Boolean) => mapStructValueWriter(rowSchema)
-    case MapType(_: DataType, _: DataType, _: Boolean) =>
-      makeWriter(childType.asInstanceOf[MapType].valueType)
+  
+  // `JackGenerator` only supports to write out a struct, an array of struct or an arbitrary map
+  rowSchema match {
+    case _: StructType | _: MapType =>
+      TypeCheckResult.TypeCheckSuccess
+    case _ => TypeCheckResult.TypeCheckFailure(
+      s"Input type ${rowSchema.simpleString} must be a struct or a map")
   }
 
   // `ValueWriter`s for all fields of the schema
-  private def rootFieldWriters(schema: StructType): Array[ValueWriter] = {
-    schema.map(_.dataType).map(makeWriter).toArray
+  private lazy val rootFieldWriters: Array[ValueWriter] = {
+    rowSchema.asInstanceOf[StructType].map(_.dataType).map(makeWriter).toArray
   }
 
   // `ValueWriter` for array data storing rows of the schema.
-  private def arrElementWriter(schema: StructType): ValueWriter = {
+  private lazy val arrElementWriter: ValueWriter = {
     (arr: SpecializedGetters, i: Int) => {
-      writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters(schema)))
+      val schema: StructType = rowSchema.asInstanceOf[StructType]
+      writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
     }
   }
 
-  private def mapStructValueWriter(schema: StructType): ValueWriter = makeWriter(schema)
+  private lazy val mapElementWriter: ValueWriter = {
+    makeWriter(rowSchema.asInstanceOf[MapType].valueType)
+  }
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
 
@@ -218,7 +214,7 @@ private[sql] class JacksonGenerator(
    * @param row The row to convert
    */
   def write(row: InternalRow): Unit = {
-    writeObject(writeFields(row, rowSchema, rootWriter.asInstanceOf[Array[ValueWriter]]))
+    writeObject(writeFields(row, rowSchema.asInstanceOf[StructType], rootFieldWriters))
   }
 
   /**
@@ -227,12 +223,16 @@ private[sql] class JacksonGenerator(
    * @param array The array of rows to convert
    */
   def write(array: ArrayData): Unit = {
-    writeArray(writeArrayData(array, rootWriter.asInstanceOf[ValueWriter]))
+    writeArray(writeArrayData(array, arrElementWriter))
   }
 
+  /**
+   * Transforms a `MapData` to JSON object using Jackson
+   *
+   * @param map a map to convert
+   */
   def write(map: MapData): Unit = {
-    writeObject(writeMapData(map, childType.asInstanceOf[MapType],
-      rootWriter.asInstanceOf[ValueWriter]))
+    writeObject(writeMapData(map, rowSchema.asInstanceOf[MapType], mapElementWriter))
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')

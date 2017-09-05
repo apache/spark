@@ -638,14 +638,13 @@ case class StructsToJson(
 
   @transient
   lazy val gen = new JacksonGenerator(
-    child.dataType, rowSchema, writer, new JSONOptions(options, timeZoneId.get))
+    rowSchema, writer, new JSONOptions(options, timeZoneId.get))
 
   @transient
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
-    case MapType(_: DataType, st: StructType, _) => st
-    case MapType(_: DataType, _: DataType, _) => StructType(Nil)
+    case MapType(_: DataType, _: DataType, _) => child.dataType
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -677,18 +676,27 @@ case class StructsToJson(
   override def dataType: DataType = StringType
 
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
-    case _: StructType | ArrayType(_: StructType, _) |
-         MapType(_: DataType, _: DataType, _: Boolean) =>
+    case _: StructType | ArrayType(_: StructType, _) =>
       try {
-        JacksonUtils.verifySchema(rowSchema)
+        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
+    case MapType(_: DataType, st: StructType, _: Boolean) =>
+      try {
+        JacksonUtils.verifySchema(st)
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case MapType(_: DataType, _: DataType, _: Boolean) =>
+      TypeCheckResult.TypeCheckSuccess
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
-          s"map with a struct value.")
+          s"an arbitrary map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
