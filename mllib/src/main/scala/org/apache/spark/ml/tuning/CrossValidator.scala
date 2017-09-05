@@ -23,7 +23,6 @@ import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 
-import com.github.fommil.netlib.F2jBLAS
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
 
@@ -73,8 +72,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   @Since("1.2.0")
   def this() = this(Identifiable.randomUID("cv"))
 
-  private val f2jBLAS = new F2jBLAS
-
   /** @group setParam */
   @Since("1.2.0")
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
@@ -112,7 +109,6 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
     val est = $(estimator)
     val eval = $(evaluator)
     val epm = $(estimatorParamMaps)
-    val numModels = epm.length
 
     // Create execution context based on $(parallelism)
     val executionContext = getExecutionContext
@@ -129,7 +125,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       logDebug(s"Train split $splitIndex with multiple sets of parameters.")
 
       // Fit models in a Future for training in parallel
-      val models = epm.map { paramMap =>
+      val modelFutures = epm.map { paramMap =>
         Future[Model[_]] {
           val model = est.fit(trainingDataset, paramMap)
           model.asInstanceOf[Model[_]]
@@ -137,12 +133,11 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       }
 
       // Unpersist training data only when all models have trained
-      Future.sequence[Model[_], Iterable](models)(implicitly, executionContext).onComplete { _ =>
-        trainingDataset.unpersist()
-      } (executionContext)
+      Future.sequence[Model[_], Iterable](modelFutures)(implicitly, executionContext)
+        .onComplete { _ => trainingDataset.unpersist() } (executionContext)
 
       // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
-      val foldMetricFutures = models.zip(epm).map { case (modelFuture, paramMap) =>
+      val foldMetricFutures = modelFutures.zip(epm).map { case (modelFuture, paramMap) =>
         modelFuture.map { model =>
           // TODO: duplicate evaluator to take extra params from input
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
@@ -155,10 +150,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
       val foldMetrics = foldMetricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
       validationDataset.unpersist()
       foldMetrics
-    }.transpose.map(_.sum)
-
-    // Calculate average metric over all splits
-    f2jBLAS.dscal(numModels, 1.0 / $(numFolds), metrics, 1)
+    }.transpose.map(_.sum / $(numFolds)) // Calculate average metric over all splits
 
     logInfo(s"Average cross-validation metrics: ${metrics.toSeq}")
     val (bestMetric, bestIndex) =
