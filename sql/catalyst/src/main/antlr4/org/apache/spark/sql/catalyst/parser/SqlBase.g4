@@ -81,6 +81,7 @@ statement
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec? locationSpec?
         (COMMENT comment=STRING)?
+        (TBLPROPERTIES tableProps=tablePropertyList)?
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT comment=STRING)?
