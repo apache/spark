@@ -38,7 +38,6 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
@@ -84,7 +83,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
           classOf[MapRedOutputFormat[_, _]])
     }
 
-    dataSchema.map(_.name).foreach(OrcFileFormat.checkFieldName)
+    dataSchema.map(_.name).foreach(
+      org.apache.spark.sql.execution.datasources.orc.OrcFileFormat.checkFieldName)
 
     new OutputWriterFactory {
       override def newInstance(
