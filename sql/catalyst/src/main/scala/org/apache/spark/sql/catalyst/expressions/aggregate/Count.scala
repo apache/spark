@@ -23,9 +23,13 @@ import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = """_FUNC_(*) - Returns the total number of retrieved rows, including rows containing NULL values.
-    _FUNC_(expr) - Returns the number of rows for which the supplied expression is non-NULL.
-    _FUNC_(DISTINCT expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are unique and non-NULL.""")
+  usage = """
+    _FUNC_(*) - Returns the total number of retrieved rows, including rows containing null.
+
+    _FUNC_(expr) - Returns the number of rows for which the supplied expression is non-null.
+
+    _FUNC_(DISTINCT expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are unique and non-null.
+  """)
 // scalastyle:on line.size.limit
 case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
@@ -33,9 +37,6 @@ case class Count(children: Seq[Expression]) extends DeclarativeAggregate {
 
   // Return data type.
   override def dataType: DataType = LongType
-
-  // Expected input data type.
-  override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.size)(AnyDataType)
 
   private lazy val count = AttributeReference("count", LongType, nullable = false)()
 

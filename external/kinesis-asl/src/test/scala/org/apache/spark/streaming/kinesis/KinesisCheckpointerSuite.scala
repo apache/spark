@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.kinesis
 
-import java.util.concurrent.{ExecutorService, TimeoutException}
+import java.util.concurrent.TimeoutException
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -30,8 +30,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterEach, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.streaming.{Duration, TestSuiteBase}
 import org.apache.spark.util.ManualClock
@@ -119,7 +118,7 @@ class KinesisCheckpointerSuite extends TestSuiteBase
     when(receiverMock.getLatestSeqNumToCheckpoint(shardId)).thenReturn(someSeqNum)
 
     kinesisCheckpointer.removeCheckpointer(shardId, checkpointerMock)
-    verify(checkpointerMock, times(1)).checkpoint(anyString())
+    verify(checkpointerMock, times(1)).checkpoint()
   }
 
   test("if checkpointing is going on, wait until finished before removing and checkpointing") {
@@ -141,12 +140,15 @@ class KinesisCheckpointerSuite extends TestSuiteBase
       ExecutionContext.global)
 
     intercept[TimeoutException] {
+      // scalastyle:off awaitready
       Await.ready(f, 50 millis)
+      // scalastyle:on awaitready
     }
 
     clock.advance(checkpointInterval.milliseconds / 2)
     eventually(timeout(1 second)) {
-      verify(checkpointerMock, times(2)).checkpoint(anyString())
+      verify(checkpointerMock, times(1)).checkpoint(anyString)
+      verify(checkpointerMock, times(1)).checkpoint()
     }
   }
 }

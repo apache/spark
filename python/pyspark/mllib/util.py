@@ -140,8 +140,8 @@ class MLUtils(object):
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from glob import glob
         >>> from pyspark.mllib.util import MLUtils
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])), \
-                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, 1.23), (2, 4.56)])),
+        ...             LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> MLUtils.saveAsLibSVMFile(sc.parallelize(examples), tempFile.name)
@@ -166,8 +166,8 @@ class MLUtils(object):
         >>> from tempfile import NamedTemporaryFile
         >>> from pyspark.mllib.util import MLUtils
         >>> from pyspark.mllib.regression import LabeledPoint
-        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])), \
-                        LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
+        >>> examples = [LabeledPoint(1.1, Vectors.sparse(3, [(0, -1.23), (2, 4.56e-7)])),
+        ...             LabeledPoint(0.0, Vectors.dense([1.01, 2.02, 3.03]))]
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> sc.parallelize(examples, 1).saveAsTextFile(tempFile.name)
@@ -499,7 +499,7 @@ class LinearDataGenerator(object):
     def generateLinearRDD(sc, nexamples, nfeatures, eps,
                           nParts=2, intercept=0.0):
         """
-        Generate a RDD of LabeledPoints.
+        Generate an RDD of LabeledPoints.
         """
         return callMLlibFunc(
             "generateLinearRDDWrapper", sc, int(nexamples), int(nfeatures),

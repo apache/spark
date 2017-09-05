@@ -29,7 +29,7 @@ import org.apache.spark.serializer.KryoTest.RegistratorWithoutAutoReset
 /**
  * Tests to ensure that [[Serializer]] implementations obey the API contracts for methods that
  * describe properties of the serialized stream, such as
- * [[Serializer.supportsRelocationOfSerializedObjects]].
+ * `Serializer.supportsRelocationOfSerializedObjects`.
  */
 class SerializerPropertiesSuite extends SparkFunSuite {
 

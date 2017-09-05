@@ -114,6 +114,31 @@ def basic_df_example(spark):
     # +----+-------+
     # $example off:run_sql$
 
+    # $example on:global_temp_view$
+    # Register the DataFrame as a global temporary view
+    df.createGlobalTempView("people")
+
+    # Global temporary view is tied to a system preserved database `global_temp`
+    spark.sql("SELECT * FROM global_temp.people").show()
+    # +----+-------+
+    # | age|   name|
+    # +----+-------+
+    # |null|Michael|
+    # |  30|   Andy|
+    # |  19| Justin|
+    # +----+-------+
+
+    # Global temporary view is cross-session
+    spark.newSession().sql("SELECT * FROM global_temp.people").show()
+    # +----+-------+
+    # | age|   name|
+    # +----+-------+
+    # |null|Michael|
+    # |  30|   Andy|
+    # |  19| Justin|
+    # +----+-------+
+    # $example off:global_temp_view$
+
 
 def schema_inference_example(spark):
     # $example on:schema_inferring$
@@ -158,9 +183,6 @@ def programmatic_schema_example(spark):
 
     # Apply the schema to the RDD.
     schemaPeople = spark.createDataFrame(people, schema)
-
-    # Creates a temporary view using the DataFrame
-    schemaPeople.createOrReplaceTempView("people")
 
     # Creates a temporary view using the DataFrame
     schemaPeople.createOrReplaceTempView("people")

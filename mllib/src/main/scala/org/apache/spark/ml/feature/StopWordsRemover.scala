@@ -28,8 +28,11 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
 
 /**
  * A feature transformer that filters out stop words from input.
- * Note: null values from input array are preserved unless adding null to stopWords explicitly.
- * @see [[http://en.wikipedia.org/wiki/Stop_words]]
+ *
+ * @note null values from input array are preserved unless adding null to stopWords
+ * explicitly.
+ *
+ * @see <a href="http://en.wikipedia.org/wiki/Stop_words">Stop words (Wikipedia)</a>
  */
 @Since("1.5.0")
 class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
@@ -49,7 +52,7 @@ class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String
   /**
    * The words to be filtered out.
    * Default: English stop words
-   * @see [[StopWordsRemover.loadDefaultStopWords()]]
+   * @see `StopWordsRemover.loadDefaultStopWords()`
    * @group param
    */
   @Since("1.5.0")
@@ -129,7 +132,8 @@ object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
    * Loads the default stop words for the given language.
    * Supported languages: danish, dutch, english, finnish, french, german, hungarian,
    * italian, norwegian, portuguese, russian, spanish, swedish, turkish
-   * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
+   * @see <a href="http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/">
+   * here</a>
    */
   @Since("2.0.0")
   def loadDefaultStopWords(language: String): Array[String] = {

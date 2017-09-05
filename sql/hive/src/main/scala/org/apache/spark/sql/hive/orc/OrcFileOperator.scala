@@ -27,7 +27,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.types.StructType
 
-private[orc] object OrcFileOperator extends Logging {
+private[hive] object OrcFileOperator extends Logging {
   /**
    * Retrieves an ORC file reader from a given path.  The path can point to either a directory or a
    * single ORC file.  If it points to a directory, it picks any non-empty ORC file within that
@@ -38,7 +38,7 @@ private[orc] object OrcFileOperator extends Logging {
    * 1. Retrieving file metadata (schema and compression codecs, etc.)
    * 2. Read the actual file content (in this case, the given path should point to the target file)
    *
-   * @note As recorded by SPARK-8501, ORC writes an empty schema (<code>struct&lt;&gt;</code) to an
+   * @note As recorded by SPARK-8501, ORC writes an empty schema (<code>struct&lt;&gt;</code>) to an
    *       ORC file if the file contains zero rows. This is OK for Hive since the schema of the
    *       table is managed by metastore.  But this becomes a problem when reading ORC files
    *       directly from HDFS via Spark SQL, because we have to discover the schema from raw ORC

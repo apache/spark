@@ -112,7 +112,7 @@ class SparkStatusTracker private[spark] (sc: SparkContext) {
    */
   def getExecutorInfos: Array[SparkExecutorInfo] = {
     val executorIdToRunningTasks: Map[String, Int] =
-      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl].runningTasksByExecutors()
+      sc.taskScheduler.asInstanceOf[TaskSchedulerImpl].runningTasksByExecutors
 
     sc.getExecutorStorageStatus.map { status =>
       val bmId = status.blockManagerId

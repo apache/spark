@@ -33,6 +33,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.VersionUtils.majorVersion
 
 /**
  * Common params for KMeans and KMeansModel
@@ -41,7 +43,9 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
-   * The number of clusters to create (k). Must be > 1. Default: 2.
+   * The number of clusters to create (k). Must be &gt; 1. Note that it is possible for fewer than
+   * k clusters to be returned, for example, if there are fewer than k distinct points to cluster.
+   * Default: 2.
    * @group param
    */
   @Since("1.5.0")
@@ -69,7 +73,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 
   /**
    * Param for the number of steps for the k-means|| initialization mode. This is an advanced
-   * setting -- the default of 5 is almost always enough. Must be > 0. Default: 5.
+   * setting -- the default of 2 is almost always enough. Must be &gt; 0. Default: 2.
    * @group expertParam
    */
   @Since("1.5.0")
@@ -92,13 +96,11 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 }
 
 /**
- * :: Experimental ::
  * Model fitted by KMeans.
  *
  * @param parentModel a model trained by spark.mllib.clustering.KMeans.
  */
 @Since("1.5.0")
-@Experimental
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
     private val parentModel: MLlibKMeansModel)
@@ -106,8 +108,8 @@ class KMeansModel private[ml] (
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
-    val copied = new KMeansModel(uid, parentModel)
-    copyValues(copied, extra)
+    val copied = copyValues(new KMeansModel(uid, parentModel), extra)
+    copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
   /** @group setParam */
@@ -161,8 +163,8 @@ class KMeansModel private[ml] (
 
   private var trainingSummary: Option[KMeansSummary] = None
 
-  private[clustering] def setSummary(summary: KMeansSummary): this.type = {
-    this.trainingSummary = Some(summary)
+  private[clustering] def setSummary(summary: Option[KMeansSummary]): this.type = {
+    this.trainingSummary = summary
     this
   }
 
@@ -229,10 +231,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
 
-      val versionRegex = "([0-9]+)\\.(.+)".r
-      val versionRegex(major, _) = metadata.sparkVersion
-
-      val clusterCenters = if (major.toInt >= 2) {
+      val clusterCenters = if (majorVersion(metadata.sparkVersion) >= 2) {
         val data: Dataset[Data] = sparkSession.read.parquet(dataPath).as[Data]
         data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
@@ -247,13 +246,11 @@ object KMeansModel extends MLReadable[KMeansModel] {
 }
 
 /**
- * :: Experimental ::
  * K-means clustering with support for k-means|| initialization proposed by Bahmani et al.
  *
- * @see [[http://dx.doi.org/10.14778/2180912.2180915 Bahmani et al., Scalable k-means++.]]
+ * @see <a href="http://dx.doi.org/10.14778/2180912.2180915">Bahmani et al., Scalable k-means++.</a>
  */
 @Since("1.5.0")
-@Experimental
 class KMeans @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
   extends Estimator[KMeansModel] with KMeansParams with DefaultParamsWritable {
@@ -262,7 +259,7 @@ class KMeans @Since("1.5.0") (
     k -> 2,
     maxIter -> 20,
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
-    initSteps -> 5,
+    initSteps -> 2,
     tol -> 1e-4)
 
   @Since("1.5.0")
@@ -306,13 +303,18 @@ class KMeans @Since("1.5.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
-    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+
+    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
-    val instr = Instrumentation.create(this, rdd)
-    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
+    if (handlePersistence) {
+      instances.persist(StorageLevel.MEMORY_AND_DISK)
+    }
 
+    val instr = Instrumentation.create(this, instances)
+    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -320,13 +322,17 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
-    val parentModel = algo.run(rdd, Option(instr))
+    val parentModel = algo.run(instances, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    val m = model.setSummary(summary)
-    instr.logSuccess(m)
-    m
+
+    model.setSummary(Some(summary))
+    instr.logSuccess(model)
+    if (handlePersistence) {
+      instances.unpersist()
+    }
+    model
   }
 
   @Since("1.5.0")
@@ -346,35 +352,15 @@ object KMeans extends DefaultParamsReadable[KMeans] {
  * :: Experimental ::
  * Summary of KMeans.
  *
- * @param predictions  [[DataFrame]] produced by [[KMeansModel.transform()]]
- * @param predictionCol  Name for column of predicted clusters in `predictions`
- * @param featuresCol  Name for column of features in `predictions`
- * @param k  Number of clusters
+ * @param predictions  `DataFrame` produced by `KMeansModel.transform()`.
+ * @param predictionCol  Name for column of predicted clusters in `predictions`.
+ * @param featuresCol  Name for column of features in `predictions`.
+ * @param k  Number of clusters.
  */
 @Since("2.0.0")
 @Experimental
 class KMeansSummary private[clustering] (
-    @Since("2.0.0") @transient val predictions: DataFrame,
-    @Since("2.0.0") val predictionCol: String,
-    @Since("2.0.0") val featuresCol: String,
-    @Since("2.0.0") val k: Int) extends Serializable {
-
-  /**
-   * Cluster centers of the transformed data.
-   */
-  @Since("2.0.0")
-  @transient lazy val cluster: DataFrame = predictions.select(predictionCol)
-
-  /**
-   * Size of (number of data points in) each cluster.
-   */
-  @Since("2.0.0")
-  lazy val clusterSizes: Array[Long] = {
-    val sizes = Array.fill[Long](k)(0)
-    cluster.groupBy(predictionCol).count().select(predictionCol, "count").collect().foreach {
-      case Row(cluster: Int, count: Long) => sizes(cluster) = count
-    }
-    sizes
-  }
-
-}
+    predictions: DataFrame,
+    predictionCol: String,
+    featuresCol: String,
+    k: Int) extends ClusteringSummary(predictions, predictionCol, featuresCol, k)

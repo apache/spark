@@ -54,6 +54,7 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 // $example off:programmatic_schema$
+import org.apache.spark.sql.AnalysisException;
 
 // $example on:untyped_ops$
 // col("...") is preferable to df.col("...")
@@ -84,7 +85,7 @@ public class JavaSparkSQLExample {
   }
   // $example off:create_ds$
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws AnalysisException {
     // $example on:init_session$
     SparkSession spark = SparkSession
       .builder()
@@ -101,7 +102,7 @@ public class JavaSparkSQLExample {
     spark.stop();
   }
 
-  private static void runBasicDataFrameExample(SparkSession spark) {
+  private static void runBasicDataFrameExample(SparkSession spark) throws AnalysisException {
     // $example on:create_df$
     Dataset<Row> df = spark.read().json("examples/src/main/resources/people.json");
 
@@ -176,6 +177,31 @@ public class JavaSparkSQLExample {
     // |  19| Justin|
     // +----+-------+
     // $example off:run_sql$
+
+    // $example on:global_temp_view$
+    // Register the DataFrame as a global temporary view
+    df.createGlobalTempView("people");
+
+    // Global temporary view is tied to a system preserved database `global_temp`
+    spark.sql("SELECT * FROM global_temp.people").show();
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+
+    // Global temporary view is cross-session
+    spark.newSession().sql("SELECT * FROM global_temp.people").show();
+    // +----+-------+
+    // | age|   name|
+    // +----+-------+
+    // |null|Michael|
+    // |  30|   Andy|
+    // |  19| Justin|
+    // +----+-------+
+    // $example off:global_temp_view$
   }
 
   private static void runDatasetCreationExample(SparkSession spark) {
@@ -201,12 +227,9 @@ public class JavaSparkSQLExample {
     // Encoders for most common types are provided in class Encoders
     Encoder<Integer> integerEncoder = Encoders.INT();
     Dataset<Integer> primitiveDS = spark.createDataset(Arrays.asList(1, 2, 3), integerEncoder);
-    Dataset<Integer> transformedDS = primitiveDS.map(new MapFunction<Integer, Integer>() {
-      @Override
-      public Integer call(Integer value) throws Exception {
-        return value + 1;
-      }
-    }, integerEncoder);
+    Dataset<Integer> transformedDS = primitiveDS.map(
+        (MapFunction<Integer, Integer>) value -> value + 1,
+        integerEncoder);
     transformedDS.collect(); // Returns [2, 3, 4]
 
     // DataFrames can be converted to a Dataset by providing a class. Mapping based on name
@@ -229,15 +252,12 @@ public class JavaSparkSQLExample {
     JavaRDD<Person> peopleRDD = spark.read()
       .textFile("examples/src/main/resources/people.txt")
       .javaRDD()
-      .map(new Function<String, Person>() {
-        @Override
-        public Person call(String line) throws Exception {
-          String[] parts = line.split(",");
-          Person person = new Person();
-          person.setName(parts[0]);
-          person.setAge(Integer.parseInt(parts[1].trim()));
-          return person;
-        }
+      .map(line -> {
+        String[] parts = line.split(",");
+        Person person = new Person();
+        person.setName(parts[0]);
+        person.setAge(Integer.parseInt(parts[1].trim()));
+        return person;
       });
 
     // Apply a schema to an RDD of JavaBeans to get a DataFrame
@@ -250,12 +270,9 @@ public class JavaSparkSQLExample {
 
     // The columns of a row in the result can be accessed by field index
     Encoder<String> stringEncoder = Encoders.STRING();
-    Dataset<String> teenagerNamesByIndexDF = teenagersDF.map(new MapFunction<Row, String>() {
-      @Override
-      public String call(Row row) throws Exception {
-        return "Name: " + row.getString(0);
-      }
-    }, stringEncoder);
+    Dataset<String> teenagerNamesByIndexDF = teenagersDF.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.getString(0),
+        stringEncoder);
     teenagerNamesByIndexDF.show();
     // +------------+
     // |       value|
@@ -264,12 +281,9 @@ public class JavaSparkSQLExample {
     // +------------+
 
     // or by field name
-    Dataset<String> teenagerNamesByFieldDF = teenagersDF.map(new MapFunction<Row, String>() {
-      @Override
-      public String call(Row row) throws Exception {
-        return "Name: " + row.<String>getAs("name");
-      }
-    }, stringEncoder);
+    Dataset<String> teenagerNamesByFieldDF = teenagersDF.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.<String>getAs("name"),
+        stringEncoder);
     teenagerNamesByFieldDF.show();
     // +------------+
     // |       value|
@@ -298,12 +312,9 @@ public class JavaSparkSQLExample {
     StructType schema = DataTypes.createStructType(fields);
 
     // Convert records of the RDD (people) to Rows
-    JavaRDD<Row> rowRDD = peopleRDD.map(new Function<String, Row>() {
-      @Override
-      public Row call(String record) throws Exception {
-        String[] attributes = record.split(",");
-        return RowFactory.create(attributes[0], attributes[1].trim());
-      }
+    JavaRDD<Row> rowRDD = peopleRDD.map((Function<String, Row>) record -> {
+      String[] attributes = record.split(",");
+      return RowFactory.create(attributes[0], attributes[1].trim());
     });
 
     // Apply the schema to the RDD
@@ -317,12 +328,9 @@ public class JavaSparkSQLExample {
 
     // The results of SQL queries are DataFrames and support all the normal RDD operations
     // The columns of a row in the result can be accessed by field index or by field name
-    Dataset<String> namesDS = results.map(new MapFunction<Row, String>() {
-      @Override
-      public String call(Row row) throws Exception {
-        return "Name: " + row.getString(0);
-      }
-    }, Encoders.STRING());
+    Dataset<String> namesDS = results.map(
+        (MapFunction<Row, String>) row -> "Name: " + row.getString(0),
+        Encoders.STRING());
     namesDS.show();
     // +-------------+
     // |        value|

@@ -237,7 +237,7 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
       absTol 1E-10, "mean mismatch")
     assert(summarizer.variance ~== Vectors.dense(Array(0.17657142857, 1.645115714, 2.42057142857))
       absTol 1E-8, "variance mismatch")
-    assert(summarizer.numNonzeros ~== Vectors.dense(Array(0.3, 0.5, 0.4))
+    assert(summarizer.numNonzeros ~== Vectors.dense(Array(3.0, 4.0, 3.0))
       absTol 1E-10, "numNonzeros mismatch")
     assert(summarizer.max ~== Vectors.dense(Array(0.0, 1.7, 1.3)) absTol 1E-10, "max mismatch")
     assert(summarizer.min ~== Vectors.dense(Array(-0.8, -1.2, -1.7)) absTol 1E-10, "min mismatch")
@@ -269,5 +269,23 @@ class MultivariateOnlineSummarizerSuite extends SparkFunSuite {
     assert(summarizer2.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
     assert(summarizer3.max ~== Vectors.dense(10.0, 0.0) absTol 1e-14)
     assert(summarizer3.min ~== Vectors.dense(0.0, -10.0) absTol 1e-14)
+  }
+
+  test ("test zero variance (SPARK-21818)") {
+    val summarizer1 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.7)
+    val summarizer2 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.4)
+    val summarizer3 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.5)
+    val summarizer4 = (new MultivariateOnlineSummarizer)
+      .add(Vectors.dense(3.0), 0.4)
+
+    val summarizer = summarizer1
+      .merge(summarizer2)
+      .merge(summarizer3)
+      .merge(summarizer4)
+
+    assert(summarizer.variance(0) >= 0.0)
   }
 }

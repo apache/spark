@@ -18,17 +18,13 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Locale
 
 import scala.util.control.Exception._
-import scala.util.Try
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 private[csv] object CSVInferSchema {
 
@@ -39,22 +35,27 @@ private[csv] object CSVInferSchema {
    *     3. Replace any null types with string type
    */
   def infer(
-      tokenRdd: RDD[Array[String]],
+      tokenRDD: RDD[Array[String]],
       header: Array[String],
       options: CSVOptions): StructType = {
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
+    val fields = if (options.inferSchemaFlag) {
+      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+      val rootTypes: Array[DataType] =
+        tokenRDD.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
-    val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
-      val dType = rootType match {
-        case _: NullType => StringType
-        case other => other
+      header.zip(rootTypes).map { case (thisHeader, rootType) =>
+        val dType = rootType match {
+          case _: NullType => StringType
+          case other => other
+        }
+        StructField(thisHeader, dType, nullable = true)
       }
-      StructField(thisHeader, dType, nullable = true)
+    } else {
+      // By default fields are assumed to be StringType
+      header.map(fieldName => StructField(fieldName, StringType, nullable = true))
     }
 
-    StructType(structFields)
+    StructType(fields)
   }
 
   private def inferRowType(options: CSVOptions)
@@ -85,7 +86,9 @@ private[csv] object CSVInferSchema {
         case NullType => tryParseInteger(field, options)
         case IntegerType => tryParseInteger(field, options)
         case LongType => tryParseLong(field, options)
-        case _: DecimalType => tryParseDecimal(field, options)
+        case _: DecimalType =>
+          // DecimalTypes have different precisions and scales, so we try to find the common type.
+          findTightestCommonType(typeSoFar, tryParseDecimal(field, options)).getOrElse(StringType)
         case DoubleType => tryParseDouble(field, options)
         case TimestampType => tryParseTimestamp(field, options)
         case BooleanType => tryParseBoolean(field, options)
@@ -94,6 +97,10 @@ private[csv] object CSVInferSchema {
           throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
     }
+  }
+
+  private def isInfOrNan(field: String, options: CSVOptions): Boolean = {
+    field == options.nanValue || field == options.negativeInf || field == options.positiveInf
   }
 
   private def tryParseInteger(field: String, options: CSVOptions): DataType = {
@@ -131,7 +138,7 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseDouble(field: String, options: CSVOptions): DataType = {
-    if ((allCatch opt field.toDouble).isDefined) {
+    if ((allCatch opt field.toDouble).isDefined || isInfOrNan(field, options)) {
       DoubleType
     } else {
       tryParseTimestamp(field, options)
@@ -139,20 +146,14 @@ private[csv] object CSVInferSchema {
   }
 
   private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
-    if (options.dateFormat != null) {
-      // This case infers a custom `dataFormat` is set.
-      if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
-        TimestampType
-      } else {
-        tryParseBoolean(field, options)
-      }
-    } else {
+    // This case infers a custom `dataFormat` is set.
+    if ((allCatch opt options.timestampFormat.parse(field)).isDefined) {
+      TimestampType
+    } else if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
       // We keep this for backwords competibility.
-      if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-        TimestampType
-      } else {
-        tryParseBoolean(field, options)
-      }
+      TimestampType
+    } else {
+      tryParseBoolean(field, options)
     }
   }
 
@@ -217,107 +218,5 @@ private[csv] object CSVInferSchema {
       }
 
     case _ => None
-  }
-}
-
-private[csv] object CSVTypeCast {
-
-  /**
-   * Casts given string datum to specified type.
-   * Currently we do not support complex types (ArrayType, MapType, StructType).
-   *
-   * For string types, this is simply the datum. For other types.
-   * For other nullable types, this is null if the string datum is empty.
-   *
-   * @param datum string value
-   * @param castType SparkSQL type
-   */
-  def castTo(
-      datum: String,
-      castType: DataType,
-      nullable: Boolean = true,
-      options: CSVOptions = CSVOptions()): Any = {
-
-    castType match {
-      case _: ByteType => if (datum == options.nullValue && nullable) null else datum.toByte
-      case _: ShortType => if (datum == options.nullValue && nullable) null else datum.toShort
-      case _: IntegerType => if (datum == options.nullValue && nullable) null else datum.toInt
-      case _: LongType => if (datum == options.nullValue && nullable) null else datum.toLong
-      case _: FloatType =>
-        if (datum == options.nullValue && nullable) {
-          null
-        } else if (datum == options.nanValue) {
-          Float.NaN
-        } else if (datum == options.negativeInf) {
-          Float.NegativeInfinity
-        } else if (datum == options.positiveInf) {
-          Float.PositiveInfinity
-        } else {
-          Try(datum.toFloat)
-            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
-        }
-      case _: DoubleType =>
-        if (datum == options.nullValue && nullable) {
-          null
-        } else if (datum == options.nanValue) {
-          Double.NaN
-        } else if (datum == options.negativeInf) {
-          Double.NegativeInfinity
-        } else if (datum == options.positiveInf) {
-          Double.PositiveInfinity
-        } else {
-          Try(datum.toDouble)
-            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
-        }
-      case _: BooleanType => datum.toBoolean
-      case dt: DecimalType =>
-        if (datum == options.nullValue && nullable) {
-          null
-        } else {
-          val value = new BigDecimal(datum.replaceAll(",", ""))
-          Decimal(value, dt.precision, dt.scale)
-        }
-      case _: TimestampType if options.dateFormat != null =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        options.dateFormat.parse(datum).getTime * 1000L
-      case _: TimestampType =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        DateTimeUtils.stringToTime(datum).getTime  * 1000L
-      case _: DateType if options.dateFormat != null =>
-        DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
-      case _: DateType =>
-        DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-      case _: StringType => UTF8String.fromString(datum)
-      case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
-    }
-  }
-
-  /**
-   * Helper method that converts string representation of a character to actual character.
-   * It handles some Java escaped strings and throws exception if given string is longer than one
-   * character.
-   */
-  @throws[IllegalArgumentException]
-  def toChar(str: String): Char = {
-    if (str.charAt(0) == '\\') {
-      str.charAt(1)
-      match {
-        case 't' => '\t'
-        case 'r' => '\r'
-        case 'b' => '\b'
-        case 'f' => '\f'
-        case '\"' => '\"' // In case user changes quote char and uses \" as delimiter in options
-        case '\'' => '\''
-        case 'u' if str == """\u0000""" => '\u0000'
-        case _ =>
-          throw new IllegalArgumentException(s"Unsupported special character for delimiter: $str")
-      }
-    } else if (str.length == 1) {
-      str.charAt(0)
-    } else {
-      throw new IllegalArgumentException(s"Delimiter cannot be more than one character: $str")
-    }
   }
 }

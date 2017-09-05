@@ -122,7 +122,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         logDebug(
           s"""
           |=== Result of Batch ${batch.name} ===
-          |${sideBySide(plan.treeString, curPlan.treeString).mkString("\n")}
+          |${sideBySide(batchStartPlan.treeString, curPlan.treeString).mkString("\n")}
         """.stripMargin)
       } else {
         logTrace(s"Batch ${batch.name} has no effect.")

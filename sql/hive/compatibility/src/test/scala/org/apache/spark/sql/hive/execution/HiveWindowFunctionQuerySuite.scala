@@ -95,9 +95,9 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
     // This is used to generate golden files.
     sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    sql(s"set fs.default.name=file://$testTempDir/")
+    sql(s"set fs.defaultFS=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    sql("set mapred.job.tracker=local")
+    sql("set mapreduce.jobtracker.address=local")
   }
 
   override def afterAll() {
@@ -764,9 +764,9 @@ class HiveWindowFunctionQueryFileSuite
     // This is used to generate golden files.
     // sql("set hive.plan.serialization.format=kryo")
     // Explicitly set fs to local fs.
-    // sql(s"set fs.default.name=file://$testTempDir/")
+    // sql(s"set fs.defaultFS=file://$testTempDir/")
     // Ask Hive to run jobs in-process as a single map and reduce task.
-    // sql("set mapred.job.tracker=local")
+    // sql("set mapreduce.jobtracker.address=local")
   }
 
   override def afterAll() {

@@ -57,7 +57,7 @@ setMethod("show", "GroupedData",
 
 #' Count
 #'
-#' Count the number of rows for each group.
+#' Count the number of rows for each group when we have \code{GroupedData} input.
 #' The resulting SparkDataFrame will also contain the grouping columns.
 #'
 #' @return A SparkDataFrame.
@@ -233,6 +233,9 @@ setMethod("gapplyCollect",
           })
 
 gapplyInternal <- function(x, func, schema) {
+  if (is.character(schema)) {
+    schema <- structType(schema)
+  }
   packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                        connection = NULL)
   broadcastArr <- lapply(ls(.broadcastNames),

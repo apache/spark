@@ -780,7 +780,7 @@ setMethod("cogroup",
 #' @noRd
 setMethod("sortByKey",
           signature(x = "RDD"),
-          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitions(x)) {
+          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitionsRDD(x)) {
             rangeBounds <- list()
 
             if (numPartitions > 1) {
@@ -850,7 +850,7 @@ setMethod("sortByKey",
 #' @noRd
 setMethod("subtractByKey",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR:::getNumPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::getNumPartitionsRDD(x)) {
             filterFunction <- function(elem) {
               iters <- elem[[2]]
               (length(iters[[1]]) > 0) && (length(iters[[2]]) == 0)

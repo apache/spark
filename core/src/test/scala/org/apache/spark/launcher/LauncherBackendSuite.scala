@@ -26,6 +26,7 @@ import org.scalatest.Matchers
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 class LauncherBackendSuite extends SparkFunSuite with Matchers {
 
@@ -35,6 +36,8 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
 
   tests.foreach { case (name, master) =>
     test(s"$name: launcher handle") {
+      // The tests here are failed due to the cmd length limitation up to 8K on Windows.
+      assume(!Utils.isWindows)
       testWithMaster(master)
     }
   }

@@ -36,7 +36,14 @@ compute <- function(mode, partition, serializer, deserializer, key,
       # available since R 3.2.4. So we set the global option here.
       oldOpt <- getOption("stringsAsFactors")
       options(stringsAsFactors = FALSE)
-      inputData <- do.call(rbind.data.frame, inputData)
+
+      # Handle binary data types
+      if ("raw" %in% sapply(inputData[[1]], class)) {
+        inputData <- SparkR:::rbindRaws(inputData)
+      } else {
+        inputData <- do.call(rbind.data.frame, inputData)
+      }
+
       options(stringsAsFactors = oldOpt)
 
       names(inputData) <- colNames
@@ -83,6 +90,7 @@ bootTime <- currentTimeSecs()
 bootElap <- elapsedSecs()
 
 rLibDir <- Sys.getenv("SPARKR_RLIBDIR")
+connectionTimeout <- as.integer(Sys.getenv("SPARKR_BACKEND_CONNECTION_TIMEOUT", "6000"))
 dirs <- strsplit(rLibDir, ",")[[1]]
 # Set libPaths to include SparkR package as loadNamespace needs this
 # TODO: Figure out if we can avoid this by not loading any objects that require
@@ -91,8 +99,10 @@ dirs <- strsplit(rLibDir, ",")[[1]]
 suppressPackageStartupMessages(library(SparkR))
 
 port <- as.integer(Sys.getenv("SPARKR_WORKER_PORT"))
-inputCon <- socketConnection(port = port, blocking = TRUE, open = "rb")
-outputCon <- socketConnection(port = port, blocking = TRUE, open = "wb")
+inputCon <- socketConnection(
+    port = port, blocking = TRUE, open = "rb", timeout = connectionTimeout)
+outputCon <- socketConnection(
+    port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
 
 # read the index of the current partition inside the RDD
 partition <- SparkR:::readInt(inputCon)

@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.plans
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, ResolvedHint, Union}
 import org.apache.spark.sql.catalyst.util._
 
 /**
@@ -65,5 +65,11 @@ class SameResultSuite extends SparkFunSuite {
   test("union") {
     assertSameResult(Union(Seq(testRelation, testRelation2)),
       Union(Seq(testRelation2, testRelation)))
+  }
+
+  test("hint") {
+    val df1 = testRelation.join(ResolvedHint(testRelation))
+    val df2 = testRelation.join(testRelation)
+    assertSameResult(df1, df2)
   }
 }

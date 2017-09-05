@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.Utils
@@ -66,13 +66,15 @@ case class SortAggregateExec(
     groupingExpressions.map(SortOrder(_, Ascending)) :: Nil
   }
 
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
   override def outputOrdering: Seq[SortOrder] = {
     groupingExpressions.map(SortOrder(_, Ascending))
   }
 
   protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
     val numOutputRows = longMetric("numOutputRows")
-    child.execute().mapPartitionsInternal { iter =>
+    child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
       val hasInput = iter.hasNext
@@ -82,6 +84,7 @@ case class SortAggregateExec(
         Iterator[UnsafeRow]()
       } else {
         val outputIter = new SortBasedAggregationIterator(
+          partIndex,
           groupingExpressions,
           child.output,
           iter,

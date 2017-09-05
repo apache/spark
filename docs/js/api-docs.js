@@ -50,7 +50,7 @@ $(document).ready(function() {
     MathJax.Hub.Config({
       displayAlign: "left",
       tex2jax: {
-        inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+        inlineMath: [ ["$", "$"], ["\\(","\\)"] ],
         displayMath: [ ["$$","$$"], ["\\[", "\\]"] ],
         processEscapes: true,
         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'a']

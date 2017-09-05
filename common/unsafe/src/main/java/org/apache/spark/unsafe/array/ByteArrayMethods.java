@@ -40,6 +40,7 @@ public class ByteArrayMethods {
     }
   }
 
+  private static final boolean unaligned = Platform.unaligned();
   /**
    * Optimized byte array equality check for byte arrays.
    * @return true if the arrays are equal, false otherwise
@@ -47,17 +48,33 @@ public class ByteArrayMethods {
   public static boolean arrayEquals(
       Object leftBase, long leftOffset, Object rightBase, long rightOffset, final long length) {
     int i = 0;
-    while (i <= length - 8) {
-      if (Platform.getLong(leftBase, leftOffset + i) !=
-        Platform.getLong(rightBase, rightOffset + i)) {
-        return false;
+
+    // check if stars align and we can get both offsets to be aligned
+    if ((leftOffset % 8) == (rightOffset % 8)) {
+      while ((leftOffset + i) % 8 != 0 && i < length) {
+        if (Platform.getByte(leftBase, leftOffset + i) !=
+            Platform.getByte(rightBase, rightOffset + i)) {
+              return false;
+        }
+        i += 1;
       }
-      i += 8;
     }
+    // for architectures that suport unaligned accesses, chew it up 8 bytes at a time
+    if (unaligned || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
+      while (i <= length - 8) {
+        if (Platform.getLong(leftBase, leftOffset + i) !=
+            Platform.getLong(rightBase, rightOffset + i)) {
+              return false;
+        }
+        i += 8;
+      }
+    }
+    // this will finish off the unaligned comparisons, or do the entire aligned
+    // comparison whichever is needed.
     while (i < length) {
       if (Platform.getByte(leftBase, leftOffset + i) !=
-        Platform.getByte(rightBase, rightOffset + i)) {
-        return false;
+          Platform.getByte(rightBase, rightOffset + i)) {
+            return false;
       }
       i += 1;
     }

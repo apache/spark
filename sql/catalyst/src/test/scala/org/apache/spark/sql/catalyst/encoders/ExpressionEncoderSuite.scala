@@ -24,7 +24,7 @@ import java.util.Arrays
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.sql.Encoders
+import org.apache.spark.sql.{Encoder, Encoders}
 import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -66,8 +66,6 @@ case class RepeatedData(
     mapFieldNull: scala.collection.Map[Int, java.lang.Long],
     structField: PrimitiveData)
 
-case class SpecificCollection(l: List[Int])
-
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {
   override def hashCode(): Int = value
@@ -105,6 +103,12 @@ class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
   override def deserialize(datum: Any): UDTCaseClass = datum match {
     case uri: UTF8String => UDTCaseClass(new java.net.URI(uri.toString))
   }
+}
+
+case class PrimitiveValueClass(wrapped: Int) extends AnyVal
+case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends AnyVal
+object ReferenceValueClass {
+  case class Container(data: Int)
 }
 
 class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
@@ -290,6 +294,17 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     ExpressionEncoder.tuple(intEnc, ExpressionEncoder.tuple(intEnc, longEnc))
   }
 
+  encodeDecodeTest(
+    PrimitiveValueClass(42), "primitive value class")
+
+  encodeDecodeTest(
+    ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
+
+  encodeDecodeTest(Option(31), "option of int")
+  encodeDecodeTest(Option.empty[Int], "empty option of int")
+  encodeDecodeTest(Option("abc"), "option of string")
+  encodeDecodeTest(Option.empty[String], "empty option of string")
+
   productTest(("UDT", new ExamplePoint(0.1, 0.2)))
 
   test("nullable of encoder schema") {
@@ -328,9 +343,27 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     }
   }
 
-  test("null check for map key") {
+  test("nullable of encoder serializer") {
+    def checkNullable[T: Encoder](nullable: Boolean): Unit = {
+      assert(encoderFor[T].serializer.forall(_.nullable === nullable))
+    }
+
+    // test for flat encoders
+    checkNullable[Int](false)
+    checkNullable[Option[Int]](true)
+    checkNullable[java.lang.Integer](true)
+    checkNullable[String](true)
+  }
+
+  test("null check for map key: String") {
     val encoder = ExpressionEncoder[Map[String, Int]]()
     val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("null check for map key: Integer") {
+    val encoder = ExpressionEncoder[Map[Integer, String]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 

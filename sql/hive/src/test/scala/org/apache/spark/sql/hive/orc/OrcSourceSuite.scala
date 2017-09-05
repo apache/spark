@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -56,7 +57,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
          |  stringField STRING
          |)
          |STORED AS ORC
-         |LOCATION '${orcTableAsDir.getCanonicalPath}'
+         |LOCATION '${orcTableAsDir.toURI}'
        """.stripMargin)
 
     sql(
@@ -146,6 +147,78 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
     sql("DROP TABLE IF EXISTS orcNullValues")
   }
+
+  test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
+    val conf = sqlContext.sessionState.conf
+    assert(new OrcOptions(Map("Orc.Compress" -> "NONE"), conf).compressionCodec == "NONE")
+  }
+
+  test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
+    val location = Utils.createTempDir()
+    val uri = location.toURI
+    try {
+      hiveClient.runSqlHive("USE default")
+      hiveClient.runSqlHive(
+        """
+          |CREATE EXTERNAL TABLE hive_orc(
+          |  a STRING,
+          |  b CHAR(10),
+          |  c VARCHAR(10),
+          |  d ARRAY<CHAR(3)>)
+          |STORED AS orc""".stripMargin)
+      // Hive throws an exception if I assign the location in the create table statement.
+      hiveClient.runSqlHive(
+        s"ALTER TABLE hive_orc SET LOCATION '$uri'")
+      hiveClient.runSqlHive(
+        """
+          |INSERT INTO TABLE hive_orc
+          |SELECT 'a', 'b', 'c', ARRAY(CAST('d' AS CHAR(3)))
+          |FROM (SELECT 1) t""".stripMargin)
+
+      // We create a different table in Spark using the same schema which points to
+      // the same location.
+      spark.sql(
+        s"""
+           |CREATE EXTERNAL TABLE spark_orc(
+           |  a STRING,
+           |  b CHAR(10),
+           |  c VARCHAR(10),
+           |  d ARRAY<CHAR(3)>)
+           |STORED AS orc
+           |LOCATION '$uri'""".stripMargin)
+      val result = Row("a", "b         ", "c", Seq("d  "))
+      checkAnswer(spark.table("hive_orc"), result)
+      checkAnswer(spark.table("spark_orc"), result)
+    } finally {
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
+      hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")
+      Utils.deleteRecursively(location)
+    }
+  }
+
+  test("SPARK-21839: Add SQL config for ORC compression") {
+    val conf = sqlContext.sessionState.conf
+    // Test if the default of spark.sql.orc.compression.codec is snappy
+    assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "SNAPPY")
+
+    // OrcOptions's parameters have a higher priority than SQL configuration.
+    // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
+    withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
+      assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
+      val map1 = Map("orc.compress" -> "zlib")
+      val map2 = Map("orc.compress" -> "zlib", "compression" -> "lzo")
+      assert(new OrcOptions(map1, conf).compressionCodec == "ZLIB")
+      assert(new OrcOptions(map2, conf).compressionCodec == "LZO")
+    }
+
+    // Test all the valid options of spark.sql.orc.compression.codec
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO").foreach { c =>
+      withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
+        val expected = if (c == "UNCOMPRESSED") "NONE" else c
+        assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
+      }
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite {
@@ -156,7 +229,7 @@ class OrcSourceSuite extends OrcSuite {
       s"""CREATE TEMPORARY VIEW normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
-         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
 
@@ -164,7 +237,7 @@ class OrcSourceSuite extends OrcSuite {
       s"""CREATE TEMPORARY VIEW normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
-         |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
+         |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
   }

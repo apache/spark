@@ -17,14 +17,12 @@
 
 package org.apache.spark.ui.exec
 
-import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.status.api.v1.ExecutorSummary
-import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
-import org.apache.spark.util.Utils
+import org.apache.spark.status.api.v1.{ExecutorSummary, MemoryMetrics}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 // This isn't even used anymore -- but we need to keep it b/c of a MiMa false positive
 private[ui] case class ExecutorSummaryInfo(
@@ -41,7 +39,9 @@ private[ui] case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    maxMemory: Long,
+    isBlacklisted: Int,
+    maxOnHeapMem: Long,
+    maxOffHeapMem: Long,
     executorLogs: Map[String, String])
 
 
@@ -49,24 +49,56 @@ private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
     threadDumpEnabled: Boolean)
   extends WebUIPage("") {
-  private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
       <div>
         {
-          <div id="active-executors"></div> ++
+          <div>
+            <span class="expand-additional-metrics">
+              <span class="expand-additional-metrics-arrow arrow-closed"></span>
+              <a>Show Additional Metrics</a>
+            </span>
+            <div class="additional-metrics collapsed">
+              <ul>
+                <li>
+                  <input type="checkbox" id="select-all-metrics"/>
+                  <span class="additional-metric-title"><em>(De)select All</em></span>
+                </li>
+                <li>
+                  <span data-toggle="tooltip"
+                        title={ExecutorsPage.ON_HEAP_MEMORY_TOOLTIP} data-placement="right">
+                    <input type="checkbox" name="on_heap_memory"/>
+                    <span class="additional-metric-title">On Heap Storage Memory</span>
+                  </span>
+                </li>
+                <li>
+                  <span data-toggle="tooltip"
+                        title={ExecutorsPage.OFF_HEAP_MEMORY_TOOLTIP} data-placement="right">
+                    <input type="checkbox" name="off_heap_memory"/>
+                    <span class="additional-metric-title">Off Heap Storage Memory</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div> ++
+          <div id="active-executors" class="span12 pagination"></div> ++
           <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>
         }
-      </div>;
+      </div>
 
     UIUtils.headerSparkPage("Executors", content, parent, useDataTables = true)
   }
 }
 
 private[spark] object ExecutorsPage {
+  private val ON_HEAP_MEMORY_TOOLTIP = "Memory used / total available memory for on heap " +
+    "storage of data like RDD partitions cached in memory."
+  private val OFF_HEAP_MEMORY_TOOLTIP = "Memory used / total available memory for off heap " +
+    "storage of data like RDD partitions cached in memory."
+
   /** Represent an executor's info as a map given a storage status index */
   def getExecInfo(
       listener: ExecutorsListener,
@@ -82,19 +114,18 @@ private[spark] object ExecutorsPage {
     val rddBlocks = status.numBlocks
     val memUsed = status.memUsed
     val maxMem = status.maxMem
+    val memoryMetrics = for {
+      onHeapUsed <- status.onHeapMemUsed
+      offHeapUsed <- status.offHeapMemUsed
+      maxOnHeap <- status.maxOnHeapMem
+      maxOffHeap <- status.maxOffHeapMem
+    } yield {
+      new MemoryMetrics(onHeapUsed, offHeapUsed, maxOnHeap, maxOffHeap)
+    }
+
+
     val diskUsed = status.diskUsed
-    val totalCores = listener.executorToTotalCores.getOrElse(execId, 0)
-    val maxTasks = listener.executorToTasksMax.getOrElse(execId, 0)
-    val activeTasks = listener.executorToTasksActive.getOrElse(execId, 0)
-    val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
-    val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
-    val totalTasks = activeTasks + failedTasks + completedTasks
-    val totalDuration = listener.executorToDuration.getOrElse(execId, 0L)
-    val totalGCTime = listener.executorToJvmGCTime.getOrElse(execId, 0L)
-    val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
-    val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
-    val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
-    val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
+    val taskSummary = listener.executorToTaskSummary.getOrElse(execId, ExecutorTaskSummary(execId))
 
     new ExecutorSummary(
       execId,
@@ -103,19 +134,21 @@ private[spark] object ExecutorsPage {
       rddBlocks,
       memUsed,
       diskUsed,
-      totalCores,
-      maxTasks,
-      activeTasks,
-      failedTasks,
-      completedTasks,
-      totalTasks,
-      totalDuration,
-      totalGCTime,
-      totalInputBytes,
-      totalShuffleRead,
-      totalShuffleWrite,
+      taskSummary.totalCores,
+      taskSummary.tasksMax,
+      taskSummary.tasksActive,
+      taskSummary.tasksFailed,
+      taskSummary.tasksComplete,
+      taskSummary.tasksActive + taskSummary.tasksFailed + taskSummary.tasksComplete,
+      taskSummary.duration,
+      taskSummary.jvmGCTime,
+      taskSummary.inputBytes,
+      taskSummary.shuffleRead,
+      taskSummary.shuffleWrite,
+      taskSummary.isBlacklisted,
       maxMem,
-      executorLogs
+      taskSummary.executorLogs,
+      memoryMetrics
     )
   }
 }

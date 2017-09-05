@@ -40,7 +40,7 @@ public class ColumnVectorUtils {
   /**
    * Populates the entire `col` with `row[fieldIdx]`
    */
-  public static void populate(ColumnVector col, InternalRow row, int fieldIdx) {
+  public static void populate(WritableColumnVector col, InternalRow row, int fieldIdx) {
     int capacity = col.capacity;
     DataType t = col.dataType();
 
@@ -86,8 +86,9 @@ public class ColumnVectorUtils {
         col.getChildColumn(0).putInts(0, capacity, c.months);
         col.getChildColumn(1).putLongs(0, capacity, c.microseconds);
       } else if (t instanceof DateType) {
-        Date date = (Date)row.get(fieldIdx, t);
-        col.putInts(0, capacity, DateTimeUtils.fromJavaDate(date));
+        col.putInts(0, capacity, row.getInt(fieldIdx));
+      } else if (t instanceof TimestampType) {
+        col.putLongs(0, capacity, row.getLong(fieldIdx));
       }
     }
   }
@@ -114,7 +115,7 @@ public class ColumnVectorUtils {
     }
   }
 
-  private static void appendValue(ColumnVector dst, DataType t, Object o) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
       if (t instanceof CalendarIntervalType) {
         dst.appendStruct(true);
@@ -164,7 +165,7 @@ public class ColumnVectorUtils {
     }
   }
 
-  private static void appendValue(ColumnVector dst, DataType t, Row src, int fieldIdx) {
+  private static void appendValue(WritableColumnVector dst, DataType t, Row src, int fieldIdx) {
     if (t instanceof ArrayType) {
       ArrayType at = (ArrayType)t;
       if (src.isNullAt(fieldIdx)) {
@@ -197,15 +198,23 @@ public class ColumnVectorUtils {
    */
   public static ColumnarBatch toBatch(
       StructType schema, MemoryMode memMode, Iterator<Row> row) {
-    ColumnarBatch batch = ColumnarBatch.allocate(schema, memMode);
+    int capacity = ColumnarBatch.DEFAULT_BATCH_SIZE;
+    WritableColumnVector[] columnVectors;
+    if (memMode == MemoryMode.OFF_HEAP) {
+      columnVectors = OffHeapColumnVector.allocateColumns(capacity, schema);
+    } else {
+      columnVectors = OnHeapColumnVector.allocateColumns(capacity, schema);
+    }
+
     int n = 0;
     while (row.hasNext()) {
       Row r = row.next();
       for (int i = 0; i < schema.fields().length; i++) {
-        appendValue(batch.column(i), schema.fields()[i].dataType(), r, i);
+        appendValue(columnVectors[i], schema.fields()[i].dataType(), r, i);
       }
       n++;
     }
+    ColumnarBatch batch = new ColumnarBatch(schema, columnVectors, capacity);
     batch.setNumRows(n);
     return batch;
   }

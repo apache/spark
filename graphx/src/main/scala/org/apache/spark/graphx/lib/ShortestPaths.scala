@@ -33,10 +33,11 @@ object ShortestPaths {
 
   private def incrementMap(spmap: SPMap): SPMap = spmap.map { case (v, d) => v -> (d + 1) }
 
-  private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap =
+  private def addMaps(spmap1: SPMap, spmap2: SPMap): SPMap = {
     (spmap1.keySet ++ spmap2.keySet).map {
       k => k -> math.min(spmap1.getOrElse(k, Int.MaxValue), spmap2.getOrElse(k, Int.MaxValue))
-    }.toMap
+    }(collection.breakOut) // more efficient alternative to [[collection.Traversable.toMap]]
+  }
 
   /**
    * Computes shortest paths to the given set of landmark vertices.

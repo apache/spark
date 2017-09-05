@@ -39,6 +39,12 @@ private[hive] trait HiveClient {
   def getConf(key: String, defaultValue: String): String
 
   /**
+   * Return the associated Hive SessionState of this [[HiveClientImpl]]
+   * @return [[Any]] not SessionState to avoid linkage error
+   */
+  def getState: Any
+
+  /**
    * Runs a HiveQL command using Hive, returning the results as a list of strings.  Each row will
    * result in one string.
    */
@@ -58,15 +64,16 @@ private[hive] trait HiveClient {
   def setCurrentDatabase(databaseName: String): Unit
 
   /** Returns the metadata for specified database, throwing an exception if it doesn't exist */
-  final def getDatabase(name: String): CatalogDatabase = {
-    getDatabaseOption(name).getOrElse(throw new NoSuchDatabaseException(name))
-  }
+  def getDatabase(name: String): CatalogDatabase
 
-  /** Returns the metadata for a given database, or None if it doesn't exist. */
-  def getDatabaseOption(name: String): Option[CatalogDatabase]
+  /** Return whether a table/view with the specified name exists. */
+  def databaseExists(dbName: String): Boolean
 
   /** List the names of all the databases that match the specified pattern. */
   def listDatabases(pattern: String): Seq[String]
+
+  /** Return whether a table/view with the specified name exists. */
+  def tableExists(dbName: String, tableName: String): Boolean
 
   /** Returns the specified table, or throws [[NoSuchTableException]]. */
   final def getTable(dbName: String, tableName: String): CatalogTable = {
@@ -83,10 +90,15 @@ private[hive] trait HiveClient {
   def dropTable(dbName: String, tableName: String, ignoreIfNotExists: Boolean, purge: Boolean): Unit
 
   /** Alter a table whose name matches the one specified in `table`, assuming it exists. */
-  final def alterTable(table: CatalogTable): Unit = alterTable(table.identifier.table, table)
+  final def alterTable(table: CatalogTable): Unit = {
+    alterTable(table.database, table.identifier.table, table)
+  }
 
-  /** Updates the given table with new metadata, optionally renaming the table. */
-  def alterTable(tableName: String, table: CatalogTable): Unit
+  /**
+   * Updates the given table with new metadata, optionally renaming the table or
+   * moving across different database.
+   */
+  def alterTable(dbName: String, tableName: String, table: CatalogTable): Unit
 
   /** Creates a new database with the given name. */
   def createDatabase(database: CatalogDatabase, ignoreIfExists: Boolean): Unit
@@ -122,7 +134,8 @@ private[hive] trait HiveClient {
       table: String,
       specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean,
-      purge: Boolean): Unit
+      purge: Boolean,
+      retainData: Boolean): Unit
 
   /**
    * Rename one or many existing table partitions, assuming they exist.
@@ -151,6 +164,16 @@ private[hive] trait HiveClient {
       throw new NoSuchPartitionException(dbName, tableName, spec)
     }
   }
+
+  /**
+   * Returns the partition names for the given table that match the supplied partition spec.
+   * If no partition spec is specified, all partitions are returned.
+   *
+   * The returned sequence is sorted as strings.
+   */
+  def getPartitionNames(
+      table: CatalogTable,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[String]
 
   /** Returns the specified partition or None if it does not exist. */
   final def getPartitionOption(
@@ -181,40 +204,39 @@ private[hive] trait HiveClient {
    * If no partition spec is specified, all partitions are returned.
    */
   def getPartitions(
-      table: CatalogTable,
+      catalogTable: CatalogTable,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition]
 
   /** Returns partitions filtered by predicates for the given table. */
   def getPartitionsByFilter(
-      table: CatalogTable,
+      catalogTable: CatalogTable,
       predicates: Seq[Expression]): Seq[CatalogTablePartition]
 
   /** Loads a static partition into an existing table. */
   def loadPartition(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
-      isSkewedStoreAsSubdir: Boolean): Unit
+      isSrcLocal: Boolean): Unit
 
   /** Loads data into an existing table. */
   def loadTable(
       loadPath: String, // TODO URI
       tableName: String,
       replace: Boolean,
-      holdDDLTime: Boolean): Unit
+      isSrcLocal: Boolean): Unit
 
   /** Loads new dynamic partitions into an existing table. */
   def loadDynamicPartitions(
       loadPath: String,
+      dbName: String,
       tableName: String,
       partSpec: java.util.LinkedHashMap[String, String], // Hive relies on LinkedHashMap ordering
       replace: Boolean,
-      numDP: Int,
-      holdDDLTime: Boolean,
-      listBucketingEnabled: Boolean): Unit
+      numDP: Int): Unit
 
   /** Create a function in an existing database. */
   def createFunction(db: String, func: CatalogFunction): Unit

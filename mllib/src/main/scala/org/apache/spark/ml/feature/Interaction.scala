@@ -21,12 +21,12 @@ import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -136,7 +136,7 @@ class Interaction @Since("1.6.0") (@Since("1.6.0") override val uid: String) ext
         case _: VectorUDT =>
           val attrs = AttributeGroup.fromStructField(f).attributes.getOrElse(
             throw new SparkException("Vector attributes must be defined for interaction."))
-          attrs.map(getNumFeatures).toArray
+          attrs.map(getNumFeatures)
       }
       new FeatureEncoder(numFeatures)
     }.toArray

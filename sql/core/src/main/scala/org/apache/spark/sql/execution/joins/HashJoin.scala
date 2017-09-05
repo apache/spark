@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -38,7 +39,7 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
@@ -63,45 +64,16 @@ trait HashJoin {
   protected lazy val (buildKeys, streamedKeys) = {
     require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
       "Join keys from two sides should have same types")
-    val lkeys = rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
-    val rkeys = rewriteKeyExpr(rightKeys).map(BindReferences.bindReference(_, right.output))
+    val lkeys = HashJoin.rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
+    val rkeys = HashJoin.rewriteKeyExpr(rightKeys)
+      .map(BindReferences.bindReference(_, right.output))
     buildSide match {
       case BuildLeft => (lkeys, rkeys)
       case BuildRight => (rkeys, lkeys)
     }
   }
 
-  /**
-   * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
-   *
-   * If not, returns the original expressions.
-   */
-  private def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
-    var keyExpr: Expression = null
-    var width = 0
-    keys.foreach { e =>
-      e.dataType match {
-        case dt: IntegralType if dt.defaultSize <= 8 - width =>
-          if (width == 0) {
-            if (e.dataType != LongType) {
-              keyExpr = Cast(e, LongType)
-            } else {
-              keyExpr = e
-            }
-            width = dt.defaultSize
-          } else {
-            val bits = dt.defaultSize * 8
-            keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
-              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
-            width -= bits
-          }
-        // TODO: support BooleanType, DateType and TimestampType
-        case other =>
-          return keys
-      }
-    }
-    keyExpr :: Nil
-  }
+
 
   protected def buildSideKeyGenerator(): Projection =
     UnsafeProjection.create(buildKeys)
@@ -110,7 +82,7 @@ trait HashJoin {
     UnsafeProjection.create(streamedKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
-    newPredicate(condition.get, streamedPlan.output ++ buildPlan.output)
+    newPredicate(condition.get, streamedPlan.output ++ buildPlan.output).eval _
   } else {
     (r: InternalRow) => true
   }
@@ -192,7 +164,7 @@ trait HashJoin {
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
-    val result = new GenericMutableRow(Array[Any](null))
+    val result = new GenericInternalRow(Array[Any](null))
     val joinedRow = new JoinedRow
     streamIter.map { current =>
       val key = joinKeys(current)
@@ -222,10 +194,11 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric,
+      avgHashProbe: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
-      case Inner =>
+      case _: InnerLike =>
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
         outerJoin(streamedIter, hashed)
@@ -240,10 +213,42 @@ trait HashJoin {
           s"BroadcastHashJoin should not take $x as the JoinType")
     }
 
+    // At the end of the task, we update the avg hash probe.
+    TaskContext.get().addTaskCompletionListener(_ =>
+      avgHashProbe.set(hashed.getAverageProbesPerLookup))
+
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
       resultProj(r)
     }
+  }
+}
+
+object HashJoin {
+  /**
+   * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+   *
+   * If not, returns the original expressions.
+   */
+  private[joins] def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+    assert(keys.nonEmpty)
+    // TODO: support BooleanType, DateType and TimestampType
+    if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
+      || keys.map(_.dataType.defaultSize).sum > 8) {
+      return keys
+    }
+
+    var keyExpr: Expression = if (keys.head.dataType != LongType) {
+      Cast(keys.head, LongType)
+    } else {
+      keys.head
+    }
+    keys.tail.foreach { e =>
+      val bits = e.dataType.defaultSize * 8
+      keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
+        BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
+    }
+    keyExpr :: Nil
   }
 }
