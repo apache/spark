@@ -27,6 +27,8 @@ import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
+import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -39,6 +41,12 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+import org.apache.hadoop.yarn.security.client.ClientToAMTokenSecretManager;
+import org.apache.hadoop.yarn.security.client.ClientToAMTokenIdentifier;
+
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * A SASL Server for Spark which simply keeps track of the state of a single SASL session, from the
@@ -73,14 +81,25 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   /** Identifier for a certain secret key within the secretKeyHolder. */
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;
+  private TransportConf conf;
+  private String clientUser;
   private SaslServer saslServer;
 
   public SparkSaslServer(
       String secretKeyId,
       SecretKeyHolder secretKeyHolder,
       boolean alwaysEncrypt) {
+    this(secretKeyId, secretKeyHolder, alwaysEncrypt, null);
+  }
+
+  public SparkSaslServer(
+      String secretKeyId,
+      SecretKeyHolder secretKeyHolder,
+      boolean alwaysEncrypt,
+      TransportConf conf) {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
+    this.conf = conf;
 
     // Sasl.QOP is a comma-separated list of supported values. The value that allows encryption
     // is listed first since it's preferred over the non-encrypted one (if the client also
@@ -96,6 +115,13 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     } catch (SaslException e) {
       throw Throwables.propagate(e);
     }
+  }
+
+  /**
+   * Returns the user name of the client.
+   */
+  public String getUserName() {
+    return clientUser;
   }
 
   /**
@@ -156,15 +182,16 @@ public class SparkSaslServer implements SaslEncryptionBackend {
   private class DigestCallbackHandler implements CallbackHandler {
     @Override
     public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      NameCallback nc = null;
+      PasswordCallback pc = null;
       for (Callback callback : callbacks) {
         if (callback instanceof NameCallback) {
           logger.trace("SASL server callback: setting username");
-          NameCallback nc = (NameCallback) callback;
+          nc = (NameCallback) callback;
           nc.setName(encodeIdentifier(secretKeyHolder.getSaslUser(secretKeyId)));
         } else if (callback instanceof PasswordCallback) {
           logger.trace("SASL server callback: setting password");
-          PasswordCallback pc = (PasswordCallback) callback;
-          pc.setPassword(encodePassword(secretKeyHolder.getSecretKey(secretKeyId)));
+          pc = (PasswordCallback) callback;
         } else if (callback instanceof RealmCallback) {
           logger.trace("SASL server callback: setting realm");
           RealmCallback rc = (RealmCallback) callback;
@@ -182,10 +209,45 @@ public class SparkSaslServer implements SaslEncryptionBackend {
           throw new UnsupportedCallbackException(callback, "Unrecognized SASL DIGEST-MD5 Callback");
         }
       }
+      if (pc != null) {
+        if (conf != null && conf.isConnectionUsingTokens()) {
+          ClientToAMTokenSecretManager secretManager = new ClientToAMTokenSecretManager(null,
+            decodeMasterKey(secretKeyHolder.getSecretKey(secretKeyId)));
+          ClientToAMTokenIdentifier identifier = getIdentifier(nc.getDefaultName());
+          clientUser = identifier.getUser().getShortUserName();
+          pc.setPassword(getClientToAMSecretKey(identifier, secretManager));
+        } else {
+          clientUser = nc.getDefaultName();
+          pc.setPassword(encodePassword(secretKeyHolder.getSecretKey(secretKeyId)));
+        }
+      }
     }
   }
 
-  /* Encode a byte[] identifier as a Base64-encoded string. */
+  /** Creates an ClientToAMTokenIdentifier from the encoded Base-64 String */
+  private static ClientToAMTokenIdentifier getIdentifier(String id) throws InvalidToken {
+    byte[] tokenId = byteBufToByte(Base64.decode(
+      Unpooled.wrappedBuffer(id.getBytes(StandardCharsets.UTF_8))));
+
+    ClientToAMTokenIdentifier tokenIdentifier = new ClientToAMTokenIdentifier();
+    try {
+      tokenIdentifier.readFields(new DataInputStream(new ByteArrayInputStream(tokenId)));
+    } catch (IOException e) {
+      throw (InvalidToken) new InvalidToken(
+              "Can't de-serialize tokenIdentifier").initCause(e);
+    }
+    return tokenIdentifier;
+  }
+
+  /** Returns an Base64-encoded secretKey created from the Identifier and the secretmanager */
+  private char[] getClientToAMSecretKey(ClientToAMTokenIdentifier tokenid,
+                                        ClientToAMTokenSecretManager secretManager) throws InvalidToken {
+    byte[] password =  secretManager.retrievePassword(tokenid);
+    return Base64.encode(Unpooled.wrappedBuffer(password)).toString(StandardCharsets.UTF_8)
+            .toCharArray();
+  }
+
+  /** Encode a String identifier as a Base64-encoded string. */
   public static String encodeIdentifier(String identifier) {
     Preconditions.checkNotNull(identifier, "User cannot be null if SASL is enabled");
     return getBase64EncodedString(identifier);
@@ -197,6 +259,25 @@ public class SparkSaslServer implements SaslEncryptionBackend {
     return getBase64EncodedString(password).toCharArray();
   }
 
+  /** Decode a base64-encoded indentifier as a String. */
+  public static String decodeIdentifier(String identifier) {
+    Preconditions.checkNotNull(identifier, "User cannot be null if SASL is enabled");
+    return Base64.decode(Unpooled.wrappedBuffer(identifier.getBytes(StandardCharsets.UTF_8)))
+            .toString(StandardCharsets.UTF_8);
+  }
+
+  /** Decode a base64-encoded MasterKey as a byte[] array. */
+  public static byte[] decodeMasterKey(String masterKey) {
+    ByteBuf masterKeyByteBuf = Base64.decode(Unpooled.wrappedBuffer(masterKey.getBytes(StandardCharsets.UTF_8)));
+    return byteBufToByte(masterKeyByteBuf);
+  }
+
+  /** Convert an ByteBuf to a byte[] array. */
+  private static byte[] byteBufToByte(ByteBuf byteBuf) {
+    byte[] byteArray = new byte[byteBuf.readableBytes()];
+    byteBuf.readBytes(byteArray);
+    return byteArray;
+  }
   /** Return a Base64-encoded string. */
   private static String getBase64EncodedString(String str) {
     ByteBuf byteBuf = null;
