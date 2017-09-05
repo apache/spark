@@ -21,7 +21,6 @@ import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.execution.arrow.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -29,12 +28,13 @@ import org.apache.spark.unsafe.types.UTF8String;
 /**
  * A column vector backed by Apache Arrow.
  */
-public final class ArrowColumnVector extends ReadOnlyColumnVector {
+public final class ArrowColumnVector extends ColumnVector {
 
   private final ArrowVectorAccessor accessor;
-  private final int valueCount;
+  private ArrowColumnVector[] childColumns;
 
   private void ensureAccessible(int index) {
+    int valueCount = accessor.getValueCount();
     if (index < 0 || index >= valueCount) {
       throw new IndexOutOfBoundsException(
         String.format("index: %d, valueCount: %d", index, valueCount));
@@ -42,10 +42,21 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
   }
 
   private void ensureAccessible(int index, int count) {
+    int valueCount = accessor.getValueCount();
     if (index < 0 || index + count > valueCount) {
       throw new IndexOutOfBoundsException(
         String.format("index range: [%d, %d), valueCount: %d", index, index + count, valueCount));
     }
+  }
+
+  @Override
+  public int numNulls() {
+    return accessor.getNullCount();
+  }
+
+  @Override
+  public boolean anyNullsSet() {
+    return numNulls() > 0;
   }
 
   @Override
@@ -274,9 +285,20 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     return accessor.getBinary(rowId);
   }
 
+  /**
+   * Returns the data for the underlying array.
+   */
+  @Override
+  public ArrowColumnVector arrayData() { return childColumns[0]; }
+
+  /**
+   * Returns the ordinal's child data column.
+   */
+  @Override
+  public ArrowColumnVector getChildColumn(int ordinal) { return childColumns[ordinal]; }
+
   public ArrowColumnVector(ValueVector vector) {
-    super(vector.getValueCapacity(), ArrowUtils.fromArrowField(vector.getField()),
-      MemoryMode.OFF_HEAP);
+    super(ArrowUtils.fromArrowField(vector.getField()));
 
     if (vector instanceof NullableBitVector) {
       accessor = new BooleanAccessor((NullableBitVector) vector);
@@ -302,7 +324,7 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
       ListVector listVector = (ListVector) vector;
       accessor = new ArrayAccessor(listVector);
 
-      childColumns = new ColumnVector[1];
+      childColumns = new ArrowColumnVector[1];
       childColumns[0] = new ArrowColumnVector(listVector.getDataVector());
       resultArray = new ColumnVector.Array(childColumns[0]);
     } else if (vector instanceof MapVector) {
@@ -317,9 +339,6 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     } else {
       throw new UnsupportedOperationException();
     }
-    valueCount = accessor.getValueCount();
-    numNulls = accessor.getNullCount();
-    anyNullsSet = numNulls > 0;
   }
 
   private abstract static class ArrowVectorAccessor {
@@ -327,14 +346,9 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     private final ValueVector vector;
     private final ValueVector.Accessor nulls;
 
-    private final int valueCount;
-    private final int nullCount;
-
     ArrowVectorAccessor(ValueVector vector) {
       this.vector = vector;
       this.nulls = vector.getAccessor();
-      this.valueCount = nulls.getValueCount();
-      this.nullCount = nulls.getNullCount();
     }
 
     final boolean isNullAt(int rowId) {
@@ -342,11 +356,11 @@ public final class ArrowColumnVector extends ReadOnlyColumnVector {
     }
 
     final int getValueCount() {
-      return valueCount;
+      return nulls.getValueCount();
     }
 
     final int getNullCount() {
-      return nullCount;
+      return nulls.getNullCount();
     }
 
     final void close() {
