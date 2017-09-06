@@ -2347,45 +2347,6 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("insert overwrite directory") {
-    withTempDir { dir =>
-      val path = dir.toURI.getPath
-
-      val v1 =
-        s"""
-           | INSERT OVERWRITE DIRECTORY '${path}'
-           | USING json
-           | OPTIONS (a 1, b 0.1, c TRUE)
-           | SELECT 1 as a, 'c' as b
-         """.stripMargin
-
-      spark.sql(v1)
-
-      checkAnswer(
-        spark.read.json(dir.getCanonicalPath),
-        sql("SELECT 1 as a, 'c' as b"))
-    }
-  }
-
-  test("insert overwrite directory to data source not providing FileFormat") {
-    withTempDir { dir =>
-      val path = dir.toURI.getPath
-
-      val v1 =
-        s"""
-           | INSERT OVERWRITE DIRECTORY '${path}'
-           | USING JDBC
-           | OPTIONS (a 1, b 0.1, c TRUE)
-           | SELECT 1 as a, 'c' as b
-         """.stripMargin
-      val e = intercept[SparkException] {
-        spark.sql(v1)
-      }.getMessage
-
-      assert(e.contains("Only Data Sources providing FileFormat are supported"))
-    }
-  }
-
   Seq(true, false).foreach { caseSensitive =>
     test(s"alter table add columns with existing column name - caseSensitive $caseSensitive") {
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> s"$caseSensitive") {
