@@ -108,7 +108,7 @@ case class InsertIntoHiveDirCommand(
         outputLocation = tmpPath.toString)
 
       val fs = writeToPath.getFileSystem(hadoopConf)
-      if (overwrite) {
+      if (overwrite && fs.exists(writeToPath)) {
         val existFiles = fs.listStatus(writeToPath)
         existFiles.foreach {
           existFile =>
