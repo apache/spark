@@ -108,11 +108,13 @@ case class InsertIntoHiveDirCommand(
         qualifiedPath
       }
 
-    val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, writeToPath)
+    val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, writeToPath)
+    // TODO: using tmpPath
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       writeToPath.toString, tableDesc, false)
 
     try {
+      // TODO: using tmpPath
       saveAsHiveFile(
         sparkSession = sparkSession,
         plan = children.head,
@@ -120,9 +122,9 @@ case class InsertIntoHiveDirCommand(
         fileSinkConf = fileSinkConf,
         outputLocation = writeToPath.toString)
 
-      // val fs = writeToPath.getFileSystem(hadoopConf)
-      // fs.rename(tmpLocation, writeToPath)
-      // deleteExternalTmpPath(hadoopConf)
+      // TODO: move files from tmpPath to writeToPath
+
+      deleteExternalTmpPath(hadoopConf)
 
     } catch {
       case e =>
