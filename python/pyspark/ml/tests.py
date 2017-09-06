@@ -456,9 +456,10 @@ class ParamTests(SparkSessionTestCase):
         )
 
     def test_preserve_set_state(self):
-        model = Binarizer()
+        dataset = self.spark.createDataFrame([(0.5,)], ["data"])
+        model = Binarizer(inputCol="data")
         self.assertFalse(model.isSet("threshold"))
-        model._transfer_params_to_java()
+        model.transform(dataset)
         model._transfer_params_from_java()
         self.assertFalse(model.isSet("threshold"),
                          "Params not explicitly set should remain unset after transform")
