@@ -62,6 +62,20 @@ class ClusteringEvaluatorSuite
     assert(evaluator.evaluate(iris) ~== 0.6564679231 relTol 1e-5)
   }
 
+  test("number of clusters must be greater than one") {
+    val iris = ClusteringEvaluatorSuite.irisDataset(spark)
+      .withColumn("label", $"label".cast(IntegerType))
+      .where($"label" === 0)
+    val evaluator = new ClusteringEvaluator()
+      .setFeaturesCol("features")
+      .setPredictionCol("label")
+
+    val e = intercept[AssertionError]{
+      evaluator.evaluate(iris)
+    }
+    assert(e.getMessage.contains("Number of clusters must be greater than one"))
+  }
+
 }
 
 object ClusteringEvaluatorSuite {

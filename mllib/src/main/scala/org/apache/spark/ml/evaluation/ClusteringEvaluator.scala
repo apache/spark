@@ -94,6 +94,10 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkColumnType(dataset.schema, $(predictionCol), IntegerType)
 
+    // Silhouette is reasonable only when the number of clusters is grater then 1
+    assert(dataset.select($(predictionCol)).distinct().count() > 1,
+      "Number of clusters must be greater than one.")
+
     $(metricName) match {
       case "squaredSilhouette" => SquaredEuclideanSilhouette.computeSilhouetteScore(
         dataset,
