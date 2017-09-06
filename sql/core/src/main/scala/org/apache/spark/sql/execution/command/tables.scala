@@ -206,6 +206,9 @@ case class AlterTableAddColumnsCommand(
       reorderedSchema.map(_.name), "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
 
+    val newDataSchema = StructType(catalogTable.dataSchema ++ columns)
+    DDLUtils.checkFieldNames(catalogTable.copy(schema = newDataSchema))
+
     catalog.alterTableSchema(
       table, catalogTable.schema.copy(fields = reorderedSchema.toArray))
 

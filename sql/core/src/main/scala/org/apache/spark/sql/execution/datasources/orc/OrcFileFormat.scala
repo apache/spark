@@ -29,7 +29,7 @@ private[sql] object OrcFileFormat {
     } catch {
       case _: IllegalArgumentException =>
         throw new AnalysisException(
-          s"""Attribute name "$name" contains invalid character(s).
+          s"""Column name "$name" contains invalid character(s).
              |Please use alias to rename it.
            """.stripMargin.split("\n").mkString(" ").trim)
     }
