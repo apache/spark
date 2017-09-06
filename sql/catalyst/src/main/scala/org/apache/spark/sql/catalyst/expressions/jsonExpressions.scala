@@ -640,11 +640,12 @@ case class StructsToJson(
   lazy val gen = new JacksonGenerator(
     rowSchema, writer, new JSONOptions(options, timeZoneId.get))
 
+  // TODO: support ArrayType(MapType)
   @transient
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
-    case MapType(_: DataType, _: DataType, _) => child.dataType
+    case mt: MapType => mt
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -666,7 +667,7 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
-      case MapType(_: DataType, _: DataType, _: Boolean) =>
+      case _: MapType =>
         (map: Any) =>
           gen.write(map.asInstanceOf[MapData])
           getAndReset()

@@ -28,38 +28,45 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
 private[sql] class JacksonGenerator(
-    rowSchema: DataType,
+    dataType: DataType,
     writer: Writer,
     options: JSONOptions) {
-
   // A `ValueWriter` is responsible for writing a field of an `InternalRow` to appropriate
   // JSON data. Here we are using `SpecializedGetters` rather than `InternalRow` so that
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
   // `JackGenerator` only supports to write out a struct, an array of struct or an arbitrary map
-  rowSchema match {
+  dataType match {
     case _: StructType | _: MapType =>
       TypeCheckResult.TypeCheckSuccess
-    case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${rowSchema.simpleString} must be a struct or a map")
+    case _ => throw new UnsupportedOperationException(
+      s"`JacksonGenerator` only supports to be initialized with a `StructType` " +
+          s"or `MapType` but got ${dataType.simpleString}")
   }
 
   // `ValueWriter`s for all fields of the schema
-  private lazy val rootFieldWriters: Array[ValueWriter] = {
-    rowSchema.asInstanceOf[StructType].map(_.dataType).map(makeWriter).toArray
+  private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
+    case st: StructType => st.asInstanceOf[StructType].map(_.dataType).map(makeWriter).toArray
+    case _ => throw new UnsupportedOperationException(
+      s"Initial type ${dataType.simpleString} must be a struct")
   }
 
   // `ValueWriter` for array data storing rows of the schema.
-  private lazy val arrElementWriter: ValueWriter = {
-    (arr: SpecializedGetters, i: Int) => {
-      val schema: StructType = rowSchema.asInstanceOf[StructType]
-      writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
-    }
+  private lazy val arrElementWriter: ValueWriter = dataType match {
+    case st: StructType =>
+      (arr: SpecializedGetters, i: Int) => {
+        val schema: StructType = st.asInstanceOf[StructType]
+        writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
+      }
+    case _ => throw new UnsupportedOperationException(
+      s"Initial type ${dataType.simpleString} must be a struct")
   }
 
-  private lazy val mapElementWriter: ValueWriter = {
-    makeWriter(rowSchema.asInstanceOf[MapType].valueType)
+  private lazy val mapElementWriter: ValueWriter = dataType match {
+    case mt: MapType => makeWriter(dataType.asInstanceOf[MapType].valueType)
+    case _ => throw new UnsupportedOperationException(
+      s"Initial type ${dataType.simpleString} must be a map")
   }
 
   private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
@@ -213,8 +220,11 @@ private[sql] class JacksonGenerator(
    *
    * @param row The row to convert
    */
-  def write(row: InternalRow): Unit = {
-    writeObject(writeFields(row, rowSchema.asInstanceOf[StructType], rootFieldWriters))
+  def write(row: InternalRow): Unit = dataType match {
+    case st: StructType =>
+      writeObject(writeFields(row, st.asInstanceOf[StructType], rootFieldWriters))
+    case _ => throw new UnsupportedOperationException(
+      s"this api is only used when `JacksonGenerator` is initialized with `StructType`")
   }
 
   /**
@@ -222,8 +232,10 @@ private[sql] class JacksonGenerator(
    *
    * @param array The array of rows to convert
    */
-  def write(array: ArrayData): Unit = {
-    writeArray(writeArrayData(array, arrElementWriter))
+  def write(array: ArrayData): Unit = dataType match {
+    case _: StructType => writeArray(writeArrayData(array, arrElementWriter))
+    case _ => throw new UnsupportedOperationException(
+      s"this api is only used when `JacksonGenerator` is initialized with `StructType`")
   }
 
   /**
@@ -231,8 +243,10 @@ private[sql] class JacksonGenerator(
    *
    * @param map a map to convert
    */
-  def write(map: MapData): Unit = {
-    writeObject(writeMapData(map, rowSchema.asInstanceOf[MapType], mapElementWriter))
+  def write(map: MapData): Unit = dataType match {
+    case mt: MapType => writeObject(writeMapData(map, mt.asInstanceOf[MapType], mapElementWriter))
+    case _ => throw new UnsupportedOperationException(
+      s"this api is only used when `JacksonGenerator` is initialized with `MapType`")
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')
