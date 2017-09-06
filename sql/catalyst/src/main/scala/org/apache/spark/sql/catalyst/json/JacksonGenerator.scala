@@ -22,10 +22,15 @@ import java.io.Writer
 import com.fasterxml.jackson.core._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
+
+// `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
+// Once it is initialized with `StructType`, it can be used to write out a struct or an array of
+// struct. Once it is initialized with `MapType`, it can be used to write out a map. An exception
+// will be thrown if trying to write out a struct if it is initialized with a `MapType`,
+// and vice verse.
 
 private[sql] class JacksonGenerator(
     dataType: DataType,
@@ -36,7 +41,7 @@ private[sql] class JacksonGenerator(
   // we can directly access data in `ArrayData` without the help of `SpecificMutableRow`.
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
-  // `JackGenerator` only supports to write out a struct, an array of struct or an arbitrary map
+  // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
   dataType match {
     case _: StructType | _: MapType =>
     case _ => throw new UnsupportedOperationException(
@@ -222,7 +227,7 @@ private[sql] class JacksonGenerator(
     case st: StructType =>
       writeObject(writeFields(row, st, rootFieldWriters))
     case _ => throw new UnsupportedOperationException(
-      s"this api is only used when `JacksonGenerator` is initialized with `StructType`")
+      s"`JacksonGenerator` can only be used to write out a row when initialized with `StructType`.")
   }
 
   /**
@@ -233,7 +238,8 @@ private[sql] class JacksonGenerator(
   def write(array: ArrayData): Unit = dataType match {
     case _: StructType => writeArray(writeArrayData(array, arrElementWriter))
     case _ => throw new UnsupportedOperationException(
-      s"this api is only used when `JacksonGenerator` is initialized with `StructType`")
+      s"`JacksonGenerator` can only be used to write out an array when initialized" +
+          s"with `StructType`.")
   }
 
   /**
@@ -244,7 +250,7 @@ private[sql] class JacksonGenerator(
   def write(map: MapData): Unit = dataType match {
     case mt: MapType => writeObject(writeMapData(map, mt, mapElementWriter))
     case _ => throw new UnsupportedOperationException(
-      s"this api is only used when `JacksonGenerator` is initialized with `MapType`")
+      s"`JacksonGenerator` can only be used to write out a map when initialized with `MapType`.")
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')
