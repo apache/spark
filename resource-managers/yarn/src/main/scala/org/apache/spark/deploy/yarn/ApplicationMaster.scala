@@ -21,12 +21,18 @@ import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
 import java.net.{Socket, URI, URL}
 import java.util.concurrent.{TimeoutException, TimeUnit}
+import javax.crypto.SecretKey
+import javax.crypto.spec.SecretKeySpec
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.Promise
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
+import com.google.common.base.Charsets
+import io.netty.buffer.ByteBuf
+import io.netty.buffer.Unpooled
+import io.netty.handler.codec.base64.Base64
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
@@ -41,9 +47,16 @@ import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.deploy.yarn.security.{AMCredentialRenewer, YARNHadoopDelegationTokenManager}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
+import org.apache.spark.network.{BlockDataManager, TransportContext}
+import org.apache.spark.network.client.TransportClientBootstrap
+import org.apache.spark.network.netty.{NettyBlockRpcServer, SparkTransportConf}
+import org.apache.spark.network.sasl.{SaslClientBootstrap, SaslServerBootstrap}
+import org.apache.spark.network.server.{TransportServer, TransportServerBootstrap}
 import org.apache.spark.rpc._
+import org.apache.spark.rpc.netty.NettyRpcCallContext
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util._
 
 /**
@@ -89,6 +102,7 @@ private[spark] class ApplicationMaster(
 
   @volatile private var reporterThread: Thread = _
   @volatile private var allocator: YarnAllocator = _
+  @volatile private var clientToAMPort: Int = _
 
   // A flag to check whether user has initialized spark context
   @volatile private var registered = false
@@ -247,7 +261,9 @@ private[spark] class ApplicationMaster(
 
         if (!unregistered) {
           // we only want to unregister if we don't want the RM to retry
-          if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
+          if (finalStatus == FinalApplicationStatus.SUCCEEDED ||
+            finalStatus == FinalApplicationStatus.KILLED ||
+            isLastAttempt) {
             unregister(finalStatus, finalMsg)
             cleanupStagingDir()
           }
@@ -283,6 +299,7 @@ private[spark] class ApplicationMaster(
         credentialRenewerThread.start()
         credentialRenewerThread.join()
       }
+      clientToAMPort = sparkConf.getInt("spark.yarn.clientToAM.port", 0)
 
       if (isClusterMode) {
         runDriver(securityMgr)
@@ -402,7 +419,8 @@ private[spark] class ApplicationMaster(
       uiAddress,
       historyAddress,
       securityMgr,
-      localResources)
+      localResources,
+      clientToAMPort)
 
     // Initialize the AM endpoint *after* the allocator has been initialized. This ensures
     // that when the driver sends an initial executor request (e.g. after an AM restart),
@@ -422,6 +440,35 @@ private[spark] class ApplicationMaster(
       YarnSchedulerBackend.ENDPOINT_NAME)
   }
 
+  /**
+   * Create an [[RpcEndpoint]] that communicates with the client.
+   *
+   * @return A reference to the application master's RPC endpoint.
+   */
+  private def runClientAMEndpoint(
+       port: Int,
+       driverRef: RpcEndpointRef,
+       securityManager: SecurityManager): RpcEndpointRef = {
+    val serversparkConf = new SparkConf()
+    serversparkConf.set("spark.rpc.connectionUsingTokens", "true")
+
+    val amRpcEnv =
+      RpcEnv.create(ApplicationMaster.SYSTEM_NAME, Utils.localHostName(), port, serversparkConf,
+        securityManager)
+    clientToAMPort = amRpcEnv.address.port
+
+    val clientAMEndpoint =
+      amRpcEnv.setupEndpoint(ApplicationMaster.ENDPOINT_NAME,
+        new ClientToAMEndpoint(amRpcEnv, driverRef, securityManager))
+    clientAMEndpoint
+  }
+
+  /** RpcEndpoint class for ClientToAM */
+  private[spark] class ClientToAMEndpoint(
+      override val rpcEnv: RpcEnv, driverRef: RpcEndpointRef, securityManager: SecurityManager)
+    extends RpcEndpoint with Logging {
+  }
+
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter(None)
     userClassThread = startUserApplication()
@@ -438,8 +485,12 @@ private[spark] class ApplicationMaster(
         val driverRef = createSchedulerRef(
           sc.getConf.get("spark.driver.host"),
           sc.getConf.get("spark.driver.port"))
+        val clientToAMSecurityManager = new SecurityManager(sparkConf)
+        runClientAMEndpoint(clientToAMPort, driverRef, clientToAMSecurityManager)
         registerAM(sc.getConf, rpcEnv, driverRef, sc.ui.map(_.webUrl), securityMgr)
         registered = true
+        clientToAMSecurityManager.setSecretKey(Base64.encode(
+          Unpooled.wrappedBuffer(client.getMasterKey)).toString(Charsets.UTF_8));
       } else {
         // Sanity check; should never happen in normal operation, since sc should only be null
         // if the user app did not create a SparkContext.
@@ -464,10 +515,13 @@ private[spark] class ApplicationMaster(
       amCores, true)
     val driverRef = waitForSparkDriver()
     addAmIpFilter(Some(driverRef))
+    val clientToAMSecurityManager = new SecurityManager(sparkConf)
+    runClientAMEndpoint(clientToAMPort, driverRef, clientToAMSecurityManager)
     registerAM(sparkConf, rpcEnv, driverRef, sparkConf.getOption("spark.driver.appUIAddress"),
       securityMgr)
     registered = true
-
+    clientToAMSecurityManager.setSecretKey(Base64.encode(
+      Unpooled.wrappedBuffer(client.getMasterKey)).toString(Charsets.UTF_8));
     // In client mode the actor will stop the reporter thread.
     reporterThread.join()
   }
@@ -749,7 +803,17 @@ private[spark] class ApplicationMaster(
 
 }
 
+sealed trait ApplicationMasterMessage extends Serializable
+
+private [spark] object ApplicationMasterMessages {
+
+  case class HelloWorld() extends ApplicationMasterMessage
+}
+
 object ApplicationMaster extends Logging {
+
+  val SYSTEM_NAME = "sparkYarnAM"
+  val ENDPOINT_NAME = "clientToAM"
 
   // exit codes for different causes, no reason behind the values
   private val EXIT_SUCCESS = 0

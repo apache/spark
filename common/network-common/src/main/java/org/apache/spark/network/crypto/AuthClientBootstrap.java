@@ -95,8 +95,9 @@ public class AuthClientBootstrap implements TransportClientBootstrap {
   private void doSparkAuth(TransportClient client, Channel channel)
     throws GeneralSecurityException, IOException {
 
+    String user = secretKeyHolder.getSaslUser(appId);
     String secretKey = secretKeyHolder.getSecretKey(appId);
-    try (AuthEngine engine = new AuthEngine(appId, secretKey, conf)) {
+    try (AuthEngine engine = new AuthEngine(appId, user, secretKey, conf)) {
       ClientChallenge challenge = engine.challenge();
       ByteBuf challengeData = Unpooled.buffer(challenge.encodedLength());
       challenge.encode(challengeData);

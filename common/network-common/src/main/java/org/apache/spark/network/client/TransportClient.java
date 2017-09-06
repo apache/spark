@@ -75,6 +75,7 @@ public class TransportClient implements Closeable {
   private final Channel channel;
   private final TransportResponseHandler handler;
   @Nullable private String clientId;
+  @Nullable private String clientUser;
   private volatile boolean timedOut;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
@@ -112,6 +113,25 @@ public class TransportClient implements Closeable {
   public void setClientId(String id) {
     Preconditions.checkState(clientId == null, "Client ID has already been set.");
     this.clientId = id;
+  }
+
+  /**
+   * Returns the user name used by the client to authenticate itself when authentication is enabled.
+   *
+   * @return The client User Name, or null if authentication is disabled.
+   */
+  public String getClientUser() {
+    return clientUser;
+  }
+
+  /**
+   * Sets the authenticated client's user name. This is meant to be used by the authentication layer.
+   *
+   * Trying to set a different client User Name after it's been set will result in an exception.
+   */
+  public void setClientUser(String user) {
+    Preconditions.checkState(clientUser == null, "Client User Name has already been set.");
+    this.clientUser = user;
   }
 
   /**

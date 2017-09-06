@@ -35,7 +35,10 @@ import com.google.common.collect.ImmutableMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.spark.network.util.TransportConf;
+
 import static org.apache.spark.network.sasl.SparkSaslServer.*;
+
 
 /**
  * A SASL Client for Spark which simply keeps track of the state of a single SASL session, from the
@@ -48,12 +51,25 @@ public class SparkSaslClient implements SaslEncryptionBackend {
   private final String secretKeyId;
   private final SecretKeyHolder secretKeyHolder;
   private final String expectedQop;
+  private TransportConf conf;
   private SaslClient saslClient;
 
-  public SparkSaslClient(String secretKeyId, SecretKeyHolder secretKeyHolder, boolean encrypt) {
+  public SparkSaslClient(
+      String secretKeyId,
+      SecretKeyHolder secretKeyHolder,
+      boolean alwaysEncrypt) {
+    this(secretKeyId,secretKeyHolder,alwaysEncrypt, null);
+  }
+
+  public SparkSaslClient(
+      String secretKeyId,
+      SecretKeyHolder secretKeyHolder,
+      boolean encrypt,
+      TransportConf conf) {
     this.secretKeyId = secretKeyId;
     this.secretKeyHolder = secretKeyHolder;
     this.expectedQop = encrypt ? QOP_AUTH_CONF : QOP_AUTH;
+    this.conf = conf;
 
     Map<String, String> saslProps = ImmutableMap.<String, String>builder()
       .put(Sasl.QOP, expectedQop)
@@ -131,11 +147,23 @@ public class SparkSaslClient implements SaslEncryptionBackend {
         if (callback instanceof NameCallback) {
           logger.trace("SASL client callback: setting username");
           NameCallback nc = (NameCallback) callback;
-          nc.setName(encodeIdentifier(secretKeyHolder.getSaslUser(secretKeyId)));
+          if (conf != null && conf.isConnectionUsingTokens()) {
+            // Token Identifier is already encoded
+            nc.setName(secretKeyHolder.getSaslUser(secretKeyId));
+          } else {
+            nc.setName(encodeIdentifier(secretKeyHolder.getSaslUser(secretKeyId)));
+          }
+
         } else if (callback instanceof PasswordCallback) {
           logger.trace("SASL client callback: setting password");
           PasswordCallback pc = (PasswordCallback) callback;
-          pc.setPassword(encodePassword(secretKeyHolder.getSecretKey(secretKeyId)));
+          if (conf != null && conf.isConnectionUsingTokens()) {
+            // Token Identifier is already encoded
+            pc.setPassword(secretKeyHolder.getSecretKey(secretKeyId).toCharArray());
+          } else {
+            pc.setPassword(encodePassword(secretKeyHolder.getSecretKey(secretKeyId)));
+
+          }
         } else if (callback instanceof RealmCallback) {
           logger.trace("SASL client callback: setting realm");
           RealmCallback rc = (RealmCallback) callback;

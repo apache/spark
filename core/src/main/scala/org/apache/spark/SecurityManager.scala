@@ -222,10 +222,11 @@ private[spark] class SecurityManager(
   setViewAcls(defaultAclUsers, sparkConf.get("spark.ui.view.acls", ""))
   setModifyAcls(defaultAclUsers, sparkConf.get("spark.modify.acls", ""))
 
-  setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""));
-  setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""));
+  setViewAclsGroups(sparkConf.get("spark.ui.view.acls.groups", ""))
+  setModifyAclsGroups(sparkConf.get("spark.modify.acls.groups", ""))
 
-  private val secretKey = generateSecretKey()
+  private var identifier = "sparkSaslUser"
+  private var secretKey = generateSecretKey()
   logInfo("SecurityManager: authentication " + (if (authOn) "enabled" else "disabled") +
     "; ui acls " + (if (aclsOn) "enabled" else "disabled") +
     "; users  with view permissions: " + viewAcls.toString() +
@@ -533,11 +534,23 @@ private[spark] class SecurityManager(
 
   /**
    * Gets the user used for authenticating SASL connections.
-   * For now use a single hardcoded user.
    * @return the SASL user as a String
    */
-  def getSaslUser(): String = "sparkSaslUser"
+  def getSaslUser(): String = identifier
 
+  /**
+   * This can be a user name or unique identifier
+   */
+  def setSaslUser(ident: String) {
+    identifier = ident
+  }
+
+  /**
+   * set the secret key
+   */
+  def setSecretKey(secret: String) {
+    secretKey = secret
+  }
   /**
    * Gets the secret key.
    * @return the secret key as a String if authentication is enabled, otherwise returns null
