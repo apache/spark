@@ -890,9 +890,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |NOT EXISTS (SELECT * FROM t1)
           """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
-        val join = optimizedPlan.collect {
-          case j: Join => j
-        }.head.asInstanceOf[Join]
+        val join = optimizedPlan.collectFirst { case j: Join => j }.get
         assert(join.duplicateResolved)
         assert(optimizedPlan.resolved)
       }
@@ -934,10 +932,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
              |                          WHERE  t4.t2a = t3a)
            """.stripMargin
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
-        val joinNodes = optimizedPlan.collect {
-          case j: Join => j
-        }.map(_.asInstanceOf[Join])
-        joinNodes.map(j => assert(j.duplicateResolved))
+        val joinNodes = optimizedPlan.collect { case j: Join => j }
+        joinNodes.foreach(j => assert(j.duplicateResolved))
         assert(optimizedPlan.resolved)
       }
     }
