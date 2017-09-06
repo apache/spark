@@ -693,7 +693,7 @@ case class StructsToJson(
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case MapType(_: DataType, _: DataType, _: Boolean) =>
+    case _: MapType =>
       TypeCheckResult.TypeCheckSuccess
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +

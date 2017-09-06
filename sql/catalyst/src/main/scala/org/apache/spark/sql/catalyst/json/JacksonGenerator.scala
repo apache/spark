@@ -39,7 +39,6 @@ private[sql] class JacksonGenerator(
   // `JackGenerator` only supports to write out a struct, an array of struct or an arbitrary map
   dataType match {
     case _: StructType | _: MapType =>
-      TypeCheckResult.TypeCheckSuccess
     case _ => throw new UnsupportedOperationException(
       s"`JacksonGenerator` only supports to be initialized with a `StructType` " +
           s"or `MapType` but got ${dataType.simpleString}")
@@ -153,7 +152,7 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         val v = row.get(ordinal, dataType)
         sys.error(s"Failed to convert value $v (class of ${v.getClass}}) " +
-            s"with the type of $dataType to JSON.")
+          s"with the type of $dataType to JSON.")
   }
 
   private def writeObject(f: => Unit): Unit = {
