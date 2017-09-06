@@ -58,6 +58,10 @@ private[sql] class JacksonGenerator(
       (arr: SpecializedGetters, i: Int) => {
         writeObject(writeFields(arr.getStruct(i, st.length), st, rootFieldWriters))
       }
+    case mt: MapType =>
+      (arr: SpecializedGetters, i: Int) => {
+        writeObject(writeMapData(arr.getMap(i), mt, mapElementWriter))
+      }
     case _ => throw new UnsupportedOperationException(
       s"Initial type ${dataType.simpleString} must be a struct")
   }
@@ -232,7 +236,7 @@ private[sql] class JacksonGenerator(
    * @param array The array of rows to convert
    */
   def write(array: ArrayData): Unit = dataType match {
-    case _: StructType => writeArray(writeArrayData(array, arrElementWriter))
+    case _: StructType | _: MapType => writeArray(writeArrayData(array, arrElementWriter))
     case _ => throw new UnsupportedOperationException(
       s"this api is only used when `JacksonGenerator` is initialized with `StructType`")
   }
