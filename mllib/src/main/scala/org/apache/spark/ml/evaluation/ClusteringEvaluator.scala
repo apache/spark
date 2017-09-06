@@ -43,13 +43,16 @@ import org.apache.spark.sql.types.IntegerType
  */
 @Experimental
 @Since("2.3.0")
-class ClusteringEvaluator (val uid: String)
+class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: String)
   extends Evaluator with HasPredictionCol with HasFeaturesCol with DefaultParamsWritable {
 
+  @Since("2.3.0")
   def this() = this(Identifiable.randomUID("cluEval"))
 
+  @Since("2.3.0")
   override def copy(pMap: ParamMap): ClusteringEvaluator = this.defaultCopy(pMap)
 
+  @Since("2.3.0")
   override def isLargerBetter: Boolean = true
 
   /** @group setParam */
@@ -74,9 +77,11 @@ class ClusteringEvaluator (val uid: String)
 }
 
 
+@Since("2.3.0")
 object ClusteringEvaluator
   extends DefaultParamsReadable[ClusteringEvaluator] {
 
+  @Since("2.3.0")
   override def load(path: String): ClusteringEvaluator = super.load(path)
 
 }
@@ -107,7 +112,7 @@ object ClusteringEvaluator
  *
  * where `$a_{i}$` is the average dissimilarity of `i` with all other data
  * within the same cluster, `$b_{i}$` is the lowest average dissimilarity
- * of to any other cluster, of which `i` is not a member.
+ * of `i` to any other cluster, of which `i` is not a member.
  * `$a_{i}$` can be interpreted as as how well `i` is assigned to its cluster
  * (the smaller the value, the better the assignment), while `$b_{i}$` is
  * a measure of how well `i` has not been assigned to its "neighboring cluster",
@@ -124,18 +129,18 @@ object ClusteringEvaluator
  * and parallel implementation of the Silhouette using the squared Euclidean
  * distance measure.
  *
- * With this assumption, the average of the distance of the point `X`
+ * With this assumption, the total distance of the point `X`
  * to the points `$C_{i}$` belonging to the cluster `$\Gamma$` is:
  *
  * <blockquote>
  *   $$
- *   \sum\limits_{i=1}^N d(X, C_{i} )^2 =
+ *   \sum\limits_{i=1}^N d(X, C_{i} ) =
  *   \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D (x_{j}-c_{ij})^2 \Big)
  *   = \sum\limits_{i=1}^N \Big( \sum\limits_{j=1}^D x_{j}^2 +
- *   \sum\limits_{j=1}^D c_{ij}^2 -2\sum\limits_{j=1}^D x_{i}c_{ij} \Big)
+ *   \sum\limits_{j=1}^D c_{ij}^2 -2\sum\limits_{j=1}^D x_{j}c_{ij} \Big)
  *   = \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}^2 +
  *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D c_{ij}^2
- *   -2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij}
+ *   -2 \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}c_{ij}
  *   $$
  * </blockquote>
  *
@@ -167,8 +172,8 @@ object ClusteringEvaluator
  *
  * <blockquote>
  *   $$
- *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{i}c_{ij} =
- *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i}
+ *   \sum\limits_{i=1}^N \sum\limits_{j=1}^D x_{j}c_{ij} =
+ *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{j}
  *   $$
  * </blockquote>
  *
@@ -184,8 +189,8 @@ object ClusteringEvaluator
  *
  * <blockquote>
  *   $$
- *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{i} =
- *   \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}
+ *   \sum\limits_{j=1}^D \Big(\sum\limits_{i=1}^N c_{ij} \Big) x_{j} =
+ *   \sum\limits_{j=1}^D Y_{\Gamma j} x_{j}
  *   $$
  * </blockquote>
  *
@@ -193,22 +198,22 @@ object ClusteringEvaluator
  *
  * <blockquote>
  *   $$
- *   N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}
+ *   N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{j}
  *   $$
  * </blockquote>
  *
- * and the distance of a point to a cluster can be computed as
+ * and the average distance of a point to a cluster can be computed as
  *
  * <blockquote>
  *   $$
  *   \frac{\sum\limits_{i=1}^N d(X, C_{i} )^2}{N} =
- *   \frac{N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N} =
- *   \xi_{X} + \frac{\Psi_{\Gamma} }{N} - 2 \frac{\sum\limits_{j=1}^D Y_{\Gamma j} x_{i}}{N}
+ *   \frac{N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{j}}{N} =
+ *   \xi_{X} + \frac{\Psi_{\Gamma} }{N} - 2 \frac{\sum\limits_{j=1}^D Y_{\Gamma j} x_{j}}{N}
  *   $$
  * </blockquote>
  *
- * Thus, it is enough to precompute the constant `$\xi_{X}$` for each point `X`
- * and the constants `$\Psi_{\Gamma}$` and `N` and the vector `$Y_{\Gamma}$` for
+ * Thus, it is enough to precompute: the constant `$\xi_{X}$` for each point `X`; the
+ * constants `$\Psi_{\Gamma}$`, `N` and the vector `$Y_{\Gamma}$` for
  * each cluster `$\Gamma$`.
  *
  * In the implementation, the precomputed values for the clusters
@@ -242,7 +247,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * @param sc `SparkContext` to be used
    */
   def registerKryoClasses(sc: SparkContext): Unit = {
-    if (! kryoRegistrationPerformed) {
+    if (!kryoRegistrationPerformed) {
       sc.getConf.registerKryoClasses(
         Array(
           classOf[SquaredEuclideanSilhouette.ClusterStats]
@@ -263,7 +268,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * @param featuresCol The name of the column which contains the feature vector of the point.
    * @return A [[scala.collection.immutable.Map]] which associates each cluster id
    *         to a [[ClusterStats]] object (which contains the precomputed values `N`,
-   *         `\Psi_{\Gamma}` and `Y_{\Gamma}` for a cluster).
+   *         `$\Psi_{\Gamma}$` and `$Y_{\Gamma}$` for a cluster).
    */
   def computeClusterStats(
     df: DataFrame,
@@ -307,7 +312,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * @param broadcastedClustersMap A map of the precomputed values for each cluster.
    * @param features The [[org.apache.spark.ml.linalg.Vector]] representing the current point.
    * @param clusterId The id of the cluster the current point belongs to.
-   * @param squaredNorm The `\Xi_{X}` (which is the squared norm) precomputed for the point.
+   * @param squaredNorm The `$\Xi_{X}$` (which is the squared norm) precomputed for the point.
    * @return The Silhouette for the point.
    */
   def computeSilhouetteCoefficient(
@@ -365,7 +370,8 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * @param featuresCol The name of the column which contains the feature vector of the point.
    * @return The average of the Silhouette values of the clustered data.
    */
-  def computeSilhouetteScore(dataset: Dataset[_],
+  def computeSilhouetteScore(
+      dataset: Dataset[_],
       predictionCol: String,
       featuresCol: String): Double = {
     SquaredEuclideanSilhouette.registerKryoClasses(dataset.sparkSession.sparkContext)
@@ -375,8 +381,7 @@ private[evaluation] object SquaredEuclideanSilhouette {
     }
     val dfWithSquaredNorm = dataset.withColumn("squaredNorm", squaredNormUDF(col(featuresCol)))
 
-    // compute aggregate values for clusters
-    // needed by the algorithm
+    // compute aggregate values for clusters needed by the algorithm
     val clustersStatsMap = SquaredEuclideanSilhouette
       .computeClusterStats(dfWithSquaredNorm, predictionCol, featuresCol)
 
@@ -386,11 +391,15 @@ private[evaluation] object SquaredEuclideanSilhouette {
       computeSilhouetteCoefficient(bClustersStatsMap, _: Vector, _: Int, _: Double)
     }
 
-    dfWithSquaredNorm
+    val silhouetteScore = dfWithSquaredNorm
       .select(avg(
         computeSilhouetteCoefficientUDF(col(featuresCol), col(predictionCol), col("squaredNorm"))
       ))
       .collect()(0)
       .getDouble(0)
+
+    bClustersStatsMap.destroy()
+
+    silhouetteScore
   }
 }
