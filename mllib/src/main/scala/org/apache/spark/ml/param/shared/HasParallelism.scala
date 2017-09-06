@@ -23,12 +23,15 @@ import org.apache.spark.ml.param.{IntParam, Params, ParamValidators}
 import org.apache.spark.util.ThreadUtils
 
 /**
- * Common parameter for estimators trained in a multithreaded environment.
+ * Trait to define a level of parallelism for algorithms that are able to use
+ * multithreaded execution, and provide a thread-pool based execution context.
  */
 private[ml] trait HasParallelism extends Params {
 
   /**
-   * param for the number of threads to use when running parallel meta-algorithms
+   * The number of threads to use when running parallel algorithms.
+   * Default is 1 for serial execution
+   *
    * @group expertParam
    */
   val parallelism = new IntParam(this, "parallelism",
@@ -39,6 +42,11 @@ private[ml] trait HasParallelism extends Params {
   /** @group expertGetParam */
   def getParallelism: Int = $(parallelism)
 
+  /**
+   * Create a new execution context with a thread-pool that has a maximum number of threads
+   * set to the value of [[parallelism]]. If this param is set to 1, a same-thread executor
+   * will be used to run in serial.
+   */
   private[ml] def getExecutionContext: ExecutionContext = {
     getParallelism match {
       case 1 =>
