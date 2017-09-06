@@ -511,17 +511,6 @@ trait String2TrimExpression extends Expression with ImplicitCastInputTypes {
 
   override def nullable: Boolean = children.exists(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
-
-  override def sql: String = {
-    if (children.size == 1) {
-      val childrenSQL = children.map(_.sql).mkString(", ")
-      s"$prettyName($childrenSQL)"
-    } else {
-      val trimSQL = children(0).map(_.sql).mkString(", ")
-      val tarSQL = children(1).map(_.sql).mkString(", ")
-      s"$prettyName($trimSQL, $tarSQL)"
-    }
-  }
 }
 
 object StringTrim {
@@ -539,8 +528,8 @@ object StringTrim {
  * trimStr: A character string to be trimmed from the source string, if it has multiple characters, the function
  * searches for each character in the source string, removes the characters from the source string until it
  * encounters the first non-match character.
- * BOTH: removes any characters from both ends of the source string that matches characters in the trim string.
-  */
+ * BOTH: removes any character from both ends of the source string that matches characters in the trim string.
+ */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
@@ -577,14 +566,15 @@ case class StringTrim(
   }
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString != null) {
+    if (srcString == null) {
+      null
+    } else {
       if (trimStr.isDefined) {
         return srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
         return srcString.trim()
       }
     }
-    null
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -599,8 +589,7 @@ case class StringTrim(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trim();
-        }
-         """.stripMargin)
+        }""".stripMargin)
     } else {
       val trimString = evals(1)
       val getTrimFunction =
@@ -609,17 +598,16 @@ case class StringTrim(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trim(${trimString.value});
-      }""".stripMargin
+        }""".stripMargin
       ev.copy(evals.map(_.code).mkString("\n") +
         s"""
-      boolean ${ev.isNull} = false;
-      UTF8String ${ev.value} = null;
-      if (${srcString.isNull}) {
-        ${ev.isNull} = true;
-      } else {
-        $getTrimFunction
-      }
-    """.stripMargin)
+        boolean ${ev.isNull} = false;
+        UTF8String ${ev.value} = null;
+        if (${srcString.isNull}) {
+          ${ev.isNull} = true;
+        } else {
+          $getTrimFunction
+        }""".stripMargin)
     }
   }
 }
@@ -637,7 +625,7 @@ object StringTrimLeft {
  * have two arguments, the first argument contains trimStr, the second argument contains the source string.
  * trimStr: the function removes any characters from the left end of the source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
- * LEADING: removes any characters from the left end of the source string that matches characters in the trim string.
+ * LEADING: removes any character from the left end of the source string that matches characters in the trim string.
  */
 @ExpressionDescription(
   usage = """
@@ -676,14 +664,15 @@ case class StringTrimLeft(
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString != null) {
+    if (srcString == null) {
+      null
+    } else {
       if (trimStr.isDefined) {
         return srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
         return srcString.trimLeft()
       }
     }
-    null
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -716,8 +705,7 @@ case class StringTrimLeft(
           ${ev.isNull} = true;
         } else {
           $getTrimLeftFunction
-        }
-        """.stripMargin )
+        }""".stripMargin )
     }
   }
 }
@@ -735,7 +723,7 @@ object StringTrimRight {
  * have two arguments, the first argument contains trimStr, the second argument contains the source string.
  * trimStr: the function removes any characters from the right end of source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
- * TRAILING: removes any characters from the right end of the source string that matches characters in the trim string.
+ * TRAILING: removes any character from the right end of the source string that matches characters in the trim string.
  */
 @ExpressionDescription(
   usage = """
@@ -774,14 +762,15 @@ case class StringTrimRight(
 
   override def eval(input: InternalRow): Any = {
     val srcString = srcStr.eval(input).asInstanceOf[UTF8String]
-    if (srcString != null) {
+    if (srcString == null) {
+      null
+    } else {
       if (trimStr.isDefined) {
         return srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
         return srcString.trimRight()
         }
       }
-    null
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -814,8 +803,7 @@ case class StringTrimRight(
           ${ev.isNull} = true;
         } else {
           $getTrimRightFunction
-        }
-        """.stripMargin )
+        }""".stripMargin )
     }
   }
 }
