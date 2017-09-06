@@ -244,4 +244,48 @@ class JoinBenchmark extends BenchmarkBase {
      *shuffle hash join codegen=true           1773 / 1792          2.4         422.7       1.1X
      */
   }
+
+  ignore("cartesian product") {
+    val N = 1 << 12
+    sparkSession.conf.set("spark.sql.autoBroadcastJoinThreshold", 32767)
+    runBenchmark("cartesian product", N) {
+      val df1 = sparkSession.range(N).selectExpr("id + rand(10) as k1")
+      val df2 = sparkSession.range(N).selectExpr("id + rand(10) as k2")
+      val df = df1.join(df2, col("k1") >= (col("k2") - 1.0) && col("k1") <= (col("k2") + 1.0))
+      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[CartesianProductExec]).isDefined)
+      df.count()
+    }
+
+    /*
+     *Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Windows 7 6.1
+     *Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+     *cartesian product:                       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+     *------------------------------------------------------------------------------------------------
+     *cartesian product codegen=false               817 /  850          0.0      199394.7       1.0X
+     *cartesian product codegen=true                719 /  730          0.0      175493.6       1.1X
+     */
+  }
+
+  ignore("broadcast nested loop join") {
+    val N = 1 << 12
+    sparkSession.conf.set("spark.sql.autoBroadcastJoinThreshold", "10000000")
+    runBenchmark("nested loop join", N) {
+      val df1 = sparkSession.range(N).selectExpr("id as k", "id + rand(10) as k1")
+      val df2 = sparkSession.range(N / 2).selectExpr("id * 2 as k2", "id * 2 + rand(10) as k3")
+      val df = df1.join(df2,
+        col("k") === col("k2") || col("k1") >= (col("k3") - 1.0) && col("k1") <= (col("k3") + 1.0))
+      assert(df.queryExecution.sparkPlan.find(_.isInstanceOf[BroadcastNestedLoopJoinExec])
+        .isDefined)
+      df.count()
+    }
+
+    /*
+     *Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Windows 7 6.1
+     *Intel64 Family 6 Model 94 Stepping 3, GenuineIntel
+     *nested loop join:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+     *------------------------------------------------------------------------------------------------
+     *nested loop join codegen=false                413 /  446          0.0      100849.9       1.0X
+     *nested loop join codegen=true                 339 /  373          0.0       82703.1       1.2X
+     */
+  }
 }
