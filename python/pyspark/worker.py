@@ -138,11 +138,13 @@ def read_vectorized_udfs(pickleSer, infile):
         else:
             args = ["a[0]"]
         call_udfs.append("f%d(%s)" % (i, ", ".join(args)))
+
     def chk_len(v, size):
         if len(v) == size:
             return v
         else:
             raise Exception("The length of returned value should be the same as input value")
+
     call_and_chk_len = ['chk_len(%s, a[0])' % call_udf for call_udf in call_udfs]
     udfs['chk_len'] = chk_len
     # Create function like this:
