@@ -1867,7 +1867,8 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement).
+   * Returns a new [[Dataset]] by sampling a fraction of rows (without replacement),
+   * using a random seed.
    *
    * @param fraction Fraction of rows to generate, range [0.0, 1.0].
    *
@@ -2575,8 +2576,9 @@ class Dataset[T] private[sql](
    * @group action
    * @since 1.6.0
    */
-  def foreachPartition(func: ForeachPartitionFunction[T]): Unit =
-    foreachPartition(it => func.call(it.asJava))
+  def foreachPartition(func: ForeachPartitionFunction[T]): Unit = {
+    foreachPartition((it: Iterator[T]) => func.call(it.asJava))
+  }
 
   /**
    * Returns the first `n` rows in the Dataset.

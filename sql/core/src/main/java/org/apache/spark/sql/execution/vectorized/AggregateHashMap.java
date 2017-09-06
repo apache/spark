@@ -21,7 +21,6 @@ import java.util.Arrays;
 
 import com.google.common.annotations.VisibleForTesting;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.StructType;
 
 import static org.apache.spark.sql.types.DataTypes.LongType;

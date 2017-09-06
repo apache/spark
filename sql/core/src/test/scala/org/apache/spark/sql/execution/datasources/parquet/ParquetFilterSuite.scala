@@ -506,7 +506,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             sparkContext.register(accu)
 
             val df = spark.read.parquet(path).filter("a < 100")
-            df.foreachPartition(_.foreach(v => accu.add(0)))
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
             df.collect
 
             if (enablePushDown) {
