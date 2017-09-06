@@ -63,7 +63,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     this(sc, new SystemClock)
   }
 
-  sc.addSparkListener(this)
+  sc.listenerBus.addToQueue(this, LiveListenerBus.EXECUTOR_MGMT_QUEUE)
 
   override val rpcEnv: RpcEnv = sc.env.rpcEnv
 

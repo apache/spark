@@ -419,7 +419,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
     _jobProgressListener = new JobProgressListener(_conf)
-    listenerBus.addListener(jobProgressListener)
+    listenerBus.addToQueue(jobProgressListener, LiveListenerBus.APP_STATUS_QUEUE)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
@@ -442,7 +442,7 @@ class SparkContext(config: SparkConf) extends Logging {
 
     _ui =
       if (conf.getBoolean("spark.ui.enabled", true)) {
-        Some(SparkUI.createLiveUI(this, _conf, listenerBus, _jobProgressListener,
+        Some(SparkUI.createLiveUI(this, _conf, _jobProgressListener,
           _env.securityManager, appName, startTime = startTime))
       } else {
         // For tests, do not enable the UI
@@ -522,7 +522,7 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addListener(logger)
+        listenerBus.addToQueue(logger, "eventLog")
         Some(logger)
       } else {
         None
@@ -1879,8 +1879,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   def stop(): Unit = {
     if (LiveListenerBus.withinListenerThread.value) {
-      throw new SparkException(
-        s"Cannot stop SparkContext within listener thread of ${LiveListenerBus.name}")
+      throw new SparkException(s"Cannot stop SparkContext within listener bus thread.")
     }
     // Use the stopping variable to ensure no contention for the stop scenario.
     // Still track the stopped variable for use elsewhere in the code.
