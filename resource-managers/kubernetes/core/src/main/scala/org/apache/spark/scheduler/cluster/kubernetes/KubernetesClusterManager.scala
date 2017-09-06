@@ -96,12 +96,16 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         sparkConf,
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
         Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+    val executorPodFactory = new ExecutorPodFactoryImpl(
+        sparkConf,
+        NodeAffinityExecutorPodModifierImpl,
+        mountSmallFilesBootstrap,
+        executorInitContainerbootStrap,
+        executorInitContainerSecretVolumePlugin)
     new KubernetesClusterSchedulerBackend(
         sc.taskScheduler.asInstanceOf[TaskSchedulerImpl],
         sc,
-        executorInitContainerbootStrap,
-        executorInitContainerSecretVolumePlugin,
-        mountSmallFilesBootstrap,
+        executorPodFactory,
         kubernetesClient)
   }
 
