@@ -930,13 +930,6 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
-  val ARROW_EXECUTION_VECTORIZE_UDFS =
-    buildConf("spark.sql.execution.arrow.vectorizeUDFs")
-      .internal()
-      .doc("Apply Python UDFs as vectorized functions")
-      .booleanConf
-      .createWithDefault(false)
-
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -1216,8 +1209,6 @@ class SQLConf extends Serializable with Logging {
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
-
-  def arrowVectorizeUDFs: Boolean = getConf(ARROW_EXECUTION_VECTORIZE_UDFS)
 
   /** ********************** SQLConf functionality methods ************ */
 

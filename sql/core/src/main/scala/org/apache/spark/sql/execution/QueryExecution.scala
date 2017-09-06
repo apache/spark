@@ -102,7 +102,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   /** A sequence of rules that will be applied in order to the physical plan before execution. */
   protected def preparations: Seq[Rule[SparkPlan]] = Seq(
-    python.ExtractPythonUDFs(sparkSession.sessionState.conf),
+    python.ExtractPythonUDFs,
     PlanSubqueries(sparkSession),
     new ReorderJoinPredicates,
     EnsureRequirements(sparkSession.sessionState.conf),

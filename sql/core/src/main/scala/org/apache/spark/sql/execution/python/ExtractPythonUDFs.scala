@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
-import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -91,7 +90,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-case class ExtractPythonUDFs(conf: SQLConf) extends Rule[SparkPlan] with PredicateHelper {
+object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
@@ -139,11 +138,16 @@ case class ExtractPythonUDFs(conf: SQLConf) extends Rule[SparkPlan] with Predica
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          val evaluation = if (conf.arrowEnable && conf.arrowVectorizeUDFs) {
-            ArrowEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
-          } else {
-            BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+
+          val evaluation = validUdfs.partition(_.vectorized) match {
+            case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
+              ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
+              BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
+            case _ =>
+              throw new IllegalArgumentException("Can not mix vectorized and non-vectorized UDFs")
           }
+
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {
