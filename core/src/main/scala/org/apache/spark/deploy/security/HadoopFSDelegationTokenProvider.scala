@@ -26,8 +26,9 @@ import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 
 private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration => Set[FileSystem])
     extends HadoopDelegationTokenProvider with Logging {
@@ -41,17 +42,15 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
+      sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
 
     val fsToGetTokens = fileSystems(hadoopConf)
-    val fetchCreds = fetchDelegationTokens(
-      getTokenRenewer(hadoopConf),
-      fsToGetTokens,
-      creds)
+    val fetchCreds = fetchDelegationTokens(getTokenRenewer(hadoopConf), fsToGetTokens, creds)
 
     // Get the token renewal interval if it is not set. It will only be called once.
     if (tokenRenewalInterval == null) {
-      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, fsToGetTokens, creds)
+      tokenRenewalInterval = getTokenRenewalInterval(hadoopConf, sparkConf, fsToGetTokens)
     }
 
     // Get the time of next renewal.
@@ -102,27 +101,27 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
 
   private def getTokenRenewalInterval(
       hadoopConf: Configuration,
-      filesystems: Set[FileSystem],
-      creds: Credentials): Option[Long] = {
+      sparkConf: SparkConf,
+      filesystems: Set[FileSystem]): Option[Long] = {
     // We cannot use the tokens generated with renewer yarn. Trying to renew
     // those will fail with an access control issue. So create new tokens with the logged in
     // user as renewer.
-    val fetchCreds = fetchDelegationTokens(
-      UserGroupInformation.getCurrentUser.getUserName,
-      filesystems,
-      creds)
+    sparkConf.get(PRINCIPAL).flatMap { renewer =>
+      val creds = new Credentials()
+      fetchDelegationTokens(renewer, filesystems, creds)
 
-    val renewIntervals = fetchCreds.getAllTokens.asScala.filter {
-      _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
-    }.flatMap { token =>
-      Try {
-        val newExpiration = token.renew(hadoopConf)
-        val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
-        val interval = newExpiration - identifier.getIssueDate
-        logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
-        interval
-      }.toOption
+      val renewIntervals = creds.getAllTokens.asScala.filter {
+        _.decodeIdentifier().isInstanceOf[AbstractDelegationTokenIdentifier]
+      }.flatMap { token =>
+        Try {
+          val newExpiration = token.renew(hadoopConf)
+          val identifier = token.decodeIdentifier().asInstanceOf[AbstractDelegationTokenIdentifier]
+          val interval = newExpiration - identifier.getIssueDate
+          logInfo(s"Renewal interval is $interval for token ${token.getKind.toString}")
+          interval
+        }.toOption
+      }
+      if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
     }
-    if (renewIntervals.isEmpty) None else Some(renewIntervals.min)
   }
 }

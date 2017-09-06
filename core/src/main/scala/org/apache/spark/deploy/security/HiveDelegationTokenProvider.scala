@@ -20,6 +20,8 @@ package org.apache.spark.deploy.security
 import java.lang.reflect.UndeclaredThrowableException
 import java.security.PrivilegedExceptionAction
 
+import org.apache.spark.SparkConf
+
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -61,6 +63,7 @@ private[security] class HiveDelegationTokenProvider
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
+      sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
       val conf = hiveConf(hadoopConf)

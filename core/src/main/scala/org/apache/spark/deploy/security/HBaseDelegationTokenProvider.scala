@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy.security
 
+import org.apache.spark.SparkConf
+
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
 
@@ -34,6 +36,7 @@ private[security] class HBaseDelegationTokenProvider
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
+      sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)
