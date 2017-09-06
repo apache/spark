@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.ml.linalg.{BLAS, DenseVector, Vector, Vectors, VectorUDT}
-import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -63,16 +63,44 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
   @Since("2.3.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
+  /**
+   * param for metric name in evaluation
+   * (supports `"squaredSilhouette"` (default))
+   * @group param
+   */
+  @Since("2.3.0")
+  val metricName: Param[String] = {
+    val allowedParams = ParamValidators.inArray(Array("squaredSilhouette"))
+    new Param(
+      this,
+      "metricName",
+      "metric name in evaluation (squaredSilhouette)",
+      allowedParams
+    )
+  }
+
+  /** @group getParam */
+  @Since("2.3.0")
+  def getMetricName: String = $(metricName)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setMetricName(value: String): this.type = set(metricName, value)
+
+  setDefault(metricName -> "squaredSilhouette")
+
   @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkColumnType(dataset.schema, $(predictionCol), IntegerType)
 
-    SquaredEuclideanSilhouette.computeSilhouetteScore(
-      dataset,
-      $(predictionCol),
-      $(featuresCol)
-    )
+    $(metricName) match {
+      case "squaredSilhouette" => SquaredEuclideanSilhouette.computeSilhouetteScore(
+        dataset,
+        $(predictionCol),
+        $(featuresCol)
+      )
+    }
   }
 }
 
