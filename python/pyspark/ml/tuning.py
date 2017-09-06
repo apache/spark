@@ -265,7 +265,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             validateUB = (i + 1) * h
             condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
             validation = df.filter(condition).cache()
-            train = df.filter(~condition)
+            train = df.filter(~condition).cache()
 
             def singleTrain(index):
                 model = est.fit(train, epm[index])
@@ -277,6 +277,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             for k in range(numModels):
                 metrics[k] += (currentFoldMetrics[k] / nFolds)
             validation.unpersist()
+            train.unpersist()
 
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
