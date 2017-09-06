@@ -362,7 +362,7 @@ private[spark] class MemoryStore(
 
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = bbos.size  - unrollMemoryUsedByThisBlock + additionalMemoryRequest
+        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock + additionalMemoryRequest
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
