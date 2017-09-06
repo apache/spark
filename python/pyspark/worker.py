@@ -138,9 +138,16 @@ def read_vectorized_udfs(pickleSer, infile):
         else:
             args = ["a[0]"]
         call_udfs.append("f%d(%s)" % (i, ", ".join(args)))
+    def chk_len(v, size):
+        if len(v) == size:
+            return v
+        else:
+            raise Exception("The length of returned value should be the same as input value")
+    call_and_chk_len = ['chk_len(%s, a[0])' % call_udf for call_udf in call_udfs]
+    udfs['chk_len'] = chk_len
     # Create function like this:
-    #   lambda a: [f0(a[0]), f1(a[1], a[2]), f2(a[3])]
-    mapper_str = "lambda a: [%s]" % (", ".join(call_udfs))
+    #   lambda a: [chk_len(f0(a[0]), a[0]), chk_len(f1(a[1], a[2]), a[0]), ...]
+    mapper_str = "lambda a: [%s]" % (", ".join(call_and_chk_len))
     mapper = eval(mapper_str, udfs)
 
     func = lambda _, it: map(mapper, it)

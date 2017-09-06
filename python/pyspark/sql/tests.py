@@ -3245,6 +3245,15 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             with self.assertRaisesRegexp(Exception, 'division( or modulo)? by zero'):
                 df.select(raise_exception(col('id'))).collect()
 
+    def test_vectorized_udf_invalid_length(self):
+        import pandas as pd
+        df = self.spark.range(10)
+        raise_exception = pandas_udf(lambda size: pd.Series(1), LongType())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception,
+                    'The length of returned value should be the same as input value'):
+                df.select(raise_exception()).collect()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
