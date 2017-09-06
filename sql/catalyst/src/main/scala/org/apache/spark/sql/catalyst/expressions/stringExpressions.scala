@@ -589,7 +589,7 @@ case class StringTrim(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trim();
-        }""".stripMargin)
+        }""")
     } else {
       val trimString = evals(1)
       val getTrimFunction =
@@ -598,7 +598,7 @@ case class StringTrim(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trim(${trimString.value});
-        }""".stripMargin
+        }"""
       ev.copy(evals.map(_.code).mkString("\n") +
         s"""
         boolean ${ev.isNull} = false;
@@ -607,7 +607,7 @@ case class StringTrim(
           ${ev.isNull} = true;
         } else {
           $getTrimFunction
-        }""".stripMargin)
+        }""")
     }
   }
 }
@@ -687,7 +687,7 @@ case class StringTrimLeft(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trimLeft();
-        }""".stripMargin)
+        }""")
     } else {
       val trimString = evals(1)
       val getTrimLeftFunction =
@@ -696,7 +696,7 @@ case class StringTrimLeft(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
-        }""".stripMargin
+        }"""
       ev.copy(evals.map(_.code).mkString("\n") +
         s"""
         boolean ${ev.isNull} = false;
@@ -705,7 +705,7 @@ case class StringTrimLeft(
           ${ev.isNull} = true;
         } else {
           $getTrimLeftFunction
-        }""".stripMargin )
+        }""")
     }
   }
 }
@@ -769,8 +769,8 @@ case class StringTrimRight(
         return srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
         return srcString.trimRight()
-        }
       }
+    }
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -785,7 +785,7 @@ case class StringTrimRight(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trimRight();
-        }""".stripMargin)
+        }""")
     } else {
       val trimString = evals(1)
       val getTrimRightFunction =
@@ -794,7 +794,7 @@ case class StringTrimRight(
           ${ev.isNull} = true;
         } else {
           ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
-        }""".stripMargin
+        }"""
       ev.copy(evals.map(_.code).mkString("\n") +
         s"""
         boolean ${ev.isNull} = false;
@@ -803,7 +803,7 @@ case class StringTrimRight(
           ${ev.isNull} = true;
         } else {
           $getTrimRightFunction
-        }""".stripMargin )
+        }""")
     }
   }
 }
