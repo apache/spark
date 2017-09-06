@@ -152,6 +152,8 @@ if __name__ == "__main__":
         ("varianceCol", "column name for the biased sample variance of prediction.",
          None, "TypeConverters.toString"),
         ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
+         "TypeConverters.toInt"),
+        ("parallelism", "number of threads to use when fitting models in parallel.", "1",
          "TypeConverters.toInt")]
 
     code = []

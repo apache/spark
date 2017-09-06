@@ -101,6 +101,44 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(expectedMetrics.confusionMatrix ~== ovaMetrics.confusionMatrix absTol 400)
   }
 
+  test("one-vs-rest: tuning parallelism does not change output") {
+    val ovaPar1 = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+
+    val ovaModelPar1 = ovaPar1.fit(dataset)
+
+    val transformedDatasetPar1 = ovaModelPar1.transform(dataset)
+
+    val ovaResultsPar1 = transformedDatasetPar1.select("prediction", "label").rdd.map {
+      row => (row.getDouble(0), row.getDouble(1))
+    }
+
+    val ovaPar2 = new OneVsRest()
+      .setClassifier(new LogisticRegression)
+      .setParallelism(2)
+
+    val ovaModelPar2 = ovaPar2.fit(dataset)
+
+    val transformedDatasetPar2 = ovaModelPar2.transform(dataset)
+
+    val ovaResultsPar2 = transformedDatasetPar2.select("prediction", "label").rdd.map {
+      row => (row.getDouble(0), row.getDouble(1))
+    }
+
+    val metricsPar1 = new MulticlassMetrics(ovaResultsPar1)
+    val metricsPar2 = new MulticlassMetrics(ovaResultsPar2)
+    assert(metricsPar1.confusionMatrix == metricsPar2.confusionMatrix)
+
+    ovaModelPar1.models.zip(ovaModelPar2.models).foreach {
+      case (lrModel1: LogisticRegressionModel, lrModel2: LogisticRegressionModel) =>
+        assert(lrModel1.coefficients === lrModel2.coefficients)
+        assert(lrModel1.intercept === lrModel2.intercept)
+      case other =>
+        throw new AssertionError(s"Loaded OneVsRestModel expected model of type" +
+          s" LogisticRegressionModel but found ${other.getClass.getName}")
+    }
+  }
+
   test("one-vs-rest: pass label metadata correctly during train") {
     val numClasses = 3
     val ova = new OneVsRest()

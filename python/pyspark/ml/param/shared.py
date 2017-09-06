@@ -608,6 +608,30 @@ class HasAggregationDepth(Params):
         return self.getOrDefault(self.aggregationDepth)
 
 
+class HasParallelism(Params):
+    """
+    Mixin for param parallelism: number of threads to use when fitting models in parallel.
+    """
+
+    parallelism = Param(Params._dummy(), "parallelism", "number of threads to use when fitting models in parallel.", typeConverter=TypeConverters.toInt)
+
+    def __init__(self):
+        super(HasParallelism, self).__init__()
+        self._setDefault(parallelism=1)
+
+    def setParallelism(self, value):
+        """
+        Sets the value of :py:attr:`parallelism`.
+        """
+        return self._set(parallelism=value)
+
+    def getParallelism(self):
+        """
+        Gets the value of parallelism or its default value.
+        """
+        return self.getOrDefault(self.parallelism)
+
+
 class DecisionTreeParams(Params):
     """
     Mixin for Decision Tree parameters.
