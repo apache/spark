@@ -221,9 +221,10 @@ class ArrowPandasSerializer(ArrowSerializer):
         Make an ArrowRecordBatch from a Pandas Series and serialize
         """
         import pyarrow as pa
-        # TODO: iterator could be a tuple
-        arr = pa.Array.from_pandas(series)
-        batch = pa.RecordBatch.from_arrays([arr], ["_0"])
+        if not isinstance(series, (list, tuple)):
+            series = [series]
+        arrs = [pa.Array.from_pandas(s) for s in series]
+        batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in range(len(arrs))])
         return super(ArrowPandasSerializer, self).dumps(batch)
 
     def loads(self, obj):
