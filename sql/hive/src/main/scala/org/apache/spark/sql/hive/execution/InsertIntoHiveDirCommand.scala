@@ -18,19 +18,20 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.language.existentials
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred._
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 /**
@@ -84,48 +85,46 @@ case class InsertIntoHiveDirCommand(
     val writeToPath =
       if (isLocal) {
         val localFileSystem = FileSystem.getLocal(jobConf)
-        val localPath = localFileSystem.makeQualified(targetPath)
-        if (localFileSystem.exists(localPath)) {
-          if (overwrite) {
-            localFileSystem.delete(localPath, true)
-          } else {
-            throw new RuntimeException("Directory '" + localPath.toString + "' already exists")
-          }
-        }
-        localPath
+        localFileSystem.makeQualified(targetPath)
       } else {
         val qualifiedPath = FileUtils.makeQualified(targetPath, hadoopConf)
         val dfs = qualifiedPath.getFileSystem(jobConf)
-        if (dfs.exists(qualifiedPath)) {
-          if (overwrite) {
-            dfs.delete(qualifiedPath, true)
-          } else {
-            throw new RuntimeException("Directory '" + qualifiedPath.toString + "' already exists")
-          }
-        } else {
+        if (!dfs.exists(qualifiedPath)) {
           dfs.mkdirs(qualifiedPath.getParent)
         }
         qualifiedPath
       }
 
     val tmpPath = getExternalTmpPath(sparkSession, hadoopConf, writeToPath)
-    // TODO: using tmpPath
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
-      writeToPath.toString, tableDesc, false)
+      tmpPath.toString, tableDesc, false)
 
     try {
-      // TODO: using tmpPath
       saveAsHiveFile(
         sparkSession = sparkSession,
         plan = children.head,
         hadoopConf = hadoopConf,
         fileSinkConf = fileSinkConf,
-        outputLocation = writeToPath.toString)
+        outputLocation = tmpPath.toString)
 
-      // TODO: move files from tmpPath to writeToPath
+      val fs = writeToPath.getFileSystem(hadoopConf)
+      if (overwrite) {
+        val existFiles = fs.listStatus(writeToPath)
+        existFiles.foreach {
+          existFile =>
+            if (existFile.getPath != createdTempDir.get) {
+              fs.delete(existFile.getPath, true)
+            }
+        }
+      }
+
+      val tmpFiles = fs.listStatus(tmpPath)
+      tmpFiles.foreach {
+        tmpFile =>
+          fs.rename(tmpFile.getPath, writeToPath)
+      }
 
       deleteExternalTmpPath(hadoopConf)
-
     } catch {
       case e =>
         throw new SparkException("Failed inserting overwrite directory " + storage.locationUri.get)
