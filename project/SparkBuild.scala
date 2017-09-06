@@ -123,7 +123,7 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
     .settings(
-      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.9.0"
+      libraryDependencies += "org.scalastyle" %% "scalastyle" % "1.0.0"
     )
 
   lazy val scalaStyleOnCompile = taskKey[Unit]("scalaStyleOnCompile")
