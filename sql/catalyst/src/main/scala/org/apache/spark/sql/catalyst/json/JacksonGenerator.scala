@@ -47,7 +47,7 @@ private[sql] class JacksonGenerator(
 
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
-    case st: StructType => st.asInstanceOf[StructType].map(_.dataType).map(makeWriter).toArray
+    case st: StructType => st.map(_.dataType).map(makeWriter).toArray
     case _ => throw new UnsupportedOperationException(
       s"Initial type ${dataType.simpleString} must be a struct")
   }
@@ -56,15 +56,14 @@ private[sql] class JacksonGenerator(
   private lazy val arrElementWriter: ValueWriter = dataType match {
     case st: StructType =>
       (arr: SpecializedGetters, i: Int) => {
-        val schema: StructType = st.asInstanceOf[StructType]
-        writeObject(writeFields(arr.getStruct(i, schema.length), schema, rootFieldWriters))
+        writeObject(writeFields(arr.getStruct(i, st.length), st, rootFieldWriters))
       }
     case _ => throw new UnsupportedOperationException(
       s"Initial type ${dataType.simpleString} must be a struct")
   }
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
-    case mt: MapType => makeWriter(dataType.asInstanceOf[MapType].valueType)
+    case mt: MapType => makeWriter(mt.valueType)
     case _ => throw new UnsupportedOperationException(
       s"Initial type ${dataType.simpleString} must be a map")
   }
@@ -222,7 +221,7 @@ private[sql] class JacksonGenerator(
    */
   def write(row: InternalRow): Unit = dataType match {
     case st: StructType =>
-      writeObject(writeFields(row, st.asInstanceOf[StructType], rootFieldWriters))
+      writeObject(writeFields(row, st, rootFieldWriters))
     case _ => throw new UnsupportedOperationException(
       s"this api is only used when `JacksonGenerator` is initialized with `StructType`")
   }
@@ -244,7 +243,7 @@ private[sql] class JacksonGenerator(
    * @param map a map to convert
    */
   def write(map: MapData): Unit = dataType match {
-    case mt: MapType => writeObject(writeMapData(map, mt.asInstanceOf[MapType], mapElementWriter))
+    case mt: MapType => writeObject(writeMapData(map, mt, mapElementWriter))
     case _ => throw new UnsupportedOperationException(
       s"this api is only used when `JacksonGenerator` is initialized with `MapType`")
   }
