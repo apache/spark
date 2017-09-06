@@ -367,6 +367,9 @@ case class InsertIntoTable(
  * @param provider Specifies what data source to use; only used for data source file.
  * @param child The query to be executed
  * @param overwrite If true, the existing directory will be overwritten
+ *
+ * Note that this plan is unresolved and has to be replaced by the concrete implementations
+ * during analysis.
  */
 case class InsertIntoDir(
     isLocal: Boolean,
@@ -378,6 +381,7 @@ case class InsertIntoDir(
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved: Boolean = false
 }
 
 /**

@@ -84,6 +84,7 @@ case class InsertIntoHiveTable(
 
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
 
     val hiveQlTable = HiveClientImpl.toHiveTable(table)
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
@@ -242,7 +243,7 @@ case class InsertIntoHiveTable(
 
     // Attempt to delete the staging directory and the inclusive files. If failed, the files are
     // expected to be dropped at the normal termination of VM since deleteOnExit is used.
-    deleteExternalTmpPath(hadoopConf)
+    deleteExternalTmpPath(hadoopConf, stagingDir)
 
     // un-cache this table.
     sparkSession.catalog.uncacheTable(table.identifier.quotedString)

@@ -41,8 +41,6 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       bucketSpec: Option[BucketSpec] = None,
       options: Map[String, String] = Map.empty): Unit = {
 
-    val sessionState = sparkSession.sessionState
-
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
     if (isCompressed) {
       // Please note that isCompressed, "mapreduce.output.fileoutputformat.compress",

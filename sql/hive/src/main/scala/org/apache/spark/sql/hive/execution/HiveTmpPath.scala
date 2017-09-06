@@ -29,17 +29,15 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveVersion
 
 // Base trait for getting a temporary location for writing data
-private[hive] trait HiveTmpPath extends RunnableCommand {
+private[hive] trait HiveTmpPath extends Logging {
 
   var createdTempDir: Option[Path] = None
-
-  private var stagingDir: String = ""
 
   def getExternalTmpPath(
       sparkSession: SparkSession,
@@ -65,7 +63,7 @@ private[hive] trait HiveTmpPath extends RunnableCommand {
 
     val externalCatalog = sparkSession.sharedState.externalCatalog
     val hiveVersion = externalCatalog.asInstanceOf[HiveExternalCatalog].client.version
-    stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
+    val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
     val scratchDir = hadoopConf.get("hive.exec.scratchdir", "/tmp/hive")
 
     if (hiveVersionsUsingOldExternalTempPath.contains(hiveVersion)) {
@@ -77,7 +75,7 @@ private[hive] trait HiveTmpPath extends RunnableCommand {
     }
   }
 
-  def deleteExternalTmpPath(hadoopConf : Configuration) : Unit = {
+  def deleteExternalTmpPath(hadoopConf: Configuration, stagingDir: String) : Unit = {
     // Attempt to delete the staging directory and the inclusive files. If failed, the files are
     // expected to be dropped at the normal termination of VM since deleteOnExit is used.
     try {

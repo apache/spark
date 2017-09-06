@@ -124,7 +124,8 @@ case class InsertIntoHiveDirCommand(
           fs.rename(tmpFile.getPath, writeToPath)
       }
 
-      deleteExternalTmpPath(hadoopConf)
+      val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
+      deleteExternalTmpPath(hadoopConf, stagingDir)
     } catch {
       case e : Throwable =>
         throw new SparkException(

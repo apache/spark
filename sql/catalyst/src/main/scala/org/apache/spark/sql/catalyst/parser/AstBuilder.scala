@@ -191,19 +191,22 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
 
   /**
    * Add an
-   *   INSERT INTO [TABLE] or
-   *   INSERT OVERWRITE TABLE or
-   *   INSERT OVERWRITE [LOCAL] DIRECTORY
+   * {{{
+   *   INSERT OVERWRITE TABLE tableIdentifier [partitionSpec [IF NOT EXISTS]]?
+   *   INSERT INTO [TABLE] tableIdentifier [partitionSpec]
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY STRING [rowFormat] [createFileFormat]
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY [STRING] tableProvider [OPTIONS tablePropertyList]
+   * }}}
    * operation to logical plan
    */
   private def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
     ctx match {
-      case table : InsertIntoTableContext =>
+      case table: InsertIntoTableContext =>
         val (tableIdent, partitionKeys, overwrite, exists) = visitInsertIntoTable(table)
         InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, overwrite, exists)
-      case table : InsertOverwriteTableContext =>
+      case table: InsertOverwriteTableContext =>
         val (tableIdent, partitionKeys, overwrite, exists) = visitInsertOverwriteTable(table)
         InsertIntoTable(UnresolvedRelation(tableIdent), partitionKeys, query, overwrite, exists)
       case dir: InsertOverwriteDirContext =>
