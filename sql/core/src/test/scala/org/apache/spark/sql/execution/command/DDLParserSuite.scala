@@ -539,7 +539,8 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val e2 = intercept[ParseException] {
       parser.parsePlan(v2)
     }
-    assert(e2.message.contains("You need to specify directory path or 'path' in OPTIONS"))
+    assert(e2.message.contains(
+      "Directory path and 'path' in OPTIONS should be specified one, but not both"))
 
     val v3 =
       """
