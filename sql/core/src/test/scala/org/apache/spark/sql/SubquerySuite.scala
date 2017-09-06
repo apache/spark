@@ -889,7 +889,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
             |WHERE
             |NOT EXISTS (SELECT * FROM t1)
           """.stripMargin
-        val ds = sql(sqlText)
         val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
         val join = optimizedPlan.collect {
           case j: Join => j
