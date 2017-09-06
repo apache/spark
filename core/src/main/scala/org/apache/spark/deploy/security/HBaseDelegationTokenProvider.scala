@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.security
 
-import org.apache.spark.SparkConf
-
 import scala.reflect.runtime.universe
 import scala.util.control.NonFatal
 
@@ -26,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 

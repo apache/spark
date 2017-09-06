@@ -20,8 +20,6 @@ package org.apache.spark.deploy.security
 import java.lang.reflect.UndeclaredThrowableException
 import java.security.PrivilegedExceptionAction
 
-import org.apache.spark.SparkConf
-
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -32,6 +30,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
 import org.apache.hadoop.security.token.Token
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
