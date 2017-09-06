@@ -18,15 +18,13 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.types.IntegerType
 
-
-private[ml] case class ClusteringEvaluationTestData(features: Vector, label: Int)
 
 class ClusteringEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -56,34 +54,24 @@ class ClusteringEvaluatorSuite
   */
   test("squared euclidean Silhouette") {
     val iris = ClusteringEvaluatorSuite.irisDataset(spark)
+      .withColumn("label", $"label".cast(IntegerType))
     val evaluator = new ClusteringEvaluator()
         .setFeaturesCol("features")
         .setPredictionCol("label")
 
-    assert(evaluator.evaluate(iris) ~== 0.6564679231 relTol 1e-10)
+    assert(evaluator.evaluate(iris) ~== 0.6564679231 relTol 1e-5)
   }
 
 }
 
 object ClusteringEvaluatorSuite {
   def irisDataset(spark: SparkSession): DataFrame = {
-    import spark.implicits._
 
-    val irisCsvPath = Thread.currentThread()
+    val irisPath = Thread.currentThread()
       .getContextClassLoader
-      .getResource("test-data/iris.csv")
+      .getResource("test-data/iris.libsvm")
       .toString
 
-    spark.sparkContext
-      .textFile(irisCsvPath)
-      .map {
-        line =>
-          val splits = line.split(",")
-          ClusteringEvaluationTestData(
-            Vectors.dense(splits.take(splits.length-1).map(_.toDouble)),
-            splits(splits.length-1).toInt
-          )
-      }
-      .toDF()
+    spark.read.format("libsvm").load(irisPath)
   }
 }
