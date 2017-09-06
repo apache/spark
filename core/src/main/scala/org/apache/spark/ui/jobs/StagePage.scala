@@ -23,10 +23,10 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.HashSet
 import scala.xml.{Elem, Node, Unparsed}
+
 import org.apache.commons.lang3.StringEscapeUtils
-import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.SparkConf
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
@@ -41,9 +41,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val progressListener = parent.progressListener
   private val operationGraphListener = parent.operationGraphListener
   private val executorsListener = parent.executorsListener
-  private val logDir = parent.conf.getOption("spark.history.fs.logDirectory")
-    .getOrElse("")
-  private var fs: FileSystem = null
 
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
@@ -289,36 +286,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           1
         }
       }
-
-      def getApplicationId = {
-        var applicationId = ""
-        val applicationIdArray = parent.basePath.split("/").filter(_.startsWith("application"))
-        if (applicationIdArray.length != 0) {
-          applicationId = applicationIdArray(0)
-        }
-        applicationId
-      }
-
-      def getFileSystem = {
-        if (!logDir.isEmpty && fs == null) {
-          val hadoopConf = SparkHadoopUtil.get.newConfiguration(parent.conf)
-          fs = new Path(logDir).getFileSystem(hadoopConf)
-        }
-        fs
-      }
-
-      def getLatestUpdateTime = {
-        var latestUpdateTime = System.currentTimeMillis()
-        if (!logDir.isEmpty) {
-          val statuses = getFileSystem.globStatus(new Path(logDir + "/" + getApplicationId + "*"))
-          if (statuses.length != 0) {
-            val status = statuses(0)
-            latestUpdateTime = status.getModificationTime
-          }
-        }
-        latestUpdateTime
-      }
-
       val currentTime = System.currentTimeMillis()
       val (taskTable, taskTableHTML) = try {
         val _taskTable = new TaskPagedTable(
@@ -333,7 +300,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           stageData.hasShuffleWrite,
           stageData.hasBytesSpilled,
           currentTime,
-          getLatestUpdateTime,
           pageSize = taskPageSize,
           sortColumn = taskSortColumn,
           desc = taskSortDesc,
@@ -898,7 +864,6 @@ private[ui] class TaskDataSource(
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
     currentTime: Long,
-    latestUpdateTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -924,9 +889,7 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration =
-      if (info.status == "RUNNING") info.timeRunning(latestUpdateTime)
-      else metrics.map(_.executorRunTime).getOrElse(1L)
+    val duration = taskData.taskDuration.getOrElse(1L)
     val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
@@ -1192,7 +1155,6 @@ private[ui] class TaskPagedTable(
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
     currentTime: Long,
-    latestUpdateTime: Long,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean,
@@ -1218,7 +1180,6 @@ private[ui] class TaskPagedTable(
     hasShuffleWrite,
     hasBytesSpilled,
     currentTime,
-    latestUpdateTime: Long,
     pageSize,
     sortColumn,
     desc,
