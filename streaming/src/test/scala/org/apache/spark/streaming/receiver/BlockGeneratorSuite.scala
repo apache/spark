@@ -25,7 +25,7 @@ import scala.collection.mutable
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts._
+import org.scalatest.concurrent.TimeLimits._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}

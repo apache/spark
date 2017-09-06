@@ -26,7 +26,7 @@ import scala.tools.nsc.Properties
 
 import org.apache.hadoop.fs.Path
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
@@ -50,7 +50,7 @@ class HiveSparkSubmitSuite
   with Matchers
   with BeforeAndAfterEach
   with ResetSystemProperties
-  with Timeouts {
+  with TimeLimits {
 
   // TODO: rewrite these or mark them as slow tests to be run sparingly
 
