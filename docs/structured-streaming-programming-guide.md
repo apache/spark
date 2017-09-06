@@ -977,7 +977,7 @@ at the beginning of every trigger is the red line  For example, when the engine 
 `(12:14, dog)`, it sets the watermark for the next trigger as `12:04`.
 This watermark lets the engine maintain intermediate state for additional 10 minutes to allow late
 data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
-windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in 
+windows `12:00 - 12:10` and `12:05 - 12:15`. Since, it is still ahead of the watermark `12:04` in 
 the trigger, the engine still maintains the intermediate counts as state and correctly updates the 
 counts of the related windows. However, when the watermark is updated to `12:11`, the intermediate 
 state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
