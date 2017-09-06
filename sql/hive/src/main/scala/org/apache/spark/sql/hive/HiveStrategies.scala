@@ -148,15 +148,14 @@ object HiveAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case InsertIntoTable(r: HiveTableRelation, partSpec, query, overwrite, ifPartitionNotExists)
         if DDLUtils.isHiveTable(r.tableMeta) =>
-      DDLUtils.checkFieldNames(r.tableMeta)
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite, ifPartitionNotExists)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
-      DDLUtils.checkFieldNames(tableDesc)
+      DDLUtils.checkDataSchemaFieldNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
-      DDLUtils.checkFieldNames(tableDesc)
+      DDLUtils.checkDataSchemaFieldNames(tableDesc)
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
   }
 }
