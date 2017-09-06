@@ -565,7 +565,7 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       parser.parsePlan(v4)
     }
     assert(e4.message.contains(
-      "Directory path and 'path' in OPTIONS are both used to indicate the directory path"))
+      "Directory path and 'path' in OPTIONS should be specified one, but not both"))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;
