@@ -153,8 +153,8 @@ if __name__ == "__main__":
          None, "TypeConverters.toString"),
         ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
          "TypeConverters.toInt"),
-        ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).", "1",
-         "TypeConverters.toInt")]
+        ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).",
+         "1", "TypeConverters.toInt")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:
