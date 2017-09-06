@@ -613,7 +613,7 @@ class HasParallelism(Params):
     Mixin for param parallelism: number of threads to use when fitting models in parallel.
     """
 
-    parallelism = Param(Params._dummy(), "parallelism", "number of threads to use when fitting models in parallel.", typeConverter=TypeConverters.toInt)
+    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms.", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasParallelism, self).__init__()

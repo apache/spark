@@ -298,9 +298,10 @@ final class OneVsRest @Since("1.4.0") (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   /**
-   * @group expertSetParam
    * The implementation of parallel one vs. rest runs the classification for
    * each class in a separate threads.
+   *
+   * @group expertSetParam
    */
   def setParallelism(value: Int): this.type = {
     set(parallelism, value)

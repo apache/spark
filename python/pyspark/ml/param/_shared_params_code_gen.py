@@ -153,7 +153,7 @@ if __name__ == "__main__":
          None, "TypeConverters.toString"),
         ("aggregationDepth", "suggested depth for treeAggregate (>= 2).", "2",
          "TypeConverters.toInt"),
-        ("parallelism", "number of threads to use when fitting models in parallel (>= 1).", "1",
+        ("parallelism", "the number of threads to use when running parallel algorithms (>= 1).", "1",
          "TypeConverters.toInt")]
 
     code = []
