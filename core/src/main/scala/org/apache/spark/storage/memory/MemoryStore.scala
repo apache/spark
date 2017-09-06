@@ -329,8 +329,6 @@ private[spark] class MemoryStore(
     val initialMemoryThreshold = unrollMemoryThreshold
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
-    // Memory to request as a multiple of current reserved size
-    val memoryGrowthFactor = 1.5
     // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
     val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
@@ -349,6 +347,9 @@ private[spark] class MemoryStore(
       ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
+    // Since each time the size of 'bbos' growth is a 'chunkSize', so every time we apply for
+    // additional 'chunkSize' memory to avoid unnecessary synchronization.
+    var additionalMemoryRequest = chunkSize
     // Request enough memory to begin unrolling
     keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
 
@@ -361,7 +362,7 @@ private[spark] class MemoryStore(
 
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = (bbos.size * memoryGrowthFactor - unrollMemoryUsedByThisBlock).toLong
+        val amountToRequest = bbos.size  - unrollMemoryUsedByThisBlock + additionalMemoryRequest
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
@@ -385,6 +386,7 @@ private[spark] class MemoryStore(
         val excessUnrollMemory = unrollMemoryUsedByThisBlock - bbos.size
         releaseUnrollMemoryForThisTask(memoryMode, excessUnrollMemory)
       } else {
+        additionalMemoryRequest = 0
         reserveAdditionalMemoryIfNecessary()
       }
     }
