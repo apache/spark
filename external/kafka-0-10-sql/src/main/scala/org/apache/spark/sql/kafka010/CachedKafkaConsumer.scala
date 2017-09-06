@@ -112,9 +112,15 @@ private[kafka010] case class CachedKafkaConsumer private(
     // we will move to the next available offset within `[offset, untilOffset)` and retry.
     // If `failOnDataLoss` is `true`, the loop body will be executed only once.
     var toFetchOffset = offset
-    while (toFetchOffset != UNKNOWN_OFFSET) {
+    var consumerRecord: ConsumerRecord[Array[Byte], Array[Byte]] = null
+    // We want to break out of the while loop on a successful fetch to avoid using "return"
+    // which may causes a NonLocalReturnControl exception when this method is used as a function.
+    var isFetchComplete = false
+
+    while (toFetchOffset != UNKNOWN_OFFSET && !isFetchComplete) {
       try {
-        return fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
+        consumerRecord = fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
+        isFetchComplete = true
       } catch {
         case e: OffsetOutOfRangeException =>
           // When there is some error thrown, it's better to use a new consumer to drop all cached
@@ -125,8 +131,13 @@ private[kafka010] case class CachedKafkaConsumer private(
           toFetchOffset = getEarliestAvailableOffsetBetween(toFetchOffset, untilOffset)
       }
     }
-    resetFetchedData()
-    null
+
+    if (isFetchComplete) {
+      consumerRecord
+    } else {
+      resetFetchedData()
+      null
+    }
   }
 
   /**

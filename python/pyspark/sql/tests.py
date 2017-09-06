@@ -704,6 +704,31 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_validate_column_types(self):
+        from pyspark.sql.functions import udf, to_json
+        from pyspark.sql.column import _to_java_column
+
+        self.assertTrue("Column" in _to_java_column("a").getClass().toString())
+        self.assertTrue("Column" in _to_java_column(u"a").getClass().toString())
+        self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
+
+        self.assertRaisesRegexp(
+            TypeError,
+            "Invalid argument, not a string or column",
+            lambda: _to_java_column(1))
+
+        class A():
+            pass
+
+        self.assertRaises(TypeError, lambda: _to_java_column(A()))
+        self.assertRaises(TypeError, lambda: _to_java_column([]))
+
+        self.assertRaisesRegexp(
+            TypeError,
+            "Invalid argument, not a string or column",
+            lambda: udf(lambda x: x)(None))
+        self.assertRaises(TypeError, lambda: to_json(1))
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
@@ -868,16 +893,6 @@ class SQLTests(ReusedPySparkTestCase):
                            "float1 + 1.5 as float1 FROM table2").first()
 
         self.assertEqual((126, -127, -32767, 32766, 2147483646, 2.5), tuple(r))
-
-        from pyspark.sql.types import _parse_schema_abstract, _infer_schema_type
-        rdd = self.sc.parallelize([(127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1),
-                                    {"a": 1}, (2,), [1, 2, 3])])
-        abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
-        schema = _parse_schema_abstract(abstract)
-        typedSchema = _infer_schema_type(rdd.first(), schema)
-        df = self.spark.createDataFrame(rdd, typedSchema)
-        r = (127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1), {"a": 1}, Row(b=2), [1, 2, 3])
-        self.assertEqual(r, tuple(df.first()))
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
@@ -2083,6 +2098,24 @@ class SQLTests(ReusedPySparkTestCase):
         plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
         self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
 
+    def test_sample(self):
+        self.assertRaisesRegexp(
+            TypeError,
+            "should be a bool, float and number",
+            lambda: self.spark.range(1).sample())
+
+        self.assertRaises(
+            TypeError,
+            lambda: self.spark.range(1).sample("a"))
+
+        self.assertRaises(
+            TypeError,
+            lambda: self.spark.range(1).sample(seed="abc"))
+
+        self.assertRaises(
+            IllegalArgumentException,
+            lambda: self.spark.range(1).sample(-1.0))
+
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = self.sc.parallelize(data, 5)
@@ -2358,9 +2391,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_BinaryType_serialization(self):
         # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
+        # The empty bytearray is test for SPARK-21534.
         schema = StructType([StructField('mybytes', BinaryType())])
         data = [[bytearray(b'here is my data')],
-                [bytearray(b'and here is some more')]]
+                [bytearray(b'and here is some more')],
+                [bytearray(b'')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
 

@@ -19,17 +19,38 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
 /**
  * Column data backed using offheap memory.
  */
-public final class OffHeapColumnVector extends ColumnVector {
+public final class OffHeapColumnVector extends WritableColumnVector {
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
+  /**
+   * Allocates columns to store elements of each field of the schema off heap.
+   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
+   * in number of elements, not number of bytes.
+   */
+  public static OffHeapColumnVector[] allocateColumns(int capacity, StructType schema) {
+    return allocateColumns(capacity, schema.fields());
+  }
+
+  /**
+   * Allocates columns to store elements of each field off heap.
+   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
+   * in number of elements, not number of bytes.
+   */
+  public static OffHeapColumnVector[] allocateColumns(int capacity, StructField[] fields) {
+    OffHeapColumnVector[] vectors = new OffHeapColumnVector[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      vectors[i] = new OffHeapColumnVector(capacity, fields[i].dataType());
+    }
+    return vectors;
+  }
 
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
@@ -40,8 +61,8 @@ public final class OffHeapColumnVector extends ColumnVector {
   private long lengthData;
   private long offsetData;
 
-  protected OffHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.OFF_HEAP);
+  public OffHeapColumnVector(int capacity, DataType type) {
+    super(capacity, type);
 
     nulls = 0;
     data = 0;
@@ -518,5 +539,10 @@ public final class OffHeapColumnVector extends ColumnVector {
     this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
     Platform.setMemory(nulls + oldCapacity, (byte)0, newCapacity - oldCapacity);
     capacity = newCapacity;
+  }
+
+  @Override
+  protected OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+    return new OffHeapColumnVector(capacity, type);
   }
 }

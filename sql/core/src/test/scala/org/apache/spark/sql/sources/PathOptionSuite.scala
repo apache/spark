@@ -135,7 +135,7 @@ class PathOptionSuite extends DataSourceTest with SharedSQLContext {
 
   private def getPathOption(tableName: String): Option[String] = {
     spark.table(tableName).queryExecution.analyzed.collect {
-      case LogicalRelation(r: TestOptionsRelation, _, _) => r.pathOption
+      case LogicalRelation(r: TestOptionsRelation, _, _, _) => r.pathOption
     }.head
   }
 

@@ -219,6 +219,9 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
     resultsUsingPredict.zip(results.select(predictionCol).as[Double].collect()).foreach {
       case (pred1, pred2) => assert(pred1 === pred2)
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, GBTClassificationModel](gbtModel, validationDataset)
   }
 
   test("GBT parameter stepSize should be in interval (0, 1]") {

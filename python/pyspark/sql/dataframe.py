@@ -659,19 +659,69 @@ class DataFrame(object):
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
     @since(1.3)
-    def sample(self, withReplacement, fraction, seed=None):
+    def sample(self, withReplacement=None, fraction=None, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
+
+        :param withReplacement: Sample with replacement or not (default False).
+        :param fraction: Fraction of rows to generate, range [0.0, 1.0].
+        :param seed: Seed for sampling (default a random seed).
 
         .. note:: This is not guaranteed to provide exactly the fraction specified of the total
             count of the given :class:`DataFrame`.
 
-        >>> df.sample(False, 0.5, 42).count()
-        2
+        .. note:: `fraction` is required and, `withReplacement` and `seed` are optional.
+
+        >>> df = spark.range(10)
+        >>> df.sample(0.5, 3).count()
+        4
+        >>> df.sample(fraction=0.5, seed=3).count()
+        4
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        1
+        >>> df.sample(1.0).count()
+        10
+        >>> df.sample(fraction=1.0).count()
+        10
+        >>> df.sample(False, fraction=1.0).count()
+        10
         """
-        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd = self._jdf.sample(withReplacement, fraction, long(seed))
-        return DataFrame(rdd, self.sql_ctx)
+
+        # For the cases below:
+        #   sample(True, 0.5 [, seed])
+        #   sample(True, fraction=0.5 [, seed])
+        #   sample(withReplacement=False, fraction=0.5 [, seed])
+        is_withReplacement_set = \
+            type(withReplacement) == bool and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(faction=0.5 [, seed])
+        is_withReplacement_omitted_kwargs = \
+            withReplacement is None and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(0.5 [, seed])
+        is_withReplacement_omitted_args = isinstance(withReplacement, float)
+
+        if not (is_withReplacement_set
+                or is_withReplacement_omitted_kwargs
+                or is_withReplacement_omitted_args):
+            argtypes = [
+                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None]
+            raise TypeError(
+                "withReplacement (optional), fraction (required) and seed (optional)"
+                " should be a bool, float and number; however, "
+                "got [%s]." % ", ".join(argtypes))
+
+        if is_withReplacement_omitted_args:
+            if fraction is not None:
+                seed = fraction
+            fraction = withReplacement
+            withReplacement = None
+
+        seed = long(seed) if seed is not None else None
+        args = [arg for arg in [withReplacement, fraction, seed] if arg is not None]
+        jdf = self._jdf.sample(*args)
+        return DataFrame(jdf, self.sql_ctx)
 
     @since(1.5)
     def sampleBy(self, col, fractions, seed=None):
@@ -927,7 +977,7 @@ class DataFrame(object):
 
     @since("1.3.1")
     def describe(self, *cols):
-        """Computes statistics for numeric and string columns.
+        """Computes basic statistics for numeric and string columns.
 
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
@@ -955,10 +1005,69 @@ class DataFrame(object):
         |    min|                 2|Alice|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
+
+        Use summary for expanded statistics and control over which statistics to compute.
         """
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since("2.3.0")
+    def summary(self, *statistics):
+        """Computes specified statistics for numeric and string columns. Available statistics are:
+        - count
+        - mean
+        - stddev
+        - min
+        - max
+        - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+
+        If no statistics are given, this function computes count, mean, stddev, min,
+        approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+
+        >>> df.summary().show()
+        +-------+------------------+-----+
+        |summary|               age| name|
+        +-------+------------------+-----+
+        |  count|                 2|    2|
+        |   mean|               3.5| null|
+        | stddev|2.1213203435596424| null|
+        |    min|                 2|Alice|
+        |    25%|               5.0| null|
+        |    50%|               5.0| null|
+        |    75%|               5.0| null|
+        |    max|                 5|  Bob|
+        +-------+------------------+-----+
+
+        >>> df.summary("count", "min", "25%", "75%", "max").show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |    min|  2|Alice|
+        |    25%|5.0| null|
+        |    75%|5.0| null|
+        |    max|  5|  Bob|
+        +-------+---+-----+
+
+        To do a summary for specific columns first select them:
+
+        >>> df.select("age", "name").summary("count").show()
+        +-------+---+----+
+        |summary|age|name|
+        +-------+---+----+
+        |  count|  2|   2|
+        +-------+---+----+
+
+        See also describe for basic statistics.
+        """
+        if len(statistics) == 1 and isinstance(statistics[0], list):
+            statistics = statistics[0]
+        jdf = self._jdf.summary(self._jseq(statistics))
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
@@ -1181,7 +1290,7 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by a distinct.
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
         """
@@ -1192,13 +1301,35 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by a distinct.
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
 
-        .. note:: Deprecated in 2.0, use union instead.
+        .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
         return self.union(other)
+
+    @since(2.3)
+    def unionByName(self, other):
+        """ Returns a new :class:`DataFrame` containing union of rows in this and another frame.
+
+        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        The difference between this function and :func:`union` is that this function
+        resolves columns by name (not by position):
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.unionByName(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   6|   4|   5|
+        +----+----+----+
+        """
+        return DataFrame(self._jdf.unionByName(other._jdf), self.sql_ctx)
 
     @since(1.3)
     def intersect(self, other):

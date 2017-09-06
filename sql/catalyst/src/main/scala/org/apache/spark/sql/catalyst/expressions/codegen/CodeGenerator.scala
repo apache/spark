@@ -464,14 +464,13 @@ class CodegenContext {
   /**
    * Returns the specialized code to set a given value in a column vector for a given `DataType`.
    */
-  def setValue(batch: String, row: String, dataType: DataType, ordinal: Int,
-      value: String): String = {
+  def setValue(vector: String, rowId: String, dataType: DataType, value: String): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) =>
-        s"$batch.column($ordinal).put${primitiveTypeName(jt)}($row, $value);"
-      case t: DecimalType => s"$batch.column($ordinal).putDecimal($row, $value, ${t.precision});"
-      case t: StringType => s"$batch.column($ordinal).putByteArray($row, $value.getBytes());"
+        s"$vector.put${primitiveTypeName(jt)}($rowId, $value);"
+      case t: DecimalType => s"$vector.putDecimal($rowId, $value, ${t.precision});"
+      case t: StringType => s"$vector.putByteArray($rowId, $value.getBytes());"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
@@ -482,37 +481,36 @@ class CodegenContext {
    * that could potentially be nullable.
    */
   def updateColumn(
-      batch: String,
-      row: String,
+      vector: String,
+      rowId: String,
       dataType: DataType,
-      ordinal: Int,
       ev: ExprCode,
       nullable: Boolean): String = {
     if (nullable) {
       s"""
          if (!${ev.isNull}) {
-           ${setValue(batch, row, dataType, ordinal, ev.value)}
+           ${setValue(vector, rowId, dataType, ev.value)}
          } else {
-           $batch.column($ordinal).putNull($row);
+           $vector.putNull($rowId);
          }
        """
     } else {
-      s"""${setValue(batch, row, dataType, ordinal, ev.value)};"""
+      s"""${setValue(vector, rowId, dataType, ev.value)};"""
     }
   }
 
   /**
    * Returns the specialized code to access a value from a column vector for a given `DataType`.
    */
-  def getValue(batch: String, row: String, dataType: DataType, ordinal: Int): String = {
+  def getValue(vector: String, rowId: String, dataType: DataType): String = {
     val jt = javaType(dataType)
     dataType match {
       case _ if isPrimitiveType(jt) =>
-        s"$batch.column($ordinal).get${primitiveTypeName(jt)}($row)"
+        s"$vector.get${primitiveTypeName(jt)}($rowId)"
       case t: DecimalType =>
-        s"$batch.column($ordinal).getDecimal($row, ${t.precision}, ${t.scale})"
+        s"$vector.getDecimal($rowId, ${t.precision}, ${t.scale})"
       case StringType =>
-        s"$batch.column($ordinal).getUTF8String($row)"
+        s"$vector.getUTF8String($rowId)"
       case _ =>
         throw new IllegalArgumentException(s"cannot generate code for unsupported type: $dataType")
     }
@@ -596,6 +594,7 @@ class CodegenContext {
     case array: ArrayType => genComp(array, c1, c2) + " == 0"
     case struct: StructType => genComp(struct, c1, c2) + " == 0"
     case udt: UserDefinedType[_] => genEqual(udt.sqlType, c1, c2)
+    case NullType => "false"
     case _ =>
       throw new IllegalArgumentException(
         "cannot generate equality code for un-comparable type: " + dataType.simpleString)

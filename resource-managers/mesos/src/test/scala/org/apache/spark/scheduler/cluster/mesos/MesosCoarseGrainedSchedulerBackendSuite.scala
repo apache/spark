@@ -30,7 +30,7 @@ import org.mockito.Matchers._
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.mesos.config._
@@ -568,9 +568,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(launchedTasks.head.getLabels.equals(taskLabels))
   }
 
-  test("mesos supports spark.mesos.network.name") {
+  test("mesos supports spark.mesos.network.name and spark.mesos.network.labels") {
     setBackend(Map(
-      "spark.mesos.network.name" -> "test-network-name"
+      "spark.mesos.network.name" -> "test-network-name",
+      "spark.mesos.network.labels" -> "key1:val1,key2:val2"
     ))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
@@ -582,6 +583,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val networkInfos = launchedTasks.head.getContainer.getNetworkInfosList
     assert(networkInfos.size == 1)
     assert(networkInfos.get(0).getName == "test-network-name")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getKey == "key1")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getValue == "val1")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getKey == "key2")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
   test("supports spark.scheduler.minRegisteredResourcesRatio") {
