@@ -18,19 +18,19 @@
 package org.apache.spark.sql.hive.execution
 
 import scala.language.existentials
-
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.common.FileUtils
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.mapred._
-
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.client.HiveClientImpl
 
 /**
@@ -54,7 +54,7 @@ case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     query: LogicalPlan,
-    overwrite: Boolean) extends SaveAsHiveFile {
+    overwrite: Boolean) extends SaveAsHiveFile with HiveTmpPath {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
@@ -108,15 +108,26 @@ case class InsertIntoHiveDirCommand(
         qualifiedPath
       }
 
+    val tmpLocation = getExternalTmpPath(sparkSession, hadoopConf, writeToPath)
     val fileSinkConf = new org.apache.spark.sql.hive.HiveShim.ShimFileSinkDesc(
       writeToPath.toString, tableDesc, false)
 
-    saveAsHiveFile(
-      sparkSession = sparkSession,
-      plan = children.head,
-      hadoopConf = hadoopConf,
-      fileSinkConf = fileSinkConf,
-      outputLocation = targetPath.toString)
+    try {
+      saveAsHiveFile(
+        sparkSession = sparkSession,
+        plan = children.head,
+        hadoopConf = hadoopConf,
+        fileSinkConf = fileSinkConf,
+        outputLocation = writeToPath.toString)
+
+      // val fs = writeToPath.getFileSystem(hadoopConf)
+      // fs.rename(tmpLocation, writeToPath)
+      // deleteExternalTmpPath(hadoopConf)
+
+    } catch {
+      case e =>
+        throw new SparkException("Failed inserting overwrite directory " + storage.locationUri.get)
+    }
 
     Seq.empty[Row]
   }
