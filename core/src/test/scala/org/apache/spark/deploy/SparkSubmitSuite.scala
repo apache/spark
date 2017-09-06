@@ -907,7 +907,8 @@ class SparkSubmitSuite
     val tmpJarPath = s"s3a://${new File(tmpJar.toURI).getAbsolutePath}"
     // This assumes UT environment could access external network.
     val remoteHttpJar =
-      "http://central.maven.org/maven2/io/netty/netty-all/4.0.51.Final/netty-all-4.0.51.Final.jar"
+      "http://central.maven.org/maven2/io/dropwizard/metrics/metrics-core/" +
+        "3.2.4/metrics-core-3.2.4.jar"
 
     val args = Seq(
       "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
@@ -925,9 +926,49 @@ class SparkSubmitSuite
     // to local.
     val jars = sysProps("spark.yarn.dist.jars").split(",").toSet
     jars.contains(tmpJarPath) should be (true)
-    val nettyJar = jars.filter(_.contains("netty"))
-    nettyJar.size should be (1)
-    nettyJar.head should startWith("file:")
+    val metricsJar = jars.filter(_.contains("metrics"))
+    metricsJar.size should be (1)
+    metricsJar.head should startWith("file:")
+
+    val hadoopConf1 = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf1)
+    hadoopConf1.set("fs.http.impl", classOf[TestFileSystem].getCanonicalName)
+    hadoopConf1.set("fs.http.impl.disable.cache", "true")
+
+    val args1 = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", s"$tmpJarPath,$remoteHttpJar",
+      s"s3a://$mainResource"
+    )
+
+    val appArgs1 = new SparkSubmitArguments(args1)
+    val sysProps1 = SparkSubmit.prepareSubmitEnvironment(appArgs1, Some(hadoopConf1))._3
+
+    // If Hadoop FileSystem supports remote HTTP(S) resoures, we will still keep HTTP
+    // resource URI, not the local one.
+    val jars1 = sysProps1("spark.yarn.dist.jars").split(",").toSet
+    jars1.contains(remoteHttpJar) should be (true)
+
+    val args2 = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--conf", "spark.yarn.dist.forceDownloadResources=true",
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", s"$tmpJarPath,$remoteHttpJar",
+      s"s3a://$mainResource"
+    )
+
+    val appArgs2 = new SparkSubmitArguments(args2)
+    val sysProps2 = SparkSubmit.prepareSubmitEnvironment(appArgs2, Some(hadoopConf1))._3
+
+    // We explicitly disable using HTTP(S) FileSystem, force downloading remote HTTP(s)
+    // resources, so the URI should be local one.
+    val jars2 = sysProps2("spark.yarn.dist.jars").split(",").toSet
+    jars.filter(_.contains("metrics")).head should startWith("file:")
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.

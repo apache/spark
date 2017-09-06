@@ -25,11 +25,11 @@ import java.text.ParseException
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
-import scala.util.Properties
+import scala.util.{Properties, Try}
 
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.ivy.Ivy
@@ -48,6 +48,7 @@ import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 
@@ -367,7 +368,17 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }.orNull
     }
 
-    if (clusterManager == YARN) {
+    // Using a dummy http URI to check if HTTP(s) FileSystem is available, it returns true in
+    // Hadoop 2.9+, otherwise it returns false.
+    val isHttpFsAvailable = Try { FileSystem.get(Utils.resolveURI("http://foo/bar"), hadoopConf) }
+      .map(_ => true)
+      .getOrElse(false)
+    // When running in YARN cluster manager, we check the configuration
+    // "spark.yarn.dist.forceDownloadResources", if true we always download remote HTTP(s)
+    // resources to local and then re-upload them to Hadoop FS, if false we need to check the
+    // availability of HTTP(s) FileSystem to decide wether to use HTTP(s) FS to handle resources
+    // or not.
+    if (clusterManager == YARN && (sparkConf.get(FORCE_DOWNLOAD_RESOURCES) || !isHttpFsAvailable)) {
       // This security manager will not need an auth secret, but set a dummy value in case
       // spark.authenticate is enabled, otherwise an exception is thrown.
       sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")

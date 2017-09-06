@@ -400,4 +400,12 @@ package object config {
       .doc("Memory to request as a multiple of the size that used to unroll the block.")
       .doubleConf
       .createWithDefault(1.5)
+
+  private[spark] val FORCE_DOWNLOAD_RESOURCES =
+    ConfigBuilder("spark.yarn.dist.forceDownloadResources")
+      .doc("Whether to download remote HTTP(s) resources to local and upload to Hadoop FS. " +
+        "This is only honored in Hadoop 2.9+ environment to bypass the build-in HTTP(s) " +
+        "FileSystem and use Spark's own logic to handle remote HTTP(s) resources")
+      .booleanConf
+      .createWithDefault(false)
 }

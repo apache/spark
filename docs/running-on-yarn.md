@@ -212,6 +212,15 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.dist.forceDownloadResources</code></td>
+  <td><code>false</code></td>
+  <td>
+    Whether to download remote HTTP(s) resources to local and upload to Hadoop FS. This is only 
+    honored in Hadoop 2.9+ environment to bypass the build-in HTTP(s) FileSystem and use Spark's 
+    own logic to handle remote HTTP(s) resources"
+  </td>
+</tr>
+<tr>
  <td><code>spark.executor.instances</code></td>
   <td><code>2</code></td>
   <td>
