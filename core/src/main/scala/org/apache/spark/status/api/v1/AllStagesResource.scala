@@ -142,7 +142,7 @@ private[v1] object AllStagesResource {
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attemptNumber,
       launchTime = new Date(uiData.taskInfo.launchTime),
-      duration = uiData.taskDuration,
+      duration = uiData.taskDuration(),
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,
       status = uiData.taskInfo.status,
