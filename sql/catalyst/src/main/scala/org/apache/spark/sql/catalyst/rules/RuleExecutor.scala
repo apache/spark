@@ -64,12 +64,12 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected def batches: Seq[Batch]
 
   /**
-   * Defines a check function which checks for structural integrity of the plan after the execution
+   * Defines a check function that checks for structural integrity of the plan after the execution
    * of each rule. For example, we can check whether a plan is still resolved after each rule in
-   * `Optimizer`, so we can catch rules that return invalid plans. The check function will returns
+   * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
    * `false` if the given plan doesn't pass the structural integrity check.
    */
-  protected def planChecker(plan: TreeType): Boolean = true
+  protected def isPlanIntegral(plan: TreeType): Boolean = true
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
@@ -102,7 +102,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
             }
 
             // Run the structural integrity checker against the plan after each rule.
-            if (!planChecker(result)) {
+            if (!isPlanIntegral(result)) {
               val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
                 "the structural integrity of the plan is broken."
               throw new TreeNodeException(result, message, null)

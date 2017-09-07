@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 
 
-class OptimizerSICheckerkSuite extends PlanTest {
+class OptimizerStructuralIntegrityCheckerSuite extends PlanTest {
 
   object OptimizeRuleBreakSI extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {

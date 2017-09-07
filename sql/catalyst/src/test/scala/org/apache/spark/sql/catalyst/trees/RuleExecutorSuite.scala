@@ -59,7 +59,7 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity checker") {
     object WithSIChecker extends RuleExecutor[Expression] {
-      override protected def planChecker(expr: Expression): Boolean = expr match {
+      override protected def isPlanIntegral(expr: Expression): Boolean = expr match {
         case IntegerLiteral(_) => true
         case _ => false
       }
