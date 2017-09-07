@@ -529,10 +529,9 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         """
         if self.hasSummary:
             java_blrt_summary = self._call_java("summary")
-            java_blrt_interceptVector = self._call_java("interceptVector")
             java_blrt_numClasses = self._call_java("numClasses")
-            java_blrt_binarysummary = self._call_java("binarySummary")
-            if (len(java_blrt_interceptVector) == 1):
+            if (java_blrt_numClasses == 2):
+                java_blrt_binarysummary = self._call_java("binarySummary")
                 return BinaryLogisticRegressionTrainingSummary(java_blrt_binarysummary)
             else:
                 return LogisticRegressionTrainingSummary(java_blrt_summary)
