@@ -2927,7 +2927,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         """
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
-        return self._call_java("findSynonyms", word, num)
+        return list(self._call_java("findSynonyms", word, num))
 
     @since("2.3.0")
     def findSynonymsArray(self, word, num):
