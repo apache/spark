@@ -938,4 +938,16 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       }
     }
   }
+
+  test("SPARK-21835: Join in correlated subquery should be duplicateResolved: case 3") {
+    val sqlText =
+      """
+        |SELECT * FROM l, r WHERE l.a = r.c + 1 AND
+        |(EXISTS (SELECT * FROM r) OR l.a = r.c)
+      """.stripMargin
+    val optimizedPlan = sql(sqlText).queryExecution.optimizedPlan
+    val join = optimizedPlan.collectFirst { case j: Join => j }.get
+    assert(join.duplicateResolved)
+    assert(optimizedPlan.resolved)
+  }
 }
