@@ -115,6 +115,7 @@ private[spark] class Executor(
   if (!isLocal) {
     env.metricsSystem.registerSource(executorSource)
     env.blockManager.initialize(conf.getAppId)
+    env.metricsSystem.registerSource(env.blockManager.shuffleMetricsSource)
   }
 
   // Whether to load classes in user jars before those in Spark jars

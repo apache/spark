@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,6 +116,12 @@ public class ExternalShuffleClient extends ShuffleClient {
         listener.onBlockFetchFailure(blockId, e);
       }
     }
+  }
+
+  @Override
+  public MetricSet shuffleMetrics() {
+    checkInit();
+    return clientFactory.getAllMetrics();
   }
 
   /**
