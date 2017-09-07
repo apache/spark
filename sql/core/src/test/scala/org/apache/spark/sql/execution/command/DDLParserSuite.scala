@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.dsl.plans.DslLogicalPlan
 import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan,
-    Project, ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical.{Generate, InsertIntoDir, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Project, ScriptTransformation}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
@@ -529,10 +529,10 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     val v1 = "INSERT OVERWRITE DIRECTORY '/tmp/file' USING parquet SELECT 1 as a"
     parser.parsePlan(v1) match {
       case InsertIntoDir(_, storage, provider, query, overwrite) =>
-        assert(storage.locationUri != None && storage.locationUri.get.toString == "/tmp/file")
+        assert(storage.locationUri.isDefined && storage.locationUri.get.toString == "/tmp/file")
       case other =>
         fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
-          " from query," + s"got ${other.getClass.getName}: $v1")
+          " from query," + s" got ${other.getClass.getName}: $v1")
     }
 
     val v2 = "INSERT OVERWRITE DIRECTORY USING parquet SELECT 1 as a"
@@ -550,7 +550,12 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       """.stripMargin
     parser.parsePlan(v3) match {
       case InsertIntoDir(_, storage, provider, query, overwrite) =>
-        assert(storage.locationUri != None && provider == Some("json"))
+        assert(storage.locationUri.isDefined && provider == Some("json"))
+        assert(storage.properties.get("path") == Some("/tmp/file"))
+        assert(storage.properties.get("a") == Some("1"))
+        assert(storage.properties.get("b") == Some("0.1"))
+        assert(storage.properties.get("c") == Some("TRUE"))
+        assert(!storage.properties.contains("abc"))
       case other =>
         fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
           " from query," + s"got ${other.getClass.getName}: $v1")

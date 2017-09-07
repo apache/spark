@@ -22,6 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * A command used to write the result of a query to a directory.
@@ -44,10 +45,10 @@ case class InsertIntoDataSourceDirCommand(
     query: LogicalPlan,
     overwrite: Boolean) extends RunnableCommand {
 
-  override def innerChildren: Seq[LogicalPlan] = Seq(query)
+  override def children: Seq[LogicalPlan] = Seq(query)
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    assert(innerChildren.length == 1)
+  override def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
+    assert(children.length == 1)
     assert(storage.locationUri.nonEmpty, "Directory path is required")
     assert(!provider.isEmpty, "Data source is required")
 

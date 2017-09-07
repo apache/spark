@@ -368,6 +368,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
+  // Jane
   test("insert overwrite directory") {
     withTempDir { dir =>
       val path = dir.toURI.getPath
@@ -406,4 +407,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       assert(e.contains("Only Data Sources providing FileFormat are supported"))
     }
   }
+
+
 }

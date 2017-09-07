@@ -75,7 +75,7 @@ private[hive] trait HiveTmpPath extends Logging {
     }
   }
 
-  def deleteExternalTmpPath(hadoopConf: Configuration, stagingDir: String) : Unit = {
+  def deleteExternalTmpPath(hadoopConf: Configuration) : Unit = {
     // Attempt to delete the staging directory and the inclusive files. If failed, the files are
     // expected to be dropped at the normal termination of VM since deleteOnExit is used.
     try {
@@ -88,6 +88,7 @@ private[hive] trait HiveTmpPath extends Logging {
       }
     } catch {
       case NonFatal(e) =>
+        val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
         logWarning(s"Unable to delete staging directory: $stagingDir.\n" + e)
     }
   }

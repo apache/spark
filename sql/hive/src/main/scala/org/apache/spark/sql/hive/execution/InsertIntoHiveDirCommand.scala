@@ -109,25 +109,18 @@ case class InsertIntoHiveDirCommand(
 
       val fs = writeToPath.getFileSystem(hadoopConf)
       if (overwrite && fs.exists(writeToPath)) {
-        val existFiles = fs.listStatus(writeToPath)
-        existFiles.foreach {
-          existFile =>
-            if (existFile.getPath != createdTempDir.get) {
-              fs.delete(existFile.getPath, true)
-            }
+        fs.listStatus(writeToPath).foreach { existFile =>
+          if (Option(existFile.getPath) != createdTempDir) fs.delete(existFile.getPath, true)
         }
       }
 
-      val tmpFiles = fs.listStatus(tmpPath)
-      tmpFiles.foreach {
-        tmpFile =>
-          fs.rename(tmpFile.getPath, writeToPath)
+      fs.listStatus(tmpPath).foreach {
+        tmpFile => fs.rename(tmpFile.getPath, writeToPath)
       }
 
-      val stagingDir = hadoopConf.get("hive.exec.stagingdir", ".hive-staging")
-      deleteExternalTmpPath(hadoopConf, stagingDir)
+      deleteExternalTmpPath(hadoopConf)
     } catch {
-      case e : Throwable =>
+      case e: Throwable =>
         throw new SparkException(
           "Failed inserting overwrite directory " + storage.locationUri.get, e)
     }

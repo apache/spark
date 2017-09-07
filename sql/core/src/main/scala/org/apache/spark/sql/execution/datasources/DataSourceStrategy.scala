@@ -145,7 +145,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
         parts, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
-    case InsertIntoDir(isLocal, storage, provider, query, overwrite)
+    case InsertIntoDir(_, storage, provider, query, overwrite)
       if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
 
       val outputPath = new Path(storage.locationUri.get)
