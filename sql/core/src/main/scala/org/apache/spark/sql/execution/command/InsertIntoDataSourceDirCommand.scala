@@ -21,8 +21,8 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources._
 
 /**
  * A command used to write the result of a query to a directory.
