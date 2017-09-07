@@ -191,6 +191,32 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("RowEncoder should support primitive arrays") {
+    val schema = new StructType()
+      .add("booleanPrimitiveArray", ArrayType(BooleanType, false))
+      .add("bytePrimitiveArray", ArrayType(ByteType, false))
+      .add("shortPrimitiveArray", ArrayType(ShortType, false))
+      .add("intPrimitiveArray", ArrayType(IntegerType, false))
+      .add("longPrimitiveArray", ArrayType(LongType, false))
+      .add("floatPrimitiveArray", ArrayType(FloatType, false))
+      .add("doublePrimitiveArray", ArrayType(DoubleType, false))
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val input = Seq(
+      Array(true, false),
+      Array(1.toByte, 64.toByte, Byte.MaxValue),
+      Array(1.toShort, 255.toShort, Short.MaxValue),
+      Array(1, 10000, Int.MaxValue),
+      Array(1.toLong, 1000000.toLong, Long.MaxValue),
+      Array(1.1.toFloat, 123.456.toFloat, Float.MaxValue),
+      Array(11.1111, 123456.7890123, Double.MaxValue)
+    )
+    val row = encoder.toRow(Row.fromSeq(input))
+    val convertedBack = encoder.fromRow(row)
+    input.zipWithIndex.map { case (array, index) =>
+      assert(convertedBack.getSeq(index) === array)
+    }
+  }
+
   test("RowEncoder should support array as the external type for ArrayType") {
     val schema = new StructType()
       .add("array", ArrayType(IntegerType))
@@ -245,6 +271,39 @@ class RowEncoderSuite extends SparkFunSuite {
       encoder.toRow(Row(Array("a")))
     }
     assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
+  }
+
+  for {
+    elementType <- Seq(IntegerType, StringType)
+    containsNull <- Seq(true, false)
+    nullable <- Seq(true, false)
+  } {
+    test("RowEncoder should preserve array nullability: " +
+      s"ArrayType($elementType, containsNull = $containsNull), nullable = $nullable") {
+      val schema = new StructType().add("array", ArrayType(elementType, containsNull), nullable)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.serializer.length == 1)
+      assert(encoder.serializer.head.dataType == ArrayType(elementType, containsNull))
+      assert(encoder.serializer.head.nullable == nullable)
+    }
+  }
+
+  for {
+    keyType <- Seq(IntegerType, StringType)
+    valueType <- Seq(IntegerType, StringType)
+    valueContainsNull <- Seq(true, false)
+    nullable <- Seq(true, false)
+  } {
+    test("RowEncoder should preserve map nullability: " +
+      s"MapType($keyType, $valueType, valueContainsNull = $valueContainsNull), " +
+      s"nullable = $nullable") {
+      val schema = new StructType().add(
+        "map", MapType(keyType, valueType, valueContainsNull), nullable)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      assert(encoder.serializer.length == 1)
+      assert(encoder.serializer.head.dataType == MapType(keyType, valueType, valueContainsNull))
+      assert(encoder.serializer.head.nullable == nullable)
+    }
   }
 
   private def encodeDecodeTest(schema: StructType): Unit = {

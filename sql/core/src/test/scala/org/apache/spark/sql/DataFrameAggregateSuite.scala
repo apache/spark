@@ -17,6 +17,10 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
+import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -65,9 +69,9 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       decimalData.groupBy("a").agg(sum("b")),
-      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(3.0)),
-        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(3.0)),
-        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)))
+      Seq(Row(new java.math.BigDecimal(1), new java.math.BigDecimal(3)),
+        Row(new java.math.BigDecimal(2), new java.math.BigDecimal(3)),
+        Row(new java.math.BigDecimal(3), new java.math.BigDecimal(3)))
     )
 
     val decimalDataWithNulls = spark.sparkContext.parallelize(
@@ -80,10 +84,10 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       DecimalData(null, 2) :: Nil).toDF()
     checkAnswer(
       decimalDataWithNulls.groupBy("a").agg(sum("b")),
-      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.0)),
-        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.0)),
-        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(3.0)),
-        Row(null, new java.math.BigDecimal(2.0)))
+      Seq(Row(new java.math.BigDecimal(1), new java.math.BigDecimal(1)),
+        Row(new java.math.BigDecimal(2), new java.math.BigDecimal(1)),
+        Row(new java.math.BigDecimal(3), new java.math.BigDecimal(3)),
+        Row(null, new java.math.BigDecimal(2)))
     )
   }
 
@@ -94,6 +98,15 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       ret,
       Row(0, 0, 1, 0) :: Row(1, 1, 1, 1) :: Nil
+    )
+  }
+
+  test("SPARK-18952: regexes fail codegen when used as keys due to bad forward-slash escapes") {
+    val df = Seq(("some[thing]", "random-string")).toDF("key", "val")
+
+    checkAnswer(
+      df.groupBy(regexp_extract('key, "([a-z]+)\\[", 1)).count(),
+      Row("some", 1) :: Nil
     )
   }
 
@@ -250,19 +263,19 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
 
     checkAnswer(
       decimalData.agg(avg('a)),
-      Row(new java.math.BigDecimal(2.0)))
+      Row(new java.math.BigDecimal(2)))
 
     checkAnswer(
       decimalData.agg(avg('a), sumDistinct('a)), // non-partial
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+      Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0)))
+      Row(new java.math.BigDecimal(2)))
     // non-partial
     checkAnswer(
       decimalData.agg(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))),
-      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+      Row(new java.math.BigDecimal(2), new java.math.BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
@@ -451,6 +464,16 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       df.select(collect_set($"a"), collect_set($"b")),
       Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
     )
+
+    checkDataset(
+      df.select(collect_set($"a").as("aSet")).as[Set[Int]],
+      Set(1, 2, 3))
+    checkDataset(
+      df.select(collect_set($"b").as("bSet")).as[Set[Int]],
+      Set(2, 4))
+    checkDataset(
+      df.select(collect_set($"a"), collect_set($"b")).as[(Set[Int], Set[Int])],
+      Seq(Set(1, 2, 3) -> Set(2, 4)): _*)
   }
 
   test("collect functions structs") {
@@ -498,12 +521,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(2.0) :: Row(2.0) :: Row(2.0) :: Nil)
   }
 
-  test("SQL decimal test (used for catching certain demical handling bugs in aggregates)") {
+  test("SQL decimal test (used for catching certain decimal handling bugs in aggregates)") {
     checkAnswer(
       decimalData.groupBy('a cast DecimalType(10, 2)).agg(avg('b cast DecimalType(10, 2))),
-      Seq(Row(new java.math.BigDecimal(1.0), new java.math.BigDecimal(1.5)),
-        Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(1.5)),
-        Row(new java.math.BigDecimal(3.0), new java.math.BigDecimal(1.5))))
+      Seq(Row(new java.math.BigDecimal(1), new java.math.BigDecimal("1.5")),
+        Row(new java.math.BigDecimal(2), new java.math.BigDecimal("1.5")),
+        Row(new java.math.BigDecimal(3), new java.math.BigDecimal("1.5"))))
   }
 
   test("SPARK-17616: distinct aggregate combined with a non-partial aggregate") {
@@ -512,5 +535,89 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.groupBy($"x").agg(countDistinct($"y"), sort_array(collect_list($"z"))),
       Seq(Row(1, 2, Seq("a", "b")), Row(3, 2, Seq("c", "c", "d"))))
+  }
+
+  test("SPARK-18004 limit + aggregates") {
+    val df = Seq(("a", 1), ("b", 2), ("c", 1), ("d", 5)).toDF("id", "value")
+    val limit2Df = df.limit(2)
+    checkAnswer(
+      limit2Df.groupBy("id").count().select($"id"),
+      limit2Df.select($"id"))
+  }
+
+  test("SPARK-17237 remove backticks in a pivot result schema") {
+    val df = Seq((2, 3, 4), (3, 4, 5)).toDF("a", "x", "y")
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkAnswer(
+        df.groupBy("a").pivot("x").agg(count("y"), avg("y")).na.fill(0),
+        Seq(Row(3, 0, 0.0, 1, 5.0), Row(2, 1, 4.0, 0, 0.0))
+      )
+    }
+  }
+
+  test("aggregate function in GROUP BY") {
+    val e = intercept[AnalysisException] {
+      testData.groupBy(sum($"key")).count()
+    }
+    assert(e.message.contains("aggregate functions are not allowed in GROUP BY"))
+  }
+
+  private def assertNoExceptions(c: Column): Unit = {
+    for ((wholeStage, useObjectHashAgg) <-
+         Seq((true, true), (true, false), (false, true), (false, false))) {
+      withSQLConf(
+        (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString),
+        (SQLConf.USE_OBJECT_HASH_AGG.key, useObjectHashAgg.toString)) {
+
+        val df = Seq(("1", 1), ("1", 2), ("2", 3), ("2", 4)).toDF("x", "y")
+
+        // test case for HashAggregate
+        val hashAggDF = df.groupBy("x").agg(c, sum("y"))
+        val hashAggPlan = hashAggDF.queryExecution.executedPlan
+        if (wholeStage) {
+          assert(hashAggPlan.find {
+            case WholeStageCodegenExec(_: HashAggregateExec) => true
+            case _ => false
+          }.isDefined)
+        } else {
+          assert(hashAggPlan.isInstanceOf[HashAggregateExec])
+        }
+        hashAggDF.collect()
+
+        // test case for ObjectHashAggregate and SortAggregate
+        val objHashAggOrSortAggDF = df.groupBy("x").agg(c, collect_list("y"))
+        val objHashAggOrSortAggPlan = objHashAggOrSortAggDF.queryExecution.executedPlan
+        if (useObjectHashAgg) {
+          assert(objHashAggOrSortAggPlan.isInstanceOf[ObjectHashAggregateExec])
+        } else {
+          assert(objHashAggOrSortAggPlan.isInstanceOf[SortAggregateExec])
+        }
+        objHashAggOrSortAggDF.collect()
+      }
+    }
+  }
+
+  test("SPARK-19471: AggregationIterator does not initialize the generated result projection" +
+    " before using it") {
+    Seq(
+      monotonically_increasing_id(), spark_partition_id(),
+      rand(Random.nextLong()), randn(Random.nextLong())
+    ).foreach(assertNoExceptions)
+  }
+
+  test("SPARK-21580 ints in aggregation expressions are taken as group-by ordinal.") {
+    checkAnswer(
+      testData2.groupBy(lit(3), lit(4)).agg(lit(6), lit(7), sum("b")),
+      Seq(Row(3, 4, 6, 7, 9)))
+    checkAnswer(
+      testData2.groupBy(lit(3), lit(4)).agg(lit(6), 'b, sum("b")),
+      Seq(Row(3, 4, 6, 1, 3), Row(3, 4, 6, 2, 6)))
+
+    checkAnswer(
+      spark.sql("SELECT 3, 4, SUM(b) FROM testData2 GROUP BY 1, 2"),
+      Seq(Row(3, 4, 9)))
+    checkAnswer(
+      spark.sql("SELECT 3 AS c, 4 AS d, SUM(b) FROM testData2 GROUP BY c, d"),
+      Seq(Row(3, 4, 9)))
   }
 }

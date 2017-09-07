@@ -20,9 +20,12 @@ package org.apache.spark.sql.util
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
-import org.apache.spark.sql.{functions, QueryTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.{functions, AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, InsertIntoTable, LogicalPlan, Project}
 import org.apache.spark.sql.execution.{QueryExecution, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.datasources.{CreateTable, InsertIntoHadoopFsRelationCommand}
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.test.SharedSQLContext
 
 class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
@@ -58,7 +61,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     spark.listenerManager.unregister(listener)
   }
 
-  test("execute callback functions when a DataFrame action failed") {
+  testQuietly("execute callback functions when a DataFrame action failed") {
     val metrics = ArrayBuffer.empty[(String, QueryExecution, Exception)]
     val listener = new QueryExecutionListener {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
@@ -73,8 +76,6 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     val errorUdf = udf[Int, Int] { _ => throw new RuntimeException("udf error") }
     val df = sparkContext.makeRDD(Seq(1 -> "a")).toDF("i", "j")
 
-    // Ignore the log when we are expecting an exception.
-    sparkContext.setLogLevel("FATAL")
     val e = intercept[SparkException](df.select(errorUdf($"i")).collect())
 
     assert(metrics.length == 1)
@@ -158,5 +159,58 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
     assert(metrics(1) == bottomAggDataSize)
 
     spark.listenerManager.unregister(listener)
+  }
+
+  test("execute callback functions for DataFrameWriter") {
+    val commands = ArrayBuffer.empty[(String, LogicalPlan)]
+    val exceptions = ArrayBuffer.empty[(String, Exception)]
+    val listener = new QueryExecutionListener {
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {
+        exceptions += funcName -> exception
+      }
+
+      override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
+        commands += funcName -> qe.logical
+      }
+    }
+    spark.listenerManager.register(listener)
+
+    withTempPath { path =>
+      spark.range(10).write.format("json").save(path.getCanonicalPath)
+      assert(commands.length == 1)
+      assert(commands.head._1 == "save")
+      assert(commands.head._2.isInstanceOf[InsertIntoHadoopFsRelationCommand])
+      assert(commands.head._2.asInstanceOf[InsertIntoHadoopFsRelationCommand]
+        .fileFormat.isInstanceOf[JsonFileFormat])
+    }
+
+    withTable("tab") {
+      sql("CREATE TABLE tab(i long) using parquet") // adds commands(1) via onSuccess
+      spark.range(10).write.insertInto("tab")
+      assert(commands.length == 3)
+      assert(commands(2)._1 == "insertInto")
+      assert(commands(2)._2.isInstanceOf[InsertIntoTable])
+      assert(commands(2)._2.asInstanceOf[InsertIntoTable].table
+        .asInstanceOf[UnresolvedRelation].tableIdentifier.table == "tab")
+    }
+    // exiting withTable adds commands(3) via onSuccess (drops tab)
+
+    withTable("tab") {
+      spark.range(10).select($"id", $"id" % 5 as "p").write.partitionBy("p").saveAsTable("tab")
+      assert(commands.length == 5)
+      assert(commands(4)._1 == "saveAsTable")
+      assert(commands(4)._2.isInstanceOf[CreateTable])
+      assert(commands(4)._2.asInstanceOf[CreateTable].tableDesc.partitionColumnNames == Seq("p"))
+    }
+
+    withTable("tab") {
+      sql("CREATE TABLE tab(i long) using parquet")
+      val e = intercept[AnalysisException] {
+        spark.range(10).select($"id", $"id").write.insertInto("tab")
+      }
+      assert(exceptions.length == 1)
+      assert(exceptions.head._1 == "insertInto")
+      assert(exceptions.head._2 == e)
+    }
   }
 }

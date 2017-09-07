@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.sql.Timestamp
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.types.{IntegerType, StringType}
@@ -83,6 +85,13 @@ class CallMethodViaReflectionSuite extends SparkFunSuite with ExpressionEvalHelp
     assert(CallMethodViaReflection(
       Seq(Literal(staticClassName), Literal(1))).checkInputDataTypes().isFailure)
     assert(createExpr(staticClassName, "method1").checkInputDataTypes().isSuccess)
+  }
+
+  test("unsupported type checking") {
+    val ret = createExpr(staticClassName, "method1", new Timestamp(1)).checkInputDataTypes()
+    assert(ret.isFailure)
+    val errorMsg = ret.asInstanceOf[TypeCheckFailure].message
+    assert(errorMsg.contains("arguments from the third require boolean, byte, short"))
   }
 
   test("invoking methods using acceptable types") {

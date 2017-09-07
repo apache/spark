@@ -30,43 +30,23 @@ import org.apache.spark.sql.types.StructType
  * to executor side to create actual [[OutputWriter]]s on the fly.
  */
 abstract class OutputWriterFactory extends Serializable {
+
+  /** Returns the file extension to be used when writing files out. */
+  def getFileExtension(context: TaskAttemptContext): String
+
   /**
    * When writing to a [[HadoopFsRelation]], this method gets called by each task on executor side
    * to instantiate new [[OutputWriter]]s.
    *
-   * @param stagingDir Base path (directory) of the file to which this [[OutputWriter]] is supposed
-   *                   to write.  Note that this may not point to the final output file.  For
-   *                   example, `FileOutputFormat` writes to temporary directories and then merge
-   *                   written files back to the final destination.  In this case, `path` points to
-   *                   a temporary output file under the temporary directory.
-   * @param fileNamePrefix Prefix of the file name. The returned OutputWriter must make sure this
-   *                       prefix is used in the actual file name. For example, if the prefix is
-   *                       "part-1-2-3", then the file name must start with "part_1_2_3" but can
-   *                       end in arbitrary extension.
+   * @param path Path to write the file.
    * @param dataSchema Schema of the rows to be written. Partition columns are not included in the
    *        schema if the relation being written is partitioned.
    * @param context The Hadoop MapReduce task context.
-   * @since 1.4.0
    */
   def newInstance(
-      stagingDir: String,
-      fileNamePrefix: String,
+      path: String,
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
-
-  /**
-   * Returns a new instance of [[OutputWriter]] that will write data to the given path.
-   * This method gets called by each task on executor to write InternalRows to
-   * format-specific files. Compared to the other `newInstance()`, this is a newer API that
-   * passes only the path that the writer must write to. The writer must write to the exact path
-   * and not modify it (do not add subdirectories, extensions, etc.). All other
-   * file-format-specific information needed to create the writer must be passed
-   * through the [[OutputWriterFactory]] implementation.
-   * @since 2.0.0
-   */
-  def newWriter(path: String): OutputWriter = {
-    throw new UnsupportedOperationException("newInstance with just path not supported")
-  }
 }
 
 
@@ -80,27 +60,12 @@ abstract class OutputWriter {
   /**
    * Persists a single row.  Invoked on the executor side.  When writing to dynamically partitioned
    * tables, dynamic partition columns are not included in rows to be written.
-   *
-   * @since 1.4.0
    */
-  def write(row: Row): Unit
+  def write(row: InternalRow): Unit
 
   /**
    * Closes the [[OutputWriter]]. Invoked on the executor side after all rows are persisted, before
    * the task output is committed.
-   *
-   * @since 1.4.0
    */
   def close(): Unit
-
-  private var converter: InternalRow => Row = _
-
-  protected[sql] def initConverter(dataSchema: StructType) = {
-    converter =
-      CatalystTypeConverters.createToScalaConverter(dataSchema).asInstanceOf[InternalRow => Row]
-  }
-
-  protected[sql] def writeInternal(row: InternalRow): Unit = {
-    write(converter(row))
-  }
 }

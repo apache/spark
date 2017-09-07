@@ -57,7 +57,8 @@ private[deploy] class DriverRunner(
   @volatile private[worker] var finalException: Option[Exception] = None
 
   // Timeout to wait for when trying to terminate a driver.
-  private val DRIVER_TERMINATE_TIMEOUT_MS = 10 * 1000
+  private val DRIVER_TERMINATE_TIMEOUT_MS =
+    conf.getTimeAsMs("spark.worker.driverTerminateTimeout", "10s")
 
   // Decoupled for testing
   def setClock(_clock: Clock): Unit = {

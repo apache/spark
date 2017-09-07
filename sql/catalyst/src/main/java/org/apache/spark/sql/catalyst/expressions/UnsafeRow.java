@@ -167,6 +167,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public void pointTo(Object baseObject, long baseOffset, int sizeInBytes) {
     assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
+    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
@@ -183,6 +184,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   public void setTotalSize(int sizeInBytes) {
+    assert sizeInBytes % 8 == 0 : "sizeInBytes (" + sizeInBytes + ") should be a multiple of 8";
     this.sizeInBytes = sizeInBytes;
   }
 
@@ -196,7 +198,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     assertIndexIsValid(i);
     BitSetMethods.set(baseObject, baseOffset, i);
     // To preserve row equality, zero out the value when setting the column to null.
-    // Since this row does does not currently support updates to variable-length values, we don't
+    // Since this row does not currently support updates to variable-length values, we don't
     // have to worry about zeroing out that data.
     Platform.putLong(baseObject, getFieldOffset(i), 0);
   }
@@ -550,7 +552,7 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
    */
   public void writeToStream(OutputStream out, byte[] writeBuffer) throws IOException {
     if (baseObject instanceof byte[]) {
-      int offsetInByteArray = (int) (Platform.BYTE_ARRAY_OFFSET - baseOffset);
+      int offsetInByteArray = (int) (baseOffset - Platform.BYTE_ARRAY_OFFSET);
       out.write((byte[]) baseObject, offsetInByteArray, sizeInBytes);
     } else {
       int dataRemaining = sizeInBytes;
@@ -578,12 +580,8 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       return (sizeInBytes == o.sizeInBytes) &&
         ByteArrayMethods.arrayEquals(baseObject, baseOffset, o.baseObject, o.baseOffset,
           sizeInBytes);
-    } else if (!(other instanceof InternalRow)) {
-      return false;
-    } else {
-      throw new IllegalArgumentException(
-        "Cannot compare UnsafeRow to " + other.getClass().getName());
     }
+    return false;
   }
 
   /**

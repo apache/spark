@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.python
 
@@ -119,26 +119,23 @@ case class BatchEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       val pickle = new Pickler(needConversion)
       // Input iterator to Python: input rows are grouped so we send them in batches to Python.
       // For each row, add it to the queue.
-      val inputIterator = iter.grouped(100).map { inputRows =>
-        val toBePickled = inputRows.map { inputRow =>
-          queue.add(inputRow.asInstanceOf[UnsafeRow])
-          val row = projection(inputRow)
-          if (needConversion) {
-            EvaluatePython.toJava(row, schema)
-          } else {
-            // fast path for these types that does not need conversion in Python
-            val fields = new Array[Any](row.numFields)
-            var i = 0
-            while (i < row.numFields) {
-              val dt = dataTypes(i)
-              fields(i) = EvaluatePython.toJava(row.get(i, dt), dt)
-              i += 1
-            }
-            fields
+      val inputIterator = iter.map { inputRow =>
+        queue.add(inputRow.asInstanceOf[UnsafeRow])
+        val row = projection(inputRow)
+        if (needConversion) {
+          EvaluatePython.toJava(row, schema)
+        } else {
+          // fast path for these types that does not need conversion in Python
+          val fields = new Array[Any](row.numFields)
+          var i = 0
+          while (i < row.numFields) {
+            val dt = dataTypes(i)
+            fields(i) = EvaluatePython.toJava(row.get(i, dt), dt)
+            i += 1
           }
-        }.toArray
-        pickle.dumps(toBePickled)
-      }
+          fields
+        }
+      }.grouped(100).map(x => pickle.dumps(x.toArray))
 
       val context = TaskContext.get()
 

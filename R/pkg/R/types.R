@@ -29,7 +29,7 @@ PRIMITIVE_TYPES <- as.environment(list(
   "string" = "character",
   "binary" = "raw",
   "boolean" = "logical",
-  "timestamp" = "POSIXct",
+  "timestamp" = c("POSIXct", "POSIXt"),
   "date" = "Date",
   # following types are not SQL types returned by dtypes(). They are listed here for usage
   # by checkType() in schema.R.

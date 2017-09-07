@@ -23,11 +23,10 @@ import java.nio.ByteBuffer
 import org.apache.spark.storage.StorageUtils
 
 /**
- * Reads data from a ByteBuffer, and optionally cleans it up using StorageUtils.dispose()
- * at the end of the stream (e.g. to close a memory-mapped file).
+ * Reads data from a ByteBuffer.
  */
 private[spark]
-class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = false)
+class ByteBufferInputStream(private var buffer: ByteBuffer)
   extends InputStream {
 
   override def read(): Int = {
@@ -72,9 +71,6 @@ class ByteBufferInputStream(private var buffer: ByteBuffer, dispose: Boolean = f
    */
   private def cleanUp() {
     if (buffer != null) {
-      if (dispose) {
-        StorageUtils.dispose(buffer)
-      }
       buffer = null
     }
   }

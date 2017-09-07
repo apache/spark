@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import scala.collection.mutable.{LinkedHashMap, ListBuffer}
 
-import org.apache.spark.{ExceptionFailure, Resubmitted, SparkConf, SparkContext}
+import org.apache.spark.{Resubmitted, SparkConf, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageStatus, StorageStatusListener}
@@ -53,7 +53,8 @@ private[ui] case class ExecutorTaskSummary(
     var shuffleRead: Long = 0L,
     var shuffleWrite: Long = 0L,
     var executorLogs: Map[String, String] = Map.empty,
-    var isAlive: Boolean = true
+    var isAlive: Boolean = true,
+    var isBlacklisted: Boolean = false
 )
 
 /**
@@ -61,9 +62,10 @@ private[ui] case class ExecutorTaskSummary(
  * A SparkListener that prepares information to be displayed on the ExecutorsTab
  */
 @DeveloperApi
+@deprecated("This class will be removed in a future release.", "2.2.0")
 class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: SparkConf)
     extends SparkListener {
-  var executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
+  val executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
   var executorEvents = new ListBuffer[SparkListenerEvent]()
 
   private val maxTimelineExecutors = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
@@ -73,7 +75,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
 
   def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
 
-  override def onExecutorAdded(executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
+  override def onExecutorAdded(
+      executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
     val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
     taskSummary.executorLogs = executorAdded.executorInfo.logUrlMap
@@ -100,7 +103,8 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     executorToTaskSummary.get(executorRemoved.executorId).foreach(e => e.isAlive = false)
   }
 
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart): Unit = {
+  override def onApplicationStart(
+      applicationStart: SparkListenerApplicationStart): Unit = {
     applicationStart.driverLogs.foreach { logs =>
       val storageStatus = activeStorageStatusList.find { s =>
         s.blockManagerId.executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER ||
@@ -114,28 +118,30 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     }
   }
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = synchronized {
+  override def onTaskStart(
+      taskStart: SparkListenerTaskStart): Unit = synchronized {
     val eid = taskStart.taskInfo.executorId
     val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
     taskSummary.tasksActive += 1
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = synchronized {
+  override def onTaskEnd(
+      taskEnd: SparkListenerTaskEnd): Unit = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val eid = info.executorId
       val taskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
-      taskEnd.reason match {
-        case Resubmitted =>
-          // Note: For resubmitted tasks, we continue to use the metrics that belong to the
-          // first attempt of this task. This may not be 100% accurate because the first attempt
-          // could have failed half-way through. The correct fix would be to keep track of the
-          // metrics added by each attempt, but this is much more complicated.
-          return
-        case e: ExceptionFailure =>
-          taskSummary.tasksFailed += 1
-        case _ =>
-          taskSummary.tasksComplete += 1
+      // Note: For resubmitted tasks, we continue to use the metrics that belong to the
+      // first attempt of this task. This may not be 100% accurate because the first attempt
+      // could have failed half-way through. The correct fix would be to keep track of the
+      // metrics added by each attempt, but this is much more complicated.
+      if (taskEnd.reason == Resubmitted) {
+        return
+      }
+      if (info.successful) {
+        taskSummary.tasksComplete += 1
+      } else {
+        taskSummary.tasksFailed += 1
       }
       if (taskSummary.tasksActive >= 1) {
         taskSummary.tasksActive -= 1
@@ -157,4 +163,46 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     }
   }
 
+  private def updateExecutorBlacklist(
+      eid: String,
+      isBlacklisted: Boolean): Unit = {
+    val execTaskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
+    execTaskSummary.isBlacklisted = isBlacklisted
+  }
+
+  override def onExecutorBlacklisted(
+      executorBlacklisted: SparkListenerExecutorBlacklisted)
+  : Unit = synchronized {
+    updateExecutorBlacklist(executorBlacklisted.executorId, true)
+  }
+
+  override def onExecutorUnblacklisted(
+      executorUnblacklisted: SparkListenerExecutorUnblacklisted)
+  : Unit = synchronized {
+    updateExecutorBlacklist(executorUnblacklisted.executorId, false)
+  }
+
+  override def onNodeBlacklisted(
+      nodeBlacklisted: SparkListenerNodeBlacklisted)
+  : Unit = synchronized {
+    // Implicitly blacklist every executor associated with this node, and show this in the UI.
+    activeStorageStatusList.foreach { status =>
+      if (status.blockManagerId.host == nodeBlacklisted.hostId) {
+        updateExecutorBlacklist(status.blockManagerId.executorId, true)
+      }
+    }
+  }
+
+  override def onNodeUnblacklisted(
+      nodeUnblacklisted: SparkListenerNodeUnblacklisted)
+  : Unit = synchronized {
+    // Implicitly unblacklist every executor associated with this node, regardless of how
+    // they may have been blacklisted initially (either explicitly through executor blacklisting
+    // or implicitly through node blacklisting). Show this in the UI.
+    activeStorageStatusList.foreach { status =>
+      if (status.blockManagerId.host == nodeUnblacklisted.hostId) {
+        updateExecutorBlacklist(status.blockManagerId.executorId, false)
+      }
+    }
+  }
 }

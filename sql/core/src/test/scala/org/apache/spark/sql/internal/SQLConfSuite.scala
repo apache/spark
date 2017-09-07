@@ -1,29 +1,29 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.internal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
+import org.apache.spark.util.Utils
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -215,15 +215,10 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("default value of WAREHOUSE_PATH") {
-    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
-    try {
-      // to get the default value, always unset it
-      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
-      assert(spark.sessionState.conf.warehousePath
-        === new Path(s"${System.getProperty("user.dir")}/spark-warehouse").toString)
-    } finally {
-      sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
-    }
+    // JVM adds a trailing slash if the directory exists and leaves it as-is, if it doesn't
+    // In our comparison, strip trailing slash off of both sides, to account for such cases
+    assert(new Path(Utils.resolveURI("spark-warehouse")).toString.stripSuffix("/") === spark
+      .sessionState.conf.warehousePath.stripSuffix("/"))
   }
 
   test("MAX_CASES_BRANCHES") {
@@ -274,5 +269,16 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(e1.message.contains("Cannot modify the value of a static config"))
     val e2 = intercept[AnalysisException](spark.conf.unset(SCHEMA_STRING_LENGTH_THRESHOLD.key))
     assert(e2.message.contains("Cannot modify the value of a static config"))
+  }
+
+  test("SPARK-21588 SQLContext.getConf(key, null) should return null") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, null))
+      assert("1" == spark.conf.get(SQLConf.SHUFFLE_PARTITIONS.key, "<undefined>"))
+    }
+
+    assert(spark.conf.getOption("spark.sql.nonexistent").isEmpty)
+    assert(null == spark.conf.get("spark.sql.nonexistent", null))
+    assert("<undefined>" == spark.conf.get("spark.sql.nonexistent", "<undefined>"))
   }
 }

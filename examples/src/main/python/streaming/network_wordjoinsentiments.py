@@ -67,8 +67,8 @@ if __name__ == "__main__":
     # with the static RDD inside the transform() method and then multiplying
     # the frequency of the words by its sentiment value
     happiest_words = word_counts.transform(lambda rdd: word_sentiments.join(rdd)) \
-        .map(lambda (word, tuple): (word, float(tuple[0]) * tuple[1])) \
-        .map(lambda (word, happiness): (happiness, word)) \
+        .map(lambda word_tuples: (word_tuples[0], float(word_tuples[1][0]) * word_tuples[1][1])) \
+        .map(lambda word_happiness: (word_happiness[1], word_happiness[0])) \
         .transform(lambda rdd: rdd.sortByKey(False))
 
     happiest_words.foreachRDD(print_happiest_words)

@@ -19,6 +19,7 @@
 package org.apache.hive.service.cli;
 
 import java.sql.DatabaseMetaData;
+import java.util.Locale;
 
 import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hive.service.cli.thrift.TTypeId;
@@ -160,7 +161,7 @@ public enum Type {
       if (name.equalsIgnoreCase(type.name)) {
         return type;
       } else if (type.isQualifiedType() || type.isComplexType()) {
-        if (name.toUpperCase().startsWith(type.name)) {
+        if (name.toUpperCase(Locale.ROOT).startsWith(type.name)) {
             return type;
         }
       }

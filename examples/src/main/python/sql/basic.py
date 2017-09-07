@@ -187,9 +187,6 @@ def programmatic_schema_example(spark):
     # Creates a temporary view using the DataFrame
     schemaPeople.createOrReplaceTempView("people")
 
-    # Creates a temporary view using the DataFrame
-    schemaPeople.createOrReplaceTempView("people")
-
     # SQL can be run over DataFrames that have been registered as a table.
     results = spark.sql("SELECT name FROM people")
 

@@ -148,7 +148,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid)
         self._setDefault(rawPredictionCol="rawPrediction", labelCol="label",
                          metricName="areaUnderROC")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @since("1.4.0")
@@ -174,7 +174,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
                   metricName="areaUnderROC")
         Sets params for binary classification evaluator.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 
@@ -226,7 +226,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid)
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="rmse")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @since("1.4.0")
@@ -252,7 +252,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
                   metricName="rmse")
         Sets params for regression evaluator.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 
@@ -299,7 +299,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="f1")
-        kwargs = self.__init__._input_kwargs
+        kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @since("1.5.0")
@@ -325,7 +325,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
                   metricName="f1")
         Sets params for multiclass classification evaluator.
         """
-        kwargs = self.setParams._input_kwargs
+        kwargs = self._input_kwargs
         return self._set(**kwargs)
 
 if __name__ == "__main__":

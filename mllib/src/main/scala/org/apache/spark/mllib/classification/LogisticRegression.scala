@@ -202,9 +202,11 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
  * Train a classification model for Binary Logistic Regression
  * using Stochastic Gradient Descent. By default L2 regularization is used,
  * which can be changed via `LogisticRegressionWithSGD.optimizer`.
- * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
- * for k classes multi-label classification problem.
+ *
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
+ *
+ * @note Labels used in Logistic Regression should be {0, 1, ..., k - 1}
+ * for k classes multi-label classification problem.
  */
 @Since("0.8.0")
 class LogisticRegressionWithSGD private[mllib] (
@@ -239,7 +241,8 @@ class LogisticRegressionWithSGD private[mllib] (
 
 /**
  * Top-level methods for calling Logistic Regression using Stochastic Gradient Descent.
- * NOTE: Labels used in Logistic Regression should be {0, 1}
+ *
+ * @note Labels used in Logistic Regression should be {0, 1}
  */
 @Since("0.8.0")
 @deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
@@ -252,7 +255,6 @@ object LogisticRegressionWithSGD {
    * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -260,6 +262,8 @@ object LogisticRegressionWithSGD {
    * @param miniBatchFraction Fraction of data to be used per iteration.
    * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
+   *
+   * @note Labels used in Logistic Regression should be {0, 1}
    */
   @Since("1.0.0")
   def train(
@@ -276,13 +280,13 @@ object LogisticRegressionWithSGD {
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
-
    * @param miniBatchFraction Fraction of data to be used per iteration.
+   *
+   * @note Labels used in Logistic Regression should be {0, 1}
    */
   @Since("1.0.0")
   def train(
@@ -298,13 +302,13 @@ object LogisticRegressionWithSGD {
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using the specified step size. We use the entire data
    * set to update the gradient in each iteration.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
-
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LogisticRegressionModel which has the weights and offset from training.
+   *
+   * @note Labels used in Logistic Regression should be {0, 1}
    */
   @Since("1.0.0")
   def train(
@@ -318,11 +322,12 @@ object LogisticRegressionWithSGD {
    * Train a logistic regression model given an RDD of (label, features) pairs. We run a fixed
    * number of iterations of gradient descent using a step size of 1.0. We use the entire data set
    * to update the gradient in each iteration.
-   * NOTE: Labels used in Logistic Regression should be {0, 1}
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LogisticRegressionModel which has the weights and offset from training.
+   *
+   * @note Labels used in Logistic Regression should be {0, 1}
    */
   @Since("1.0.0")
   def train(
@@ -335,8 +340,6 @@ object LogisticRegressionWithSGD {
 /**
  * Train a classification model for Multinomial/Binary Logistic Regression using
  * Limited-memory BFGS. Standard feature scaling and L2 regularization are used by default.
- * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
- * for k classes multi-label classification problem.
  *
  * Earlier implementations of LogisticRegressionWithLBFGS applies a regularization
  * penalty to all elements including the intercept. If this is called with one of
@@ -344,6 +347,9 @@ object LogisticRegressionWithSGD {
  * into a call to ml.LogisticRegression, otherwise this will use the existing mllib
  * GeneralizedLinearAlgorithm trainer, resulting in a regularization penalty to the
  * intercept.
+ *
+ * @note Labels used in Logistic Regression should be {0, 1, ..., k - 1}
+ * for k classes multi-label classification problem.
  */
 @Since("1.1.0")
 class LogisticRegressionWithLBFGS

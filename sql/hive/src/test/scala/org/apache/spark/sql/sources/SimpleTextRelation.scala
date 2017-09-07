@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.sources
 
-import java.text.NumberFormat
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
-import org.apache.spark.sql.{sources, Row, SparkSession}
+import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -51,12 +47,13 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
     SimpleTextRelation.lastHadoopConf = Option(job.getConfiguration)
     new OutputWriterFactory {
       override def newInstance(
-          stagingDir: String,
-          fileNamePrefix: String,
+          path: String,
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new SimpleTextOutputWriter(stagingDir, fileNamePrefix, context)
+        new SimpleTextOutputWriter(path, dataSchema, context)
       }
+
+      override def getFileExtension(context: TaskAttemptContext): String = ""
     }
   }
 
@@ -106,7 +103,7 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
               // `Cast`ed values are always of internal types (e.g. UTF8String instead of String)
               Cast(Literal(value), dataType).eval()
           })
-        }.filter(predicate).map(projection)
+        }.filter(predicate.eval).map(projection)
 
       // Appends partition values
       val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
@@ -120,33 +117,22 @@ class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   }
 }
 
-class SimpleTextOutputWriter(
-    stagingDir: String, fileNamePrefix: String, context: TaskAttemptContext)
+class SimpleTextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
   extends OutputWriter {
-  private val recordWriter: RecordWriter[NullWritable, Text] =
-    new AppendingTextOutputFormat(new Path(stagingDir), fileNamePrefix).getRecordWriter(context)
 
-  override def write(row: Row): Unit = {
-    val serialized = row.toSeq.map { v =>
+  private val writer = CodecStreams.createOutputStreamWriter(context, new Path(path))
+
+  override def write(row: InternalRow): Unit = {
+    val serialized = row.toSeq(dataSchema).map { v =>
       if (v == null) "" else v.toString
     }.mkString(",")
-    recordWriter.write(null, new Text(serialized))
+
+    writer.write(serialized)
+    writer.write('\n')
   }
 
   override def close(): Unit = {
-    recordWriter.close(context)
-  }
-}
-
-class AppendingTextOutputFormat(stagingDir: Path, fileNamePrefix: String)
-  extends TextOutputFormat[NullWritable, Text] {
-
-  val numberFormat = NumberFormat.getInstance()
-  numberFormat.setMinimumIntegerDigits(5)
-  numberFormat.setGroupingUsed(false)
-
-  override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-    new Path(stagingDir, fileNamePrefix)
+    writer.close()
   }
 }
 

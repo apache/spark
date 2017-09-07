@@ -50,7 +50,7 @@ object LDAExample {
     val ll = model.logLikelihood(dataset)
     val lp = model.logPerplexity(dataset)
     println(s"The lower bound on the log likelihood of the entire corpus: $ll")
-    println(s"The upper bound bound on perplexity: $lp")
+    println(s"The upper bound on perplexity: $lp")
 
     // Describe topics.
     val topics = model.describeTopics(3)

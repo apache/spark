@@ -95,7 +95,7 @@ def install_exception_handler():
     original = py4j.protocol.get_return_value
     # The original `get_return_value` is not patched, it's idempotent.
     patched = capture_sql_exception(original)
-    # only patch the one used in in py4j.java_gateway (call Java API)
+    # only patch the one used in py4j.java_gateway (call Java API)
     py4j.java_gateway.get_return_value = patched
 
 

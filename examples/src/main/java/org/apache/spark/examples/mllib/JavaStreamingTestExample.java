@@ -17,10 +17,6 @@
 
 package org.apache.spark.examples.mllib;
 
-
-import org.apache.spark.api.java.function.VoidFunction;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 // $example on$
 import org.apache.spark.mllib.stat.test.BinarySample;
 import org.apache.spark.mllib.stat.test.StreamingTest;
@@ -75,16 +71,12 @@ public class JavaStreamingTestExample {
     ssc.checkpoint(Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark").toString());
 
     // $example on$
-    JavaDStream<BinarySample> data = ssc.textFileStream(dataDir).map(
-      new Function<String, BinarySample>() {
-        @Override
-        public BinarySample call(String line) {
-          String[] ts = line.split(",");
-          boolean label = Boolean.parseBoolean(ts[0]);
-          double value = Double.parseDouble(ts[1]);
-          return new BinarySample(label, value);
-        }
-      });
+    JavaDStream<BinarySample> data = ssc.textFileStream(dataDir).map(line -> {
+      String[] ts = line.split(",");
+      boolean label = Boolean.parseBoolean(ts[0]);
+      double value = Double.parseDouble(ts[1]);
+      return new BinarySample(label, value);
+    });
 
     StreamingTest streamingTest = new StreamingTest()
       .setPeacePeriod(0)
@@ -98,21 +90,11 @@ public class JavaStreamingTestExample {
     // Stop processing if test becomes significant or we time out
     timeoutCounter = numBatchesTimeout;
 
-    out.foreachRDD(new VoidFunction<JavaRDD<StreamingTestResult>>() {
-      @Override
-      public void call(JavaRDD<StreamingTestResult> rdd) {
-        timeoutCounter -= 1;
-
-        boolean anySignificant = !rdd.filter(new Function<StreamingTestResult, Boolean>() {
-          @Override
-          public Boolean call(StreamingTestResult v) {
-            return v.pValue() < 0.05;
-          }
-        }).isEmpty();
-
-        if (timeoutCounter <= 0 || anySignificant) {
-          rdd.context().stop();
-        }
+    out.foreachRDD(rdd -> {
+      timeoutCounter -= 1;
+      boolean anySignificant = !rdd.filter(v -> v.pValue() < 0.05).isEmpty();
+      if (timeoutCounter <= 0 || anySignificant) {
+        rdd.context().stop();
       }
     });
 

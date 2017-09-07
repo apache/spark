@@ -26,17 +26,35 @@ import org.apache.spark.ui.{UIUtils, WebUIPage}
 private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   def render(request: HttpServletRequest): Seq[Node] = {
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
     val requestedIncomplete =
-      Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
+      Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
 
     val allAppsSize = parent.getApplicationList().count(_.completed != requestedIncomplete)
+    val eventLogsUnderProcessCount = parent.getEventLogsUnderProcess()
+    val lastUpdatedTime = parent.getLastUpdatedTime()
     val providerConfig = parent.getProviderConfig()
     val content =
+      <script src={UIUtils.prependBaseUri("/static/historypage-common.js")}></script>
       <div>
           <div class="span12">
             <ul class="unstyled">
               {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
             </ul>
+            {
+            if (eventLogsUnderProcessCount > 0) {
+              <p>There are {eventLogsUnderProcessCount} event log(s) currently being
+                processed which may result in additional applications getting listed on this page.
+                Refresh the page to view updates. </p>
+            }
+            }
+
+            {
+            if (lastUpdatedTime > 0) {
+              <p>Last updated: <span id="last-updated">{lastUpdatedTime}</span></p>
+            }
+            }
+
             {
             if (allAppsSize > 0) {
               <script src={UIUtils.prependBaseUri("/static/dataTables.rowsGroup.js")}></script> ++
@@ -46,6 +64,8 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
                 <script>setAppLimit({parent.maxApplications})</script>
             } else if (requestedIncomplete) {
               <h4>No incomplete applications found!</h4>
+            } else if (eventLogsUnderProcessCount > 0) {
+              <h4>No completed applications found!</h4>
             } else {
               <h4>No completed applications found!</h4> ++ parent.emptyListingHtml
             }

@@ -17,19 +17,15 @@
 
 package org.apache.spark.sql.streaming;
 
-import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.InternalOutputModes;
+import org.apache.spark.sql.catalyst.streaming.InternalOutputModes;
 
 /**
- * :: Experimental ::
- *
  * OutputMode is used to what data will be written to a streaming sink when there is
  * new data available in a streaming DataFrame/Dataset.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 public class OutputMode {
 
@@ -46,12 +42,23 @@ public class OutputMode {
 
   /**
    * OutputMode in which all the rows in the streaming DataFrame/Dataset will be written
-   * to the sink every time these is some updates. This output mode can only be used in queries
+   * to the sink every time there are some updates. This output mode can only be used in queries
    * that contain aggregations.
    *
    * @since 2.0.0
    */
   public static OutputMode Complete() {
     return InternalOutputModes.Complete$.MODULE$;
+  }
+
+  /**
+   * OutputMode in which only the rows that were updated in the streaming DataFrame/Dataset will
+   * be written to the sink every time there are some updates. If the query doesn't contain
+   * aggregations, it will be equivalent to `Append` mode.
+   *
+   * @since 2.1.1
+   */
+  public static OutputMode Update() {
+    return InternalOutputModes.Update$.MODULE$;
   }
 }

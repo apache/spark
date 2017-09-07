@@ -22,7 +22,7 @@ import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.ml.linalg.{DenseMatrix, Vectors}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.{ParamMap, ParamsSuite}
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MetadataUtils, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
@@ -33,6 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.Metadata
 
 class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -75,8 +76,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(ova.getPredictionCol === "prediction")
     val ovaModel = ova.fit(dataset)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(ovaModel)
+    MLTestingUtils.checkCopyAndUids(ova, ovaModel)
 
     assert(ovaModel.models.length === numClasses)
     val transformedDataset = ovaModel.transform(dataset)
@@ -136,6 +136,17 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(outputFields.contains("p"))
   }
 
+  test("SPARK-18625 : OneVsRestModel should support setFeaturesCol and setPredictionCol") {
+    val ova = new OneVsRest().setClassifier(new LogisticRegression)
+    val ovaModel = ova.fit(dataset)
+    val dataset2 = dataset.select(col("label").as("y"), col("features").as("fea"))
+    ovaModel.setFeaturesCol("fea")
+    ovaModel.setPredictionCol("pred")
+    val transformedDataset = ovaModel.transform(dataset2)
+    val outputFields = transformedDataset.schema.fieldNames.toSet
+    assert(outputFields === Set("y", "fea", "pred"))
+  }
+
   test("SPARK-8049: OneVsRest shouldn't output temp columns") {
     val logReg = new LogisticRegression()
       .setMaxIter(1)
@@ -143,6 +154,16 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setClassifier(logReg)
     val output = ovr.fit(dataset).transform(dataset)
     assert(output.schema.fieldNames.toSet === Set("label", "features", "prediction"))
+  }
+
+  test("SPARK-21306: OneVsRest should support setWeightCol") {
+    val dataset2 = dataset.withColumn("weight", lit(1))
+    // classifier inherits hasWeightCol
+    val ova = new OneVsRest().setWeightCol("weight").setClassifier(new LogisticRegression())
+    assert(ova.fit(dataset2) !== null)
+    // classifier doesn't inherit hasWeightCol
+    val ova2 = new OneVsRest().setWeightCol("weight").setClassifier(new DecisionTreeClassifier())
+    assert(ova2.fit(dataset2) !== null)
   }
 
   test("OneVsRest.copy and OneVsRestModel.copy") {

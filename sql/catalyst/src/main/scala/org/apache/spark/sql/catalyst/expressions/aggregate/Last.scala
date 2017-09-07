@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
@@ -29,16 +30,14 @@ import org.apache.spark.sql.types._
  * a single partition, and we use a single reducer to do the aggregation.).
  */
 @ExpressionDescription(
-  usage = "_FUNC_(expr,isIgnoreNull) - Returns the last value of `child` for a group of rows.")
-case class Last(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
+  usage = """
+    _FUNC_(expr[, isIgnoreNull]) - Returns the last value of `expr` for a group of rows.
+      If `isIgnoreNull` is true, returns only non-null values.
+  """)
+case class Last(child: Expression, ignoreNullsExpr: Expression)
+  extends DeclarativeAggregate with ExpectsInputTypes {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))
-
-  private val ignoreNulls: Boolean = ignoreNullsExpr match {
-    case Literal(b: Boolean, BooleanType) => b
-    case _ =>
-      throw new AnalysisException("The second argument of First should be a boolean literal.")
-  }
 
   override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
 
@@ -52,6 +51,20 @@ case class Last(child: Expression, ignoreNullsExpr: Expression) extends Declarat
 
   // Expected input data type.
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType, BooleanType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else if (!ignoreNullsExpr.foldable) {
+      TypeCheckFailure(
+        s"The second argument of Last must be a boolean literal, but got: ${ignoreNullsExpr.sql}")
+    } else {
+      TypeCheckSuccess
+    }
+  }
+
+  private def ignoreNulls: Boolean = ignoreNullsExpr.eval().asInstanceOf[Boolean]
 
   private lazy val last = AttributeReference("last", child.dataType)()
 

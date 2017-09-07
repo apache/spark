@@ -18,6 +18,8 @@
 package org.apache.spark.util.collection
 
 import java.io._
+import java.nio.channels.{Channels, FileChannel}
+import java.nio.file.StandardOpenOption
 import java.util.Comparator
 
 import scala.collection.BufferedIterator
@@ -192,12 +194,19 @@ class ExternalAppendOnlyMap[K, V, C](
    * It will be called by TaskMemoryManager when there is not enough memory for the task.
    */
   override protected[this] def forceSpill(): Boolean = {
-    assert(readingIterator != null)
-    val isSpilled = readingIterator.spill()
-    if (isSpilled) {
-      currentMap = null
+    if (readingIterator != null) {
+      val isSpilled = readingIterator.spill()
+      if (isSpilled) {
+        currentMap = null
+      }
+      isSpilled
+    } else if (currentMap.size > 0) {
+      spill(currentMap)
+      currentMap = new SizeTrackingAppendOnlyMap[K, C]
+      true
+    } else {
+      false
     }
-    isSpilled
   }
 
   /**
@@ -453,7 +462,7 @@ class ExternalAppendOnlyMap[K, V, C](
     )
 
     private var batchIndex = 0  // Which batch we're in
-    private var fileStream: FileInputStream = null
+    private var fileChannel: FileChannel = null
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
@@ -470,14 +479,14 @@ class ExternalAppendOnlyMap[K, V, C](
       if (batchIndex < batchOffsets.length - 1) {
         if (deserializeStream != null) {
           deserializeStream.close()
-          fileStream.close()
+          fileChannel.close()
           deserializeStream = null
-          fileStream = null
+          fileChannel = null
         }
 
         val start = batchOffsets(batchIndex)
-        fileStream = new FileInputStream(file)
-        fileStream.getChannel.position(start)
+        fileChannel = FileChannel.open(file.toPath, StandardOpenOption.READ)
+        fileChannel.position(start)
         batchIndex += 1
 
         val end = batchOffsets(batchIndex)
@@ -485,7 +494,8 @@ class ExternalAppendOnlyMap[K, V, C](
         assert(end >= start, "start = " + start + ", end = " + end +
           ", batchOffsets = " + batchOffsets.mkString("[", ", ", "]"))
 
-        val bufferedStream = new BufferedInputStream(ByteStreams.limit(fileStream, end - start))
+        val bufferedStream = new BufferedInputStream(
+          ByteStreams.limit(Channels.newInputStream(fileChannel), end - start))
         val wrappedStream = serializerManager.wrapStream(blockId, bufferedStream)
         ser.deserializeStream(wrappedStream)
       } else {
@@ -545,9 +555,9 @@ class ExternalAppendOnlyMap[K, V, C](
         ds.close()
         deserializeStream = null
       }
-      if (fileStream != null) {
-        fileStream.close()
-        fileStream = null
+      if (fileChannel != null) {
+        fileChannel.close()
+        fileChannel = null
       }
       if (file.exists()) {
         if (!file.delete()) {

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
  * Thrown by a catalog when an item cannot be found. The analyzer will rethrow the exception
  * as an [[org.apache.spark.sql.AnalysisException]] with the correct position information.
  */
-class NoSuchDatabaseException(db: String) extends AnalysisException(s"Database '$db' not found")
+class NoSuchDatabaseException(val db: String) extends AnalysisException(s"Database '$db' not found")
 
 class NoSuchTableException(db: String, table: String)
   extends AnalysisException(s"Table or view '$table' not found in database '$db'")

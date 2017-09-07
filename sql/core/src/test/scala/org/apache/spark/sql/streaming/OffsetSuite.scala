@@ -18,7 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, Offset}
+import org.apache.spark.sql.execution.streaming.{LongOffset, Offset, SerializedOffset}
 
 trait OffsetSuite extends SparkFunSuite {
   /** Creates test to check all the comparisons of offsets given a `one` that is less than `two`. */
@@ -35,25 +35,11 @@ trait OffsetSuite extends SparkFunSuite {
 class LongOffsetSuite extends OffsetSuite {
   val one = LongOffset(1)
   val two = LongOffset(2)
+  val three = LongOffset(3)
   compare(one, two)
+
+  compare(LongOffset(SerializedOffset(one.json)),
+          LongOffset(SerializedOffset(three.json)))
 }
 
-class CompositeOffsetSuite extends OffsetSuite {
-  compare(
-    one = CompositeOffset(Some(LongOffset(1)) :: Nil),
-    two = CompositeOffset(Some(LongOffset(2)) :: Nil))
-
-  compare(
-    one = CompositeOffset(None :: Nil),
-    two = CompositeOffset(Some(LongOffset(2)) :: Nil))
-
-  compare(
-    one = CompositeOffset.fill(LongOffset(0), LongOffset(1)),
-    two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
-
-  compare(
-    one = CompositeOffset.fill(LongOffset(1), LongOffset(1)),
-    two = CompositeOffset.fill(LongOffset(1), LongOffset(2)))
-
-}
 

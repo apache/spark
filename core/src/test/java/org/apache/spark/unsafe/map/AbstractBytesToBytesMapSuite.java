@@ -19,13 +19,10 @@ package org.apache.spark.unsafe.map;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import scala.Tuple2;
 import scala.Tuple2$;
-import scala.runtime.AbstractFunction1;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -33,8 +30,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.executor.ShuffleWriteMetrics;
@@ -75,13 +70,6 @@ public abstract class AbstractBytesToBytesMapSuite {
   @Mock(answer = RETURNS_SMART_NULLS) BlockManager blockManager;
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
 
-  private static final class WrapStream extends AbstractFunction1<OutputStream, OutputStream> {
-    @Override
-    public OutputStream apply(OutputStream stream) {
-      return stream;
-    }
-  }
-
   @Before
   public void setup() {
     memoryManager =
@@ -97,38 +85,30 @@ public abstract class AbstractBytesToBytesMapSuite {
     spillFilesCreated.clear();
     MockitoAnnotations.initMocks(this);
     when(blockManager.diskBlockManager()).thenReturn(diskBlockManager);
-    when(diskBlockManager.createTempLocalBlock()).thenAnswer(
-        new Answer<Tuple2<TempLocalBlockId, File>>() {
-      @Override
-      public Tuple2<TempLocalBlockId, File> answer(InvocationOnMock invocationOnMock)
-          throws Throwable {
-        TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
-        File file = File.createTempFile("spillFile", ".spill", tempDir);
-        spillFilesCreated.add(file);
-        return Tuple2$.MODULE$.apply(blockId, file);
-      }
+    when(diskBlockManager.createTempLocalBlock()).thenAnswer(invocationOnMock -> {
+      TempLocalBlockId blockId = new TempLocalBlockId(UUID.randomUUID());
+      File file = File.createTempFile("spillFile", ".spill", tempDir);
+      spillFilesCreated.add(file);
+      return Tuple2$.MODULE$.apply(blockId, file);
     });
     when(blockManager.getDiskWriter(
       any(BlockId.class),
       any(File.class),
       any(SerializerInstance.class),
       anyInt(),
-      any(ShuffleWriteMetrics.class))).thenAnswer(new Answer<DiskBlockObjectWriter>() {
-      @Override
-      public DiskBlockObjectWriter answer(InvocationOnMock invocationOnMock) throws Throwable {
+      any(ShuffleWriteMetrics.class))).thenAnswer(invocationOnMock -> {
         Object[] args = invocationOnMock.getArguments();
 
         return new DiskBlockObjectWriter(
           (File) args[1],
+          serializerManager,
           (SerializerInstance) args[2],
           (Integer) args[3],
-          new WrapStream(),
           false,
           (ShuffleWriteMetrics) args[4],
           (BlockId) args[0]
         );
-      }
-    });
+      });
   }
 
   @After

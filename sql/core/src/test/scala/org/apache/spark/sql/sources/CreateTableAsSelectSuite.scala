@@ -33,14 +33,15 @@ class CreateTableAsSelectSuite
   extends DataSourceTest
   with SharedSQLContext
   with BeforeAndAfterEach {
+  import testImplicits._
 
   protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    spark.read.json(rdd).createOrReplaceTempView("jt")
+    val ds = (1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}""").toDS()
+    spark.read.json(ds).createOrReplaceTempView("jt")
   }
 
   override def afterAll(): Unit = {
@@ -70,7 +71,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT a, b FROM jt
          """.stripMargin)
@@ -94,7 +95,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${childPath.toString}'
+           |  path '${childPath.toURI}'
            |) AS
            |SELECT a, b FROM jt
          """.stripMargin)
@@ -112,7 +113,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT a, b FROM jt
          """.stripMargin)
@@ -127,7 +128,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE IF NOT EXISTS jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT a * 4 FROM jt
          """.stripMargin)
@@ -145,7 +146,7 @@ class CreateTableAsSelectSuite
            |CREATE TABLE jsonTable
            |USING json
            |OPTIONS (
-           |  path '${path.toString}'
+           |  path '${path.toURI}'
            |) AS
            |SELECT b FROM jt
          """.stripMargin)
@@ -162,7 +163,7 @@ class CreateTableAsSelectSuite
         sql(
           s"""
              |CREATE TEMPORARY TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toString}')
+             |OPTIONS (PATH '${path.toURI}')
              |PARTITIONED BY (a)
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
@@ -179,7 +180,7 @@ class CreateTableAsSelectSuite
         sql(
           s"""
              |CREATE EXTERNAL TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toString}')
+             |OPTIONS (PATH '${path.toURI}')
              |AS SELECT 1 AS a, 2 AS b
            """.stripMargin
         )
@@ -196,7 +197,7 @@ class CreateTableAsSelectSuite
       sql(
         s"""
            |CREATE TABLE t USING PARQUET
-           |OPTIONS (PATH '${path.toString}')
+           |OPTIONS (PATH '${path.toURI}')
            |PARTITIONED BY (a)
            |AS SELECT 1 AS a, 2 AS b
          """.stripMargin
@@ -206,13 +207,13 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with non-zero buckets") {
+  test("create table using as select - with valid number of buckets") {
     val catalog = spark.sessionState.catalog
     withTable("t") {
       sql(
         s"""
            |CREATE TABLE t USING PARQUET
-           |OPTIONS (PATH '${path.toString}')
+           |OPTIONS (PATH '${path.toURI}')
            |CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS
            |AS SELECT 1 AS a, 2 AS b
          """.stripMargin
@@ -222,23 +223,25 @@ class CreateTableAsSelectSuite
     }
   }
 
-  test("create table using as select - with zero buckets") {
+  test("create table using as select - with invalid number of buckets") {
     withTable("t") {
-      val e = intercept[AnalysisException] {
-        sql(
-          s"""
-             |CREATE TABLE t USING PARQUET
-             |OPTIONS (PATH '${path.toString}')
-             |CLUSTERED BY (a) SORTED BY (b) INTO 0 BUCKETS
-             |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
-        )
-      }.getMessage
-      assert(e.contains("Expected positive number of buckets, but got `0`"))
+      Seq(0, 100000).foreach(numBuckets => {
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""
+               |CREATE TABLE t USING PARQUET
+               |OPTIONS (PATH '${path.toURI}')
+               |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
+               |AS SELECT 1 AS a, 2 AS b
+             """.stripMargin
+          )
+        }.getMessage
+        assert(e.contains("Number of buckets should be greater than 0 but less than 100000"))
+      })
     }
   }
 
-  test("CTAS of decimal calculation") {
+  test("SPARK-17409: CTAS of decimal calculation") {
     withTable("tab2") {
       withTempView("tab1") {
         spark.range(99, 101).createOrReplaceTempView("tab1")
@@ -247,6 +250,15 @@ class CreateTableAsSelectSuite
         sql(s"CREATE TABLE tab2 USING PARQUET AS $sqlStmt")
         checkAnswer(spark.table("tab2"), sql(sqlStmt))
       }
+    }
+  }
+
+  test("specifying the column list for CTAS") {
+    withTable("t") {
+      val e = intercept[ParseException] {
+        sql("CREATE TABLE t (a int, b int) USING parquet AS SELECT 1, 2")
+      }.getMessage
+      assert(e.contains("Schema may not be specified in a Create Table As Select (CTAS)"))
     }
   }
 }

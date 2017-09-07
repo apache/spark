@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io.{FileDescriptor, InputStream}
 import java.lang
 import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -31,20 +30,29 @@ import org.apache.spark.internal.Logging
 
 object DebugFilesystem extends Logging {
   // Stores the set of active streams and their creation sites.
-  private val openStreams = new ConcurrentHashMap[FSDataInputStream, Throwable]()
+  private val openStreams = mutable.Map.empty[FSDataInputStream, Throwable]
 
-  def clearOpenStreams(): Unit = {
+  def addOpenStream(stream: FSDataInputStream): Unit = openStreams.synchronized {
+    openStreams.put(stream, new Throwable())
+  }
+
+  def clearOpenStreams(): Unit = openStreams.synchronized {
     openStreams.clear()
   }
 
-  def assertNoOpenStreams(): Unit = {
-    val numOpen = openStreams.size()
+  def removeOpenStream(stream: FSDataInputStream): Unit = openStreams.synchronized {
+    openStreams.remove(stream)
+  }
+
+  def assertNoOpenStreams(): Unit = openStreams.synchronized {
+    val numOpen = openStreams.values.size
     if (numOpen > 0) {
-      for (exc <- openStreams.values().asScala) {
+      for (exc <- openStreams.values) {
         logWarning("Leaked filesystem connection created at:")
         exc.printStackTrace()
       }
-      throw new RuntimeException(s"There are $numOpen possibly leaked file streams.")
+      throw new IllegalStateException(s"There are $numOpen possibly leaked file streams.",
+        openStreams.values.head)
     }
   }
 }
@@ -59,8 +67,7 @@ class DebugFilesystem extends LocalFileSystem {
 
   override def open(f: Path, bufferSize: Int): FSDataInputStream = {
     val wrapped: FSDataInputStream = super.open(f, bufferSize)
-    openStreams.put(wrapped, new Throwable())
-
+    addOpenStream(wrapped)
     new FSDataInputStream(wrapped.getWrappedStream) {
       override def setDropBehind(dropBehind: lang.Boolean): Unit = wrapped.setDropBehind(dropBehind)
 
@@ -97,7 +104,7 @@ class DebugFilesystem extends LocalFileSystem {
 
       override def close(): Unit = {
         wrapped.close()
-        openStreams.remove(wrapped)
+        removeOpenStream(wrapped)
       }
 
       override def read(): Int = wrapped.read()

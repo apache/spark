@@ -37,7 +37,7 @@ class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   def this() = this(Identifiable.randomUID("normalizer"))
 
   /**
-   * Normalization in L^p^ space.  Must be >= 1.
+   * Normalization in L^p^ space. Must be greater than equal to 1.
    * (default: p = 2)
    * @group param
    */

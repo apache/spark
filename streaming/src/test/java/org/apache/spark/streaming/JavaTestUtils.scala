@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.spark.api.java.JavaRDDLike
-import org.apache.spark.streaming.api.java.{JavaDStreamLike, JavaDStream, JavaStreamingContext}
+import org.apache.spark.streaming.api.java.{JavaDStream, JavaDStreamLike, JavaStreamingContext}
 
 /** Exposes streaming test functionality in a Java-friendly way. */
 trait JavaTestBase extends TestSuiteBase {
@@ -35,7 +35,7 @@ trait JavaTestBase extends TestSuiteBase {
   def attachTestInputStream[T](
       ssc: JavaStreamingContext,
       data: JList[JList[T]],
-      numPartitions: Int) = {
+      numPartitions: Int): JavaDStream[T] = {
     val seqData = data.asScala.map(_.asScala)
 
     implicit val cm: ClassTag[T] =
@@ -47,9 +47,9 @@ trait JavaTestBase extends TestSuiteBase {
   /**
    * Attach a provided stream to it's associated StreamingContext as a
    * [[org.apache.spark.streaming.TestOutputStream]].
-   **/
+   */
   def attachTestOutputStream[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]](
-      dstream: JavaDStreamLike[T, This, R]) = {
+      dstream: JavaDStreamLike[T, This, R]): Unit = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val ostream = new TestOutputStreamWithPartitions(dstream.dstream)
@@ -90,10 +90,10 @@ trait JavaTestBase extends TestSuiteBase {
 }
 
 object JavaTestUtils extends JavaTestBase {
-  override def maxWaitTimeMillis = 20000
+  override def maxWaitTimeMillis: Int = 20000
 
 }
 
 object JavaCheckpointTestUtils extends JavaTestBase {
-  override def actuallyWait = true
+  override def actuallyWait: Boolean = true
 }

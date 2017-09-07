@@ -20,7 +20,7 @@ algorithm to learn these latent factors. The implementation in `spark.mllib` has
 following parameters:
 
 * *numBlocks* is the number of blocks used to parallelize computation (set to -1 to auto-configure).
-* *rank* is the number of latent factors in the model.
+* *rank* is the number of features to use (also referred to as the number of latent factors).
 * *iterations* is the number of iterations of ALS to run. ALS typically converges to a reasonable
   solution in 20 iterations or less.
 * *lambda* specifies the regularization parameter in ALS.
@@ -119,5 +119,5 @@ a dependency.
 
 ## Tutorial
 
-The [training exercises](https://databricks-training.s3.amazonaws.com/index.html) from the Spark Summit 2014 include a hands-on tutorial for
-[personalized movie recommendation with `spark.mllib`](https://databricks-training.s3.amazonaws.com/movie-recommendation-with-mllib.html).
+The [training exercises](https://github.com/databricks/spark-training) from the Spark Summit 2014 include a hands-on tutorial for
+[personalized movie recommendation with `spark.mllib`](https://github.com/databricks/spark-training/blob/master/website/movie-recommendation-with-mllib.md).

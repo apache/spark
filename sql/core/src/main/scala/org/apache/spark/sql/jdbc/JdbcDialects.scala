@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.Connection
+import java.sql.{Connection, Date, Timestamp}
+
+import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, InterfaceStability, Since}
 import org.apache.spark.sql.types._
@@ -40,8 +42,8 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * SQL dialect of a certain database or jdbc driver.
  * Lots of databases define types that aren't explicitly supported
  * by the JDBC spec.  Some JDBC drivers also report inaccurate
- * information---for instance, BIT(n>1) being reported as a BIT type is quite
- * common, even though BIT in JDBC is meant for single-bit values.  Also, there
+ * information---for instance, BIT(n{@literal >}1) being reported as a BIT type is quite
+ * common, even though BIT in JDBC is meant for single-bit values. Also, there
  * does not appear to be a standard name for an unbounded string or binary
  * type; we use BLOB and CLOB by default but override with database-specific
  * alternatives when these are absent or do not behave correctly.
@@ -124,6 +126,29 @@ abstract class JdbcDialect extends Serializable {
   }
 
   /**
+   * Escape special characters in SQL string literals.
+   * @param value The string to be escaped.
+   * @return Escaped string.
+   */
+  @Since("2.3.0")
+  protected[jdbc] def escapeSql(value: String): String =
+    if (value == null) null else StringUtils.replace(value, "'", "''")
+
+  /**
+   * Converts value to SQL expression.
+   * @param value The value to be converted.
+   * @return Converted value.
+   */
+  @Since("2.3.0")
+  def compileValue(value: Any): Any = value match {
+    case stringValue: String => s"'${escapeSql(stringValue)}'"
+    case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case dateValue: Date => "'" + dateValue + "'"
+    case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
+    case _ => value
+  }
+
+  /**
    * Return Some[true] iff `TRUNCATE TABLE` causes cascading default.
    * Some[true] : TRUNCATE TABLE causes cascading.
    * Some[false] : TRUNCATE TABLE does not cause cascading.
@@ -134,13 +159,13 @@ abstract class JdbcDialect extends Serializable {
 
 /**
  * :: DeveloperApi ::
- * Registry of dialects that apply to every new jdbc [[org.apache.spark.sql.DataFrame]].
+ * Registry of dialects that apply to every new jdbc `org.apache.spark.sql.DataFrame`.
  *
  * If multiple matching dialects are registered then all matching ones will be
  * tried in reverse order. A user-added dialect will thus be applied first,
  * overwriting the defaults.
  *
- * Note that all new dialects are applied to new jdbc DataFrames only. Make
+ * @note All new dialects are applied to new jdbc DataFrames only. Make
  * sure to register your dialects first.
  */
 @DeveloperApi
@@ -148,7 +173,7 @@ abstract class JdbcDialect extends Serializable {
 object JdbcDialects {
 
   /**
-   * Register a dialect for use on all new matching jdbc [[org.apache.spark.sql.DataFrame]].
+   * Register a dialect for use on all new matching jdbc `org.apache.spark.sql.DataFrame`.
    * Reading an existing dialect will cause a move-to-front.
    *
    * @param dialect The new dialect.
@@ -174,6 +199,7 @@ object JdbcDialects {
   registerDialect(MsSqlServerDialect)
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
+  registerDialect(TeradataDialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

@@ -27,6 +27,7 @@ import traceback
 
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
+from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, BatchedSerializer
@@ -86,22 +87,19 @@ def read_single_udf(pickleSer, infile):
 
 def read_udfs(pickleSer, infile):
     num_udfs = read_int(infile)
-    if num_udfs == 1:
-        # fast path for single UDF
-        _, udf = read_single_udf(pickleSer, infile)
-        mapper = lambda a: udf(*a)
-    else:
-        udfs = {}
-        call_udf = []
-        for i in range(num_udfs):
-            arg_offsets, udf = read_single_udf(pickleSer, infile)
-            udfs['f%d' % i] = udf
-            args = ["a[%d]" % o for o in arg_offsets]
-            call_udf.append("f%d(%s)" % (i, ", ".join(args)))
-        # Create function like this:
-        #   lambda a: (f0(a0), f1(a1, a2), f2(a3))
-        mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
-        mapper = eval(mapper_str, udfs)
+    udfs = {}
+    call_udf = []
+    for i in range(num_udfs):
+        arg_offsets, udf = read_single_udf(pickleSer, infile)
+        udfs['f%d' % i] = udf
+        args = ["a[%d]" % o for o in arg_offsets]
+        call_udf.append("f%d(%s)" % (i, ", ".join(args)))
+    # Create function like this:
+    #   lambda a: (f0(a0), f1(a1, a2), f2(a3))
+    # In the special case of a single UDF this will return a single result rather
+    # than a tuple of results; this is the format that the JVM side expects.
+    mapper_str = "lambda a: (%s)" % (", ".join(call_udf))
+    mapper = eval(mapper_str, udfs)
 
     func = lambda _, it: map(mapper, it)
     ser = BatchedSerializer(PickleSerializer(), 100)
@@ -119,10 +117,17 @@ def main(infile, outfile):
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
             raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions") %
+                             "driver %s, PySpark cannot run with different minor versions." +
+                             "Please check environment variables PYSPARK_PYTHON and " +
+                             "PYSPARK_DRIVER_PYTHON are correctly set.") %
                             ("%d.%d" % sys.version_info[:2], version))
 
         # initialize global state
+        taskContext = TaskContext._getOrCreate()
+        taskContext._stageId = read_int(infile)
+        taskContext._partitionId = read_int(infile)
+        taskContext._attemptNumber = read_int(infile)
+        taskContext._taskAttemptId = read_long(infile)
         shuffle.MemoryBytesSpilled = 0
         shuffle.DiskBytesSpilled = 0
         _accumulatorRegistry.clear()
