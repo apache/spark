@@ -73,11 +73,13 @@ private[r] object DecisionTreeClassifierWrapper extends MLReadable[DecisionTreeC
       checkpointInterval: Int,
       seed: String,
       maxMemoryInMB: Int,
-      cacheNodeIds: Boolean): DecisionTreeClassifierWrapper = {
+      cacheNodeIds: Boolean,
+      handleInvalid: String): DecisionTreeClassifierWrapper = {
 
     val rFormula = new RFormula()
       .setFormula(formula)
       .setForceIndexLabel(true)
+      .setHandleInvalid(handleInvalid)
     checkDataColumns(rFormula, data)
     val rFormulaModel = rFormula.fit(data)
 

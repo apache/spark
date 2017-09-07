@@ -1275,11 +1275,11 @@ private[spark] class BlockManager(
     val numPeersToReplicateTo = level.replication - 1
     val startTime = System.nanoTime
 
-    var peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
-    var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
+    val peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
+    val peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
-    val initialPeers = getPeers(false).filterNot(existingReplicas.contains(_))
+    val initialPeers = getPeers(false).filterNot(existingReplicas.contains)
 
     var peersForReplication = blockReplicationPolicy.prioritize(
       blockManagerId,

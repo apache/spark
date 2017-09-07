@@ -28,8 +28,10 @@ import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
-import org.apache.spark.sql.{DataFrame, Dataset}
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.functions._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
@@ -100,6 +102,25 @@ object MLUtils extends Logging {
       .map(_.trim)
       .filter(line => !(line.isEmpty || line.startsWith("#")))
       .map(parseLibSVMRecord)
+  }
+
+  private[spark] def parseLibSVMFile(
+      sparkSession: SparkSession, paths: Seq[String]): RDD[(Double, Array[Int], Array[Double])] = {
+    val lines = sparkSession.baseRelationToDataFrame(
+      DataSource.apply(
+        sparkSession,
+        paths = paths,
+        className = classOf[TextFileFormat].getName
+      ).resolveRelation(checkFilesExist = false))
+      .select("value")
+
+    import lines.sqlContext.implicits._
+
+    lines.select(trim($"value").as("line"))
+      .filter(not((length($"line") === 0).or($"line".startsWith("#"))))
+      .as[String]
+      .rdd
+      .map(MLUtils.parseLibSVMRecord)
   }
 
   private[spark] def parseLibSVMRecord(line: String): (Double, Array[Int], Array[Double]) = {

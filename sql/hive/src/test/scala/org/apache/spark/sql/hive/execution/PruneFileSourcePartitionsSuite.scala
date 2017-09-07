@@ -86,7 +86,7 @@ class PruneFileSourcePartitionsSuite extends QueryTest with SQLTestUtils with Te
         case relation: LogicalRelation => relation
       }
       assert(relations.size === 1, s"Size wrong for:\n ${df.queryExecution}")
-      val size2 = relations(0).computeStats.sizeInBytes
+      val size2 = relations(0).stats.sizeInBytes
       assert(size2 == relations(0).catalogTable.get.stats.get.sizeInBytes)
       assert(size2 < tableStats.get.sizeInBytes)
     }

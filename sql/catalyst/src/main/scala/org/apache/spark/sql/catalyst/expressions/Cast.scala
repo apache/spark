@@ -164,7 +164,7 @@ object Cast {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
        10
@@ -1047,7 +1047,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
         $fieldsEvalCode
-        $evPrim = $result.copy();
+        $evPrim = $result;
       """
   }
 

@@ -210,6 +210,14 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
+    if (conf.receiveBuf() > 0) {
+      bootstrap.option(ChannelOption.SO_RCVBUF, conf.receiveBuf());
+    }
+
+    if (conf.sendBuf() > 0) {
+      bootstrap.option(ChannelOption.SO_SNDBUF, conf.sendBuf());
+    }
+
     final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
     final AtomicReference<Channel> channelRef = new AtomicReference<>();
 

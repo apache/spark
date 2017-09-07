@@ -17,9 +17,6 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.scalatest._
-import org.scalatest.mock.MockitoSugar
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
 
 class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
