@@ -111,6 +111,11 @@ private[yarn] class YarnAllocator(
   @volatile private var targetNumExecutors =
     YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sparkConf)
 
+  // The number of containers that we think the RM is able to launch given its available
+  // resources. -1 means the number is not known, so it should be ignored until it becomes
+  // known.
+  private var rmAvailableContainers = -1
+
   private var currentNodeBlacklist = Set.empty[String]
 
   // Executor loss reason requests that are pending - maps from executor ID for inquiry to a
@@ -268,6 +273,8 @@ private[yarn] class YarnAllocator(
 
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
+    val availableResources = allocateResponse.getAvailableResources()
+
     if (allocatedContainers.size > 0) {
       logDebug(("Allocated containers: %d. Current executor count: %d. " +
         "Launching executor count: %d. Cluster resources: %s.")
@@ -275,7 +282,7 @@ private[yarn] class YarnAllocator(
           allocatedContainers.size,
           numExecutorsRunning.get,
           numExecutorsStarting.get,
-          allocateResponse.getAvailableResources))
+          availableResources))
 
       handleAllocatedContainers(allocatedContainers.asScala)
     }
@@ -287,6 +294,19 @@ private[yarn] class YarnAllocator(
       logDebug("Finished processing %d completed containers. Current running executor count: %d."
         .format(completedContainers.size, numExecutorsRunning.get))
     }
+
+    // Adjust the number of available containers by checking the RM response. This is a best guess,
+    // since the data returned isn't fine grained enough; for example you may have many GB of memory
+    // available but that is the sum of all NMs, it doesn't necessarily mean you can launch a
+    // container of that size.
+    //
+    // This also assumes that all executors are of the same size, which is the only possible
+    // configuration currently in Spark.
+    val availableByCores = availableResources.getVirtualCores() / resource.getVirtualCores()
+    val availableByMemory = availableResources.getMemory() / resource.getMemory()
+    rmAvailableContainers = math.min(availableByCores, availableByMemory)
+    logDebug(s"Allocation done, RM can still launch $rmAvailableContainers executors (of size " +
+      s"$resource) if needed.")
   }
 
   /**
@@ -300,12 +320,18 @@ private[yarn] class YarnAllocator(
     val numPendingAllocate = pendingAllocate.size
     val missing = targetNumExecutors - numPendingAllocate -
       numExecutorsStarting.get - numExecutorsRunning.get
+
+    val numberOfRequests = if (rmAvailableContainers >= 0) {
+      math.min(missing, rmAvailableContainers)
+    } else {
+      missing
+    }
     logDebug(s"Updating resource requests, target: $targetNumExecutors, " +
       s"pending: $numPendingAllocate, running: ${numExecutorsRunning.get}, " +
-      s"executorsStarting: ${numExecutorsStarting.get}")
+      s"executorsStarting: ${numExecutorsStarting.get}, available: $rmAvailableContainers")
 
-    if (missing > 0) {
-      logInfo(s"Will request $missing executor container(s), each with " +
+    if (numberOfRequests > 0) {
+      logInfo(s"Will request $numberOfRequests executor container(s), each with " +
         s"${resource.getVirtualCores} core(s) and " +
         s"${resource.getMemory} MB memory (including $memoryOverhead MB of overhead)")
 
@@ -328,7 +354,7 @@ private[yarn] class YarnAllocator(
       }
 
       // consider the number of new containers and cancelled stale containers available
-      val availableContainers = missing + cancelledContainers
+      val availableContainers = numberOfRequests + cancelledContainers
 
       // to maximize locality, include requests with no locality preference that can be cancelled
       val potentialContainers = availableContainers + anyHostRequests.size
@@ -373,17 +399,31 @@ private[yarn] class YarnAllocator(
           logInfo(s"Submitted container request for host ${hostStr(request)}.")
         }
       }
-    } else if (numPendingAllocate > 0 && missing < 0) {
-      val numToCancel = math.min(numPendingAllocate, -missing)
-      logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired " +
-        s"total $targetNumExecutors executors.")
-
-      val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
-      if (!matchingRequests.isEmpty) {
-        matchingRequests.iterator().next().asScala
-          .take(numToCancel).foreach(amClient.removeContainerRequest)
+    } else if (numPendingAllocate > 0) {
+      // There are two cases where we may need to reduce the number of requests:
+      // - when the driver has reduced the number of desired executors (i.e. missing < 0)
+      // - when the current pending requests exceed the number that YARN can allocate at the
+      //   moment.
+      val unwanted = if (missing < 0) math.min(numPendingAllocate, -missing) else 0
+      val unavailable = if (rmAvailableContainers > 0) {
+        math.max(numPendingAllocate - rmAvailableContainers, 0)
       } else {
-        logWarning("Expected to find pending requests, but found none.")
+        0
+      }
+      val numToCancel = math.max(unwanted, unavailable)
+
+      if (numToCancel > 0) {
+        logInfo(s"Canceling requests for $numToCancel executor container(s); " +
+          s"desired target = $targetNumExecutors, " +
+          s"available = $rmAvailableContainers.")
+
+        val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
+        if (!matchingRequests.isEmpty) {
+          matchingRequests.iterator().next().asScala
+            .take(numToCancel).foreach(amClient.removeContainerRequest)
+        } else {
+          logWarning("Expected to find pending requests, but found none.")
+        }
       }
     }
   }

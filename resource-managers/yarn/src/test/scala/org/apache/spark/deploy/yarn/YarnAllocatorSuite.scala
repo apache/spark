@@ -17,14 +17,20 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.util.Collections
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.mockito.Matchers._
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.{BeforeAndAfterEach, Matchers}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
@@ -88,7 +94,6 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       "--jar", "somejar.jar",
       "--class", "SomeClass")
     val sparkConfClone = sparkConf.clone()
-    sparkConfClone
       .set("spark.executor.instances", maxExecutors.toString)
       .set("spark.executor.cores", "5")
       .set("spark.executor.memory", "2048")
@@ -350,4 +355,109 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     clock.advance(50 * 1000L)
     handler.getNumExecutorsFailed should be (0)
   }
+
+  test("SPARK-18769: limit requests according to RM's available resources") {
+    // These match the configuration in createAllocator()
+    val containerCpu = 5
+    val containerMem = (2048 + YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN).toInt
+
+    // Available resources returned by the mock client for the test.
+    val normal = Resource.newInstance(containerMem * 10, containerCpu * 10)
+    val lowMem = Resource.newInstance(containerMem * 2, containerCpu * 5)
+    val lowCpu = Resource.newInstance(containerMem * 5, containerCpu * 1)
+    val empty = Resource.newInstance(0, 0)
+
+    val client = mock(classOf[AMRMClient[ContainerRequest]])
+    val response = mock(classOf[AllocateResponse])
+    when(response.getAllocatedContainers()).thenReturn(Collections.emptyList(),
+      Collections.emptyList())
+    when(response.getAvailableResources()).thenReturn(normal)
+    when(client.allocate(anyFloat())).thenReturn(response)
+
+    // Keep track of how many container requests were added to the client. The request count
+    // needs to be reset to 0 after an allocation request, since the allocator only adds requests
+    // and rely on the AMRMClient to clean up state internally.
+    var requestCount = 0
+    when(client.addContainerRequest(any(classOf[ContainerRequest]))).thenAnswer(
+      new Answer[Unit]() {
+        override def answer(unused: InvocationOnMock): Unit = {
+          requestCount += 1
+        }
+      }
+    )
+
+    val allocator = createAllocator(0, client)
+
+    // First allocation should not create any requests.
+    allocator.allocateResources()
+    assert(requestCount === 0)
+
+    // Request 2 executors.
+    allocator.requestTotalExecutorsWithPreferredLocalities(2, 0, Map(), Set())
+    allocator.allocateResources()
+    assert(requestCount === 2)
+    requestCount = 0
+
+    // Switch to "low memory" resources.
+    when(response.getAvailableResources()).thenReturn(lowMem)
+    allocator.allocateResources()
+    requestCount = 0
+
+    // Try to allocate a new container, verify that only 2 requests remain since that's what
+    // "lowMem" supports.
+    allocator.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    allocator.allocateResources()
+    assert(requestCount === 2)
+    requestCount = 0
+
+    // Switch to "low cpu" resources.
+    when(response.getAvailableResources()).thenReturn(lowCpu)
+    allocator.allocateResources()
+    requestCount = 0
+
+    // This will cause the number of requests to fall to 1, since that's all "lowCpu" allows to run.
+    allocator.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    allocator.allocateResources()
+    assert(requestCount === 1)
+    requestCount = 0
+
+    // Switch to empty.
+    when(response.getAvailableResources()).thenReturn(empty)
+    allocator.allocateResources()
+    requestCount = 0
+
+    allocator.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    allocator.allocateResources()
+    assert(requestCount === 0)
+    requestCount = 0
+
+    // Switch back to normal.
+    when(response.getAvailableResources()).thenReturn(normal)
+    allocator.allocateResources()
+    requestCount = 0
+
+    allocator.requestTotalExecutorsWithPreferredLocalities(3, 0, Map(), Set())
+    allocator.allocateResources()
+    assert(requestCount === 3)
+
+    // Switch bach to low CPU, and mock some state so that there are a few pending allocation
+    // requests. This should cause these requests to be removed.
+    when(response.getAvailableResources()).thenReturn(lowCpu)
+    allocator.allocateResources()
+    requestCount = 0
+
+    val pending = (1 to 10).map { _ =>
+      val res = Resource.newInstance(containerMem, containerCpu)
+      new ContainerRequest(res, Array(YarnSparkHadoopUtil.ANY_HOST), null,
+        YarnSparkHadoopUtil.RM_REQUEST_PRIORITY)
+    }.toList.asJava
+    doReturn(List(pending).asJava)
+      .when(client)
+      .getMatchingRequests(any(classOf[Priority]), anyString(), any(classOf[Resource]))
+
+    allocator.requestTotalExecutorsWithPreferredLocalities(1, 0, Map(), Set())
+    allocator.allocateResources()
+    verify(client, times(9)).removeContainerRequest(any(classOf[ContainerRequest]))
+  }
+
 }
