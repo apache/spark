@@ -3226,6 +3226,13 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         res = df.select(f0())
         self.assertEquals(df.select(lit(1)).collect(), res.collect())
 
+    def test_vectorized_udf_datatype_string(self):
+        import pandas as pd
+        df = self.spark.range(100000)
+        f0 = pandas_udf(lambda size: pd.Series(1).repeat(size), "long")
+        res = df.select(f0())
+        self.assertEquals(df.select(lit(1)).collect(), res.collect())
+
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(
             col('id').cast('int').alias('a'),
