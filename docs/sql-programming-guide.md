@@ -1580,9 +1580,8 @@ options.
       Note that this is different from the Hive behavior.
     - As a result, `DROP TABLE` statements on those tables will not remove the data.
 
- - From Spark 2.0.1, `spark.sql.parquet.cacheMetadata` is no longer used. See
-   [SPARK-16321](https://issues.apache.org/jira/browse/SPARK-16321) and
-   [SPARK-15639](https://issues.apache.org/jira/browse/SPARK-15639) for details.
+ - `spark.sql.parquet.cacheMetadata` is no longer used.
+   See [SPARK-13664](https://issues.apache.org/jira/browse/SPARK-13664) for details.
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
