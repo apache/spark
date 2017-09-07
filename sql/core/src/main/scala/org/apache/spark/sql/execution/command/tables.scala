@@ -201,13 +201,14 @@ case class AlterTableAddColumnsCommand(
 
     // make sure any partition columns are at the end of the fields
     val reorderedSchema = catalogTable.dataSchema ++ columns ++ catalogTable.partitionSchema
+    val newSchema = catalogTable.schema.copy(fields = reorderedSchema.toArray)
 
     SchemaUtils.checkColumnNameDuplication(
       reorderedSchema.map(_.name), "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
+    DDLUtils.checkDataSchemaFieldNames(catalogTable.copy(schema = newSchema))
 
-    catalog.alterTableSchema(
-      table, catalogTable.schema.copy(fields = reorderedSchema.toArray))
+    catalog.alterTableSchema(table, newSchema)
 
     Seq.empty[Row]
   }
