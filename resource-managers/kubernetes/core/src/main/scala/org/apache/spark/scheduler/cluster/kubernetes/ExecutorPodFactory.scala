@@ -16,17 +16,16 @@
  */
 package org.apache.spark.scheduler.cluster.kubernetes
 
-import java.util.concurrent.atomic.AtomicLong
+import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
 import org.apache.commons.io.FilenameUtils
-import scala.collection.JavaConverters._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.kubernetes.{ConfigurationUtils, InitContainerResourceStagingServerSecretPlugin, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.{InitContainerUtil, MountSmallFilesBootstrap}
+import org.apache.spark.deploy.kubernetes.submit.{InitContainerUtil, MountSecretsBootstrap, MountSmallFilesBootstrap}
 import org.apache.spark.util.Utils
 
 // Configures executor pods. Construct one of these with a SparkConf to set up properties that are
@@ -45,6 +44,7 @@ private[spark] trait ExecutorPodFactory {
 private[spark] class ExecutorPodFactoryImpl(
     sparkConf: SparkConf,
     nodeAffinityExecutorPodModifier: NodeAffinityExecutorPodModifier,
+    mountSecretsBootstrap: Option[MountSecretsBootstrap],
     mountSmallFilesBootstrap: Option[MountSmallFilesBootstrap],
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin])
@@ -250,11 +250,18 @@ private[spark] class ExecutorPodFactoryImpl(
           .build()
       }
     }.getOrElse(executorPod)
+
+    val (withMaybeSecretsMountedPod, withMaybeSecretsMountedContainer) =
+      mountSecretsBootstrap.map {bootstrap =>
+        bootstrap.mountSecrets(withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer)
+      }.getOrElse((withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer))
+
     val (withMaybeSmallFilesMountedPod, withMaybeSmallFilesMountedContainer) =
       mountSmallFilesBootstrap.map { bootstrap =>
         bootstrap.mountSmallFilesSecret(
-            withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer)
-      }.getOrElse((withMaybeShuffleConfigPod, withMaybeShuffleConfigExecutorContainer))
+          withMaybeSecretsMountedPod, withMaybeSecretsMountedContainer)
+      }.getOrElse((withMaybeSecretsMountedPod, withMaybeSecretsMountedContainer))
+
     val (executorPodWithInitContainer, initBootstrappedExecutorContainer) =
       executorInitContainerBootstrap.map { bootstrap =>
         val podWithDetachedInitContainer = bootstrap.bootstrapInitContainerAndVolumes(

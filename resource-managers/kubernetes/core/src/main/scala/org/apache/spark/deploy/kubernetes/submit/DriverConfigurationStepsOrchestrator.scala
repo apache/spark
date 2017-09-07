@@ -20,7 +20,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.ConfigurationUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, InitContainerBootstrapStep, MountSmallLocalFilesStep, PythonStep}
+import org.apache.spark.deploy.kubernetes.submit.submitsteps._
 import org.apache.spark.deploy.kubernetes.submit.submitsteps.initcontainer.InitContainerConfigurationStepsOrchestrator
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.Utils
@@ -83,6 +83,11 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     val allDriverLabels = driverCustomLabels ++ Map(
         SPARK_APP_ID_LABEL -> kubernetesAppId,
         SPARK_ROLE_LABEL -> SPARK_POD_DRIVER_ROLE)
+    val driverSecretNamesToMountPaths = ConfigurationUtils.parsePrefixedKeyValuePairs(
+      submissionSparkConf,
+      KUBERNETES_DRIVER_SECRETS_PREFIX,
+      "driver secrets")
+
     val initialSubmissionStep = new BaseDriverConfigurationStep(
         kubernetesAppId,
         kubernetesResourceNamePrefix,
@@ -92,8 +97,10 @@ private[spark] class DriverConfigurationStepsOrchestrator(
         mainClass,
         appArgs,
         submissionSparkConf)
+
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsStep(
         submissionSparkConf, kubernetesResourceNamePrefix)
+
     val pythonStep = mainAppResource match {
       case PythonMainAppResource(mainPyResource) =>
         Option(new PythonStep(mainPyResource, additionalPythonFiles, filesDownloadPath))
@@ -153,17 +160,27 @@ private[spark] class DriverConfigurationStepsOrchestrator(
     } else {
       (filesDownloadPath, Seq.empty[DriverConfigurationStep])
     }
+
     val dependencyResolutionStep = new DependencyResolutionStep(
       sparkJars,
       sparkFiles,
       jarsDownloadPath,
       localFilesDownloadPath)
+
+    val mountSecretsStep = if (driverSecretNamesToMountPaths.nonEmpty) {
+      val mountSecretsBootstrap = new MountSecretsBootstrapImpl(driverSecretNamesToMountPaths)
+      Some(new MountSecretsStep(mountSecretsBootstrap))
+    } else {
+      None
+    }
+
     Seq(
       initialSubmissionStep,
       kubernetesCredentialsStep,
       dependencyResolutionStep) ++
       submittedDependenciesBootstrapSteps ++
-      pythonStep.toSeq
+      pythonStep.toSeq ++
+      mountSecretsStep.toSeq
   }
 
   private def areAnyFilesNonContainerLocal(files: Seq[String]): Boolean = {

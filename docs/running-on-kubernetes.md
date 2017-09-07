@@ -800,6 +800,22 @@ from the other deployment modes. See the [configuration page](configuration.html
     the Driver process. The user can specify multiple of these to set multiple environment variables.
   </td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
+  <td>(none)</td>
+  <td>
+    Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
+    in the driver Pod. The user can specify multiple instances of this for multiple secrets.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
+  <td>(none)</td>
+  <td>
+    Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
+    in the executor Pods. The user can specify multiple instances of this for multiple secrets.
+  </td>
+</tr>
 </table>
 
 
