@@ -2000,4 +2000,38 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assert(setOfPath.size() == pathSizeToDeleteOnExit)
     }
   }
+
+  test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
+    Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+      withTable("t21912") {
+        Seq("ORC", "PARQUET").foreach { source =>
+          val m = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
+          }.getMessage
+          assert(m.contains(s"contains invalid character(s)"))
+
+          val m2 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
+          }.getMessage
+          assert(m2.contains(s"contains invalid character(s)"))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+            val m3 = intercept[AnalysisException] {
+              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
+            }.getMessage
+            assert(m3.contains(s"contains invalid character(s)"))
+          }
+        }
+
+        // TODO: After SPARK-21929, we need to check ORC, too.
+        Seq("PARQUET").foreach { source =>
+          sql(s"CREATE TABLE t21912(`col` INT) USING $source")
+          val m = intercept[AnalysisException] {
+            sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+          }.getMessage
+          assert(m.contains(s"contains invalid character(s)"))
+        }
+      }
+    }
+  }
 }

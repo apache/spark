@@ -34,7 +34,10 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils}
 
@@ -850,6 +853,7 @@ object DDLUtils {
     }
   }
 
+<<<<<<< HEAD
 
   /**
    * Throws exception if outputPath tries to overwrite inputpath.
@@ -862,6 +866,23 @@ object DDLUtils {
     if (inputPaths.contains(outputPath)) {
       throw new AnalysisException(
         "Cannot overwrite a path that is also being read from.")
+=======
+  private[sql] def checkDataSchemaFieldNames(table: CatalogTable): Unit = {
+    table.provider.foreach {
+      _.toLowerCase(Locale.ROOT) match {
+        case HIVE_PROVIDER =>
+          val serde = table.storage.serde
+          if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
+            OrcFileFormat.checkFieldNames(table.dataSchema)
+          } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
+              serde == Some("parquet.hive.serde.ParquetHiveSerDe")) {
+            ParquetSchemaConverter.checkFieldNames(table.dataSchema)
+          }
+        case "parquet" => ParquetSchemaConverter.checkFieldNames(table.dataSchema)
+        case "orc" => OrcFileFormat.checkFieldNames(table.dataSchema)
+        case _ =>
+      }
+>>>>>>> master
     }
   }
 }
