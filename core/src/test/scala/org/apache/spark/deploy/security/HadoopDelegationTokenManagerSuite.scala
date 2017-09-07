@@ -94,7 +94,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
 
     val hiveCredentialProvider = new HiveDelegationTokenProvider()
     val credentials = new Credentials()
-    hiveCredentialProvider.obtainDelegationTokens(hadoopConf, credentials)
+    hiveCredentialProvider.obtainDelegationTokens(hadoopConf, sparkConf, credentials)
 
     credentials.getAllTokens.size() should be (0)
   }
@@ -105,7 +105,7 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite with Matchers {
 
     val hbaseTokenProvider = new HBaseDelegationTokenProvider()
     val creds = new Credentials()
-    hbaseTokenProvider.obtainDelegationTokens(hadoopConf, creds)
+    hbaseTokenProvider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
 
     creds.getAllTokens.size should be (0)
   }
