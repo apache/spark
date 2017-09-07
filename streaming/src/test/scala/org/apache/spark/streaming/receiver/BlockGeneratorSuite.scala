@@ -24,6 +24,7 @@ import scala.collection.mutable
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers._
+import org.scalatest.concurrent.{Signaler, ThreadSignaler}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.TimeLimits._
 import org.scalatest.time.SpanSugar._
@@ -34,6 +35,7 @@ import org.apache.spark.util.ManualClock
 
 class BlockGeneratorSuite extends SparkFunSuite with BeforeAndAfter {
 
+  implicit val defaultSignaler: Signaler = ThreadSignaler
   private val blockIntervalMs = 10
   private val conf = new SparkConf().set("spark.streaming.blockInterval", s"${blockIntervalMs}ms")
   @volatile private var blockGenerator: BlockGenerator = null
