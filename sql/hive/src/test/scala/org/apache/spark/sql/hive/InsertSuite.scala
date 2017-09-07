@@ -624,6 +624,32 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
+  test("multi insert overwrite to dir") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      withTempDir { dir =>
+        val pathUri = dir.toURI
+
+        sql(
+          s"""
+             |FROM test_insert_table
+             |INSERT OVERWRITE DIRECTORY '${pathUri}'
+             |STORED AS orc
+             |SELECT id
+             |INSERT OVERWRITE DIRECTORY '${pathUri}'
+             |STORED AS orc
+             |SELECT *
+           """.stripMargin)
+
+        // use orc data source to check the data of path is right.
+        checkAnswer(
+          spark.read.orc(dir.getCanonicalPath),
+          sql("select * from test_insert_table"))
+      }
+    }
+  }
+
   test("insert overwrite to dir to illegal path") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
