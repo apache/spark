@@ -85,7 +85,7 @@ class GeneratedProjectionSuite extends PlanTest {
 
   test("SPARK-18016: generated projections on wider table requiring class-splitting") {
     // Set the max value at `WHOLESTAGE_HUGE_METHOD_LIMIT` to compile gen'd code by janino
-    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
       val N = 4000
       val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
       val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))

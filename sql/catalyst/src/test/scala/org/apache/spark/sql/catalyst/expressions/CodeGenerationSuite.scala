@@ -100,7 +100,7 @@ class CodeGenerationSuite extends PlanTest with ExpressionEvalHelper {
 
   test("SPARK-18091: split large if expressions into blocks due to JVM code size limit") {
     // Set the max value at `WHOLESTAGE_HUGE_METHOD_LIMIT` to compile gen'd code by janino
-    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
       var strExpr: Expression = Literal("abc")
       for (_ <- 1 to 150) {
         strExpr = Decode(Encode(strExpr, "utf-8"), "utf-8")
@@ -134,7 +134,7 @@ class CodeGenerationSuite extends PlanTest with ExpressionEvalHelper {
 
   test("SPARK-14793: split wide map creation into blocks due to JVM code size limit") {
     // Set the max value at `WHOLESTAGE_HUGE_METHOD_LIMIT` to compile gen'd code by janino
-    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
       val length = 5000
       val expressions = Seq(CreateMap(
         List.fill(length)(EqualTo(Literal(1), Literal(1))).zipWithIndex.flatMap {

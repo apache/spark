@@ -133,7 +133,7 @@ class OrderingSuite extends PlanTest with ExpressionEvalHelper {
   test("SPARK-16845: GeneratedClass$SpecificOrdering grows beyond 64 KB") {
     // To just check if janino can compile gen'd code, we set the max value at
     // `WHOLESTAGE_HUGE_METHOD_LIMIT` explicitly.
-    withSQLConf(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
       val sortOrder = Literal("abc").asc
 
       // this is passing prior to SPARK-16845, and it should also be passing after SPARK-16845
