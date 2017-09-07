@@ -63,10 +63,12 @@ from pyspark.sql.types import UserDefinedType, _infer_type, _make_type_verifier
 from pyspark.sql.types import _array_signed_int_typecode_ctype_mappings, _array_type_mappings
 from pyspark.sql.types import _array_unsigned_int_typecode_ctype_mappings
 from pyspark.tests import QuietTest, ReusedPySparkTestCase, SparkSubmitTests
-from pyspark.sql.functions import UserDefinedFunction, sha2, lit, col, expr, pandas_udf
+from pyspark.sql.functions import UserDefinedFunction, sha2, lit, col, expr
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
+if _have_pandas:
+    from pyspark.sql.functions import pandas_udf
 
 _have_arrow = False
 try:
