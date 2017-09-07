@@ -368,7 +368,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
     }
   }
 
-  // Jane
   test("insert overwrite directory") {
     withTempDir { dir =>
       val path = dir.toURI.getPath
@@ -378,6 +377,26 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
            | INSERT OVERWRITE DIRECTORY '${path}'
            | USING json
            | OPTIONS (a 1, b 0.1, c TRUE)
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+
+      spark.sql(v1)
+
+      checkAnswer(
+        spark.read.json(dir.getCanonicalPath),
+        sql("SELECT 1 as a, 'c' as b"))
+    }
+  }
+
+  test("insert overwrite directory with path in options") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY
+           | USING json
+           | OPTIONS ('path' '${path}')
            | SELECT 1 as a, 'c' as b
          """.stripMargin
 
@@ -407,6 +426,4 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       assert(e.contains("Only Data Sources providing FileFormat are supported"))
     }
   }
-
-
 }
