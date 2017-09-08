@@ -1544,7 +1544,7 @@ options.
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
-  - The queries which select only `spark.sql.columnNameOfCorruptRecord` column are disallowed now. Notice that the queries which have only the column after column pruning (e.g. filtering on the column followed by a counting operation) are also disallowed. If you want to select only the corrupt records, you should cache or save the Dataset and DataFrame before running such queries.
+  - The queries which select only `spark.sql.columnNameOfCorruptRecord` column are disallowed now. Notice that the queries which have only the column after column pruning (e.g. filtering on the column followed by a counting operation) are also disallowed. If you want to select only the corrupt records, you should cache or save the underlying Dataset and DataFrame before running such queries.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 

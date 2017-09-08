@@ -116,9 +116,12 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (requiredSchema.length == 1 &&
       requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
       throw new AnalysisException(
-        s"'${parsedOptions.columnNameOfCorruptRecord}' cannot be selected alone without other " +
+        s"'${parsedOptions.columnNameOfCorruptRecord}' cannot be selected alone without other\n" +
         "data columns, because its content is completely derived from the data columns parsed.\n" +
-        "If you want to select corrupt records only, cache or save the Dataset " +
+        "Even your queries looks not only select this column, if after column pruning it isn't\n" +
+        "involving paring any data fields, e.g., filtering on the column followed by a \n" +
+        "counting, it can produce incorrect results and so disallowed.\n" +
+        "If you want to select corrupt records only, cache or save the Dataset\n" +
         "before executing queries, as this parses all fields under the hood. For example: \n" +
         "df.cache()\n" +
         s"""df.select("${parsedOptions.columnNameOfCorruptRecord}")"""

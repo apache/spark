@@ -2052,8 +2052,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val errMsg = intercept[AnalysisException] {
         spark.read.schema(schema).json(path).select("_corrupt_record").collect()
       }.getMessage
-      assert(errMsg.contains(
-        "'_corrupt_record' cannot be selected alone without other data columns"))
+      assert(errMsg.contains("'_corrupt_record' cannot be selected alone"))
     }
   }
 }
