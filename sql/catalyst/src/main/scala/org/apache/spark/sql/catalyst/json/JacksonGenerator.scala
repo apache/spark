@@ -26,12 +26,13 @@ import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, MapData}
 import org.apache.spark.sql.types._
 
-// `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
-// Once it is initialized with `StructType`, it can be used to write out a struct or an array of
-// struct. Once it is initialized with `MapType`, it can be used to write out a map. An exception
-// will be thrown if trying to write out a struct if it is initialized with a `MapType`,
-// and vice verse.
-
+/**
+ * `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
+ * Once it is initialized with `StructType`, it can be used to write out a struct or an array of
+ * struct. Once it is initialized with `MapType`, it can be used to write out a map. An exception
+ * will be thrown if trying to write out a struct if it is initialized with a `MapType`,
+ * and vice verse.
+ */
 private[sql] class JacksonGenerator(
     dataType: DataType,
     writer: Writer,
