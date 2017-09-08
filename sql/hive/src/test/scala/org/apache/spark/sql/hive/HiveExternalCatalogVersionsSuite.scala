@@ -43,6 +43,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   override def afterAll(): Unit = {
     Utils.deleteRecursively(wareHousePath)
+    Utils.deleteRecursively(tmpDataDir)
     super.afterAll()
   }
 
@@ -101,7 +102,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         |spark.sql("create view v_{} as select 1 i".format(version_index))
       """.stripMargin.getBytes("utf8"))
 
-    READ_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
+    PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
       val sparkHome = new File(sparkTestingDir, s"spark-$version")
       if (!sparkHome.exists()) {
         downloadSpark(version)
@@ -124,7 +125,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
   test("backward compatibility") {
     val args = Seq(
-      "--class", READ_TABLES.getClass.getName.stripSuffix("$"),
+      "--class", PROCESS_TABLES.getClass.getName.stripSuffix("$"),
       "--name", "HiveExternalCatalog backward compatibility test",
       "--master", "local[2]",
       "--conf", "spark.ui.enabled=false",
@@ -136,7 +137,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   }
 }
 
-object READ_TABLES extends QueryTest with SQLTestUtils {
+object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
   val testingVersions = Seq("2.0.2", "2.1.1", "2.2.0")
 
