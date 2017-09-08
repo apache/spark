@@ -685,7 +685,8 @@ class StreamExecution(
         runId,
         currentBatchId,
         offsetSeqMetadata)
-      lastExecution.executedPlan // Force the lazy generation of execution plan
+      println("\n\n\n")
+      println(lastExecution.executedPlan) // Force the lazy generation of execution plan
     }
 
     val nextBatch =

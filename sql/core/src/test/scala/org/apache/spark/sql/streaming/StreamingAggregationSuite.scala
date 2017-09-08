@@ -53,6 +53,29 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     val inputData = MemoryStream[Int]
 
     val aggregated =
+      inputData.toDS()
+        .coalesce(1)
+        .groupBy()
+        .count()
+        .as[Long]
+
+    testStream(aggregated, Complete())(
+      AddData(inputData, 3),
+      CheckLastBatch(1),
+      AddData(inputData),
+      CheckLastBatch(1),
+      AddData(inputData, 2, 4),
+      CheckLastBatch(3),
+      AddData(inputData),
+      CheckLastBatch(3),
+      StopStream
+    )
+  }
+  /*
+  test("simple count, update mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
       inputData.toDF()
         .groupBy($"value")
         .agg(count("*"))
@@ -381,4 +404,5 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       AddData(streamInput, 0, 1, 2, 3),
       CheckLastBatch((0, 0, 2), (1, 1, 3)))
   }
+  */
 }

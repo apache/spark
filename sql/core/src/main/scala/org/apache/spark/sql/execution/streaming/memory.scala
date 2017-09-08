@@ -212,6 +212,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
       latestBatchId.isEmpty || batchId > latestBatchId.get
     }
     if (notCommitted) {
+      println(data.queryExecution.toRdd.toDebugString)
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
         case Append | Update =>

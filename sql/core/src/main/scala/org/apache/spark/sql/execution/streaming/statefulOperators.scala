@@ -200,7 +200,9 @@ case class StateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+        println(s"Restore iterHasNext: ${iter.hasNext}")
         iter.flatMap { row =>
+          println(row)
           val key = getKey(row)
           val savedState = store.get(key)
           numOutputRows += 1
