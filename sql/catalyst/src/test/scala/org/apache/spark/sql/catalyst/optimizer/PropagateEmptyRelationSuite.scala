@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.StructType
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -67,6 +69,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     // Note that `None` is used to compare with OptimizeWithoutPropagateEmptyRelation.
     val testcases = Seq(
       (true, true, Inner, None),
+      (true, true, Cross, None),
       (true, true, LeftOuter, None),
       (true, true, RightOuter, None),
       (true, true, FullOuter, None),
@@ -74,6 +77,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, true, LeftSemi, None),
 
       (true, false, Inner, Some(LocalRelation('a.int, 'b.int))),
+      (true, false, Cross, Some(LocalRelation('a.int, 'b.int))),
       (true, false, LeftOuter, None),
       (true, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
       (true, false, FullOuter, None),
@@ -81,6 +85,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (true, false, LeftSemi, None),
 
       (false, true, Inner, Some(LocalRelation('a.int, 'b.int))),
+      (false, true, Cross, Some(LocalRelation('a.int, 'b.int))),
       (false, true, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, true, RightOuter, None),
       (false, true, FullOuter, None),
@@ -88,6 +93,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
       (false, true, LeftSemi, Some(LocalRelation('a.int))),
 
       (false, false, Inner, Some(LocalRelation('a.int, 'b.int))),
+      (false, false, Cross, Some(LocalRelation('a.int, 'b.int))),
       (false, false, LeftOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, false, RightOuter, Some(LocalRelation('a.int, 'b.int))),
       (false, false, FullOuter, Some(LocalRelation('a.int, 'b.int))),
@@ -120,6 +126,48 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("propagate empty streaming relation through multiple UnaryNode") {
+    val output = Seq('a.int)
+    val data = Seq(Row(1))
+    val schema = StructType.fromAttributes(output)
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val relation = LocalRelation(
+      output,
+      data.map(converter(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+
+    val query = relation
+      .where(false)
+      .select('a)
+      .where('a > 1)
+      .where('a != 200)
+      .orderBy('a.asc)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = LocalRelation(output, isStreaming = true)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("don't propagate empty streaming relation through agg") {
+    val output = Seq('a.int)
+    val data = Seq(Row(1))
+    val schema = StructType.fromAttributes(output)
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val relation = LocalRelation(
+      output,
+      data.map(converter(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+
+    val query = relation
+      .groupBy('a)('a)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("don't propagate non-empty local relation") {
     val query = testRelation1
       .where(true)
@@ -138,7 +186,7 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer.analyze)
   }
 
-  test("propagate empty relation through Aggregate without aggregate function") {
+  test("propagate empty relation through Aggregate with grouping expressions") {
     val query = testRelation1
       .where(false)
       .groupBy('a)('a, ('a + 1).as('x))
@@ -149,13 +197,13 @@ class PropagateEmptyRelationSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("don't propagate empty relation through Aggregate with aggregate function") {
+  test("don't propagate empty relation through Aggregate without grouping expressions") {
     val query = testRelation1
       .where(false)
-      .groupBy('a)(count('a))
+      .groupBy()()
 
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = LocalRelation('a.int).groupBy('a)(count('a)).analyze
+    val correctAnswer = LocalRelation('a.int).groupBy()().analyze
 
     comparePlans(optimized, correctAnswer)
   }

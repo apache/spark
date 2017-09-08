@@ -20,8 +20,8 @@ package org.apache.spark.deploy
 import java.io.File
 import java.net.URI
 
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.spark.{SparkConf, SparkUserAppException}
@@ -85,6 +85,7 @@ object PythonRunner {
     // pass conf spark.pyspark.python to python process, the only way to pass info to
     // python process is through environment variable.
     sparkConf.get(PYSPARK_PYTHON).foreach(env.put("PYSPARK_PYTHON", _))
+    sys.env.get("PYTHONHASHSEED").foreach(env.put("PYTHONHASHSEED", _))
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     try {
       val process = builder.start()

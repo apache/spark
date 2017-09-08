@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
 
   /**
-   * Returns a RDD from grouping items of its parent RDD in fixed size blocks by passing a sliding
+   * Returns an RDD from grouping items of its parent RDD in fixed size blocks by passing a sliding
    * window over them. The ordering is first based on the partition index and then the ordering of
    * items within each partition. This is similar to sliding in Scala collections, except that it
    * becomes an empty RDD if the window size is greater than the total number of items. It needs to
@@ -48,7 +48,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
   }
 
   /**
-   * [[sliding(Int, Int)*]] with step = 1.
+   * `sliding(Int, Int)*` with step = 1.
    */
   def sliding(windowSize: Int): RDD[Array[T]] = sliding(windowSize, 1)
 

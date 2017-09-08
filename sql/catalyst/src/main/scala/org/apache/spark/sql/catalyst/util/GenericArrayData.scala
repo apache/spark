@@ -49,7 +49,15 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
   def this(seqOrArray: Any) = this(GenericArrayData.anyToSeq(seqOrArray))
 
-  override def copy(): ArrayData = new GenericArrayData(array.clone())
+  override def copy(): ArrayData = {
+    val newValues = new Array[Any](array.length)
+    var i = 0
+    while (i < array.length) {
+      newValues(i) = InternalRow.copyValue(array(i))
+      i += 1
+    }
+    new GenericArrayData(newValues)
+  }
 
   override def numElements(): Int = array.length
 
@@ -70,6 +78,10 @@ class GenericArrayData(val array: Array[Any]) extends ArrayData {
   override def getStruct(ordinal: Int, numFields: Int): InternalRow = getAs(ordinal)
   override def getArray(ordinal: Int): ArrayData = getAs(ordinal)
   override def getMap(ordinal: Int): MapData = getAs(ordinal)
+
+  override def setNullAt(ordinal: Int): Unit = array(ordinal) = null
+
+  override def update(ordinal: Int, value: Any): Unit = array(ordinal) = value
 
   override def toString(): String = array.mkString("[", ",", "]")
 

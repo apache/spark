@@ -29,27 +29,30 @@ import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
 
 class MultilayerPerceptronClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
 
   @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = spark.createDataFrame(Seq(
-        (Vectors.dense(0.0, 0.0), 0.0),
-        (Vectors.dense(0.0, 1.0), 1.0),
-        (Vectors.dense(1.0, 0.0), 1.0),
-        (Vectors.dense(1.0, 1.0), 0.0))
+    dataset = Seq(
+      (Vectors.dense(0.0, 0.0), 0.0),
+      (Vectors.dense(0.0, 1.0), 1.0),
+      (Vectors.dense(1.0, 0.0), 1.0),
+      (Vectors.dense(1.0, 1.0), 0.0)
     ).toDF("features", "label")
   }
 
   test("Input Validation") {
     val mlpc = new MultilayerPerceptronClassifier()
     intercept[IllegalArgumentException] {
-      mlpc.setLayers(Array[Int]())
+      mlpc.setLayers(Array.empty[Int])
     }
     intercept[IllegalArgumentException] {
       mlpc.setLayers(Array[Int](1))
@@ -73,18 +76,62 @@ class MultilayerPerceptronClassifierSuite
       .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
+    MLTestingUtils.checkCopyAndUids(trainer, model)
     val predictionAndLabels = result.select("prediction", "label").collect()
     predictionAndLabels.foreach { case Row(p: Double, l: Double) =>
       assert(p == l)
     }
   }
 
+  test("Predicted class probabilities: calibration on toy dataset") {
+    val layers = Array[Int](4, 5, 2)
+
+    val strongDataset = Seq(
+      (Vectors.dense(1, 2, 3, 4), 0d, Vectors.dense(1d, 0d)),
+      (Vectors.dense(4, 3, 2, 1), 1d, Vectors.dense(0d, 1d)),
+      (Vectors.dense(1, 1, 1, 1), 0d, Vectors.dense(.5, .5)),
+      (Vectors.dense(1, 1, 1, 1), 1d, Vectors.dense(.5, .5))
+    ).toDF("features", "label", "expectedProbability")
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(strongDataset)
+    val result = model.transform(strongDataset)
+    result.select("probability", "expectedProbability").collect().foreach {
+      case Row(p: Vector, e: Vector) =>
+        assert(p ~== e absTol 1e-3)
+    }
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, MultilayerPerceptronClassificationModel](model, strongDataset)
+  }
+
+  test("test model probability") {
+    val layers = Array[Int](2, 5, 2)
+    val trainer = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(1)
+      .setSeed(123L)
+      .setMaxIter(100)
+      .setSolver("l-bfgs")
+    val model = trainer.fit(dataset)
+    model.setProbabilityCol("probability")
+    val result = model.transform(dataset)
+    val features2prob = udf { features: Vector => model.mlpModel.predict(features) }
+    result.select(features2prob(col("features")), col("probability")).collect().foreach {
+      case Row(p1: Vector, p2: Vector) =>
+        assert(p1 ~== p2 absTol 1e-3)
+    }
+  }
+
   test("Test setWeights by training restart") {
-    val dataFrame = spark.createDataFrame(Seq(
+    val dataFrame = Seq(
       (Vectors.dense(0.0, 0.0), 0.0),
       (Vectors.dense(0.0, 1.0), 1.0),
       (Vectors.dense(1.0, 0.0), 1.0),
-      (Vectors.dense(1.0, 1.0), 0.0))
+      (Vectors.dense(1.0, 1.0), 0.0)
     ).toDF("features", "label")
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronClassifier()
@@ -114,9 +161,9 @@ class MultilayerPerceptronClassifierSuite
     val xMean = Array(5.843, 3.057, 3.758, 1.199)
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     // the input seed is somewhat magic, to make this test pass
-    val rdd = sc.parallelize(generateMultinomialLogisticInput(
-      coefficients, xMean, xVariance, true, nPoints, 1), 2)
-    val dataFrame = spark.createDataFrame(rdd).toDF("label", "features")
+    val data = generateMultinomialLogisticInput(
+      coefficients, xMean, xVariance, true, nPoints, 1).toDS()
+    val dataFrame = data.toDF("label", "features")
     val numClasses = 3
     val numIterations = 100
     val layers = Array[Int](4, 5, 4, numClasses)
@@ -137,9 +184,9 @@ class MultilayerPerceptronClassifierSuite
       .setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.0)
       .setNumIterations(numIterations)
-    val lrModel = lr.run(rdd.map(OldLabeledPoint.fromML))
+    val lrModel = lr.run(data.rdd.map(OldLabeledPoint.fromML))
     val lrPredictionAndLabels =
-      lrModel.predict(rdd.map(p => OldVectors.fromML(p.features))).zip(rdd.map(_.label))
+      lrModel.predict(data.rdd.map(p => OldVectors.fromML(p.features))).zip(data.rdd.map(_.label))
     // MLP's predictions should not differ a lot from LR's.
     val lrMetrics = new MulticlassMetrics(lrPredictionAndLabels)
     val mlpMetrics = new MulticlassMetrics(mlpPredictionAndLabels)

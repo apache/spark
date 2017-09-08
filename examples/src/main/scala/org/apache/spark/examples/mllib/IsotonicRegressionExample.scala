@@ -62,6 +62,8 @@ object IsotonicRegressionExample {
     model.save(sc, "target/tmp/myIsotonicRegressionModel")
     val sameModel = IsotonicRegressionModel.load(sc, "target/tmp/myIsotonicRegressionModel")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

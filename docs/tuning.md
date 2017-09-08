@@ -12,7 +12,7 @@ Because of the in-memory nature of most Spark computations, Spark programs can b
 by any resource in the cluster: CPU, network bandwidth, or memory.
 Most often, if the data fits in memory, the bottleneck is network bandwidth, but sometimes, you
 also need to do some tuning, such as
-[storing RDDs in serialized form](programming-guide.html#rdd-persistence), to
+[storing RDDs in serialized form](rdd-programming-guide.html#rdd-persistence), to
 decrease memory usage.
 This guide will cover two main topics: data serialization, which is crucial for good network
 performance and can also reduce memory use, and memory tuning. We also sketch several smaller topics.
@@ -45,6 +45,7 @@ and calling `conf.set("spark.serializer", "org.apache.spark.serializer.KryoSeria
 This setting configures the serializer used for not only shuffling data between worker
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
+Since Spark 2.0.0, we internally use Kryo serializer when shuffling RDDs with simple types, arrays of simple types, or string type.
 
 Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
 in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
@@ -122,21 +123,8 @@ large records.
 `R` is the storage space within `M` where cached blocks immune to being evicted by execution.
 
 The value of `spark.memory.fraction` should be set in order to fit this amount of heap space
-comfortably within the JVM's old or "tenured" generation. Otherwise, when much of this space is
-used for caching and execution, the tenured generation will be full, which causes the JVM to
-significantly increase time spent in garbage collection. See
-<a href="https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/sizing.html">Java GC sizing documentation</a>
-for more information.
-
-The tenured generation size is controlled by the JVM's `NewRatio` parameter, which defaults to 2,
-meaning that the tenured generation is 2 times the size of the new generation (the rest of the heap).
-So, by default, the tenured generation occupies 2/3 or about 0.66 of the heap. A value of
-0.6 for `spark.memory.fraction` keeps storage and execution memory within the old generation with
-room to spare. If `spark.memory.fraction` is increased to, say, 0.8, then `NewRatio` may have to
-increase to 6 or more.
-
-`NewRatio` is set as a JVM flag for executors, which means adding
-`spark.executor.extraJavaOptions=-XX:NewRatio=x` to a Spark job's configuration.
+comfortably within the JVM's old or "tenured" generation. See the discussion of advanced GC
+tuning below for details.
 
 ## Determining Memory Consumption
 
@@ -167,7 +155,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 
 When your objects are still too large to efficiently store despite this tuning, a much simpler way
 to reduce memory usage is to store them in *serialized* form, using the serialized StorageLevels in
-the [RDD persistence API](programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
+the [RDD persistence API](rdd-programming-guide.html#rdd-persistence), such as `MEMORY_ONLY_SER`.
 Spark will then store each RDD partition as one large byte array.
 The only downside of storing data in serialized form is slower access times, due to having to
 deserialize each object on the fly.
@@ -217,25 +205,36 @@ temporary objects created during task execution. Some steps which may be useful 
 * Check if there are too many garbage collections by collecting GC stats. If a full GC is invoked multiple times for
   before a task completes, it means that there isn't enough memory available for executing tasks.
 
-* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of
-  memory used for caching by lowering `spark.memory.storageFraction`; it is better to cache fewer
-  objects than to slow down task execution!
-
 * If there are too many minor collections but not many major GCs, allocating more memory for Eden would help. You
   can set the size of the Eden to be an over-estimate of how much memory each task will need. If the size of Eden
   is determined to be `E`, then you can set the size of the Young generation using the option `-Xmn=4/3*E`. (The scaling
   up by 4/3 is to account for space used by survivor regions as well.)
+  
+* In the GC stats that are printed, if the OldGen is close to being full, reduce the amount of
+  memory used for caching by lowering `spark.memory.fraction`; it is better to cache fewer
+  objects than to slow down task execution. Alternatively, consider decreasing the size of
+  the Young generation. This means lowering `-Xmn` if you've set it as above. If not, try changing the 
+  value of the JVM's `NewRatio` parameter. Many JVMs default this to 2, meaning that the Old generation 
+  occupies 2/3 of the heap. It should be large enough such that this fraction exceeds `spark.memory.fraction`.
+  
+* Try the G1GC garbage collector with `-XX:+UseG1GC`. It can improve performance in some situations where
+  garbage collection is a bottleneck. Note that with large executor heap sizes, it may be important to
+  increase the [G1 region size](https://blogs.oracle.com/g1gc/entry/g1_gc_tuning_a_case) 
+  with `-XX:G1HeapRegionSize`
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 64 MB,
-  we can estimate size of Eden to be `4*3*64MB`.
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 128 MB,
+  we can estimate size of Eden to be `4*3*128MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
 
 Our experience suggests that the effect of GC tuning depends on your application and the amount of memory available.
 There are [many more tuning options](http://www.oracle.com/technetwork/java/javase/gc-tuning-6-140523.html) described online,
 but at a high level, managing how frequently full GC takes place can help in reducing the overhead.
+
+GC tuning flags for executors can be specified by setting `spark.executor.extraJavaOptions` in
+a job's configuration.
 
 # Other Considerations
 
@@ -263,7 +262,7 @@ number of cores in your clusters.
 
 ## Broadcasting Large Variables
 
-Using the [broadcast functionality](programming-guide.html#broadcast-variables)
+Using the [broadcast functionality](rdd-programming-guide.html#broadcast-variables)
 available in `SparkContext` can greatly reduce the size of each serialized task, and the cost
 of launching a job over a cluster. If your tasks use any large object from the driver program
 inside of them (e.g. a static lookup table), consider turning it into a broadcast variable.

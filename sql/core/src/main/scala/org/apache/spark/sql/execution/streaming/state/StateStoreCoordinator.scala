@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.util.UUID
+
 import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
@@ -29,16 +31,19 @@ import org.apache.spark.util.RpcUtils
 private sealed trait StateStoreCoordinatorMessage extends Serializable
 
 /** Classes representing messages */
-private case class ReportActiveInstance(storeId: StateStoreId, host: String, executorId: String)
+private case class ReportActiveInstance(
+    storeId: StateStoreProviderId,
+    host: String,
+    executorId: String)
   extends StateStoreCoordinatorMessage
 
-private case class VerifyIfInstanceActive(storeId: StateStoreId, executorId: String)
+private case class VerifyIfInstanceActive(storeId: StateStoreProviderId, executorId: String)
   extends StateStoreCoordinatorMessage
 
-private case class GetLocation(storeId: StateStoreId)
+private case class GetLocation(storeId: StateStoreProviderId)
   extends StateStoreCoordinatorMessage
 
-private case class DeactivateInstances(storeRootLocation: String)
+private case class DeactivateInstances(runId: UUID)
   extends StateStoreCoordinatorMessage
 
 private object StopCoordinator
@@ -80,29 +85,31 @@ object StateStoreCoordinatorRef extends Logging {
 class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 
   private[state] def reportActiveInstance(
-      storeId: StateStoreId,
+      stateStoreProviderId: StateStoreProviderId,
       host: String,
       executorId: String): Unit = {
-    rpcEndpointRef.send(ReportActiveInstance(storeId, host, executorId))
+    rpcEndpointRef.send(ReportActiveInstance(stateStoreProviderId, host, executorId))
   }
 
   /** Verify whether the given executor has the active instance of a state store */
-  private[state] def verifyIfInstanceActive(storeId: StateStoreId, executorId: String): Boolean = {
-    rpcEndpointRef.askWithRetry[Boolean](VerifyIfInstanceActive(storeId, executorId))
+  private[state] def verifyIfInstanceActive(
+      stateStoreProviderId: StateStoreProviderId,
+      executorId: String): Boolean = {
+    rpcEndpointRef.askSync[Boolean](VerifyIfInstanceActive(stateStoreProviderId, executorId))
   }
 
   /** Get the location of the state store */
-  private[state] def getLocation(storeId: StateStoreId): Option[String] = {
-    rpcEndpointRef.askWithRetry[Option[String]](GetLocation(storeId))
+  private[state] def getLocation(stateStoreProviderId: StateStoreProviderId): Option[String] = {
+    rpcEndpointRef.askSync[Option[String]](GetLocation(stateStoreProviderId))
   }
 
-  /** Deactivate instances related to a set of operator */
-  private[state] def deactivateInstances(storeRootLocation: String): Unit = {
-    rpcEndpointRef.askWithRetry[Boolean](DeactivateInstances(storeRootLocation))
+  /** Deactivate instances related to a query */
+  private[sql] def deactivateInstances(runId: UUID): Unit = {
+    rpcEndpointRef.askSync[Boolean](DeactivateInstances(runId))
   }
 
   private[state] def stop(): Unit = {
-    rpcEndpointRef.askWithRetry[Boolean](StopCoordinator)
+    rpcEndpointRef.askSync[Boolean](StopCoordinator)
   }
 }
 
@@ -111,11 +118,13 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
  * Class for coordinating instances of [[StateStore]]s loaded in executors across the cluster,
  * and get their locations for job scheduling.
  */
-private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
-  private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
+private class StateStoreCoordinator(override val rpcEnv: RpcEnv)
+    extends ThreadSafeRpcEndpoint with Logging {
+  private val instances = new mutable.HashMap[StateStoreProviderId, ExecutorCacheTaskLocation]
 
   override def receive: PartialFunction[Any, Unit] = {
     case ReportActiveInstance(id, host, executorId) =>
+      logDebug(s"Reported state store $id is active at $executorId")
       instances.put(id, ExecutorCacheTaskLocation(host, executorId))
   }
 
@@ -125,19 +134,25 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends ThreadS
         case Some(location) => location.executorId == execId
         case None => false
       }
+      logDebug(s"Verified that state store $id is active: $response")
       context.reply(response)
 
     case GetLocation(id) =>
-      context.reply(instances.get(id).map(_.toString))
+      val executorId = instances.get(id).map(_.toString)
+      logDebug(s"Got location of the state store $id: $executorId")
+      context.reply(executorId)
 
-    case DeactivateInstances(loc) =>
+    case DeactivateInstances(runId) =>
       val storeIdsToRemove =
-        instances.keys.filter(_.checkpointLocation == loc).toSeq
+        instances.keys.filter(_.queryRunId == runId).toSeq
       instances --= storeIdsToRemove
+      logDebug(s"Deactivating instances related to checkpoint location $runId: " +
+        storeIdsToRemove.mkString(", "))
       context.reply(true)
 
     case StopCoordinator =>
       stop() // Stop before replying to ensure that endpoint name has been deregistered
+      logInfo("StateStoreCoordinator stopped")
       context.reply(true)
   }
 }

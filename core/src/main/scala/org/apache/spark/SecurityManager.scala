@@ -29,6 +29,7 @@ import org.apache.hadoop.io.Text
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.network.sasl.SecretKeyHolder
 import org.apache.spark.util.Utils
 
@@ -181,7 +182,9 @@ import org.apache.spark.util.Utils
  *  setting `spark.ssl.useNodeLocalConf` to `true`.
  */
 
-private[spark] class SecurityManager(sparkConf: SparkConf)
+private[spark] class SecurityManager(
+    sparkConf: SparkConf,
+    val ioEncryptionKey: Option[Array[Byte]] = None)
   extends Logging with SecretKeyHolder {
 
   import SecurityManager._
@@ -189,7 +192,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   // allow all users/groups to have view/modify permissions
   private val WILDCARD_ACL = "*"
 
-  private val authOn = sparkConf.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
+  private val authOn = sparkConf.get(NETWORK_AUTH_ENABLED)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
   private var aclsOn =
     sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
@@ -282,7 +285,10 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       }: TrustManager
     })
 
-    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
+    require(fileServerSSLOptions.protocol.isDefined,
+      "spark.ssl.protocol is required when enabling SSL connections.")
+
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.get)
     sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
 
     val hostVerifier = new HostnameVerifier {
@@ -408,6 +414,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     logInfo("Changing acls enabled to: " + aclsOn)
   }
 
+  def getIOEncryptionKey(): Option[Array[Byte]] = ioEncryptionKey
+
   /**
    * Generates or looks up the secret key.
    *
@@ -509,11 +517,11 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
   def isAuthenticationEnabled(): Boolean = authOn
 
   /**
-   * Checks whether SASL encryption should be enabled.
-   * @return Whether to enable SASL encryption when connecting to services that support it.
+   * Checks whether network encryption should be enabled.
+   * @return Whether to enable encryption when connecting to services that support it.
    */
-  def isSaslEncryptionEnabled(): Boolean = {
-    sparkConf.getBoolean("spark.authenticate.enableSaslEncryption", false)
+  def isEncryptionEnabled(): Boolean = {
+    sparkConf.get(NETWORK_ENCRYPTION_ENABLED) || sparkConf.get(SASL_ENCRYPTION_ENABLED)
   }
 
   /**
@@ -551,4 +559,5 @@ private[spark] object SecurityManager {
 
   // key used to store the spark secret in the Hadoop UGI
   val SECRET_LOOKUP_KEY = "sparkCookie"
+
 }

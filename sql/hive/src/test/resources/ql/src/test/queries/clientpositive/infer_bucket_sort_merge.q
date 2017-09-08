@@ -1,7 +1,7 @@
 set hive.exec.infer.bucket.sort=true;
 set hive.exec.infer.bucket.sort.num.buckets.power.two=true;
 set hive.merge.mapredfiles=true;
-set mapred.reduce.tasks=2;
+set mapreduce.job.reduces=2;
 
 -- This tests inferring how data is bucketed/sorted from the operators in the reducer
 -- and populating that information in partitions' metadata.  In particular, those cases

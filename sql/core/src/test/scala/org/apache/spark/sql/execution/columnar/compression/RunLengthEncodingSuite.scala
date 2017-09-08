@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.columnar.compression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.types.AtomicType
@@ -80,7 +80,7 @@ class RunLengthEncodingSuite extends SparkFunSuite {
       buffer.rewind().position(headerSize + 4)
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
-      val mutableRow = new GenericMutableRow(1)
+      val mutableRow = new GenericInternalRow(1)
 
       if (inputSeq.nonEmpty) {
         inputSeq.foreach { i =>

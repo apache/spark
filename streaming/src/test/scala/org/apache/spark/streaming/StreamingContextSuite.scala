@@ -18,6 +18,8 @@
 package org.apache.spark.streaming
 
 import java.io.{File, NotSerializableException}
+import java.util.Locale
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,8 +27,8 @@ import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
@@ -40,7 +42,7 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
 
-class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
+class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
 
   val master = "local[2]"
   val appName = this.getClass.getSimpleName
@@ -404,6 +406,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // test whether awaitTermination() does not exit if not time is given
     val exception = intercept[Exception] {
+      // Necessary to make failAfter interrupt awaitTermination() in ScalaTest 3.x
+      implicit val signaler: Signaler = ThreadSignaler
       failAfter(1000 millis) {
         ssc.awaitTermination()
         throw new Exception("Did not wait for stop")
@@ -744,7 +748,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
         val ex = intercept[IllegalStateException] {
           body
         }
-        assert(ex.getMessage.toLowerCase().contains(expectedErrorMsg))
+        assert(ex.getMessage.toLowerCase(Locale.ROOT).contains(expectedErrorMsg))
       }
     }
 
@@ -804,6 +808,36 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // Throw the exception if crash
     ssc.awaitTerminationOrTimeout(1)
     ssc.stop()
+  }
+
+  test("SPARK-18560 Receiver data should be deserialized properly.") {
+    // Start a two nodes cluster, so receiver will use one node, and Spark jobs will use the
+    // other one. Then Spark jobs need to fetch remote blocks and it will trigger SPARK-18560.
+    val conf = new SparkConf().setMaster("local-cluster[2,1,1024]").setAppName(appName)
+    ssc = new StreamingContext(conf, Milliseconds(100))
+    val input = ssc.receiverStream(new TestReceiver)
+    val latch = new CountDownLatch(1)
+    @volatile var stopping = false
+    input.count().foreachRDD { rdd =>
+      // Make sure we can read from BlockRDD
+      if (rdd.collect().headOption.getOrElse(0L) > 0 && !stopping) {
+        // Stop StreamingContext to unblock "awaitTerminationOrTimeout"
+        stopping = true
+        new Thread() {
+          setDaemon(true)
+          override def run(): Unit = {
+            ssc.stop(stopSparkContext = true, stopGracefully = false)
+            latch.countDown()
+          }
+        }.start()
+      }
+    }
+    ssc.start()
+    ssc.awaitTerminationOrTimeout(60000)
+    // Wait until `ssc.top` returns. Otherwise, we may finish this test too fast and leak an active
+    // SparkContext. Note: the stop codes in `after` will just do nothing if `ssc.stop` in this test
+    // is running.
+    assert(latch.await(60, TimeUnit.SECONDS))
   }
 
   def addInputStream(s: StreamingContext): DStream[Int] = {

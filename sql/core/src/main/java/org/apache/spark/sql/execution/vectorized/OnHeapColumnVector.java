@@ -20,7 +20,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 
@@ -28,10 +27,32 @@ import org.apache.spark.unsafe.Platform;
  * A column backed by an in memory JVM array. This stores the NULLs as a byte per value
  * and a java array for the values.
  */
-public final class OnHeapColumnVector extends ColumnVector {
+public final class OnHeapColumnVector extends WritableColumnVector {
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
+  /**
+   * Allocates columns to store elements of each field of the schema on heap.
+   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
+   * in number of elements, not number of bytes.
+   */
+  public static OnHeapColumnVector[] allocateColumns(int capacity, StructType schema) {
+    return allocateColumns(capacity, schema.fields());
+  }
+
+  /**
+   * Allocates columns to store elements of each field on heap.
+   * Capacity is the initial capacity of the vector and it will grow as necessary. Capacity is
+   * in number of elements, not number of bytes.
+   */
+  public static OnHeapColumnVector[] allocateColumns(int capacity, StructField[] fields) {
+    OnHeapColumnVector[] vectors = new OnHeapColumnVector[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      vectors[i] = new OnHeapColumnVector(capacity, fields[i].dataType());
+    }
+    return vectors;
+  }
 
   // The data stored in these arrays need to maintain binary compatible. We can
   // directly pass this buffer to external components.
@@ -51,8 +72,9 @@ public final class OnHeapColumnVector extends ColumnVector {
   private int[] arrayLengths;
   private int[] arrayOffsets;
 
-  protected OnHeapColumnVector(int capacity, DataType type) {
-    super(capacity, type, MemoryMode.ON_HEAP);
+  public OnHeapColumnVector(int capacity, DataType type) {
+    super(capacity, type);
+
     reserveInternal(capacity);
     reset();
   }
@@ -130,6 +152,16 @@ public final class OnHeapColumnVector extends ColumnVector {
     return byteData[rowId] == 1;
   }
 
+  @Override
+  public boolean[] getBooleans(int rowId, int count) {
+    assert(dictionary == null);
+    boolean[] array = new boolean[count];
+    for (int i = 0; i < count; ++i) {
+      array[i] = (byteData[rowId + i] == 1);
+    }
+   return array;
+  }
+
   //
 
   //
@@ -162,6 +194,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public byte[] getBytes(int rowId, int count) {
+    assert(dictionary == null);
+    byte[] array = new byte[count];
+    System.arraycopy(byteData, rowId, array, 0, count);
+    return array;
+  }
+
   //
   // APIs dealing with Shorts
   //
@@ -190,6 +230,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return (short) dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public short[] getShorts(int rowId, int count) {
+    assert(dictionary == null);
+    short[] array = new short[count];
+    System.arraycopy(shortData, rowId, array, 0, count);
+    return array;
   }
 
 
@@ -232,6 +280,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToInt(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public int[] getInts(int rowId, int count) {
+    assert(dictionary == null);
+    int[] array = new int[count];
+    System.arraycopy(intData, rowId, array, 0, count);
+    return array;
   }
 
   /**
@@ -286,6 +342,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public long[] getLongs(int rowId, int count) {
+    assert(dictionary == null);
+    long[] array = new long[count];
+    System.arraycopy(longData, rowId, array, 0, count);
+    return array;
+  }
+
   //
   // APIs dealing with floats
   //
@@ -323,6 +387,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToFloat(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public float[] getFloats(int rowId, int count) {
+    assert(dictionary == null);
+    float[] array = new float[count];
+    System.arraycopy(floatData, rowId, array, 0, count);
+    return array;
   }
 
   //
@@ -364,6 +436,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     } else {
       return dictionary.decodeToDouble(dictionaryIds.getDictId(rowId));
     }
+  }
+
+  @Override
+  public double[] getDoubles(int rowId, int count) {
+    assert(dictionary == null);
+    double[] array = new double[count];
+    System.arraycopy(doubleData, rowId, array, 0, count);
+    return array;
   }
 
   //
@@ -410,53 +490,53 @@ public final class OnHeapColumnVector extends ColumnVector {
       int[] newLengths = new int[newCapacity];
       int[] newOffsets = new int[newCapacity];
       if (this.arrayLengths != null) {
-        System.arraycopy(this.arrayLengths, 0, newLengths, 0, elementsAppended);
-        System.arraycopy(this.arrayOffsets, 0, newOffsets, 0, elementsAppended);
+        System.arraycopy(this.arrayLengths, 0, newLengths, 0, capacity);
+        System.arraycopy(this.arrayOffsets, 0, newOffsets, 0, capacity);
       }
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
     } else if (type instanceof BooleanType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
-        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, capacity);
         byteData = newData;
       }
     } else if (type instanceof ByteType) {
       if (byteData == null || byteData.length < newCapacity) {
         byte[] newData = new byte[newCapacity];
-        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, capacity);
         byteData = newData;
       }
     } else if (type instanceof ShortType) {
       if (shortData == null || shortData.length < newCapacity) {
         short[] newData = new short[newCapacity];
-        if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
+        if (shortData != null) System.arraycopy(shortData, 0, newData, 0, capacity);
         shortData = newData;
       }
     } else if (type instanceof IntegerType || type instanceof DateType ||
       DecimalType.is32BitDecimalType(type)) {
       if (intData == null || intData.length < newCapacity) {
         int[] newData = new int[newCapacity];
-        if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
+        if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity);
         intData = newData;
       }
     } else if (type instanceof LongType || type instanceof TimestampType ||
         DecimalType.is64BitDecimalType(type)) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
-        if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
+        if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);
         longData = newData;
       }
     } else if (type instanceof FloatType) {
       if (floatData == null || floatData.length < newCapacity) {
         float[] newData = new float[newCapacity];
-        if (floatData != null) System.arraycopy(floatData, 0, newData, 0, elementsAppended);
+        if (floatData != null) System.arraycopy(floatData, 0, newData, 0, capacity);
         floatData = newData;
       }
     } else if (type instanceof DoubleType) {
       if (doubleData == null || doubleData.length < newCapacity) {
         double[] newData = new double[newCapacity];
-        if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, elementsAppended);
+        if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, capacity);
         doubleData = newData;
       }
     } else if (resultStruct != null) {
@@ -466,9 +546,14 @@ public final class OnHeapColumnVector extends ColumnVector {
     }
 
     byte[] newNulls = new byte[newCapacity];
-    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, elementsAppended);
+    if (nulls != null) System.arraycopy(nulls, 0, newNulls, 0, capacity);
     nulls = newNulls;
 
     capacity = newCapacity;
+  }
+
+  @Override
+  protected OnHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+    return new OnHeapColumnVector(capacity, type);
   }
 }

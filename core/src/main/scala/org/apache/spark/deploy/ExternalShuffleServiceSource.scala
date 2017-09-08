@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 import javax.annotation.concurrent.ThreadSafe
 
-import com.codahale.metrics.{Gauge, MetricRegistry}
+import com.codahale.metrics.MetricRegistry
 
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.network.shuffle.ExternalShuffleBlockHandler

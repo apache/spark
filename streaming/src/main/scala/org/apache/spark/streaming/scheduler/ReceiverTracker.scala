@@ -165,12 +165,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
   /** Stop the receiver execution thread. */
   def stop(graceful: Boolean): Unit = synchronized {
-    if (isTrackerStarted) {
-      // First, stop the receivers
-      trackerState = Stopping
+    val isStarted: Boolean = isTrackerStarted
+    trackerState = Stopping
+    if (isStarted) {
       if (!skipReceiverLaunch) {
-        // Send the stop signal to all the receivers
-        endpoint.askWithRetry[Boolean](StopAllReceivers)
+        // First, stop the receivers. Send the stop signal to all the receivers
+        endpoint.askSync[Boolean](StopAllReceivers)
 
         // Wait for the Spark job that runs the receivers to be over
         // That is, for the receivers to quit gracefully.
@@ -183,7 +183,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
 
         // Check if all the receivers have been deregistered or not
-        val receivers = endpoint.askWithRetry[Seq[Int]](AllReceiverIds)
+        val receivers = endpoint.askSync[Seq[Int]](AllReceiverIds)
         if (receivers.nonEmpty) {
           logWarning("Not all of the receivers have deregistered, " + receivers)
         } else {
@@ -194,10 +194,13 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Finally, stop the endpoint
       ssc.env.rpcEnv.stop(endpoint)
       endpoint = null
-      receivedBlockTracker.stop()
-      logInfo("ReceiverTracker stopped")
-      trackerState = Stopped
     }
+
+    // `ReceivedBlockTracker` is open when this instance is created. We should
+    // close this even if this `ReceiverTracker` is not started.
+    receivedBlockTracker.stop()
+    logInfo("ReceiverTracker stopped")
+    trackerState = Stopped
   }
 
   /** Allocate all unallocated blocks to the given batch. */
@@ -242,7 +245,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    */
   def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
     if (isTrackerStarted) {
-      endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
+      endpoint.askSync[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
         _.runningExecutor.map {
           _.executorId
         }

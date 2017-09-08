@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.sql.Timestamp
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.FileSystem
@@ -40,7 +41,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       val tmpDir = Files.createTempDir()
       // create the table for test
       sql(s"CREATE TABLE table_with_partition(key int,value string) " +
-        s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
+        s"PARTITIONED by (ds string) location '${tmpDir.toURI}' ")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
         "SELECT key,value FROM testData")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
@@ -69,81 +70,19 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
     }
   }
 
-  test("SPARK-13709: reading partitioned Avro table with nested schema") {
-    withTempDir { dir =>
-      val path = dir.getCanonicalPath
-      val tableName = "spark_13709"
-      val tempTableName = "spark_13709_temp"
+  test("SPARK-21739: Cast expression should initialize timezoneId") {
+    withTable("table_with_timestamp_partition") {
+      sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED BY (ts TIMESTAMP)")
+      sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
+        "PARTITION (ts = '2010-01-01 00:00:00.000') VALUES (1)")
 
-      new File(path, tableName).mkdir()
-      new File(path, tempTableName).mkdir()
+      // test for Cast expression in TableReader
+      checkAnswer(sql("SELECT * FROM table_with_timestamp_partition"),
+        Seq(Row(1, Timestamp.valueOf("2010-01-01 00:00:00.000"))))
 
-      val avroSchema =
-        """{
-          |  "name": "test_record",
-          |  "type": "record",
-          |  "fields": [ {
-          |    "name": "f0",
-          |    "type": "int"
-          |  }, {
-          |    "name": "f1",
-          |    "type": {
-          |      "type": "record",
-          |      "name": "inner",
-          |      "fields": [ {
-          |        "name": "f10",
-          |        "type": "int"
-          |      }, {
-          |        "name": "f11",
-          |        "type": "double"
-          |      } ]
-          |    }
-          |  } ]
-          |}
-        """.stripMargin
-
-      withTable(tableName, tempTableName) {
-        // Creates the external partitioned Avro table to be tested.
-        sql(
-          s"""CREATE EXTERNAL TABLE $tableName
-             |PARTITIONED BY (ds STRING)
-             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-             |STORED AS
-             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
-             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
-             |LOCATION '$path/$tableName'
-             |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
-           """.stripMargin
-        )
-
-        // Creates an temporary Avro table used to prepare testing Avro file.
-        sql(
-          s"""CREATE EXTERNAL TABLE $tempTableName
-             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
-             |STORED AS
-             |  INPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
-             |  OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
-             |LOCATION '$path/$tempTableName'
-             |TBLPROPERTIES ('avro.schema.literal' = '$avroSchema')
-           """.stripMargin
-        )
-
-        // Generates Avro data.
-        sql(s"INSERT OVERWRITE TABLE $tempTableName SELECT 1, STRUCT(2, 2.5)")
-
-        // Adds generated Avro data as a new partition to the testing table.
-        sql(s"ALTER TABLE $tableName ADD PARTITION (ds = 'foo') LOCATION '$path/$tempTableName'")
-
-        // The following query fails before SPARK-13709 is fixed. This is because when reading data
-        // from table partitions, Avro deserializer needs the Avro schema, which is defined in
-        // table property "avro.schema.literal". However, we only initializes the deserializer using
-        // partition properties, which doesn't include the wanted property entry. Merging two sets
-        // of properties solves the problem.
-        checkAnswer(
-          sql(s"SELECT * FROM $tableName"),
-          Row(1, Row(2, 2.5D), "foo")
-        )
-      }
+      // test for Cast expression in HiveTableScanExec
+      checkAnswer(sql("SELECT value FROM table_with_timestamp_partition " +
+        "WHERE ts = '2010-01-01 00:00:00.000'"), Row(1))
     }
   }
 }

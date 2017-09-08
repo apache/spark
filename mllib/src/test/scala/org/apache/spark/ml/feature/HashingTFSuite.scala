@@ -29,14 +29,15 @@ import org.apache.spark.util.Utils
 
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
+  import testImplicits._
+  import HashingTFSuite.murmur3FeatureIdx
+
   test("params") {
     ParamsSuite.checkParams(new HashingTF)
   }
 
   test("hashingTF") {
-    val df = spark.createDataFrame(Seq(
-      (0, "a a b b c d".split(" ").toSeq)
-    )).toDF("id", "words")
+    val df = Seq((0, "a a b b c d".split(" ").toSeq)).toDF("id", "words")
     val n = 100
     val hashingTF = new HashingTF()
       .setInputCol("words")
@@ -54,9 +55,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("applying binary term freqs") {
-    val df = spark.createDataFrame(Seq(
-      (0, "a a b c c c".split(" ").toSeq)
-    )).toDF("id", "words")
+    val df = Seq((0, "a a b c c c".split(" ").toSeq)).toDF("id", "words")
     val n = 100
     val hashingTF = new HashingTF()
         .setInputCol("words")
@@ -79,7 +78,12 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     testDefaultReadWrite(t)
   }
 
-  private def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
+}
+
+object HashingTFSuite {
+
+  private[feature] def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
     Utils.nonNegativeMod(MLlibHashingTF.murmur3Hash(term), numFeatures)
   }
+
 }

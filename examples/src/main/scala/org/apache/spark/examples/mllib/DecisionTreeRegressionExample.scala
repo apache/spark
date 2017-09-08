@@ -61,6 +61,8 @@ object DecisionTreeRegressionExample {
     model.save(sc, "target/tmp/myDecisionTreeRegressionModel")
     val sameModel = DecisionTreeModel.load(sc, "target/tmp/myDecisionTreeRegressionModel")
     // $example off$
+
+    sc.stop()
   }
 }
 // scalastyle:on println

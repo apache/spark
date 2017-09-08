@@ -34,6 +34,7 @@ import org.apache.spark.sql.functions._
 private[r] class GaussianMixtureWrapper private (
     val pipeline: PipelineModel,
     val dim: Int,
+    val logLikelihood: Double,
     val isLoaded: Boolean = false) extends MLWritable {
 
   private val gmm: GaussianMixtureModel = pipeline.stages(1).asInstanceOf[GaussianMixtureModel]
@@ -68,10 +69,11 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       maxIter: Int,
       tol: Double): GaussianMixtureWrapper = {
 
-    val rFormulaModel = new RFormula()
+    val rFormula = new RFormula()
       .setFormula(formula)
       .setFeaturesCol("features")
-      .fit(data)
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
 
     // get feature names from output schema
     val schema = rFormulaModel.transform(data).schema
@@ -84,12 +86,16 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       .setK(k)
       .setMaxIter(maxIter)
       .setTol(tol)
+      .setFeaturesCol(rFormula.getFeaturesCol)
 
     val pipeline = new Pipeline()
       .setStages(Array(rFormulaModel, gm))
       .fit(data)
 
-    new GaussianMixtureWrapper(pipeline, dim)
+    val gmm: GaussianMixtureModel = pipeline.stages(1).asInstanceOf[GaussianMixtureModel]
+    val logLikelihood: Double = gmm.summary.logLikelihood
+
+    new GaussianMixtureWrapper(pipeline, dim, logLikelihood)
   }
 
   override def read: MLReader[GaussianMixtureWrapper] = new GaussianMixtureWrapperReader
@@ -103,7 +109,8 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       val pipelinePath = new Path(path, "pipeline").toString
 
       val rMetadata = ("class" -> instance.getClass.getName) ~
-        ("dim" -> instance.dim)
+        ("dim" -> instance.dim) ~
+        ("logLikelihood" -> instance.logLikelihood)
       val rMetadataJson: String = compact(render(rMetadata))
 
       sc.parallelize(Seq(rMetadataJson), 1).saveAsTextFile(rMetadataPath)
@@ -122,7 +129,8 @@ private[r] object GaussianMixtureWrapper extends MLReadable[GaussianMixtureWrapp
       val rMetadataStr = sc.textFile(rMetadataPath, 1).first()
       val rMetadata = parse(rMetadataStr)
       val dim = (rMetadata \ "dim").extract[Int]
-      new GaussianMixtureWrapper(pipeline, dim, isLoaded = true)
+      val logLikelihood = (rMetadata \ "logLikelihood").extract[Double]
+      new GaussianMixtureWrapper(pipeline, dim, logLikelihood, isLoaded = true)
     }
   }
 }

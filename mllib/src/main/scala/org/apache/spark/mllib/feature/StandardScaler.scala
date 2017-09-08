@@ -32,7 +32,7 @@ import org.apache.spark.rdd.RDD
  * which is computed as the square root of the unbiased sample variance.
  *
  * @param withMean False by default. Centers the data with mean before scaling. It will build a
- *                 dense output, so this does not work on sparse input and will raise an exception.
+ *                 dense output, so take care when applying to sparse input.
  * @param withStd True by default. Scales the data to unit standard deviation.
  */
 @Since("1.1.0")
@@ -139,26 +139,27 @@ class StandardScalerModel @Since("1.3.0") (
       // the member variables are accessed, `invokespecial` will be called which is expensive.
       // This can be avoid by having a local reference of `shift`.
       val localShift = shift
-      vector match {
-        case DenseVector(vs) =>
-          val values = vs.clone()
-          val size = values.length
-          if (withStd) {
-            var i = 0
-            while (i < size) {
-              values(i) = if (std(i) != 0.0) (values(i) - localShift(i)) * (1.0 / std(i)) else 0.0
-              i += 1
-            }
-          } else {
-            var i = 0
-            while (i < size) {
-              values(i) -= localShift(i)
-              i += 1
-            }
-          }
-          Vectors.dense(values)
-        case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+      // Must have a copy of the values since it will be modified in place
+      val values = vector match {
+        // specially handle DenseVector because its toArray does not clone already
+        case d: DenseVector => d.values.clone()
+        case v: Vector => v.toArray
       }
+      val size = values.length
+      if (withStd) {
+        var i = 0
+        while (i < size) {
+          values(i) = if (std(i) != 0.0) (values(i) - localShift(i)) * (1.0 / std(i)) else 0.0
+          i += 1
+        }
+      } else {
+        var i = 0
+        while (i < size) {
+          values(i) -= localShift(i)
+          i += 1
+        }
+      }
+      Vectors.dense(values)
     } else if (withStd) {
       vector match {
         case DenseVector(vs) =>

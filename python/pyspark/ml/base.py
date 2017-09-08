@@ -17,9 +17,14 @@
 
 from abc import ABCMeta, abstractmethod
 
+import copy
+
 from pyspark import since
 from pyspark.ml.param import Params
+from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.sql.functions import udf
+from pyspark.sql.types import StructField, StructType, DoubleType
 
 
 @inherit_doc
@@ -116,3 +121,54 @@ class Model(Transformer):
     """
 
     __metaclass__ = ABCMeta
+
+
+@inherit_doc
+class UnaryTransformer(HasInputCol, HasOutputCol, Transformer):
+    """
+    Abstract class for transformers that take one input column, apply transformation,
+    and output the result as a new column.
+
+    .. versionadded:: 2.3.0
+    """
+
+    @abstractmethod
+    def createTransformFunc(self):
+        """
+        Creates the transform function using the given param map. The input param map already takes
+        account of the embedded param map. So the param values should be determined
+        solely by the input param map.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def outputDataType(self):
+        """
+        Returns the data type of the output column.
+        """
+        raise NotImplementedError()
+
+    @abstractmethod
+    def validateInputType(self, inputType):
+        """
+        Validates the input type. Throw an exception if it is invalid.
+        """
+        raise NotImplementedError()
+
+    def transformSchema(self, schema):
+        inputType = schema[self.getInputCol()].dataType
+        self.validateInputType(inputType)
+        if self.getOutputCol() in schema.names:
+            raise ValueError("Output column %s already exists." % self.getOutputCol())
+        outputFields = copy.copy(schema.fields)
+        outputFields.append(StructField(self.getOutputCol(),
+                                        self.outputDataType(),
+                                        nullable=False))
+        return StructType(outputFields)
+
+    def _transform(self, dataset):
+        self.transformSchema(dataset.schema)
+        transformUDF = udf(self.createTransformFunc(), self.outputDataType())
+        transformedDataset = dataset.withColumn(self.getOutputCol(),
+                                                transformUDF(dataset[self.getInputCol()]))
+        return transformedDataset

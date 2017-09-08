@@ -57,7 +57,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
   }
 
   test("toArray()") {
-    val empty = ByteBuffer.wrap(Array[Byte]())
+    val empty = ByteBuffer.wrap(Array.empty[Byte])
     val bytes = ByteBuffer.wrap(Array.tabulate(8)(_.toByte))
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(bytes, bytes, empty))
     assert(chunkedByteBuffer.toArray === bytes.array() ++ bytes.array())
@@ -74,7 +74,7 @@ class ChunkedByteBufferSuite extends SparkFunSuite {
   }
 
   test("toInputStream()") {
-    val empty = ByteBuffer.wrap(Array[Byte]())
+    val empty = ByteBuffer.wrap(Array.empty[Byte])
     val bytes1 = ByteBuffer.wrap(Array.tabulate(256)(_.toByte))
     val bytes2 = ByteBuffer.wrap(Array.tabulate(128)(_.toByte))
     val chunkedByteBuffer = new ChunkedByteBuffer(Array(empty, bytes1, bytes2))

@@ -30,7 +30,7 @@ import org.apache.spark.annotation.Since
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
- * Note: Users should not implement this interface.
+ * @note Users should not implement this interface.
  */
 @Since("2.0.0")
 sealed trait Vector extends Serializable {
@@ -136,7 +136,21 @@ sealed trait Vector extends Serializable {
    * Converts this vector to a sparse vector with all explicit zeros removed.
    */
   @Since("2.0.0")
-  def toSparse: SparseVector
+  def toSparse: SparseVector = toSparseWithSize(numNonzeros)
+
+  /**
+   * Converts this vector to a sparse vector with all explicit zeros removed when the size is known.
+   * This method is used to avoid re-computing the number of non-zero elements when it is
+   * already known. This method should only be called after computing the number of non-zero
+   * elements via [[numNonzeros]]. e.g.
+   * {{{
+   *   val nnz = numNonzeros
+   *   val sv = toSparse(nnz)
+   * }}}
+   *
+   * If `nnz` is under-specified, a [[java.lang.ArrayIndexOutOfBoundsException]] is thrown.
+   */
+  private[linalg] def toSparseWithSize(nnz: Int): SparseVector
 
   /**
    * Converts this vector to a dense vector.
@@ -152,7 +166,7 @@ sealed trait Vector extends Serializable {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
-      toSparse
+      toSparseWithSize(nnz)
     } else {
       toDense
     }
@@ -169,7 +183,7 @@ sealed trait Vector extends Serializable {
 /**
  * Factory methods for [[org.apache.spark.ml.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
+ * `scala.collection.immutable.Vector` by default.
  */
 @Since("2.0.0")
 object Vectors {
@@ -208,17 +222,7 @@ object Vectors {
    */
   @Since("2.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
-    require(size > 0, "The size of the requested sparse vector must be greater than 0.")
-
     val (indices, values) = elements.sortBy(_._1).unzip
-    var prev = -1
-    indices.foreach { i =>
-      require(prev < i, s"Found duplicate indices: $i.")
-      prev = i
-    }
-    require(prev < size, s"You may not write an element to index $prev because the declared " +
-      s"size of your vector is $size")
-
     new SparseVector(size, indices.toArray, values.toArray)
   }
 
@@ -505,8 +509,7 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
     nnz
   }
 
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  private[linalg] override def toSparseWithSize(nnz: Int): SparseVector = {
     val ii = new Array[Int](nnz)
     val vv = new Array[Double](nnz)
     var k = 0
@@ -560,11 +563,25 @@ class SparseVector @Since("2.0.0") (
     @Since("2.0.0") val indices: Array[Int],
     @Since("2.0.0") val values: Array[Double]) extends Vector {
 
-  require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
-    s" indices match the dimension of the values. You provided ${indices.length} indices and " +
-    s" ${values.length} values.")
-  require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
-    s"which exceeds the specified vector size ${size}.")
+  // validate the data
+  {
+    require(size >= 0, "The size of the requested sparse vector must be greater than 0.")
+    require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
+      s" indices match the dimension of the values. You provided ${indices.length} indices and " +
+      s" ${values.length} values.")
+    require(indices.length <= size, s"You provided ${indices.length} indices and values, " +
+      s"which exceeds the specified vector size ${size}.")
+
+    if (indices.nonEmpty) {
+      require(indices(0) >= 0, s"Found negative index: ${indices(0)}.")
+    }
+    var prev = -1
+    indices.foreach { i =>
+      require(prev < i, s"Index $i follows $prev and is not strictly increasing")
+      prev = i
+    }
+    require(prev < size, s"Index $prev out of bounds for vector of size $size")
+  }
 
   override def toString: String =
     s"($size,${indices.mkString("[", ",", "]")},${values.mkString("[", ",", "]")})"
@@ -631,8 +648,7 @@ class SparseVector @Since("2.0.0") (
     nnz
   }
 
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  private[linalg] override def toSparseWithSize(nnz: Int): SparseVector = {
     if (nnz == numActives) {
       this
     } else {
@@ -653,6 +669,8 @@ class SparseVector @Since("2.0.0") (
   override def argmax: Int = {
     if (size == 0) {
       -1
+    } else if (numActives == 0) {
+      0
     } else {
       // Find the max active entry.
       var maxIdx = indices(0)

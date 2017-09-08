@@ -20,6 +20,7 @@ package org.apache.spark.ml.param.shared
 import java.io.PrintWriter
 
 import scala.reflect.ClassTag
+import scala.xml.Utility
 
 /**
  * Code generator for shared params (sharedParams.scala). Run under the Spark folder with
@@ -46,14 +47,16 @@ private[shared] object SharedParamsCodeGen {
         Some("\"probability\"")),
       ParamDesc[String]("varianceCol", "Column name for the biased sample variance of prediction"),
       ParamDesc[Double]("threshold",
-        "threshold in binary classification prediction, in range [0, 1]", Some("0.5"),
-        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false),
+        "threshold in binary classification prediction, in range [0, 1]",
+        isValid = "ParamValidators.inRange(0, 1)", finalMethods = false, finalFields = false),
       ParamDesc[Array[Double]]("thresholds", "Thresholds in multi-class classification" +
         " to adjust the probability of predicting each class." +
-        " Array must have length equal to the number of classes, with values >= 0." +
+        " Array must have length equal to the number of classes, with values > 0" +
+        " excepting that at most one value may be 0." +
         " The class with largest value p/t is predicted, where p is the original probability" +
-        " of that class and t is the class' threshold",
-        isValid = "(t: Array[Double]) => t.forall(_ >= 0)", finalMethods = false),
+        " of that class and t is the class's threshold",
+        isValid = "(t: Array[Double]) => t.forall(_ >= 0) && t.count(_ == 0) <= 1",
+        finalMethods = false),
       ParamDesc[String]("inputCol", "input column name"),
       ParamDesc[Array[String]]("inputCols", "input column names"),
       ParamDesc[String]("outputCol", "output column name", Some("uid + \"__output\"")),
@@ -64,7 +67,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("handleInvalid", "how to handle invalid entries. Options are skip (which " +
         "will filter out rows with bad values), or error (which will throw an error). More " +
         "options may be added later",
-        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))"),
+        isValid = "ParamValidators.inArray(Array(\"skip\", \"error\"))", finalFields = false),
       ParamDesc[Boolean]("standardization", "whether to standardize the training features" +
         " before fitting the model", Some("true")),
       ParamDesc[Long]("seed", "random seed", Some("this.getClass.getName.hashCode.toLong")),
@@ -74,11 +77,12 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Double]("tol", "the convergence tolerance for iterative algorithms (>= 0)",
         isValid = "ParamValidators.gtEq(0)"),
       ParamDesc[Double]("stepSize", "Step size to be used for each iteration of optimization (>" +
-        " 0)", isValid = "ParamValidators.gt(0)"),
+        " 0)", isValid = "ParamValidators.gt(0)", finalFields = false),
       ParamDesc[String]("weightCol", "weight column name. If this is not set or empty, we treat " +
         "all instance weights as 1.0"),
-      ParamDesc[String]("solver", "the solver algorithm for optimization. If this is not set or " +
-        "empty, default value is 'auto'", Some("\"auto\"")))
+      ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
+      ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"
@@ -93,7 +97,9 @@ private[shared] object SharedParamsCodeGen {
       doc: String,
       defaultValueStr: Option[String] = None,
       isValid: String = "",
-      finalMethods: Boolean = true) {
+      finalMethods: Boolean = true,
+      finalFields: Boolean = true,
+      isExpertParam: Boolean = false) {
 
     require(name.matches("[a-z][a-zA-Z0-9]*"), s"Param name $name is invalid.")
     require(doc.nonEmpty) // TODO: more rigorous on doc
@@ -151,11 +157,23 @@ private[shared] object SharedParamsCodeGen {
     } else {
       ""
     }
+    val groupStr = if (param.isExpertParam) {
+      Array("expertParam", "expertGetParam")
+    } else {
+      Array("param", "getParam")
+    }
     val methodStr = if (param.finalMethods) {
       "final def"
     } else {
       "def"
     }
+    val fieldStr = if (param.finalFields) {
+      "final val"
+    } else {
+      "val"
+    }
+
+    val htmlCompliantDoc = Utility.escape(doc)
 
     s"""
       |/**
@@ -164,12 +182,12 @@ private[shared] object SharedParamsCodeGen {
       |private[ml] trait Has$Name extends Params {
       |
       |  /**
-      |   * Param for $doc.
-      |   * @group param
+      |   * Param for $htmlCompliantDoc.
+      |   * @group ${groupStr(0)}
       |   */
-      |  final val $name: $Param = new $Param(this, "$name", "$doc"$isValid)
+      |  $fieldStr $name: $Param = new $Param(this, "$name", "$doc"$isValid)
       |$setDefault
-      |  /** @group getParam */
+      |  /** @group ${groupStr(1)} */
       |  $methodStr get$Name: $T = $$($name)
       |}
       |""".stripMargin

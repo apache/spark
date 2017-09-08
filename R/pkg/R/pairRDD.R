@@ -780,7 +780,7 @@ setMethod("cogroup",
 #' @noRd
 setMethod("sortByKey",
           signature(x = "RDD"),
-          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitions(x)) {
+          function(x, ascending = TRUE, numPartitions = SparkR:::getNumPartitionsRDD(x)) {
             rangeBounds <- list()
 
             if (numPartitions > 1) {
@@ -850,7 +850,7 @@ setMethod("sortByKey",
 #' @noRd
 setMethod("subtractByKey",
           signature(x = "RDD", other = "RDD"),
-          function(x, other, numPartitions = SparkR:::getNumPartitions(x)) {
+          function(x, other, numPartitions = SparkR:::getNumPartitionsRDD(x)) {
             filterFunction <- function(elem) {
               iters <- elem[[2]]
               (length(iters[[1]]) > 0) && (length(iters[[2]]) == 0)
@@ -917,19 +917,19 @@ setMethod("sampleByKey",
               len <- 0
 
               # mixing because the initial seeds are close to each other
-              runif(10)
+              stats::runif(10)
 
               for (elem in part) {
                 if (elem[[1]] %in% names(fractions)) {
                   frac <- as.numeric(fractions[which(elem[[1]] == names(fractions))])
                   if (withReplacement) {
-                    count <- rpois(1, frac)
+                    count <- stats::rpois(1, frac)
                     if (count > 0) {
                       res[ (len + 1) : (len + count) ] <- rep(list(elem), count)
                       len <- len + count
                     }
                   } else {
-                    if (runif(1) < frac) {
+                    if (stats::runif(1) < frac) {
                       len <- len + 1
                       res[[len]] <- elem
                     }

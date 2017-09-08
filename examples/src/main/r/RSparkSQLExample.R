@@ -15,10 +15,13 @@
 # limitations under the License.
 #
 
+# To run this example use
+# ./bin/spark-submit examples/src/main/r/RSparkSQLExample.R
+
 library(SparkR)
 
 # $example on:init_session$
-sparkR.session(appName = "MyApp", sparkConfig = list(spark.some.config.option = "some-value"))
+sparkR.session(appName = "R Spark SQL basic example", sparkConfig = list(spark.some.config.option = "some-value"))
 # $example off:init_session$
 
 
@@ -195,7 +198,7 @@ head(teenagers)
 # $example on:spark_hive$
 # enableHiveSupport defaults to TRUE
 sparkR.session(enableHiveSupport = TRUE)
-sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING) USING hive")
 sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
@@ -204,7 +207,11 @@ results <- collect(sql("FROM src SELECT key, value"))
 
 
 # $example on:jdbc_dataset$
+# Loading data from a JDBC source
 df <- read.jdbc("jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
+
+# Saving data to a JDBC source
+write.jdbc(df, "jdbc:postgresql:dbserver", "schema.tablename", user = "username", password = "password")
 # $example off:jdbc_dataset$
 
 # Stop the SparkSession now

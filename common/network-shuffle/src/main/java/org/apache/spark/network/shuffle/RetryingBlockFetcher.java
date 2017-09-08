@@ -57,14 +57,15 @@ public class RetryingBlockFetcher {
      * {@link org.apache.spark.network.client.TransportClientFactory} in order to fix connection
      * issues.
      */
-    void createAndStart(String[] blockIds, BlockFetchingListener listener) throws IOException;
+    void createAndStart(String[] blockIds, BlockFetchingListener listener)
+         throws IOException, InterruptedException;
   }
 
   /** Shared executor service used for waiting and retrying. */
   private static final ExecutorService executorService = Executors.newCachedThreadPool(
     NettyUtils.createThreadFactory("Block Fetch Retry"));
 
-  private final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
+  private static final Logger logger = LoggerFactory.getLogger(RetryingBlockFetcher.class);
 
   /** Used to initiate new Block Fetches on our remaining blocks. */
   private final BlockFetchStarter fetchStarter;
@@ -163,12 +164,9 @@ public class RetryingBlockFetcher {
     logger.info("Retrying fetch ({}/{}) for {} outstanding blocks after {} ms",
       retryCount, maxRetries, outstandingBlocksIds.size(), retryWaitTime);
 
-    executorService.submit(new Runnable() {
-      @Override
-      public void run() {
-        Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
-        fetchAllOutstanding();
-      }
+    executorService.submit(() -> {
+      Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
+      fetchAllOutstanding();
     });
   }
 

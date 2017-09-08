@@ -16,6 +16,9 @@
 #
 
 from abc import ABCMeta, abstractmethod
+import sys
+if sys.version >= '3':
+    xrange = range
 
 from pyspark import SparkContext
 from pyspark.sql import DataFrame
@@ -59,6 +62,32 @@ class JavaWrapper(object):
         java_args = [_py2java(sc, arg) for arg in args]
         return java_obj(*java_args)
 
+    @staticmethod
+    def _new_java_array(pylist, java_class):
+        """
+        Create a Java array of given java_class type. Useful for
+        calling a method with a Scala Array from Python with Py4J.
+
+        :param pylist:
+          Python list to convert to a Java Array.
+        :param java_class:
+          Java class to specify the type of Array. Should be in the
+          form of sc._gateway.jvm.* (sc is a valid Spark Context).
+        :return:
+          Java Array of converted pylist.
+
+        Example primitive Java classes:
+          - basestring -> sc._gateway.jvm.java.lang.String
+          - int -> sc._gateway.jvm.java.lang.Integer
+          - float -> sc._gateway.jvm.java.lang.Double
+          - bool -> sc._gateway.jvm.java.lang.Boolean
+        """
+        sc = SparkContext._active_spark_context
+        java_array = sc._gateway.new_array(java_class, len(pylist))
+        for i in xrange(len(pylist)):
+            java_array[i] = pylist[i]
+        return java_array
+
 
 @inherit_doc
 class JavaParams(JavaWrapper, Params):
@@ -71,9 +100,13 @@ class JavaParams(JavaWrapper, Params):
 
     __metaclass__ = ABCMeta
 
+    def __del__(self):
+        if SparkContext._active_spark_context:
+            SparkContext._active_spark_context._gateway.detach(self._java_obj)
+
     def _make_java_param_pair(self, param, value):
         """
-        Makes a Java parm pair.
+        Makes a Java param pair.
         """
         sc = SparkContext._active_spark_context
         param = self._resolveParam(param)
@@ -102,6 +135,20 @@ class JavaParams(JavaWrapper, Params):
                 paramMap.put([pair])
         return paramMap
 
+    def _create_params_from_java(self):
+        """
+        SPARK-10931: Temporary fix to create params that are defined in the Java obj but not here
+        """
+        java_params = list(self._java_obj.params())
+        from pyspark.ml.param import Param
+        for java_param in java_params:
+            java_param_name = java_param.name()
+            if not hasattr(self, java_param_name):
+                param = Param(self, java_param_name, java_param.doc())
+                setattr(param, "created_from_java_param", True)
+                setattr(self, java_param_name, param)
+                self._params = None  # need to reset so self.params will discover new params
+
     def _transfer_params_from_java(self):
         """
         Transforms the embedded params from the companion Java object.
@@ -114,6 +161,10 @@ class JavaParams(JavaWrapper, Params):
                 if self._java_obj.isSet(java_param):
                     value = _java2py(sc, self._java_obj.getOrDefault(java_param))
                     self._set(**{param.name: value})
+                # SPARK-10931: Temporary fix for params that have a default in Java
+                if self._java_obj.hasDefault(java_param) and not self.isDefined(param):
+                    value = _java2py(sc, self._java_obj.getDefault(java_param)).get()
+                    self._setDefault(**{param.name: value})
 
     def _transfer_param_map_from_java(self, javaParamMap):
         """
@@ -171,6 +222,11 @@ class JavaParams(JavaWrapper, Params):
             # Load information from java_stage to the instance.
             py_stage = py_type()
             py_stage._java_obj = java_stage
+
+            # SPARK-10931: Temporary fix so that persisted models would own params from Estimator
+            if issubclass(py_type, JavaModel):
+                py_stage._create_params_from_java()
+
             py_stage._resetUid(java_stage.uid())
             py_stage._transfer_params_from_java()
         elif hasattr(py_type, "_from_java"):
@@ -179,6 +235,25 @@ class JavaParams(JavaWrapper, Params):
             raise NotImplementedError("This Java stage cannot be loaded into Python currently: %r"
                                       % stage_name)
         return py_stage
+
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with the same uid and some
+        extra params. This implementation first calls Params.copy and
+        then make a copy of the companion Java pipeline component with
+        extra params. So both the Python wrapper and the Java pipeline
+        component get copied.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        that = super(JavaParams, self).copy(extra)
+        if self._java_obj is not None:
+            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
+            that._transfer_params_to_java()
+        return that
 
 
 @inherit_doc
@@ -211,7 +286,8 @@ class JavaEstimator(JavaParams, Estimator):
 
     def _fit(self, dataset):
         java_model = self._fit_java(dataset)
-        return self._create_model(java_model)
+        model = self._create_model(java_model)
+        return self._copyValues(model)
 
 
 @inherit_doc
@@ -255,22 +331,10 @@ class JavaModel(JavaTransformer, Model):
         """
         super(JavaModel, self).__init__(java_model)
         if java_model is not None:
+
+            # SPARK-10931: This is a temporary fix to allow models to own params
+            # from estimators. Eventually, these params should be in models through
+            # using common base classes between estimators and models.
+            self._create_params_from_java()
+
             self._resetUid(java_model.uid())
-
-    def copy(self, extra=None):
-        """
-        Creates a copy of this instance with the same uid and some
-        extra params. This implementation first calls Params.copy and
-        then make a copy of the companion Java model with extra params.
-        So both the Python wrapper and the Java model get copied.
-
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
-        """
-        if extra is None:
-            extra = dict()
-        that = super(JavaModel, self).copy(extra)
-        if self._java_obj is not None:
-            that._java_obj = self._java_obj.copy(self._empty_java_param_map())
-            that._transfer_params_to_java()
-        return that
