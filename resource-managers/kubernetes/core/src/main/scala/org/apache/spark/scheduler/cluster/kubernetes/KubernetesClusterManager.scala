@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.kubernetes.KubernetesExternalShuffleClientImpl
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 
@@ -132,12 +132,18 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
         executorInitContainerBootstrap,
         executorInitContainerSecretVolumePlugin,
         kubernetesShuffleManager)
+    val allocatorExecutor = ThreadUtils
+        .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
+    val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
+        "kubernetes-executor-requests")
     new KubernetesClusterSchedulerBackend(
-        sc.taskScheduler.asInstanceOf[TaskSchedulerImpl],
-        sc,
+        scheduler.asInstanceOf[TaskSchedulerImpl],
+        sc.env.rpcEnv,
         executorPodFactory,
         kubernetesShuffleManager,
-        kubernetesClient)
+        kubernetesClient,
+        allocatorExecutor,
+        requestExecutorsService)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
