@@ -20,10 +20,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.ConfigurationUtils
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.submitsteps._
+import org.apache.spark.deploy.kubernetes.submit.submitsteps.{BaseDriverConfigurationStep, DependencyResolutionStep, DriverAddressConfigurationStep, DriverConfigurationStep, DriverKubernetesCredentialsStep, InitContainerBootstrapStep, MountSecretsStep, MountSmallLocalFilesStep, PythonStep}
 import org.apache.spark.deploy.kubernetes.submit.submitsteps.initcontainer.InitContainerConfigurationStepsOrchestrator
 import org.apache.spark.launcher.SparkLauncher
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SystemClock, Utils}
 
 /**
  * Constructs the complete list of driver configuration steps to run to deploy the Spark driver.
@@ -97,7 +97,11 @@ private[spark] class DriverConfigurationStepsOrchestrator(
         mainClass,
         appArgs,
         submissionSparkConf)
-
+    val driverAddressStep = new DriverAddressConfigurationStep(
+        kubernetesResourceNamePrefix,
+        allDriverLabels,
+        submissionSparkConf,
+        new SystemClock)
     val kubernetesCredentialsStep = new DriverKubernetesCredentialsStep(
         submissionSparkConf, kubernetesResourceNamePrefix)
 
@@ -176,6 +180,7 @@ private[spark] class DriverConfigurationStepsOrchestrator(
 
     Seq(
       initialSubmissionStep,
+      driverAddressStep,
       kubernetesCredentialsStep,
       dependencyResolutionStep) ++
       submittedDependenciesBootstrapSteps ++
