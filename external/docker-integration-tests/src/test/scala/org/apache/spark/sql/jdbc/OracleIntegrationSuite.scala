@@ -80,7 +80,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.commit()
 
     conn.prepareStatement(
-      "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 number(1), n2 number(1))").executeUpdate()
+      "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 NUMBER(1), n2 NUMBER(1))").executeUpdate()
     conn.prepareStatement(
       "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)").executeUpdate()
     conn.commit()
@@ -291,7 +291,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // custom schema can read data
     val props = new Properties()
     props.put("customDataFrameColumnTypes",
-      s"ID decimal(${DecimalType.MAX_PRECISION}, 0), N1 int, N2 boolean")
+      s"ID DECIMAL(${DecimalType.MAX_PRECISION}, 0), N1 INT, N2 BOOLEAN")
     val dfRead = spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", props)
 
     val rows = dfRead.collect()

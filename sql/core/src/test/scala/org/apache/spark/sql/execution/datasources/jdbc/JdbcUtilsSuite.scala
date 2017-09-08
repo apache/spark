@@ -31,55 +31,55 @@ class JdbcUtilsSuite extends SparkFunSuite {
 
   test("Parse user specified column types") {
     assert(
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 date, C2 string", caseInsensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 DATE, C2 STRING", caseInsensitive) ===
       StructType(Seq(StructField("C1", DateType, true), StructField("C2", StringType, true))))
-    assert(JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 date, C2 string", caseSensitive) ===
+    assert(JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 DATE, C2 STRING", caseSensitive) ===
       StructType(Seq(StructField("C1", DateType, true), StructField("C2", StringType, true))))
     assert(
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 date, C2 string", caseInsensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 DATE, C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("C2", StringType, true))))
     assert(JdbcUtils.parseUserSpecifiedColumnTypes(
-      schema, "c1 decimal(38, 0), C2 string", caseInsensitive) ===
+      schema, "c1 DECIMAL(38, 0), C2 STRING", caseInsensitive) ===
       StructType(Seq(StructField("c1", DecimalType(38, 0), true),
         StructField("C2", StringType, true))))
 
     // Throw AnalysisException
     val duplicate = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 date, c1 string", caseInsensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 DATE, c1 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("c1", StringType, true)))
     }
     assert(duplicate.getMessage.contains(
       "Found duplicate column(s) in the createTableColumnTypes option value"))
 
     val allColumns = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 string", caseSensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 STRING", caseSensitive) ===
         StructType(Seq(StructField("C1", DateType, true)))
     }
     assert(allColumns.getMessage.contains("Please provide all the columns,"))
 
     val caseSensitiveColumnNotFound = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 date, C2 string", caseSensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 DATE, C2 STRING", caseSensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("C2", StringType, true)))
     }
     assert(caseSensitiveColumnNotFound.getMessage.contains(
       s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column c1 not found in schema"))
 
     val caseInsensitiveColumnNotFound = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 date, C2 string", caseInsensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 DATE, C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
     assert(caseInsensitiveColumnNotFound.getMessage.contains(
       s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column c3 not found in schema"))
 
     // Throw ParseException
-    val DataTypeNotSupported = intercept[ParseException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 datee, C2 string", caseInsensitive) ===
+    val dataTypeNotSupported = intercept[ParseException]{
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 DATEE, C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
-    assert(DataTypeNotSupported.getMessage.contains("DataType datee is not supported"))
+    assert(dataTypeNotSupported.getMessage.contains("DataType datee is not supported"))
 
     val mismatchedInput = intercept[ParseException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 date. C2 string", caseInsensitive) ===
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 DATE. C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
     assert(mismatchedInput.getMessage.contains("mismatched input '.' expecting"))

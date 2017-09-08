@@ -971,7 +971,7 @@ class JDBCSuite extends SparkFunSuite
   test("jdbc API support custom schema") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val props = new Properties()
-    props.put("customDataFrameColumnTypes", "NAME string, THEID bigint")
+    props.put("customDataFrameColumnTypes", "NAME STRING, THEID BIGINT")
     val schema = StructType(Seq(
       StructField("NAME", StringType, true), StructField("THEID", LongType, true)))
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
@@ -987,7 +987,7 @@ class JDBCSuite extends SparkFunSuite
            |CREATE TEMPORARY VIEW people_view
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
-           |customDataFrameColumnTypes 'NAME string, THEID int')
+           |customDataFrameColumnTypes 'NAME STRING, THEID INT')
         """.stripMargin.replaceAll("\n", " "))
       val schema = StructType(
         Seq(StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))

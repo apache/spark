@@ -1339,7 +1339,7 @@ the following case-insensitive options:
   <tr>
     <td><code>customDataFrameColumnTypes</code></td>
     <td>
-     The DataFrame column data types to use instead of the defaults when reading data from jdbc API. (e.g: <code>"id decimal(38, 0), name string")</code>. The specified types should be valid spark sql data types. This option applies only to reading.
+     The DataFrame column data types to use instead of the defaults when reading data from jdbc API. (e.g: <code>"id DECIMAL(38, 0), name STRING")</code>. The specified types should be valid spark sql data types. This option applies only to reading.
     </td>
   </tr>
 </table>
