@@ -441,7 +441,7 @@ class StructField(DataType):
     def typeName(self):
         raise TypeError(
             "StructField does not have typeName."
-            "Use typeName on its type explicitly instead.")
+            "Use typeName on its type explicitly instead. ")
 
 
 class StructType(DataType):
