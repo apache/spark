@@ -41,12 +41,16 @@ sealed abstract class SummaryBuilder {
   /**
    * Returns an aggregate object that contains the summary of the column with the requested metrics.
    * @param featuresCol a column that contains features Vector object.
-   * @param weightCol (Optional param) a column that contains weight value. Default weight is 1.0.
+   * @param weightCol a column that contains weight value. Default weight is 1.0.
    * @return an aggregate column that contains the statistics. The exact content of this
    *         structure is determined during the creation of the builder.
    */
   @Since("2.3.0")
-  def summary(featuresCol: Column, weightCol: Column = lit(1.0)): Column
+  def summary(featuresCol: Column, weightCol: Column): Column
+
+  @Since("2.3.0")
+  def summary(featuresCol: Column): Column = summary(featuresCol, lit(1.0))
+
 }
 
 /**
@@ -93,8 +97,7 @@ object Summarizer extends Logging {
    *  - min: the minimum for each coefficient.
    *  - normL2: the Euclidian norm for each coefficient.
    *  - normL1: the L1 norm of each coefficient (sum of the absolute values).
-   * @param firstMetric the metric being provided
-   * @param metrics additional metrics that can be provided.
+   * @param metrics metrics that can be provided.
    * @return a builder.
    * @throws IllegalArgumentException if one of the metric names is not understood.
    *
@@ -102,50 +105,75 @@ object Summarizer extends Logging {
    * interface.
    */
   @Since("2.3.0")
-  def metrics(firstMetric: String, metrics: String*): SummaryBuilder = {
-    val (typedMetrics, computeMetrics) = getRelevantMetrics(Seq(firstMetric) ++ metrics)
+  def metrics(metrics: String*): SummaryBuilder = {
+    require(metrics.size >= 1, "Should include at least one metric")
+    val (typedMetrics, computeMetrics) = getRelevantMetrics(metrics)
     new SummaryBuilderImpl(typedMetrics, computeMetrics)
   }
 
   @Since("2.3.0")
-  def mean(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def mean(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "mean")
   }
 
   @Since("2.3.0")
-  def variance(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def mean(col: Column): Column = mean(col, lit(1.0))
+
+  @Since("2.3.0")
+  def variance(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "variance")
   }
 
   @Since("2.3.0")
-  def count(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def variance(col: Column): Column = variance(col, lit(1.0))
+
+  @Since("2.3.0")
+  def count(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "count")
   }
 
   @Since("2.3.0")
-  def numNonZeros(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def count(col: Column): Column = count(col, lit(1.0))
+
+  @Since("2.3.0")
+  def numNonZeros(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "numNonZeros")
   }
 
   @Since("2.3.0")
-  def max(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def numNonZeros(col: Column): Column = numNonZeros(col, lit(1.0))
+
+  @Since("2.3.0")
+  def max(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "max")
   }
 
   @Since("2.3.0")
-  def min(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def max(col: Column): Column = max(col, lit(1.0))
+
+  @Since("2.3.0")
+  def min(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "min")
   }
 
   @Since("2.3.0")
-  def normL1(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def min(col: Column): Column = min(col, lit(1.0))
+
+  @Since("2.3.0")
+  def normL1(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "normL1")
   }
 
   @Since("2.3.0")
-  def normL2(col: Column, weightCol: Column = lit(1.0)): Column = {
+  def normL1(col: Column): Column = normL1(col, lit(1.0))
+
+  @Since("2.3.0")
+  def normL2(col: Column, weightCol: Column): Column = {
     getSingleMetric(col, weightCol, "normL2")
   }
+
+  @Since("2.3.0")
+  def normL2(col: Column): Column = normL2(col, lit(1.0))
 
   private def getSingleMetric(col: Column, weightCol: Column, metric: String): Column = {
     val c1 = metrics(metric).summary(col, weightCol)

@@ -48,6 +48,12 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       _summarizer
     }
 
+    val summarizerWithoutWeight = {
+      val _summarizer = new MultivariateOnlineSummarizer
+      inputVec.foreach(v => _summarizer.add(OldVectors.fromML(v._1)))
+      _summarizer
+    }
+
     // Because the Spark context is reset between tests, we cannot hold a reference onto it.
     def wrappedInit() = {
       val df = inputVec.toDF("features", "weight")
@@ -62,10 +68,22 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Seq(Row(summarizer.mean), summarizer.mean))
     }
 
+    registerTest(s"$name - mean only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("mean").summary(c), mean(c)),
+        Seq(Row(summarizerWithoutWeight.mean), summarizerWithoutWeight.mean))
+    }
+
     registerTest(s"$name - variance only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("variance").summary(c, weight), variance(c, weight)),
         Seq(Row(summarizer.variance), summarizer.variance))
+    }
+
+    registerTest(s"$name - variance only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("variance").summary(c), variance(c)),
+        Seq(Row(summarizerWithoutWeight.variance), summarizerWithoutWeight.variance))
     }
 
     registerTest(s"$name - count only") {
@@ -74,10 +92,22 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Seq(Row(summarizer.count), summarizer.count))
     }
 
+    registerTest(s"$name - count only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("count").summary(c), count(c)),
+        Seq(Row(summarizerWithoutWeight.count), summarizerWithoutWeight.count))
+    }
+
     registerTest(s"$name - numNonZeros only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("numNonZeros").summary(c, weight), numNonZeros(c, weight)),
         Seq(Row(summarizer.numNonzeros), summarizer.numNonzeros))
+    }
+
+    registerTest(s"$name - numNonZeros only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("numNonZeros").summary(c), numNonZeros(c)),
+        Seq(Row(summarizerWithoutWeight.numNonzeros), summarizerWithoutWeight.numNonzeros))
     }
 
     registerTest(s"$name - min only") {
@@ -86,10 +116,22 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Seq(Row(summarizer.min), summarizer.min))
     }
 
+    registerTest(s"$name - min only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("min").summary(c), min(c)),
+        Seq(Row(summarizerWithoutWeight.min), summarizerWithoutWeight.min))
+    }
+
     registerTest(s"$name - max only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("max").summary(c, weight), max(c, weight)),
         Seq(Row(summarizer.max), summarizer.max))
+    }
+
+    registerTest(s"$name - max only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("max").summary(c), max(c)),
+        Seq(Row(summarizerWithoutWeight.max), summarizerWithoutWeight.max))
     }
 
     registerTest(s"$name - normL1 only") {
@@ -98,10 +140,22 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
         Seq(Row(summarizer.normL1), summarizer.normL1))
     }
 
+    registerTest(s"$name - normL1 only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("normL1").summary(c), normL1(c)),
+        Seq(Row(summarizerWithoutWeight.normL1), summarizerWithoutWeight.normL1))
+    }
+
     registerTest(s"$name - normL2 only") {
       val (df, c, weight) = wrappedInit()
       compare(df.select(metrics("normL2").summary(c, weight), normL2(c, weight)),
         Seq(Row(summarizer.normL2), summarizer.normL2))
+    }
+
+    registerTest(s"$name - normL2 only w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(metrics("normL2").summary(c), normL2(c)),
+        Seq(Row(summarizerWithoutWeight.normL2), summarizerWithoutWeight.normL2))
     }
 
     registerTest(s"$name - multiple metrics at once") {
@@ -109,6 +163,15 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
       compare(df.select(
         metrics("mean", "variance", "count", "numNonZeros").summary(c, weight)),
         Seq(Row(summarizer.mean, summarizer.variance, summarizer.count, summarizer.numNonzeros))
+      )
+    }
+
+    registerTest(s"$name - multiple metrics at once w/o weight") {
+      val (df, c, _) = wrappedInit()
+      compare(df.select(
+        metrics("mean", "variance", "count", "numNonZeros").summary(c)),
+        Seq(Row(summarizerWithoutWeight.mean, summarizerWithoutWeight.variance,
+          summarizerWithoutWeight.count, summarizerWithoutWeight.numNonzeros))
       )
     }
   }
@@ -146,14 +209,15 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   testExample("single element", Seq((Vectors.dense(0.0, 1.0, 2.0), 2.0)))
 
-  testExample("two elements (dense)",
+  testExample("multiple elements (dense)",
     Seq(
       (Vectors.dense(-1.0, 0.0, 6.0), 0.5),
-      (Vectors.dense(3.0, -3.0, 0.0), 2.8)
+      (Vectors.dense(3.0, -3.0, 0.0), 2.8),
+      (Vectors.dense(1.0, -3.0, 0.0), 0.0)
     )
   )
 
-  testExample("two elements (sparse)",
+  testExample("multiple elements (sparse)",
     Seq(
       (Vectors.dense(-1.0, 0.0, 6.0).toSparse, 0.5),
       (Vectors.dense(3.0, -3.0, 0.0).toSparse, 2.8),
