@@ -24,10 +24,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
-import scala.Tuple2;
-
 import com.google.common.annotations.VisibleForTesting;
 import io.netty.channel.Channel;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +58,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   private final Map<Long, RpcResponseCallback> outstandingRpcs;
 
-  private final Queue<Tuple2<String, StreamCallback>> streamCallbacks;
+  private final Queue<Pair<String, StreamCallback>> streamCallbacks;
   private volatile boolean streamActive;
 
   /** Records the time (in system nanoseconds) that the last fetch or RPC request was sent. */
@@ -92,7 +92,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   public void addStreamCallback(String streamId, StreamCallback callback) {
     timeOfLastRequestNs.set(System.nanoTime());
-    streamCallbacks.offer(new Tuple2<>(streamId, callback));
+    streamCallbacks.offer(ImmutablePair.of(streamId, callback));
   }
 
   @VisibleForTesting
@@ -119,9 +119,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
         logger.warn("RpcResponseCallback.onFailure throws exception", e);
       }
     }
-    for (Tuple2<String, StreamCallback> entry : streamCallbacks) {
+    for (Pair<String, StreamCallback> entry : streamCallbacks) {
       try {
-        entry._2().onFailure(entry._1(), cause);
+        entry.getValue().onFailure(entry.getKey(), cause);
       } catch (Exception e) {
         logger.warn("StreamCallback.onFailure throws exception", e);
       }
@@ -208,9 +208,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof StreamResponse) {
       StreamResponse resp = (StreamResponse) message;
-      Tuple2<String, StreamCallback> entry = streamCallbacks.poll();
+      Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
-        StreamCallback callback = entry._2();
+        StreamCallback callback = entry.getValue();
         if (resp.byteCount > 0) {
           StreamInterceptor interceptor = new StreamInterceptor(this, resp.streamId, resp.byteCount,
             callback);
@@ -235,9 +235,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
       }
     } else if (message instanceof StreamFailure) {
       StreamFailure resp = (StreamFailure) message;
-      Tuple2<String, StreamCallback> entry = streamCallbacks.poll();
+      Pair<String, StreamCallback> entry = streamCallbacks.poll();
       if (entry != null) {
-        StreamCallback callback = entry._2();
+        StreamCallback callback = entry.getValue();
         try {
           callback.onFailure(resp.streamId, new RuntimeException(resp.error));
         } catch (IOException ioe) {

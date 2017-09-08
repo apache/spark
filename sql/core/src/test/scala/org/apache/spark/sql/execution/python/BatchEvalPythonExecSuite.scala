@@ -65,7 +65,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
   test("Python UDF: no push down on non-deterministic") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
-      .where("b > 4 and dummyPythonUDF(a) and rand() > 3")
+      .where("b > 4 and dummyPythonUDF(a) and rand() > 0.3")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(
           And(_: AttributeReference, _: GreaterThan),
@@ -77,7 +77,7 @@ class BatchEvalPythonExecSuite extends SparkPlanTest with SharedSQLContext {
 
   test("Python UDF: no push down on predicates starting from the first non-deterministic") {
     val df = Seq(("Hello", 4)).toDF("a", "b")
-      .where("dummyPythonUDF(a) and rand() > 3 and b > 4")
+      .where("dummyPythonUDF(a) and rand() > 0.3 and b > 4")
     val qualifiedPlanNodes = df.queryExecution.executedPlan.collect {
       case f @ FilterExec(And(_: And, _: GreaterThan), InputAdapter(_: BatchEvalPythonExec)) => f
     }

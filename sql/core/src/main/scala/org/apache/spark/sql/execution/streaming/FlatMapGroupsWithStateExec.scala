@@ -136,7 +136,7 @@ case class FlatMapGroupsWithStateExec(
           outputIterator,
           {
             store.commit()
-            longMetric("numTotalStateRows") += store.numKeys()
+            setStoreMetrics(store)
           }
         )
     }

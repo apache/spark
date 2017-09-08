@@ -23,9 +23,9 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.mock
 
 import org.apache.spark._
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -395,7 +395,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     }
     // Listener tracks only SQL metrics, not other accumulators
     assert(trackedAccums.size === 1)
-    assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
+    assert(trackedAccums.head === ((sqlMetricInfo.id, sqlMetricInfo.update.get)))
   }
 
   test("driver side SQL metrics") {

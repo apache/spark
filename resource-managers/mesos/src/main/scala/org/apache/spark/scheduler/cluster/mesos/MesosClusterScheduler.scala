@@ -28,10 +28,11 @@ import org.apache.mesos.{Scheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.Protos.TaskStatus.Reason
+import org.apache.mesos.protobuf.ByteString
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, TaskState}
-import org.apache.spark.deploy.mesos.config
 import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.config
 import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionResponse, SubmissionStatusResponse}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
@@ -369,7 +370,8 @@ private[spark] class MesosClusterScheduler(
   }
 
   private def getDriverFrameworkID(desc: MesosDriverDescription): String = {
-    s"${frameworkId}-${desc.submissionId}"
+    val retries = desc.retryState.map { d => s"-retry-${d.retries.toString}" }.getOrElse("")
+    s"${frameworkId}-${desc.submissionId}${retries}"
   }
 
   private def adjust[A, B](m: collection.Map[A, B], k: A, default: B)(f: B => B) = {
@@ -385,10 +387,44 @@ private[spark] class MesosClusterScheduler(
     val env = desc.conf.getAllWithPrefix("spark.mesos.driverEnv.") ++ commandEnv
 
     val envBuilder = Environment.newBuilder()
+
+    // add normal environment variables
     env.foreach { case (k, v) =>
       envBuilder.addVariables(Variable.newBuilder().setName(k).setValue(v))
     }
+
+    // add secret environment variables
+    getSecretEnvVar(desc).foreach { variable =>
+      if (variable.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName}" +
+          s"on file ${variable.getName}")
+      } else {
+        logInfo(s"Setting secret on environment variable name=${variable.getName}")
+      }
+      envBuilder.addVariables(variable)
+    }
+
     envBuilder.build()
+  }
+
+  private def getSecretEnvVar(desc: MesosDriverDescription): List[Variable] = {
+    val secrets = getSecrets(desc)
+    val secretEnvKeys = desc.conf.get(config.SECRET_ENVKEY).getOrElse(Nil)
+    if (illegalSecretInput(secretEnvKeys, secrets)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secrets and environment keys " +
+          s"for environment-based reference secrets got secrets $secrets, " +
+          s"and keys $secretEnvKeys")
+    }
+
+    secrets.zip(secretEnvKeys).map {
+      case (s, k) =>
+        Variable.newBuilder()
+          .setName(k)
+          .setType(Variable.Type.SECRET)
+          .setSecret(s)
+          .build
+    }.toList
   }
 
   private def getDriverUris(desc: MesosDriverDescription): List[CommandInfo.URI] = {
@@ -528,16 +564,102 @@ private[spark] class MesosClusterScheduler(
 
     val appName = desc.conf.get("spark.app.name")
 
+    val driverLabels = MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS)
+      .getOrElse(""))
+
     TaskInfo.newBuilder()
       .setTaskId(taskId)
       .setName(s"Driver for ${appName}")
       .setSlaveId(offer.offer.getSlaveId)
       .setCommand(buildDriverCommand(desc))
+      .setContainer(getContainerInfo(desc))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
-      .setLabels(MesosProtoUtils.mesosLabels(desc.conf.get(config.DRIVER_LABELS).getOrElse("")))
-      .setContainer(MesosSchedulerBackendUtil.containerInfo(desc.conf))
+      .setLabels(driverLabels)
       .build
+  }
+
+  private def getContainerInfo(desc: MesosDriverDescription): ContainerInfo.Builder = {
+    val containerInfo = MesosSchedulerBackendUtil.containerInfo(desc.conf)
+
+    getSecretVolume(desc).foreach { volume =>
+      if (volume.getSource.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName}" +
+          s"on file ${volume.getContainerPath}")
+      } else {
+        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+      }
+      containerInfo.addVolumes(volume)
+    }
+
+    containerInfo
+  }
+
+
+  private def getSecrets(desc: MesosDriverDescription): Seq[Secret] = {
+    def createValueSecret(data: String): Secret = {
+      Secret.newBuilder()
+        .setType(Secret.Type.VALUE)
+        .setValue(Secret.Value.newBuilder().setData(ByteString.copyFrom(data.getBytes)))
+        .build()
+    }
+
+    def createReferenceSecret(name: String): Secret = {
+      Secret.newBuilder()
+        .setReference(Secret.Reference.newBuilder().setName(name))
+        .setType(Secret.Type.REFERENCE)
+        .build()
+    }
+
+    val referenceSecrets: Seq[Secret] =
+      desc.conf.get(config.SECRET_NAME).getOrElse(Nil).map(s => createReferenceSecret(s))
+
+    val valueSecrets: Seq[Secret] = {
+      desc.conf.get(config.SECRET_VALUE).getOrElse(Nil).map(s => createValueSecret(s))
+    }
+
+    if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
+      throw new SparkException("Cannot specify VALUE type secrets and REFERENCE types ones")
+    }
+
+    if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets
+  }
+
+  private def illegalSecretInput(dest: Seq[String], s: Seq[Secret]): Boolean = {
+    if (dest.isEmpty) {  // no destination set (ie not using secrets of this type
+      return false
+    }
+    if (dest.nonEmpty && s.nonEmpty) {
+      // make sure there is a destination for each secret of this type
+      if (dest.length != s.length) {
+        return true
+      }
+    }
+    false
+  }
+
+  private def getSecretVolume(desc: MesosDriverDescription): List[Volume] = {
+    val secrets = getSecrets(desc)
+    val secretPaths: Seq[String] =
+      desc.conf.get(config.SECRET_FILENAME).getOrElse(Nil)
+
+    if (illegalSecretInput(secretPaths, secrets)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secrets and file paths for file-based " +
+          s"reference secrets got secrets $secrets, and paths $secretPaths")
+    }
+
+    secrets.zip(secretPaths).map {
+      case (s, p) =>
+        val source = Volume.Source.newBuilder()
+          .setType(Volume.Source.Type.SECRET)
+          .setSecret(s)
+        Volume.newBuilder()
+          .setContainerPath(p)
+          .setSource(source)
+          .setMode(Volume.Mode.RO)
+          .build
+    }.toList
   }
 
   /**
@@ -583,9 +705,14 @@ private[spark] class MesosClusterScheduler(
         } catch {
           case e: SparkException =>
             afterLaunchCallback(submission.submissionId)
-            finishedDrivers += new MesosClusterSubmissionState(submission, TaskID.newBuilder().
-              setValue(submission.submissionId).build(), SlaveID.newBuilder().setValue("").
-              build(), None, null, None, getDriverFrameworkID(submission))
+            finishedDrivers += new MesosClusterSubmissionState(
+              submission,
+              TaskID.newBuilder().setValue(submission.submissionId).build(),
+              SlaveID.newBuilder().setValue("").build(),
+              None,
+              null,
+              None,
+              getDriverFrameworkID(submission))
             logError(s"Failed to launch the driver with id: ${submission.submissionId}, " +
               s"cpu: $driverCpu, mem: $driverMem, reason: ${e.getMessage}")
         }

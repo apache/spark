@@ -19,13 +19,16 @@ package org.apache.spark.ml.source.libsvm
 
 import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
+import java.util.List
 
 import com.google.common.io.Files
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.linalg.SQLDataTypes.VectorType
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{Row, SaveMode}
+import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 
@@ -35,16 +38,23 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    val lines =
+    val lines0 =
       """
         |1 1:1.0 3:2.0 5:3.0
         |0
+      """.stripMargin
+    val lines1 =
+      """
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    val dir = Utils.createDirectory(tempDir.getCanonicalPath, "data")
-    val file = new File(dir, "part-00000")
-    Files.write(lines, file, StandardCharsets.UTF_8)
-    path = dir.toURI.toString
+    val dir = Utils.createTempDir()
+    val succ = new File(dir, "_SUCCESS")
+    val file0 = new File(dir, "part-00000")
+    val file1 = new File(dir, "part-00001")
+    Files.write("", succ, StandardCharsets.UTF_8)
+    Files.write(lines0, file0, StandardCharsets.UTF_8)
+    Files.write(lines1, file1, StandardCharsets.UTF_8)
+    path = dir.getPath
   }
 
   override def afterAll(): Unit = {
@@ -101,12 +111,12 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data and read it again") {
     val df = spark.read.format("libsvm").load(path)
-    val tempDir2 = new File(tempDir, "read_write_test")
-    val writepath = tempDir2.toURI.toString
-    // TODO: Remove requirement to coalesce by supporting multiple reads.
-    df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
+    val writePath = Utils.createTempDir().getPath
 
-    val df2 = spark.read.format("libsvm").load(writepath)
+    // TODO: Remove requirement to coalesce by supporting multiple reads.
+    df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writePath)
+
+    val df2 = spark.read.format("libsvm").load(writePath)
     val row1 = df2.first()
     val v = row1.getAs[SparseVector](1)
     assert(v == Vectors.sparse(6, Seq((0, 1.0), (2, 2.0), (4, 3.0))))
@@ -117,6 +127,27 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
     intercept[IOException] {
       df.write.format("libsvm").save(path + "_2")
     }
+  }
+
+  test("write libsvm data from scratch and read it again") {
+    val rawData = new java.util.ArrayList[Row]()
+    rawData.add(Row(1.0, Vectors.sparse(3, Seq((0, 2.0), (1, 3.0)))))
+    rawData.add(Row(4.0, Vectors.sparse(3, Seq((0, 5.0), (2, 6.0)))))
+
+    val struct = StructType(
+      StructField("labelFoo", DoubleType, false) ::
+      StructField("featuresBar", VectorType, false) :: Nil
+    )
+    val df = spark.sqlContext.createDataFrame(rawData, struct)
+
+    val writePath = Utils.createTempDir().getPath
+
+    df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writePath)
+
+    val df2 = spark.read.format("libsvm").load(writePath)
+    val row1 = df2.first()
+    val v = row1.getAs[SparseVector](1)
+    assert(v == Vectors.sparse(3, Seq((0, 2.0), (1, 3.0))))
   }
 
   test("select features from libsvm relation") {
@@ -145,7 +176,9 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("create libsvmTable table without schema and path") {
     try {
-      val e = intercept[IOException](spark.sql("CREATE TABLE libsvmTable USING libsvm"))
+      val e = intercept[IllegalArgumentException] {
+        spark.sql("CREATE TABLE libsvmTable USING libsvm")
+      }
       assert(e.getMessage.contains("No input path specified for libsvm data"))
     } finally {
       spark.sql("DROP TABLE IF EXISTS libsvmTable")
