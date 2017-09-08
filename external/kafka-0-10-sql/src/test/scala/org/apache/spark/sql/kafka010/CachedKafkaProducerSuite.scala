@@ -18,7 +18,6 @@
 package org.apache.spark.sql.kafka010
 
 import java.{util => ju}
-import java.util.concurrent.ConcurrentMap
 
 import org.apache.kafka.clients.producer.KafkaProducer
 import org.apache.kafka.common.serialization.ByteArraySerializer
@@ -36,42 +35,51 @@ class CachedKafkaProducerSuite extends SharedSQLContext with PrivateMethodTester
   }
 
   test("Should return the cached instance on calling getOrCreate with same params.") {
-    val kafkaParams = new ju.HashMap[String, Object]()
-    kafkaParams.put("acks", "0")
-    // Here only host should be resolvable, it does not need a running instance of kafka server.
-    kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
-    kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
-    kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
+    val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
     val producer = CachedKafkaProducer.getOrCreate(kafkaParams)
     val producer2 = CachedKafkaProducer.getOrCreate(kafkaParams)
-    assert(producer == producer2)
-
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
-    val map = CachedKafkaProducer.invokePrivate(cacheMap())
+    assert(producer.kafkaProducer == producer2.kafkaProducer)
+    assert(producer.inUseCount.intValue() == 2)
+    val map = CachedKafkaProducer.getAsMap
     assert(map.size == 1)
   }
 
   test("Should close the correct kafka producer for the given kafkaPrams.") {
+    val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
+    val producer: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(kafkaParams)
+    kafkaParams.put("acks", "1")
+    val producer2: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(kafkaParams)
+    // With updated conf, a new producer instance should be created.
+    assert(producer.kafkaProducer != producer2.kafkaProducer)
+
+    val map = CachedKafkaProducer.getAsMap
+    assert(map.size == 2)
+    producer2.inUseCount.decrementAndGet()
+
+    CachedKafkaProducer.close(kafkaParams)
+    assert(producer2.isClosed)
+    val map2 = CachedKafkaProducer.getAsMap
+    assert(map2.size == 1)
+    import scala.collection.JavaConverters._
+    val (seq: Seq[(String, Object)], _producer: CachedKafkaProducer) = map2.asScala.toArray.apply(0)
+    assert(_producer.kafkaProducer == producer.kafkaProducer)
+   }
+
+  test("Should not close a producer in-use.") {
+    val kafkaParams: ju.HashMap[String, Object] = generateKafkaParams
+    val producer: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(kafkaParams)
+    assert(producer.inUseCount.intValue() > 0)
+    CachedKafkaProducer.close(kafkaParams)
+    assert(producer.inUseCount.intValue() > 0)
+    assert(!producer.isClosed, "An in-use producer should not be closed.")
+  }
+
+ private def generateKafkaParams: ju.HashMap[String, Object] = {
     val kafkaParams = new ju.HashMap[String, Object]()
     kafkaParams.put("acks", "0")
     kafkaParams.put("bootstrap.servers", "127.0.0.1:9022")
     kafkaParams.put("key.serializer", classOf[ByteArraySerializer].getName)
     kafkaParams.put("value.serializer", classOf[ByteArraySerializer].getName)
-    val producer: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
-    kafkaParams.put("acks", "1")
-    val producer2: KP = CachedKafkaProducer.getOrCreate(kafkaParams)
-    // With updated conf, a new producer instance should be created.
-    assert(producer != producer2)
-
-    val cacheMap = PrivateMethod[ConcurrentMap[Seq[(String, Object)], KP]]('getAsMap)
-    val map = CachedKafkaProducer.invokePrivate(cacheMap())
-    assert(map.size == 2)
-
-    CachedKafkaProducer.close(kafkaParams)
-    val map2 = CachedKafkaProducer.invokePrivate(cacheMap())
-    assert(map2.size == 1)
-    import scala.collection.JavaConverters._
-    val (seq: Seq[(String, Object)], _producer: KP) = map2.asScala.toArray.apply(0)
-    assert(_producer == producer)
+    kafkaParams
   }
 }

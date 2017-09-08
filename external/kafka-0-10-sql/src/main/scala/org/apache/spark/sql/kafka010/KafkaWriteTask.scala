@@ -35,13 +35,12 @@ private[kafka010] class KafkaWriteTask(
     inputSchema: Seq[Attribute],
     topic: Option[String]) extends KafkaRowWriter(inputSchema, topic) {
   // used to synchronize with Kafka callbacks
-  private var producer: KafkaProducer[Array[Byte], Array[Byte]] = _
+  private val producer: CachedKafkaProducer = CachedKafkaProducer.getOrCreate(producerConfiguration)
 
   /**
    * Writes key value data out to topics.
    */
   def execute(iterator: Iterator[InternalRow]): Unit = {
-    producer = CachedKafkaProducer.getOrCreate(producerConfiguration)
     while (iterator.hasNext && failedWrite == null) {
       val currentRow = iterator.next()
       sendRow(currentRow, producer)
@@ -49,12 +48,9 @@ private[kafka010] class KafkaWriteTask(
   }
 
   def close(): Unit = {
+    producer.inUseCount.decrementAndGet()
+    producer.kafkaProducer.flush()
     checkForErrors()
-    if (producer != null) {
-      producer.flush()
-      checkForErrors()
-      producer = null
-    }
   }
 }
 
@@ -79,7 +75,7 @@ private[kafka010] abstract class KafkaRowWriter(
    * assuming the row is in Kafka.
    */
   protected def sendRow(
-      row: InternalRow, producer: KafkaProducer[Array[Byte], Array[Byte]]): Unit = {
+      row: InternalRow, producer: CachedKafkaProducer): Unit = {
     val projectedRow = projection(row)
     val topic = projectedRow.getUTF8String(0)
     val key = projectedRow.getBinary(1)
@@ -89,7 +85,7 @@ private[kafka010] abstract class KafkaRowWriter(
         s"${KafkaSourceProvider.TOPIC_OPTION_KEY} option for setting a default topic.")
     }
     val record = new ProducerRecord[Array[Byte], Array[Byte]](topic.toString, key, value)
-    producer.send(record, callback)
+    producer.kafkaProducer.send(record, callback)
   }
 
   protected def checkForErrors(): Unit = {
