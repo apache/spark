@@ -151,9 +151,11 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       InsertIntoHiveTable(r.tableMeta, partSpec, query, overwrite, ifPartitionNotExists)
 
     case CreateTable(tableDesc, mode, None) if DDLUtils.isHiveTable(tableDesc) =>
+      DDLUtils.checkDataSchemaFieldNames(tableDesc)
       CreateTableCommand(tableDesc, ignoreIfExists = mode == SaveMode.Ignore)
 
     case CreateTable(tableDesc, mode, Some(query)) if DDLUtils.isHiveTable(tableDesc) =>
+      DDLUtils.checkDataSchemaFieldNames(tableDesc)
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
   }
 }

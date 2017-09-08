@@ -23,7 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
@@ -31,7 +31,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.Utils
 
-trait SparkSubmitTestUtils extends SparkFunSuite with Timeouts {
+trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
   // This is copied from org.apache.spark.deploy.SparkSubmitSuite
