@@ -418,6 +418,7 @@ object FunctionRegistry {
     expression[Sha1]("sha"),
     expression[Sha1]("sha1"),
     expression[Sha2]("sha2"),
+    expression[CurrentUser]("current_user"),
     expression[SparkPartitionID]("spark_partition_id"),
     expression[InputFileName]("input_file_name"),
     expression[InputFileBlockStart]("input_file_block_start"),

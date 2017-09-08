@@ -209,6 +209,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(2743272264L, 2180413220L))
   }
 
+  test("misc current_user function") {
+    checkAnswer(
+      spark.sql("select current_user()"),
+      Row(spark.sparkContext.sparkUser)
+    )
+  }
+
   test("string function find_in_set") {
     val df = Seq(("abc,b,ab,c,def", "abc,b,ab,c,def")).toDF("a", "b")
 

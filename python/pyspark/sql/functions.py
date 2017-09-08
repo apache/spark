@@ -1296,6 +1296,15 @@ def hash(*cols):
     return Column(jc)
 
 
+@since(2.3)
+def current_user():
+    """
+    Returns current user executing the query as a :class:`StringType` column column.
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.current_user())
+
+
 # ---------------------- String/Binary functions ------------------------------
 
 _string_functions = {
