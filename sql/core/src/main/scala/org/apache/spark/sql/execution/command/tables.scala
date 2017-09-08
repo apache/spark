@@ -640,39 +640,12 @@ case class DescribeColumnCommand(
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = {
-    // The displayed names are based on Hive.
-    // (Link for the corresponding Hive Jira: https://issues.apache.org/jira/browse/HIVE-7050)
-    if (isExtended) {
-      Seq(
-        AttributeReference("col_name", StringType, nullable = false,
-          new MetadataBuilder().putString("comment", "name of the column").build())(),
-        AttributeReference("data_type", StringType, nullable = false,
-          new MetadataBuilder().putString("comment", "data type of the column").build())(),
-        AttributeReference("min", StringType, nullable = true,
-          new MetadataBuilder().putString("comment", "min value of the column").build())(),
-        AttributeReference("max", StringType, nullable = true,
-          new MetadataBuilder().putString("comment", "max value of the column").build())(),
-        AttributeReference("num_nulls", StringType, nullable = true,
-          new MetadataBuilder().putString("comment", "number of nulls of the column").build())(),
-        AttributeReference("distinct_count", StringType, nullable = true,
-          new MetadataBuilder().putString("comment", "distinct count of the column").build())(),
-        AttributeReference("avg_col_len", StringType, nullable = true,
-          new MetadataBuilder().putString("comment",
-            "average length of the values of the column").build())(),
-        AttributeReference("max_col_len", StringType, nullable = true,
-          new MetadataBuilder().putString("comment",
-            "maximum length of the values of the column").build())(),
-        AttributeReference("comment", StringType, nullable = true,
-          new MetadataBuilder().putString("comment", "comment of the column").build())())
-    } else {
-      Seq(
-        AttributeReference("col_name", StringType, nullable = false,
-          new MetadataBuilder().putString("comment", "name of the column").build())(),
-        AttributeReference("data_type", StringType, nullable = false,
-          new MetadataBuilder().putString("comment", "data type of the column").build())(),
-        AttributeReference("comment", StringType, nullable = true,
-          new MetadataBuilder().putString("comment", "comment of the column").build())())
-    }
+    Seq(
+      AttributeReference("info_name", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "name of the column info").build())(),
+      AttributeReference("info_value", StringType, nullable = false,
+        new MetadataBuilder().putString("comment", "value of the column info").build())()
+    )
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -701,41 +674,21 @@ case class DescribeColumnCommand(
       None
     }
 
-    val fieldValues = if (isExtended) {
-      // Show column stats when extended or formatted is specified.
-      Seq(
-        field.name,
-        field.dataType.catalogString,
-        cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"),
-        cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"),
-        cs.map(_.nullCount.toString).getOrElse("NULL"),
-        cs.map(_.distinctCount.toString).getOrElse("NULL"),
-        cs.map(_.avgLen.toString).getOrElse("NULL"),
-        cs.map(_.maxLen.toString).getOrElse("NULL"),
-        comment.getOrElse("NULL"))
-    } else {
-      Seq(
-        field.name,
-        field.dataType.catalogString,
-        comment.getOrElse("NULL"))
+    val buffer = ArrayBuffer[Row](
+      Row("col_name", field.name),
+      Row("data_type", field.dataType.catalogString),
+      Row("comment", comment.getOrElse("NULL"))
+    )
+    if (isExtended) {
+      // Show column stats when EXTENDED or FORMATTED is specified.
+      buffer += Row("min", cs.flatMap(_.min.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("max", cs.flatMap(_.max.map(_.toString)).getOrElse("NULL"))
+      buffer += Row("num_nulls", cs.map(_.nullCount.toString).getOrElse("NULL"))
+      buffer += Row("distinct_count", cs.map(_.distinctCount.toString).getOrElse("NULL"))
+      buffer += Row("avg_col_len", cs.map(_.avgLen.toString).getOrElse("NULL"))
+      buffer += Row("max_col_len", cs.map(_.maxLen.toString).getOrElse("NULL"))
     }
-
-    Seq(Row(formatColumnInfo(fieldValues)))
-  }
-
-  /** Do alignment for the result for better readability. */
-  private def formatColumnInfo(fieldValues: Seq[String]): String = {
-    assert(output.length == fieldValues.length)
-    val fieldNames = output.map(_.name)
-    val nameBuilder = new StringBuilder()
-    val valueBuilder = new StringBuilder()
-    fieldNames.zip(fieldValues).foreach { case (name, value) =>
-      // This is for alignment.
-      val len = math.max(name.length, value.length) + 1
-      nameBuilder.append(String.format("%-" + len + "s", name)).append("\t")
-      valueBuilder.append(String.format("%-" + len + "s", value)).append("\t")
-    }
-    nameBuilder.toString() + "\n" + valueBuilder.toString()
+    buffer
   }
 }
 

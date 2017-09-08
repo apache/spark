@@ -13,37 +13,59 @@ struct<>
 -- !query 1
 DESC desc_col_temp_table key
 -- !query 1 schema
-struct<col_name:string,data_type:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 1 output
-col_name 	data_type 	comment        	
-key      	int       	column_comment
+col_name	key
+data_type	int
+comment	column_comment
 
 
 -- !query 2
 DESC EXTENDED desc_col_temp_table key
 -- !query 2 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 2 output
-col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
-key      	int       	NULL 	NULL 	NULL      	NULL           	NULL        	NULL        	column_comment
+col_name	key
+data_type	int
+comment	column_comment
+min	NULL
+max	NULL
+num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
 
 
 -- !query 3
 DESC FORMATTED desc_col_temp_table key
 -- !query 3 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 3 output
-col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
-key      	int       	NULL 	NULL 	NULL      	NULL           	NULL        	NULL        	column_comment
+col_name	key
+data_type	int
+comment	column_comment
+min	NULL
+max	NULL
+num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
 
 
 -- !query 4
 DESC FORMATTED desc_col_temp_table desc_col_temp_table.key
 -- !query 4 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 4 output
-col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
-key      	int       	NULL 	NULL 	NULL      	NULL           	NULL        	NULL        	column_comment
+col_name	key
+data_type	int
+comment	column_comment
+min	NULL
+max	NULL
+num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
 
 
 -- !query 5
@@ -74,28 +96,43 @@ struct<>
 -- !query 8
 DESC desc_col_table key
 -- !query 8 schema
-struct<col_name:string,data_type:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 8 output
-col_name 	data_type 	comment        	
-key      	int       	column_comment
+col_name	key
+data_type	int
+comment	column_comment
 
 
 -- !query 9
 DESC EXTENDED desc_col_table key
 -- !query 9 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 9 output
-col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
-key      	int       	NULL 	NULL 	0         	0              	4           	4           	column_comment
+col_name	key
+data_type	int
+comment	column_comment
+min	NULL
+max	NULL
+num_nulls	0
+distinct_count	0
+avg_col_len	4
+max_col_len	4
 
 
 -- !query 10
 DESC FORMATTED desc_col_table key
 -- !query 10 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 10 output
-col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment        	
-key      	int       	NULL 	NULL 	0         	0              	4           	4           	column_comment
+col_name	key
+data_type	int
+comment	column_comment
+min	NULL
+max	NULL
+num_nulls	0
+distinct_count	0
+avg_col_len	4
+max_col_len	4
 
 
 -- !query 11
@@ -109,19 +146,33 @@ struct<>
 -- !query 12
 DESC FORMATTED desc_col_complex_table `a.b`
 -- !query 12 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 12 output
-col_name 	data_type 	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment 	
-a.b      	int       	NULL 	NULL 	NULL      	NULL           	NULL        	NULL        	NULL
+col_name	a.b
+data_type	int
+comment	NULL
+min	NULL
+max	NULL
+num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
 
 
 -- !query 13
 DESC FORMATTED desc_col_complex_table col
 -- !query 13 schema
-struct<col_name:string,data_type:string,min:string,max:string,num_nulls:string,distinct_count:string,avg_col_len:string,max_col_len:string,comment:string>
+struct<info_name:string,info_value:string>
 -- !query 13 output
-col_name 	data_type              	min  	max  	num_nulls 	distinct_count 	avg_col_len 	max_col_len 	comment 	
-col      	struct<x:int,y:string> 	NULL 	NULL 	NULL      	NULL           	NULL        	NULL        	NULL
+col_name	col
+data_type	struct<x:int,y:string>
+comment	NULL
+min	NULL
+max	NULL
+num_nulls	NULL
+distinct_count	NULL
+avg_col_len	NULL
+max_col_len	NULL
 
 
 -- !query 14
