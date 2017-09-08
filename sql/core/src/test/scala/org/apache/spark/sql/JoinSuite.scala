@@ -836,8 +836,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 
       joinPairs.foreach {
         case(join1, join2) =>
-          val leftKeys = join1.leftKeys
-          val rightKeys = join1.rightKeys
+          val leftKeys = join1.leftJoinKeys
+          val rightKeys = join1.rightJoinKeys
           val outputOrderingPhysical = join1.outputOrdering
           val outputOrderingExecuted = join2.outputOrdering
 
