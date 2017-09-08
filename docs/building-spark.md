@@ -94,9 +94,11 @@ like ZooKeeper and Hadoop itself.
 ## Building with Kafka 0.8 support
 
 Kafka 0.8 support must be explicitly enabled with the `kafka-0-8` profile.
-Kafka 0.10 support is still automatically built.
+Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.
 
     ./build/mvn -Pkafka-0-8 -DskipTests clean package
+
+Kafka 0.10 support is still automatically built.
 
 ## Building submodules individually
 

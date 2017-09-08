@@ -253,7 +253,7 @@ streaming_kafka = Module(
         "-Pkafka-0-8",
     ],
     environ={
-        "ENABLE_KAFKA_TESTS": "1"
+        "ENABLE_KAFKA_0_8_TESTS": "1"
     },
     sbt_test_goals=[
         "streaming-kafka-0-8/test",
