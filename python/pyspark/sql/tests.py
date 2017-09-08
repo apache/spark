@@ -1796,8 +1796,12 @@ class SQLTests2(ReusedPySparkTestCase):
         self.sc.stop()
         sc = SparkContext('local[4]', self.sc.appName)
         spark = SparkSession.builder.getOrCreate()
-        df = spark.createDataFrame([(1, 2)], ["c", "c"])
-        df.collect()
+        try:
+            df = spark.createDataFrame([(1, 2)], ["c", "c"])
+            df.collect()
+        finally:
+            spark.stop()
+            sc.stop()
 
 
 class HiveContextSQLTests(ReusedPySparkTestCase):
