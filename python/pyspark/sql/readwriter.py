@@ -851,8 +851,9 @@ class DataFrameWriter(OptionUtils):
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
-                            This will override ``orc.compress``. If None is set, it uses the
-                            default value, ``snappy``.
+                            This will override ``orc.compress`` and
+                            ``spark.sql.orc.compression.codec``. If None is set, it uses the value
+                            specified in ``spark.sql.orc.compression.codec``.
 
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))

@@ -58,10 +58,41 @@ package object config {
 
   private[spark] val DRIVER_LABELS =
     ConfigBuilder("spark.mesos.driver.labels")
-      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs.  Key-value " +
+      .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +
         "pairs should be separated by a colon, and commas used to list more than one." +
         "Ex. key:value,key2:value2")
       .stringConf
+      .createOptional
+
+  private[spark] val SECRET_NAME =
+    ConfigBuilder("spark.mesos.driver.secret.names")
+      .doc("A comma-separated list of secret reference names. Consult the Mesos Secret protobuf " +
+        "for more information.")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val SECRET_VALUE =
+    ConfigBuilder("spark.mesos.driver.secret.values")
+      .doc("A comma-separated list of secret values.")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val SECRET_ENVKEY =
+    ConfigBuilder("spark.mesos.driver.secret.envkeys")
+      .doc("A comma-separated list of the environment variables to contain the secrets." +
+        "The environment variable will be set on the driver.")
+      .stringConf
+      .toSequence
+      .createOptional
+
+  private[spark] val SECRET_FILENAME =
+    ConfigBuilder("spark.mesos.driver.secret.filenames")
+      .doc("A comma-seperated list of file paths secret will be written to.  Consult the Mesos " +
+        "Secret protobuf for more information.")
+      .stringConf
+      .toSequence
       .createOptional
 
   private[spark] val DRIVER_FAILOVER_TIMEOUT =

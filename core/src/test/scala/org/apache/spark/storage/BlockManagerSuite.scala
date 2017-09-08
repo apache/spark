@@ -33,7 +33,7 @@ import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts._
+import org.scalatest.concurrent.TimeLimits._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager

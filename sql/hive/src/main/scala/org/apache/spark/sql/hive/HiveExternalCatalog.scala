@@ -512,7 +512,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       identifier = TableIdentifier(newName, Some(db)),
       storage = storageWithNewPath)
 
-    client.alterTable(oldName, newTable)
+    client.alterTable(db, oldName, newTable)
   }
 
   private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {

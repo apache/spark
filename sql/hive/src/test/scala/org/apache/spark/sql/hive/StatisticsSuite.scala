@@ -203,7 +203,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
           sql(s"INSERT INTO TABLE $tableName PARTITION (ds='$ds') SELECT * FROM src")
         }
 
-        sql(s"ALTER TABLE $tableName SET LOCATION '$path'")
+        sql(s"ALTER TABLE $tableName SET LOCATION '${path.toURI}'")
 
         sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS noscan")
 
@@ -222,7 +222,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             s"""
                |CREATE TABLE $sourceTableName (key STRING, value STRING)
                |PARTITIONED BY (ds STRING)
-               |LOCATION '$path'
+               |LOCATION '${path.toURI}'
              """.stripMargin)
 
           val partitionDates = List("2010-01-01", "2010-01-02", "2010-01-03")
@@ -239,7 +239,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             s"""
                |CREATE TABLE $tableName (key STRING, value STRING)
                |PARTITIONED BY (ds STRING)
-               |LOCATION '$path'
+               |LOCATION '${path.toURI}'
              """.stripMargin)
 
           // Register only one of the partitions found on disk

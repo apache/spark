@@ -1195,4 +1195,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .csv(Seq("10u12").toDS())
     checkAnswer(results, Row(null))
   }
+
+  test("SPARK-20978: Fill the malformed column when the number of tokens is less than schema") {
+    val df = spark.read
+      .schema("a string, b string, unparsed string")
+      .option("columnNameOfCorruptRecord", "unparsed")
+      .csv(Seq("a").toDS())
+    checkAnswer(df, Row("a", null, "a"))
+  }
 }

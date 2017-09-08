@@ -62,6 +62,10 @@ The history server can be configured as follows:
     <td>JVM options for the history server (default: none).</td>
   </tr>
   <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the history server (default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>
       The public address for the history server. If this is not set, links to application history
@@ -451,6 +455,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
 * `GraphiteSink`: Sends metrics to a Graphite node.
 * `Slf4jSink`: Sends metrics to slf4j as log entries.
+* `StatsdSink`: Sends metrics to a StatsD node.
 
 Spark also supports a Ganglia sink which is not included in the default build due to
 licensing restrictions:
