@@ -41,7 +41,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
   // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
   // still resolved after the execution of each rule.
   override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    Utils.isTesting && plan.resolved
+    !Utils.isTesting || plan.resolved
   }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
