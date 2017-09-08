@@ -86,12 +86,21 @@ struct<structstojson(map(a, 1)):string>
 
 
 -- !query 8
+select to_json(array(map('a',1)))
+select to_json(array(map('a',1), map('b',2)))
 select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 -- !query 8 schema
 struct<>
 -- !query 8 output
-org.apache.spark.sql.AnalysisException
-Must use a map() function for options;; line 1 pos 7
+org.apache.spark.sql.catalyst.parser.ParseException
+
+mismatched input 'select' expecting {<EOF>, ',', 'FROM', 'WHERE', 'GROUP', 'ORDER', 'HAVING', 'LIMIT', 'LATERAL', 'WINDOW', 'UNION', 'EXCEPT', 'MINUS', 'INTERSECT', 'SORT', 'CLUSTER', 'DISTRIBUTE'}(line 2, pos 0)
+
+== SQL ==
+select to_json(array(map('a',1)))
+select to_json(array(map('a',1), map('b',2)))
+^^^
+select to_json(named_struct('a', 1, 'b', 2), named_struct('mode', 'PERMISSIVE'))
 
 
 -- !query 9
