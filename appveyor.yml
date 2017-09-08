@@ -45,6 +45,9 @@ install:
 build_script:
   - cmd: mvn -DskipTests -Phadoop-2.6 -Psparkr -Phive -Phive-thriftserver package
 
+environment:
+  NOT_CRAN: true
+
 test_script:
   - cmd: .\bin\spark-submit2.cmd --conf spark.hadoop.fs.default.name="file:///" R\pkg\tests\run-all.R
 
