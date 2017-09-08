@@ -569,46 +569,52 @@ class SessionCatalog(
   /**
    * Rename a table.
    *
-   * If a database is specified in `oldName`, this will rename the table in that database.
-   * If no database is specified, this will first attempt to rename a temporary table with
-   * the same name, then, if that does not exist, rename the table in the current database.
+   * If the database specified in `newName` is different from the one specified in `oldName`,
+   * It results in moving table across databases.
    *
-   * This assumes the database specified in `newName` matches the one in `oldName`.
+   * If no database is specified in `oldName`, this will first attempt to rename a temporary table
+   * with the same name, then, if that does not exist, rename the table in the current database.
+   *
+   * If no database is specified in `newName`, current database will be used.
+   *
    */
   def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
-    val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
-    newName.database.map(formatDatabaseName).foreach { newDb =>
-      if (db != newDb) {
-        throw new AnalysisException(
-          s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
-      }
-    }
+    val oldDb = formatDatabaseName(oldName.database.getOrElse(currentDb))
+    val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
 
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
-    if (db == globalTempViewManager.database) {
-      globalTempViewManager.rename(oldTableName, newTableName)
-    } else {
-      requireDbExists(db)
-      if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
-        requireTableExists(TableIdentifier(oldTableName, Some(db)))
-        requireTableNotExists(TableIdentifier(newTableName, Some(db)))
-        validateName(newTableName)
-        externalCatalog.renameTable(db, oldTableName, newTableName)
-      } else {
-        if (newName.database.isDefined) {
-          throw new AnalysisException(
-            s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
-              s"name '${newName.database.get}' in the destination table")
-        }
-        if (tempTables.contains(newTableName)) {
-          throw new AnalysisException(s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': " +
-            "destination table already exists")
-        }
-        val table = tempTables(oldTableName)
-        tempTables.remove(oldTableName)
-        tempTables.put(newTableName, table)
+    if (oldDb == globalTempViewManager.database || newDb == globalTempViewManager.database) {
+      // when either old table or new table is a global temporary view
+      if (oldDb != newDb) {
+        // It's forbidden to move a global temporary view to another database
+        // or change a table from regular database to be a global temporary view.
+        throw new AnalysisException(
+          s"Cannot change database of table '$oldTableName'")
       }
+      globalTempViewManager.rename(oldTableName, newTableName)
+    } else if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
+      // when the old table is a regular table/view
+      requireDbExists(oldDb)
+      requireDbExists(newDb)
+      requireTableExists(TableIdentifier(oldTableName, Some(oldDb)))
+      requireTableNotExists(TableIdentifier(newTableName, Some(newDb)))
+      validateName(newTableName)
+      externalCatalog.renameTable(oldDb, oldTableName, newDb, newTableName)
+    } else {
+      // when the old table is a non-global temporary view
+      if (newName.database.isDefined) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+            s"name '${newName.database.get}' in the destination table")
+      }
+      if (tempTables.contains(newTableName)) {
+        throw new AnalysisException(s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': " +
+          "destination table already exists")
+      }
+      val table = tempTables(oldTableName)
+      tempTables.remove(oldTableName)
+      tempTables.put(newTableName, table)
     }
   }
 

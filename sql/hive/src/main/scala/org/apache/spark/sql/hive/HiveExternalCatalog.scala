@@ -488,11 +488,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   override protected def doRenameTable(
-      db: String,
+      oldDb: String,
       oldName: String,
+      newDb: String,
       newName: String): Unit = withClient {
-    val rawTable = getRawTable(db, oldName)
-
+    val rawTable = getRawTable(oldDb, oldName)
     // Note that Hive serde tables don't use path option in storage properties to store the value
     // of table location, but use `locationUri` field to store it directly. And `locationUri` field
     // will be updated automatically in Hive metastore by the `alterTable` call at the end of this
@@ -502,17 +502,17 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     val storageWithNewPath = if (rawTable.tableType == MANAGED && hasPathOption) {
       // If it's a managed table with path option and we are renaming it, then the path option
       // becomes inaccurate and we need to update it according to the new table name.
-      val newTablePath = defaultTablePath(TableIdentifier(newName, Some(db)))
+      val newTablePath = defaultTablePath(TableIdentifier(newName, Some(newDb)))
       updateLocationInStorageProps(rawTable, Some(newTablePath))
     } else {
       rawTable.storage
     }
 
     val newTable = rawTable.copy(
-      identifier = TableIdentifier(newName, Some(db)),
+      identifier = TableIdentifier(newName, Some(newDb)),
       storage = storageWithNewPath)
 
-    client.alterTable(db, oldName, newTable)
+    client.alterTable(oldDb, oldName, newTable)
   }
 
   private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {

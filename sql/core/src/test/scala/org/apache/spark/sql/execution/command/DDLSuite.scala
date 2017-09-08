@@ -760,7 +760,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
 
     // The database in destination table name can be omitted, and we will use the database of source
     // table for it.
-    sql("ALTER TABLE dbx.tab2 RENAME TO tab1")
+    sql("ALTER TABLE dbx.tab2 RENAME TO dbx.tab1")
     assert(catalog.listTables("dbx") == Seq(tableIdent1))
 
     catalog.setCurrentDatabase("dbx")

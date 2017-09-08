@@ -120,15 +120,15 @@ class ExternalCatalogEventSuite extends SparkFunSuite {
     checkEvents(CreateTablePreEvent("db5", "tbl1") :: Nil)
 
     // RENAME
-    catalog.renameTable("db5", "tbl1", "tbl2")
+    catalog.renameTable("db5", "tbl1", "db5", "tbl2")
     checkEvents(
-      RenameTablePreEvent("db5", "tbl1", "tbl2") ::
-      RenameTableEvent("db5", "tbl1", "tbl2") :: Nil)
+      RenameTablePreEvent("db5", "tbl1", "db5", "tbl2") ::
+      RenameTableEvent("db5", "tbl1", "db5", "tbl2") :: Nil)
 
     intercept[AnalysisException] {
-      catalog.renameTable("db5", "tbl1", "tbl2")
+      catalog.renameTable("db5", "tbl1", "db5", "tbl2")
     }
-    checkEvents(RenameTablePreEvent("db5", "tbl1", "tbl2") :: Nil)
+    checkEvents(RenameTablePreEvent("db5", "tbl1", "db5", "tbl2") :: Nil)
 
     // DROP
     intercept[AnalysisException] {

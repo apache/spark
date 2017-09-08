@@ -58,7 +58,7 @@ class GlobalTempViewSuite extends QueryTest with SharedSQLContext {
       checkAnswer(spark.table(s"$globalTempDB.src"), Row(1, "a"))
 
       // Use qualified name to rename a global temp view.
-      sql(s"ALTER VIEW $globalTempDB.src RENAME TO src2")
+      sql(s"ALTER VIEW $globalTempDB.src RENAME TO $globalTempDB.src2")
       intercept[NoSuchTableException](spark.table(s"$globalTempDB.src"))
       checkAnswer(spark.table(s"$globalTempDB.src2"), Row(1, "a"))
 

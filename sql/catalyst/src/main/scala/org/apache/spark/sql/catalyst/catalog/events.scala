@@ -97,6 +97,7 @@ case class DropTableEvent(database: String, name: String) extends TableEvent
 case class RenameTablePreEvent(
     database: String,
     name: String,
+    newDb: String,
     newName: String)
   extends TableEvent
 
@@ -106,6 +107,7 @@ case class RenameTablePreEvent(
 case class RenameTableEvent(
     database: String,
     name: String,
+    newDb: String,
     newName: String)
   extends TableEvent
 
