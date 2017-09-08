@@ -865,10 +865,6 @@ private[spark] object JsonProtocolSuite extends Assertions {
       sw.incWriteTime(b + c + d)
       sw.incRecordsWritten(if (hasRecords) (a + b + c) / 100 else -1)
     }
-    // Make at most 6 blocks
-    t.setUpdatedBlockStatuses((1 to (e % 5 + 1)).map { i =>
-      (RDDBlockId(e % i, f % i), BlockStatus(StorageLevel.MEMORY_AND_DISK_SER_2, a % i, b % i))
-    }.toSeq)
     t
   }
 

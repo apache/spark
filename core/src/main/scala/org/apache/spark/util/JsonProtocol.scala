@@ -669,8 +669,8 @@ private[spark] object JsonProtocol {
       val taskId = (json \ "Task ID").extract[Long]
       val stageId = (json \ "Stage ID").extract[Int]
       val stageAttemptId = (json \ "Stage Attempt ID").extract[Int]
-      val updates =
-        (json \ "Accumulator Updates").extract[List[JValue]].map(accumulableInfoFromJson)
+      val updates = accumulablesFromJson(Some(json \ "Accumulator Updates"))
+        .getOrElse(Seq.empty[AccumulableInfo])
       (taskId, stageId, stageAttemptId, updates)
     }
     SparkListenerExecutorMetricsUpdate(execInfo, accumUpdates)
@@ -693,12 +693,8 @@ private[spark] object JsonProtocol {
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val failureReason = Utils.jsonOption(json \ "Failure Reason").map(_.extract[String])
-    val accumulatedValues = {
-      Utils.jsonOption(json \ "Accumulables").map(_.extract[List[JValue]]) match {
-        case Some(values) => values.map(accumulableInfoFromJson)
-        case None => Seq.empty[AccumulableInfo]
-      }
-    }
+    val accumulatedValues = accumulablesFromJson(Utils.jsonOption(json \ "Accumulables"))
+      .getOrElse(Seq.empty[AccumulableInfo])
 
     val stageInfo = new StageInfo(
       stageId, attemptId, stageName, numTasks, rddInfos, parentIds, details)
@@ -724,10 +720,8 @@ private[spark] object JsonProtocol {
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
     val killed = Utils.jsonOption(json \ "Killed").exists(_.extract[Boolean])
-    val accumulables = Utils.jsonOption(json \ "Accumulables").map(_.extract[Seq[JValue]]) match {
-      case Some(values) => values.map(accumulableInfoFromJson)
-      case None => Seq.empty[AccumulableInfo]
-    }
+    val accumulables = accumulablesFromJson(Utils.jsonOption(json \ "Accumulables"))
+      .getOrElse(Seq.empty[AccumulableInfo])
 
     val taskInfo =
       new TaskInfo(taskId, index, attempt, launchTime, executorId, host, taskLocality, speculative)
@@ -737,6 +731,16 @@ private[spark] object JsonProtocol {
     taskInfo.killed = killed
     taskInfo.setAccumulables(accumulables)
     taskInfo
+  }
+
+  def accumulablesFromJson(json: Option[JValue]): Option[Seq[AccumulableInfo]] = {
+    json.map(_.extract[Seq[JValue]]) match {
+      case Some(values) => Some(values.filterNot(
+        v =>
+          Utils.jsonOption(v \ "Name").map(_.extract[String]).exists(accumulableBlacklist.contains)
+      ).map(accumulableInfoFromJson))
+      case None => None
+    }
   }
 
   def accumulableInfoFromJson(json: JValue): AccumulableInfo = {
@@ -841,15 +845,6 @@ private[spark] object JsonProtocol {
         Utils.jsonOption(inJson \ "Records Read").map(_.extract[Long]).getOrElse(0L))
     }
 
-    // Updated blocks
-    Utils.jsonOption(json \ "Updated Blocks").foreach { blocksJson =>
-      metrics.setUpdatedBlockStatuses(blocksJson.extract[List[JValue]].map { blockJson =>
-        val id = BlockId((blockJson \ "Block ID").extract[String])
-        val status = blockStatusFromJson(blockJson \ "Status")
-        (id, status)
-      })
-    }
-
     metrics
   }
 
@@ -886,8 +881,7 @@ private[spark] object JsonProtocol {
         val fullStackTrace =
           Utils.jsonOption(json \ "Full Stack Trace").map(_.extract[String]).orNull
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
-        val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
-          .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
+        val accumUpdates = accumulablesFromJson(Utils.jsonOption(json \ "Accumulator Updates"))
           .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulators().map(acc => {
             acc.toInfo(Some(acc.value), None)
           }))
