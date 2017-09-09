@@ -645,21 +645,29 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       withTempDir { dir =>
         val pathUri = dir.toURI
 
-        sql(
-          s"""
-             |FROM test_insert_table
-             |INSERT OVERWRITE DIRECTORY '${pathUri}'
-             |STORED AS orc
-             |SELECT id
-             |INSERT OVERWRITE DIRECTORY '${pathUri}'
-             |STORED AS orc
-             |SELECT *
-           """.stripMargin)
+        withTempDir { dir2 =>
+          val pathUri2 = dir2.toURI
 
-        // use orc data source to check the data of path is right.
-        checkAnswer(
-          spark.read.orc(dir.getCanonicalPath),
-          sql("select * from test_insert_table"))
+          sql(
+            s"""
+               |FROM test_insert_table
+               |INSERT OVERWRITE DIRECTORY '${pathUri}'
+               |STORED AS orc
+               |SELECT id
+               |INSERT OVERWRITE DIRECTORY '${pathUri2}'
+               |STORED AS orc
+               |SELECT *
+             """.stripMargin)
+
+          // use orc data source to check the data of path is right.
+          checkAnswer(
+            spark.read.orc(dir.getCanonicalPath),
+            sql("select id from test_insert_table"))
+
+          checkAnswer(
+            spark.read.orc(dir2.getCanonicalPath),
+            sql("select * from test_insert_table"))
+        }
       }
     }
   }

@@ -551,11 +551,11 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
     parser.parsePlan(v3) match {
       case InsertIntoDir(_, storage, provider, query, overwrite) =>
         assert(storage.locationUri.isDefined && provider == Some("json"))
-        assert(storage.properties.get("path") == Some("/tmp/file"))
         assert(storage.properties.get("a") == Some("1"))
         assert(storage.properties.get("b") == Some("0.1"))
-        assert(storage.properties.get("c") == Some("TRUE"))
+        assert(storage.properties.get("c") == Some("true"))
         assert(!storage.properties.contains("abc"))
+        assert(!storage.properties.contains("path"))
       case other =>
         fail(s"Expected to parse ${classOf[InsertIntoDataSourceDirCommand].getClass.getName}" +
           " from query," + s"got ${other.getClass.getName}: $v1")

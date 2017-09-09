@@ -369,7 +369,7 @@ case class InsertIntoTable(
  * @param overwrite If true, the existing directory will be overwritten
  *
  * Note that this plan is unresolved and has to be replaced by the concrete implementations
- * sql/core/src/main/scala/org/apache/spark/sql/execution/command/ddl.scaladuring analysis.
+ * during analysis.
  */
 case class InsertIntoDir(
     isLocal: Boolean,
