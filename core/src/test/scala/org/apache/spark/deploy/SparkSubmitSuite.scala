@@ -31,7 +31,7 @@ import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -97,7 +97,7 @@ class SparkSubmitSuite
   with Matchers
   with BeforeAndAfterEach
   with ResetSystemProperties
-  with Timeouts
+  with TimeLimits
   with TestPrematureExit {
 
   override def beforeEach() {
