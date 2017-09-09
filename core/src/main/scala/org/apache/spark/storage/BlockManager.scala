@@ -998,7 +998,6 @@ private[spark] class BlockManager(
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
       // catch and properly re-throw InterruptedException.
       if (exceptionWasThrown) {
-        logWarning(s"Putting block $blockId failed due to an exception")
         // If an exception was thrown then it's possible that the code in `putBody` has already
         // notified the master about the availability of this block, so we need to send an update
         // to remove this block location.
