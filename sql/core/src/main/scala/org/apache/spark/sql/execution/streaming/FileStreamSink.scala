@@ -127,7 +127,7 @@ class FileStreamSink(
         outputSpec = FileFormatWriter.OutputSpec(path, Map.empty),
         hadoopConf = hadoopConf,
         partitionColumns = partitionColumns,
-        bucketSpec = None,
+        bucketIdExpression = None,
         statsTrackers = Nil,
         options = options)
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.physical
 
+import scala.language.existentials
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
@@ -30,7 +32,10 @@ import org.apache.spark.sql.types.{DataType, IntegerType}
  *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
  *    about how tuples are distributed within a single partition.
  */
-sealed trait Distribution
+sealed trait Distribution {
+  /** If defined, then represents how many partitions are expected by the distribution */
+  def numPartitions: Option[Int] = None
+}
 
 /**
  * Represents a distribution where no promises are made about co-location of data.
@@ -49,12 +54,20 @@ case object AllTuples extends Distribution
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+case class ClusteredDistribution(
+    clustering: Seq[Expression],
+    numClusters: Option[Int] = None,
+    hashingFunctionClass: Option[Class[_ <: HashExpression[Int]]] = None)
+  extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
       "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
+  require(numClusters.isEmpty || numClusters.get > 0,
+    "Number of cluster (if set) should only be a positive integer")
+
+  override def numPartitions: Option[Int] = numClusters
 }
 
 /**
@@ -234,7 +247,10 @@ case object SinglePartition extends Partitioning {
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
+case class HashPartitioning(
+    expressions: Seq[Expression],
+    numPartitions: Int,
+    hashingFunctionClass: Class[_ <: HashExpression[Int]] = classOf[Murmur3Hash])
   extends Expression with Partitioning with Unevaluable {
 
   override def children: Seq[Expression] = expressions
@@ -243,8 +259,10 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
-      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+    case ClusteredDistribution(requiredClustering, numClusters, hashingFunctionClazz) =>
+      (numClusters.isEmpty || numClusters.get == numPartitions) &&
+        (hashingFunctionClazz.isEmpty || hashingFunctionClazz.get == hashingFunctionClass) &&
+        expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
 
@@ -260,9 +278,16 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   /**
    * Returns an expression that will produce a valid partition ID(i.e. non-negative and is less
-   * than numPartitions) based on hashing expressions.
+   * than numPartitions) based on hashing expression(s) and the hashing function.
    */
-  def partitionIdExpression: Expression = Pmod(new Murmur3Hash(expressions), Literal(numPartitions))
+  def partitionIdExpression: Expression = {
+    val hashExpression = hashingFunctionClass match {
+      case m if m == classOf[Murmur3Hash] => new Murmur3Hash(expressions)
+      case h if h == classOf[HiveHash] => HiveHash(expressions)
+      case _ => throw new Exception(s"Unsupported hashingFunction: $hashingFunctionClass")
+    }
+    Pmod(hashExpression, Literal(numPartitions))
+  }
 }
 
 /**
@@ -289,8 +314,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
-      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+    case ClusteredDistribution(requiredClustering, numClusters, hashingFunctionClass) =>
+      (numClusters.isEmpty || numClusters.get == numPartitions) && hashingFunctionClass.isEmpty &&
+        ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
     case _ => false
   }
 

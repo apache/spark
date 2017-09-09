@@ -22,11 +22,12 @@ import java.net.URI
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale, Random}
 
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.common.FileUtils
+import org.apache.hadoop.hive.common.{FileUtils, HiveStatsUtils}
 import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.hadoop.hive.ql.exec.TaskRunner
 import org.apache.hadoop.hive.ql.plan.TableDesc
@@ -35,8 +36,9 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, HiveHash, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.{CommandUtils, DataWritingCommand}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter
@@ -311,25 +313,10 @@ case class InsertIntoHiveTable(
       }
     }
 
-    table.bucketSpec match {
-      case Some(bucketSpec) =>
-        // Writes to bucketed hive tables are allowed only if user does not care about maintaining
-        // table's bucketing ie. both "hive.enforce.bucketing" and "hive.enforce.sorting" are
-        // set to false
-        val enforceBucketingConfig = "hive.enforce.bucketing"
-        val enforceSortingConfig = "hive.enforce.sorting"
-
-        val message = s"Output Hive table ${table.identifier} is bucketed but Spark" +
-          "currently does NOT populate bucketed output which is compatible with Hive."
-
-        if (hadoopConf.get(enforceBucketingConfig, "true").toBoolean ||
-          hadoopConf.get(enforceSortingConfig, "true").toBoolean) {
-          throw new AnalysisException(message)
-        } else {
-          logWarning(message + s" Inserting data anyways since both $enforceBucketingConfig and " +
-            s"$enforceSortingConfig are set to false.")
-        }
-      case _ => // do nothing since table has no bucketing
+    if (!overwrite && table.bucketSpec.isDefined) {
+      throw new SparkException("Appending data to hive bucketed table is not allowed as it " +
+        "will break the table's bucketing guarantee. Consider overwriting instead. Table = " +
+        table.qualifiedName)
     }
 
     val committer = FileCommitProtocol.instantiate(
@@ -344,6 +331,9 @@ case class InsertIntoHiveTable(
       }.asInstanceOf[Attribute]
     }
 
+    val (_, dataColumns) = getPartitionAndDataColumns
+    val bucketIdExpression = getBucketIdExpression(dataColumns)
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       plan = children.head,
@@ -352,9 +342,20 @@ case class InsertIntoHiveTable(
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
-      bucketSpec = None,
+      bucketIdExpression = bucketIdExpression,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
+
+    // validate bucketing based on number of files before loading to metastore
+    table.bucketSpec.foreach { spec =>
+      if (partition.nonEmpty && numDynamicPartitions > 0) {
+        val validPartitionPaths =
+          getValidPartitionPaths(hadoopConf, tmpLocation, numDynamicPartitions)
+        validateBuckets(hadoopConf, validPartitionPaths, table.bucketSpec.get.numBuckets)
+      } else {
+        validateBuckets(hadoopConf, Seq(tmpLocation), table.bucketSpec.get.numBuckets)
+      }
+    }
 
     if (partition.nonEmpty) {
       if (numDynamicPartitions > 0) {
@@ -371,10 +372,10 @@ case class InsertIntoHiveTable(
         // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DML#LanguageManualDML-InsertingdataintoHiveTablesfromqueries
         // scalastyle:on
         val oldPart =
-          externalCatalog.getPartitionOption(
-            table.database,
-            table.identifier.table,
-            partitionSpec)
+        externalCatalog.getPartitionOption(
+          table.database,
+          table.identifier.table,
+          partitionSpec)
 
         var doHiveOverwrite = overwrite
 
@@ -446,5 +447,133 @@ case class InsertIntoHiveTable(
     // does not return anything for insert operations.
     // TODO: implement hive compatibility as rules.
     Seq.empty[Row]
+  }
+
+  private def getValidPartitionPaths(
+      conf: Configuration,
+      outputPath: Path,
+      numDynamicPartitions: Int): Seq[Path] = {
+    val validPartitionPaths = mutable.HashSet[Path]()
+    try {
+      val fs = outputPath.getFileSystem(conf)
+      HiveStatsUtils.getFileStatusRecurse(outputPath, numDynamicPartitions, fs)
+        .filter(_.isDirectory)
+        .foreach(d => validPartitionPaths.add(d.getPath))
+    } catch {
+      case e: IOException =>
+        throw new SparkException("Unable to extract partition paths from temporary output " +
+          s"location $outputPath due to : ${e.getMessage}", e)
+    }
+    validPartitionPaths.toSeq
+  }
+
+  private def validateBuckets(conf: Configuration, outputPaths: Seq[Path], numBuckets: Int) = {
+    val bucketedFilePattern = """part-(\d+)(?:.*)?$""".r
+
+    def getBucketIdFromFilename(fileName : String): Option[Int] =
+      fileName match {
+        case bucketedFilePattern(bucketId) => Some(bucketId.toInt)
+        case _ => None
+      }
+
+    outputPaths.foreach(outputPath => {
+      val fs = outputPath.getFileSystem(conf)
+      val allFiles = fs.listStatus(outputPath)
+      if (allFiles != null && allFiles.nonEmpty) {
+        val files = allFiles.filterNot(_.getPath.getName == "_SUCCESS")
+          .map(_.getPath.getName)
+          .sortBy(_.toString)
+
+        var expectedBucketId = 0
+        files.foreach { case file =>
+          getBucketIdFromFilename(file) match {
+            case Some(id) if id == expectedBucketId =>
+              expectedBucketId += 1
+            case Some(_) =>
+              throw new SparkException(
+                s"Potentially missing bucketed output files in temporary bucketed output " +
+                  s"location. Aborting job. Output location : $outputPath, files found : " +
+                  files.mkString("[", ",", "]"))
+            case None =>
+              throw new SparkException(
+                s"Invalid file found in temporary bucketed output location. Aborting job. " +
+                  s"Output location : $outputPath, bad file : $file")
+          }
+        }
+
+        if (expectedBucketId != numBuckets) {
+          throw new SparkException(
+            s"Potentially missing bucketed output files in temporary bucketed output location. " +
+              s"Aborting job. Output location : $outputPath, files found : " +
+              files.mkString("[", ",", "]"))
+        }
+      }
+    })
+  }
+
+  private def getPartitionAndDataColumns: (Seq[Attribute], Seq[Attribute]) = {
+    val allColumns = query.output
+    val partitionColumnNames = partition.keySet
+    allColumns.partition(c => partitionColumnNames.contains(c.name))
+  }
+
+  /**
+   * Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
+   * guarantee the data distribution is same between shuffle and bucketed data source, which
+   * enables us to only shuffle one side when join a bucketed table and a normal one.
+   */
+  private def getBucketIdExpression(dataColumns: Seq[Attribute]): Option[Expression] =
+    table.bucketSpec.map { spec =>
+      HashPartitioning(
+        spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get),
+        spec.numBuckets,
+        classOf[HiveHash]
+      ).partitionIdExpression
+    }
+
+  /**
+   * If the table is bucketed, then requiredDistribution would be the bucket columns.
+   * Else it would be empty
+   */
+  override def requiredDistribution: Seq[Distribution] = table.bucketSpec match {
+    case Some(bucketSpec) =>
+      val (_, dataColumns) = getPartitionAndDataColumns
+      Seq(ClusteredDistribution(
+        bucketSpec.bucketColumnNames.map(b => dataColumns.find(_.name == b).get),
+        Option(bucketSpec.numBuckets),
+        Some(classOf[HiveHash])
+      ))
+
+    case _ => Seq(UnspecifiedDistribution)
+  }
+
+  /**
+   * How is `requiredOrdering` determined ?
+   *
+   *     table type      |    normal table    |              bucketed table
+   * --------------------+--------------------+-----------------------------------------------
+   *   non-partitioned   |        Nil         |               sort columns
+   *   static partition  |        Nil         |               sort columns
+   *   dynamic partition |  partition columns | (partition columns + bucketId + sort columns)
+   * --------------------+--------------------+-----------------------------------------------
+   */
+  override def requiredOrdering: Seq[Seq[SortOrder]] = {
+    val (partitionColumns, dataColumns) = getPartitionAndDataColumns
+    val isDynamicPartitioned =
+      table.partitionColumnNames.nonEmpty && partition.values.exists(_.isEmpty)
+
+    val sortExpressions = table.bucketSpec match {
+      case Some(bucketSpec) =>
+        val sortColumns = bucketSpec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
+        if (isDynamicPartitioned) {
+          partitionColumns ++ getBucketIdExpression(dataColumns) ++ sortColumns
+        } else {
+          sortColumns
+        }
+
+      case _ => if (isDynamicPartitioned) partitionColumns else Nil
+    }
+
+    Seq(sortExpressions.map(SortOrder(_, Ascending)))
   }
 }

@@ -18,12 +18,13 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{InterpretedMutableProjection, Literal}
+import org.apache.spark.sql.catalyst.expressions.{HiveHash, InterpretedMutableProjection, Literal, Murmur3Hash}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning}
 
 class PartitioningSuite extends SparkFunSuite {
+  private val expressions = Seq(Literal(2), Literal(3))
+
   test("HashPartitioning compatibility should be sensitive to expression ordering (SPARK-9785)") {
-    val expressions = Seq(Literal(2), Literal(3))
     // Consider two HashPartitionings that have the same _set_ of hash expressions but which are
     // created with different orderings of those expressions:
     val partitioningA = HashPartitioning(expressions, 100)
@@ -34,11 +35,13 @@ class PartitioningSuite extends SparkFunSuite {
     val distribution = ClusteredDistribution(expressions)
     assert(partitioningA.satisfies(distribution))
     assert(partitioningB.satisfies(distribution))
+
     // These partitionings compute different hashcodes for the same input row:
     def computeHashCode(partitioning: HashPartitioning): Int = {
       val hashExprProj = new InterpretedMutableProjection(partitioning.expressions, Seq.empty)
       hashExprProj.apply(InternalRow.empty).hashCode()
     }
+
     assert(computeHashCode(partitioningA) != computeHashCode(partitioningB))
     // Thus, these partitionings are incompatible:
     assert(!partitioningA.compatibleWith(partitioningB))
@@ -51,5 +54,19 @@ class PartitioningSuite extends SparkFunSuite {
     assert(partitioningA === partitioningA)
     assert(partitioningA.guarantees(partitioningA))
     assert(partitioningA.compatibleWith(partitioningA))
+  }
+
+  test("HashPartitioning compatibility should be sensitive to hashing function") {
+    val partitioningA = HashPartitioning(expressions, 100, classOf[Murmur3Hash])
+    val partitioningB = HashPartitioning(expressions, 100, classOf[HiveHash])
+    assert(partitioningA != partitioningB)
+    assert(!partitioningA.compatibleWith(partitioningB))
+  }
+
+  test("HashPartitioning compatibility should be sensitive to number of partitions") {
+    val partitioningA = HashPartitioning(expressions, 10, classOf[Murmur3Hash])
+    val partitioningB = HashPartitioning(expressions, 1212, classOf[Murmur3Hash])
+    assert(partitioningA != partitioningB)
+    assert(!partitioningA.compatibleWith(partitioningB))
   }
 }
