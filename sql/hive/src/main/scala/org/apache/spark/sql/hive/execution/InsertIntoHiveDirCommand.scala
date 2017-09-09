@@ -117,12 +117,12 @@ case class InsertIntoHiveDirCommand(
       fs.listStatus(tmpPath).foreach {
         tmpFile => fs.rename(tmpFile.getPath, writeToPath)
       }
-
-      deleteExternalTmpPath(hadoopConf)
     } catch {
       case e: Throwable =>
         throw new SparkException(
           "Failed inserting overwrite directory " + storage.locationUri.get, e)
+    } finally {
+      deleteExternalTmpPath(hadoopConf)
     }
 
     Seq.empty[Row]
