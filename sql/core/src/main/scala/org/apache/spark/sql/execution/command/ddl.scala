@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, Resolver}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.datasources.PartitioningUtils
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.HiveSerDe
@@ -867,6 +868,20 @@ object DDLUtils {
         case "orc" => OrcFileFormat.checkFieldNames(table.dataSchema)
         case _ =>
       }
+    }
+  }
+
+  /**
+   * Throws exception if outputPath tries to overwrite inputpath.
+   */
+  def verifyNotReadPath(query: LogicalPlan, outputPath: Path) : Unit = {
+    val inputPaths = query.collect {
+      case LogicalRelation(r: HadoopFsRelation, _, _, _) => r.location.rootPaths
+    }.flatten
+
+    if (inputPaths.contains(outputPath)) {
+      throw new AnalysisException(
+        "Cannot overwrite a path that is also being read from.")
     }
   }
 }
