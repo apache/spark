@@ -1544,7 +1544,7 @@ options.
 
 ## Upgrading From Spark SQL 2.2 to 2.3
 
-  - The queries which select only `spark.sql.columnNameOfCorruptRecord` column are disallowed now. Notice that the queries which have only the column after column pruning (e.g. filtering on the column followed by a counting operation) are also disallowed. If you want to select only the corrupt records, you should cache or save the underlying Dataset and DataFrame before running such queries.
+  - Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the referenced columns only include the internal corrupt record column (named `_corrupt_record` by default). For example, `spark.read.schema(schema).json(file).filter($"_corrupt_record".isNotNull).count()` and `spark.read.schema(schema).json(file).select("_corrupt_record").show()`. Instead, you can cache or save the parsed results and then send the same query. For example, `val df = spark.read.schema(schema).json(file).cache()` and then `df.filter($"_corrupt_record".isNotNull).count()`.
 
 ## Upgrading From Spark SQL 2.1 to 2.2
 
