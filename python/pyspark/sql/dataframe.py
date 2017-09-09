@@ -46,9 +46,9 @@ class DataFrame(object):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
-    and can be created using various functions in :class:`SQLContext`::
+    and can be created using various functions in :class:`SparkSession`::
 
-        people = sqlContext.read.parquet("...")
+        people = spark.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -59,9 +59,9 @@ class DataFrame(object):
 
     A more concrete example::
 
-        # To create DataFrame using SQLContext
-        people = sqlContext.read.parquet("...")
-        department = sqlContext.read.parquet("...")
+        # To create DataFrame using SparkSession
+        people = spark.read.parquet("...")
+        department = spark.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
@@ -116,9 +116,9 @@ class DataFrame(object):
 
     @since(1.3)
     def registerTempTable(self, name):
-        """Registers this RDD as a temporary table using the given name.
+        """Registers this DataFrame as a temporary table using the given name.
 
-        The lifetime of this temporary table is tied to the :class:`SQLContext`
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
