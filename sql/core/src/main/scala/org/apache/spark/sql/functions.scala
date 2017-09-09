@@ -3119,8 +3119,8 @@ object functions {
   }
 
   /**
-   * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s
-   * or a `MapType` with a `StructType` value into a JSON string with the specified schema.
+   * (Scala-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
+   * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct or array of the structs.
@@ -3135,8 +3135,8 @@ object functions {
   }
 
   /**
-   * (Java-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s
-   * or a `MapType` with a `StructType` value into a JSON string with the specified schema.
+   * (Java-specific) Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
+   * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct or array of the structs.
@@ -3150,8 +3150,8 @@ object functions {
     to_json(e, options.asScala.toMap)
 
   /**
-   * Converts a column containing a `StructType`, `ArrayType` of `StructType`s
-   * or a `MapType` with a `StructType` value into a JSON string with the specified schema.
+   * Converts a column containing a `StructType`, `ArrayType` of `StructType`s,
+   * a `MapType` or `ArrayType` of `MapType`s into a JSON string with the specified schema.
    * Throws an exception, in the case of an unsupported type.
    *
    * @param e a column containing a struct or array of the structs.

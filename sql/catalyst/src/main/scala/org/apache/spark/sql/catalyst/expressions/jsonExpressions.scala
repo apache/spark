@@ -604,7 +604,8 @@ case class JsonToStructs(
 }
 
 /**
- * Converts a [[StructType]] or [[ArrayType]] of [[StructType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
+ * or [[ArrayType]] of [[MapType]]s to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -621,6 +622,10 @@ case class JsonToStructs(
        {"a":{"b":1}}
       > SELECT _FUNC_(map(named_struct('a',1),named_struct('b',2)));
        {"[1]":{"b":2}}
+      > SELECT _FUNC_(map('a',1));
+       {"a":1}
+      > SELECT _FUNC_(array((map('a',1))));
+       [{"a":1}]
   """,
   since = "2.2.0")
 // scalastyle:on line.size.limit
