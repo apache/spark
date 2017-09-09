@@ -377,9 +377,8 @@ case class InsertIntoDir(
     provider: Option[String],
     child: LogicalPlan,
     overwrite: Boolean = true)
-  extends LogicalPlan {
+  extends UnaryNode {
 
-  override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
   override lazy val resolved: Boolean = false
 }
