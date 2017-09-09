@@ -49,7 +49,7 @@ import org.apache.spark.sql.hive.client.HiveClientImpl
  * @param isLocal whether the path specified in `storage` is a local directory
  * @param storage storage format used to describe how the query result is stored.
  * @param query the logical plan representing data to write to
- * @param overwrite whthere overwrites existing directory
+ * @param overwrite whether overwrites existing directory
  */
 case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
