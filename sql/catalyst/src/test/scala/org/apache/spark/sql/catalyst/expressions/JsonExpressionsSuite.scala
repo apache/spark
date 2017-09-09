@@ -21,6 +21,7 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -589,5 +590,27 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         gmtId),
       """{"t":"2015-12-31T16:00:00"}"""
     )
+  }
+
+  test("to_json: verify MapType's value type instead of key type") {
+    // Keys in map are treated as strings when converting to JSON. The type doesn't matter at all.
+    val mapType1 = MapType(CalendarIntervalType, IntegerType)
+    val schema1 = StructType(StructField("a", mapType1) :: Nil)
+    val struct1 = Literal.create(null, schema1)
+    checkEvaluation(
+      StructsToJson(Map.empty, struct1, gmtId),
+      null
+    )
+
+    // The value type must be valid for converting to JSON.
+    val mapType2 = MapType(IntegerType, CalendarIntervalType)
+    val schema2 = StructType(StructField("a", mapType2) :: Nil)
+    val struct2 = Literal.create(null, schema2)
+    intercept[TreeNodeException[_]] {
+      checkEvaluation(
+        StructsToJson(Map.empty, struct2, gmtId),
+        null
+      )
+    }
   }
 }
