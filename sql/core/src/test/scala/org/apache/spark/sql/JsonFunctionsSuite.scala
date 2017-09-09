@@ -257,6 +257,18 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       "A type of keys and values in map() must be string, but got"))
   }
 
+  test("SPARK-21954: JacksonUtils should verify MapType's value type instead of key type") {
+    // interval type is invalid for converting to JSON. However, the keys of a map are treated
+    // as strings, so its type doesn't matter.
+    checkAnswer(
+      sql("SELECT to_json(struct(map(interval 1 second, 'a')))"),
+      Row("""{"col1":{"interval 1 seconds":"a"}}""") :: Nil)
+    val e = intercept[AnalysisException] {
+      sql("SELECT to_json(struct(map('a', interval 1 second)))")
+    }
+    assert(e.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
+  }
+
   test("SPARK-19967 Support from_json in SQL") {
     val df1 = Seq("""{"a": 1}""").toDS()
     checkAnswer(
