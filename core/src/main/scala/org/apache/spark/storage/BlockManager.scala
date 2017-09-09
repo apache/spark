@@ -988,12 +988,6 @@ private[spark] class BlockManager(
         logWarning(s"Putting block $blockId failed")
       }
       res
-    } catch {
-      // Since removeBlockInternal may throw exception,
-      // we should print exception first to show root cause.
-      case e: Throwable =>
-        logWarning(s"Putting block $blockId failed due to exception $e.")
-        throw e
     } finally {
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
       // catch and properly re-throw InterruptedException.

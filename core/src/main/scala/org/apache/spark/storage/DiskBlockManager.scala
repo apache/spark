@@ -53,7 +53,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   /** Looks up a file by hashing it into one of our local subdirectories. */
   // This method should be kept in sync with
   // org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getFile().
-  private def getFileInternal(filename: String): File = {
+  private def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % localDirs.length
@@ -77,11 +77,11 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
     new File(subDir, filename)
   }
 
-  def getFile(blockId: BlockId): File = getFileInternal(blockId.name)
+  def getFile(blockId: BlockId): File = getFile(blockId.name)
 
   /** Check if disk block manager has a block. */
   def containsBlock(blockId: BlockId): Boolean = {
-    getFileInternal(blockId.name).exists()
+    getFile(blockId.name).exists()
   }
 
   /** List all the files currently stored on disk by the disk manager. */
