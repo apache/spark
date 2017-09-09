@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.functions.{from_json, struct, to_json}
+import org.apache.spark.sql.functions.{from_json, lit, map, struct, to_json}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
@@ -196,14 +196,28 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("to_json unsupported type") {
-    val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
-      .select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
+    val baseDf = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+    val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
     val e = intercept[AnalysisException]{
       // Unsupported type throws an exception
       df.select(to_json($"c")).collect()
     }
     assert(e.getMessage.contains(
       "Unable to convert column a of type calendarinterval to JSON."))
+
+    // interval type is invalid for converting to JSON. However, the keys of a map are treated
+    // as strings, so its type doesn't matter.
+    val df2 = baseDf
+      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
+    val df3 = baseDf
+      .select(struct(map(lit("a"), $"a._1".cast(CalendarIntervalType)).as("col1")).as("c"))
+    checkAnswer(
+      df2.select(to_json($"c")),
+      Row("""{"col1":{"interval -3 months 7 hours":"a"}}""") :: Nil)
+    val e2 = intercept[AnalysisException] {
+      df3.select(to_json($"c")).collect()
+    }
+    assert(e2.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
   }
 
   test("roundtrip in to_json and from_json - struct") {
@@ -255,18 +269,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     }
     assert(errMsg2.getMessage.startsWith(
       "A type of keys and values in map() must be string, but got"))
-  }
-
-  test("SPARK-21954: JacksonUtils should verify MapType's value type instead of key type") {
-    // interval type is invalid for converting to JSON. However, the keys of a map are treated
-    // as strings, so its type doesn't matter.
-    checkAnswer(
-      sql("SELECT to_json(struct(map(interval 1 second, 'a')))"),
-      Row("""{"col1":{"interval 1 seconds":"a"}}""") :: Nil)
-    val e = intercept[AnalysisException] {
-      sql("SELECT to_json(struct(map('a', interval 1 second)))")
-    }
-    assert(e.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
   }
 
   test("SPARK-19967 Support from_json in SQL") {
