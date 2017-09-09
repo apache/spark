@@ -124,7 +124,7 @@ class JavaParams(JavaWrapper, Params):
                 self._java_obj.set(pair)
             if param in self._defaultParamMap:
                 pair = self._make_java_param_pair(param, self._defaultParamMap[param])
-                self._java_obj.setDefault(pair.param(), pair.value())
+                self._java_obj.setDefaultPair(pair)
 
     def _transfer_param_map_to_java(self, pyParamMap):
         """

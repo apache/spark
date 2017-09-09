@@ -686,6 +686,12 @@ trait Params extends Identifiable with Serializable {
     this
   }
 
+  /** Python friendly method to set a single ParamPair */
+  protected final def setDefaultPair(paramPair: ParamPair[_]): this.type = {
+    defaultParamMap.put(paramPair)
+    this
+  }
+
   /**
    * Gets the default value of a parameter.
    */
