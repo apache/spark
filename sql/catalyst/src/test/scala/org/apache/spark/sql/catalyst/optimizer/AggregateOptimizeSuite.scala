@@ -23,10 +23,11 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL}
+import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL, GROUPING_WITH_UNION}
+import org.apache.spark.sql.types.IntegerType
 
 class AggregateOptimizeSuite extends PlanTest {
   override val conf = new SQLConf().copy(CASE_SENSITIVE -> false, GROUP_BY_ORDINAL -> false)
@@ -73,5 +74,44 @@ class AggregateOptimizeSuite extends PlanTest {
     val correctAnswer = input.groupBy('a + 1, 'b + 2)(sum('c)).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("split aggregate with expand operator") {
+    withSQLConf(GROUPING_WITH_UNION.key -> "true") {
+      val a = 'a.int
+      val b = 'b.int
+      val c = 'c.int
+      val nulInt = Literal(null, IntegerType)
+      val gid = 'spark_grouping_id.int.withNullability(false)
+
+      val query = GroupingSets(Seq(Seq(), Seq(a), Seq(a, b)), Seq(a, b), testRelation,
+        Seq(a, b, count(c).as("count(c)")))
+      val optimized = SplitAggregateWithExpand(analyzer.execute(query))
+
+      val correctAnswer = Union(
+        Seq(
+          Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+            Expand(Seq(Seq(a, b, c, nulInt, nulInt, 3)),
+              Seq(a, b, c, a, b, gid),
+              Project(Seq(a, b, c, a.as("a"), b.as("b")), testRelation)
+            )
+          ),
+          Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+            Expand(Seq(Seq(a, b, c, a, nulInt, 1)),
+              Seq(a, b, c, a, b, gid),
+              Project(Seq(a, b, c, a.as("a"), b.as("b")), testRelation)
+            )
+          ),
+          Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+            Expand(Seq(Seq(a, b, c, a, b, 0)),
+              Seq(a, b, c, a, b, gid),
+              Project(Seq(a, b, c, a.as("a"), b.as("b")), testRelation)
+            )
+          )
+        )
+      )
+
+      comparePlans(optimized, correctAnswer, false)
+    }
   }
 }

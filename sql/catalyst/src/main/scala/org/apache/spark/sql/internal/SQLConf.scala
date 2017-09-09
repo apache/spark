@@ -481,6 +481,13 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val GROUPING_WITH_UNION = buildConf("spark.sql.grouping.union.enabled")
+    .doc("When true, the grouping analytics (i.e., cube, rollup, grouping sets) will be " +
+      "implemented by Union with a number of aggregates for each group. " +
+      "When false, the grouping analytics will be implemented by a single aggregate on Expand.")
+    .booleanConf
+    .createWithDefault(false)
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
@@ -1156,6 +1163,8 @@ class SQLConf extends Serializable with Logging {
   def groupByOrdinal: Boolean = getConf(GROUP_BY_ORDINAL)
 
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
+
+  def groupingWithUnion: Boolean = getConf(GROUPING_WITH_UNION)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
