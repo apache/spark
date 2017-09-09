@@ -21,7 +21,7 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -626,7 +626,7 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val mapType2 = MapType(IntegerType, CalendarIntervalType)
     val schema2 = StructType(StructField("a", mapType2) :: Nil)
     val struct2 = Literal.create(null, schema2)
-    intercept[UnresolvedException[_]] {
+    intercept[TreeNodeException[_]] {
       checkEvaluation(
         StructsToJson(Map.empty, struct2, gmtId),
         null

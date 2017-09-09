@@ -195,6 +195,16 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("""{"_1":"26/08/2015 18:00"}""") :: Nil)
   }
 
+  test("to_json - key types of map don't matter") {
+    // interval type is invalid for converting to JSON. However, the keys of a map are treated
+    // as strings, so its type doesn't matter.
+    val df = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
+      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
+    checkAnswer(
+      df.select(to_json($"c")),
+      Row("""{"col1":{"interval -3 months 7 hours":"a"}}""") :: Nil)
+  }
+
   test("to_json unsupported type") {
     val baseDf = Seq(Tuple1(Tuple1("interval -3 month 7 hours"))).toDF("a")
     val df = baseDf.select(struct($"a._1".cast(CalendarIntervalType).as("a")).as("c"))
@@ -205,17 +215,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage.contains(
       "Unable to convert column a of type calendarinterval to JSON."))
 
-    // interval type is invalid for converting to JSON. However, the keys of a map are treated
-    // as strings, so its type doesn't matter.
+    // interval type is invalid for converting to JSON. We can't use it as value type of a map.
     val df2 = baseDf
-      .select(struct(map($"a._1".cast(CalendarIntervalType), lit("a")).as("col1")).as("c"))
-    val df3 = baseDf
       .select(struct(map(lit("a"), $"a._1".cast(CalendarIntervalType)).as("col1")).as("c"))
-    checkAnswer(
-      df2.select(to_json($"c")),
-      Row("""{"col1":{"interval -3 months 7 hours":"a"}}""") :: Nil)
     val e2 = intercept[AnalysisException] {
-      df3.select(to_json($"c")).collect()
+      df2.select(to_json($"c")).collect()
     }
     assert(e2.getMessage.contains("Unable to convert column col1 of type calendarinterval to JSON"))
   }
