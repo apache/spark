@@ -27,7 +27,7 @@ import scala.util.Random
 import scala.util.control.NonFatal
 
 import org.scalatest.{Assertions, BeforeAndAfterAll}
-import org.scalatest.concurrent.{Eventually, Timeouts}
+import org.scalatest.concurrent.{Eventually, Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
@@ -67,8 +67,9 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
  * avoid hanging forever in the case of failures. However, individual suites can change this
  * by overriding `streamingTimeout`.
  */
-trait StreamTest extends QueryTest with SharedSQLContext with Timeouts with BeforeAndAfterAll {
+trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with BeforeAndAfterAll {
 
+  implicit val defaultSignaler: Signaler = ThreadSignaler
   override def afterAll(): Unit = {
     super.afterAll()
     StateStore.stop() // stop the state store maintenance thread and unload store providers

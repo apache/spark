@@ -64,6 +64,10 @@ singleDataType
     : dataType EOF
     ;
 
+singleTableSchema
+    : colTypeList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
@@ -77,6 +81,7 @@ statement
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec? locationSpec?
         (COMMENT comment=STRING)?
+        (TBLPROPERTIES tableProps=tablePropertyList)?
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT comment=STRING)?
@@ -974,7 +979,7 @@ CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
-    | '\"' ( ~('\"'|'\\') | ('\\' .) )* '\"'
+    | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
     ;
 
 BIGINT_LITERAL

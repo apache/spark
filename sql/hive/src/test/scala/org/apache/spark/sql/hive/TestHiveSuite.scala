@@ -42,4 +42,8 @@ class TestHiveSuite extends TestHiveSingleton with SQLTestUtils {
     }
     testHiveSparkSession.reset()
   }
+
+  test("SPARK-15887: hive-site.xml should be loaded") {
+    assert(hiveClient.getConf("hive.in.test", "") == "true")
+  }
 }

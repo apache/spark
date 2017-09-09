@@ -21,6 +21,7 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -373,6 +374,16 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("2")))
   }
 
+  test("SPARK-21804: json_tuple returns null values within repeated columns except the first one") {
+    checkJsonTuple(
+      JsonTuple(Literal("""{"f1": 1, "f2": 2}""") ::
+        NonFoldableLiteral("f1") ::
+        NonFoldableLiteral("cast(NULL AS STRING)") ::
+        NonFoldableLiteral("f1") ::
+        Nil),
+      InternalRow(UTF8String.fromString("1"), null, UTF8String.fromString("1")))
+  }
+
   val gmtId = Option(DateTimeUtils.TimeZoneGMT.getID)
 
   test("from_json") {
@@ -647,5 +658,27 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(
       StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
       output)
+  }
+
+  test("to_json: verify MapType's value type instead of key type") {
+    // Keys in map are treated as strings when converting to JSON. The type doesn't matter at all.
+    val mapType1 = MapType(CalendarIntervalType, IntegerType)
+    val schema1 = StructType(StructField("a", mapType1) :: Nil)
+    val struct1 = Literal.create(null, schema1)
+    checkEvaluation(
+      StructsToJson(Map.empty, struct1, gmtId),
+      null
+    )
+
+    // The value type must be valid for converting to JSON.
+    val mapType2 = MapType(IntegerType, CalendarIntervalType)
+    val schema2 = StructType(StructField("a", mapType2) :: Nil)
+    val struct2 = Literal.create(null, schema2)
+    intercept[TreeNodeException[_]] {
+      checkEvaluation(
+        StructsToJson(Map.empty, struct2, gmtId),
+        null
+      )
+    }
   }
 }

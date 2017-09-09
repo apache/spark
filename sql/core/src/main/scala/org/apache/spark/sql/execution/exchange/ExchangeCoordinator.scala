@@ -75,7 +75,7 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  * For example, we have two stages with the following pre-shuffle partition size statistics:
  * stage 1: [100 MB, 20 MB, 100 MB, 10MB, 30 MB]
  * stage 2: [10 MB,  10 MB, 70 MB,  5 MB, 5 MB]
- * assuming the target input size is 128 MB, we will have three post-shuffle partitions,
+ * assuming the target input size is 128 MB, we will have four post-shuffle partitions,
  * which are:
  *  - post-shuffle partition 0: pre-shuffle partition 0 (size 110 MB)
  *  - post-shuffle partition 1: pre-shuffle partition 1 (size 30 MB)

@@ -368,18 +368,18 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Aggregate(
       Seq(attributeWithWatermark),
       aggExprs("c"),
-      Deduplicate(Seq(att), streamRelation, streaming = true)),
+      Deduplicate(Seq(att), streamRelation)),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on streaming relation after aggregation",
-    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation), streaming = true),
+    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("dropDuplicates"))
 
   assertSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on batch relation inside a streaming query",
-    Deduplicate(Seq(att), batchRelation, streaming = false),
+    Deduplicate(Seq(att), batchRelation),
     outputMode = Append
   )
 

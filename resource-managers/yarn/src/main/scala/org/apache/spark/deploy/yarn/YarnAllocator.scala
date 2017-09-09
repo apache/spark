@@ -551,8 +551,8 @@ private[yarn] class YarnAllocator(
           updateInternalState()
         }
       } else {
-        logInfo(("Skip launching executorRunnable as runnning Excecutors count: %d " +
-          "reached target Executors count: %d.").format(
+        logInfo(("Skip launching executorRunnable as running executors count: %d " +
+          "reached target executors count: %d.").format(
           numExecutorsRunning.get, targetNumExecutors))
       }
     }

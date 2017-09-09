@@ -349,6 +349,8 @@ if [[ "$1" == "publish-release" ]]; then
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
+  #./dev/change-scala-version.sh 2.11
+
   pushd $tmp_repo/org/apache/spark
 
   # Remove any extra files generated during install
