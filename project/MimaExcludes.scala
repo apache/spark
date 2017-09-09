@@ -68,7 +68,10 @@ object MimaExcludes {
 
     // [SPARK-14280] Support Scala 2.12
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transformWith"),
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.FutureAction.transform"),
+
+    // [SPARK-21685][ML] PySpark Params isSet state should not change after transform
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.ml.param.Params.setDefaultPair")
   )
 
   // Exclude rules for 2.2.x
