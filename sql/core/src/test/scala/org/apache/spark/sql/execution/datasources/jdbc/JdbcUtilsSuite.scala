@@ -49,7 +49,7 @@ class JdbcUtilsSuite extends SparkFunSuite {
         StructType(Seq(StructField("c1", DateType, true), StructField("c1", StringType, true)))
     }
     assert(duplicate.getMessage.contains(
-      "Found duplicate column(s) in the createTableColumnTypes option value"))
+      "Found duplicate column(s) in the customSchema option value"))
 
     val allColumns = intercept[AnalysisException]{
       JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 STRING", caseSensitive) ===

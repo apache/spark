@@ -960,12 +960,12 @@ class JDBCSuite extends SparkFunSuite
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
     }.getMessage
-    assert(e1.contains("Please use customSchema option to specified column types."))
+    assert(e1.contains("User specified schema not supported with `jdbc`"))
 
     val e2 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
     }.getMessage
-    assert(e2.contains("Please use customSchema option to specified column types."))
+    assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 
   test("jdbc API support custom schema") {
