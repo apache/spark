@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.TestUtils.assertSpilled
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.expressions.Window
+import org.apache.spark.sql.functions.{max, rank}
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class WindowData(month: Int, area: String, product: Int)
@@ -485,5 +487,11 @@ class SQLWindowFunctionSuite extends QueryTest with SharedSQLContext {
     }
 
     spark.catalog.dropTempView("nums")
+  }
+
+  test("[SPARK-21896] nested window functions in aggregations") {
+    val df = Seq((1, 2), (1, 3), (2, 4), (5, 5)).toDF("a", "b")
+    val window = Window.orderBy('a)
+    checkAnswer(df.groupBy().agg(max(rank().over(window))), Seq(Row(4)))
   }
 }

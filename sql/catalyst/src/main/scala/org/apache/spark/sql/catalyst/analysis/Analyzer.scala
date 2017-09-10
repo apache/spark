@@ -1727,14 +1727,21 @@ class Analyzer(
    *    it into the plan tree.
    */
   object ExtractWindowExpressions extends Rule[LogicalPlan] {
-    private def hasWindowFunction(projectList: Seq[NamedExpression]): Boolean =
-      projectList.exists(hasWindowFunction)
+    private def hasWindowFunction(exprs: Seq[Expression]): Boolean =
+      exprs.exists(hasWindowFunction)
 
-    private def hasWindowFunction(expr: NamedExpression): Boolean = {
+    private def hasWindowFunction(expr: Expression): Boolean = {
       expr.find {
         case window: WindowExpression => true
         case _ => false
       }.isDefined
+    }
+
+    private def containsAggregateFunctionWithWindowExpression(exprs: Seq[Expression]): Boolean = {
+      exprs.exists(expr => expr.find {
+        case AggregateExpression(aggFunc, _, _, _) if hasWindowFunction(aggFunc.children) => true
+        case _ => false
+      }.isDefined)
     }
 
     /**
@@ -1920,7 +1927,34 @@ class Analyzer(
 
       case p: LogicalPlan if !p.childrenResolved => p
 
-      // Aggregate without Having clause.
+      // Extract window expressions from aggregate functions. There might be an aggregate whose
+      // aggregate function contains a window expression as a child, which we need to extract.
+      // e.g., df.groupBy().agg(max(rank().over(window))
+      case a @ Aggregate(groupingExprs, aggregateExprs, child)
+        if containsAggregateFunctionWithWindowExpression(aggregateExprs) &&
+           a.expressions.forall(_.resolved) =>
+
+        val windowExprAliases = new ArrayBuffer[NamedExpression]()
+        val newAggregateExprs = aggregateExprs.map { expr =>
+          expr.transform {
+            case aggExpr @ AggregateExpression(func, _, _, _) if hasWindowFunction(func.children) =>
+              val newFuncChildren = func.children.map { funcExpr =>
+                funcExpr.transform {
+                  case we: WindowExpression =>
+                    // Replace window expressions with aliases to them
+                    val windowExprAlias = Alias(we, s"_we${windowExprAliases.length}")()
+                    windowExprAliases += windowExprAlias
+                    windowExprAlias.toAttribute
+                }
+              }
+              val newFunc = func.withNewChildren(newFuncChildren).asInstanceOf[AggregateFunction]
+              aggExpr.copy(aggregateFunction = newFunc)
+          }.asInstanceOf[NamedExpression]
+        }
+        val window = addWindow(windowExprAliases, child)
+        // TODO do we also need a projection here?
+        Aggregate(groupingExprs, newAggregateExprs, window)
+
       case a @ Aggregate(groupingExprs, aggregateExprs, child)
         if hasWindowFunction(aggregateExprs) &&
            a.expressions.forall(_.resolved) =>
