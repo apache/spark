@@ -517,7 +517,8 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    for (int i = 0; i < 682; ++i) {
+    UnsafeInMemorySorter unsafeInMemSorter = sorter.inMemSorter;
+    for (int i = 0; unsafeInMemSorter.hasSpaceForAnotherRecord(); ++i) {
       insertNumber(sorter, i);
     }
     // todo: this might actually not be zero if pageSize is somehow configured differently,
