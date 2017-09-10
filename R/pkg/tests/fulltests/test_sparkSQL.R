@@ -693,6 +693,26 @@ test_that("test tableNames and tables", {
   expect_equal(count(tables), count + 0)
 })
 
+test_that("createOrReplaceGlobalTempView", {
+  df <- read.json(jsonPath)
+  createOrReplaceGlobalTempView(df, "table1")
+  newdf <- sql("SELECT * FROM global_temp.table1 where name = 'Michael'")
+  expect_is(newdf, "SparkDataFrame")
+  expect_equal(count(newdf), 1)
+  expect_true(dropGlobalTempView("table1"))
+
+  createOrReplaceGlobalTempView(df, "dfView")
+  sqlCast <- collect(sql("select cast('2' as decimal) as x from global_temp.dfView limit 1"))
+  out <- capture.output(sqlCast)
+  expect_true(is.data.frame(sqlCast))
+  expect_equal(names(sqlCast)[1], "x")
+  expect_equal(nrow(sqlCast), 1)
+  expect_equal(ncol(sqlCast), 1)
+  expect_equal(out[1], "  x")
+  expect_equal(out[2], "1 2")
+  expect_true(dropGlobalTempView("dfView"))
+})
+
 test_that(
   "createOrReplaceTempView() results in a queryable table and sql() results in a new DataFrame", {
   df <- read.json(jsonPath)

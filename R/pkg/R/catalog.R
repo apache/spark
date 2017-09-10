@@ -216,9 +216,41 @@ dropTempTable <- function(x, ...) {
   dispatchFunc("dropTempView(viewName)", x, ...)
 }
 
-#' Drops the temporary view with the given view name in the catalog.
+#' Drops the global temporary view with the given view name in the catalog.
 #'
-#' Drops the temporary view with the given view name in the catalog.
+#' Drops the global temporary view with the given view name in the catalog.
+#' If the view has been cached before, then it will also be uncached.
+#'
+#' Global temporary view is cross-session. Its lifetime is the lifetime of the Spark application,
+#' i.e. it will be automatically dropped when the application terminates. It's tied to a system
+#' preserved database `global_temp`, and we must use the qualified name to refer a global temp
+#' view, e.g. `SELECT * FROM global_temp.view1`.
+#'
+#' @param viewName the name of the temporary view to be dropped.
+#' @return TRUE if the view is dropped successfully, FALSE otherwise.
+#' @rdname dropGlobalTempView
+#' @name dropGlobalTempView
+#' @export
+#' @examples
+#' \dontrun{
+#' sparkR.session()
+#' df <- read.df(path, "parquet")
+#' createOrReplaceGlobalTempView(df, "table")
+#' dropGlobalTempView("table")
+#' }
+#' @note since 2.3.0
+dropGlobalTempView <- function(viewName) {
+  sparkSession <- getSparkSession()
+  if (class(viewName) != "character") {
+    stop("viewName must be a string.")
+  }
+  catalog <- callJMethod(sparkSession, "catalog")
+  callJMethod(catalog, "dropGlobalTempView", viewName)
+}
+
+#' Drops the local temporary view with the given view name in the catalog.
+#'
+#' Drops the local temporary view with the given view name in the catalog.
 #' If the view has been cached before, then it will also be uncached.
 #'
 #' @param viewName the name of the temporary view to be dropped.
