@@ -459,6 +459,10 @@ sparkr = Module(
     dependencies=[hive, mllib],
     source_file_regexes=[
         "R/",
+        "sql/core/src/main/scala/org/apache/spark/sql/api/r/",
+        "core/src/main/scala/org/apache/spark/api/r/",
+        "mllib/src/main/scala/org/apache/spark/ml/r/",
+        "core/src/test/scala/org/apache/spark/deploy/SparkSubmitSuite.scala",
     ],
     should_run_r_tests=True
 )
