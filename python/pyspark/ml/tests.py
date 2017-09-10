@@ -1662,7 +1662,8 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         data_path = "data/mllib/sample_multiclass_classification_data.txt"
         df = self.spark.read.format("libsvm").load(data_path)
 
-        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 3], blockSize=128, seed=1234)
+        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 3],
+                                             blockSize=128, seed=1234)
         model = mlp.fit(df)
         test = self.sc.parallelize([Row(features=Vectors.dense(0.1, 0.1, 0.25, 0.25))]).toDF()
         result = model.transform(test).head()

@@ -1356,7 +1356,8 @@ class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaML
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                                      HasMaxIter, HasTol, HasSeed, HasStepSize, HasSolver,
-                                     JavaMLWritable, JavaMLReadable, HasProbabilityCol, HasRawPredictionCol):
+                                     JavaMLWritable, JavaMLReadable, HasProbabilityCol,
+                                     HasRawPredictionCol):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
