@@ -30,6 +30,10 @@ Extended Usage:
        {"a":{"b":1}}
       > SELECT to_json(map(named_struct('a',1),named_struct('b',2)));
        {"[1]":{"b":2}}
+      > SELECT to_json(map('a',1));
+       {"a":1}
+      > SELECT to_json(array((map('a',1))));
+       [{"a":1}]
   
     Since: 2.2.0
 
