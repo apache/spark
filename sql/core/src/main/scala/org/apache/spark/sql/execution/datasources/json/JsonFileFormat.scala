@@ -116,15 +116,14 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
     if (requiredSchema.length == 1 &&
       requiredSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
       throw new AnalysisException(
-        s"'${parsedOptions.columnNameOfCorruptRecord}' cannot be selected alone without other\n" +
-        "data columns, because its content is completely derived from the data columns parsed.\n" +
-        "Even your queries looks not only select this column, if after column pruning it isn't\n" +
-        "involving paring any data fields, e.g., filtering on the column followed by a \n" +
-        "counting, it can produce incorrect results and so disallowed.\n" +
-        "If you want to select corrupt records only, cache or save the Dataset\n" +
-        "before executing queries, as this parses all fields under the hood. For example: \n" +
-        "df.cache()\n" +
-        s"""df.select("${parsedOptions.columnNameOfCorruptRecord}")"""
+        "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
+        "referenced columns only include the internal corrupt record column\n" +
+        s"(named ${parsedOptions.columnNameOfCorruptRecord} by default). For example:\n" +
+        "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
+        "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().\n" +
+        "Instead, you can cache or save the parsed results and then send the same query.\n" +
+        "For example, val df = spark.read.schema(schema).json(file).cache() and then\n" +
+        "df.filter($\"_corrupt_record\".isNotNull).count()."
       )
     }
 

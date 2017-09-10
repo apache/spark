@@ -2045,16 +2045,11 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
           |{"field": "3"}""".stripMargin
       Seq(data).toDF().repartition(1).write.text(path)
       val schema = new StructType().add("field", ByteType).add("_corrupt_record", StringType)
-      val expectedErrorMsg = "'_corrupt_record' cannot be selected alone"
-      var msg = intercept[AnalysisException] {
+      // negative cases
+      val msg = intercept[AnalysisException] {
         spark.read.schema(schema).json(path).select("_corrupt_record").collect()
       }.getMessage
-      assert(msg.contains(expectedErrorMsg))
-      // negative cases
-      msg = intercept[AnalysisException] {
-        spark.read.schema(schema).json(path).select("_corrupt_record").show()
-      }.getMessage
-      assert(msg.contains(expectedErrorMsg))
+      assert(msg.contains("only include the internal corrupt record column"))
       intercept[catalyst.errors.TreeNodeException[_]] {
         spark.read.schema(schema).json(path).filter($"_corrupt_record".isNotNull).count()
       }
@@ -2062,6 +2057,10 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val df = spark.read.schema(schema).json(path).cache()
       assert(df.filter($"_corrupt_record".isNotNull).count() == 1)
       assert(df.filter($"_corrupt_record".isNull).count() == 2)
+      checkAnswer(
+        df.select("_corrupt_record"),
+        Row(null) :: Row(null) :: Row("{\"field\": \"3\"}") :: Nil
+      )
     }
   }
 }
