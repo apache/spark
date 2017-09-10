@@ -438,6 +438,11 @@ class StructField(DataType):
     def fromInternal(self, obj):
         return self.dataType.fromInternal(obj)
 
+    def typeName(self):
+        raise TypeError(
+            "StructField does not have typeName. "
+            "Use typeName on its type explicitly instead.")
+
 
 class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
