@@ -1662,13 +1662,13 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         data_path = "data/mllib/sample_multiclass_classification_data.txt"
         df = self.spark.read.format("libsvm").load(data_path)
 
-        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 4, 3], blockSize=1, seed=123)
+        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 3], blockSize=128, seed=1234)
         model = mlp.fit(df)
         test = self.sc.parallelize([Row(features=Vectors.dense(0.1, 0.1, 0.25, 0.25))]).toDF()
         result = model.transform(test).head()
         expected_prediction = 2.0
         expected_probability = [0.0, 0.0, 1.0]
-        expected_rawPrediction = [-39.163, 12.9528, 25.8075]
+        expected_rawPrediction = [-46.7154, -118.0921, 163.8612]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
         self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
