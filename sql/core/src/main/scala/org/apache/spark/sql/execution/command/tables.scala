@@ -652,16 +652,17 @@ case class DescribeColumnCommand(
     val catalog = sparkSession.sessionState.catalog
     val resolver = sparkSession.sessionState.conf.resolver
     val relation = sparkSession.table(table).queryExecution.analyzed
+
+    val colName = UnresolvedAttribute(colNameParts).name
     val field = {
       relation.resolve(colNameParts, resolver).getOrElse {
-        throw new AnalysisException(s"Column ${UnresolvedAttribute(colNameParts).name} does not " +
-          s"exist")
+        throw new AnalysisException(s"Column $colName does not exist")
       }
     }
     if (!field.isInstanceOf[Attribute]) {
       // If the field is not an attribute after `resolve`, then it's a nested field.
-      throw new AnalysisException(s"DESC TABLE COLUMN command is not supported for nested column:" +
-        s" ${UnresolvedAttribute(colNameParts).name}")
+      throw new AnalysisException(
+        s"DESC TABLE COLUMN command does not support nested data types: $colName")
     }
 
     val catalogTable = catalog.getTempViewOrPermanentTableMetadata(table)
