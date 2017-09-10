@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import java.io.File
 import java.math.MathContext
 import java.net.{MalformedURLException, URL}
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.{AccumulatorSuite, SparkException}
@@ -2656,6 +2656,69 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "cannot resolve '`v.i`' given input columns: [__auto_generated_subquery_name.i]")
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
+
+  test("SPARK-21646: CommonTypeForBinaryComparison: StringType vs NumericType") {
+    withTempView("v") {
+      val str1 = Long.MaxValue.toString + "1"
+      val str2 = Int.MaxValue.toString + "1"
+      val str3 = "10"
+      Seq(str1, str2, str3).toDF("c1").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT c1 from v where c1 > 0"), Row(str1) :: Row(str2) :: Row(str3) :: Nil)
+      checkAnswer(sql("SELECT c1 from v where c1 > 0L"), Row(str1) :: Row(str2) :: Row(str3) :: Nil)
+    }
+  }
+
+  test("SPARK-21646: CommonTypeForBinaryComparison: DoubleType vs IntegerType") {
+    withTempView("v") {
+      Seq(("0", 1), ("-0.4", 2)).toDF("a", "b").createOrReplaceTempView("v")
+      checkAnswer(sql("SELECT a FROM v WHERE a=0"), Seq(Row("0")))
+      checkAnswer(sql("SELECT a FROM v WHERE a=0L"), Seq(Row("0")))
+      checkAnswer(sql("SELECT a FROM v WHERE a=0.0"), Seq(Row("0")))
+      checkAnswer(sql("SELECT a FROM v WHERE a=-0.4"), Seq(Row("-0.4")))
+    }
+  }
+
+  test("SPARK-21646: CommonTypeForBinaryComparison: StringType vs DateType") {
+    withTempView("v") {
+      val v1 = Date.valueOf("2017-09-22")
+      val v2 = Date.valueOf("2017-09-09")
+      Seq(v1, v2).toDF("c1").createTempView("v")
+      checkAnswer(sql("select * from v where c1 > '2017-8-1'"), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as date)"),
+        Row(v1) :: Row(v2) :: Nil)
+    }
+  }
+
+  test("SPARK-21646: CommonTypeForBinaryComparison: StringType vs TimestampType") {
+    withTempView("v") {
+      val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
+      val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
+      val df = Seq(v1, v2).toDF("c1").createTempView("v")
+      checkAnswer(sql("select * from v where c1 > '2017-8-1'"), Row(v2) :: Nil)
+      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as timestamp)"), Row(v2) :: Nil)
+    }
+  }
+
+  test("SPARK-21646: CommonTypeForBinaryComparison: TimestampType vs DateType") {
+    withTempView("v") {
+      val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
+      val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
+      val df = Seq(v1, v2).toDF("c1").createTempView("v")
+      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as date)"), Row(v2) :: Nil)
+      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as timestamp)"), Row(v2) :: Nil)
+    }
+  }
+
+  test("SPARK-21646: CommonTypeForBinaryComparison: TimestampType vs NumericType") {
+    withTempView("v") {
+      val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
+      val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
+      val df = Seq(v1, v2).toDF("c1").createTempView("v")
+      checkAnswer(sql("select * from v where c1 > 1"), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(sql("select * from v where c1 > cast(cast('2010-08-01' as timestamp) as double)"),
+        Row(v1) :: Row(v2) :: Nil)
     }
   }
 }

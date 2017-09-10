@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion._
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -1101,13 +1101,34 @@ class TypeCoercionSuite extends AnalysisTest {
   test("binary comparison with string promotion") {
     ruleTest(PromoteStrings,
       GreaterThan(Literal("123"), Literal(1)),
-      GreaterThan(Cast(Literal("123"), IntegerType), Literal(1)))
+      GreaterThan(Cast(Literal("123"), DoubleType), Cast(Literal(1), DoubleType)))
     ruleTest(PromoteStrings,
       LessThan(Literal(true), Literal("123")),
       LessThan(Literal(true), Cast(Literal("123"), BooleanType)))
     ruleTest(PromoteStrings,
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(1L)),
+      GreaterThan(Cast(Literal("123"), DoubleType), Cast(Literal(1L), DoubleType)))
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal("123"), Literal(0.1)),
+      GreaterThan(Cast(Literal("123"), DoubleType), Literal(0.1)))
+
+    val date1 = Date.valueOf("2017-07-21")
+    val timestamp1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal(date1), Literal("2017-07-01")),
+      GreaterThan(Literal(date1), Cast(Literal("2017-07-01"), DateType)))
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal(timestamp1), Literal("2017-07-01")),
+      GreaterThan(Literal(timestamp1), Cast(Literal("2017-07-01"), TimestampType)))
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal(timestamp1), Cast(Literal("2017-07-01"), DateType)),
+      GreaterThan(Literal(timestamp1), Cast(Cast(Literal("2017-07-01"), DateType), TimestampType)))
+    ruleTest(PromoteStrings,
+      GreaterThan(Literal(timestamp1), Literal(1L)),
+      GreaterThan(Cast(Literal(timestamp1), DoubleType), Cast(Literal(1L), DoubleType)))
   }
 
   test("cast WindowFrame boundaries to the type they operate upon") {

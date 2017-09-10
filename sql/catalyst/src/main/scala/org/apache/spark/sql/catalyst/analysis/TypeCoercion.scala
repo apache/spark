@@ -116,19 +116,21 @@ object TypeCoercion {
    * other is a Timestamp by making the target type to be String.
    */
   val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
-    // We should cast all relative timestamp/date/string comparison into string comparisons
-    // This behaves as a user would expect because timestamp strings sort lexicographically.
-    // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
-    case (StringType, DateType) => Some(StringType)
-    case (DateType, StringType) => Some(StringType)
-    case (StringType, TimestampType) => Some(StringType)
-    case (TimestampType, StringType) => Some(StringType)
-    case (TimestampType, DateType) => Some(StringType)
-    case (DateType, TimestampType) => Some(StringType)
+    // We should follow hive:
+    // https://github.com/apache/hive/blob/rel/storage-release-2.4.0/ql/src/java/
+    // org/apache/hadoop/hive/ql/exec/FunctionRegistry.java#L781
+    case (StringType, DateType) => Some(DateType)
+    case (DateType, StringType) => Some(DateType)
+    case (StringType, TimestampType) => Some(TimestampType)
+    case (TimestampType, StringType) => Some(TimestampType)
+    case (TimestampType, DateType) => Some(TimestampType)
+    case (DateType, TimestampType) => Some(TimestampType)
     case (StringType, NullType) => Some(StringType)
     case (NullType, StringType) => Some(StringType)
+    case (StringType | TimestampType, r: NumericType) => Some(DoubleType)
+    case (l: NumericType, StringType | TimestampType) => Some(DoubleType)
     case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
+    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
     case (l, r) => None
   }
 
@@ -353,13 +355,13 @@ object TypeCoercion {
       case p @ Equality(left @ TimestampType(), right @ StringType()) =>
         p.makeCopy(Array(left, Cast(right, TimestampType)))
 
-      case p @ BinaryComparison(left, right)
-        if left.isInstanceOf[AttributeReference] && right.isInstanceOf[Literal] =>
-        p.makeCopy(Array(left, castExpr(right, left.dataType)))
-
-      case p @ BinaryComparison(left, right)
-        if left.isInstanceOf[Literal] && right.isInstanceOf[AttributeReference] =>
-        p.makeCopy(Array(castExpr(left, right.dataType), right))
+//      case p @ BinaryComparison(left, right)
+//        if left.isInstanceOf[AttributeReference] && right.isInstanceOf[Literal] =>
+//        p.makeCopy(Array(left, castExpr(right, left.dataType)))
+//
+//      case p @ BinaryComparison(left, right)
+//        if left.isInstanceOf[Literal] && right.isInstanceOf[AttributeReference] =>
+//        p.makeCopy(Array(castExpr(left, right.dataType), right))
 
       case p @ BinaryComparison(left, right)
         if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
