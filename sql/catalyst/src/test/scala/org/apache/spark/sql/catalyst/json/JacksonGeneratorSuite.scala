@@ -103,23 +103,4 @@ class JacksonGeneratorSuite extends SparkFunSuite {
       gen.write(input)
     }
   }
-
-  test("error handling : inital with MapType and write out rows") {
-    val dataType = MapType(StringType, IntegerType)
-    val input = new GenericArrayData(InternalRow(1) :: InternalRow(2) :: Nil)
-    val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[UnsupportedOperationException] {
-      gen.write(input)
-    }
-  }
-
-  test("error handling : inital with StructType and write out map") {
-    val dataType = StructType(StructField("a", IntegerType) :: Nil)
-    val input = new GenericArrayData(
-      ArrayBasedMapData(Map("a" -> 1)) :: ArrayBasedMapData(Map("a" -> 2)) :: Nil)
-    val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[UnsupportedOperationException] {
-      gen.write(input)
-    }
-  }
 }

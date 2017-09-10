@@ -240,34 +240,8 @@ private[sql] class JacksonGenerator(
    *
    * @param array The array of rows or maps to convert
    */
-  def write(array: ArrayData): Unit = dataType match {
-    case st: StructType =>
-      try {
-        if (array.numElements() > 0) {
-          array.getStruct(0, st.length)
-        }
-      } catch {
-        case cce: ClassCastException =>
-          throw new UnsupportedOperationException(
-            s"`JacksonGenerator` can only be used to write out an array of struct " +
-              s"when initialized with `StructType`")
-      }
-      writeArray(writeArrayData(array, arrElementWriter))
-    case _: MapType =>
-      try {
-        if (array.numElements() > 0) {
-          array.getMap(0)
-        }
-      } catch {
-        case cce: ClassCastException =>
-          throw new UnsupportedOperationException(
-            s"`JacksonGenerator` can only be used to write out an array of map when initialized" +
-                s"with `MapType`")
-      }
-      writeArray(writeArrayData(array, arrElementWriter))
-    case _ => throw new UnsupportedOperationException(
-      s"`JacksonGenerator` can only be used to write out an array when initialized" +
-          s"with `StructType` or `MapType.")
+  def write(array: ArrayData): Unit = {
+    writeArray(writeArrayData(array, arrElementWriter))
   }
 
   /**
