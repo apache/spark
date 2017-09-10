@@ -354,15 +354,6 @@ object TypeCoercion {
         p.makeCopy(Array(Cast(left, TimestampType), right))
       case p @ Equality(left @ TimestampType(), right @ StringType()) =>
         p.makeCopy(Array(left, Cast(right, TimestampType)))
-
-//      case p @ BinaryComparison(left, right)
-//        if left.isInstanceOf[AttributeReference] && right.isInstanceOf[Literal] =>
-//        p.makeCopy(Array(left, castExpr(right, left.dataType)))
-//
-//      case p @ BinaryComparison(left, right)
-//        if left.isInstanceOf[Literal] && right.isInstanceOf[AttributeReference] =>
-//        p.makeCopy(Array(castExpr(left, right.dataType), right))
-
       case p @ BinaryComparison(left, right)
         if findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
         val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
