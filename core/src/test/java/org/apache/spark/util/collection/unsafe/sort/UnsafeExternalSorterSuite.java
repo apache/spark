@@ -19,10 +19,18 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
+import jodd.io.StringOutputStream;
+import org.hamcrest.Description;
+import org.hamcrest.Matcher;
+import org.hamcrest.Matchers;
+import org.hamcrest.TypeSafeMatcher;
+import org.junit.Rule;
+import org.junit.rules.ExpectedException;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -503,6 +511,9 @@ public class UnsafeExternalSorterSuite {
     verifyIntIterator(sorter.getIterator(279), 279, 300);
   }
 
+  @Rule
+  public ExpectedException exceptions = ExpectedException.none();
+
   @Test
   public void testOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
@@ -513,10 +524,31 @@ public class UnsafeExternalSorterSuite {
     // so we actually have to compute the expected spill size according to the configured page size
     assertEquals(0,  sorter.getSpillSize());
     // we expect the next insert to attempt growing the pointerssArray
-    // we want it to fail
+    // first allocation is expected to fail, then a spill is triggered which attempts another allocation
+    // which also fails and we expect to see this OOM here.
+    // the original code messed with a released array within the spill code
+    // and ended up with a failed assertion.
+    // we also expect the location of the OOM to be org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
     memoryManager.markConseqOOM(2);
+    exceptions.expect(OutOfMemoryError.class);
+    exceptions.expect(
+            new TypeSafeMatcher<OutOfMemoryError>() {
+              Matcher<java.lang.String> stringMatcher = Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset");
+              @Override
+              public void describeTo(Description description) {
+                stringMatcher.describeTo(description);
+              }
+
+              protected boolean matchesSafely(OutOfMemoryError item) {
+                StringOutputStream stringOutputStream = new StringOutputStream();
+                PrintWriter printWriter = new PrintWriter(stringOutputStream);
+                item.printStackTrace( printWriter );
+                printWriter.flush();
+                return stringMatcher.matches(stringOutputStream.toString());
+              }
+            }
+    );
     insertNumber(sorter, 1024);
-    assertEquals(1,  sorter.getSpillSize());
   }
 
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
