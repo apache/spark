@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.util.*;
 
-import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
@@ -44,8 +43,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  *  - Compaction: The batch and columns should be able to compact based on a selection vector.
  */
 public final class ColumnarBatch {
-  private static final int DEFAULT_BATCH_SIZE = 4 * 1024;
-  private static MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
+  public static final int DEFAULT_BATCH_SIZE = 4 * 1024;
 
   private final StructType schema;
   private final int capacity;
@@ -63,18 +61,6 @@ public final class ColumnarBatch {
 
   // Staging row returned from getRow.
   final Row row;
-
-  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
-    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
-  }
-
-  public static ColumnarBatch allocate(StructType type) {
-    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
-  }
-
-  public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
-    return new ColumnarBatch(schema, maxRows, memMode);
-  }
 
   /**
    * Called to close all the columns in this batch. It is not valid to access the data after
@@ -95,12 +81,19 @@ public final class ColumnarBatch {
     private final ColumnarBatch parent;
     private final int fixedLenRowSize;
     private final ColumnVector[] columns;
+    private final WritableColumnVector[] writableColumns;
 
     // Ctor used if this is a top level row.
     private Row(ColumnarBatch parent) {
       this.parent = parent;
       this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(parent.numCols());
       this.columns = parent.columns;
+      this.writableColumns = new WritableColumnVector[this.columns.length];
+      for (int i = 0; i < this.columns.length; i++) {
+        if (this.columns[i] instanceof WritableColumnVector) {
+          this.writableColumns[i] = (WritableColumnVector) this.columns[i];
+        }
+      }
     }
 
     // Ctor used if this is a struct.
@@ -108,6 +101,12 @@ public final class ColumnarBatch {
       this.parent = null;
       this.fixedLenRowSize = UnsafeRow.calculateFixedPortionByteSize(columns.length);
       this.columns = columns;
+      this.writableColumns = new WritableColumnVector[this.columns.length];
+      for (int i = 0; i < this.columns.length; i++) {
+        if (this.columns[i] instanceof WritableColumnVector) {
+          this.writableColumns[i] = (WritableColumnVector) this.columns[i];
+        }
+      }
     }
 
     /**
@@ -307,64 +306,69 @@ public final class ColumnarBatch {
 
     @Override
     public void setNullAt(int ordinal) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNull(rowId);
+      getWritableColumn(ordinal).putNull(rowId);
     }
 
     @Override
     public void setBoolean(int ordinal, boolean value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putBoolean(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putBoolean(rowId, value);
     }
 
     @Override
     public void setByte(int ordinal, byte value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putByte(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putByte(rowId, value);
     }
 
     @Override
     public void setShort(int ordinal, short value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putShort(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putShort(rowId, value);
     }
 
     @Override
     public void setInt(int ordinal, int value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putInt(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putInt(rowId, value);
     }
 
     @Override
     public void setLong(int ordinal, long value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putLong(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putLong(rowId, value);
     }
 
     @Override
     public void setFloat(int ordinal, float value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putFloat(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putFloat(rowId, value);
     }
 
     @Override
     public void setDouble(int ordinal, double value) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putDouble(rowId, value);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putDouble(rowId, value);
     }
 
     @Override
     public void setDecimal(int ordinal, Decimal value, int precision) {
-      assert (!columns[ordinal].isConstant);
-      columns[ordinal].putNotNull(rowId);
-      columns[ordinal].putDecimal(rowId, value, precision);
+      WritableColumnVector column = getWritableColumn(ordinal);
+      column.putNotNull(rowId);
+      column.putDecimal(rowId, value, precision);
+    }
+
+    private WritableColumnVector getWritableColumn(int ordinal) {
+      WritableColumnVector column = writableColumns[ordinal];
+      assert (!column.isConstant);
+      return column;
     }
   }
 
@@ -409,7 +413,9 @@ public final class ColumnarBatch {
    */
   public void reset() {
     for (int i = 0; i < numCols(); ++i) {
-      columns[i].reset();
+      if (columns[i] instanceof WritableColumnVector) {
+        ((WritableColumnVector) columns[i]).reset();
+      }
     }
     if (this.numRowsFiltered > 0) {
       Arrays.fill(filteredRows, false);
@@ -427,7 +433,7 @@ public final class ColumnarBatch {
     this.numRows = numRows;
 
     for (int ordinal : nullFilteredColumns) {
-      if (columns[ordinal].numNulls != 0) {
+      if (columns[ordinal].numNulls() != 0) {
         for (int rowId = 0; rowId < numRows; rowId++) {
           if (!filteredRows[rowId] && columns[ordinal].isNullAt(rowId)) {
             filteredRows[rowId] = true;
@@ -505,18 +511,12 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
-  private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
+  public ColumnarBatch(StructType schema, ColumnVector[] columns, int capacity) {
     this.schema = schema;
-    this.capacity = maxRows;
-    this.columns = new ColumnVector[schema.size()];
+    this.columns = columns;
+    this.capacity = capacity;
     this.nullFilteredColumns = new HashSet<>();
-    this.filteredRows = new boolean[maxRows];
-
-    for (int i = 0; i < schema.fields().length; ++i) {
-      StructField field = schema.fields()[i];
-      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
-    }
-
+    this.filteredRows = new boolean[capacity];
     this.row = new Row(this);
   }
 }

@@ -47,7 +47,7 @@ case class ScalaUDF(
     udfName: Option[String] = None,
     nullable: Boolean = true,
     udfDeterministic: Boolean = true)
-  extends Expression with ImplicitCastInputTypes with NonSQLExpression {
+  extends Expression with ImplicitCastInputTypes with NonSQLExpression with UserDefinedExpression {
 
   override def deterministic: Boolean = udfDeterministic && children.forall(_.deterministic)
 

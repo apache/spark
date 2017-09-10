@@ -18,11 +18,13 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.StructType
 
 class PropagateEmptyRelationSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -120,6 +122,48 @@ class PropagateEmptyRelationSuite extends PlanTest {
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = LocalRelation('a.int)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("propagate empty streaming relation through multiple UnaryNode") {
+    val output = Seq('a.int)
+    val data = Seq(Row(1))
+    val schema = StructType.fromAttributes(output)
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val relation = LocalRelation(
+      output,
+      data.map(converter(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+
+    val query = relation
+      .where(false)
+      .select('a)
+      .where('a > 1)
+      .where('a != 200)
+      .orderBy('a.asc)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = LocalRelation(output, isStreaming = true)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("don't propagate empty streaming relation through agg") {
+    val output = Seq('a.int)
+    val data = Seq(Row(1))
+    val schema = StructType.fromAttributes(output)
+    val converter = CatalystTypeConverters.createToCatalystConverter(schema)
+    val relation = LocalRelation(
+      output,
+      data.map(converter(_).asInstanceOf[InternalRow]),
+      isStreaming = true)
+
+    val query = relation
+      .groupBy('a)('a)
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
 
     comparePlans(optimized, correctAnswer)
   }

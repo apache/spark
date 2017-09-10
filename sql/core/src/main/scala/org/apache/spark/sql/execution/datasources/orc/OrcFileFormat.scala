@@ -15,30 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst
+package org.apache.spark.sql.execution.datasources.orc
 
-import scala.util.control.NonFatal
+import org.apache.orc.TypeDescription
 
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.types.StructType
 
-
-abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
-  protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
-    val actualSQL = e.sql
+private[sql] object OrcFileFormat {
+  private def checkFieldName(name: String): Unit = {
     try {
-      assert(actualSQL === expectedSQL)
+      TypeDescription.fromString(s"struct<$name:int>")
     } catch {
-      case cause: Throwable =>
-        fail(
-          s"""Wrong SQL generated for the following expression:
-             |
-             |${e.prettyName}
-             |
-             |$cause
-           """.stripMargin)
+      case _: IllegalArgumentException =>
+        throw new AnalysisException(
+          s"""Column name "$name" contains invalid character(s).
+             |Please use alias to rename it.
+           """.stripMargin.split("\n").mkString(" ").trim)
     }
+  }
+
+  def checkFieldNames(schema: StructType): StructType = {
+    schema.fieldNames.foreach(checkFieldName)
+    schema
   }
 }

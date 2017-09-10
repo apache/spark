@@ -40,9 +40,9 @@ import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.SparkConf
 
 /**
  * This is a helper class for Kafka test suites. This has the functionality to set up

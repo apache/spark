@@ -19,9 +19,9 @@ package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.sql.QueryTest
 
 class HiveUtilsSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 

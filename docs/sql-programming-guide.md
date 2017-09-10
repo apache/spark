@@ -733,8 +733,9 @@ SELECT * FROM parquetTable
 
 Table partitioning is a common optimization approach used in systems like Hive. In a partitioned
 table, data are usually stored in different directories, with partitioning column values encoded in
-the path of each partition directory. The Parquet data source is now able to discover and infer
-partitioning information automatically. For example, we can store all our previously used
+the path of each partition directory. All built-in file sources (including Text/CSV/JSON/ORC/Parquet)
+are able to discover and infer partitioning information automatically.
+For example, we can store all our previously used
 population data into a partitioned table using the following directory structure, with two extra
 columns, `gender` and `country` as partitioning columns:
 
@@ -922,13 +923,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   <td>
     Some Parquet-producing systems, in particular Impala and Hive, store Timestamp into INT96. This
     flag tells Spark SQL to interpret INT96 data as a timestamp to provide compatibility with these systems.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.sql.parquet.cacheMetadata</code></td>
-  <td>true</td>
-  <td>
-    Turns on caching of Parquet schema metadata. Can speed up querying of static data.
   </td>
 </tr>
 <tr>
@@ -1309,6 +1303,13 @@ the following case-insensitive options:
    </tr>
 
   <tr>
+     <td><code>sessionInitStatement</code></td>
+     <td>
+       After each database session is opened to the remote DB and before starting to read data, this option executes a custom SQL statement (or a PL/SQL block). Use this to implement session initialization code. Example: <code>option("sessionInitStatement", """BEGIN execute immediate 'alter session set "_serial_direct_read"=true'; END;""")</code>
+     </td>
+  </tr>
+
+  <tr>
     <td><code>truncate</code></td>
     <td>
      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. This option applies only to writing.
@@ -1579,6 +1580,9 @@ options.
       Dropping external tables will not remove the data. Users are not allowed to specify the location for Hive managed tables.
       Note that this is different from the Hive behavior.
     - As a result, `DROP TABLE` statements on those tables will not remove the data.
+
+ - `spark.sql.parquet.cacheMetadata` is no longer used.
+   See [SPARK-13664](https://issues.apache.org/jira/browse/SPARK-13664) for details.
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
