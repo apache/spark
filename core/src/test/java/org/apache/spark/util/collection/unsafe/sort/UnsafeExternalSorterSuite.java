@@ -503,6 +503,22 @@ public class UnsafeExternalSorterSuite {
     verifyIntIterator(sorter.getIterator(279), 279, 300);
   }
 
+  @Test
+  public void testOOMDuringSpill() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    for (int i = 0; i < 682; ++i) {
+      insertNumber(sorter, i);
+    }
+    // todo: this might actually not be zero if pageSize is somehow configured differently,
+    // so we actually have to compute the expected spill size according to the configured page size
+    assertEquals(0,  sorter.getSpillSize());
+    // we expect the next insert to attempt growing the pointerssArray
+    // we want it to fail
+    memoryManager.markConseqOOM(2);
+    insertNumber(sorter, 1024);
+    assertEquals(1,  sorter.getSpillSize());
+  }
+
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
       throws IOException {
     for (int i = start; i < end; i++) {
