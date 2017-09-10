@@ -209,6 +209,10 @@ class DataTypeTests(unittest.TestCase):
         row = Row()
         self.assertEqual(len(row), 0)
 
+    def test_struct_field_type_name(self):
+        struct_field = StructField("a", IntegerType())
+        self.assertRaises(TypeError, struct_field.typeName)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
