@@ -521,7 +521,7 @@ setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") 
 # @export
 setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
 
-#' @rdname summary
+#' @rdname describe
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
@@ -768,6 +768,10 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 #' @rdname union
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
+#' @rdname unionByName
+#' @export
+setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 #' @export

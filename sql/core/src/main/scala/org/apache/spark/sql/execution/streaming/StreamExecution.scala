@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{InterruptedIOException, IOException}
+import java.io.{InterruptedIOException, IOException, UncheckedIOException}
+import java.nio.channels.ClosedByInterruptException
 import java.util.UUID
-import java.util.concurrent.{CountDownLatch, TimeUnit}
+import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 
@@ -27,6 +28,7 @@ import scala.collection.mutable.{Map => MutableMap}
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
 
+import com.google.common.util.concurrent.UncheckedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
@@ -335,7 +337,7 @@ class StreamExecution(
         // `stop()` is already called. Let `finally` finish the cleanup.
       }
     } catch {
-      case _: InterruptedException | _: InterruptedIOException if state.get == TERMINATED =>
+      case e if isInterruptedByStop(e) =>
         // interrupted by stop()
         updateStatusMessage("Stopped")
       case e: IOException if e.getMessage != null
@@ -407,6 +409,32 @@ class StreamExecution(
     }
   }
 
+  private def isInterruptedByStop(e: Throwable): Boolean = {
+    if (state.get == TERMINATED) {
+      e match {
+        // InterruptedIOException - thrown when an I/O operation is interrupted
+        // ClosedByInterruptException - thrown when an I/O operation upon a channel is interrupted
+        case _: InterruptedException | _: InterruptedIOException | _: ClosedByInterruptException =>
+          true
+        // The cause of the following exceptions may be one of the above exceptions:
+        //
+        // UncheckedIOException - thrown by codes that cannot throw a checked IOException, such as
+        //                        BiFunction.apply
+        // ExecutionException - thrown by codes running in a thread pool and these codes throw an
+        //                      exception
+        // UncheckedExecutionException - thrown by codes that cannot throw a checked
+        //                               ExecutionException, such as BiFunction.apply
+        case e2 @ (_: UncheckedIOException | _: ExecutionException | _: UncheckedExecutionException)
+          if e2.getCause != null =>
+          isInterruptedByStop(e2.getCause)
+        case _ =>
+          false
+      }
+    } else {
+      false
+    }
+  }
+
   /**
    * Populate the start offsets to start the execution at the current offsets stored in the sink
    * (i.e. avoid reprocessing data that we have already processed). This function must be called
@@ -438,7 +466,10 @@ class StreamExecution(
         availableOffsets = nextOffsets.toStreamProgress(sources)
         /* Initialize committed offsets to a committed batch, which at this
          * is the second latest batch id in the offset log. */
-        offsetLog.get(latestBatchId - 1).foreach { secondLatestBatchId =>
+        if (latestBatchId != 0) {
+          val secondLatestBatchId = offsetLog.get(latestBatchId - 1).getOrElse {
+            throw new IllegalStateException(s"batch ${latestBatchId - 1} doesn't exist")
+          }
           committedOffsets = secondLatestBatchId.toStreamProgress(sources)
         }
 
@@ -565,10 +596,14 @@ class StreamExecution(
 
         // Now that we've updated the scheduler's persistent checkpoint, it is safe for the
         // sources to discard data from the previous batch.
-        val prevBatchOff = offsetLog.get(currentBatchId - 1)
-        if (prevBatchOff.isDefined) {
-          prevBatchOff.get.toStreamProgress(sources).foreach {
-            case (src, off) => src.commit(off)
+        if (currentBatchId != 0) {
+          val prevBatchOff = offsetLog.get(currentBatchId - 1)
+          if (prevBatchOff.isDefined) {
+            prevBatchOff.get.toStreamProgress(sources).foreach {
+              case (src, off) => src.commit(off)
+            }
+          } else {
+            throw new IllegalStateException(s"batch $currentBatchId doesn't exist")
           }
         }
 
@@ -602,6 +637,9 @@ class StreamExecution(
           if committedOffsets.get(source).map(_ != available).getOrElse(true) =>
           val current = committedOffsets.get(source)
           val batch = source.getBatch(current, available)
+          assert(batch.isStreaming,
+            s"DataFrame returned by getBatch from $source did not have isStreaming=true\n" +
+              s"${batch.queryExecution.logical}")
           logDebug(s"Retrieving data from $source: $current -> $available")
           Some(source -> batch)
         case _ => None
@@ -621,14 +659,15 @@ class StreamExecution(
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
-          LocalRelation(output)
+          LocalRelation(output, isStreaming = true)
         }
     }
 
     // Rewire the plan to use the new attributes that were returned by the source.
     val replacementMap = AttributeMap(replacements)
     val triggerLogicalPlan = withNewSources transformAllExpressions {
-      case a: Attribute if replacementMap.contains(a) => replacementMap(a)
+      case a: Attribute if replacementMap.contains(a) =>
+        replacementMap(a).withMetadata(a.metadata)
       case ct: CurrentTimestamp =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType)
