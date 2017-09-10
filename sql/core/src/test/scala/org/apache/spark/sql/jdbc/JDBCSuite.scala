@@ -960,18 +960,18 @@ class JDBCSuite extends SparkFunSuite
     val e1 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, new Properties())
     }.getMessage
-    assert(e1.contains("Please use customDataFrameColumnTypes option to specified column types."))
+    assert(e1.contains("Please use customSchema option to specified column types."))
 
     val e2 = intercept[AnalysisException] {
       spark.read.schema(schema).jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties())
     }.getMessage
-    assert(e2.contains("Please use customDataFrameColumnTypes option to specified column types."))
+    assert(e2.contains("Please use customSchema option to specified column types."))
   }
 
   test("jdbc API support custom schema") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val props = new Properties()
-    props.put("customDataFrameColumnTypes", "NAME STRING, THEID BIGINT")
+    props.put("customSchema", "NAME STRING, THEID BIGINT")
     val schema = StructType(Seq(
       StructField("NAME", StringType, true), StructField("THEID", LongType, true)))
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
@@ -987,7 +987,7 @@ class JDBCSuite extends SparkFunSuite
            |CREATE TEMPORARY VIEW people_view
            |USING org.apache.spark.sql.jdbc
            |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
-           |customDataFrameColumnTypes 'NAME STRING, THEID INT')
+           |customSchema 'NAME STRING, THEID INT')
         """.stripMargin.replaceAll("\n", " "))
       val schema = StructType(
         Seq(StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))

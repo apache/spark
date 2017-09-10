@@ -197,7 +197,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, properties: Properties): DataFrame = {
-    assertJdbcAPISpecifiedDataFrameSchema()
+    assertNoSpecifiedSchema("jdbc")
     // properties should override settings in extraOptions.
     this.extraOptions ++= properties.asScala
     // explicit url and dbtable should override all
@@ -268,7 +268,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       table: String,
       predicates: Array[String],
       connectionProperties: Properties): DataFrame = {
-    assertJdbcAPISpecifiedDataFrameSchema()
+    assertNoSpecifiedSchema("jdbc")
     // connectionProperties should override settings in extraOptions.
     val params = extraOptions.toMap ++ connectionProperties.asScala.toMap
     val options = new JDBCOptions(url, table, params)
@@ -675,16 +675,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
       throw new AnalysisException(s"User specified schema not supported with `$operation`")
-    }
-  }
-
-  /**
-   * A convenient function for validate specified column types schema in jdbc API.
-   */
-  private def assertJdbcAPISpecifiedDataFrameSchema(): Unit = {
-    if (userSpecifiedSchema.nonEmpty) {
-      throw new AnalysisException("Please use customDataFrameColumnTypes option to " +
-        "specified column types.")
     }
   }
 

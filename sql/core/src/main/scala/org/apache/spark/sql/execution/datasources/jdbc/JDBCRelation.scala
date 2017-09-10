@@ -113,9 +113,9 @@ private[sql] case class JDBCRelation(
 
   override val schema: StructType = {
     val schema = JDBCRDD.resolveTable(jdbcOptions)
-    val customDataFrameColumnTypes = jdbcOptions.customDataFrameColumnTypes
-    if (customDataFrameColumnTypes.isDefined) {
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, customDataFrameColumnTypes.get,
+    val customSchema = jdbcOptions.customSchema
+    if (customSchema.isDefined) {
+      JdbcUtils.parseUserSpecifiedColumnTypes(schema, customSchema.get,
         sqlContext.sessionState.conf.resolver)
     } else {
       schema

@@ -1337,9 +1337,9 @@ the following case-insensitive options:
   </tr>
 
   <tr>
-    <td><code>customDataFrameColumnTypes</code></td>
+    <td><code>customSchema</code></td>
     <td>
-     The DataFrame column data types to use instead of the defaults when reading data from jdbc API. (e.g: <code>"id DECIMAL(38, 0), name STRING")</code>. The specified types should be valid spark sql data types. This option applies only to reading.
+     The custom schema to use for reading data from JDBC connectors. For example, "id DECIMAL(38, 0), name STRING"). The column names should be identical to the corresponding column names of JDBC table. Users can specify the corresponding data types of Spark SQL instead of using the defaults. This option applies only to reading.
     </td>
   </tr>
 </table>

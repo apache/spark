@@ -769,7 +769,7 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Parses the user specified customDataFrameColumnTypes option value to DataFrame schema,
+   * Parses the user specified customSchema option value to DataFrame schema,
    * and returns it if it's all columns are equals to default schema's.
    */
   def parseUserSpecifiedColumnTypes(
@@ -779,7 +779,7 @@ object JdbcUtils extends Logging {
     val userSchema = CatalystSqlParser.parseTableSchema(columnTypes)
 
     SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the createTableColumnTypes option value", nameEquality)
+      userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
     if (userSchema.size != schema.size) {
       throw new AnalysisException("Please provide all the columns, " +
