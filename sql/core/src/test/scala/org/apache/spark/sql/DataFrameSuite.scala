@@ -2039,4 +2039,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
+
+  test("SPARK-21966: ResolveMissingReference rule should not ignore Union") {
+    val df1 = Seq((1, 1), (2, 1), (2, 2)).toDF("a", "b")
+    val df2 = Seq((1, 1), (1, 2), (2, 3)).toDF("a", "b")
+    val df3 = df1.cube("a").sum("b")
+    val df4 = df2.cube("a").sum("b")
+    val df = df3.union(df4).filter("grouping_id() = 0")
+    checkAnswer(df, Seq(Row(1, 1), Row(2, 3), Row(1, 3), Row(2, 3)))
+  }
 }

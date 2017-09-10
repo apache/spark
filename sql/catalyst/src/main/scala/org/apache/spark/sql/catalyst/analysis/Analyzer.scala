@@ -1115,6 +1115,8 @@ class Analyzer(
           g.copy(join = true, child = addMissingAttr(g.child, missing))
         case d: Distinct =>
           throw new AnalysisException(s"Can't add $missingAttrs to $d")
+        case u: Union =>
+          u.withNewChildren(u.children.map(addMissingAttr(_, missingAttrs)))
         case u: UnaryNode =>
           u.withNewChildren(addMissingAttr(u.child, missingAttrs) :: Nil)
         case other =>
@@ -1133,6 +1135,8 @@ class Analyzer(
         resolved
       } else {
         plan match {
+          case u: Union if !u.children.head.isInstanceOf[SubqueryAlias] =>
+            resolveExpressionRecursively(resolved, u.children.head)
           case u: UnaryNode if !u.isInstanceOf[SubqueryAlias] =>
             resolveExpressionRecursively(resolved, u.child)
           case other => resolved
