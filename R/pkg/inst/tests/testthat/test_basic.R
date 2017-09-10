@@ -68,23 +68,5 @@ test_that("spark.glm and predict", {
   out <- capture.output(print(summary(model)))
   expect_true(any(grepl("Dispersion parameter for gamma family", out)))
 
-  # tweedie family
-  model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species,
-                     family = "tweedie", var.power = 1.2, link.power = 0.0)
-  prediction <- predict(model, training)
-  expect_equal(typeof(take(select(prediction, "prediction"), 1)$prediction), "double")
-  vals <- collect(select(prediction, "prediction"))
-
-  # manual calculation of the R predicted values to avoid dependence on statmod
-  #' library(statmod)
-  #' rModel <- glm(Sepal.Width ~ Sepal.Length + Species, data = iris,
-  #'             family = tweedie(var.power = 1.2, link.power = 0.0))
-  #' print(coef(rModel))
-
-  rCoef <- c(0.6455409, 0.1169143, -0.3224752, -0.3282174)
-  rVals <- exp(as.numeric(model.matrix(Sepal.Width ~ Sepal.Length + Species,
-                                       data = iris) %*% rCoef))
-  expect_true(all(abs(rVals - vals) < 1e-5), rVals - vals)
-
   sparkR.session.stop()
 })
