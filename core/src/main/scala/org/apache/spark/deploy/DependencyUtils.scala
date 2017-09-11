@@ -19,8 +19,6 @@ package org.apache.spark.deploy
 
 import java.io.File
 
-import scala.collection.mutable.HashMap
-
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
