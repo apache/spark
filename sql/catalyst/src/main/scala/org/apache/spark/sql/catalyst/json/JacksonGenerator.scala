@@ -67,8 +67,6 @@ private[sql] class JacksonGenerator(
       (arr: SpecializedGetters, i: Int) => {
         writeObject(writeMapData(arr.getMap(i), mt, mapElementWriter))
       }
-    case _ => throw new UnsupportedOperationException(
-      s"Initial type ${dataType.simpleString} must be a struct")
   }
 
   private lazy val mapElementWriter: ValueWriter = dataType match {
