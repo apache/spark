@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
@@ -32,11 +33,13 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.MessageDecoder;
 import org.apache.spark.network.protocol.MessageEncoder;
+import org.apache.spark.network.server.ChunkFetchRequestHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.server.TransportRequestHandler;
 import org.apache.spark.network.server.TransportServer;
 import org.apache.spark.network.server.TransportServerBootstrap;
+import org.apache.spark.network.util.IOMode;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 import org.apache.spark.network.util.TransportFrameDecoder;
@@ -77,6 +80,11 @@ public class TransportContext {
   private static final MessageEncoder ENCODER = MessageEncoder.INSTANCE;
   private static final MessageDecoder DECODER = MessageDecoder.INSTANCE;
 
+  // Separate thread pool for handling ChunkFetchRequest. This helps to enable throttling
+  // max number of TransportServer worker threads that are blocked on writing response
+  // of ChunkFetchRequest message back to the client via the underlying channel.
+  private static EventLoopGroup chunkFetchWorkers;
+
   public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
     this(conf, rpcHandler, false);
   }
@@ -88,6 +96,15 @@ public class TransportContext {
     this.conf = conf;
     this.rpcHandler = rpcHandler;
     this.closeIdleConnections = closeIdleConnections;
+
+    synchronized(this.getClass()) {
+      if (chunkFetchWorkers == null) {
+        chunkFetchWorkers = NettyUtils.createEventLoop(
+            IOMode.valueOf(conf.ioMode()),
+            conf.chunkFetchHandlerThreads(),
+            "chunk-fetch-handler");
+      }
+    }
   }
 
   /**
@@ -144,6 +161,7 @@ public class TransportContext {
       RpcHandler channelRpcHandler) {
     try {
       TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
+      ChunkFetchRequestHandler chunkFetchHandler = createChunkFetchHandler(channelHandler, channelRpcHandler);
       channel.pipeline()
         .addLast("encoder", ENCODER)
         .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
@@ -151,7 +169,9 @@ public class TransportContext {
         .addLast("idleStateHandler", new IdleStateHandler(0, 0, conf.connectionTimeoutMs() / 1000))
         // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this
         // would require more logic to guarantee if this were not part of the same event loop.
-        .addLast("handler", channelHandler);
+        .addLast("handler", channelHandler)
+        // Use a separate EventLoopGroup to handle ChunkFetchRequest messages.
+        .addLast(chunkFetchWorkers, "chunkFetchHandler", chunkFetchHandler);
       return channelHandler;
     } catch (RuntimeException e) {
       logger.error("Error while initializing Netty pipeline", e);
@@ -171,6 +191,15 @@ public class TransportContext {
       rpcHandler, conf.maxChunksBeingTransferred());
     return new TransportChannelHandler(client, responseHandler, requestHandler,
       conf.connectionTimeoutMs(), closeIdleConnections);
+  }
+
+  /**
+   * Creates the dedicated ChannelHandler for ChunkFetchRequest messages.
+   */
+  private ChunkFetchRequestHandler createChunkFetchHandler(TransportChannelHandler channelHandler,
+      RpcHandler rpcHandler) {
+    return new ChunkFetchRequestHandler(channelHandler.getClient(),
+        rpcHandler.getStreamManager(), conf.maxChunksBeingTransferred());
   }
 
   public TransportConf getConf() { return conf; }

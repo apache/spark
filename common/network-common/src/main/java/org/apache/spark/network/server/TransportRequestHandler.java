@@ -30,9 +30,6 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
-import org.apache.spark.network.protocol.ChunkFetchRequest;
-import org.apache.spark.network.protocol.ChunkFetchFailure;
-import org.apache.spark.network.protocol.ChunkFetchSuccess;
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.OneWayMessage;
 import org.apache.spark.network.protocol.RequestMessage;
@@ -105,9 +102,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
   @Override
   public void handle(RequestMessage request) {
-    if (request instanceof ChunkFetchRequest) {
-      processFetchRequest((ChunkFetchRequest) request);
-    } else if (request instanceof RpcRequest) {
+    if (request instanceof RpcRequest) {
       processRpcRequest((RpcRequest) request);
     } else if (request instanceof OneWayMessage) {
       processOneWayMessage((OneWayMessage) request);
@@ -116,36 +111,6 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
     }
-  }
-
-  private void processFetchRequest(final ChunkFetchRequest req) {
-    if (logger.isTraceEnabled()) {
-      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
-        req.streamChunkId);
-    }
-    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
-    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
-      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-        chunksBeingTransferred, maxChunksBeingTransferred);
-      channel.close();
-      return;
-    }
-    ManagedBuffer buf;
-    try {
-      streamManager.checkAuthorization(reverseClient, req.streamChunkId.streamId);
-      streamManager.registerChannel(channel, req.streamChunkId.streamId);
-      buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
-    } catch (Exception e) {
-      logger.error(String.format("Error opening block %s for request from %s",
-        req.streamChunkId, getRemoteAddress(channel)), e);
-      respond(new ChunkFetchFailure(req.streamChunkId, Throwables.getStackTraceAsString(e)));
-      return;
-    }
-
-    streamManager.chunkBeingSent(req.streamChunkId.streamId);
-    respond(new ChunkFetchSuccess(req.streamChunkId, buf)).addListener(future -> {
-      streamManager.chunkSent(req.streamChunkId.streamId);
-    });
   }
 
   private void processStreamRequest(final StreamRequest req) {

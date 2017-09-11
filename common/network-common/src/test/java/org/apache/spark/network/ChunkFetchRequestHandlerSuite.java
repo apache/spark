@@ -17,10 +17,12 @@
 
 package org.apache.spark.network;
 
+import io.netty.channel.ChannelHandlerContext;
 import java.util.ArrayList;
 import java.util.List;
 
 import io.netty.channel.Channel;
+import org.apache.spark.network.server.ChunkFetchRequestHandler;
 import org.junit.Test;
 
 import static org.mockito.Mockito.*;
@@ -33,24 +35,28 @@ import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
-import org.apache.spark.network.server.TransportRequestHandler;
 
-public class TransportRequestHandlerSuite {
+public class ChunkFetchRequestHandlerSuite {
 
   @Test
-  public void handleStreamRequest() throws Exception {
+  public void handleChunkFetchRequest() throws Exception {
     RpcHandler rpcHandler = new NoOpRpcHandler();
     OneForOneStreamManager streamManager = (OneForOneStreamManager) (rpcHandler.getStreamManager());
     Channel channel = mock(Channel.class);
+    ChannelHandlerContext context = mock(ChannelHandlerContext.class);
+    when(context.channel())
+        .thenAnswer(invocationOnMock0 -> {
+          return channel;
+        });
     List<Pair<Object, ExtendedChannelPromise>> responseAndPromisePairs =
-      new ArrayList<>();
+        new ArrayList<>();
     when(channel.writeAndFlush(any()))
-      .thenAnswer(invocationOnMock0 -> {
-        Object response = invocationOnMock0.getArguments()[0];
-        ExtendedChannelPromise channelFuture = new ExtendedChannelPromise(channel);
-        responseAndPromisePairs.add(ImmutablePair.of(response, channelFuture));
-        return channelFuture;
-      });
+        .thenAnswer(invocationOnMock0 -> {
+          Object response = invocationOnMock0.getArguments()[0];
+          ExtendedChannelPromise channelFuture = new ExtendedChannelPromise(channel);
+          responseAndPromisePairs.add(ImmutablePair.of(response, channelFuture));
+          return channelFuture;
+        });
 
     // Prepare the stream.
     List<ManagedBuffer> managedBuffers = new ArrayList<>();
@@ -61,37 +67,35 @@ public class TransportRequestHandlerSuite {
     long streamId = streamManager.registerStream("test-app", managedBuffers.iterator());
     streamManager.registerChannel(channel, streamId);
     TransportClient reverseClient = mock(TransportClient.class);
-    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
-      rpcHandler, 2L);
+    ChunkFetchRequestHandler requestHandler = new ChunkFetchRequestHandler(reverseClient,
+        rpcHandler.getStreamManager(), 2L);
 
-    RequestMessage request0 = new StreamRequest(String.format("%d_%d", streamId, 0));
-    requestHandler.handle(request0);
+    RequestMessage request0 = new ChunkFetchRequest(new StreamChunkId(streamId, 0));
+    requestHandler.channelRead(context, request0);
     assert responseAndPromisePairs.size() == 1;
-    assert responseAndPromisePairs.get(0).getLeft() instanceof StreamResponse;
-    assert ((StreamResponse) (responseAndPromisePairs.get(0).getLeft())).body() ==
+    assert responseAndPromisePairs.get(0).getLeft() instanceof ChunkFetchSuccess;
+    assert ((ChunkFetchSuccess) (responseAndPromisePairs.get(0).getLeft())).body() ==
         managedBuffers.get(0);
 
-    RequestMessage request1 = new StreamRequest(String.format("%d_%d", streamId, 1));
-    requestHandler.handle(request1);
+    RequestMessage request1 = new ChunkFetchRequest(new StreamChunkId(streamId, 1));
+    requestHandler.channelRead(context, request1);
     assert responseAndPromisePairs.size() == 2;
-    assert responseAndPromisePairs.get(1).getLeft() instanceof StreamResponse;
-    assert ((StreamResponse) (responseAndPromisePairs.get(1).getLeft())).body() ==
+    assert responseAndPromisePairs.get(1).getLeft() instanceof ChunkFetchSuccess;
+    assert ((ChunkFetchSuccess) (responseAndPromisePairs.get(1).getLeft())).body() ==
         managedBuffers.get(1);
 
     // Finish flushing the response for request0.
     responseAndPromisePairs.get(0).getRight().finish(true);
 
-    RequestMessage request2 = new StreamRequest(String.format("%d_%d", streamId, 2));
-    requestHandler.handle(request2);
+    RequestMessage request2 = new ChunkFetchRequest(new StreamChunkId(streamId, 2));
+    requestHandler.channelRead(context, request2);
     assert responseAndPromisePairs.size() == 3;
-    assert responseAndPromisePairs.get(2).getLeft() instanceof StreamResponse;
-    assert ((StreamResponse) (responseAndPromisePairs.get(2).getLeft())).body() ==
-      managedBuffers.get(2);
+    assert responseAndPromisePairs.get(2).getLeft() instanceof ChunkFetchSuccess;
+    assert ((ChunkFetchSuccess) (responseAndPromisePairs.get(2).getLeft())).body() ==
+        managedBuffers.get(2);
 
-    // Request3 will trigger the close of channel, because the number of max chunks being
-    // transferred is 2;
-    RequestMessage request3 = new StreamRequest(String.format("%d_%d", streamId, 3));
-    requestHandler.handle(request3);
+    RequestMessage request3 = new ChunkFetchRequest(new StreamChunkId(streamId, 3));
+    requestHandler.channelRead(context, request3);
     verify(channel, times(1)).close();
     assert responseAndPromisePairs.size() == 3;
   }
