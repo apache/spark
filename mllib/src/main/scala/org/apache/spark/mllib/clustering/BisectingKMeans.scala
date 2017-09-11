@@ -342,7 +342,7 @@ private object BisectingKMeans extends Serializable {
         val newClusterChildren = children.filter(newClusterCenters.contains(_))
         if (newClusterChildren.nonEmpty) {
           val selected = newClusterChildren.minBy { child =>
-            KMeans.fastSquaredDistance(newClusterCenters(child), v)
+            EuclideanDistanceSuite.fastSquaredDistance(newClusterCenters(child), v)
           }
           (selected, v)
         } else {
@@ -379,7 +379,7 @@ private object BisectingKMeans extends Serializable {
         val rightIndex = rightChildIndex(rawIndex)
         val indexes = Seq(leftIndex, rightIndex).filter(clusters.contains(_))
         val height = math.sqrt(indexes.map { childIndex =>
-          KMeans.fastSquaredDistance(center, clusters(childIndex).center)
+          EuclideanDistanceSuite.fastSquaredDistance(center, clusters(childIndex).center)
         }.max)
         val children = indexes.map(buildSubTree(_)).toArray
         new ClusteringTreeNode(index, size, center, cost, height, children)
@@ -449,7 +449,7 @@ private[clustering] class ClusteringTreeNode private[clustering] (
       this :: Nil
     } else {
       val selected = children.minBy { child =>
-        KMeans.fastSquaredDistance(child.centerWithNorm, pointWithNorm)
+        EuclideanDistanceSuite.fastSquaredDistance(child.centerWithNorm, pointWithNorm)
       }
       selected :: selected.predictPath(pointWithNorm)
     }
@@ -467,7 +467,8 @@ private[clustering] class ClusteringTreeNode private[clustering] (
    * Predicts the cluster index and the cost of the input point.
    */
   private def predict(pointWithNorm: VectorWithNorm): (Int, Double) = {
-    predict(pointWithNorm, KMeans.fastSquaredDistance(centerWithNorm, pointWithNorm))
+    predict(pointWithNorm,
+      EuclideanDistanceSuite.fastSquaredDistance(centerWithNorm, pointWithNorm))
   }
 
   /**
@@ -482,7 +483,7 @@ private[clustering] class ClusteringTreeNode private[clustering] (
       (index, cost)
     } else {
       val (selectedChild, minCost) = children.map { child =>
-        (child, KMeans.fastSquaredDistance(child.centerWithNorm, pointWithNorm))
+        (child, EuclideanDistanceSuite.fastSquaredDistance(child.centerWithNorm, pointWithNorm))
       }.minBy(_._2)
       selectedChild.predict(pointWithNorm, minCost)
     }
