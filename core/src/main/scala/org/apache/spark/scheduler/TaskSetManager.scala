@@ -75,6 +75,29 @@ private[spark] class TaskSetManager(
 
   val tasks = taskSet.tasks
   val numTasks = tasks.length
+
+  // The max no. of concurrent tasks that can run for a particular job group.
+  val maxConcurrentTasks = {
+    // This is set to null while running the unit tests
+    if (taskSet.properties != null) {
+      val jobGroupId = taskSet.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
+      if (jobGroupId != null && !jobGroupId.isEmpty) {
+        val maxTasks = conf.getInt(s"spark.job.${jobGroupId}.maxConcurrentTasks", Int.MaxValue)
+        if (maxTasks < 1) {
+          throw new IllegalArgumentException(
+            "Maximum Concurrent Tasks should be set greater than 0 for the job to progress."
+          )
+        } else {
+          maxTasks
+        }
+      } else {
+        Int.MaxValue
+      }
+    } else {
+      Int.MaxValue
+    }
+  }
+
   val copiesRunning = new Array[Int](numTasks)
 
   // For each task, tracks whether a copy of the task has succeeded. A task will also be
@@ -441,7 +464,7 @@ private[spark] class TaskSetManager(
       blacklist.isNodeBlacklistedForTaskSet(host) ||
         blacklist.isExecutorBlacklistedForTaskSet(execId)
     }
-    if (!isZombie && !offerBlacklisted) {
+    if (!isZombie && !offerBlacklisted && runningTasks < maxConcurrentTasks) {
       val curTime = clock.getTimeMillis()
 
       var allowedLocality = maxLocality
@@ -512,6 +535,9 @@ private[spark] class TaskSetManager(
           serializedTask)
       }
     } else {
+      if (runningTasks >= maxConcurrentTasks) {
+        logDebug("Already running max. no. of concurrent tasks.")
+      }
       None
     }
   }
