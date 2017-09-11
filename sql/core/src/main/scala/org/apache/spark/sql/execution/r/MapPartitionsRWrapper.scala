@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.r
 
 import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -34,8 +34,7 @@ case class MapPartitionsRWrapper(
     outputSchema: StructType) extends (Iterator[Any] => Iterator[Any]) {
   def apply(iter: Iterator[Any]): Iterator[Any] = {
     // If the content of current DataFrame is serialized R data?
-    val isSerializedRData =
-      if (inputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
+    val isSerializedRData = inputSchema == SERIALIZED_R_DATA_SCHEMA
 
     val (newIter, deserializer, colNames) =
       if (!isSerializedRData) {

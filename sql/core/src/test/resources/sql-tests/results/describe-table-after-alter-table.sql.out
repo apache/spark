@@ -23,8 +23,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_with_comment  	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	added               	                    
@@ -52,8 +53,9 @@ d                   	string
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_with_comment  	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	modified comment    	                    
@@ -88,8 +90,9 @@ b                   	int
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_comment       	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Location [not included in comparison]sql/core/spark-warehouse/table_comment
@@ -114,8 +117,9 @@ b                   	int
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_comment       	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Comment             	added comment       	                    
@@ -141,8 +145,9 @@ b                   	int
 # Detailed Table Information	                    	                    
 Database            	default             	                    
 Table               	table_comment       	                    
-Created [not included in comparison]
+Created Time [not included in comparison]
 Last Access [not included in comparison]
+Created By [not included in comparison]
 Type                	MANAGED             	                    
 Provider            	parquet             	                    
 Location [not included in comparison]sql/core/spark-warehouse/table_comment

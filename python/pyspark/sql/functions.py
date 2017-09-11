@@ -1116,9 +1116,11 @@ def from_unixtime(timestamp, format="yyyy-MM-dd HH:mm:ss"):
     representing the timestamp of that moment in the current system time zone in the given
     format.
 
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> time_df = spark.createDataFrame([(1428476400,)], ['unix_time'])
     >>> time_df.select(from_unixtime('unix_time').alias('ts')).collect()
     [Row(ts=u'2015-04-08 00:00:00')]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.from_unixtime(_to_java_column(timestamp), format))
@@ -1133,9 +1135,11 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 
     if `timestamp` is None, then it returns current timestamp.
 
+    >>> spark.conf.set("spark.sql.session.timeZone", "America/Los_Angeles")
     >>> time_df = spark.createDataFrame([('2015-04-08',)], ['dt'])
     >>> time_df.select(unix_timestamp('dt', 'yyyy-MM-dd').alias('unix_time')).collect()
     [Row(unix_time=1428476400)]
+    >>> spark.conf.unset("spark.sql.session.timeZone")
     """
     sc = SparkContext._active_spark_context
     if timestamp is None:
@@ -1420,7 +1424,9 @@ def substring(str, pos, len):
     """
     Substring starts at `pos` and is of length `len` when str is String type or
     returns the slice of byte array that starts at `pos` in byte and is of length `len`
-    when str is Binary type
+    when str is Binary type.
+
+    .. note:: The position is not zero based, but 1 based index.
 
     >>> df = spark.createDataFrame([('abcd',)], ['s',])
     >>> df.select(substring(df.s, 1, 2).alias('s')).collect()
@@ -1883,14 +1889,19 @@ def from_json(col, schema, options={}):
     string.
 
     :param col: string column in json format
-    :param schema: a StructType or ArrayType of StructType to use when parsing the json column
+    :param schema: a StructType or ArrayType of StructType to use when parsing the json column.
     :param options: options to control parsing. accepts the same options as the json datasource
+
+    .. note:: Since Spark 2.3, the DDL-formatted string or a JSON format string is also
+              supported for ``schema``.
 
     >>> from pyspark.sql.types import *
     >>> data = [(1, '''{"a": 1}''')]
     >>> schema = StructType([StructField("a", IntegerType())])
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(from_json(df.value, schema).alias("json")).collect()
+    [Row(json=Row(a=1))]
+    >>> df.select(from_json(df.value, "a INT").alias("json")).collect()
     [Row(json=Row(a=1))]
     >>> data = [(1, '''[{"a": 1}]''')]
     >>> schema = ArrayType(StructType([StructField("a", IntegerType())]))
@@ -1900,7 +1911,9 @@ def from_json(col, schema, options={}):
     """
 
     sc = SparkContext._active_spark_context
-    jc = sc._jvm.functions.from_json(_to_java_column(col), schema.json(), options)
+    if isinstance(schema, DataType):
+        schema = schema.json()
+    jc = sc._jvm.functions.from_json(_to_java_column(col), schema, options)
     return Column(jc)
 
 
@@ -2026,14 +2039,24 @@ class UserDefinedFunction(object):
                 "{0}".format(type(func)))
 
         self.func = func
-        self.returnType = (
-            returnType if isinstance(returnType, DataType)
-            else _parse_datatype_string(returnType))
+        self._returnType = returnType
         # Stores UserDefinedPythonFunctions jobj, once initialized
+        self._returnType_placeholder = None
         self._judf_placeholder = None
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+
+    @property
+    def returnType(self):
+        # This makes sure this is called after SparkContext is initialized.
+        # ``_parse_datatype_string`` accesses to JVM for parsing a DDL formatted string.
+        if self._returnType_placeholder is None:
+            if isinstance(self._returnType, DataType):
+                self._returnType_placeholder = self._returnType
+            else:
+                self._returnType_placeholder = _parse_datatype_string(self._returnType)
+        return self._returnType_placeholder
 
     @property
     def _judf(self):
@@ -2066,10 +2089,22 @@ class UserDefinedFunction(object):
         """
         Wrap this udf with a function and attach docstring from func
         """
-        @functools.wraps(self.func)
+
+        # It is possible for a callable instance without __name__ attribute or/and
+        # __module__ attribute to be wrapped here. For example, functools.partial. In this case,
+        # we should avoid wrapping the attributes from the wrapped function to the wrapper
+        # function. So, we take out these attribute names from the default names to set and
+        # then manually assign it after being wrapped.
+        assignments = tuple(
+            a for a in functools.WRAPPER_ASSIGNMENTS if a != '__name__' and a != '__module__')
+
+        @functools.wraps(self.func, assigned=assignments)
         def wrapper(*args):
             return self(*args)
 
+        wrapper.__name__ = self._name
+        wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
+                              else self.func.__class__.__module__)
         wrapper.func = self.func
         wrapper.returnType = self.returnType
 

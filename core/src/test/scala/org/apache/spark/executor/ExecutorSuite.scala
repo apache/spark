@@ -25,6 +25,7 @@ import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.collection.mutable.Map
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.mockito.ArgumentCaptor
 import org.mockito.Matchers.{any, eq => meq}
@@ -32,7 +33,7 @@ import org.mockito.Mockito.{inOrder, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Eventually
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState

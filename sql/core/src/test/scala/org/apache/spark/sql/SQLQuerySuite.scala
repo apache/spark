@@ -1219,7 +1219,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-3483 Special chars in column names") {
     val data = Seq("""{"key?number1": "value1", "key.number2": "value2"}""").toDS()
     spark.read.json(data).createOrReplaceTempView("records")
-    sql("SELECT `key?number1`, `key.number2` FROM records")
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      sql("SELECT `key?number1`, `key.number2` FROM records")
+    }
   }
 
   test("SPARK-3814 Support Bitwise & operator") {
@@ -1339,7 +1341,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       .json(Seq("""{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""").toDS())
       .createOrReplaceTempView("t")
 
-    checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
+    }
   }
 
   test("SPARK-6583 order by aggregated function") {
@@ -1542,10 +1546,10 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Seq(Row(d)))
     checkAnswer(
       df.selectExpr("b * a + b"),
-      Seq(Row(BigDecimal(2.12321))))
+      Seq(Row(BigDecimal("2.12321"))))
     checkAnswer(
       df.selectExpr("b * a - b"),
-      Seq(Row(BigDecimal(0.12321))))
+      Seq(Row(BigDecimal("0.12321"))))
     checkAnswer(
       df.selectExpr("b * a * b"),
       Seq(Row(d)))
@@ -1835,25 +1839,28 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
 
     // Create paths with unusual characters
-    val specialCharacterPath = sql(
-      """
+    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
+      val specialCharacterPath = sql(
+        """
         | SELECT struct(`col$.a_`, `a.b.c.`) as `r&&b.c` FROM
         |   (SELECT struct(a, b) as `col$.a_`, struct(b, a) as `a.b.c.` FROM testData2) tmp
       """.stripMargin)
-    withTempView("specialCharacterTable") {
-      specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
-      checkAnswer(
-        specialCharacterPath.select($"`r&&b.c`.*"),
-        nestedStructData.select($"record.*"))
-      checkAnswer(
-        sql("SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
+      withTempView("specialCharacterTable") {
+        specialCharacterPath.createOrReplaceTempView("specialCharacterTable")
+        checkAnswer(
+          specialCharacterPath.select($"`r&&b.c`.*"),
+          nestedStructData.select($"record.*"))
+        checkAnswer(
+        sql(
+          "SELECT `r&&b.c`.`col$.a_` FROM specialCharacterTable"),
         nestedStructData.select($"record.r1"))
-      checkAnswer(
-        sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
-        nestedStructData.select($"record.r2"))
-      checkAnswer(
-        sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
-        nestedStructData.select($"record.r1.*"))
+        checkAnswer(
+          sql("SELECT `r&&b.c`.`a.b.c.` FROM specialCharacterTable"),
+          nestedStructData.select($"record.r2"))
+        checkAnswer(
+          sql("SELECT `r&&b.c`.`col$.a_`.* FROM specialCharacterTable"),
+          nestedStructData.select($"record.r1.*"))
+      }
     }
 
     // Try star expanding a scalar. This should fail.
@@ -2649,6 +2656,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "cannot resolve '`v.i`' given input columns: [__auto_generated_subquery_name.i]")
 
       checkAnswer(sql("SELECT __auto_generated_subquery_name.i from (SELECT i FROM v)"), Row(1))
+    }
+  }
+
+  test("SPARK-21743: top-most limit should not cause memory leak") {
+    // In unit test, Spark will fail the query if memory leak detected.
+    spark.range(100).groupBy("id").count().limit(1).collect()
+  }
+
+  test("SPARK-21652: rule confliction of InferFiltersFromConstraints and ConstantPropagation") {
+    withTempView("t1", "t2") {
+      Seq((1, 1)).toDF("col1", "col2").createOrReplaceTempView("t1")
+      Seq(1, 2).toDF("col").createOrReplaceTempView("t2")
+      val df = sql(
+        """
+          |SELECT *
+          |FROM t1, t2
+          |WHERE t1.col1 = 1 AND 1 = t1.col2 AND t1.col1 = t2.col AND t1.col2 = t2.col
+        """.stripMargin)
+      checkAnswer(df, Row(1, 1, 1))
     }
   }
 }

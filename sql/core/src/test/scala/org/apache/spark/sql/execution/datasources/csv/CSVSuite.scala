@@ -24,8 +24,8 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 import org.apache.commons.lang3.time.FastDateFormat
-import org.apache.hadoop.io.compress.GzipCodec
 import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, UDT}
@@ -1173,5 +1173,34 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
           checkAnswer(readBack, Row(expected))
         }
       }
+  }
+
+  test("SPARK-21263: Invalid float and double are handled correctly in different modes") {
+    val exception = intercept[SparkException] {
+      spark.read.schema("a DOUBLE")
+        .option("mode", "FAILFAST")
+        .csv(Seq("10u12").toDS())
+        .collect()
+    }
+    assert(exception.getMessage.contains("""input string: "10u12""""))
+
+    val count = spark.read.schema("a FLOAT")
+      .option("mode", "DROPMALFORMED")
+      .csv(Seq("10u12").toDS())
+      .count()
+    assert(count == 0)
+
+    val results = spark.read.schema("a FLOAT")
+      .option("mode", "PERMISSIVE")
+      .csv(Seq("10u12").toDS())
+    checkAnswer(results, Row(null))
+  }
+
+  test("SPARK-20978: Fill the malformed column when the number of tokens is less than schema") {
+    val df = spark.read
+      .schema("a string, b string, unparsed string")
+      .option("columnNameOfCorruptRecord", "unparsed")
+      .csv(Seq("a").toDS())
+    checkAnswer(df, Row("a", null, "a"))
   }
 }

@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -34,6 +35,7 @@ private[security] class HBaseDelegationTokenProvider
 
   override def obtainDelegationTokens(
       hadoopConf: Configuration,
+      sparkConf: SparkConf,
       creds: Credentials): Option[Long] = {
     try {
       val mirror = universe.runtimeMirror(Utils.getContextOrSparkClassLoader)

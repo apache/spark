@@ -48,6 +48,18 @@ function getParameterByName(name, searchString) {
   return results === null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
 }
 
+function removeColumnByName(columns, columnName) {
+  return columns.filter(function(col) {return col.name != columnName})
+}
+
+function getColumnIndex(columns, columnName) {
+  for(var i = 0; i < columns.length; i++) {
+    if (columns[i].name == columnName)
+      return i;
+  }
+  return -1;
+}
+
 jQuery.extend( jQuery.fn.dataTableExt.oSort, {
     "title-numeric-pre": function ( a ) {
         var x = a.match(/title="*(-?[0-9\.]+)/)[1];
@@ -122,84 +134,68 @@ $(document).ready(function() {
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
           attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
-
+          attempt["durationMillisec"] = attempt["duration"];
+          attempt["duration"] = formatDuration(attempt["duration"]);
           var app_clone = {"id" : id, "name" : name, "num" : num, "attempts" : [attempt]};
           array.push(app_clone);
         }
       }
+      if(array.length < 20) {
+        $.fn.dataTable.defaults.paging = false;
+      }
 
       var data = {
         "uiroot": uiRoot,
-        "applications": array
-        }
+        "applications": array,
+        "hasMultipleAttempts": hasMultipleAttempts,
+        "showCompletedColumns": !requestedIncomplete,
+      }
 
       $.get("static/historypage-template.html", function(template) {
-        historySummary.append(Mustache.render($(template).filter("#history-summary-template").html(),data));
-        var selector = "#history-summary-table";
+        var sibling = historySummary.prev();
+        historySummary.detach();
+        var apps = $(Mustache.render($(template).filter("#history-summary-template").html(),data));
+        var attemptIdColumnName = 'attemptId';
+        var startedColumnName = 'started';
+        var defaultSortColumn = completedColumnName = 'completed';
+        var durationColumnName = 'duration';
         var conf = {
-                    "columns": [
-                        {name: 'first', type: "appid-numeric"},
-                        {name: 'second'},
-                        {name: 'third'},
-                        {name: 'fourth'},
-                        {name: 'fifth'},
-                        {name: 'sixth', type: "title-numeric"},
-                        {name: 'seventh'},
-                        {name: 'eighth'},
-                        {name: 'ninth'},
-                    ],
-                    "columnDefs": [
-                        {"searchable": false, "targets": [5]}
-                    ],
-                    "autoWidth": false,
-                    "order": [[ 4, "desc" ]]
-        };
-
-        var rowGroupConf = {
-                           "rowsGroup": [
-                               'first:name',
-                               'second:name'
-                           ],
+          "columns": [
+            {name: 'appId', type: "appid-numeric"},
+            {name: 'appName'},
+            {name: attemptIdColumnName},
+            {name: startedColumnName},
+            {name: completedColumnName},
+            {name: durationColumnName, type: "title-numeric"},
+            {name: 'user'},
+            {name: 'lastUpdated'},
+            {name: 'eventLog'},
+          ],
+          "autoWidth": false,
         };
 
         if (hasMultipleAttempts) {
-          jQuery.extend(conf, rowGroupConf);
-          var rowGroupCells = document.getElementsByClassName("rowGroupColumn");
-          for (i = 0; i < rowGroupCells.length; i++) {
-            rowGroupCells[i].style='background-color: #ffffff';
-          }
-        }
-
-        if (!hasMultipleAttempts) {
-          var attemptIDCells = document.getElementsByClassName("attemptIDSpan");
-          for (i = 0; i < attemptIDCells.length; i++) {
-            attemptIDCells[i].style.display='none';
-          }
-        }
-
-        if (requestedIncomplete) {
-          var completedCells = document.getElementsByClassName("completedColumn");
-          for (i = 0; i < completedCells.length; i++) {
-            completedCells[i].style.display='none';
-          }
-
-          var durationCells = document.getElementsByClassName("durationColumn");
-          for (i = 0; i < durationCells.length; i++) {
-            durationCells[i].style.display='none';
-          }
+          conf.rowsGroup = [
+            'appId:name',
+            'appName:name'
+          ];
         } else {
-          var durationCells = document.getElementsByClassName("durationClass");
-          for (i = 0; i < durationCells.length; i++) {
-            var timeInMilliseconds = parseInt(durationCells[i].title);
-            durationCells[i].innerHTML = formatDuration(timeInMilliseconds);
-          }
+          conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
         }
 
-        if ($(selector.concat(" tr")).length < 20) {
-          $.extend(conf, {paging: false});
+        var defaultSortColumn = completedColumnName;
+        if (requestedIncomplete) {
+          defaultSortColumn = startedColumnName;
+          conf.columns = removeColumnByName(conf.columns, completedColumnName);
+          conf.columns = removeColumnByName(conf.columns, durationColumnName);
         }
-
-        $(selector).DataTable(conf);
+        conf.order = [[ getColumnIndex(conf.columns, defaultSortColumn), "desc" ]];
+        conf.columnDefs = [
+          {"searchable": false, "targets": [getColumnIndex(conf.columns, durationColumnName)]}
+        ];
+        historySummary.append(apps);
+        apps.DataTable(conf);
+        sibling.after(historySummary);
         $('#history-summary [data-toggle="tooltip"]').tooltip();
       });
     });

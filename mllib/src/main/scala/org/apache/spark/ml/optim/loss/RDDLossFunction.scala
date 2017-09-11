@@ -22,14 +22,13 @@ import breeze.linalg.{DenseVector => BDV}
 import breeze.optimize.DiffFunction
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.optim.aggregator.DifferentiableLossAggregator
 import org.apache.spark.rdd.RDD
 
 /**
  * This class computes the gradient and loss of a differentiable loss function by mapping a
- * [[DifferentiableLossAggregator]] over an [[RDD]] of [[Instance]]s. The loss function is the
+ * [[DifferentiableLossAggregator]] over an [[RDD]]. The loss function is the
  * sum of the loss computed on a single instance across all points in the RDD. Therefore, the actual
  * analytical form of the loss function is specified by the aggregator, which computes each points
  * contribution to the overall loss.
@@ -37,7 +36,7 @@ import org.apache.spark.rdd.RDD
  * A differentiable regularization component can also be added by providing a
  * [[DifferentiableRegularization]] loss function.
  *
- * @param instances
+ * @param instances RDD containing the data to compute the loss function over.
  * @param getAggregator A function which gets a new loss aggregator in every tree aggregate step.
  * @param regularization An option representing the regularization loss function to apply to the
  *                       coefficients.
@@ -50,7 +49,7 @@ private[ml] class RDDLossFunction[
     Agg <: DifferentiableLossAggregator[T, Agg]: ClassTag](
     instances: RDD[T],
     getAggregator: (Broadcast[Vector] => Agg),
-    regularization: Option[DifferentiableRegularization[Array[Double]]],
+    regularization: Option[DifferentiableRegularization[Vector]],
     aggregationDepth: Int = 2)
   extends DiffFunction[BDV[Double]] {
 
@@ -62,8 +61,8 @@ private[ml] class RDDLossFunction[
     val newAgg = instances.treeAggregate(thisAgg)(seqOp, combOp, aggregationDepth)
     val gradient = newAgg.gradient
     val regLoss = regularization.map { regFun =>
-      val (regLoss, regGradient) = regFun.calculate(coefficients.data)
-      BLAS.axpy(1.0, Vectors.dense(regGradient), gradient)
+      val (regLoss, regGradient) = regFun.calculate(Vectors.fromBreeze(coefficients))
+      BLAS.axpy(1.0, regGradient, gradient)
       regLoss
     }.getOrElse(0.0)
     bcCoefficients.destroy(blocking = false)

@@ -64,6 +64,10 @@ singleDataType
     : dataType EOF
     ;
 
+singleTableSchema
+    : colTypeList EOF
+    ;
+
 statement
     : query                                                            #statementDefault
     | USE db=identifier                                                #use
@@ -77,6 +81,7 @@ statement
         (PARTITIONED BY partitionColumnNames=identifierList)?
         bucketSpec? locationSpec?
         (COMMENT comment=STRING)?
+        (TBLPROPERTIES tableProps=tablePropertyList)?
         (AS? query)?                                                   #createTable
     | createTableHeader ('(' columns=colTypeList ')')?
         (COMMENT comment=STRING)?
@@ -238,8 +243,10 @@ query
     ;
 
 insertInto
-    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?
-    | INSERT INTO TABLE? tableIdentifier partitionSpec?
+    : INSERT OVERWRITE TABLE tableIdentifier (partitionSpec (IF NOT EXISTS)?)?                              #insertOverwriteTable
+    | INSERT INTO TABLE? tableIdentifier partitionSpec?                                                     #insertIntoTable
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? createFileFormat?                            #insertOverwriteHiveDir
+    | INSERT OVERWRITE LOCAL? DIRECTORY (path=STRING)? tableProvider (OPTIONS options=tablePropertyList)?   #insertOverwriteDir
     ;
 
 partitionSpecLocation
@@ -473,11 +480,11 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? tableAlias                   #tableName
-    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?  #aliasedQuery
-    | '(' relation ')' sample? (AS? strictIdentifier)?     #aliasedRelation
-    | inlineTable                                          #inlineTableDefault2
-    | functionTable                                        #tableValuedFunction
+    : tableIdentifier sample? tableAlias      #tableName
+    | '(' queryNoWith ')' sample? tableAlias  #aliasedQuery
+    | '(' relation ')' sample? tableAlias     #aliasedRelation
+    | inlineTable                             #inlineTableDefault2
+    | functionTable                           #tableValuedFunction
     ;
 
 inlineTable
@@ -740,6 +747,7 @@ nonReserved
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
     | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT | CURRENT_DATE | CURRENT_TIMESTAMP
+    | DIRECTORY
     ;
 
 SELECT: 'SELECT';
@@ -810,6 +818,7 @@ WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+DIRECTORY: 'DIRECTORY';
 VIEW: 'VIEW';
 REPLACE: 'REPLACE';
 INSERT: 'INSERT';
@@ -974,7 +983,7 @@ CURRENT_TIMESTAMP: 'CURRENT_TIMESTAMP';
 
 STRING
     : '\'' ( ~('\''|'\\') | ('\\' .) )* '\''
-    | '\"' ( ~('\"'|'\\') | ('\\' .) )* '\"'
+    | '"' ( ~('"'|'\\') | ('\\' .) )* '"'
     ;
 
 BIGINT_LITERAL

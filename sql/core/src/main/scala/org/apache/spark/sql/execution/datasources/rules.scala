@@ -22,7 +22,7 @@ import java.util.Locale
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, RowOrdering}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Expression, InputFileBlockLength, InputFileBlockStart, InputFileName, RowOrdering}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -382,13 +382,13 @@ case class PreprocessTableInsertion(conf: SQLConf) extends Rule[LogicalPlan] wit
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ InsertIntoTable(table, _, query, _, _) if table.resolved && query.resolved =>
       table match {
-        case relation: CatalogRelation =>
+        case relation: HiveTableRelation =>
           val metadata = relation.tableMeta
           preprocess(i, metadata.identifier.quotedString, metadata.partitionColumnNames)
-        case LogicalRelation(h: HadoopFsRelation, _, catalogTable) =>
+        case LogicalRelation(h: HadoopFsRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, h.partitionSchema.map(_.name))
-        case LogicalRelation(_: InsertableRelation, _, catalogTable) =>
+        case LogicalRelation(_: InsertableRelation, _, catalogTable, _) =>
           val tblName = catalogTable.map(_.identifier.quotedString).getOrElse("unknown")
           preprocess(i, tblName, Nil)
         case _ => i
@@ -409,6 +409,42 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
   }
 }
 
+
+/**
+ * A rule to do various checks before reading a table.
+ */
+object PreReadCheck extends (LogicalPlan => Unit) {
+  def apply(plan: LogicalPlan): Unit = {
+    plan.foreach {
+      case operator: LogicalPlan =>
+        operator transformExpressionsUp {
+          case e @ (_: InputFileName | _: InputFileBlockLength | _: InputFileBlockStart) =>
+            checkNumInputFileBlockSources(e, operator)
+            e
+        }
+    }
+  }
+
+  private def checkNumInputFileBlockSources(e: Expression, operator: LogicalPlan): Int = {
+    operator match {
+      case _: HiveTableRelation => 1
+      case _ @ LogicalRelation(_: HadoopFsRelation, _, _, _) => 1
+      case _: LeafNode => 0
+      // UNION ALL has multiple children, but these children do not concurrently use InputFileBlock.
+      case u: Union =>
+        if (u.children.map(checkNumInputFileBlockSources(e, _)).sum >= 1) 1 else 0
+      case o =>
+        val numInputFileBlockSources = o.children.map(checkNumInputFileBlockSources(e, _)).sum
+        if (numInputFileBlockSources > 1) {
+          e.failAnalysis(s"'${e.prettyName}' does not support more than one sources")
+        } else {
+          numInputFileBlockSources
+        }
+    }
+  }
+}
+
+
 /**
  * A rule to do various checks before inserting into or writing to a data source table.
  */
@@ -418,10 +454,10 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
 
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
-      case InsertIntoTable(l @ LogicalRelation(relation, _, _), partition, query, _, _) =>
+      case InsertIntoTable(l @ LogicalRelation(relation, _, _, _), partition, query, _, _) =>
         // Get all input data source relations of the query.
         val srcRelations = query.collect {
-          case LogicalRelation(src, _, _) => src
+          case LogicalRelation(src, _, _, _) => src
         }
         if (srcRelations.contains(relation)) {
           failAnalysis("Cannot insert into table that is also being read from.")
@@ -443,7 +479,7 @@ object PreWriteCheck extends (LogicalPlan => Unit) {
       case InsertIntoTable(t, _, _, _, _)
         if !t.isInstanceOf[LeafNode] ||
           t.isInstanceOf[Range] ||
-          t == OneRowRelation ||
+          t.isInstanceOf[OneRowRelation] ||
           t.isInstanceOf[LocalRelation] =>
         failAnalysis(s"Inserting into an RDD-based table is not allowed.")
 

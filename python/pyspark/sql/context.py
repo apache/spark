@@ -220,11 +220,11 @@ class SQLContext(object):
         >>> sqlContext.registerJavaFunction("javaStringLength",
         ...   "test.org.apache.spark.sql.JavaStringLength", IntegerType())
         >>> sqlContext.sql("SELECT javaStringLength('test')").collect()
-        [Row(UDF(test)=4)]
+        [Row(UDF:javaStringLength(test)=4)]
         >>> sqlContext.registerJavaFunction("javaStringLength2",
         ...   "test.org.apache.spark.sql.JavaStringLength")
         >>> sqlContext.sql("SELECT javaStringLength2('test')").collect()
-        [Row(UDF(test)=4)]
+        [Row(UDF:javaStringLength2(test)=4)]
 
         """
         jdt = None

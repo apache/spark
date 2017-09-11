@@ -258,6 +258,11 @@ public final class BytesToBytesMap extends MemoryConsumer {
       this.destructive = destructive;
       if (destructive) {
         destructiveIterator = this;
+        // longArray will not be used anymore if destructive is true, release it now.
+        if (longArray != null) {
+          freeArray(longArray);
+          longArray = null;
+        }
       }
     }
 

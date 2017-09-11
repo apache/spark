@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.execution.metric.SQLMetricInfo
-import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -31,7 +30,6 @@ class SparkPlanInfo(
     val nodeName: String,
     val simpleString: String,
     val children: Seq[SparkPlanInfo],
-    val metadata: Map[String, String],
     val metrics: Seq[SQLMetricInfo]) {
 
   override def hashCode(): Int = {
@@ -58,7 +56,6 @@ private[execution] object SparkPlanInfo {
       new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
     }
 
-    new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),
-      plan.metadata, metrics)
+    new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan), metrics)
   }
 }

@@ -115,7 +115,7 @@ class TimeStampedHashMapSuite extends SparkFunSuite {
       testMap2("k1") = "v1"
       testMap2 --= keys
       assert(testMap2.size === 1)
-      assert(testMap2.iterator.toSeq.head === ("k1", "v1"))
+      assert(testMap2.iterator.toSeq.head === (("k1", "v1")))
 
       // +
       val testMap3 = testMap2 + (("k0", "v0"))

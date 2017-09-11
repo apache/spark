@@ -103,7 +103,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5 id="sqlstat">SQL Statistics</h5> ++
+      <h5 id="sqlstat">SQL Statistics ({numStatement})</h5> ++
         <div>
           <ul class="unstyled">
             {table.getOrElse("No statistics have been generated yet.")}
@@ -164,7 +164,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     }
 
     val content =
-      <h5 id="sessionstat">Session Statistics</h5> ++
+      <h5 id="sessionstat">Session Statistics ({numBatches})</h5> ++
       <div>
         <ul class="unstyled">
           {table.getOrElse("No statistics have been generated yet.")}

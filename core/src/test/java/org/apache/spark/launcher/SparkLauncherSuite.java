@@ -21,7 +21,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,12 +44,7 @@ public class SparkLauncherSuite {
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
-  private SparkLauncher launcher;
-
-  @Before
-  public void configureLauncher() {
-    launcher = new SparkLauncher().setSparkHome(System.getProperty("spark.test.home"));
-  }
+  private final SparkLauncher launcher = new SparkLauncher();
 
   @Test
   public void testSparkArgumentHandling() throws Exception {
@@ -101,60 +95,6 @@ public class SparkLauncherSuite {
     assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
   }
 
-  @Test(expected=IllegalStateException.class)
-  public void testRedirectTwiceFails() throws Exception {
-    launcher.setAppResource("fake-resource.jar")
-      .setMainClass("my.fake.class.Fake")
-      .redirectError()
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .launch();
-  }
-
-  @Test(expected=IllegalStateException.class)
-  public void testRedirectToLogWithOthersFails() throws Exception {
-    launcher.setAppResource("fake-resource.jar")
-      .setMainClass("my.fake.class.Fake")
-      .redirectToLog("fakeLog")
-      .redirectError(ProcessBuilder.Redirect.PIPE)
-      .launch();
-  }
-
-  @Test
-  public void testRedirectErrorToOutput() throws Exception {
-    launcher.redirectError();
-    assertTrue(launcher.redirectErrorStream);
-  }
-
-  @Test
-  public void testRedirectsSimple() throws Exception {
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE);
-    assertNotNull(launcher.errorStream);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.PIPE);
-
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE);
-    assertNotNull(launcher.outputStream);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.PIPE);
-  }
-
-  @Test
-  public void testRedirectLastWins() throws Exception {
-    launcher.redirectError(ProcessBuilder.Redirect.PIPE)
-      .redirectError(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.errorStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
-
-    launcher.redirectOutput(ProcessBuilder.Redirect.PIPE)
-      .redirectOutput(ProcessBuilder.Redirect.INHERIT);
-    assertEquals(launcher.outputStream.type(), ProcessBuilder.Redirect.Type.INHERIT);
-  }
-
-  @Test
-  public void testRedirectToLog() throws Exception {
-    launcher.redirectToLog("fakeLogger");
-    assertTrue(launcher.redirectToLog);
-    assertTrue(launcher.builder.getEffectiveConfig()
-      .containsKey(SparkLauncher.CHILD_PROCESS_LOGGER_NAME));
-  }
-
   @Test
   public void testChildProcLauncher() throws Exception {
     // This test is failed on Windows due to the failure of initiating executors
@@ -175,11 +115,11 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
+      .redirectError()
       .addAppArgs("proc");
     final Process app = launcher.launch();
 
-    new OutputRedirector(app.getInputStream(), TF);
-    new OutputRedirector(app.getErrorStream(), TF);
+    new OutputRedirector(app.getInputStream(), getClass().getName() + ".child", TF);
     assertEquals(0, app.waitFor());
   }
 

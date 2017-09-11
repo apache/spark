@@ -38,7 +38,8 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  private def empty(plan: LogicalPlan) = LocalRelation(plan.output, data = Seq.empty)
+  private def empty(plan: LogicalPlan) =
+    LocalRelation(plan.output, data = Seq.empty, isStreaming = plan.isStreaming)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
     case p: Union if p.children.forall(isEmptyLocalRelation) =>
@@ -65,11 +66,15 @@ object PropagateEmptyRelation extends Rule[LogicalPlan] with PredicateHelper {
       case _: RepartitionByExpression => empty(p)
       // An aggregate with non-empty group expression will return one output row per group when the
       // input to the aggregate is not empty. If the input to the aggregate is empty then all groups
-      // will be empty and thus the output will be empty.
+      // will be empty and thus the output will be empty. If we're working on batch data, we can
+      // then treat the aggregate as redundant.
+      //
+      // If the aggregate is over streaming data, we may need to update the state store even if no
+      // new rows are processed, so we can't eliminate the node.
       //
       // If the grouping expressions are empty, however, then the aggregate will always produce a
       // single output row and thus we cannot propagate the EmptyRelation.
-      case Aggregate(ge, _, _) if ge.nonEmpty => empty(p)
+      case Aggregate(ge, _, _) if ge.nonEmpty && !p.isStreaming => empty(p)
       // Generators like Hive-style UDTF may return their records within `close`.
       case Generate(_: Explode, _, _, _, _, _) => empty(p)
       case _ => p

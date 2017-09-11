@@ -24,6 +24,7 @@ import json
 import re
 import base64
 from array import array
+import ctypes
 
 if sys.version >= "3":
     long = int
@@ -32,6 +33,7 @@ if sys.version >= "3":
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
 
+from pyspark import SparkContext
 from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
@@ -438,14 +440,22 @@ class StructField(DataType):
     def fromInternal(self, obj):
         return self.dataType.fromInternal(obj)
 
+    def typeName(self):
+        raise TypeError(
+            "StructField does not have typeName. "
+            "Use typeName on its type explicitly instead.")
+
 
 class StructType(DataType):
     """Struct type, consisting of a list of :class:`StructField`.
 
     This is the data type representing a :class:`Row`.
 
-    Iterating a :class:`StructType` will iterate its :class:`StructField`s.
+    Iterating a :class:`StructType` will iterate its :class:`StructField`\\s.
     A contained :class:`StructField` can be accessed by name or position.
+
+    .. note:: `names` attribute is deprecated in 2.3. Use `fieldNames` method instead
+        to get a list of field names.
 
     >>> struct1 = StructType([StructField("f1", StringType(), True)])
     >>> struct1["f1"]
@@ -560,6 +570,16 @@ class StructType(DataType):
     @classmethod
     def fromJson(cls, json):
         return StructType([StructField.fromJson(f) for f in json["fields"]])
+
+    def fieldNames(self):
+        """
+        Returns all field names in a list.
+
+        >>> struct = StructType([StructField("f1", StringType(), True)])
+        >>> struct.fieldNames()
+        ['f1']
+        """
+        return list(self.names)
 
     def needConversion(self):
         # We need convert Row()/namedtuple into tuple()
@@ -727,18 +747,6 @@ _FIXED_DECIMAL = re.compile("decimal\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)")
 _BRACKETS = {'(': ')', '[': ']', '{': '}'}
 
 
-def _parse_basic_datatype_string(s):
-    if s in _all_atomic_types.keys():
-        return _all_atomic_types[s]()
-    elif s == "int":
-        return IntegerType()
-    elif _FIXED_DECIMAL.match(s):
-        m = _FIXED_DECIMAL.match(s)
-        return DecimalType(int(m.group(1)), int(m.group(2)))
-    else:
-        raise ValueError("Could not parse datatype: %s" % s)
-
-
 def _ignore_brackets_split(s, separator):
     """
     Splits the given string by given separator, but ignore separators inside brackets pairs, e.g.
@@ -771,32 +779,23 @@ def _ignore_brackets_split(s, separator):
     return parts
 
 
-def _parse_struct_fields_string(s):
-    parts = _ignore_brackets_split(s, ",")
-    fields = []
-    for part in parts:
-        name_and_type = _ignore_brackets_split(part, ":")
-        if len(name_and_type) != 2:
-            raise ValueError("The strcut field string format is: 'field_name:field_type', " +
-                             "but got: %s" % part)
-        field_name = name_and_type[0].strip()
-        field_type = _parse_datatype_string(name_and_type[1])
-        fields.append(StructField(field_name, field_type))
-    return StructType(fields)
-
-
 def _parse_datatype_string(s):
     """
     Parses the given data type string to a :class:`DataType`. The data type string format equals
     to :class:`DataType.simpleString`, except that top level struct type can omit
     the ``struct<>`` and atomic types use ``typeName()`` as their format, e.g. use ``byte`` instead
     of ``tinyint`` for :class:`ByteType`. We can also use ``int`` as a short name
-    for :class:`IntegerType`.
+    for :class:`IntegerType`. Since Spark 2.3, this also supports a schema in a DDL-formatted
+    string and case-insensitive strings.
 
     >>> _parse_datatype_string("int ")
     IntegerType
+    >>> _parse_datatype_string("INT ")
+    IntegerType
     >>> _parse_datatype_string("a: byte, b: decimal(  16 , 8   ) ")
     StructType(List(StructField(a,ByteType,true),StructField(b,DecimalType(16,8),true)))
+    >>> _parse_datatype_string("a DOUBLE, b STRING")
+    StructType(List(StructField(a,DoubleType,true),StructField(b,StringType,true)))
     >>> _parse_datatype_string("a: array< short>")
     StructType(List(StructField(a,ArrayType(ShortType,true),true)))
     >>> _parse_datatype_string(" map<string , string > ")
@@ -806,43 +805,43 @@ def _parse_datatype_string(s):
     >>> _parse_datatype_string("blabla") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("a: int,") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("array<int") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     >>> _parse_datatype_string("map<int, boolean>>") # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
         ...
-    ValueError:...
+    ParseException:...
     """
-    s = s.strip()
-    if s.startswith("array<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        return ArrayType(_parse_datatype_string(s[6:-1]))
-    elif s.startswith("map<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        parts = _ignore_brackets_split(s[4:-1], ",")
-        if len(parts) != 2:
-            raise ValueError("The map type string format is: 'map<key_type,value_type>', " +
-                             "but got: %s" % s)
-        kt = _parse_datatype_string(parts[0])
-        vt = _parse_datatype_string(parts[1])
-        return MapType(kt, vt)
-    elif s.startswith("struct<"):
-        if s[-1] != ">":
-            raise ValueError("'>' should be the last char, but got: %s" % s)
-        return _parse_struct_fields_string(s[7:-1])
-    elif ":" in s:
-        return _parse_struct_fields_string(s)
-    else:
-        return _parse_basic_datatype_string(s)
+    sc = SparkContext._active_spark_context
+
+    def from_ddl_schema(type_str):
+        return _parse_datatype_json_string(
+            sc._jvm.org.apache.spark.sql.types.StructType.fromDDL(type_str).json())
+
+    def from_ddl_datatype(type_str):
+        return _parse_datatype_json_string(
+            sc._jvm.org.apache.spark.sql.api.python.PythonSQLUtils.parseDataType(type_str).json())
+
+    try:
+        # DDL format, "fieldname datatype, fieldname datatype".
+        return from_ddl_schema(s)
+    except Exception as e:
+        try:
+            # For backwards compatibility, "integer", "struct<fieldname: datatype>" and etc.
+            return from_ddl_datatype(s)
+        except:
+            try:
+                # For backwards compatibility, "fieldname: datatype, fieldname: datatype" case.
+                return from_ddl_datatype("struct<%s>" % s.strip())
+            except:
+                raise e
 
 
 def _parse_datatype_json_string(json_string):
@@ -935,6 +934,93 @@ if sys.version < "3":
         long: LongType,
     })
 
+# Mapping Python array types to Spark SQL DataType
+# We should be careful here. The size of these types in python depends on C
+# implementation. We need to make sure that this conversion does not lose any
+# precision. Also, JVM only support signed types, when converting unsigned types,
+# keep in mind that it required 1 more bit when stored as singed types.
+#
+# Reference for C integer size, see:
+# ISO/IEC 9899:201x specification, chapter 5.2.4.2.1 Sizes of integer types <limits.h>.
+# Reference for python array typecode, see:
+# https://docs.python.org/2/library/array.html
+# https://docs.python.org/3.6/library/array.html
+# Reference for JVM's supported integral types:
+# http://docs.oracle.com/javase/specs/jvms/se8/html/jvms-2.html#jvms-2.3.1
+
+_array_signed_int_typecode_ctype_mappings = {
+    'b': ctypes.c_byte,
+    'h': ctypes.c_short,
+    'i': ctypes.c_int,
+    'l': ctypes.c_long,
+}
+
+_array_unsigned_int_typecode_ctype_mappings = {
+    'B': ctypes.c_ubyte,
+    'H': ctypes.c_ushort,
+    'I': ctypes.c_uint,
+    'L': ctypes.c_ulong
+}
+
+
+def _int_size_to_type(size):
+    """
+    Return the Catalyst datatype from the size of integers.
+    """
+    if size <= 8:
+        return ByteType
+    if size <= 16:
+        return ShortType
+    if size <= 32:
+        return IntegerType
+    if size <= 64:
+        return LongType
+
+# The list of all supported array typecodes is stored here
+_array_type_mappings = {
+    # Warning: Actual properties for float and double in C is not specified in C.
+    # On almost every system supported by both python and JVM, they are IEEE 754
+    # single-precision binary floating-point format and IEEE 754 double-precision
+    # binary floating-point format. And we do assume the same thing here for now.
+    'f': FloatType,
+    'd': DoubleType
+}
+
+# compute array typecode mappings for signed integer types
+for _typecode in _array_signed_int_typecode_ctype_mappings.keys():
+    size = ctypes.sizeof(_array_signed_int_typecode_ctype_mappings[_typecode]) * 8
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# compute array typecode mappings for unsigned integer types
+for _typecode in _array_unsigned_int_typecode_ctype_mappings.keys():
+    # JVM does not have unsigned types, so use signed types that is at least 1
+    # bit larger to store
+    size = ctypes.sizeof(_array_unsigned_int_typecode_ctype_mappings[_typecode]) * 8 + 1
+    dt = _int_size_to_type(size)
+    if dt is not None:
+        _array_type_mappings[_typecode] = dt
+
+# Type code 'u' in Python's array is deprecated since version 3.3, and will be
+# removed in version 4.0. See: https://docs.python.org/3/library/array.html
+if sys.version_info[0] < 4:
+    _array_type_mappings['u'] = StringType
+
+# Type code 'c' are only available at python 2
+if sys.version_info[0] < 3:
+    _array_type_mappings['c'] = StringType
+
+# SPARK-21465:
+# In python2, array of 'L' happened to be mistakenly partially supported. To
+# avoid breaking user's code, we should keep this partial support. Below is a
+# dirty hacking to keep this partial support and make the unit test passes
+import platform
+if sys.version_info[0] < 3 and platform.python_implementation() != 'PyPy':
+    if 'L' not in _array_type_mappings.keys():
+        _array_type_mappings['L'] = LongType
+        _array_unsigned_int_typecode_ctype_mappings['L'] = ctypes.c_uint
+
 
 def _infer_type(obj):
     """Infer the DataType from obj
@@ -958,12 +1044,17 @@ def _infer_type(obj):
                 return MapType(_infer_type(key), _infer_type(value), True)
         else:
             return MapType(NullType(), NullType(), True)
-    elif isinstance(obj, (list, array)):
+    elif isinstance(obj, list):
         for v in obj:
             if v is not None:
                 return ArrayType(_infer_type(obj[0]), True)
         else:
             return ArrayType(NullType(), True)
+    elif isinstance(obj, array):
+        if obj.typecode in _array_type_mappings:
+            return ArrayType(_array_type_mappings[obj.typecode](), False)
+        else:
+            raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
             return _infer_schema(obj)
@@ -1099,135 +1190,6 @@ def _create_converter(dataType):
             return tuple([d.get(name) for name in names])
 
     return convert_struct
-
-
-def _split_schema_abstract(s):
-    """
-    split the schema abstract into fields
-
-    >>> _split_schema_abstract("a b  c")
-    ['a', 'b', 'c']
-    >>> _split_schema_abstract("a(a b)")
-    ['a(a b)']
-    >>> _split_schema_abstract("a b[] c{a b}")
-    ['a', 'b[]', 'c{a b}']
-    >>> _split_schema_abstract(" ")
-    []
-    """
-
-    r = []
-    w = ''
-    brackets = []
-    for c in s:
-        if c == ' ' and not brackets:
-            if w:
-                r.append(w)
-            w = ''
-        else:
-            w += c
-            if c in _BRACKETS:
-                brackets.append(c)
-            elif c in _BRACKETS.values():
-                if not brackets or c != _BRACKETS[brackets.pop()]:
-                    raise ValueError("unexpected " + c)
-
-    if brackets:
-        raise ValueError("brackets not closed: %s" % brackets)
-    if w:
-        r.append(w)
-    return r
-
-
-def _parse_field_abstract(s):
-    """
-    Parse a field in schema abstract
-
-    >>> _parse_field_abstract("a")
-    StructField(a,NullType,true)
-    >>> _parse_field_abstract("b(c d)")
-    StructField(b,StructType(...c,NullType,true),StructField(d...
-    >>> _parse_field_abstract("a[]")
-    StructField(a,ArrayType(NullType,true),true)
-    >>> _parse_field_abstract("a{[]}")
-    StructField(a,MapType(NullType,ArrayType(NullType,true),true),true)
-    """
-    if set(_BRACKETS.keys()) & set(s):
-        idx = min((s.index(c) for c in _BRACKETS if c in s))
-        name = s[:idx]
-        return StructField(name, _parse_schema_abstract(s[idx:]), True)
-    else:
-        return StructField(s, NullType(), True)
-
-
-def _parse_schema_abstract(s):
-    """
-    parse abstract into schema
-
-    >>> _parse_schema_abstract("a b  c")
-    StructType...a...b...c...
-    >>> _parse_schema_abstract("a[b c] b{}")
-    StructType...a,ArrayType...b...c...b,MapType...
-    >>> _parse_schema_abstract("c{} d{a b}")
-    StructType...c,MapType...d,MapType...a...b...
-    >>> _parse_schema_abstract("a b(t)").fields[1]
-    StructField(b,StructType(List(StructField(t,NullType,true))),true)
-    """
-    s = s.strip()
-    if not s:
-        return NullType()
-
-    elif s.startswith('('):
-        return _parse_schema_abstract(s[1:-1])
-
-    elif s.startswith('['):
-        return ArrayType(_parse_schema_abstract(s[1:-1]), True)
-
-    elif s.startswith('{'):
-        return MapType(NullType(), _parse_schema_abstract(s[1:-1]))
-
-    parts = _split_schema_abstract(s)
-    fields = [_parse_field_abstract(p) for p in parts]
-    return StructType(fields)
-
-
-def _infer_schema_type(obj, dataType):
-    """
-    Fill the dataType with types inferred from obj
-
-    >>> schema = _parse_schema_abstract("a b c d")
-    >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
-    >>> _infer_schema_type(row, schema)
-    StructType...LongType...DoubleType...StringType...DateType...
-    >>> row = [[1], {"key": (1, 2.0)}]
-    >>> schema = _parse_schema_abstract("a[] b{c d}")
-    >>> _infer_schema_type(row, schema)
-    StructType...a,ArrayType...b,MapType(StringType,...c,LongType...
-    """
-    if isinstance(dataType, NullType):
-        return _infer_type(obj)
-
-    if not obj:
-        return NullType()
-
-    if isinstance(dataType, ArrayType):
-        eType = _infer_schema_type(obj[0], dataType.elementType)
-        return ArrayType(eType, True)
-
-    elif isinstance(dataType, MapType):
-        k, v = next(iter(obj.items()))
-        return MapType(_infer_schema_type(k, dataType.keyType),
-                       _infer_schema_type(v, dataType.valueType))
-
-    elif isinstance(dataType, StructType):
-        fs = dataType.fields
-        assert len(fs) == len(obj), \
-            "Obj(%s) have different length with fields(%s)" % (obj, fs)
-        fields = [StructField(f.name, _infer_schema_type(o, f.dataType), True)
-                  for o, f in zip(obj, fs)]
-        return StructType(fields)
-
-    else:
-        raise TypeError("Unexpected dataType: %s" % type(dataType))
 
 
 _acceptable_types = {

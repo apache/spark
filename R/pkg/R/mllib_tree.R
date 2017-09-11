@@ -164,6 +164,11 @@ print.summary.decisionTree <- function(x) {
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type in classification model.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.gbt,SparkDataFrame,formula-method
 #' @return \code{spark.gbt} returns a fitted Gradient Boosted Tree model.
@@ -205,7 +210,8 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, type = c("regression", "classification"),
                    maxDepth = 5, maxBins = 32, maxIter = 20, stepSize = 0.1, lossType = NULL,
                    seed = NULL, subsamplingRate = 1.0, minInstancesPerNode = 1, minInfoGain = 0.0,
-                   checkpointInterval = 10, maxMemoryInMB = 256, cacheNodeIds = FALSE) {
+                   checkpointInterval = 10, maxMemoryInMB = 256, cacheNodeIds = FALSE,
+                   handleInvalid = c("error", "keep", "skip")) {
             type <- match.arg(type)
             formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
@@ -225,6 +231,7 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
                      new("GBTRegressionModel", jobj = jobj)
                    },
                    classification = {
+                     handleInvalid <- match.arg(handleInvalid)
                      if (is.null(lossType)) lossType <- "logistic"
                      lossType <- match.arg(lossType, "logistic")
                      jobj <- callJStatic("org.apache.spark.ml.r.GBTClassifierWrapper",
@@ -233,7 +240,8 @@ setMethod("spark.gbt", signature(data = "SparkDataFrame", formula = "formula"),
                                          as.numeric(stepSize), as.integer(minInstancesPerNode),
                                          as.numeric(minInfoGain), as.integer(checkpointInterval),
                                          lossType, seed, as.numeric(subsamplingRate),
-                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds),
+                                         handleInvalid)
                      new("GBTClassificationModel", jobj = jobj)
                    }
             )
@@ -374,10 +382,11 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
-#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in classification model.
-#'        Supported options: "skip" (filter out rows with invalid data),
-#'                           "error" (throw an error), "keep" (put invalid data in a special additional
-#'                           bucket, at index numLabels). Default is "error".
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type in classification model.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.randomForest,SparkDataFrame,formula-method
 #' @return \code{spark.randomForest} returns a fitted Random Forest model.
@@ -583,6 +592,11 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #'                     nodes. If TRUE, the algorithm will cache node IDs for each instance. Caching
 #'                     can speed up training of deeper trees. Users can set how often should the
 #'                     cache be checkpointed or disable it by setting checkpointInterval.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type in classification model.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @aliases spark.decisionTree,SparkDataFrame,formula-method
 #' @return \code{spark.decisionTree} returns a fitted Decision Tree model.
@@ -617,7 +631,8 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
           function(data, formula, type = c("regression", "classification"),
                    maxDepth = 5, maxBins = 32, impurity = NULL, seed = NULL,
                    minInstancesPerNode = 1, minInfoGain = 0.0, checkpointInterval = 10,
-                   maxMemoryInMB = 256, cacheNodeIds = FALSE) {
+                   maxMemoryInMB = 256, cacheNodeIds = FALSE,
+                   handleInvalid = c("error", "keep", "skip")) {
             type <- match.arg(type)
             formula <- paste(deparse(formula), collapse = "")
             if (!is.null(seed)) {
@@ -636,6 +651,7 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
                      new("DecisionTreeRegressionModel", jobj = jobj)
                    },
                    classification = {
+                     handleInvalid <- match.arg(handleInvalid)
                      if (is.null(impurity)) impurity <- "gini"
                      impurity <- match.arg(impurity, c("gini", "entropy"))
                      jobj <- callJStatic("org.apache.spark.ml.r.DecisionTreeClassifierWrapper",
@@ -643,7 +659,8 @@ setMethod("spark.decisionTree", signature(data = "SparkDataFrame", formula = "fo
                                          as.integer(maxBins), impurity,
                                          as.integer(minInstancesPerNode), as.numeric(minInfoGain),
                                          as.integer(checkpointInterval), seed,
-                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds))
+                                         as.integer(maxMemoryInMB), as.logical(cacheNodeIds),
+                                         handleInvalid)
                      new("DecisionTreeClassificationModel", jobj = jobj)
                    }
             )
