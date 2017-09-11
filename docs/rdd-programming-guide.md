@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Spark Programming Guide
+title: RDD Programming Guide
 description: Spark SPARK_VERSION_SHORT programming guide in Java, Scala and Python
 ---
 
@@ -86,12 +86,21 @@ import org.apache.spark.SparkConf;
 
 <div data-lang="python"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} works with Python 2.6+ or Python 3.4+. It can use the standard CPython interpreter,
+Spark {{site.SPARK_VERSION}} works with Python 2.7+ or Python 3.4+. It can use the standard CPython interpreter,
 so C libraries like NumPy can be used. It also works with PyPy 2.3+.
 
-Note that support for Python 2.6 is deprecated as of Spark 2.0.0, and may be removed in Spark 2.2.0.
+Python 2.6 support was removed in Spark 2.2.0.
 
-To run Spark applications in Python, use the `bin/spark-submit` script located in the Spark directory.
+Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including including it in your setup.py as:
+
+{% highlight python %}
+    install_requires=[
+        'pyspark=={site.SPARK_VERSION}'
+    ]
+{% endhighlight %}
+
+
+To run Spark applications in Python without pip installing PySpark, use the `bin/spark-submit` script located in the Spark directory.
 This script will load Spark's Java/Scala libraries and allow you to submit applications to a cluster.
 You can also use `bin/pyspark` to launch an interactive Python shell.
 
@@ -247,7 +256,7 @@ $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 To use the Jupyter notebook (previously known as the IPython notebook),
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=jupyter ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=jupyter PYSPARK_DRIVER_PYTHON_OPTS=notebook ./bin/pyspark
 {% endhighlight %}
 
 You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`.
@@ -323,7 +332,7 @@ One important parameter for parallel collections is the number of *partitions* t
 
 Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
-Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
+Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
 {% highlight scala %}
 scala> val distFile = sc.textFile("data.txt")
@@ -356,7 +365,7 @@ Apart from text files, Spark's Scala API also supports several other data format
 
 Spark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
-Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
+Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
 {% highlight java %}
 JavaRDD<String> distFile = sc.textFile("data.txt");
@@ -388,7 +397,7 @@ Apart from text files, Spark's Java API also supports several other data formats
 
 PySpark can create distributed datasets from any storage source supported by Hadoop, including your local file system, HDFS, Cassandra, HBase, [Amazon S3](http://wiki.apache.org/hadoop/AmazonS3), etc. Spark supports text files, [SequenceFiles](http://hadoop.apache.org/common/docs/current/api/org/apache/hadoop/mapred/SequenceFileInputFormat.html), and any other Hadoop [InputFormat](http://hadoop.apache.org/docs/stable/api/org/apache/hadoop/mapred/InputFormat.html).
 
-Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3n://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
+Text file RDDs can be created using `SparkContext`'s `textFile` method. This method takes an URI for the file (either a local path on the machine, or a `hdfs://`, `s3a://`, etc URI) and reads it as a collection of lines. Here is an example invocation:
 
 {% highlight python %}
 >>> distFile = sc.textFile("data.txt")
@@ -969,40 +978,40 @@ for details.
   <td> Return a new RDD that contains the intersection of elements in the source dataset and the argument. </td>
 </tr>
 <tr>
-  <td> <b>distinct</b>([<i>numTasks</i>])) </td>
+  <td> <b>distinct</b>([<i>numPartitions</i>])) </td>
   <td> Return a new dataset that contains the distinct elements of the source dataset.</td>
 </tr>
 <tr>
-  <td> <b>groupByKey</b>([<i>numTasks</i>]) <a name="GroupByLink"></a> </td>
+  <td> <b>groupByKey</b>([<i>numPartitions</i>]) <a name="GroupByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
       average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better
       performance.
     <br />
     <b>Note:</b> By default, the level of parallelism in the output depends on the number of partitions of the parent RDD.
-      You can pass an optional <code>numTasks</code> argument to set a different number of tasks.
+      You can pass an optional <code>numPartitions</code> argument to set a different number of tasks.
   </td>
 </tr>
 <tr>
-  <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) <a name="ReduceByLink"></a> </td>
+  <td> <b>reduceByKey</b>(<i>func</i>, [<i>numPartitions</i>]) <a name="ReduceByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs where the values for each key are aggregated using the given reduce function <i>func</i>, which must be of type (V,V) => V. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
-  <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numTasks</i>]) <a name="AggregateByLink"></a> </td>
+  <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numPartitions</i>]) <a name="AggregateByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, U) pairs where the values for each key are aggregated using the given combine functions and a neutral "zero" value. Allows an aggregated value type that is different than the input value type, while avoiding unnecessary allocations. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
-  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numTasks</i>]) <a name="SortByLink"></a> </td>
+  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numPartitions</i>]) <a name="SortByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs where K implements Ordered, returns a dataset of (K, V) pairs sorted by keys in ascending or descending order, as specified in the boolean <code>ascending</code> argument.</td>
 </tr>
 <tr>
-  <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) <a name="JoinLink"></a> </td>
+  <td> <b>join</b>(<i>otherDataset</i>, [<i>numPartitions</i>]) <a name="JoinLink"></a> </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W)) pairs with all pairs of elements for each key.
     Outer joins are supported through <code>leftOuterJoin</code>, <code>rightOuterJoin</code>, and <code>fullOuterJoin</code>.
   </td>
 </tr>
 <tr>
-  <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) <a name="CogroupLink"></a> </td>
+  <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numPartitions</i>]) <a name="CogroupLink"></a> </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (Iterable&lt;V&gt;, Iterable&lt;W&gt;)) tuples. This operation is also called <code>groupWith</code>. </td>
 </tr>
 <tr>

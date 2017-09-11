@@ -55,6 +55,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
       + "null, null, null, null, null, "
       + "null, null, null, null, null, null, null)"
     ).executeUpdate()
+
+    conn.prepareStatement("CREATE TABLE ts_with_timezone " +
+      "(id integer, tstz TIMESTAMP WITH TIME ZONE, ttz TIME WITH TIME ZONE)")
+      .executeUpdate()
+    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES " +
+      "(1, TIMESTAMP WITH TIME ZONE '2016-08-12 10:22:31.949271-07', TIME WITH TIME ZONE '17:22:31.949271+00')")
+      .executeUpdate()
   }
 
   test("Type mapping for various types") {
@@ -125,5 +132,13 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     val schema = sqlContext.read.jdbc(jdbcUrl, "shortfloat", new Properties).schema
     assert(schema(0).dataType == FloatType)
     assert(schema(1).dataType == ShortType)
+  }
+
+  test("SPARK-20557: column type TIMESTAMP with TIME ZONE and TIME with TIME ZONE should be recognized") {
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, "ts_with_timezone", new Properties)
+    val rows = dfRead.collect()
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(1).equals("class java.sql.Timestamp"))
+    assert(types(2).equals("class java.sql.Timestamp"))
   }
 }

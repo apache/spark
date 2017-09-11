@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableTyp
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.QueryExecution
 
 
 /**
@@ -41,7 +42,7 @@ case class AnalyzeColumnCommand(
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
-    val sizeInBytes = AnalyzeTableCommand.calculateTotalSize(sessionState, tableMeta)
+    val sizeInBytes = CommandUtils.calculateTotalSize(sessionState, tableMeta)
 
     // Compute stats for each column
     val (rowCount, newColStats) = computeColumnStats(sparkSession, tableIdentWithDB, columnNames)
@@ -53,7 +54,7 @@ case class AnalyzeColumnCommand(
       // Newly computed column stats should override the existing ones.
       colStats = tableMeta.stats.map(_.colStats).getOrElse(Map.empty) ++ newColStats)
 
-    sessionState.catalog.alterTable(tableMeta.copy(stats = Some(statistics)))
+    sessionState.catalog.alterTableStats(tableIdentWithDB, Some(statistics))
 
     // Refresh the cached data source table in the catalog.
     sessionState.catalog.refreshTable(tableIdentWithDB)
@@ -96,11 +97,13 @@ case class AnalyzeColumnCommand(
       attributesToAnalyze.map(ColumnStat.statExprs(_, ndvMaxErr))
 
     val namedExpressions = expressions.map(e => Alias(e, e.toString)())
-    val statsRow = Dataset.ofRows(sparkSession, Aggregate(Nil, namedExpressions, relation)).head()
+    val statsRow = new QueryExecution(sparkSession, Aggregate(Nil, namedExpressions, relation))
+      .executedPlan.executeTake(1).head
 
     val rowCount = statsRow.getLong(0)
     val columnStats = attributesToAnalyze.zipWithIndex.map { case (attr, i) =>
-      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1), attr))
+      // according to `ColumnStat.statExprs`, the stats struct always have 6 fields.
+      (attr.name, ColumnStat.rowToColumnStat(statsRow.getStruct(i + 1, 6), attr))
     }.toMap
     (rowCount, columnStats)
   }

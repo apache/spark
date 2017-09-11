@@ -29,7 +29,7 @@ class DecimalAggregatesSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Decimal Optimizations", FixedPoint(100),
-      DecimalAggregates(conf)) :: Nil
+      DecimalAggregates) :: Nil
   }
 
   val testRelation = LocalRelation('a.decimal(2, 1), 'b.decimal(12, 1))

@@ -29,6 +29,12 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   import testImplicits._
 
   test("show cost in explain command") {
+    // For readability, we only show optimized plan and physical plan in explain cost command
+    checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "),
+      "Optimized Logical Plan", "Physical Plan")
+    checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "),
+      "Parsed Logical Plan", "Analyzed Logical Plan")
+
     // Only has sizeInBytes before ANALYZE command
     checkKeywordsExist(sql("EXPLAIN COST  SELECT * FROM src "), "sizeInBytes")
     checkKeywordsNotExist(sql("EXPLAIN COST  SELECT * FROM src "), "rowCount")
@@ -43,11 +49,29 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("explain extended command") {
     checkKeywordsExist(sql(" explain   select * from src where key=123 "),
-                   "== Physical Plan ==")
+                   "== Physical Plan ==",
+                   "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+
     checkKeywordsNotExist(sql(" explain   select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",
-                   "== Optimized Logical Plan ==")
+                   "== Optimized Logical Plan ==",
+                   "Owner",
+                   "Database",
+                   "Created",
+                   "Last Access",
+                   "Type",
+                   "Provider",
+                   "Properties",
+                   "Statistics",
+                   "Location",
+                   "Serde Library",
+                   "InputFormat",
+                   "OutputFormat",
+                   "Partition Provider",
+                   "Schema"
+    )
+
     checkKeywordsExist(sql(" explain   extended select * from src where key=123 "),
                    "== Parsed Logical Plan ==",
                    "== Analyzed Logical Plan ==",

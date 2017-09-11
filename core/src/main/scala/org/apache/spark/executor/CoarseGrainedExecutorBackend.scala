@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -191,11 +193,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
-      val port = executorConf.getInt("spark.executor.port", 0)
       val fetcher = RpcEnv.create(
         "driverPropsFetcher",
         hostname,
-        port,
+        -1,
         executorConf,
         new SecurityManager(executorConf),
         clientMode = true)
@@ -220,8 +221,13 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
+      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
+        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
+        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
+      }
+
       val env = SparkEnv.createExecutorEnv(
-        driverConf, executorId, hostname, port, cores, cfg.ioEncryptionKey, isLocal = false)
+        driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
 
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
         env.rpcEnv, driverUrl, executorId, hostname, cores, userClassPath, env))

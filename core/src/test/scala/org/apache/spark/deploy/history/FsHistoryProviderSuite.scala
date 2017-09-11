@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.history
 
 import java.io._
-import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
@@ -27,7 +26,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.FileStatus
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
 import org.mockito.Matchers.any
@@ -63,7 +62,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId, appAttemptId)
-    val logPath = new URI(logUri).getPath + ip
+    val logPath = new Path(logUri).toUri.getPath + ip
     new File(logPath)
   }
 
@@ -109,7 +108,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           user: String,
           completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
+          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, "")))
       }
 
       // For completed files, lastUpdated would be lastModified time.
@@ -606,7 +605,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     if (isNewFormat) {
       val newFormatStream = new FileOutputStream(file)
       Utils.tryWithSafeFinally {
-        EventLoggingListener.initEventLog(newFormatStream)
+        EventLoggingListener.initEventLog(newFormatStream, false, null)
       } {
         newFormatStream.close()
       }

@@ -25,7 +25,6 @@ import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.Seconds;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
-import org.apache.spark.streaming.api.java.JavaDStream;
 
 public class JavaKinesisInputDStreamBuilderSuite extends LocalJavaStreamingContext {
   /**

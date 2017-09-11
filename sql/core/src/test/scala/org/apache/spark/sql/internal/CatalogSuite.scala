@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.StorageLevel
 
 
 /**
@@ -78,7 +79,7 @@ class CatalogSuite
     val tempFunc = (e: Seq[Expression]) => e.head
     val funcMeta = CatalogFunction(FunctionIdentifier(name, None), "className", Nil)
     sessionCatalog.registerFunction(
-      funcMeta, ignoreIfExists = false, functionBuilder = Some(tempFunc))
+      funcMeta, overrideIfExists = false, functionBuilder = Some(tempFunc))
   }
 
   private def dropFunction(name: String, db: Option[String] = None): Unit = {
@@ -366,6 +367,7 @@ class CatalogSuite
       withUserDefinedFunction("fn1" -> true, s"$db.fn2" -> false) {
         // Try to find non existing functions.
         intercept[AnalysisException](spark.catalog.getFunction("fn1"))
+        intercept[AnalysisException](spark.catalog.getFunction(db, "fn1"))
         intercept[AnalysisException](spark.catalog.getFunction("fn2"))
         intercept[AnalysisException](spark.catalog.getFunction(db, "fn2"))
 
@@ -378,6 +380,8 @@ class CatalogSuite
         assert(fn1.name === "fn1")
         assert(fn1.database === null)
         assert(fn1.isTemporary)
+        // Find a temporary function with database
+        intercept[AnalysisException](spark.catalog.getFunction(db, "fn1"))
 
         // Find a qualified function
         val fn2 = spark.catalog.getFunction(db, "fn2")
@@ -454,6 +458,7 @@ class CatalogSuite
 
         // Find a temporary function
         assert(spark.catalog.functionExists("fn1"))
+        assert(!spark.catalog.functionExists(db, "fn1"))
 
         // Find a qualified function
         assert(spark.catalog.functionExists(db, "fn2"))
@@ -535,4 +540,11 @@ class CatalogSuite
       .createTempView("fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
   }
+
+  test("cacheTable with storage level") {
+    createTempTable("my_temp_table")
+    spark.catalog.cacheTable("my_temp_table", StorageLevel.DISK_ONLY)
+    assert(spark.table("my_temp_table").storageLevel == StorageLevel.DISK_ONLY)
+  }
+
 }

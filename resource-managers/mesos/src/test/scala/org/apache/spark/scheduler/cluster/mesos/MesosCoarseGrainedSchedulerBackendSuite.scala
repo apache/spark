@@ -28,16 +28,17 @@ import org.apache.mesos.Protos._
 import org.mockito.Matchers
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.mock.MockitoSugar
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{LocalSparkContext, SecurityManager, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.internal.config._
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor}
 import org.apache.spark.scheduler.TaskSchedulerImpl
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor}
 import org.apache.spark.scheduler.cluster.mesos.Utils._
 
 class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
@@ -199,6 +200,40 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o2"), true)
   }
 
+  test("mesos declines offers with a filter when maxCores not a multiple of executor.cores") {
+    val maxCores = 4
+    val executorCores = 3
+    setBackend(Map(
+      "spark.cores.max" -> maxCores.toString,
+      "spark.executor.cores" -> executorCores.toString
+    ))
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)
+    ))
+    verifyTaskLaunched(driver, "o1")
+    verifyDeclinedOffer(driver, createOfferId("o2"), true)
+  }
+
+  test("mesos declines offers with a filter when reached spark.cores.max with executor.cores") {
+    val maxCores = 4
+    val executorCores = 2
+    setBackend(Map(
+      "spark.cores.max" -> maxCores.toString,
+      "spark.executor.cores" -> executorCores.toString
+    ))
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1),
+      Resources(executorMemory, maxCores + 1)
+    ))
+    verifyTaskLaunched(driver, "o1")
+    verifyTaskLaunched(driver, "o2")
+    verifyDeclinedOffer(driver, createOfferId("o3"), true)
+  }
+
   test("mesos assigns tasks round-robin on offers") {
     val executorCores = 4
     val maxCores = executorCores * 2
@@ -328,6 +363,41 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
         markRegistered()
         assert(webuiUrl.isDefined)
         assert(webuiUrl.get.equals("http://webui"))
+        driver
+      }
+    }
+
+    backend.start()
+  }
+
+  test("failover timeout is set in created scheduler driver") {
+    val failoverTimeoutIn = 3600.0
+    initializeSparkConf(Map(DRIVER_FAILOVER_TIMEOUT.key -> failoverTimeoutIn.toString))
+    sc = new SparkContext(sparkConf)
+
+    val taskScheduler = mock[TaskSchedulerImpl]
+    when(taskScheduler.sc).thenReturn(sc)
+
+    val driver = mock[SchedulerDriver]
+    when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
+
+    val securityManager = mock[SecurityManager]
+
+    val backend = new MesosCoarseGrainedSchedulerBackend(
+      taskScheduler, sc, "master", securityManager) {
+      override protected def createSchedulerDriver(
+          masterUrl: String,
+          scheduler: Scheduler,
+          sparkUser: String,
+          appName: String,
+          conf: SparkConf,
+          webuiUrl: Option[String] = None,
+          checkpoint: Option[Boolean] = None,
+          failoverTimeout: Option[Double] = None,
+          frameworkId: Option[String] = None): SchedulerDriver = {
+        markRegistered()
+        assert(failoverTimeout.isDefined)
+        assert(failoverTimeout.get.equals(failoverTimeoutIn))
         driver
       }
     }
@@ -498,32 +568,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     assert(launchedTasks.head.getLabels.equals(taskLabels))
   }
 
-  test("mesos ignored invalid labels and sets configurable labels on tasks") {
-    val taskLabelsString = "mesos:test,label:test,incorrect:label:here"
+  test("mesos supports spark.mesos.network.name and spark.mesos.network.labels") {
     setBackend(Map(
-      "spark.mesos.task.labels" -> taskLabelsString
-    ))
-
-    // Build up the labels
-    val taskLabels = Protos.Labels.newBuilder()
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("mesos").setValue("test").build())
-      .addLabels(Protos.Label.newBuilder()
-        .setKey("label").setValue("test").build())
-      .build()
-
-    val offers = List(Resources(backend.executorMemory(sc), 1))
-    offerResources(offers)
-    val launchedTasks = verifyTaskLaunched(driver, "o1")
-
-    val labels = launchedTasks.head.getLabels
-
-    assert(launchedTasks.head.getLabels.equals(taskLabels))
-  }
-
-  test("mesos supports spark.mesos.network.name") {
-    setBackend(Map(
-      "spark.mesos.network.name" -> "test-network-name"
+      "spark.mesos.network.name" -> "test-network-name",
+      "spark.mesos.network.labels" -> "key1:val1,key2:val2"
     ))
 
     val (mem, cpu) = (backend.executorMemory(sc), 4)
@@ -535,6 +583,10 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     val networkInfos = launchedTasks.head.getContainer.getNetworkInfosList
     assert(networkInfos.size == 1)
     assert(networkInfos.get(0).getName == "test-network-name")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getKey == "key1")
+    assert(networkInfos.get(0).getLabels.getLabels(0).getValue == "val1")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getKey == "key2")
+    assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
   test("supports spark.scheduler.minRegisteredResourcesRatio") {

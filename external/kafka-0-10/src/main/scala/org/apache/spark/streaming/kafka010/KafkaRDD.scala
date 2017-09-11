@@ -156,7 +156,7 @@ private[spark] class KafkaRDD[K, V](
     val prefExecs = if (null == prefHost) allExecs else allExecs.filter(_.host == prefHost)
     val execs = if (prefExecs.isEmpty) allExecs else prefExecs
     if (execs.isEmpty) {
-      Seq()
+      Seq.empty
     } else {
       // execs is sorted, tp.hashCode depends only on topic and partition, so consistent index
       val index = Math.floorMod(tp.hashCode, execs.length)
@@ -199,7 +199,7 @@ private[spark] class KafkaRDD[K, V](
 
     val consumer = if (useConsumerCache) {
       CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
-      if (context.attemptNumber > 1) {
+      if (context.attemptNumber >= 1) {
         // just in case the prior attempt failures were cache related
         CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
       }

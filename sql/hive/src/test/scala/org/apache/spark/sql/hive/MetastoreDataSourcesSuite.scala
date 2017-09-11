@@ -52,11 +52,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
   }
 
-  // To test `HiveExternalCatalog`, we need to read the raw table metadata(schema, partition
-  // columns and bucket specification are still in table properties) from hive client.
-  private def hiveClient: HiveClient =
-    sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
-
   test("persistent JSON table") {
     withTable("jsonTable") {
       sql(
@@ -588,7 +583,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: HadoopFsRelation, _, _) => // OK
+            case LogicalRelation(p: HadoopFsRelation, _, _, _) => // OK
             case _ =>
               fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }
@@ -1357,32 +1352,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       f
     } finally {
       sparkSession.sparkContext.conf.set(DEBUG_MODE, previousValue)
-    }
-  }
-
-  test("SPARK-18464: support old table which doesn't store schema in table properties") {
-    withTable("old") {
-      withTempPath { path =>
-        Seq(1 -> "a").toDF("i", "j").write.parquet(path.getAbsolutePath)
-        val tableDesc = CatalogTable(
-          identifier = TableIdentifier("old", Some("default")),
-          tableType = CatalogTableType.EXTERNAL,
-          storage = CatalogStorageFormat.empty.copy(
-            properties = Map("path" -> path.getAbsolutePath)
-          ),
-          schema = new StructType(),
-          provider = Some("parquet"),
-          properties = Map(
-            HiveExternalCatalog.DATASOURCE_PROVIDER -> "parquet"))
-        hiveClient.createTable(tableDesc, ignoreIfExists = false)
-
-        checkAnswer(spark.table("old"), Row(1, "a"))
-
-        val expectedSchema = StructType(Seq(
-          StructField("i", IntegerType, nullable = true),
-          StructField("j", StringType, nullable = true)))
-        assert(table("old").schema === expectedSchema)
-      }
     }
   }
 }

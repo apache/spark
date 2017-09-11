@@ -28,6 +28,7 @@ import org.apache.kafka.common.TopicPartition
 import org.apache.spark.{SparkEnv, SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.kafka010.KafkaSource._
+import org.apache.spark.util.UninterruptibleThread
 
 
 /**
@@ -62,11 +63,20 @@ private[kafka010] case class CachedKafkaConsumer private(
 
   case class AvailableOffsetRange(earliest: Long, latest: Long)
 
+  private def runUninterruptiblyIfPossible[T](body: => T): T = Thread.currentThread match {
+    case ut: UninterruptibleThread =>
+      ut.runUninterruptibly(body)
+    case _ =>
+      logWarning("CachedKafkaConsumer is not running in UninterruptibleThread. " +
+        "It may hang when CachedKafkaConsumer's methods are interrupted because of KAFKA-1894")
+      body
+  }
+
   /**
    * Return the available offset range of the current partition. It's a pair of the earliest offset
    * and the latest offset.
    */
-  def getAvailableOffsetRange(): AvailableOffsetRange = {
+  def getAvailableOffsetRange(): AvailableOffsetRange = runUninterruptiblyIfPossible {
     consumer.seekToBeginning(Set(topicPartition).asJava)
     val earliestOffset = consumer.position(topicPartition)
     consumer.seekToEnd(Set(topicPartition).asJava)
@@ -92,7 +102,8 @@ private[kafka010] case class CachedKafkaConsumer private(
       offset: Long,
       untilOffset: Long,
       pollTimeoutMs: Long,
-      failOnDataLoss: Boolean): ConsumerRecord[Array[Byte], Array[Byte]] = {
+      failOnDataLoss: Boolean):
+    ConsumerRecord[Array[Byte], Array[Byte]] = runUninterruptiblyIfPossible {
     require(offset < untilOffset,
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
     logDebug(s"Get $groupId $topicPartition nextOffset $nextOffsetInFetchedData requested $offset")
@@ -101,9 +112,15 @@ private[kafka010] case class CachedKafkaConsumer private(
     // we will move to the next available offset within `[offset, untilOffset)` and retry.
     // If `failOnDataLoss` is `true`, the loop body will be executed only once.
     var toFetchOffset = offset
-    while (toFetchOffset != UNKNOWN_OFFSET) {
+    var consumerRecord: ConsumerRecord[Array[Byte], Array[Byte]] = null
+    // We want to break out of the while loop on a successful fetch to avoid using "return"
+    // which may causes a NonLocalReturnControl exception when this method is used as a function.
+    var isFetchComplete = false
+
+    while (toFetchOffset != UNKNOWN_OFFSET && !isFetchComplete) {
       try {
-        return fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
+        consumerRecord = fetchData(toFetchOffset, untilOffset, pollTimeoutMs, failOnDataLoss)
+        isFetchComplete = true
       } catch {
         case e: OffsetOutOfRangeException =>
           // When there is some error thrown, it's better to use a new consumer to drop all cached
@@ -114,8 +131,13 @@ private[kafka010] case class CachedKafkaConsumer private(
           toFetchOffset = getEarliestAvailableOffsetBetween(toFetchOffset, untilOffset)
       }
     }
-    resetFetchedData()
-    null
+
+    if (isFetchComplete) {
+      consumerRecord
+    } else {
+      resetFetchedData()
+      null
+    }
   }
 
   /**
@@ -276,7 +298,7 @@ private[kafka010] case class CachedKafkaConsumer private(
     reportDataLoss0(failOnDataLoss, finalMessage, cause)
   }
 
-  private def close(): Unit = consumer.close()
+  def close(): Unit = consumer.close()
 
   private def seek(offset: Long): Unit = {
     logDebug(s"Seeking to $groupId $topicPartition $offset")
@@ -371,7 +393,7 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
 
     // If this is reattempt at running the task, then invalidate cache and start with
     // a new consumer
-    if (TaskContext.get != null && TaskContext.get.attemptNumber > 1) {
+    if (TaskContext.get != null && TaskContext.get.attemptNumber >= 1) {
       removeKafkaConsumer(topic, partition, kafkaParams)
       val consumer = new CachedKafkaConsumer(topicPartition, kafkaParams)
       consumer.inuse = true
@@ -385,6 +407,14 @@ private[kafka010] object CachedKafkaConsumer extends Logging {
       consumer.inuse = true
       consumer
     }
+  }
+
+  /** Create an [[CachedKafkaConsumer]] but don't put it into cache. */
+  def createUncached(
+      topic: String,
+      partition: Int,
+      kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer = {
+    new CachedKafkaConsumer(new TopicPartition(topic, partition), kafkaParams)
   }
 
   private def reportDataLoss0(

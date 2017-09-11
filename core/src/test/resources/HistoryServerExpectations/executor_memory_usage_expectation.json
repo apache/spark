@@ -22,10 +22,12 @@
     "stdout" : "http://172.22.0.167:51469/logPage/?appId=app-20161116163331-0000&executorId=2&logType=stdout",
     "stderr" : "http://172.22.0.167:51469/logPage/?appId=app-20161116163331-0000&executorId=2&logType=stderr"
   },
-  "onHeapMemoryUsed" : 0,
-  "offHeapMemoryUsed" : 0,
-  "maxOnHeapMemory" : 384093388,
-  "maxOffHeapMemory" : 524288000
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
 }, {
   "id" : "driver",
   "hostPort" : "172.22.0.167:51475",
@@ -47,10 +49,12 @@
   "isBlacklisted" : true,
   "maxMemory" : 908381388,
   "executorLogs" : { },
-  "onHeapMemoryUsed" : 0,
-  "offHeapMemoryUsed" : 0,
-  "maxOnHeapMemory" : 384093388,
-  "maxOffHeapMemory" : 524288000
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
 }, {
   "id" : "1",
   "hostPort" : "172.22.0.167:51490",
@@ -75,11 +79,12 @@
     "stdout" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stdout",
     "stderr" : "http://172.22.0.167:51467/logPage/?appId=app-20161116163331-0000&executorId=1&logType=stderr"
   },
-
-  "onHeapMemoryUsed" : 0,
-  "offHeapMemoryUsed" : 0,
-  "maxOnHeapMemory" : 384093388,
-  "maxOffHeapMemory" : 524288000
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
 }, {
   "id" : "0",
   "hostPort" : "172.22.0.167:51491",
@@ -104,10 +109,12 @@
     "stdout" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stdout",
     "stderr" : "http://172.22.0.167:51465/logPage/?appId=app-20161116163331-0000&executorId=0&logType=stderr"
   },
-  "onHeapMemoryUsed" : 0,
-  "offHeapMemoryUsed" : 0,
-  "maxOnHeapMemory" : 384093388,
-  "maxOffHeapMemory" : 524288000
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
 }, {
   "id" : "3",
   "hostPort" : "172.22.0.167:51485",
@@ -132,8 +139,10 @@
     "stdout" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stdout",
     "stderr" : "http://172.22.0.167:51466/logPage/?appId=app-20161116163331-0000&executorId=3&logType=stderr"
   },
-  "onHeapMemoryUsed" : 0,
-  "offHeapMemoryUsed" : 0,
-  "maxOnHeapMemory" : 384093388,
-  "maxOffHeapMemory" : 524288000
+  "memoryMetrics": {
+    "usedOnHeapStorageMemory": 0,
+    "usedOffHeapStorageMemory": 0,
+    "totalOnHeapStorageMemory": 384093388,
+    "totalOffHeapStorageMemory": 524288000
+  }
 } ]

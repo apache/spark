@@ -264,6 +264,36 @@ head(arrange(waiting_counts, desc(waiting_counts$count)))
 {% endhighlight %}
 </div>
 
+In addition to standard aggregations, SparkR supports [OLAP cube](https://en.wikipedia.org/wiki/OLAP_cube) operators `cube`:
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+head(agg(cube(df, "cyl", "disp", "gear"), avg(df$mpg)))
+##  cyl  disp gear avg(mpg)
+##1  NA 140.8    4     22.8
+##2   4  75.7    4     30.4
+##3   8 400.0    3     19.2
+##4   8 318.0    3     15.5
+##5  NA 351.0   NA     15.8
+##6  NA 275.8   NA     16.3
+{% endhighlight %}
+</div>
+
+and `rollup`:
+
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+head(agg(rollup(df, "cyl", "disp", "gear"), avg(df$mpg)))
+##  cyl  disp gear avg(mpg)
+##1   4  75.7    4     30.4
+##2   8 400.0    3     19.2
+##3   8 318.0    3     15.5
+##4   4  78.7   NA     32.4
+##5   8 304.0    3     15.2
+##6   4  79.0   NA     27.3
+{% endhighlight %}
+</div>
+
 ### Operating on Columns
 
 SparkR also provides a number of functions that can directly applied to columns for data processing and during aggregation. The example below shows the use of basic arithmetic functions.
@@ -452,6 +482,7 @@ SparkR supports the following machine learning algorithms currently:
 * [`spark.logit`](api/R/spark.logit.html): [`Logistic Regression`](ml-classification-regression.html#logistic-regression)
 * [`spark.mlp`](api/R/spark.mlp.html): [`Multilayer Perceptron (MLP)`](ml-classification-regression.html#multilayer-perceptron-classifier)
 * [`spark.naiveBayes`](api/R/spark.naiveBayes.html): [`Naive Bayes`](ml-classification-regression.html#naive-bayes)
+* [`spark.svmLinear`](api/R/spark.svmLinear.html): [`Linear Support Vector Machine`](ml-classification-regression.html#linear-support-vector-machine)
 
 #### Regression
 
@@ -461,11 +492,13 @@ SparkR supports the following machine learning algorithms currently:
 
 #### Tree
 
+* [`spark.decisionTree`](api/R/spark.decisionTree.html): `Decision Tree for` [`Regression`](ml-classification-regression.html#decision-tree-regression) `and` [`Classification`](ml-classification-regression.html#decision-tree-classifier)
 * [`spark.gbt`](api/R/spark.gbt.html): `Gradient Boosted Trees for` [`Regression`](ml-classification-regression.html#gradient-boosted-tree-regression) `and` [`Classification`](ml-classification-regression.html#gradient-boosted-tree-classifier)
 * [`spark.randomForest`](api/R/spark.randomForest.html): `Random Forest for` [`Regression`](ml-classification-regression.html#random-forest-regression) `and` [`Classification`](ml-classification-regression.html#random-forest-classifier)
 
 #### Clustering
 
+* [`spark.bisectingKmeans`](api/R/spark.bisectingKmeans.html): [`Bisecting k-means`](ml-clustering.html#bisecting-k-means)
 * [`spark.gaussianMixture`](api/R/spark.gaussianMixture.html): [`Gaussian Mixture Model (GMM)`](ml-clustering.html#gaussian-mixture-model-gmm)
 * [`spark.kmeans`](api/R/spark.kmeans.html): [`K-Means`](ml-clustering.html#k-means)
 * [`spark.lda`](api/R/spark.lda.html): [`Latent Dirichlet Allocation (LDA)`](ml-clustering.html#latent-dirichlet-allocation-lda)
@@ -473,6 +506,10 @@ SparkR supports the following machine learning algorithms currently:
 #### Collaborative Filtering
 
 * [`spark.als`](api/R/spark.als.html): [`Alternating Least Squares (ALS)`](ml-collaborative-filtering.html#collaborative-filtering)
+
+#### Frequent Pattern Mining
+
+* [`spark.fpGrowth`](api/R/spark.fpGrowth.html) : [`FP-growth`](ml-frequent-pattern-mining.html#fp-growth)
 
 #### Statistics
 
@@ -557,6 +594,10 @@ The following example shows how to save/load a MLlib model by SparkR.
 </tr>
 </table>
 
+# Structured Streaming
+
+SparkR supports the Structured Streaming API (experimental). Structured Streaming is a scalable and fault-tolerant stream processing engine built on the Spark SQL engine. For more information see the R API on the [Structured Streaming Programming Guide](structured-streaming-programming-guide.html)
+
 # R Function Name Conflicts
 
 When loading and attaching a new package in R, it is possible to have a name [conflict](https://stat.ethz.ch/R-manual/R-devel/library/base/html/library.html), where a
@@ -608,3 +649,11 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 ## Upgrading to SparkR 2.1.0
 
  - `join` no longer performs Cartesian Product by default, use `crossJoin` instead.
+
+## Upgrading to SparkR 2.2.0
+
+ - A `numPartitions` parameter has been added to `createDataFrame` and `as.DataFrame`. When splitting the data, the partition position calculation has been made to match the one in Scala.
+ - The method `createExternalTable` has been deprecated to be replaced by `createTable`. Either methods can be called to create external or managed table. Additional catalog methods have also been added.
+ - By default, derby.log is now saved to `tempdir()`. This will be created when instantiating the SparkSession with `enableHiveSupport` set to `TRUE`.
+ - `spark.lda` was not setting the optimizer correctly. It has been corrected.
+ - Several model summary outputs are updated to have `coefficients` as `matrix`. This includes `spark.logit`, `spark.kmeans`, `spark.glm`. Model summary outputs for `spark.gaussianMixture` have added log-likelihood as `loglik`.

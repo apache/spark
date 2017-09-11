@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import java.util.UUID
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.TaskContext
@@ -32,19 +34,17 @@ package object state {
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
     def mapPartitionsWithStateStore[U: ClassTag](
         sqlContext: SQLContext,
-        checkpointLocation: String,
-        operatorId: Long,
-        storeVersion: Long,
+        stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
-        valueSchema: StructType)(
+        valueSchema: StructType,
+        indexOrdinal: Option[Int])(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
       mapPartitionsWithStateStore(
-        checkpointLocation,
-        operatorId,
-        storeVersion,
+        stateInfo,
         keySchema,
         valueSchema,
+        indexOrdinal,
         sqlContext.sessionState,
         Some(sqlContext.streams.stateStoreCoordinator))(
         storeUpdateFunction)
@@ -52,11 +52,10 @@ package object state {
 
     /** Map each partition of an RDD along with data in a [[StateStore]]. */
     private[streaming] def mapPartitionsWithStateStore[U: ClassTag](
-        checkpointLocation: String,
-        operatorId: Long,
-        storeVersion: Long,
+        stateInfo: StatefulOperatorStateInfo,
         keySchema: StructType,
         valueSchema: StructType,
+        indexOrdinal: Option[Int],
         sessionState: SessionState,
         storeCoordinator: Option[StateStoreCoordinatorRef])(
         storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
@@ -69,14 +68,17 @@ package object state {
         })
         cleanedF(store, iter)
       }
+
       new StateStoreRDD(
         dataRDD,
         wrappedF,
-        checkpointLocation,
-        operatorId,
-        storeVersion,
+        stateInfo.checkpointLocation,
+        stateInfo.queryRunId,
+        stateInfo.operatorId,
+        stateInfo.storeVersion,
         keySchema,
         valueSchema,
+        indexOrdinal,
         sessionState,
         storeCoordinator)
     }

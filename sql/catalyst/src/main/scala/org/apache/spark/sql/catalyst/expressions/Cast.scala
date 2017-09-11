@@ -90,6 +90,31 @@ object Cast {
   }
 
   /**
+   * Return true if we need to use the `timeZone` information casting `from` type to `to` type.
+   * The patterns matched reflect the current implementation in the Cast node.
+   * c.f. usage of `timeZone` in:
+   * * Cast.castToString
+   * * Cast.castToDate
+   * * Cast.castToTimestamp
+   */
+  def needsTimeZone(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (StringType, TimestampType) => true
+    case (DateType, TimestampType) => true
+    case (TimestampType, StringType) => true
+    case (TimestampType, DateType) => true
+    case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
+    case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+      needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
+    case (StructType(fromFields), StructType(toFields)) =>
+      fromFields.length == toFields.length &&
+        fromFields.zip(toFields).exists {
+          case (fromField, toField) =>
+            needsTimeZone(fromField.dataType, toField.dataType)
+        }
+    case _ => false
+  }
+
+  /**
    * Return true iff we may truncate during casting `from` type to `to` type. e.g. long -> int,
    * timestamp -> date.
    */
@@ -139,7 +164,7 @@ object Cast {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr AS type) - Casts the value `expr` to the target data type `type`.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_('10' as int);
        10
@@ -164,6 +189,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  // When this cast involves TimeZone, it's only resolved if the timeZoneId is set;
+  // Otherwise behave like Expression.resolved.
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && (!needsTimeZone || timeZoneId.isDefined)
+
+  private[this] def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline private[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
@@ -450,15 +482,15 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
     // TODO: Could be faster?
-    val newRow = new GenericInternalRow(from.fields.length)
     buildCast[InternalRow](_, row => {
+      val newRow = new GenericInternalRow(from.fields.length)
       var i = 0
       while (i < row.numFields) {
         newRow.update(i,
           if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
         i += 1
       }
-      newRow.copy()
+      newRow
     })
   }
 
@@ -1015,7 +1047,7 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
         final $rowClass $result = new $rowClass(${fieldsCasts.length});
         final InternalRow $tmpRow = $c;
         $fieldsEvalCode
-        $evPrim = $result.copy();
+        $evPrim = $result;
       """
   }
 

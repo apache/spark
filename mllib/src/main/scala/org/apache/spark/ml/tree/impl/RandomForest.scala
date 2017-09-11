@@ -996,7 +996,7 @@ private[spark] object RandomForest extends Logging {
     require(metadata.isContinuous(featureIndex),
       "findSplitsForContinuousFeature can only be used to find splits for a continuous feature.")
 
-    val splits = if (featureSamples.isEmpty) {
+    val splits: Array[Double] = if (featureSamples.isEmpty) {
       Array.empty[Double]
     } else {
       val numSplits = metadata.numSplits(featureIndex)
@@ -1009,10 +1009,15 @@ private[spark] object RandomForest extends Logging {
       // sort distinct values
       val valueCounts = valueCountMap.toSeq.sortBy(_._1).toArray
 
-      // if possible splits is not enough or just enough, just return all possible splits
       val possibleSplits = valueCounts.length - 1
-      if (possibleSplits <= numSplits) {
-        valueCounts.map(_._1).init
+      if (possibleSplits == 0) {
+        // constant feature
+        Array.empty[Double]
+      } else if (possibleSplits <= numSplits) {
+        // if possible splits is not enough or just enough, just return all possible splits
+        (1 to possibleSplits)
+          .map(index => (valueCounts(index - 1)._1 + valueCounts(index)._1) / 2.0)
+          .toArray
       } else {
         // stride between splits
         val stride: Double = numSamples.toDouble / (numSplits + 1)
@@ -1037,7 +1042,7 @@ private[spark] object RandomForest extends Logging {
           // makes the gap between currentCount and targetCount smaller,
           // previous value is a split threshold.
           if (previousGap < currentGap) {
-            splitsBuilder += valueCounts(index - 1)._1
+            splitsBuilder += (valueCounts(index - 1)._1 + valueCounts(index)._1) / 2.0
             targetCount += stride
           }
           index += 1
@@ -1084,7 +1089,8 @@ private[spark] object RandomForest extends Logging {
     var numNodesInGroup = 0
     // If maxMemoryInMB is set very small, we want to still try to split 1 node,
     // so we allow one iteration if memUsage == 0.
-    while (nodeStack.nonEmpty && (memUsage < maxMemoryUsage || memUsage == 0)) {
+    var groupDone = false
+    while (nodeStack.nonEmpty && !groupDone) {
       val (treeIndex, node) = nodeStack.top
       // Choose subset of features for node (if subsampling).
       val featureSubset: Option[Array[Int]] = if (metadata.subsamplingFeatures) {
@@ -1102,9 +1108,11 @@ private[spark] object RandomForest extends Logging {
         mutableTreeToNodeToIndexInfo
           .getOrElseUpdate(treeIndex, new mutable.HashMap[Int, NodeIndexInfo]())(node.id)
           = new NodeIndexInfo(numNodesInGroup, featureSubset)
+        numNodesInGroup += 1
+        memUsage += nodeMemUsage
+      } else {
+        groupDone = true
       }
-      numNodesInGroup += 1
-      memUsage += nodeMemUsage
     }
     if (memUsage > maxMemoryUsage) {
       // If maxMemoryUsage is 0, we should still allow splitting 1 node.

@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.TaskContext
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.errors._
@@ -59,7 +59,8 @@ case class HashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "peakMemory" -> SQLMetrics.createSizeMetric(sparkContext, "peak memory"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"))
+    "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "aggregate time"),
+    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
 
   override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
 
@@ -93,8 +94,9 @@ case class HashAggregateExec(
     val numOutputRows = longMetric("numOutputRows")
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
+    val avgHashProbe = longMetric("avgHashProbe")
 
-    child.execute().mapPartitions { iter =>
+    child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
       val hasInput = iter.hasNext
       if (!hasInput && groupingExpressions.nonEmpty) {
@@ -104,6 +106,7 @@ case class HashAggregateExec(
       } else {
         val aggregationIterator =
           new TungstenAggregationIterator(
+            partIndex,
             groupingExpressions,
             aggregateExpressions,
             aggregateAttributes,
@@ -116,7 +119,8 @@ case class HashAggregateExec(
             testFallbackStartsAt,
             numOutputRows,
             peakMemory,
-            spillSize)
+            spillSize,
+            avgHashProbe)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -157,7 +161,7 @@ case class HashAggregateExec(
     }
   }
 
-  // The variables used as aggregation buffer
+  // The variables used as aggregation buffer. Only used for aggregation without keys.
   private var bufVars: Seq[ExprCode] = _
 
   private def doProduceWithoutKeys(ctx: CodegenContext): String = {
@@ -209,7 +213,7 @@ case class HashAggregateExec(
     }
 
     val doAgg = ctx.freshName("doAggregateWithoutKey")
-    ctx.addNewFunction(doAgg,
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
          | private void $doAgg() throws java.io.IOException {
          |   // initialize aggregation buffer
@@ -226,7 +230,7 @@ case class HashAggregateExec(
        | while (!$initAgg) {
        |   $initAgg = true;
        |   long $beforeAgg = System.nanoTime();
-       |   $doAgg();
+       |   $doAggFuncName();
        |   $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
        |
        |   // output the result
@@ -312,8 +316,7 @@ case class HashAggregateExec(
       groupingKeySchema,
       TaskContext.get().taskMemoryManager(),
       1024 * 16, // initial capacity
-      TaskContext.get().taskMemoryManager().pageSizeBytes,
-      false // disable tracking of performance metrics
+      TaskContext.get().taskMemoryManager().pageSizeBytes
     )
   }
 
@@ -341,7 +344,8 @@ case class HashAggregateExec(
       hashMap: UnsafeFixedWidthAggregationMap,
       sorter: UnsafeKVExternalSorter,
       peakMemory: SQLMetric,
-      spillSize: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
+      spillSize: SQLMetric,
+      avgHashProbe: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -350,6 +354,9 @@ case class HashAggregateExec(
     val metrics = TaskContext.get().taskMetrics()
     peakMemory.add(maxMemory)
     metrics.incPeakExecutionMemory(maxMemory)
+
+    // Update average hashmap probe
+    avgHashProbe.set(hashMap.getAverageProbesPerLookup())
 
     if (sorter == null) {
       // not spilled
@@ -577,6 +584,7 @@ case class HashAggregateExec(
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
+    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
 
     def generateGenerateCode(): String = {
       if (isFastHashMapEnabled) {
@@ -592,7 +600,7 @@ case class HashAggregateExec(
       } else ""
     }
 
-    ctx.addNewFunction(doAgg,
+    val doAggFuncName = ctx.addNewFunction(doAgg,
       s"""
         ${generateGenerateCode}
         private void $doAgg() throws java.io.IOException {
@@ -602,7 +610,8 @@ case class HashAggregateExec(
           ${if (isFastHashMapEnabled) {
               s"$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();"} else ""}
 
-          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize);
+          $iterTerm = $thisPlan.finishAggregate($hashMapTerm, $sorterTerm, $peakMemory, $spillSize,
+            $avgHashProbe);
         }
        """)
 
@@ -672,7 +681,7 @@ case class HashAggregateExec(
      if (!$initAgg) {
        $initAgg = true;
        long $beforeAgg = System.nanoTime();
-       $doAgg();
+       $doAggFuncName();
        $aggTime.add((System.nanoTime() - $beforeAgg) / 1000000);
      }
 
@@ -792,6 +801,8 @@ case class HashAggregateExec(
          |     $unsafeRowBuffer =
          |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
          |   }
+         |   // Can't allocate buffer from the hash map. Spill the map and fallback to sort-based
+         |   // aggregation after processing all input rows.
          |   if ($unsafeRowBuffer == null) {
          |     if ($sorterTerm == null) {
          |       $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
@@ -800,7 +811,7 @@ case class HashAggregateExec(
          |     }
          |     $resetCounter
          |     // the hash map had be spilled, it should have enough memory now,
-         |     // try  to allocate buffer again.
+         |     // try to allocate buffer again.
          |     $unsafeRowBuffer =
          |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
          |     if ($unsafeRowBuffer == null) {

@@ -387,7 +387,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("6.4817"))
 
     checkAnswer(
-      df.select(format_number(lit(BigDecimal(7.128381)), 4)), // not convert anything
+      df.select(format_number(lit(BigDecimal("7.128381")), 4)), // not convert anything
       Row("7.1284"))
 
     intercept[AnalysisException] {
