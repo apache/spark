@@ -30,7 +30,13 @@ try:
     import pandas
     _have_pandas = True
 except:
-    # No Pandas, but that's okay, we'll skip those tests
+    pass
+
+_have_arrow = False
+try:
+    import pyarrow
+    _have_arrow = True
+except:
     pass
 
 from pyspark import since, SparkContext
@@ -2125,7 +2131,7 @@ def _udf(f, returnType, vectorized):
     return udf_obj._wrapped()
 
 
-if _have_pandas:
+if _have_pandas and _have_arrow:
 
     @since(2.3)
     def pandas_udf(f=None, returnType=StringType()):

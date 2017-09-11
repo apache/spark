@@ -67,9 +67,6 @@ from pyspark.sql.functions import UserDefinedFunction, sha2, lit, col, expr
 from pyspark.sql.window import Window
 from pyspark.sql.utils import AnalysisException, ParseException, IllegalArgumentException
 
-if _have_pandas:
-    from pyspark.sql.functions import pandas_udf
-
 _have_arrow = False
 try:
     import pyarrow
@@ -77,6 +74,9 @@ try:
 except:
     # No Arrow, but that's okay, we'll skip those tests
     pass
+
+if _have_pandas and _have_arrow:
+    from pyspark.sql.functions import pandas_udf
 
 
 class UTCOffsetTimezone(datetime.tzinfo):
@@ -3124,7 +3124,7 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertTrue(pdf.empty)
 
 
-@unittest.skipIf(not _have_arrow, "Arrow not installed")
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class VectorizedUDFTests(ReusedPySparkTestCase):
 
     @classmethod
