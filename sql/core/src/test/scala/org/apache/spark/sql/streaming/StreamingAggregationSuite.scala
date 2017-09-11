@@ -23,7 +23,8 @@ import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
 
 object FailureSinglton {
@@ -50,27 +51,150 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   import testImplicits._
 
   test("simple count, update mode") {
-    val inputData = MemoryStream[Int]
+    /*
+    class NonLocalRelationSource extends Source {
+      private var nextData: Seq[Int] = Seq.empty
+      private var counter = 0L
+      def addData(data: Int*): Unit = {
+        nextData = data
+        counter += data.length
+      }
 
-    val aggregated =
-      inputData.toDS()
+      def noData: Unit = {
+        counter += 1
+      }
+
+      override def getOffset: Option[Offset] = if (counter == 0) None else Some(LongOffset(counter))
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        val rdd = spark.sparkContext.parallelize(nextData, nextData.length)
+          .map(i => InternalRow(i)) // we don't really care about the values in this test
+        nextData = Seq.empty
+        spark.internalCreateDataFrame(rdd, schema, isStreaming = true).toDF()
+      }
+      override def schema: StructType = MockSourceProvider.fakeSchema
+      override def stop(): Unit = {}
+    }
+
+    val inputSource = new NonLocalRelationSource
+    MockSourceProvider.withMockSources(inputSource) {
+      withTempDir { tempDir =>
+        val aggregated: Dataset[Long] =
+          spark.readStream
+            .format((new MockSourceProvider).getClass.getCanonicalName)
+            .load()
+            .coalesce(1)
+            .groupBy()
+            .count()
+            .as[Long]
+
+        val sq = aggregated.writeStream
+          .format("memory")
+          .outputMode("complete")
+          .queryName("agg_test")
+          .option("checkpointLocation", tempDir.getAbsolutePath)
+          .start()
+
+        try {
+
+          inputSource.addData(1)
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            1L)
+
+          inputSource.noData
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            1L)
+
+          inputSource.addData(2, 3)
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            3L)
+
+          inputSource.noData
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            3L)
+        } finally {
+          sq.stop()
+        }
+      }
+    }
+    */
+
+    withTempDir { tempDir =>
+      val inputStream = MemoryStream[Int]
+
+      val sq = inputStream.toDS()
         .coalesce(1)
         .groupBy()
         .count()
         .as[Long]
+        .writeStream
+        .format("memory")
+        .outputMode("complete")
+        .queryName("agg_test")
+        .option("checkpointLocation", tempDir.getAbsolutePath)
+        .start()
 
-    testStream(aggregated, Complete())(
-      AddData(inputData, 3),
-      CheckLastBatch(1),
-      AddData(inputData),
-      CheckLastBatch(1),
-      AddData(inputData, 2, 4),
-      CheckLastBatch(3),
-      AddData(inputData),
-      CheckLastBatch(3),
-      StopStream
-    )
+      try {
+        inputStream.addData(1)
+        sq.processAllAvailable()
+
+        checkDataset(
+          spark.table("agg_test").as[Long],
+          1L)
+
+        inputStream.addData()
+        sq.processAllAvailable()
+
+        checkDataset(
+          spark.table("agg_test").as[Long],
+          1L)
+      } finally {
+        sq.stop()
+      }
+
+      val sq2 = inputStream.toDS()
+        .coalesce(2)
+        .groupBy()
+        .count()
+        .as[Long]
+        .writeStream
+        .format("memory")
+        .outputMode("complete")
+        .queryName("agg_test")
+        .option("checkpointLocation", tempDir.getAbsolutePath)
+        .start()
+
+      try {
+        inputStream.addData(2, 3)
+        sq2.processAllAvailable()
+
+        checkDataset(
+          spark.table("agg_test").as[Long],
+          3L)
+
+        inputStream.addData()
+        sq2.processAllAvailable()
+
+        checkDataset(
+          spark.table("agg_test").as[Long],
+          3L)
+      } finally {
+        sq2.stop()
+      }
+    }
   }
+
   /*
   test("simple count, update mode") {
     val inputData = MemoryStream[Int]
