@@ -528,12 +528,11 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_blrt_summary = self._call_java("summary")
-            if (self.numClasses == 2):
-                java_blrt_binarysummary = self._call_java("binarySummary")
-                return BinaryLogisticRegressionTrainingSummary(java_blrt_binarysummary)
+            java_lrt_summary = self._call_java("summary")
+            if (self.numClasses <= 2):
+                return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
             else:
-                return LogisticRegressionTrainingSummary(java_blrt_summary)
+                return LogisticRegressionTrainingSummary(java_lrt_summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -660,7 +659,6 @@ class LogisticRegressionSummary(JavaWrapper):
         """
         return self._call_java("recallByLabel")
 
-    @property
     @since("2.3.0")
     def fMeasureByLabel(self, beta=1.0):
         """
@@ -712,7 +710,6 @@ class LogisticRegressionSummary(JavaWrapper):
         """
         return self._call_java("weightedPrecision")
 
-    @property
     @since("2.3.0")
     def weightedFMeasure(self, beta=1.0):
         """

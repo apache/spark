@@ -1451,7 +1451,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 
-    def test_logistic_regression_summary(self):
+    def test_binary_logistic_regression_summary(self):
         df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
                                          (0.0, 2.0, Vectors.sparse(1, [], []))],
                                         ["label", "weight", "features"])
@@ -1473,6 +1473,13 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.fMeasureByThreshold, DataFrame))
         self.assertTrue(isinstance(s.precisionByThreshold, DataFrame))
         self.assertTrue(isinstance(s.recallByThreshold, DataFrame))
+
+        self.assertAlmostEqual(s.accuracy, 1.0, 2)
+        self.assertAlmostEqual(s.weightedTruePositiveRate, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.0, 2)
+        self.assertAlmostEqual(s.weightedRecall, 1.0, 2)
+        self.assertAlmostEqual(s.weightedPrecision, 1.0, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 1.0, 2)
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
@@ -1502,15 +1509,22 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertTrue(isinstance(s.falsePositiveRateByLabel, list))
         self.assertTrue(isinstance(s.precisionByLabel, list))
         self.assertTrue(isinstance(s.recallByLabel, list))
-        self.assertTrue(isinstance(s.fMeasureByLabel, list))
+        self.assertTrue(isinstance(s.fMeasureByLabel(), list))
         self.assertAlmostEqual(s.accuracy, 0.75, 2)
         self.assertAlmostEqual(s.weightedTruePositiveRate, 0.75, 2)
         self.assertAlmostEqual(s.weightedFalsePositiveRate, 0.25, 2)
         self.assertAlmostEqual(s.weightedRecall, 0.75, 2)
         self.assertAlmostEqual(s.weightedPrecision, 0.583, 2)
-        self.assertAlmostEqual(s.weightedFMeasure, 0.65, 2)
+        self.assertAlmostEqual(s.weightedFMeasure(), 0.65, 2)
         # test evaluation (with training dataset) produces a summary with same values
         # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
+        self.assertAlmostEqual(sameSummary.weightedTruePositiveRate, s.weightedTruePositiveRate)
+        self.assertAlmostEqual(sameSummary.weightedFalsePositiveRate, s.weightedFalsePositiveRate)
+        self.assertAlmostEqual(sameSummary.weightedRecall, s.weightedRecall)
+        self.assertAlmostEqual(sameSummary.weightedPrecision, s.weightedPrecision)
+        self.assertAlmostEqual(sameSummary.weightedFMeasure(), s.weightedFMeasure())
 
     def test_gaussian_mixture_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
