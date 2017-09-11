@@ -319,6 +319,24 @@ spark.addFile <- function(path, recursive = FALSE) {
   invisible(callJMethod(sc, "addFile", suppressWarnings(normalizePath(path)), recursive))
 }
 
+#' Add a conda `package match specification
+#' \url{https://conda.io/docs/spec.html#build-version-spec} for all tasks to be executed on
+#' this SparkContext in the future.
+spark.addCondaPackages <- function(packages) {
+  jsc <- getSparkContext()
+  callJMethod(jsc, "addCondaPackages", as.list(packages))
+}
+
+spark.addCondaChannel <- function(url) {
+  jsc <- getSparkContext()
+  callJMethod(jsc, "addCondaChannel", url)
+}
+
+spark.buildCondaInstructions <- function() {
+  sc <- callJMethod(getSparkContext(), "sc")
+  callJMethod(sc, "buildCondaInstructions")
+}
+
 #' Get the root directory that contains files added through spark.addFile.
 #'
 #' @rdname spark.getSparkFilesRootDirectory
