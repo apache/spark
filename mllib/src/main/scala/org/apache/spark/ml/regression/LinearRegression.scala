@@ -53,7 +53,7 @@ import org.apache.spark.storage.StorageLevel
 private[regression] trait LinearRegressionParams extends PredictorParams
     with HasRegParam with HasElasticNetParam with HasMaxIter with HasTol
     with HasFitIntercept with HasStandardization with HasWeightCol with HasSolver
-    with HasAggregationDepth {
+    with HasAggregationDepth with HasHandlePersistence {
 
   import LinearRegression._
 
@@ -208,6 +208,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
+
   override protected def train(dataset: Dataset[_]): LinearRegressionModel = {
     // Extract the number of features before deciding optimization solver.
     val numFeatures = dataset.select(col($(featuresCol))).first().getAs[Vector](0).size
@@ -251,8 +255,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       return lrModel
     }
 
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+    if ($(handlePersistence)) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val (featuresSummarizer, ySummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultivariateOnlineSummarizer),
@@ -285,7 +288,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
             s"zeros and the intercept will be the mean of the label; as a result, " +
             s"training is not needed.")
         }
-        if (handlePersistence) instances.unpersist()
+        if ($(handlePersistence)) instances.unpersist()
         val coefficients = Vectors.sparse(numFeatures, Seq.empty)
         val intercept = yMean
 
@@ -422,7 +425,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
       0.0
     }
 
-    if (handlePersistence) instances.unpersist()
+    if ($(handlePersistence)) instances.unpersist()
 
     val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
     // Handle possible missing or invalid prediction columns

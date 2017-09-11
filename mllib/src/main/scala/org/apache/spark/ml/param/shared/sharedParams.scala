@@ -402,4 +402,21 @@ private[ml] trait HasAggregationDepth extends Params {
   /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
 }
+
+/**
+ * Trait for shared param handlePersistence (default: true).
+ */
+private[ml] trait HasHandlePersistence extends Params {
+
+  /**
+   * Param for whether to handle data persistence.
+   * @group param
+   */
+  final val handlePersistence: BooleanParam = new BooleanParam(this, "handlePersistence", "whether to handle data persistence")
+
+  setDefault(handlePersistence, true)
+
+  /** @group getParam */
+  final def getHandlePersistence: Boolean = $(handlePersistence)
+}
 // scalastyle:on

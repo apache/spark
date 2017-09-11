@@ -17,10 +17,8 @@
 
 package org.apache.spark.ml.classification
 
-import java.util.{List => JList}
 import java.util.UUID
 
-import scala.collection.JavaConverters._
 import scala.language.existentials
 
 import org.apache.hadoop.fs.Path
@@ -34,7 +32,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-import org.apache.spark.ml.param.shared.HasWeightCol
+import org.apache.spark.ml.param.shared.{HasHandlePersistence, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -55,7 +53,7 @@ private[ml] trait ClassifierTypeTrait {
  * Params for [[OneVsRest]].
  */
 private[ml] trait OneVsRestParams extends PredictorParams
-  with ClassifierTypeTrait with HasWeightCol {
+  with ClassifierTypeTrait with HasWeightCol with HasHandlePersistence {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
@@ -67,6 +65,10 @@ private[ml] trait OneVsRestParams extends PredictorParams
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
+
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
 }
 
 private[ml] object OneVsRestParams extends ClassifierTypeTrait {
@@ -163,9 +165,7 @@ final class OneVsRestModel private[ml] (
     val initUDF = udf { () => Map[Int, Double]() }
     val newDataset = dataset.withColumn(accColName, initUDF())
 
-    // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) {
+    if ($(handlePersistence)) {
       newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
@@ -190,7 +190,7 @@ final class OneVsRestModel private[ml] (
         updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
     }
 
-    if (handlePersistence) {
+    if ($(handlePersistence)) {
       newDataset.unpersist()
     }
 
@@ -346,9 +346,7 @@ final class OneVsRest @Since("1.4.0") (
       dataset.select($(labelCol), $(featuresCol))
     }
 
-    // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) {
+    if ($(handlePersistence)) {
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
 
@@ -374,7 +372,7 @@ final class OneVsRest @Since("1.4.0") (
     }.toArray[ClassificationModel[_, _]]
     instr.logNumFeatures(models.head.numFeatures)
 
-    if (handlePersistence) {
+    if ($(handlePersistence)) {
       multiclassLabeled.unpersist()
     }
 

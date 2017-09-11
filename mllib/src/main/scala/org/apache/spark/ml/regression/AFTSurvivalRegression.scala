@@ -46,7 +46,8 @@ import org.apache.spark.storage.StorageLevel
  */
 private[regression] trait AFTSurvivalRegressionParams extends Params
   with HasFeaturesCol with HasLabelCol with HasPredictionCol with HasMaxIter
-  with HasTol with HasFitIntercept with HasAggregationDepth with Logging {
+  with HasTol with HasFitIntercept with HasAggregationDepth with HasHandlePersistence
+  with Logging {
 
   /**
    * Param for censor column name.
@@ -197,6 +198,10 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   def setAggregationDepth(value: Int): this.type = set(aggregationDepth, value)
   setDefault(aggregationDepth -> 2)
 
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
+
   /**
    * Extract [[featuresCol]], [[labelCol]] and [[censorCol]] from input dataset,
    * and put it in an RDD with strong types.
@@ -213,8 +218,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
   override def fit(dataset: Dataset[_]): AFTSurvivalRegressionModel = {
     transformSchema(dataset.schema, logging = true)
     val instances = extractAFTPoints(dataset)
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
-    if (handlePersistence) instances.persist(StorageLevel.MEMORY_AND_DISK)
+    if ($(handlePersistence)) instances.persist(StorageLevel.MEMORY_AND_DISK)
 
     val featuresSummarizer = {
       val seqOp = (c: MultivariateOnlineSummarizer, v: AFTPoint) => c.add(v.features)
@@ -273,7 +277,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     }
 
     bcFeaturesStd.destroy(blocking = false)
-    if (handlePersistence) instances.unpersist()
+    if ($(handlePersistence)) instances.unpersist()
 
     val rawCoefficients = parameters.slice(2, parameters.length)
     var i = 0
