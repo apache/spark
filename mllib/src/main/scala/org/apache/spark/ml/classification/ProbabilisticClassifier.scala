@@ -248,11 +248,7 @@ private[ml] object ProbabilisticClassificationModel {
     } else {
       var i = 0
       val size = v.size
-      val value = 1.0 / size
-      while (i < size) {
-        v.values(i) = value
-        i += 1
-      }
+      java.util.Arrays.fill(v.values, 1.0 / size)
     }
   }
 }
