@@ -26,21 +26,19 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.*;
 import org.apache.spark.sql.expressions.Window;
 import org.apache.spark.sql.expressions.UserDefinedAggregateFunction;
 import static org.apache.spark.sql.functions.*;
 import org.apache.spark.sql.hive.test.TestHive$;
-import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
+import test.org.apache.spark.sql.MyDoubleSum;
 
 public class JavaDataFrameSuite {
-  private transient JavaSparkContext sc;
-  private transient HiveContext hc;
+  private transient SQLContext hc;
 
-  DataFrame df;
+  Dataset<Row> df;
 
-  private static void checkAnswer(DataFrame actual, List<Row> expected) {
+  private static void checkAnswer(Dataset<Row> actual, List<Row> expected) {
     String errorMessage = QueryTest$.MODULE$.checkAnswer(actual, expected);
     if (errorMessage != null) {
       Assert.fail(errorMessage);
@@ -50,14 +48,12 @@ public class JavaDataFrameSuite {
   @Before
   public void setUp() throws IOException {
     hc = TestHive$.MODULE$;
-    sc = new JavaSparkContext(hc.sparkContext());
-
     List<String> jsonObjects = new ArrayList<>(10);
     for (int i = 0; i < 10; i++) {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
-    df = hc.read().json(sc.parallelize(jsonObjects));
-    df.registerTempTable("window_table");
+    df = hc.read().json(hc.createDataset(jsonObjects, Encoders.STRING()));
+    df.createOrReplaceTempView("window_table");
   }
 
   @After
@@ -82,12 +78,12 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testUDAF() {
-    DataFrame df = hc.range(0, 100).unionAll(hc.range(0, 100)).select(col("id").as("value"));
+    Dataset<Row> df = hc.range(0, 100).union(hc.range(0, 100)).select(col("id").as("value"));
     UserDefinedAggregateFunction udaf = new MyDoubleSum();
     UserDefinedAggregateFunction registeredUDAF = hc.udf().register("mydoublesum", udaf);
     // Create Columns for the UDAF. For now, callUDF does not take an argument to specific if
     // we want to use distinct aggregation.
-    DataFrame aggregatedDF =
+    Dataset<Row> aggregatedDF =
       df.groupBy()
         .agg(
           udaf.distinct(col("value")),

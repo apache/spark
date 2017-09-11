@@ -17,26 +17,31 @@
 
 package org.apache.spark.sql.hive
 
-import com.google.common.io.Files
+import java.io.File
+import java.sql.Timestamp
 
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.{QueryTest, _}
+import com.google.common.io.Files
+import org.apache.hadoop.fs.FileSystem
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("SPARK-5068: query data when path doesn't exist") {
     withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {
       val testData = sparkContext.parallelize(
         (1 to 10).map(i => TestData(i, i.toString))).toDF()
-      testData.registerTempTable("testData")
+      testData.createOrReplaceTempView("testData")
 
       val tmpDir = Files.createTempDir()
       // create the table for test
       sql(s"CREATE TABLE table_with_partition(key int,value string) " +
-        s"PARTITIONED by (ds string) location '${tmpDir.toURI.toString}' ")
+        s"PARTITIONED by (ds string) location '${tmpDir.toURI}' ")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1') " +
         "SELECT key,value FROM testData")
       sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2') " +
@@ -60,8 +65,24 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       checkAnswer(sql("select key,value from table_with_partition"),
         testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
-      sql("DROP TABLE table_with_partition")
-      sql("DROP TABLE createAndInsertTest")
+      sql("DROP TABLE IF EXISTS table_with_partition")
+      sql("DROP TABLE IF EXISTS createAndInsertTest")
+    }
+  }
+
+  test("SPARK-21739: Cast expression should initialize timezoneId") {
+    withTable("table_with_timestamp_partition") {
+      sql("CREATE TABLE table_with_timestamp_partition(value int) PARTITIONED BY (ts TIMESTAMP)")
+      sql("INSERT OVERWRITE TABLE table_with_timestamp_partition " +
+        "PARTITION (ts = '2010-01-01 00:00:00.000') VALUES (1)")
+
+      // test for Cast expression in TableReader
+      checkAnswer(sql("SELECT * FROM table_with_timestamp_partition"),
+        Seq(Row(1, Timestamp.valueOf("2010-01-01 00:00:00.000"))))
+
+      // test for Cast expression in HiveTableScanExec
+      checkAnswer(sql("SELECT value FROM table_with_timestamp_partition " +
+        "WHERE ts = '2010-01-01 00:00:00.000'"), Row(1))
     }
   }
 }

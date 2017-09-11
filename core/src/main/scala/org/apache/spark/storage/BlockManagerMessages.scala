@@ -32,6 +32,10 @@ private[spark] object BlockManagerMessages {
   // blocks that the master knows about.
   case class RemoveBlock(blockId: BlockId) extends ToBlockManagerSlave
 
+  // Replicate blocks that were lost due to executor failure
+  case class ReplicateBlock(blockId: BlockId, replicas: Seq[BlockManagerId], maxReplicas: Int)
+    extends ToBlockManagerSlave
+
   // Remove all blocks belonging to a specific RDD.
   case class RemoveRdd(rddId: Int) extends ToBlockManagerSlave
 
@@ -42,6 +46,11 @@ private[spark] object BlockManagerMessages {
   case class RemoveBroadcast(broadcastId: Long, removeFromDriver: Boolean = true)
     extends ToBlockManagerSlave
 
+  /**
+   * Driver to Executor message to trigger a thread dump.
+   */
+  case object TriggerThreadDump extends ToBlockManagerSlave
+
   //////////////////////////////////////////////////////////////////////////////////
   // Messages from slaves to the master.
   //////////////////////////////////////////////////////////////////////////////////
@@ -49,7 +58,8 @@ private[spark] object BlockManagerMessages {
 
   case class RegisterBlockManager(
       blockManagerId: BlockManagerId,
-      maxMemSize: Long,
+      maxOnHeapMemSize: Long,
+      maxOffHeapMemSize: Long,
       sender: RpcEndpointRef)
     extends ToBlockManagerMaster
 
@@ -58,12 +68,11 @@ private[spark] object BlockManagerMessages {
       var blockId: BlockId,
       var storageLevel: StorageLevel,
       var memSize: Long,
-      var diskSize: Long,
-      var externalBlockStoreSize: Long)
+      var diskSize: Long)
     extends ToBlockManagerMaster
     with Externalizable {
 
-    def this() = this(null, null, null, 0, 0, 0)  // For deserialization only
+    def this() = this(null, null, null, 0, 0)  // For deserialization only
 
     override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
       blockManagerId.writeExternal(out)
@@ -71,7 +80,6 @@ private[spark] object BlockManagerMessages {
       storageLevel.writeExternal(out)
       out.writeLong(memSize)
       out.writeLong(diskSize)
-      out.writeLong(externalBlockStoreSize)
     }
 
     override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
@@ -80,7 +88,6 @@ private[spark] object BlockManagerMessages {
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
-      externalBlockStoreSize = in.readLong()
     }
   }
 
@@ -90,7 +97,7 @@ private[spark] object BlockManagerMessages {
 
   case class GetPeers(blockManagerId: BlockManagerId) extends ToBlockManagerMaster
 
-  case class GetRpcHostPortForExecutor(executorId: String) extends ToBlockManagerMaster
+  case class GetExecutorEndpointRef(executorId: String) extends ToBlockManagerMaster
 
   case class RemoveExecutor(execId: String) extends ToBlockManagerMaster
 

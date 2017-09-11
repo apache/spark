@@ -22,34 +22,46 @@ import java.nio.ByteBuffer
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.ExecutorLossReason
-import org.apache.spark.util.{SerializableBuffer, Utils}
+import org.apache.spark.util.SerializableBuffer
 
 private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
 private[spark] object CoarseGrainedClusterMessages {
 
-  case object RetrieveSparkProps extends CoarseGrainedClusterMessage
+  case object RetrieveSparkAppConfig extends CoarseGrainedClusterMessage
+
+  case class SparkAppConfig(
+      sparkProperties: Seq[(String, String)],
+      ioEncryptionKey: Option[Array[Byte]],
+      hadoopDelegationCreds: Option[Array[Byte]])
+    extends CoarseGrainedClusterMessage
+
+  case object RetrieveLastAllocatedExecutorId extends CoarseGrainedClusterMessage
 
   // Driver to executors
   case class LaunchTask(data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean)
+  case class KillTask(taskId: Long, executor: String, interruptThread: Boolean, reason: String)
     extends CoarseGrainedClusterMessage
 
-  case object RegisteredExecutor extends CoarseGrainedClusterMessage
+  case class KillExecutorsOnHost(host: String)
+    extends CoarseGrainedClusterMessage
+
+  sealed trait RegisterExecutorResponse
+
+  case object RegisteredExecutor extends CoarseGrainedClusterMessage with RegisterExecutorResponse
 
   case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
+    with RegisterExecutorResponse
 
   // Executors to driver
   case class RegisterExecutor(
       executorId: String,
       executorRef: RpcEndpointRef,
-      hostPort: String,
+      hostname: String,
       cores: Int,
       logUrls: Map[String, String])
-    extends CoarseGrainedClusterMessage {
-    Utils.checkHostPort(hostPort, "Expected host port")
-  }
+    extends CoarseGrainedClusterMessage
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
     data: SerializableBuffer) extends CoarseGrainedClusterMessage
@@ -74,6 +86,9 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RemoveExecutor(executorId: String, reason: ExecutorLossReason)
     extends CoarseGrainedClusterMessage
 
+  case class RemoveWorker(workerId: String, host: String, message: String)
+    extends CoarseGrainedClusterMessage
+
   case class SetupDriver(driver: RpcEndpointRef) extends CoarseGrainedClusterMessage
 
   // Exchanged between the driver and the AM in Yarn client mode
@@ -91,13 +106,17 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RequestExecutors(
       requestedTotal: Int,
       localityAwareTasks: Int,
-      hostToLocalTaskCount: Map[String, Int])
+      hostToLocalTaskCount: Map[String, Int],
+      nodeBlacklist: Set[String])
     extends CoarseGrainedClusterMessage
 
-  // Check if an executor was force-killed but for a normal reason.
+  // Check if an executor was force-killed but for a reason unrelated to the running tasks.
   // This could be the case if the executor is preempted, for instance.
   case class GetExecutorLossReason(executorId: String) extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
+
+  // Used internally by executors to shut themselves down.
+  case object Shutdown extends CoarseGrainedClusterMessage
 
 }

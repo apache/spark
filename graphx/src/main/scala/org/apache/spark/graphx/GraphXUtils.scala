@@ -17,15 +17,16 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.SparkConf
+import scala.reflect.ClassTag
 
+import org.apache.spark.SparkConf
 import org.apache.spark.graphx.impl._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
-
-import org.apache.spark.util.collection.{OpenHashSet, BitSet}
 import org.apache.spark.util.BoundedPriorityQueue
+import org.apache.spark.util.collection.{BitSet, OpenHashSet}
 
 object GraphXUtils {
+
   /**
    * Registers classes that GraphX uses with Kryo.
    */
@@ -43,5 +44,29 @@ object GraphXUtils {
       classOf[GraphXPrimitiveKeyOpenHashMap[VertexId, Int]],
       classOf[OpenHashSet[Int]],
       classOf[OpenHashSet[Long]]))
+  }
+
+  /**
+   * A proxy method to map the obsolete API to the new one.
+   */
+  private[graphx] def mapReduceTriplets[VD: ClassTag, ED: ClassTag, A: ClassTag](
+      g: Graph[VD, ED],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
+      reduceFunc: (A, A) => A,
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None): VertexRDD[A] = {
+    def sendMsg(ctx: EdgeContext[VD, ED, A]) {
+      mapFunc(ctx.toEdgeTriplet).foreach { kv =>
+        val id = kv._1
+        val msg = kv._2
+        if (id == ctx.srcId) {
+          ctx.sendToSrc(msg)
+        } else {
+          assert(id == ctx.dstId)
+          ctx.sendToDst(msg)
+        }
+      }
+    }
+    g.aggregateMessagesWithActiveSet(
+      sendMsg, reduceFunc, TripletFields.All, activeSetOpt)
   }
 }

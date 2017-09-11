@@ -20,10 +20,12 @@
 # When creating new tests for Spark SQL Hive, the HADOOP_CLASSPATH must contain the hive jars so
 # that we can run Hive to generate the golden answer.  This is not required for normal development
 # or testing.
-for i in "$HIVE_HOME"/lib/*
-do HADOOP_CLASSPATH="$HADOOP_CLASSPATH:$i"
-done
-export HADOOP_CLASSPATH
+if [ -n "$HIVE_HOME" ]; then
+    for i in "$HIVE_HOME"/lib/*
+    do HADOOP_CLASSPATH="$HADOOP_CLASSPATH:$i"
+    done
+    export HADOOP_CLASSPATH
+fi
 
 realpath () {
 (

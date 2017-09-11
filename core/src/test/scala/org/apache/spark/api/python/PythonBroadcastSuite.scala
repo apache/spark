@@ -17,9 +17,9 @@
 
 package org.apache.spark.api.python
 
-import scala.io.Source
+import java.io.{File, PrintWriter}
 
-import java.io.{PrintWriter, File}
+import scala.io.Source
 
 import org.scalatest.Matchers
 

@@ -19,10 +19,11 @@ package org.apache.spark.sql.sources
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
+import org.apache.spark.sql.catalyst.expressions.PredicateHelper
 import org.apache.spark.sql.types._
 
-class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
+class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with PredicateHelper {
   override val dataSourceName: String = classOf[SimpleTextSource].getCanonicalName
 
   // We have a very limited number of supported types at here since it is just for a
@@ -44,12 +45,9 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield s"$i,val_$i,$p1")
           .saveAsTextFile(partitionDir.toString)
@@ -59,9 +57,32 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        hiveContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
+    }
+  }
+
+  test("test hadoop conf option propagation") {
+    withTempPath { file =>
+      // Test write side
+      val df = spark.range(10).selectExpr("cast(id as string)")
+      df.write
+        .option("some-random-write-option", "hahah-WRITE")
+        .option("some-null-value-option", null)  // test null robustness
+        .option("dataSchema", df.schema.json)
+        .format(dataSourceName).save(file.getAbsolutePath)
+      assert(SimpleTextRelation.lastHadoopConf.get.get("some-random-write-option") == "hahah-WRITE")
+
+      // Test read side
+      val df1 = spark.read
+        .option("some-random-read-option", "hahah-READ")
+        .option("some-null-value-option", null)  // test null robustness
+        .option("dataSchema", df.schema.json)
+        .format(dataSourceName)
+        .load(file.getAbsolutePath)
+      df1.count()
+      assert(SimpleTextRelation.lastHadoopConf.get.get("some-random-read-option") == "hahah-READ")
     }
   }
 }

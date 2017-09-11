@@ -64,7 +64,7 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorDesc]
-    executorLimit = Integer.MAX_VALUE
+    executorLimit = desc.initialExecutorLimit.getOrElse(Integer.MAX_VALUE)
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -134,5 +134,4 @@ private[spark] class ApplicationInfo(
       System.currentTimeMillis() - startTime
     }
   }
-
 }

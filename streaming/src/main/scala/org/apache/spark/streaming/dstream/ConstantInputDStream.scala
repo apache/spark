@@ -17,15 +17,19 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Time, StreamingContext}
 import scala.reflect.ClassTag
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{StreamingContext, Time}
+
 /**
- * An input stream that always returns the same RDD on each timestep. Useful for testing.
+ * An input stream that always returns the same RDD on each time step. Useful for testing.
  */
-class ConstantInputDStream[T: ClassTag](ssc_ : StreamingContext, rdd: RDD[T])
-  extends InputDStream[T](ssc_) {
+class ConstantInputDStream[T: ClassTag](_ssc: StreamingContext, rdd: RDD[T])
+  extends InputDStream[T](_ssc) {
+
+  require(rdd != null,
+    "parameter rdd null is illegal, which will lead to NPE in the following transformation")
 
   override def start() {}
 

@@ -17,34 +17,37 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.{BufferedOutputStream, ByteArrayInputStream, ByteArrayOutputStream, File,
-  FileOutputStream, OutputStreamWriter}
-import java.net.URI
+import java.io._
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
-import scala.io.Source
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
-import com.google.common.base.Charsets
 import com.google.common.io.{ByteStreams, Files}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.json4s.jackson.JsonMethods._
+import org.mockito.Matchers.any
+import org.mockito.Mockito.{mock, spy, verify}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.Matchers
+import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
-import org.apache.spark.util.{JsonProtocol, ManualClock, Utils}
+import org.apache.spark.security.GroupMappingServiceProvider
+import org.apache.spark.util.{Clock, JsonProtocol, ManualClock, Utils}
 
 class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
-
-  import FsHistoryProvider._
 
   private var testDir: File = null
 
   before {
-    testDir = Utils.createTempDir()
+    testDir = Utils.createTempDir(namePrefix = s"a b%20c+d")
   }
 
   after {
@@ -59,12 +62,13 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       codec: Option[String] = None): File = {
     val ip = if (inProgress) EventLoggingListener.IN_PROGRESS else ""
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, appId, appAttemptId)
-    val logPath = new URI(logUri).getPath + ip
+    val logPath = new Path(logUri).toUri.getPath + ip
     new File(logPath)
   }
 
-  test("Parse new and old application logs") {
-    val provider = new FsHistoryProvider(createTestConf())
+  test("Parse application logs") {
+    val clock = new ManualClock(12345678)
+    val provider = new FsHistoryProvider(createTestConf(), clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -89,26 +93,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
         None)
       )
 
-    // Write an old-style application log.
-    val oldAppComplete = writeOldLog("old1", "1.0", None, true,
-      SparkListenerApplicationStart("old1", Some("old-app-complete"), 2L, "test", None),
-      SparkListenerApplicationEnd(3L)
-      )
-
-    // Check for logs so that we force the older unfinished app to be loaded, to make
-    // sure unfinished apps are also sorted correctly.
-    provider.checkForLogs()
-
-    // Write an unfinished app, old-style.
-    val oldAppIncomplete = writeOldLog("old2", "1.0", None, false,
-      SparkListenerApplicationStart("old2", None, 2L, "test", None)
-      )
-
-    // Force a reload of data from the log directory, and check that both logs are loaded.
+    // Force a reload of data from the log directory, and check that logs are loaded.
     // Take the opportunity to check that the offset checks work as expected.
     updateAndCheck(provider) { list =>
-      list.size should be (5)
-      list.count(_.attempts.head.completed) should be (3)
+      list.size should be (3)
+      list.count(_.attempts.head.completed) should be (2)
 
       def makeAppInfo(
           id: String,
@@ -119,19 +108,18 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
           user: String,
           completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed)))
+          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, "")))
       }
 
+      // For completed files, lastUpdated would be lastModified time.
       list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
         newAppComplete.lastModified(), "test", true))
       list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
         1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
-      list(2) should be (makeAppInfo("old-app-complete", oldAppComplete.getName(), 2L, 3L,
-        oldAppComplete.lastModified(), "test", true))
-      list(3) should be (makeAppInfo(oldAppIncomplete.getName(), oldAppIncomplete.getName(), 2L,
-        -1L, oldAppIncomplete.lastModified(), "test", false))
-      list(4) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
-        newAppIncomplete.lastModified(), "test", false))
+
+      // For Inprogress files, lastUpdated would be current loading time.
+      list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
+        clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.
       list.foreach { case info =>
@@ -142,39 +130,19 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     }
   }
 
-  test("Parse legacy logs with compression codec set") {
-    val provider = new FsHistoryProvider(createTestConf())
-    val testCodecs = List((classOf[LZFCompressionCodec].getName(), true),
-      (classOf[SnappyCompressionCodec].getName(), true),
-      ("invalid.codec", false))
+  test("SPARK-3697: ignore files that cannot be read.") {
+    // setReadable(...) does not work on Windows. Please refer JDK-6728842.
+    assume(!Utils.isWindows)
 
-    testCodecs.foreach { case (codecName, valid) =>
-      val codec = if (valid) CompressionCodec.createCodec(new SparkConf(), codecName) else null
-      val logDir = new File(testDir, codecName)
-      logDir.mkdir()
-      createEmptyFile(new File(logDir, SPARK_VERSION_PREFIX + "1.0"))
-      writeFile(new File(logDir, LOG_PREFIX + "1"), false, Option(codec),
-        SparkListenerApplicationStart("app2", None, 2L, "test", None),
-        SparkListenerApplicationEnd(3L)
-        )
-      createEmptyFile(new File(logDir, COMPRESSION_CODEC_PREFIX + codecName))
-
-      val logPath = new Path(logDir.getAbsolutePath())
-      try {
-        val logInput = provider.openLegacyEventLog(logPath)
-        try {
-          Source.fromInputStream(logInput).getLines().toSeq.size should be (2)
-        } finally {
-          logInput.close()
-        }
-      } catch {
-        case e: IllegalArgumentException =>
-          valid should be (false)
+    class TestFsHistoryProvider extends FsHistoryProvider(createTestConf()) {
+      var mergeApplicationListingCall = 0
+      override protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
+        super.mergeApplicationListing(fileStatus)
+        mergeApplicationListingCall += 1
       }
     }
-  }
+    val provider = new TestFsHistoryProvider
 
-  test("SPARK-3697: ignore directories that cannot be read.") {
     val logFile1 = newLogFile("new1", None, inProgress = false)
     writeFile(logFile1, true, None,
       SparkListenerApplicationStart("app1-1", Some("app1-1"), 1L, "test", None),
@@ -187,10 +155,11 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       )
     logFile2.setReadable(false, false)
 
-    val provider = new FsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
       list.size should be (1)
     }
+
+    provider.mergeApplicationListingCall should be (1)
   }
 
   test("history file is renamed from inprogress to completed") {
@@ -346,6 +315,48 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     assert(!log2.exists())
   }
 
+  test("log cleaner for inProgress files") {
+    val firstFileModifiedTime = TimeUnit.SECONDS.toMillis(10)
+    val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
+    val maxAge = TimeUnit.SECONDS.toMillis(40)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
+
+    val log1 = newLogFile("inProgressApp1", None, inProgress = true)
+    writeFile(log1, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp1", Some("inProgressApp1"), 3L, "test", Some("attempt1"))
+    )
+
+    clock.setTime(firstFileModifiedTime)
+    provider.checkForLogs()
+
+    val log2 = newLogFile("inProgressApp2", None, inProgress = true)
+    writeFile(log2, true, None,
+      SparkListenerApplicationStart(
+        "inProgressApp2", Some("inProgressApp2"), 23L, "test2", Some("attempt2"))
+    )
+
+    clock.setTime(secondFileModifiedTime)
+    provider.checkForLogs()
+
+    // This should not trigger any cleanup
+    updateAndCheck(provider)(list => list.size should be(2))
+
+    // Should trigger cleanup for first file but not second one
+    clock.setTime(firstFileModifiedTime + maxAge + 1)
+    updateAndCheck(provider)(list => list.size should be(1))
+    assert(!log1.exists())
+    assert(log2.exists())
+
+    // Should cleanup the second file as well.
+    clock.setTime(secondFileModifiedTime + maxAge + 1)
+    updateAndCheck(provider)(list => list.size should be(0))
+    assert(!log1.exists())
+    assert(!log2.exists())
+  }
+
   test("Event log copy") {
     val provider = new FsHistoryProvider(createTestConf())
     val logs = (1 to 2).map { i =>
@@ -369,8 +380,9 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       var entry = inputStream.getNextEntry
       entry should not be null
       while (entry != null) {
-        val actual = new String(ByteStreams.toByteArray(inputStream), Charsets.UTF_8)
-        val expected = Files.toString(logs.find(_.getName == entry.getName).get, Charsets.UTF_8)
+        val actual = new String(ByteStreams.toByteArray(inputStream), StandardCharsets.UTF_8)
+        val expected =
+          Files.toString(logs.find(_.getName == entry.getName).get, StandardCharsets.UTF_8)
         actual should be (expected)
         totalEntries += 1
         entry = inputStream.getNextEntry
@@ -389,23 +401,186 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerLogStart("1.4")
     )
 
-    // Write a 1.2 log file with no start event (= no app id), it should be ignored.
-    writeOldLog("v12Log", "1.2", None, false)
-
-    // Write 1.0 and 1.1 logs, which don't have app ids.
-    writeOldLog("v11Log", "1.1", None, true,
-      SparkListenerApplicationStart("v11Log", None, 2L, "test", None),
-      SparkListenerApplicationEnd(3L))
-    writeOldLog("v10Log", "1.0", None, true,
-      SparkListenerApplicationStart("v10Log", None, 2L, "test", None),
-      SparkListenerApplicationEnd(4L))
-
     updateAndCheck(provider) { list =>
-      list.size should be (2)
-      list(0).id should be ("v10Log")
-      list(1).id should be ("v11Log")
+      list.size should be (0)
     }
   }
+
+  test("provider correctly checks whether fs is in safe mode") {
+    val provider = spy(new FsHistoryProvider(createTestConf()))
+    val dfs = mock(classOf[DistributedFileSystem])
+    // Asserts that safe mode is false because we can't really control the return value of the mock,
+    // since the API is different between hadoop 1 and 2.
+    assert(!provider.isFsInSafeMode(dfs))
+  }
+
+  test("provider waits for safe mode to finish before initializing") {
+    val clock = new ManualClock()
+    val provider = new SafeModeTestProvider(createTestConf(), clock)
+    val initThread = provider.initialize()
+    try {
+      provider.getConfig().keys should contain ("HDFS State")
+
+      clock.setTime(5000)
+      provider.getConfig().keys should contain ("HDFS State")
+
+      provider.inSafeMode = false
+      clock.setTime(10000)
+
+      eventually(timeout(1 second), interval(10 millis)) {
+        provider.getConfig().keys should not contain ("HDFS State")
+      }
+    } finally {
+      provider.stop()
+    }
+  }
+
+  test("provider reports error after FS leaves safe mode") {
+    testDir.delete()
+    val clock = new ManualClock()
+    val provider = new SafeModeTestProvider(createTestConf(), clock)
+    val errorHandler = mock(classOf[Thread.UncaughtExceptionHandler])
+    val initThread = provider.startSafeModeCheckThread(Some(errorHandler))
+    try {
+      provider.inSafeMode = false
+      clock.setTime(10000)
+
+      eventually(timeout(1 second), interval(10 millis)) {
+        verify(errorHandler).uncaughtException(any(), any())
+      }
+    } finally {
+      provider.stop()
+    }
+  }
+
+  test("ignore hidden files") {
+
+    // FsHistoryProvider should ignore hidden files.  (It even writes out a hidden file itself
+    // that should be ignored).
+
+    // write out one totally bogus hidden file
+    val hiddenGarbageFile = new File(testDir, ".garbage")
+    val out = new PrintWriter(hiddenGarbageFile)
+    // scalastyle:off println
+    out.println("GARBAGE")
+    // scalastyle:on println
+    out.close()
+
+    // also write out one real event log file, but since its a hidden file, we shouldn't read it
+    val tmpNewAppFile = newLogFile("hidden", None, inProgress = false)
+    val hiddenNewAppFile = new File(tmpNewAppFile.getParentFile, "." + tmpNewAppFile.getName)
+    tmpNewAppFile.renameTo(hiddenNewAppFile)
+
+    // and write one real file, which should still get picked up just fine
+    val newAppComplete = newLogFile("real-app", None, inProgress = false)
+    writeFile(newAppComplete, true, None,
+      SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
+        None),
+      SparkListenerApplicationEnd(5L)
+    )
+
+    val provider = new FsHistoryProvider(createTestConf())
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+      list(0).name should be ("real-app")
+    }
+  }
+
+  test("support history server ui admin acls") {
+    def createAndCheck(conf: SparkConf, properties: (String, String)*)
+      (checkFn: SecurityManager => Unit): Unit = {
+      // Empty the testDir for each test.
+      if (testDir.exists() && testDir.isDirectory) {
+        testDir.listFiles().foreach { f => if (f.isFile) f.delete() }
+      }
+
+      var provider: FsHistoryProvider = null
+      try {
+        provider = new FsHistoryProvider(conf)
+        val log = newLogFile("app1", Some("attempt1"), inProgress = false)
+        writeFile(log, true, None,
+          SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
+            "test", Some("attempt1")),
+          SparkListenerEnvironmentUpdate(Map(
+            "Spark Properties" -> properties.toSeq,
+            "JVM Information" -> Seq.empty,
+            "System Properties" -> Seq.empty,
+            "Classpath Entries" -> Seq.empty
+          )),
+          SparkListenerApplicationEnd(System.currentTimeMillis()))
+
+        provider.checkForLogs()
+        val appUi = provider.getAppUI("app1", Some("attempt1"))
+
+        assert(appUi.nonEmpty)
+        val securityManager = appUi.get.ui.securityManager
+        checkFn(securityManager)
+      } finally {
+        if (provider != null) {
+          provider.stop()
+        }
+      }
+    }
+
+    // Test both history ui admin acls and application acls are configured.
+    val conf1 = createTestConf()
+      .set("spark.history.ui.acls.enable", "true")
+      .set("spark.history.ui.admin.acls", "user1,user2")
+      .set("spark.history.ui.admin.acls.groups", "group1")
+      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+
+    createAndCheck(conf1, ("spark.admin.acls", "user"), ("spark.admin.acls.groups", "group")) {
+      securityManager =>
+        // Test whether user has permission to access UI.
+        securityManager.checkUIViewPermissions("user1") should be (true)
+        securityManager.checkUIViewPermissions("user2") should be (true)
+        securityManager.checkUIViewPermissions("user") should be (true)
+        securityManager.checkUIViewPermissions("abc") should be (false)
+
+        // Test whether user with admin group has permission to access UI.
+        securityManager.checkUIViewPermissions("user3") should be (true)
+        securityManager.checkUIViewPermissions("user4") should be (true)
+        securityManager.checkUIViewPermissions("user5") should be (true)
+        securityManager.checkUIViewPermissions("user6") should be (false)
+    }
+
+    // Test only history ui admin acls are configured.
+    val conf2 = createTestConf()
+      .set("spark.history.ui.acls.enable", "true")
+      .set("spark.history.ui.admin.acls", "user1,user2")
+      .set("spark.history.ui.admin.acls.groups", "group1")
+      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+    createAndCheck(conf2) { securityManager =>
+      // Test whether user has permission to access UI.
+      securityManager.checkUIViewPermissions("user1") should be (true)
+      securityManager.checkUIViewPermissions("user2") should be (true)
+      // Check the unknown "user" should return false
+      securityManager.checkUIViewPermissions("user") should be (false)
+
+      // Test whether user with admin group has permission to access UI.
+      securityManager.checkUIViewPermissions("user3") should be (true)
+      securityManager.checkUIViewPermissions("user4") should be (true)
+      // Check the "user5" without mapping relation should return false
+      securityManager.checkUIViewPermissions("user5") should be (false)
+    }
+
+    // Test neither history ui admin acls nor application acls are configured.
+     val conf3 = createTestConf()
+      .set("spark.history.ui.acls.enable", "true")
+      .set("spark.user.groups.mapping", classOf[TestGroupsMappingProvider].getName)
+    createAndCheck(conf3) { securityManager =>
+      // Test whether user has permission to access UI.
+      securityManager.checkUIViewPermissions("user1") should be (false)
+      securityManager.checkUIViewPermissions("user2") should be (false)
+      securityManager.checkUIViewPermissions("user") should be (false)
+
+      // Test whether user with admin group has permission to access UI.
+      // Check should be failed since we don't have acl group settings.
+      securityManager.checkUIViewPermissions("user3") should be (false)
+      securityManager.checkUIViewPermissions("user4") should be (false)
+      securityManager.checkUIViewPermissions("user5") should be (false)
+    }
+ }
 
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
@@ -428,9 +603,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
     val bstream = new BufferedOutputStream(cstream)
     if (isNewFormat) {
-      EventLoggingListener.initEventLog(new FileOutputStream(file))
+      val newFormatStream = new FileOutputStream(file)
+      Utils.tryWithSafeFinally {
+        EventLoggingListener.initEventLog(newFormatStream, false, null)
+      } {
+        newFormatStream.close()
+      }
     }
-    val writer = new OutputStreamWriter(bstream, "UTF-8")
+
+    val writer = new OutputStreamWriter(bstream, StandardCharsets.UTF_8)
     Utils.tryWithSafeFinally {
       events.foreach(e => writer.write(compact(render(JsonProtocol.sparkEventToJson(e))) + "\n"))
     } {
@@ -446,23 +627,28 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new SparkConf().set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
   }
 
-  private def writeOldLog(
-      fname: String,
-      sparkVersion: String,
-      codec: Option[CompressionCodec],
-      completed: Boolean,
-      events: SparkListenerEvent*): File = {
-    val log = new File(testDir, fname)
-    log.mkdir()
+  private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
+    extends FsHistoryProvider(conf, clock) {
 
-    val oldEventLog = new File(log, LOG_PREFIX + "1")
-    createEmptyFile(new File(log, SPARK_VERSION_PREFIX + sparkVersion))
-    writeFile(new File(log, LOG_PREFIX + "1"), false, codec, events: _*)
-    if (completed) {
-      createEmptyFile(new File(log, APPLICATION_COMPLETE))
-    }
+    @volatile var inSafeMode = true
 
-    log
+    // Skip initialization so that we can manually start the safe mode check thread.
+    private[history] override def initialize(): Thread = null
+
+    private[history] override def isFsInSafeMode(): Boolean = inSafeMode
+
   }
 
 }
+
+class TestGroupsMappingProvider extends GroupMappingServiceProvider {
+  private val mappings = Map(
+    "user3" -> "group1",
+    "user4" -> "group1",
+    "user5" -> "group")
+
+  override def getGroups(username: String): Set[String] = {
+    mappings.get(username).map(Set(_)).getOrElse(Set.empty)
+  }
+}
+

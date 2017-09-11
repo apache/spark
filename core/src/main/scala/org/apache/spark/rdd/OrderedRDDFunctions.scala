@@ -19,8 +19,9 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Logging, Partitioner, RangePartitioner}
+import org.apache.spark.{Partitioner, RangePartitioner}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
@@ -45,8 +46,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
                           V: ClassTag,
                           P <: Product2[K, V] : ClassTag] @DeveloperApi() (
     self: RDD[P])
-  extends Logging with Serializable
-{
+  extends Logging with Serializable {
   private val ordering = implicitly[Ordering[K]]
 
   /**
@@ -76,7 +76,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
   }
 
   /**
-   * Returns an RDD containing only the elements in the the inclusive range `lower` to `upper`.
+   * Returns an RDD containing only the elements in the inclusive range `lower` to `upper`.
    * If the RDD has been partitioned using a `RangePartitioner`, then this operation can be
    * performed efficiently by only scanning the partitions that might contain matching elements.
    * Otherwise, a standard `filter` is applied to all partitions.
@@ -86,12 +86,11 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
     def inRange(k: K): Boolean = ordering.gteq(k, lower) && ordering.lteq(k, upper)
 
     val rddToFilter: RDD[P] = self.partitioner match {
-      case Some(rp: RangePartitioner[K, V]) => {
+      case Some(rp: RangePartitioner[K, V]) =>
         val partitionIndicies = (rp.getPartition(lower), rp.getPartition(upper)) match {
           case (l, u) => Math.min(l, u) to Math.max(l, u)
         }
         PartitionPruningRDD.create(self, partitionIndicies.contains)
-      }
       case _ =>
         self
     }

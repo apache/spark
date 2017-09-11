@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.Vector
 
 /**
- * :: Experimental ::
  * Train or predict a linear regression model on streaming data. Training uses
  * Stochastic Gradient Descent to update the model based on each new batch of
  * incoming data from a DStream (see `LinearRegressionWithSGD` for model equation)
@@ -40,11 +39,11 @@ import org.apache.spark.mllib.linalg.Vector
  *    .setInitialWeights(Vectors.dense(...))
  *    .trainOn(DStream)
  */
-@Experimental
 @Since("1.1.0")
 class StreamingLinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
+    private var regParam: Double,
     private var miniBatchFraction: Double)
   extends StreamingLinearAlgorithm[LinearRegressionModel, LinearRegressionWithSGD]
   with Serializable {
@@ -56,10 +55,10 @@ class StreamingLinearRegressionWithSGD private[mllib] (
    * (see `StreamingLinearAlgorithm`)
    */
   @Since("1.1.0")
-  def this() = this(0.1, 50, 1.0)
+  def this() = this(0.1, 50, 0.0, 1.0)
 
   @Since("1.1.0")
-  val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, miniBatchFraction)
+  val algorithm = new LinearRegressionWithSGD(stepSize, numIterations, regParam, miniBatchFraction)
 
   protected var model: Option[LinearRegressionModel] = None
 
@@ -69,6 +68,15 @@ class StreamingLinearRegressionWithSGD private[mllib] (
   @Since("1.1.0")
   def setStepSize(stepSize: Double): this.type = {
     this.algorithm.optimizer.setStepSize(stepSize)
+    this
+  }
+
+  /**
+   * Set the regularization parameter. Default: 0.0.
+   */
+  @Since("2.0.0")
+  def setRegParam(regParam: Double): this.type = {
+    this.algorithm.optimizer.setRegParam(regParam)
     this
   }
 

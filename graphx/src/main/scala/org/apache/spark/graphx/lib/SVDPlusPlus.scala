@@ -21,8 +21,8 @@ import scala.util.Random
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
-import org.apache.spark.rdd._
 import org.apache.spark.graphx._
+import org.apache.spark.rdd._
 
 /** Implementation of SVD++ algorithm. */
 object SVDPlusPlus {
@@ -40,20 +40,10 @@ object SVDPlusPlus {
     extends Serializable
 
   /**
-   * This method is now replaced by the updated version of `run()` and returns exactly
-   * the same result.
-   */
-  @deprecated("Call run()", "1.4.0")
-  def runSVDPlusPlus(edges: RDD[Edge[Double]], conf: Conf)
-    : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
-  {
-    run(edges, conf)
-  }
-
-  /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
-   * available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].
+   * available at <a href="http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf">
+   * here</a>.
    *
    * The prediction rule is rui = u + bu + bi + qi*(pu + |N(u)|^^-0.5^^*sum(y)),
    * see the details on page 6.
@@ -67,6 +57,11 @@ object SVDPlusPlus {
   def run(edges: RDD[Edge[Double]], conf: Conf)
     : (Graph[(Array[Double], Array[Double], Double, Double), Double], Double) =
   {
+    require(conf.maxIters > 0, s"Maximum of iterations must be greater than 0," +
+      s" but got ${conf.maxIters}")
+    require(conf.maxVal > conf.minVal, s"MaxVal must be greater than MinVal," +
+      s" but got {maxVal: ${conf.maxVal}, minVal: ${conf.minVal}}")
+
     // Generate default vertex attribute
     def defaultF(rank: Int): (Array[Double], Array[Double], Double, Double) = {
       // TODO: use a fixed random seed

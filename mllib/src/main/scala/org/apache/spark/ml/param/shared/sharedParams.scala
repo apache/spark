@@ -29,7 +29,7 @@ import org.apache.spark.ml.param._
 private[ml] trait HasRegParam extends Params {
 
   /**
-   * Param for regularization parameter (>= 0).
+   * Param for regularization parameter (&gt;= 0).
    * @group param
    */
   final val regParam: DoubleParam = new DoubleParam(this, "regParam", "regularization parameter (>= 0)", ParamValidators.gtEq(0))
@@ -44,7 +44,7 @@ private[ml] trait HasRegParam extends Params {
 private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for maximum number of iterations (>= 0).
+   * Param for maximum number of iterations (&gt;= 0).
    * @group param
    */
   final val maxIter: IntParam = new IntParam(this, "maxIter", "maximum number of iterations (>= 0)", ParamValidators.gtEq(0))
@@ -139,7 +139,22 @@ private[ml] trait HasProbabilityCol extends Params {
 }
 
 /**
- * Trait for shared param threshold (default: 0.5).
+ * Trait for shared param varianceCol.
+ */
+private[ml] trait HasVarianceCol extends Params {
+
+  /**
+   * Param for Column name for the biased sample variance of prediction.
+   * @group param
+   */
+  final val varianceCol: Param[String] = new Param[String](this, "varianceCol", "Column name for the biased sample variance of prediction")
+
+  /** @group getParam */
+  final def getVarianceCol: String = $(varianceCol)
+}
+
+/**
+ * Trait for shared param threshold.
  */
 private[ml] trait HasThreshold extends Params {
 
@@ -147,9 +162,7 @@ private[ml] trait HasThreshold extends Params {
    * Param for threshold in binary classification prediction, in range [0, 1].
    * @group param
    */
-  final val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
-
-  setDefault(threshold, 0.5)
+  val threshold: DoubleParam = new DoubleParam(this, "threshold", "threshold in binary classification prediction, in range [0, 1]", ParamValidators.inRange(0, 1))
 
   /** @group getParam */
   def getThreshold: Double = $(threshold)
@@ -161,10 +174,10 @@ private[ml] trait HasThreshold extends Params {
 private[ml] trait HasThresholds extends Params {
 
   /**
-   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold..
+   * Param for Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values &gt; 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold.
    * @group param
    */
-  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", (t: Array[Double]) => t.forall(_ >= 0))
+  final val thresholds: DoubleArrayParam = new DoubleArrayParam(this, "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values > 0 excepting that at most one value may be 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class's threshold", (t: Array[Double]) => t.forall(_ >= 0) && t.count(_ == 0) <= 1)
 
   /** @group getParam */
   def getThresholds: Array[Double] = $(thresholds)
@@ -223,10 +236,10 @@ private[ml] trait HasOutputCol extends Params {
 private[ml] trait HasCheckpointInterval extends Params {
 
   /**
-   * Param for checkpoint interval (>= 1). E.g. 10 means that the cache will get checkpointed every 10 iterations..
+   * Param for set checkpoint interval (&gt;= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.
    * @group param
    */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "checkpoint interval (>= 1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", ParamValidators.gtEq(1))
+  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations", (interval: Int) => interval == -1 || interval >= 1)
 
   /** @group getParam */
   final def getCheckpointInterval: Int = $(checkpointInterval)
@@ -255,10 +268,10 @@ private[ml] trait HasFitIntercept extends Params {
 private[ml] trait HasHandleInvalid extends Params {
 
   /**
-   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later..
+   * Param for how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later.
    * @group param
    */
-  final val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", ParamValidators.inArray(Array("skip", "error")))
+  val handleInvalid: Param[String] = new Param[String](this, "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an error). More options may be added later", ParamValidators.inArray(Array("skip", "error")))
 
   /** @group getParam */
   final def getHandleInvalid: String = $(handleInvalid)
@@ -319,10 +332,10 @@ private[ml] trait HasElasticNetParam extends Params {
 private[ml] trait HasTol extends Params {
 
   /**
-   * Param for the convergence tolerance for iterative algorithms.
+   * Param for the convergence tolerance for iterative algorithms (&gt;= 0).
    * @group param
    */
-  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
+  final val tol: DoubleParam = new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms (>= 0)", ParamValidators.gtEq(0))
 
   /** @group getParam */
   final def getTol: Double = $(tol)
@@ -334,10 +347,10 @@ private[ml] trait HasTol extends Params {
 private[ml] trait HasStepSize extends Params {
 
   /**
-   * Param for Step size to be used for each iteration of optimization..
+   * Param for Step size to be used for each iteration of optimization (&gt; 0).
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization.")
+  val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size to be used for each iteration of optimization (> 0)", ParamValidators.gt(0))
 
   /** @group getParam */
   final def getStepSize: Double = $(stepSize)
@@ -349,12 +362,44 @@ private[ml] trait HasStepSize extends Params {
 private[ml] trait HasWeightCol extends Params {
 
   /**
-   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0..
+   * Param for weight column name. If this is not set or empty, we treat all instance weights as 1.0.
    * @group param
    */
-  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+  final val weightCol: Param[String] = new Param[String](this, "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0")
 
   /** @group getParam */
   final def getWeightCol: String = $(weightCol)
+}
+
+/**
+ * Trait for shared param solver.
+ */
+private[ml] trait HasSolver extends Params {
+
+  /**
+   * Param for the solver algorithm for optimization.
+   * @group param
+   */
+  val solver: Param[String] = new Param[String](this, "solver", "the solver algorithm for optimization")
+
+  /** @group getParam */
+  final def getSolver: String = $(solver)
+}
+
+/**
+ * Trait for shared param aggregationDepth (default: 2).
+ */
+private[ml] trait HasAggregationDepth extends Params {
+
+  /**
+   * Param for suggested depth for treeAggregate (&gt;= 2).
+   * @group expertParam
+   */
+  final val aggregationDepth: IntParam = new IntParam(this, "aggregationDepth", "suggested depth for treeAggregate (>= 2)", ParamValidators.gtEq(2))
+
+  setDefault(aggregationDepth, 2)
+
+  /** @group expertGetParam */
+  final def getAggregationDepth: Int = $(aggregationDepth)
 }
 // scalastyle:on

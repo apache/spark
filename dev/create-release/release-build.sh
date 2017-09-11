@@ -23,8 +23,8 @@ usage: release-build.sh <package|docs|publish-snapshot|publish-release>
 Creates build deliverables from a Spark commit.
 
 Top level targets are
-  package: Create binary packages and copy them to people.apache
-  docs: Build docs and copy them to people.apache
+  package: Create binary packages and copy them to home.apache
+  docs: Build docs and copy them to home.apache
   publish-snapshot: Publish snapshot release to Apache snapshots
   publish-release: Publish a release to Apache release repo
 
@@ -64,20 +64,23 @@ for env in ASF_USERNAME ASF_RSA_KEY GPG_PASSPHRASE GPG_KEY; do
   fi
 done
 
+# Explicitly set locale in order to make `sort` output consistent across machines.
+# See https://stackoverflow.com/questions/28881 for more details.
+export LC_ALL=C
+
 # Commit ref to checkout when building
 GIT_REF=${GIT_REF:-master}
 
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-SSH="ssh -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
 GPG="gpg --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
 
 MVN="build/mvn --force"
-PUBLISH_PROFILES="-Pyarn -Phive -Phadoop-2.2"
+PUBLISH_PROFILES="-Pmesos -Pyarn -Phive -Phive-thriftserver"
 PUBLISH_PROFILES="$PUBLISH_PROFILES -Pspark-ganglia-lgpl -Pkinesis-asl"
 
 rm -rf spark
@@ -97,7 +100,20 @@ if [ -z "$SPARK_PACKAGE_VERSION" ]; then
 fi
 
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
-USER_HOST="$ASF_USERNAME@people.apache.org"
+
+function LFTP {
+  SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
+  COMMANDS=$(cat <<EOF
+     set net:max-retries 1 &&
+     set sftp:connect-program $SSH &&
+     connect -u $ASF_USERNAME,p sftp://home.apache.org &&
+     $@
+EOF
+)
+  lftp --norc -c "$COMMANDS"
+}
+export -f LFTP
+
 
 git clean -d -f -x
 rm .gitignore
@@ -105,10 +121,14 @@ rm -rf .git
 cd ..
 
 if [ -n "$REMOTE_PARENT_MAX_LENGTH" ]; then
-  old_dirs=$($SSH $USER_HOST ls -t $REMOTE_PARENT_DIR | tail -n +$REMOTE_PARENT_MAX_LENGTH)
+  old_dirs=$(
+    LFTP nlist $REMOTE_PARENT_DIR \
+        | grep -v "^\." \
+        | sort -r \
+        | tail -n +$REMOTE_PARENT_MAX_LENGTH)
   for old_dir in $old_dirs; do
     echo "Removing directory: $old_dir"
-    $SSH $USER_HOST rm -r $REMOTE_PARENT_DIR/$old_dir
+    LFTP "rm -rf $REMOTE_PARENT_DIR/$old_dir && exit 0"
   done
 fi
 
@@ -130,22 +150,75 @@ if [[ "$1" == "package" ]]; then
     NAME=$1
     FLAGS=$2
     ZINC_PORT=$3
+    BUILD_PACKAGE=$4
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
 
     cd spark-$SPARK_VERSION-bin-$NAME
 
-    # TODO There should probably be a flag to make-distribution to allow 2.11 support
-    if [[ $FLAGS == *scala-2.11* ]]; then
-      ./dev/change-scala-version.sh 2.11
-    fi
+    # TODO There should probably be a flag to make-distribution to allow 2.12 support
+    #if [[ $FLAGS == *scala-2.12* ]]; then
+    #  ./dev/change-scala-version.sh 2.12
+    #fi
 
     export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
-    ./make-distribution.sh --name $NAME --tgz $FLAGS -DzincPort=$ZINC_PORT 2>&1 > \
-      ../binary-release-$NAME.log
-    cd ..
-    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
 
+    # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
+    # to dev0 to be closer to PEP440.
+    PYSPARK_VERSION=`echo "$SPARK_VERSION" |  sed -r "s/-/./" | sed -r "s/SNAPSHOT/dev0/"`
+    echo "__version__='$PYSPARK_VERSION'" > python/pyspark/version.py
+
+    # Get maven home set by MVN
+    MVN_HOME=`$MVN -version 2>&1 | grep 'Maven home' | awk '{print $NF}'`
+
+
+    if [ -z "$BUILD_PACKAGE" ]; then
+      echo "Creating distribution without PIP/R package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+    elif [[ "$BUILD_PACKAGE" == "withr" ]]; then
+      echo "Creating distribution with R package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --r $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+
+      echo "Copying and signing R source package"
+      R_DIST_NAME=SparkR_$SPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/R/$R_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $R_DIST_NAME.asc \
+        --detach-sig $R_DIST_NAME
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        MD5 $R_DIST_NAME > \
+        $R_DIST_NAME.md5
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        SHA512 $R_DIST_NAME > \
+        $R_DIST_NAME.sha
+    else
+      echo "Creating distribution with PIP package"
+      ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz --pip $FLAGS \
+        -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      cd ..
+
+      echo "Copying and signing python distribution"
+      PYTHON_DIST_NAME=pyspark-$PYSPARK_VERSION.tar.gz
+      cp spark-$SPARK_VERSION-bin-$NAME/python/dist/$PYTHON_DIST_NAME .
+
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
+        --output $PYTHON_DIST_NAME.asc \
+        --detach-sig $PYTHON_DIST_NAME
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        MD5 $PYTHON_DIST_NAME > \
+        $PYTHON_DIST_NAME.md5
+      echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
+        SHA512 $PYTHON_DIST_NAME > \
+        $PYTHON_DIST_NAME.sha
+    fi
+
+    echo "Copying and signing regular binary distribution"
+    cp spark-$SPARK_VERSION-bin-$NAME/spark-$SPARK_VERSION-bin-$NAME.tgz .
     echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour \
       --output spark-$SPARK_VERSION-bin-$NAME.tgz.asc \
       --detach-sig spark-$SPARK_VERSION-bin-$NAME.tgz
@@ -162,25 +235,29 @@ if [[ "$1" == "package" ]]; then
 
   # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
   # share the same Zinc server.
-  make_binary_release "hadoop1" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver" "3030" &
-  make_binary_release "hadoop1-scala2.11" "-Psparkr -Phadoop-1 -Phive -Dscala-2.11" "3031" &
-  make_binary_release "cdh4" "-Psparkr -Phadoop-1 -Phive -Phive-thriftserver -Dhadoop.version=2.0.0-mr1-cdh4.2.0" "3032" &
-  make_binary_release "hadoop2.3" "-Psparkr -Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn" "3033" &
-  make_binary_release "hadoop2.4" "-Psparkr -Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "hadoop2.6" "-Psparkr -Phadoop-2.6 -Phive -Phive-thriftserver -Pyarn" "3034" &
-  make_binary_release "hadoop2.4-without-hive" "-Psparkr -Phadoop-2.4 -Pyarn" "3037" &
-  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn" "3038" &
+  FLAGS="-Psparkr -Phive -Phive-thriftserver -Pyarn -Pmesos"
+  make_binary_release "hadoop2.6" "-Phadoop-2.6 $FLAGS" "3035" "withr" &
+  make_binary_release "hadoop2.7" "-Phadoop-2.7 $FLAGS" "3036" "withpip" &
+  make_binary_release "without-hadoop" "-Psparkr -Phadoop-provided -Pyarn -Pmesos" "3038" &
   wait
   rm -rf spark-$SPARK_VERSION-bin-*/
 
   # Copy data
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-bin"
   echo "Copying release tarballs to $dest_dir"
-  $SSH $USER_HOST mkdir $dest_dir
-  rsync -e "$SSH" spark-* $USER_HOST:$dest_dir
-  echo "Linking /latest to $dest_dir"
-  $SSH $USER_HOST rm -f "$REMOTE_PARENT_DIR/latest"
-  $SSH $USER_HOST ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
+  # Put to new directory:
+  LFTP mkdir -p $dest_dir || true
+  LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR_*'
+  # Delete /latest directory and rename new upload to /latest
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
+  LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
+  # Re-upload a second time and leave the files in the timestamped upload directory:
+  LFTP mkdir -p $dest_dir || true
+  LFTP mput -O $dest_dir 'spark-*'
+  LFTP mput -O $dest_dir 'pyspark-*'
+  LFTP mput -O $dest_dir 'SparkR_*'
   exit 0
 fi
 
@@ -190,15 +267,18 @@ if [[ "$1" == "docs" ]]; then
   echo "Building Spark docs"
   dest_dir="$REMOTE_PARENT_DIR/${DEST_DIR_NAME}-docs"
   cd docs
-  # Compile docs with Java 7 to use nicer format
   # TODO: Make configurable to add this: PRODUCTION=1
   PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
   echo "Copying release documentation to $dest_dir"
-  $SSH $USER_HOST mkdir $dest_dir
-  echo "Linking /latest to $dest_dir"
-  $SSH $USER_HOST rm -f "$REMOTE_PARENT_DIR/latest"
-  $SSH $USER_HOST ln -s $dest_dir "$REMOTE_PARENT_DIR/latest"
-  rsync -e "$SSH" -r _site/* $USER_HOST:$dest_dir
+  # Put to new directory:
+  LFTP mkdir -p $dest_dir || true
+  LFTP mirror -R _site $dest_dir
+  # Delete /latest directory and rename new upload to /latest
+  LFTP "rm -r -f $REMOTE_PARENT_DIR/latest || exit 0"
+  LFTP mv $dest_dir "$REMOTE_PARENT_DIR/latest"
+  # Re-upload a second time and leave the files in the timestamped upload directory:
+  LFTP mkdir -p $dest_dir || true
+  LFTP mirror -R _site $dest_dir
   cd ..
   exit 0
 fi
@@ -224,11 +304,10 @@ if [[ "$1" == "publish-snapshot" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES \
-    -Phive-thriftserver deploy
-  ./dev/change-scala-version.sh 2.11
-  $MVN -DzincPort=$ZINC_PORT -Dscala-2.11 --settings $tmp_settings \
-    -DskipTests $PUBLISH_PROFILES clean deploy
+  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $PUBLISH_PROFILES deploy
+  #./dev/change-scala-version.sh 2.12
+  #$MVN -DzincPort=$ZINC_PORT -Pscala-2.12 --settings $tmp_settings \
+  #  -DskipTests $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
@@ -261,18 +340,16 @@ if [[ "$1" == "publish-release" ]]; then
   # Generate random point for Zinc
   export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
 
-  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES \
-    -Phive-thriftserver clean install
+  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests $PUBLISH_PROFILES clean install
 
-  ./dev/change-scala-version.sh 2.11
-
-  $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Dscala-2.11 \
-    -DskipTests $PUBLISH_PROFILES clean install
+  #./dev/change-scala-version.sh 2.12
+  #$MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -Pscala-2.12 \
+  #  -DskipTests $PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
   /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
-  ./dev/change-version-to-2.10.sh
+  #./dev/change-scala-version.sh 2.11
 
   pushd $tmp_repo/org/apache/spark
 

@@ -56,8 +56,7 @@ class JobGeneratorSuite extends TestSuiteBase {
   // 4. allow subsequent batches to be generated (to allow premature deletion of 3rd batch metadata)
   // 5. verify whether 3rd batch's block metadata still exists
   //
-  // TODO: SPARK-7420 enable this test
-  ignore("SPARK-6222: Do not clear received block data too soon") {
+  test("SPARK-6222: Do not clear received block data too soon") {
     import JobGeneratorSuite._
     val checkpointDir = Utils.createTempDir()
     val testConf = conf
@@ -124,6 +123,7 @@ class JobGeneratorSuite extends TestSuiteBase {
       assert(getBlocksOfBatch(longBatchTime).nonEmpty, "blocks of incomplete batch already deleted")
       assert(batchCounter.getNumCompletedBatches < longBatchNumber)
       waitLatch.countDown()
+      ssc.stop()
     }
   }
 }

@@ -17,23 +17,28 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, MultivariateOnlineSummarizer}
+import org.apache.spark.mllib.stat.{MultivariateOnlineSummarizer, MultivariateStatisticalSummary}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: Experimental ::
  * Evaluator for regression.
  *
- * @param predictionAndObservations an RDD of (prediction, observation) pairs.
+ * @param predictionAndObservations an RDD of (prediction, observation) pairs
+ * @param throughOrigin True if the regression is through the origin. For example, in linear
+ *                      regression, it will be true without fitting intercept.
  */
 @Since("1.2.0")
-@Experimental
-class RegressionMetrics @Since("1.2.0") (
-    predictionAndObservations: RDD[(Double, Double)]) extends Logging {
+class RegressionMetrics @Since("2.0.0") (
+    predictionAndObservations: RDD[(Double, Double)], throughOrigin: Boolean)
+    extends Logging {
+
+  @Since("1.2.0")
+  def this(predictionAndObservations: RDD[(Double, Double)]) =
+    this(predictionAndObservations, false)
 
   /**
    * An auxiliary constructor taking a DataFrame.
@@ -41,7 +46,7 @@ class RegressionMetrics @Since("1.2.0") (
    *                                  prediction and observation
    */
   private[mllib] def this(predictionAndObservations: DataFrame) =
-    this(predictionAndObservations.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndObservations.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Use MultivariateOnlineSummarizer to calculate summary statistics of observations and errors.
@@ -55,6 +60,8 @@ class RegressionMetrics @Since("1.2.0") (
       )
     summary
   }
+
+  private lazy val SSy = math.pow(summary.normL2(0), 2)
   private lazy val SSerr = math.pow(summary.normL2(1), 2)
   private lazy val SStot = summary.variance(0) * (summary.count - 1)
   private lazy val SSreg = {
@@ -66,8 +73,9 @@ class RegressionMetrics @Since("1.2.0") (
 
   /**
    * Returns the variance explained by regression.
-   * explainedVariance = \sum_i (\hat{y_i} - \bar{y})^2 / n
-   * @see [[https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained]]
+   * explainedVariance = $\sum_i (\hat{y_i} - \bar{y})^2^ / n$
+   * @see <a href="https://en.wikipedia.org/wiki/Fraction_of_variance_unexplained">
+   * Fraction of variance unexplained (Wikipedia)</a>
    */
   @Since("1.2.0")
   def explainedVariance: Double = {
@@ -103,10 +111,18 @@ class RegressionMetrics @Since("1.2.0") (
 
   /**
    * Returns R^2^, the unadjusted coefficient of determination.
-   * @see [[http://en.wikipedia.org/wiki/Coefficient_of_determination]]
+   * @see <a href="http://en.wikipedia.org/wiki/Coefficient_of_determination">
+   * Coefficient of determination (Wikipedia)</a>
+   * In case of regression through the origin, the definition of R^2^ is to be modified.
+   * @see <a href="https://online.stat.psu.edu/~ajw13/stat501/SpecialTopics/Reg_thru_origin.pdf">
+   * J. G. Eisenhauer, Regression through the Origin. Teaching Statistics 25, 76-80 (2003)</a>
    */
   @Since("1.2.0")
   def r2: Double = {
-    1 - SSerr / SStot
+    if (throughOrigin) {
+      1 - SSerr / SSy
+    } else {
+      1 - SSerr / SStot
+    }
   }
 }

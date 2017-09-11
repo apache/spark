@@ -17,18 +17,20 @@
 
 package org.apache.spark.streaming.dstream
 
+import java.util.Locale
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDDOperationScope
 import org.apache.spark.streaming.{Duration, StreamingContext, Time}
 import org.apache.spark.streaming.scheduler.RateController
-import org.apache.spark.streaming.scheduler.rate.RateEstimator
 import org.apache.spark.util.Utils
 
 /**
  * This is the abstract base class for all input streams. This class provides methods
- * start() and stop() which is called by Spark Streaming system to start and stop receiving data.
+ * start() and stop() which are called by Spark Streaming system to start and stop
+ * receiving data, respectively.
  * Input streams that can generate RDDs from new data by running a service/thread only on
  * the driver node (that is, without running a receiver on worker nodes), can be
  * implemented by directly inheriting this InputDStream. For example,
@@ -37,10 +39,10 @@ import org.apache.spark.util.Utils
  * that requires running a receiver on the worker nodes, use
  * [[org.apache.spark.streaming.dstream.ReceiverInputDStream]] as the parent class.
  *
- * @param ssc_ Streaming context that will execute this input stream
+ * @param _ssc Streaming context that will execute this input stream
  */
-abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
-  extends DStream[T](ssc_) {
+abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
+  extends DStream[T](_ssc) {
 
   private[streaming] var lastValidTime: Time = null
 
@@ -60,7 +62,7 @@ abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
       .split("(?=[A-Z])")
       .filter(_.nonEmpty)
       .mkString(" ")
-      .toLowerCase
+      .toLowerCase(Locale.ROOT)
       .capitalize
     s"$newName [$id]"
   }
@@ -74,7 +76,7 @@ abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
   protected[streaming] override val baseScope: Option[String] = {
     val scopeName = Option(ssc.sc.getLocalProperty(SparkContext.RDD_SCOPE_KEY))
       .map { json => RDDOperationScope.fromJson(json).name + s" [$id]" }
-      .getOrElse(name.toLowerCase)
+      .getOrElse(name.toLowerCase(Locale.ROOT))
     Some(new RDDOperationScope(scopeName).toJson)
   }
 
@@ -88,10 +90,10 @@ abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
     if (!super.isTimeValid(time)) {
       false // Time not valid
     } else {
-      // Time is valid, but check it it is more than lastValidTime
+      // Time is valid, but check it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
-        logWarning("isTimeValid called with " + time + " where as last valid time is " +
-          lastValidTime)
+        logWarning(s"isTimeValid called with $time whereas the last valid time " +
+          s"is $lastValidTime")
       }
       lastValidTime = time
       true
@@ -107,8 +109,8 @@ abstract class InputDStream[T: ClassTag] (ssc_ : StreamingContext)
   }
 
   /** Method called to start receiving data. Subclasses must implement this method. */
-  def start()
+  def start(): Unit
 
   /** Method called to stop receiving data. Subclasses must implement this method. */
-  def stop()
+  def stop(): Unit
 }

@@ -17,103 +17,86 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.Locale
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.command.{DDLUtils, RunnableCommand}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{DataFrame, Row, SQLContext, SaveMode}
 
 /**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
+ * Create a table and optionally insert some data into it. Note that this plan is unresolved and
+ * has to be replaced by the concrete implementations during analysis.
+ *
+ * @param tableDesc the metadata of the table to be created.
+ * @param mode the data writing mode
+ * @param query an optional logical plan representing data to write into the created table.
  */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends LogicalPlan with Command {
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override val output: Seq[Attribute] = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
-  )
-}
-
-/**
-  * Used to represent the operation of create table using a data source.
-  * @param allowExisting If it is true, we will do nothing when the table already exists.
-  *                      If it is false, an exception will be thrown
-  */
-case class CreateTableUsing(
-    tableIdent: TableIdentifier,
-    userSpecifiedSchema: Option[StructType],
-    provider: String,
-    temporary: Boolean,
-    options: Map[String, String],
-    allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends LogicalPlan with Command {
-
-  override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
-}
-
-/**
- * A node used to support CTAS statements and saveAsTable for the data source API.
- * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
- * can analyze the logical plan that will be used to populate the table.
- * So, [[PreWriteCheck]] can detect cases that are not allowed.
- */
-// TODO: Use TableIdentifier instead of String for tableName (SPARK-10104).
-case class CreateTableUsingAsSelect(
-    tableIdent: TableIdentifier,
-    provider: String,
-    temporary: Boolean,
-    partitionColumns: Array[String],
+case class CreateTable(
+    tableDesc: CatalogTable,
     mode: SaveMode,
-    options: Map[String, String],
-    child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = Seq.empty[Attribute]
+    query: Option[LogicalPlan]) extends LogicalPlan {
+  assert(tableDesc.provider.isDefined, "The table to be created must have a provider.")
+
+  if (query.isEmpty) {
+    assert(
+      mode == SaveMode.ErrorIfExists || mode == SaveMode.Ignore,
+      "create table without data insertion can only use ErrorIfExists or Ignore as SaveMode.")
+  }
+
+  override def children: Seq[LogicalPlan] = query.toSeq
+  override def output: Seq[Attribute] = Seq.empty
+  override lazy val resolved: Boolean = false
 }
 
-case class CreateTempTableUsing(
+/**
+ * Create or replace a local/global temporary view with given data source.
+ */
+case class CreateTempViewUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
+    replace: Boolean,
+    global: Boolean,
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
-    val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], provider, options)
-    sqlContext.catalog.registerTable(
-      tableIdent.toSeq,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
-
-    Seq.empty[Row]
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary view '$tableIdent' should not have specified a database")
   }
-}
 
-case class CreateTempTableUsingAsSelect(
-    tableIdent: TableIdentifier,
-    provider: String,
-    partitionColumns: Array[String],
-    mode: SaveMode,
-    options: Map[String, String],
-    query: LogicalPlan) extends RunnableCommand {
+  override def argString: String = {
+    s"[tableIdent:$tableIdent " +
+      userSpecifiedSchema.map(_ + " ").getOrElse("") +
+      s"replace:$replace " +
+      s"provider:$provider " +
+      CatalogUtils.maskCredentials(options)
+  }
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(sqlContext, provider, partitionColumns, mode, options, df)
-    sqlContext.catalog.registerTable(
-      tableIdent.toSeq,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    if (provider.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
+      throw new AnalysisException("Hive data source can only be used with tables, " +
+        "you can't use it with CREATE TEMP VIEW USING")
+    }
+
+    val dataSource = DataSource(
+      sparkSession,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      options = options)
+
+    val catalog = sparkSession.sessionState.catalog
+    val viewDefinition = Dataset.ofRows(
+      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
+
+    if (global) {
+      catalog.createGlobalTempView(tableIdent.table, viewDefinition, replace)
+    } else {
+      catalog.createTempView(tableIdent.table, viewDefinition, replace)
+    }
 
     Seq.empty[Row]
   }
@@ -122,48 +105,19 @@ case class CreateTempTableUsingAsSelect(
 case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    // Refresh the given table's metadata first.
-    sqlContext.catalog.refreshTable(tableIdent)
-
-    // If this table is cached as a InMemoryColumnarRelation, drop the original
-    // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent.toSeq)
-    // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
-    if (isCached) {
-      // Create a data frame to represent the table.
-      // TODO: Use uncacheTable once it supports database name.
-      val df = DataFrame(sqlContext, logicalPlan)
-      // Uncache the logicalPlan.
-      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
-      // Cache it again.
-      sqlContext.cacheManager.cacheQuery(df, Some(tableIdent.table))
-    }
-
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    // Refresh the given table's metadata. If this table is cached as an InMemoryRelation,
+    // drop the original cached version and make the new version cached lazily.
+    sparkSession.catalog.refreshTable(tableIdent.quotedString)
     Seq.empty[Row]
   }
 }
 
-/**
- * Builds a map in which keys are case insensitive
- */
-class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
-  with Serializable {
+case class RefreshResource(path: String)
+  extends RunnableCommand {
 
-  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
-
-  override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
-
-  override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
-    baseMap + kv.copy(_1 = kv._1.toLowerCase)
-
-  override def iterator: Iterator[(String, String)] = baseMap.iterator
-
-  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.catalog.refreshByPath(path)
+    Seq.empty[Row]
+  }
 }
-
-/**
- * The exception thrown from the DDL parser.
- */
-class DDLException(message: String) extends RuntimeException(message)

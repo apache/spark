@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 
 class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
   // Tests that PairRDDFunctions grabs an implicit Ordering in various cases where it should.
-  test("basic inference of Orderings"){
+  test("basic inference of Orderings") {
     sc = new SparkContext("local", "test")
     val rdd = sc.parallelize(1 to 10)
 
@@ -30,11 +30,11 @@ class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
 
     // Infer orderings after basic maps to particular types
     val basicMapExpectations = ImplicitOrderingSuite.basicMapExpectations(rdd)
-    basicMapExpectations.map({case (met, explain) => assert(met, explain)})
+    basicMapExpectations.foreach { case (met, explain) => assert(met, explain) }
 
     // Infer orderings for other RDD methods
     val otherRDDMethodExpectations = ImplicitOrderingSuite.otherRDDMethodExpectations(rdd)
-    otherRDDMethodExpectations.map({case (met, explain) => assert(met, explain)})
+    otherRDDMethodExpectations.foreach { case (met, explain) => assert(met, explain) }
   }
 }
 

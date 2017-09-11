@@ -17,9 +17,10 @@
 
 package org.apache.spark.util
 
-import java.net.{URLClassLoader, URL}
+import java.net.{URL, URLClassLoader}
 import java.util.Enumeration
-import java.util.concurrent.ConcurrentHashMap
+
+import scala.collection.JavaConverters._
 
 /**
  * URL class loader that exposes the `addURL` and `getURLs` methods in URLClassLoader.
@@ -46,32 +47,12 @@ private[spark] class ChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoa
 
   private val parentClassLoader = new ParentClassLoader(parent)
 
-  /**
-   * Used to implement fine-grained class loading locks similar to what is done by Java 7. This
-   * prevents deadlock issues when using non-hierarchical class loaders.
-   *
-   * Note that due to some issues with implementing class loaders in
-   * Scala, Java 7's `ClassLoader.registerAsParallelCapable` method is not called.
-   */
-  private val locks = new ConcurrentHashMap[String, Object]()
-
   override def loadClass(name: String, resolve: Boolean): Class[_] = {
-    var lock = locks.get(name)
-    if (lock == null) {
-      val newLock = new Object()
-      lock = locks.putIfAbsent(name, newLock)
-      if (lock == null) {
-        lock = newLock
-      }
-    }
-
-    lock.synchronized {
-      try {
-        super.loadClass(name, resolve)
-      } catch {
-        case e: ClassNotFoundException =>
-          parentClassLoader.loadClass(name, resolve)
-      }
+    try {
+      super.loadClass(name, resolve)
+    } catch {
+      case e: ClassNotFoundException =>
+        parentClassLoader.loadClass(name, resolve)
     }
   }
 
@@ -82,14 +63,9 @@ private[spark] class ChildFirstURLClassLoader(urls: Array[URL], parent: ClassLoa
   }
 
   override def getResources(name: String): Enumeration[URL] = {
-    val urls = super.findResources(name)
-    val res =
-      if (urls != null && urls.hasMoreElements()) {
-        urls
-      } else {
-        parentClassLoader.getResources(name)
-      }
-    res
+    val childUrls = super.findResources(name).asScala
+    val parentUrls = parentClassLoader.getResources(name).asScala
+    (childUrls ++ parentUrls).asJavaEnumeration
   }
 
   override def addURL(url: URL) {

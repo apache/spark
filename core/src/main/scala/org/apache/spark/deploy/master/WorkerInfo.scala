@@ -29,11 +29,10 @@ private[spark] class WorkerInfo(
     val cores: Int,
     val memory: Int,
     val endpoint: RpcEndpointRef,
-    val webUiPort: Int,
-    val publicAddress: String)
+    val webUiAddress: String)
   extends Serializable {
 
-  Utils.checkHost(host, "Expected hostname")
+  Utils.checkHost(host)
   assert (port > 0)
 
   @transient var executors: mutable.HashMap[String, ExecutorDesc] = _ // executorId => info
@@ -96,10 +95,6 @@ private[spark] class WorkerInfo(
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
     coresUsed -= driver.desc.cores
-  }
-
-  def webUiAddress : String = {
-    "http://" + this.publicAddress + ":" + this.webUiPort
   }
 
   def setState(state: WorkerState.Value): Unit = {

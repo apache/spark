@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.catalyst.plans
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, VirtualColumn}
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
 
-abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
+abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanType] {
   self: PlanType =>
+
+  def conf: SQLConf = SQLConf.get
 
   def output: Seq[Attribute]
 
@@ -45,20 +47,23 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
 
   /**
-   * Attributes that are referenced by expressions but not provided by this nodes children.
-   * Subclasses should override this method if they produce attributes internally as it is used by
-   * assertions designed to prevent the construction of invalid plans.
-   *
-   * Note that virtual columns should be excluded. Currently, we only support the grouping ID
-   * virtual column.
+   * The set of all attributes that are produced by this node.
    */
-  def missingInput: AttributeSet =
-    (references -- inputSet).filter(_.name != VirtualColumn.groupingIdName)
+  def producedAttributes: AttributeSet = AttributeSet.empty
 
   /**
-   * Runs [[transform]] with `rule` on all expressions present in this query operator.
+   * Attributes that are referenced by expressions but not provided by this node's children.
+   * Subclasses should override this method if they produce attributes internally as it is used by
+   * assertions designed to prevent the construction of invalid plans.
+   */
+  def missingInput: AttributeSet = references -- inputSet -- producedAttributes
+
+  /**
+   * Runs [[transformExpressionsDown]] with `rule` on all expressions present
+   * in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
+   *
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
@@ -67,13 +72,32 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   /**
    * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
+   *
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
+    mapExpressions(_.transformDown(rule))
+  }
+
+  /**
+   * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
+   *
+   * @param rule the rule to be applied to every expression in this operator.
+   * @return
+   */
+  def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
+    mapExpressions(_.transformUp(rule))
+  }
+
+  /**
+   * Apply a map function to each expression present in this query operator, and return a new
+   * query operator based on the mapped expressions.
+   */
+  def mapExpressions(f: Expression => Expression): this.type = {
     var changed = false
 
-    @inline def transformExpressionDown(e: Expression): Expression = {
-      val newE = e.transformDown(rule)
+    @inline def transformExpression(e: Expression): Expression = {
+      val newE = f(e)
       if (newE.fastEquals(e)) {
         e
       } else {
@@ -83,53 +107,24 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionDown(e)
-      case Some(e: Expression) => Some(transformExpressionDown(e))
+      case e: Expression => transformExpression(e)
+      case Some(value) => Some(recursiveTransform(value))
       case m: Map[_, _] => m
       case d: DataType => d // Avoid unpacking Structs
       case seq: Traversable[_] => seq.map(recursiveTransform)
       case other: AnyRef => other
+      case null => null
     }
 
-    val newArgs = productIterator.map(recursiveTransform).toArray
+    val newArgs = mapProductIterator(recursiveTransform)
 
     if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
   }
 
   /**
-   * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
-   * @param rule the rule to be applied to every expression in this operator.
-   * @return
+   * Returns the result of running [[transformExpressions]] on this node
+   * and all its children.
    */
-  def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
-    var changed = false
-
-    @inline def transformExpressionUp(e: Expression): Expression = {
-      val newE = e.transformUp(rule)
-      if (newE.fastEquals(e)) {
-        e
-      } else {
-        changed = true
-        newE
-      }
-    }
-
-    def recursiveTransform(arg: Any): AnyRef = arg match {
-      case e: Expression => transformExpressionUp(e)
-      case Some(e: Expression) => Some(transformExpressionUp(e))
-      case m: Map[_, _] => m
-      case d: DataType => d // Avoid unpacking Structs
-      case seq: Traversable[_] => seq.map(recursiveTransform)
-      case other: AnyRef => other
-    }
-
-    val newArgs = productIterator.map(recursiveTransform).toArray
-
-    if (changed) makeCopy(newArgs).asInstanceOf[this.type] else this
-  }
-
-  /** Returns the result of running [[transformExpressions]] on this node
-    * and all its children. */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
       case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
@@ -137,14 +132,18 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /** Returns all of the expressions present in this query plan operator. */
-  def expressions: Seq[Expression] = {
+  final def expressions: Seq[Expression] = {
+    // Recursively find all expressions from a traversable.
+    def seqToExpressions(seq: Traversable[Any]): Traversable[Expression] = seq.flatMap {
+      case e: Expression => e :: Nil
+      case s: Traversable[_] => seqToExpressions(s)
+      case other => Nil
+    }
+
     productIterator.flatMap {
       case e: Expression => e :: Nil
-      case Some(e: Expression) => e :: Nil
-      case seq: Traversable[_] => seq.flatMap {
-        case e: Expression => e :: Nil
-        case other => Nil
-      }
+      case s: Some[_] => seqToExpressions(s.toSeq)
+      case seq: Traversable[_] => seqToExpressions(seq)
       case other => Nil
     }.toSeq
   }
@@ -167,4 +166,110 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
   override def simpleString: String = statePrefix + super.simpleString
+
+  override def verboseString: String = simpleString
+
+  /**
+   * All the subqueries of current plan.
+   */
+  def subqueries: Seq[PlanType] = {
+    expressions.flatMap(_.collect {
+      case e: PlanExpression[_] => e.plan.asInstanceOf[PlanType]
+    })
+  }
+
+  override def innerChildren: Seq[QueryPlan[_]] = subqueries
+
+  /**
+   * Returns a plan where a best effort attempt has been made to transform `this` in a way
+   * that preserves the result but removes cosmetic variations (case sensitivity, ordering for
+   * commutative operations, expression id, etc.)
+   *
+   * Plans where `this.canonicalized == other.canonicalized` will always evaluate to the same
+   * result.
+   *
+   * Some nodes should overwrite this to provide proper canonicalize logic, but they should remove
+   * expressions cosmetic variations themselves.
+   */
+  lazy val canonicalized: PlanType = {
+    val canonicalizedChildren = children.map(_.canonicalized)
+    var id = -1
+    mapExpressions {
+      case a: Alias =>
+        id += 1
+        // As the root of the expression, Alias will always take an arbitrary exprId, we need to
+        // normalize that for equality testing, by assigning expr id from 0 incrementally. The
+        // alias name doesn't matter and should be erased.
+        val normalizedChild = QueryPlan.normalizeExprId(a.child, allAttributes)
+        Alias(normalizedChild, "")(ExprId(id), a.qualifier)
+
+      case ar: AttributeReference if allAttributes.indexOf(ar.exprId) == -1 =>
+        // Top level `AttributeReference` may also be used for output like `Alias`, we should
+        // normalize the epxrId too.
+        id += 1
+        ar.withExprId(ExprId(id)).canonicalized
+
+      case other => QueryPlan.normalizeExprId(other, allAttributes)
+    }.withNewChildren(canonicalizedChildren)
+  }
+
+
+  /**
+   * Returns true when the given query plan will return the same results as this query plan.
+   *
+   * Since its likely undecidable to generally determine if two given plans will produce the same
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
+   * possibly be different.
+   *
+   * This function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.
+   */
+  final def sameResult(other: PlanType): Boolean = this.canonicalized == other.canonicalized
+
+  /**
+   * Returns a `hashCode` for the calculation performed by this plan. Unlike the standard
+   * `hashCode`, an attempt has been made to eliminate cosmetic differences.
+   */
+  final def semanticHash(): Int = canonicalized.hashCode()
+
+  /**
+   * All the attributes that are used for this plan.
+   */
+  lazy val allAttributes: AttributeSeq = children.flatMap(_.output)
+}
+
+object QueryPlan extends PredicateHelper {
+  /**
+   * Normalize the exprIds in the given expression, by updating the exprId in `AttributeReference`
+   * with its referenced ordinal from input attributes. It's similar to `BindReferences` but we
+   * do not use `BindReferences` here as the plan may take the expression as a parameter with type
+   * `Attribute`, and replace it with `BoundReference` will cause error.
+   */
+  def normalizeExprId[T <: Expression](e: T, input: AttributeSeq): T = {
+    e.transformUp {
+      case s: SubqueryExpression => s.canonicalize(input)
+      case ar: AttributeReference =>
+        val ordinal = input.indexOf(ar.exprId)
+        if (ordinal == -1) {
+          ar
+        } else {
+          ar.withExprId(ExprId(ordinal))
+        }
+    }.canonicalized.asInstanceOf[T]
+  }
+
+  /**
+   * Composes the given predicates into a conjunctive predicate, which is normalized and reordered.
+   * Then returns a new sequence of predicates by splitting the conjunctive predicate.
+   */
+  def normalizePredicates(predicates: Seq[Expression], output: AttributeSeq): Seq[Expression] = {
+    if (predicates.nonEmpty) {
+      val normalized = normalizeExprId(predicates.reduce(And), output)
+      splitConjunctivePredicates(normalized)
+    } else {
+      Nil
+    }
+  }
 }

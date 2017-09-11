@@ -21,6 +21,7 @@ import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
@@ -28,12 +29,15 @@ import org.apache.spark.streaming.rdd.WriteAheadLogBackedBlockRDD
 import org.apache.spark.streaming.receiver.{BlockManagerBasedStoreResult, Receiver, WriteAheadLogBasedStoreResult}
 import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
 import org.apache.spark.streaming.util.{WriteAheadLogRecordHandle, WriteAheadLogUtils}
-import org.apache.spark.{SparkConf, SparkEnv}
 
 class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
-    StreamingContext.getActive().map { _.stop() }
+    try {
+      StreamingContext.getActive().foreach(_.stop())
+    } finally {
+      super.afterAll()
+    }
   }
 
   testWithoutWAL("createBlockRDD creates empty BlockRDD when no block info") { receiverStream =>
@@ -93,7 +97,7 @@ class ReceiverInputDStreamSuite extends TestSuiteBase with BeforeAndAfterAll {
       assert(blockRDD.walRecordHandles.toSeq === blockInfos.map { _.walRecordHandleOption.get })
   }
 
-  testWithWAL("createBlockRDD creates BlockRDD when some block info dont have WAL info") {
+  testWithWAL("createBlockRDD creates BlockRDD when some block info don't have WAL info") {
     receiverStream =>
       val blockInfos1 = Seq.fill(2) { createBlockInfo(withWALInfo = true) }
       val blockInfos2 = Seq.fill(3) { createBlockInfo(withWALInfo = false) }

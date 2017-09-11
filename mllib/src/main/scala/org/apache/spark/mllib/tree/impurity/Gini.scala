@@ -17,16 +17,14 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 
 /**
- * :: Experimental ::
- * Class for calculating the
- * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
- * during binary classification.
+ * Class for calculating the Gini impurity
+ * (http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity)
+ * during multiclass classification.
  */
 @Since("1.0.0")
-@Experimental
 object Gini extends Impurity {
 
   /**
@@ -81,7 +79,7 @@ object Gini extends Impurity {
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param numClasses  Number of classes for label.
  */
-private[tree] class GiniAggregator(numClasses: Int)
+private[spark] class GiniAggregator(numClasses: Int)
   extends ImpurityAggregator(numClasses) with Serializable {
 
   /**
@@ -109,7 +107,6 @@ private[tree] class GiniAggregator(numClasses: Int)
   def getCalculator(allStats: Array[Double], offset: Int): GiniCalculator = {
     new GiniCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
 }
 
 /**

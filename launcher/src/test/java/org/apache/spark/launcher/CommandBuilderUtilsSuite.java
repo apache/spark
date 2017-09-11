@@ -87,12 +87,24 @@ public class CommandBuilderUtilsSuite {
     assertEquals("\"a \\\"b\\\" c\"", quoteForCommandString("a \"b\" c"));
   }
 
-  private void testOpt(String opts, List<String> expected) {
+  @Test
+  public void testJavaMajorVersion() {
+    assertEquals(6, javaMajorVersion("1.6.0_50"));
+    assertEquals(7, javaMajorVersion("1.7.0_79"));
+    assertEquals(8, javaMajorVersion("1.8.0_66"));
+    assertEquals(9, javaMajorVersion("9-ea"));
+    assertEquals(9, javaMajorVersion("9+100"));
+    assertEquals(9, javaMajorVersion("9"));
+    assertEquals(9, javaMajorVersion("9.1.0"));
+    assertEquals(10, javaMajorVersion("10"));
+  }
+
+  private static void testOpt(String opts, List<String> expected) {
     assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
         expected, parseOptionString(opts));
   }
 
-  private void testInvalidOpt(String opts) {
+  private static void testInvalidOpt(String opts) {
     try {
       parseOptionString(opts);
       fail("Expected exception for invalid option string.");

@@ -22,4 +22,4 @@ package org.apache.spark.api.java
  * these interfaces to pass functions to various Java API methods for Spark. Please visit Spark's
  * Java programming guide for more details.
  */
-package object function 
+package object function

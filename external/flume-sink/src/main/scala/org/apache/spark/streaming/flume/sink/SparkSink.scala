@@ -45,7 +45,7 @@ import org.apache.flume.sink.AbstractSink
  * the thread itself is blocked and a reference to it saved off.
  *
  * When the ack for that batch is received,
- * the thread which created the transaction is is retrieved and it commits the transaction with the
+ * the thread which created the transaction is retrieved and it commits the transaction with the
  * channel from the same thread it was originally created in (since Flume transactions are
  * thread local). If a nack is received instead, the sink rolls back the transaction. If no ack
  * is received within the specified timeout, the transaction is rolled back too. If an ack comes
@@ -88,23 +88,23 @@ class SparkSink extends AbstractSink with Logging with Configurable {
     // dependencies which are being excluded in the build. In practice,
     // Netty dependencies are already available on the JVM as Flume would have pulled them in.
     serverOpt = Option(new NettyServer(responder, new InetSocketAddress(hostname, port)))
-    serverOpt.foreach(server => {
+    serverOpt.foreach { server =>
       logInfo("Starting Avro server for sink: " + getName)
       server.start()
-    })
+    }
     super.start()
   }
 
   override def stop() {
     logInfo("Stopping Spark Sink: " + getName)
-    handler.foreach(callbackHandler => {
+    handler.foreach { callbackHandler =>
       callbackHandler.shutdown()
-    })
-    serverOpt.foreach(server => {
+    }
+    serverOpt.foreach { server =>
       logInfo("Stopping Avro Server for sink: " + getName)
       server.close()
       server.join()
-    })
+    }
     blockingLatch.countDown()
     super.stop()
   }

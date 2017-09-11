@@ -17,9 +17,12 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{SparkException, SparkContext, LocalSparkContext, SparkFunSuite}
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
-import org.mockito.Mockito.spy
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
+
+import org.apache.spark.{LocalSparkContext, SparkContext, SparkException, SparkFunSuite}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
@@ -29,6 +32,7 @@ import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     sc = new SparkContext("local[2]", "test")
   }
 
@@ -45,10 +49,6 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     assert(transform(StorageLevel.MEMORY_AND_DISK_SER) === StorageLevel.MEMORY_AND_DISK_SER)
     assert(transform(StorageLevel.MEMORY_AND_DISK_2) === StorageLevel.MEMORY_AND_DISK_2)
     assert(transform(StorageLevel.MEMORY_AND_DISK_SER_2) === StorageLevel.MEMORY_AND_DISK_SER_2)
-    // Off-heap is not supported and Spark should fail fast
-    intercept[SparkException] {
-      transform(StorageLevel.OFF_HEAP)
-    }
   }
 
   test("basic lineage truncation") {
@@ -173,6 +173,10 @@ class LocalCheckpointSuite extends SparkFunSuite with LocalSparkContext {
     // Collecting the RDD should now fail with an informative exception
     val blockId = RDDBlockId(rdd.id, numPartitions - 1)
     bmm.removeBlock(blockId)
+    // Wait until the block has been removed successfully.
+    eventually(timeout(1 seconds), interval(100 milliseconds)) {
+      assert(bmm.getBlockStatus(blockId).isEmpty)
+    }
     try {
       rdd.collect()
       fail("Collect should have failed if local checkpoint block is removed...")

@@ -17,34 +17,37 @@
 
 package org.apache.spark.serializer
 
-import java.io.{EOFException, IOException, InputStream, OutputStream}
+import java.io._
 import java.nio.ByteBuffer
+import java.util.Locale
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import com.esotericsoftware.kryo.{Kryo, KryoException}
+import com.esotericsoftware.kryo.{Kryo, KryoException, Serializer => KryoClassSerializer}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
+import com.esotericsoftware.kryo.io.{UnsafeInput => KryoUnsafeInput, UnsafeOutput => KryoUnsafeOutput}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 import org.apache.avro.generic.{GenericData, GenericRecord}
-import org.roaringbitmap.{ArrayContainer, BitmapContainer, RoaringArray, RoaringBitmap}
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
-import org.apache.spark.broadcast.HttpBroadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
-import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf}
+import org.apache.spark.util.{BoundedPriorityQueue, SerializableConfiguration, SerializableJobConf, Utils}
 import org.apache.spark.util.collection.CompactBuffer
 
 /**
- * A Spark serializer that uses the [[https://code.google.com/p/kryo/ Kryo serialization library]].
+ * A Spark serializer that uses the <a href="https://code.google.com/p/kryo/">
+ * Kryo serialization library</a>.
  *
- * Note that this serializer is not guaranteed to be wire-compatible across different versions of
+ * @note This serializer is not guaranteed to be wire-compatible across different versions of
  * Spark. It is intended to be used to serialize/de-serialize data within a single
  * Spark application.
  */
@@ -70,14 +73,23 @@ class KryoSerializer(conf: SparkConf)
 
   private val referenceTracking = conf.getBoolean("spark.kryo.referenceTracking", true)
   private val registrationRequired = conf.getBoolean("spark.kryo.registrationRequired", false)
-  private val userRegistrator = conf.getOption("spark.kryo.registrator")
+  private val userRegistrators = conf.get("spark.kryo.registrator", "")
+    .split(',').map(_.trim)
+    .filter(!_.isEmpty)
   private val classesToRegister = conf.get("spark.kryo.classesToRegister", "")
-    .split(',')
+    .split(',').map(_.trim)
     .filter(!_.isEmpty)
 
   private val avroSchemas = conf.getAvroSchema
+  // whether to use unsafe based IO for serialization
+  private val useUnsafe = conf.getBoolean("spark.kryo.unsafe", false)
 
-  def newKryoOutput(): KryoOutput = new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+  def newKryoOutput(): KryoOutput =
+    if (useUnsafe) {
+      new KryoUnsafeOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+    } else {
+      new KryoOutput(bufferSize, math.max(bufferSize, maxBufferSize))
+    }
 
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
@@ -94,6 +106,9 @@ class KryoSerializer(conf: SparkConf)
     for (cls <- KryoSerializer.toRegister) {
       kryo.register(cls)
     }
+    for ((cls, ser) <- KryoSerializer.toRegisterSerializer) {
+      kryo.register(cls, ser)
+    }
 
     // For results returned by asJavaIterable. See JavaIterableWrapperSerializer.
     kryo.register(JavaIterableWrapperSerializer.wrapperClass, new JavaIterableWrapperSerializer)
@@ -102,7 +117,6 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
     kryo.register(classOf[SerializableConfiguration], new KryoJavaSerializer())
     kryo.register(classOf[SerializableJobConf], new KryoJavaSerializer())
-    kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
     kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
     kryo.register(classOf[GenericRecord], new GenericAvroSerializer(avroSchemas))
@@ -116,7 +130,7 @@ class KryoSerializer(conf: SparkConf)
       classesToRegister
         .foreach { className => kryo.register(Class.forName(className, true, classLoader)) }
       // Allow the user to register their own classes by setting spark.kryo.registrator.
-      userRegistrator
+      userRegistrators
         .map(Class.forName(_, true, classLoader).newInstance().asInstanceOf[KryoRegistrator])
         .foreach { reg => reg.registerClasses(kryo) }
       // scalastyle:on classforname
@@ -161,6 +175,7 @@ class KryoSerializer(conf: SparkConf)
     kryo.register(None.getClass)
     kryo.register(Nil.getClass)
     kryo.register(Utils.classForName("scala.collection.immutable.$colon$colon"))
+    kryo.register(Utils.classForName("scala.collection.immutable.Map$EmptyMap$"))
     kryo.register(classOf[ArrayBuffer[Any]])
 
     kryo.setClassLoader(classLoader)
@@ -168,7 +183,7 @@ class KryoSerializer(conf: SparkConf)
   }
 
   override def newInstance(): SerializerInstance = {
-    new KryoSerializerInstance(this)
+    new KryoSerializerInstance(this, useUnsafe)
   }
 
   private[spark] override lazy val supportsRelocationOfSerializedObjects: Boolean = {
@@ -182,9 +197,12 @@ class KryoSerializer(conf: SparkConf)
 private[spark]
 class KryoSerializationStream(
     serInstance: KryoSerializerInstance,
-    outStream: OutputStream) extends SerializationStream {
+    outStream: OutputStream,
+    useUnsafe: Boolean) extends SerializationStream {
 
-  private[this] var output: KryoOutput = new KryoOutput(outStream)
+  private[this] var output: KryoOutput =
+    if (useUnsafe) new KryoUnsafeOutput(outStream) else new KryoOutput(outStream)
+
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   override def writeObject[T: ClassTag](t: T): SerializationStream = {
@@ -215,9 +233,12 @@ class KryoSerializationStream(
 private[spark]
 class KryoDeserializationStream(
     serInstance: KryoSerializerInstance,
-    inStream: InputStream) extends DeserializationStream {
+    inStream: InputStream,
+    useUnsafe: Boolean) extends DeserializationStream {
 
-  private[this] var input: KryoInput = new KryoInput(inStream)
+  private[this] var input: KryoInput =
+    if (useUnsafe) new KryoUnsafeInput(inStream) else new KryoInput(inStream)
+
   private[this] var kryo: Kryo = serInstance.borrowKryo()
 
   override def readObject[T: ClassTag](): T = {
@@ -225,7 +246,8 @@ class KryoDeserializationStream(
       kryo.readClassAndObject(input).asInstanceOf[T]
     } catch {
       // DeserializationStream uses the EOF exception to indicate stopping condition.
-      case e: KryoException if e.getMessage.toLowerCase.contains("buffer underflow") =>
+      case e: KryoException
+        if e.getMessage.toLowerCase(Locale.ROOT).contains("buffer underflow") =>
         throw new EOFException
     }
   }
@@ -244,8 +266,8 @@ class KryoDeserializationStream(
   }
 }
 
-private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
-
+private[spark] class KryoSerializerInstance(ks: KryoSerializer, useUnsafe: Boolean)
+  extends SerializerInstance {
   /**
    * A re-used [[Kryo]] instance. Methods will borrow this instance by calling `borrowKryo()`, do
    * their work, then release the instance by calling `releaseKryo()`. Logically, this is a caching
@@ -284,7 +306,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
 
   // Make these lazy vals to avoid creating a buffer unless we use them.
   private lazy val output = ks.newKryoOutput()
-  private lazy val input = new KryoInput()
+  private lazy val input = if (useUnsafe) new KryoUnsafeInput() else new KryoInput()
 
   override def serialize[T: ClassTag](t: T): ByteBuffer = {
     output.clear()
@@ -294,7 +316,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     } catch {
       case e: KryoException if e.getMessage.startsWith("Buffer overflow") =>
         throw new SparkException(s"Kryo serialization failed: ${e.getMessage}. To avoid this, " +
-          "increase spark.kryoserializer.buffer.max value.")
+          "increase spark.kryoserializer.buffer.max value.", e)
     } finally {
       releaseKryo(kryo)
     }
@@ -304,7 +326,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   override def deserialize[T: ClassTag](bytes: ByteBuffer): T = {
     val kryo = borrowKryo()
     try {
-      input.setBuffer(bytes.array)
+      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       releaseKryo(kryo)
@@ -316,7 +338,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
     val oldClassLoader = kryo.getClassLoader
     try {
       kryo.setClassLoader(loader)
-      input.setBuffer(bytes.array)
+      input.setBuffer(bytes.array(), bytes.arrayOffset() + bytes.position(), bytes.remaining())
       kryo.readClassAndObject(input).asInstanceOf[T]
     } finally {
       kryo.setClassLoader(oldClassLoader)
@@ -325,11 +347,11 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
   }
 
   override def serializeStream(s: OutputStream): SerializationStream = {
-    new KryoSerializationStream(this, s)
+    new KryoSerializationStream(this, s, useUnsafe)
   }
 
   override def deserializeStream(s: InputStream): DeserializationStream = {
-    new KryoDeserializationStream(this, s)
+    new KryoDeserializationStream(this, s, useUnsafe)
   }
 
   /**
@@ -353,7 +375,7 @@ private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends Serializ
  * serialization.
  */
 trait KryoRegistrator {
-  def registerClasses(kryo: Kryo)
+  def registerClasses(kryo: Kryo): Unit
 }
 
 private[serializer] object KryoSerializer {
@@ -363,20 +385,87 @@ private[serializer] object KryoSerializer {
     classOf[StorageLevel],
     classOf[CompressedMapStatus],
     classOf[HighlyCompressedMapStatus],
-    classOf[RoaringBitmap],
-    classOf[RoaringArray],
-    classOf[RoaringArray.Element],
-    classOf[Array[RoaringArray.Element]],
-    classOf[ArrayContainer],
-    classOf[BitmapContainer],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
+    classOf[Array[Boolean]],
     classOf[Array[Byte]],
     classOf[Array[Short]],
+    classOf[Array[Int]],
     classOf[Array[Long]],
+    classOf[Array[Float]],
+    classOf[Array[Double]],
+    classOf[Array[Char]],
+    classOf[Array[String]],
+    classOf[Array[Array[String]]],
     classOf[BoundedPriorityQueue[_]],
     classOf[SparkConf]
   )
+
+  private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
+    classOf[RoaringBitmap] -> new KryoClassSerializer[RoaringBitmap]() {
+      override def write(kryo: Kryo, output: KryoOutput, bitmap: RoaringBitmap): Unit = {
+        bitmap.serialize(new KryoOutputObjectOutputBridge(kryo, output))
+      }
+      override def read(kryo: Kryo, input: KryoInput, cls: Class[RoaringBitmap]): RoaringBitmap = {
+        val ret = new RoaringBitmap
+        ret.deserialize(new KryoInputObjectInputBridge(kryo, input))
+        ret
+      }
+    }
+  )
+}
+
+/**
+ * This is a bridge class to wrap KryoInput as an InputStream and ObjectInput. It forwards all
+ * methods of InputStream and ObjectInput to KryoInput. It's usually helpful when an API expects
+ * an InputStream or ObjectInput but you want to use Kryo.
+ */
+private[spark] class KryoInputObjectInputBridge(
+    kryo: Kryo, input: KryoInput) extends FilterInputStream(input) with ObjectInput {
+  override def readLong(): Long = input.readLong()
+  override def readChar(): Char = input.readChar()
+  override def readFloat(): Float = input.readFloat()
+  override def readByte(): Byte = input.readByte()
+  override def readShort(): Short = input.readShort()
+  override def readUTF(): String = input.readString() // readString in kryo does utf8
+  override def readInt(): Int = input.readInt()
+  override def readUnsignedShort(): Int = input.readShortUnsigned()
+  override def skipBytes(n: Int): Int = {
+    input.skip(n)
+    n
+  }
+  override def readFully(b: Array[Byte]): Unit = input.read(b)
+  override def readFully(b: Array[Byte], off: Int, len: Int): Unit = input.read(b, off, len)
+  override def readLine(): String = throw new UnsupportedOperationException("readLine")
+  override def readBoolean(): Boolean = input.readBoolean()
+  override def readUnsignedByte(): Int = input.readByteUnsigned()
+  override def readDouble(): Double = input.readDouble()
+  override def readObject(): AnyRef = kryo.readClassAndObject(input)
+}
+
+/**
+ * This is a bridge class to wrap KryoOutput as an OutputStream and ObjectOutput. It forwards all
+ * methods of OutputStream and ObjectOutput to KryoOutput. It's usually helpful when an API expects
+ * an OutputStream or ObjectOutput but you want to use Kryo.
+ */
+private[spark] class KryoOutputObjectOutputBridge(
+    kryo: Kryo, output: KryoOutput) extends FilterOutputStream(output) with ObjectOutput  {
+  override def writeFloat(v: Float): Unit = output.writeFloat(v)
+  // There is no "readChars" counterpart, except maybe "readLine", which is not supported
+  override def writeChars(s: String): Unit = throw new UnsupportedOperationException("writeChars")
+  override def writeDouble(v: Double): Unit = output.writeDouble(v)
+  override def writeUTF(s: String): Unit = output.writeString(s) // writeString in kryo does UTF8
+  override def writeShort(v: Int): Unit = output.writeShort(v)
+  override def writeInt(v: Int): Unit = output.writeInt(v)
+  override def writeBoolean(v: Boolean): Unit = output.writeBoolean(v)
+  override def write(b: Int): Unit = output.write(b)
+  override def write(b: Array[Byte]): Unit = output.write(b)
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = output.write(b, off, len)
+  override def writeBytes(s: String): Unit = output.writeString(s)
+  override def writeChar(v: Int): Unit = output.writeChar(v.toChar)
+  override def writeLong(v: Long): Unit = output.writeLong(v)
+  override def writeByte(v: Int): Unit = output.writeByte(v)
+  override def writeObject(obj: AnyRef): Unit = kryo.writeClassAndObject(output, obj)
 }
 
 /**

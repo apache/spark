@@ -17,14 +17,12 @@
 
 package org.apache.spark.mllib.stat.test
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 
 /**
- * :: Experimental ::
  * Trait for hypothesis test results.
  * @tparam DF Return type of `degreesOfFreedom`.
  */
-@Experimental
 @Since("1.1.0")
 trait TestResult[DF] {
 
@@ -79,10 +77,8 @@ trait TestResult[DF] {
 }
 
 /**
- * :: Experimental ::
  * Object containing the test results for the chi-squared hypothesis test.
  */
-@Experimental
 @Since("1.1.0")
 class ChiSqTestResult private[stat] (override val pValue: Double,
     @Since("1.1.0") override val degreesOfFreedom: Int,
@@ -98,10 +94,8 @@ class ChiSqTestResult private[stat] (override val pValue: Double,
 }
 
 /**
- * :: Experimental ::
  * Object containing the test results for the Kolmogorov-Smirnov test.
  */
-@Experimental
 @Since("1.5.0")
 class KolmogorovSmirnovTestResult private[stat] (
     @Since("1.5.0") override val pValue: Double,
@@ -115,3 +109,23 @@ class KolmogorovSmirnovTestResult private[stat] (
     "Kolmogorov-Smirnov test summary:\n" + super.toString
   }
 }
+
+/**
+ * Object containing the test results for streaming testing.
+ */
+@Since("1.6.0")
+private[stat] class StreamingTestResult @Since("1.6.0") (
+    @Since("1.6.0") override val pValue: Double,
+    @Since("1.6.0") override val degreesOfFreedom: Double,
+    @Since("1.6.0") override val statistic: Double,
+    @Since("1.6.0") val method: String,
+    @Since("1.6.0") override val nullHypothesis: String)
+  extends TestResult[Double] with Serializable {
+
+  override def toString: String = {
+    "Streaming test summary:\n" +
+      s"method: $method\n" +
+      super.toString
+  }
+}
+

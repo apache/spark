@@ -18,8 +18,8 @@
 package org.apache.spark.mllib.linalg
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.mllib.linalg.BLAS._
+import org.apache.spark.mllib.util.TestingUtils._
 
 class BLASSuite extends SparkFunSuite {
 
@@ -391,6 +391,23 @@ class BLASSuite extends SparkFunSuite {
         gemv(1.0, sA.transpose, sx, 2.0, y1)
       }
     }
+
+    val y17 = new DenseVector(Array(0.0, 0.0))
+    val y18 = y17.copy
+
+    val sA3 = new SparseMatrix(3, 2, Array(0, 2, 4), Array(1, 2, 0, 1), Array(2.0, 1.0, 1.0, 2.0))
+      .transpose
+    val sA4 =
+      new SparseMatrix(2, 3, Array(0, 1, 3, 4), Array(1, 0, 1, 0), Array(1.0, 2.0, 2.0, 1.0))
+    val sx3 = new SparseVector(3, Array(1, 2), Array(2.0, 1.0))
+
+    val expected4 = new DenseVector(Array(5.0, 4.0))
+
+    gemv(1.0, sA3, sx3, 0.0, y17)
+    gemv(1.0, sA4, sx3, 0.0, y18)
+
+    assert(y17 ~== expected4 absTol 1e-15)
+    assert(y18 ~== expected4 absTol 1e-15)
 
     val dAT =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))

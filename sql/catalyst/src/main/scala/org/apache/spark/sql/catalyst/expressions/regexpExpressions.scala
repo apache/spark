@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Locale
 import java.util.regex.{MatchResult, Pattern}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.catalyst.util.{GenericArrayData, StringUtils}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 
-trait StringRegexExpression extends ImplicitCastInputTypes {
-  self: BinaryExpression =>
+abstract class StringRegexExpression extends BinaryExpression
+  with ImplicitCastInputTypes with NullIntolerant {
 
   def escape(v: String): String
   def matches(regex: Pattern, str: String): Boolean
@@ -59,14 +60,48 @@ trait StringRegexExpression extends ImplicitCastInputTypes {
       matches(regex, input1.asInstanceOf[UTF8String].toString)
     }
   }
+
+  override def sql: String = s"${left.sql} ${prettyName.toUpperCase(Locale.ROOT)} ${right.sql}"
 }
 
 
 /**
  * Simple RegEx pattern matching function
  */
-case class Like(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression with CodegenFallback {
+@ExpressionDescription(
+  usage = "str _FUNC_ pattern - Returns true if str matches pattern, " +
+    "null if any arguments are null, false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * pattern - a string expression. The pattern is a string which is matched literally, with
+          exception to the following special symbols:
+
+          _ matches any one character in the input (similar to . in posix regular expressions)
+
+          % matches zero or more characters in the input (similar to .* in posix regular
+          expressions)
+
+          The escape character is '\'. If an escape character precedes a special symbol or another
+          escape character, the following character is matched literally. It is invalid to escape
+          any other character.
+
+          Since Spark 2.0, string literals are unescaped in our SQL parser. For example, in order
+          to match "\abc", the pattern should be "\\abc".
+
+          When SQL config 'spark.sql.parser.escapedStringLiterals' is enabled, it fallbacks
+          to Spark 1.6 behavior regarding string literal parsing. For example, if the config is
+          enabled, the pattern to match "\abc" should be "\abc".
+  """,
+  examples = """
+    Examples:
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '\%SystemDrive\%\\Users%'
+      true
+  """,
+  note = """
+    Use RLIKE to match with standard regular expressions.
+  """)
+case class Like(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v)
 
@@ -74,7 +109,7 @@ case class Like(left: Expression, right: Expression)
 
   override def toString: String = s"$left LIKE $right"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val escapeFunc = StringUtils.getClass.getName.stripSuffix("$") + ".escapeLikeRegex"
     val pattern = ctx.freshName("pattern")
@@ -88,42 +123,69 @@ case class Like(left: Expression, right: Expression)
           s"""$pattern = ${patternClass}.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
-        val eval = left.gen(ctx)
-        s"""
+        val eval = left.genCode(ctx)
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).matches();
+            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
           }
-        """
+        """)
       } else {
-        s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-        """
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        """)
       }
     } else {
+      val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc(rightStr));
-          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).matches();
+          String $rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($escapeFunc($rightStr));
+          ${ev.value} = $pattern.matcher(${eval1}.toString()).matches();
         """
       })
     }
   }
 }
 
+@ExpressionDescription(
+  usage = "str _FUNC_ regexp - Returns true if `str` matches `regexp`, or false otherwise.",
+  arguments = """
+    Arguments:
+      * str - a string expression
+      * regexp - a string expression. The pattern string should be a Java regular expression.
 
-case class RLike(left: Expression, right: Expression)
-  extends BinaryExpression with StringRegexExpression with CodegenFallback {
+          Since Spark 2.0, string literals (including regex patterns) are unescaped in our SQL
+          parser. For example, to match "\abc", a regular expression for `regexp` can be
+          "^\\abc$".
+
+          There is a SQL config 'spark.sql.parser.escapedStringLiterals' that can be used to
+          fallback to the Spark 1.6 behavior regarding string literal parsing. For example,
+          if the config is enabled, the `regexp` that can match "\abc" is "^\abc$".
+  """,
+  examples = """
+    Examples:
+      When spark.sql.parser.escapedStringLiterals is disabled (default).
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\\Users.*'
+      true
+
+      When spark.sql.parser.escapedStringLiterals is enabled.
+      > SELECT '%SystemDrive%\Users\John' _FUNC_ '%SystemDrive%\Users.*'
+      true
+  """,
+  note = """
+    Use LIKE to match with simple string pattern.
+  """)
+case class RLike(left: Expression, right: Expression) extends StringRegexExpression {
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
   override def toString: String = s"$left RLIKE $right"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val patternClass = classOf[Pattern].getName
     val pattern = ctx.freshName("pattern")
 
@@ -136,27 +198,28 @@ case class RLike(left: Expression, right: Expression)
           s"""$pattern = ${patternClass}.compile("$regexStr");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
-        val eval = left.gen(ctx)
-        s"""
+        val eval = left.genCode(ctx)
+        ev.copy(code = s"""
           ${eval.code}
           boolean ${ev.isNull} = ${eval.isNull};
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.primitive} = $pattern.matcher(${eval.primitive}.toString()).find(0);
+            ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
           }
-        """
+        """)
       } else {
-        s"""
+        ev.copy(code = s"""
           boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.primitive} = ${ctx.defaultValue(dataType)};
-        """
+          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+        """)
       }
     } else {
+      val rightStr = ctx.freshName("rightStr")
       nullSafeCodeGen(ctx, ev, (eval1, eval2) => {
         s"""
-          String rightStr = ${eval2}.toString();
-          ${patternClass} $pattern = ${patternClass}.compile(rightStr);
-          ${ev.primitive} = $pattern.matcher(${eval1}.toString()).find(0);
+          String $rightStr = ${eval2}.toString();
+          ${patternClass} $pattern = ${patternClass}.compile($rightStr);
+          ${ev.value} = $pattern.matcher(${eval1}.toString()).find(0);
         """
       })
     }
@@ -167,6 +230,13 @@ case class RLike(left: Expression, right: Expression)
 /**
  * Splits str around pat (pattern is a regular expression).
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regex) - Splits `str` around occurrences that match `regex`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('oneAtwoBthreeC', '[ABC]');
+       ["one","two","three",""]
+  """)
 case class StringSplit(str: Expression, pattern: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -180,11 +250,11 @@ case class StringSplit(str: Expression, pattern: Expression)
     new GenericArrayData(strings.asInstanceOf[Array[Any]])
   }
 
-  override def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     nullSafeCodeGen(ctx, ev, (str, pattern) =>
       // Array in java is covariant, so we don't need to cast UTF8String[] to Object[].
-      s"""${ev.primitive} = new $arrayClass($str.split($pattern, -1));""")
+      s"""${ev.value} = new $arrayClass($str.split($pattern, -1));""")
   }
 
   override def prettyName: String = "split"
@@ -196,6 +266,15 @@ case class StringSplit(str: Expression, pattern: Expression)
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(str, regexp, rep) - Replaces all substrings of `str` that match `regexp` with `rep`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('100-200', '(\d+)', 'num');
+       num-num
+  """)
+// scalastyle:on line.size.limit
 case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
@@ -207,7 +286,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   @transient private var lastReplacement: String = _
   @transient private var lastReplacementInUTF8: UTF8String = _
   // result buffer write by Matcher
-  @transient private val result: StringBuffer = new StringBuffer
+  @transient private lazy val result: StringBuffer = new StringBuffer
 
   override def nullSafeEval(s: Any, p: Any, r: Any): Any = {
     if (!p.equals(lastRegex)) {
@@ -236,7 +315,7 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
   override def children: Seq[Expression] = subject :: regexp :: rep :: Nil
   override def prettyName: String = "regexp_replace"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
 
@@ -248,6 +327,8 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     val classNamePattern = classOf[Pattern].getCanonicalName
     val classNameStringBuffer = classOf[java.lang.StringBuffer].getCanonicalName
 
+    val matcher = ctx.freshName("matcher")
+
     ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
     ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
     ctx.addMutableState("String", termLastReplacement, s"${termLastReplacement} = null;")
@@ -255,6 +336,12 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
       termLastReplacementInUTF8, s"${termLastReplacementInUTF8} = null;")
     ctx.addMutableState(classNameStringBuffer,
       termResult, s"${termResult} = new $classNameStringBuffer();")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, rep) => {
     s"""
@@ -269,14 +356,14 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
         ${termLastReplacement} = ${termLastReplacementInUTF8}.toString();
       }
       ${termResult}.delete(0, ${termResult}.length());
-      java.util.regex.Matcher m = ${termPattern}.matcher($subject.toString());
+      java.util.regex.Matcher ${matcher} = ${termPattern}.matcher($subject.toString());
 
-      while (m.find()) {
-        m.appendReplacement(${termResult}, ${termLastReplacement});
+      while (${matcher}.find()) {
+        ${matcher}.appendReplacement(${termResult}, ${termLastReplacement});
       }
-      m.appendTail(${termResult});
-      ${ev.primitive} = UTF8String.fromString(${termResult}.toString());
-      ${ev.isNull} = false;
+      ${matcher}.appendTail(${termResult});
+      ${ev.value} = UTF8String.fromString(${termResult}.toString());
+      $setEvNotNull
     """
     })
   }
@@ -287,6 +374,13 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
  *
  * NOTE: this expression is not THREAD-SAFE, as it has some internal mutable status.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(str, regexp[, idx]) - Extracts a group that matches `regexp`.",
+  examples = """
+    Examples:
+      > SELECT _FUNC_('100-200', '(\d+)-(\d+)', 1);
+       100
+  """)
 case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
   def this(s: Expression, r: Expression) = this(s, r, Literal(1))
@@ -305,7 +399,12 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
     val m = pattern.matcher(s.toString)
     if (m.find) {
       val mr: MatchResult = m.toMatchResult
-      UTF8String.fromString(mr.group(r.asInstanceOf[Int]))
+      val group = mr.group(r.asInstanceOf[Int])
+      if (group == null) { // Pattern matched, but not optional group
+        UTF8String.EMPTY_UTF8
+      } else {
+        UTF8String.fromString(group)
+      }
     } else {
       UTF8String.EMPTY_UTF8
     }
@@ -316,13 +415,21 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
   override def children: Seq[Expression] = subject :: regexp :: idx :: Nil
   override def prettyName: String = "regexp_extract"
 
-  override protected def genCode(ctx: CodeGenContext, ev: GeneratedExpressionCode): String = {
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val termLastRegex = ctx.freshName("lastRegex")
     val termPattern = ctx.freshName("pattern")
     val classNamePattern = classOf[Pattern].getCanonicalName
+    val matcher = ctx.freshName("matcher")
+    val matchResult = ctx.freshName("matchResult")
 
     ctx.addMutableState("UTF8String", termLastRegex, s"${termLastRegex} = null;")
     ctx.addMutableState(classNamePattern, termPattern, s"${termPattern} = null;")
+
+    val setEvNotNull = if (nullable) {
+      s"${ev.isNull} = false;"
+    } else {
+      ""
+    }
 
     nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
       s"""
@@ -331,15 +438,19 @@ case class RegExpExtract(subject: Expression, regexp: Expression, idx: Expressio
         ${termLastRegex} = $regexp.clone();
         ${termPattern} = ${classNamePattern}.compile(${termLastRegex}.toString());
       }
-      java.util.regex.Matcher m =
+      java.util.regex.Matcher ${matcher} =
         ${termPattern}.matcher($subject.toString());
-      if (m.find()) {
-        java.util.regex.MatchResult mr = m.toMatchResult();
-        ${ev.primitive} = UTF8String.fromString(mr.group($idx));
-        ${ev.isNull} = false;
+      if (${matcher}.find()) {
+        java.util.regex.MatchResult ${matchResult} = ${matcher}.toMatchResult();
+        if (${matchResult}.group($idx) == null) {
+          ${ev.value} = UTF8String.EMPTY_UTF8;
+        } else {
+          ${ev.value} = UTF8String.fromString(${matchResult}.group($idx));
+        }
+        $setEvNotNull
       } else {
-        ${ev.primitive} = UTF8String.EMPTY_UTF8;
-        ${ev.isNull} = false;
+        ${ev.value} = UTF8String.EMPTY_UTF8;
+        $setEvNotNull
       }"""
     })
   }

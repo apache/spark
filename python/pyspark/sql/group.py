@@ -17,7 +17,7 @@
 
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
-from pyspark.sql.column import Column, _to_seq
+from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.types import *
 
@@ -27,7 +27,7 @@ __all__ = ["GroupedData"]
 def dfapi(f):
     def _api(self):
         name = f.__name__
-        jdf = getattr(self._jdf, name)()
+        jdf = getattr(self._jgd, name)()
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -35,9 +35,9 @@ def dfapi(f):
 
 
 def df_varargs_api(f):
-    def _api(self, *args):
+    def _api(self, *cols):
         name = f.__name__
-        jdf = getattr(self._jdf, name)(_to_seq(self.sql_ctx._sc, args))
+        jdf = getattr(self._jgd, name)(_to_seq(self.sql_ctx._sc, cols))
         return DataFrame(jdf, self.sql_ctx)
     _api.__name__ = f.__name__
     _api.__doc__ = f.__doc__
@@ -54,8 +54,8 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx):
-        self._jdf = jdf
+    def __init__(self, jgd, sql_ctx):
+        self._jgd = jgd
         self.sql_ctx = sql_ctx
 
     @ignore_unicode_prefix
@@ -74,20 +74,20 @@ class GroupedData(object):
             or a list of :class:`Column`.
 
         >>> gdf = df.groupBy(df.name)
-        >>> gdf.agg({"*": "count"}).collect()
+        >>> sorted(gdf.agg({"*": "count"}).collect())
         [Row(name=u'Alice', count(1)=1), Row(name=u'Bob', count(1)=1)]
 
         >>> from pyspark.sql import functions as F
-        >>> gdf.agg(F.min(df.age)).collect()
+        >>> sorted(gdf.agg(F.min(df.age)).collect())
         [Row(name=u'Alice', min(age)=2), Row(name=u'Bob', min(age)=5)]
         """
         assert exprs, "exprs should not be empty"
         if len(exprs) == 1 and isinstance(exprs[0], dict):
-            jdf = self._jdf.agg(exprs[0])
+            jdf = self._jgd.agg(exprs[0])
         else:
             # Columns
             assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
-            jdf = self._jdf.agg(exprs[0]._jc,
+            jdf = self._jgd.agg(exprs[0]._jc,
                                 _to_seq(self.sql_ctx._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(jdf, self.sql_ctx)
 
@@ -96,7 +96,7 @@ class GroupedData(object):
     def count(self):
         """Counts the number of records for each group.
 
-        >>> df.groupBy(df.age).count().collect()
+        >>> sorted(df.groupBy(df.age).count().collect())
         [Row(age=2, count=1), Row(age=5, count=1)]
         """
 
@@ -167,26 +167,60 @@ class GroupedData(object):
         [Row(sum(age)=7, sum(height)=165)]
         """
 
+    @since(1.6)
+    def pivot(self, pivot_col, values=None):
+        """
+        Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+        There are two versions of pivot function: one that requires the caller to specify the list
+        of distinct values to pivot on, and one that does not. The latter is more concise but less
+        efficient, because Spark needs to first compute the list of distinct values internally.
+
+        :param pivot_col: Name of the column to pivot.
+        :param values: List of values that will be translated to columns in the output DataFrame.
+
+        # Compute the sum of earnings for each year by course with each course as a separate column
+
+        >>> df4.groupBy("year").pivot("course", ["dotNET", "Java"]).sum("earnings").collect()
+        [Row(year=2012, dotNET=15000, Java=20000), Row(year=2013, dotNET=48000, Java=30000)]
+
+        # Or without specifying column values (less efficient)
+
+        >>> df4.groupBy("year").pivot("course").sum("earnings").collect()
+        [Row(year=2012, Java=20000, dotNET=15000), Row(year=2013, Java=30000, dotNET=48000)]
+        """
+        if values is None:
+            jgd = self._jgd.pivot(pivot_col)
+        else:
+            jgd = self._jgd.pivot(pivot_col, values)
+        return GroupedData(jgd, self.sql_ctx)
+
 
 def _test():
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.group tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
     globs['df3'] = sc.parallelize([Row(name='Alice', age=2, height=80),
                                    Row(name='Bob', age=5, height=85)]).toDF()
+    globs['df4'] = sc.parallelize([Row(course="dotNET", year=2012, earnings=10000),
+                                   Row(course="Java",   year=2012, earnings=20000),
+                                   Row(course="dotNET", year=2012, earnings=5000),
+                                   Row(course="dotNET", year=2013, earnings=48000),
+                                   Row(course="Java",   year=2013, earnings=30000)]).toDF()
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.group, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

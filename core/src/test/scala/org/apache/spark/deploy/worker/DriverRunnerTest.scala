@@ -19,13 +19,18 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
-import org.mockito.Mockito._
+import scala.concurrent.duration._
+
 import org.mockito.Matchers._
+import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
+import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Clock
 
 class DriverRunnerTest extends SparkFunSuite {
@@ -33,8 +38,10 @@ class DriverRunnerTest extends SparkFunSuite {
     val command = new Command("mainClass", Seq(), Map(), Seq(), Seq(), Seq())
     val driverDescription = new DriverDescription("jarUrl", 512, 1, true, command)
     val conf = new SparkConf()
-    new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
-      driverDescription, null, "akka://1.2.3.4/worker/", new SecurityManager(conf))
+    val worker = mock(classOf[RpcEndpointRef])
+    doNothing().when(worker).send(any())
+    spy(new DriverRunner(conf, "driverId", new File("workDir"), new File("sparkHome"),
+      driverDescription, worker, "spark://1.2.3.4/worker/", new SecurityManager(conf)))
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {
@@ -43,6 +50,19 @@ class DriverRunnerTest extends SparkFunSuite {
     val process = mock(classOf[Process])
     when(processBuilder.start()).thenReturn(process)
     (processBuilder, process)
+  }
+
+  private def createTestableDriverRunner(
+      processBuilder: ProcessBuilderLike,
+      superviseRetry: Boolean) = {
+    val runner = createDriverRunner()
+    runner.setSleeper(mock(classOf[Sleeper]))
+    doAnswer(new Answer[Int] {
+      def answer(invocation: InvocationOnMock): Int = {
+        runner.runCommandWithRetry(processBuilder, p => (), supervise = superviseRetry)
+      }
+    }).when(runner).prepareAndRunDriver()
+    runner
   }
 
   test("Process succeeds instantly") {
@@ -145,4 +165,53 @@ class DriverRunnerTest extends SparkFunSuite {
     verify(sleeper, times(2)).sleep(2)
   }
 
+  test("Kill process finalized with state KILLED") {
+    val (processBuilder, process) = createProcessBuilderAndProcess()
+    val runner = createTestableDriverRunner(processBuilder, superviseRetry = true)
+
+    when(process.waitFor()).thenAnswer(new Answer[Int] {
+      def answer(invocation: InvocationOnMock): Int = {
+        runner.kill()
+        -1
+      }
+    })
+
+    runner.start()
+
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(runner.finalState.get === DriverState.KILLED)
+    }
+    verify(process, times(1)).waitFor()
+  }
+
+  test("Finalized with state FINISHED") {
+    val (processBuilder, process) = createProcessBuilderAndProcess()
+    val runner = createTestableDriverRunner(processBuilder, superviseRetry = true)
+    when(process.waitFor()).thenReturn(0)
+    runner.start()
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(runner.finalState.get === DriverState.FINISHED)
+    }
+  }
+
+  test("Finalized with state FAILED") {
+    val (processBuilder, process) = createProcessBuilderAndProcess()
+    val runner = createTestableDriverRunner(processBuilder, superviseRetry = false)
+    when(process.waitFor()).thenReturn(-1)
+    runner.start()
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(runner.finalState.get === DriverState.FAILED)
+    }
+  }
+
+  test("Handle exception starting process") {
+    val (processBuilder, process) = createProcessBuilderAndProcess()
+    val runner = createTestableDriverRunner(processBuilder, superviseRetry = false)
+    when(processBuilder.start()).thenThrow(new NullPointerException("bad command list"))
+    runner.start()
+    eventually(timeout(10.seconds), interval(100.millis)) {
+      assert(runner.finalState.get === DriverState.ERROR)
+      assert(runner.finalException.get.isInstanceOf[RuntimeException])
+    }
+  }
 }

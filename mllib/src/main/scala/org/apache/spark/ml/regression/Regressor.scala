@@ -18,19 +18,16 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.{PredictionModel, PredictorParams, Predictor}
+import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 
 
 /**
- * :: DeveloperApi ::
- *
  * Single-label regression
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
  * @tparam Learner  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
-@DeveloperApi
 private[spark] abstract class Regressor[
     FeaturesType,
     Learner <: Regressor[FeaturesType, Learner, M],
@@ -43,7 +40,7 @@ private[spark] abstract class Regressor[
 /**
  * :: DeveloperApi ::
  *
- * Model produced by a [[Regressor]].
+ * Model produced by a `Regressor`.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
  * @tparam M  Concrete Model type.

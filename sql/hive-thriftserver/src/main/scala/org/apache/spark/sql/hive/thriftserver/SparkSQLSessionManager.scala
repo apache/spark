@@ -27,19 +27,25 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 
-private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext: HiveContext)
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
-  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
+  private lazy val sparkSqlOperationManager = new SparkSQLOperationManager()
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
+
+    // Create operation log root directory, if operation logging is enabled
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+    }
 
     val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
     setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
@@ -60,21 +66,29 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
       sessionConf: java.util.Map[String, String],
       withImpersonation: Boolean,
       delegationToken: String): SessionHandle = {
-    hiveContext.openSession()
     val sessionHandle =
       super.openSession(protocol, username, passwd, ipAddress, sessionConf, withImpersonation,
           delegationToken)
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
+    val ctx = if (sqlContext.conf.hiveThriftServerSingleSession) {
+      sqlContext
+    } else {
+      sqlContext.newSession()
+    }
+    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+    if (sessionConf != null && sessionConf.containsKey("use:database")) {
+      ctx.sql(s"use ${sessionConf.get("use:database")}")
+    }
+    sparkSqlOperationManager.sessionToContexts.put(sessionHandle, ctx)
     sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
     HiveThriftServer2.listener.onSessionClosed(sessionHandle.getSessionId.toString)
     super.closeSession(sessionHandle)
-    sparkSqlOperationManager.sessionToActivePool -= sessionHandle
-
-    hiveContext.detachSession()
+    sparkSqlOperationManager.sessionToActivePool.remove(sessionHandle)
+    sparkSqlOperationManager.sessionToContexts.remove(sessionHandle)
   }
 }

@@ -68,7 +68,7 @@ isRemoveMethod <- function(isStatic, objId, methodName) {
 # methodName - name of method to be invoked
 invokeJava <- function(isStatic, objId, methodName, ...) {
   if (!exists(".sparkRCon", .sparkREnv)) {
-    stop("No connection to backend found. Please re-run sparkR.init")
+    stop("No connection to backend found. Please re-run sparkR.session()")
   }
 
   # If this isn't a removeJObject call
@@ -108,10 +108,27 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   conn <- get(".sparkRCon", .sparkREnv)
   writeBin(requestMessage, conn)
 
-  # TODO: check the status code to output error information
   returnStatus <- readInt(conn)
-  if (returnStatus != 0) {
+  handleErrors(returnStatus, conn)
+
+  # Backend will send +1 as keep alive value to prevent various connection timeouts
+  # on very long running jobs. See spark.r.heartBeatInterval
+  while (returnStatus == 1) {
+    returnStatus <- readInt(conn)
+    handleErrors(returnStatus, conn)
+  }
+
+  readObject(conn)
+}
+
+# Helper function to check for returned errors and print appropriate error message to user
+handleErrors <- function(returnStatus, conn) {
+  if (length(returnStatus) == 0) {
+    stop("No status is returned. Java SparkR backend might have failed.")
+  }
+
+  # 0 is success and +1 is reserved for heartbeats. Other negative values indicate errors.
+  if (returnStatus < 0) {
     stop(readString(conn))
   }
-  readObject(conn)
 }

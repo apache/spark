@@ -20,10 +20,14 @@ package org.apache.spark.sql
 import scala.collection.JavaConverters._
 import scala.util.hashing.MurmurHash3
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.StructType
 
+/**
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object Row {
   /**
    * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
@@ -44,7 +48,7 @@ object Row {
   def apply(values: Any*): Row = new GenericRow(values.toArray)
 
   /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
+   * This method can be used to construct a [[Row]] from a `Seq` of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
 
@@ -70,7 +74,7 @@ object Row {
  * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
  * user must check `isNullAt` before attempting to retrieve a value that might be null.
  *
- * To create a new Row, use [[RowFactory.create()]] in Java or [[Row.apply()]] in Scala.
+ * To create a new Row, use `RowFactory.create()` in Java or `Row.apply()` in Scala.
  *
  * A [[Row]] object can be constructed by providing field values. Example:
  * {{{
@@ -118,8 +122,9 @@ object Row {
  * }
  * }}}
  *
- * @group row
+ * @since 1.3.0
  */
+@InterfaceStability.Stable
 trait Row extends Serializable {
   /** Number of elements in the Row. */
   def size: Int = length
@@ -191,7 +196,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getBoolean(i: Int): Boolean = getAs[Boolean](i)
+  def getBoolean(i: Int): Boolean = getAnyValAs[Boolean](i)
 
   /**
    * Returns the value at position i as a primitive byte.
@@ -199,7 +204,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getByte(i: Int): Byte = getAs[Byte](i)
+  def getByte(i: Int): Byte = getAnyValAs[Byte](i)
 
   /**
    * Returns the value at position i as a primitive short.
@@ -207,7 +212,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getShort(i: Int): Short = getAs[Short](i)
+  def getShort(i: Int): Short = getAnyValAs[Short](i)
 
   /**
    * Returns the value at position i as a primitive int.
@@ -215,7 +220,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getInt(i: Int): Int = getAs[Int](i)
+  def getInt(i: Int): Int = getAnyValAs[Int](i)
 
   /**
    * Returns the value at position i as a primitive long.
@@ -223,7 +228,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getLong(i: Int): Long = getAs[Long](i)
+  def getLong(i: Int): Long = getAnyValAs[Long](i)
 
   /**
    * Returns the value at position i as a primitive float.
@@ -232,7 +237,7 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getFloat(i: Int): Float = getAs[Float](i)
+  def getFloat(i: Int): Float = getAnyValAs[Float](i)
 
   /**
    * Returns the value at position i as a primitive double.
@@ -240,13 +245,12 @@ trait Row extends Serializable {
    * @throws ClassCastException when data type does not match.
    * @throws NullPointerException when value is null.
    */
-  def getDouble(i: Int): Double = getAs[Double](i)
+  def getDouble(i: Int): Double = getAnyValAs[Double](i)
 
   /**
    * Returns the value at position i as a String object.
    *
    * @throws ClassCastException when data type does not match.
-   * @throws NullPointerException when value is null.
    */
   def getString(i: Int): String = getAs[String](i)
 
@@ -279,7 +283,7 @@ trait Row extends Serializable {
   def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
 
   /**
-   * Returns the value at position i of array type as [[java.util.List]].
+   * Returns the value at position i of array type as `java.util.List`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -294,7 +298,7 @@ trait Row extends Serializable {
   def getMap[K, V](i: Int): scala.collection.Map[K, V] = getAs[Map[K, V]](i)
 
   /**
-   * Returns the value at position i of array type as a [[java.util.Map]].
+   * Returns the value at position i of array type as a `java.util.Map`.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -302,7 +306,7 @@ trait Row extends Serializable {
     getMap[K, V](i).asJava
 
   /**
-   * Returns the value at position i of struct type as an [[Row]] object.
+   * Returns the value at position i of struct type as a [[Row]] object.
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -310,6 +314,8 @@ trait Row extends Serializable {
 
   /**
    * Returns the value at position i.
+   * For primitive types if value is null it returns 'zero value' specific for primitive
+   * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -317,6 +323,8 @@ trait Row extends Serializable {
 
   /**
    * Returns the value of a given fieldName.
+   * For primitive types if value is null it returns 'zero value' specific for primitive
+   * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -328,14 +336,16 @@ trait Row extends Serializable {
    * Returns the index of a given field name.
    *
    * @throws UnsupportedOperationException when schema is not defined.
-   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
     throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
   }
 
   /**
-   * Returns a Map(name -> value) for the requested fieldNames
+   * Returns a Map consisting of names and values for the requested fieldNames
+   * For primitive types if value is null it returns 'zero value' specific for primitive
+   * ie. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -347,7 +357,7 @@ trait Row extends Serializable {
     }.toMap
   }
 
-  override def toString(): String = s"[${this.mkString(",")}]"
+  override def toString: String = s"[${this.mkString(",")}]"
 
   /**
    * Make a copy of the current [[Row]] object.
@@ -450,4 +460,15 @@ trait Row extends Serializable {
    * start, end, and separator strings.
    */
   def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
+
+  /**
+   * Returns the value at position i.
+   *
+   * @throws UnsupportedOperationException when schema is not defined.
+   * @throws ClassCastException when data type does not match.
+   * @throws NullPointerException when value is null.
+   */
+  private def getAnyValAs[T <: AnyVal](i: Int): T =
+    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
+    else getAs[T](i)
 }

@@ -1,20 +1,20 @@
 ---
 layout: global
-title: Evaluation Metrics - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Evaluation Metrics
+title: Evaluation Metrics - RDD-based API
+displayTitle: Evaluation Metrics - RDD-based API
 ---
 
 * Table of contents
 {:toc}
 
-Spark's MLlib comes with a number of machine learning algorithms that can be used to learn from and make predictions
+`spark.mllib` comes with a number of machine learning algorithms that can be used to learn from and make predictions
 on data. When these algorithms are applied to build machine learning models, there is a need to evaluate the performance
-of the model on some criteria, which depends on the application and its requirements. Spark's MLlib also provides a
+of the model on some criteria, which depends on the application and its requirements. `spark.mllib` also provides a
 suite of metrics for the purpose of evaluating the performance of machine learning models.
 
 Specific machine learning algorithms fall under broader types of machine learning applications like classification,
 regression, clustering, etc. Each of these types have well established metrics for performance evaluation and those
-metrics that are currently available in Spark's MLlib are detailed in this section.
+metrics that are currently available in `spark.mllib` are detailed in this section.
 
 ## Classification model evaluation
 
@@ -67,7 +67,7 @@ plots (recall, false positive rate) points.
   </thead>
   <tbody>
     <tr>
-      <td>Precision (Postive Predictive Value)</td>
+      <td>Precision (Positive Predictive Value)</td>
       <td>$PPV=\frac{TP}{TP + FP}$</td>
     </tr>
     <tr>
@@ -102,213 +102,23 @@ The following code snippets illustrate how to load a sample dataset, train a bin
 data, and evaluate the performance of the algorithm by several binary evaluation metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`LogisticRegressionWithLBFGS` Scala docs](api/scala/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS) and [`BinaryClassificationMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.BinaryClassificationMetrics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
-
-// Load training data in LIBSVM format
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
-
-// Split data into training (60%) and test (40%)
-val Array(training, test) = data.randomSplit(Array(0.6, 0.4), seed = 11L)
-training.cache()
-
-// Run training algorithm to build the model
-val model = new LogisticRegressionWithLBFGS()
-  .setNumClasses(2)
-  .run(training)
-
-// Clear the prediction threshold so the model will return probabilities
-model.clearThreshold
-
-// Compute raw scores on the test set
-val predictionAndLabels = test.map { case LabeledPoint(label, features) =>
-  val prediction = model.predict(features)
-  (prediction, label)
-}
-
-// Instantiate metrics object
-val metrics = new BinaryClassificationMetrics(predictionAndLabels)
-
-// Precision by threshold
-val precision = metrics.precisionByThreshold
-precision.foreach { case (t, p) =>
-    println(s"Threshold: $t, Precision: $p")
-}
-
-// Recall by threshold
-val recall = metrics.precisionByThreshold
-recall.foreach { case (t, r) =>
-    println(s"Threshold: $t, Recall: $r")
-}
-
-// Precision-Recall Curve
-val PRC = metrics.pr
-
-// F-measure
-val f1Score = metrics.fMeasureByThreshold
-f1Score.foreach { case (t, f) =>
-    println(s"Threshold: $t, F-score: $f, Beta = 1")
-}
-
-val beta = 0.5
-val fScore = metrics.fMeasureByThreshold(beta)
-f1Score.foreach { case (t, f) =>
-    println(s"Threshold: $t, F-score: $f, Beta = 0.5")
-}
-
-// AUPRC
-val auPRC = metrics.areaUnderPR
-println("Area under precision-recall curve = " + auPRC)
-
-// Compute thresholds used in ROC and PR curves
-val thresholds = precision.map(_._1)
-
-// ROC Curve
-val roc = metrics.roc
-
-// AUROC
-val auROC = metrics.areaUnderROC
-println("Area under ROC = " + auROC)
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/BinaryClassificationMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`LogisticRegressionModel` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionModel.html) and [`LogisticRegressionWithLBFGS` Java docs](api/java/org/apache/spark/mllib/classification/LogisticRegressionWithLBFGS.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.classification.LogisticRegressionModel;
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS;
-import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-
-public class BinaryClassification {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Binary Classification Metrics");
-    SparkContext sc = new SparkContext(conf);
-    String path = "data/mllib/sample_binary_classification_data.txt";
-    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
-
-    // Split initial RDD into two... [60% training data, 40% testing data].
-    JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[] {0.6, 0.4}, 11L);
-    JavaRDD<LabeledPoint> training = splits[0].cache();
-    JavaRDD<LabeledPoint> test = splits[1];
-
-    // Run training algorithm to build the model.
-    final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
-      .setNumClasses(2)
-      .run(training.rdd());
-
-    // Clear the prediction threshold so the model will return probabilities
-    model.clearThreshold();
-
-    // Compute raw scores on the test set.
-    JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
-      new Function<LabeledPoint, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(LabeledPoint p) {
-          Double prediction = model.predict(p.features());
-          return new Tuple2<Object, Object>(prediction, p.label());
-        }
-      }
-    );
-
-    // Get evaluation metrics.
-    BinaryClassificationMetrics metrics = new BinaryClassificationMetrics(predictionAndLabels.rdd());
-
-    // Precision by threshold
-    JavaRDD<Tuple2<Object, Object>> precision = metrics.precisionByThreshold().toJavaRDD();
-    System.out.println("Precision by threshold: " + precision.toArray());
-
-    // Recall by threshold
-    JavaRDD<Tuple2<Object, Object>> recall = metrics.recallByThreshold().toJavaRDD();
-    System.out.println("Recall by threshold: " + recall.toArray());
-
-    // F Score by threshold
-    JavaRDD<Tuple2<Object, Object>> f1Score = metrics.fMeasureByThreshold().toJavaRDD();
-    System.out.println("F1 Score by threshold: " + f1Score.toArray());
-
-    JavaRDD<Tuple2<Object, Object>> f2Score = metrics.fMeasureByThreshold(2.0).toJavaRDD();
-    System.out.println("F2 Score by threshold: " + f2Score.toArray());
-
-    // Precision-recall curve
-    JavaRDD<Tuple2<Object, Object>> prc = metrics.pr().toJavaRDD();
-    System.out.println("Precision-recall curve: " + prc.toArray());
-
-    // Thresholds
-    JavaRDD<Double> thresholds = precision.map(
-      new Function<Tuple2<Object, Object>, Double>() {
-        public Double call (Tuple2<Object, Object> t) {
-          return new Double(t._1().toString());
-        }
-      }
-    );
-
-    // ROC Curve
-    JavaRDD<Tuple2<Object, Object>> roc = metrics.roc().toJavaRDD();
-    System.out.println("ROC curve: " + roc.toArray());
-
-    // AUPRC
-    System.out.println("Area under precision-recall curve = " + metrics.areaUnderPR());
-
-    // AUROC
-    System.out.println("Area under ROC = " + metrics.areaUnderROC());
-
-    // Save and load model
-    model.save(sc, "myModelPath");
-    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
-  }
-}
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaBinaryClassificationMetricsExample.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`BinaryClassificationMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.BinaryClassificationMetrics) and [`LogisticRegressionWithLBFGS` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.classification.LogisticRegressionWithLBFGS) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
-from pyspark.mllib.evaluation import BinaryClassificationMetrics
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.util import MLUtils
-
-# Several of the methods available in scala are currently missing from pyspark
-
-# Load training data in LIBSVM format
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_binary_classification_data.txt")
-
-# Split data into training (60%) and test (40%)
-training, test = data.randomSplit([0.6, 0.4], seed = 11L)
-training.cache()
-
-# Run training algorithm to build the model
-model = LogisticRegressionWithLBFGS.train(training)
-
-# Compute raw scores on the test set
-predictionAndLabels = test.map(lambda lp: (float(model.predict(lp.features)), lp.label))
-
-# Instantiate metrics object
-metrics = BinaryClassificationMetrics(predictionAndLabels)
-
-# Area under precision-recall curve
-print("Area under PR = %s" % metrics.areaUnderPR)
-
-# Area under ROC curve
-print("Area under ROC = %s" % metrics.areaUnderROC)
-
-{% endhighlight %}
-
+{% include_example python/mllib/binary_classification_metrics_example.py %}
 </div>
 </div>
 
@@ -330,7 +140,7 @@ definitions of positive and negative labels is straightforward.
 #### Label based metrics
 
 Opposed to binary classification where there are only two possible labels, multiclass classification problems have many
-possible labels and so the concept of label-based metrics is introduced. Overall precision measures precision across all
+possible labels and so the concept of label-based metrics is introduced. Accuracy measures precision across all
 labels -  the number of times any class was predicted correctly (true positives) normalized by the number of data
 points. Precision by label considers only one class, and measures the number of time a specific label was predicted
 correctly normalized by the number of times that label appears in the output.
@@ -372,19 +182,9 @@ $$\hat{\delta}(x) = \begin{cases}1 & \text{if $x = 0$}, \\ 0 & \text{otherwise}.
       </td>
     </tr>
     <tr>
-      <td>Overall Precision</td>
-      <td>$PPV = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
+      <td>Accuracy</td>
+      <td>$ACC = \frac{TP}{TP + FP} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
         \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall Recall</td>
-      <td>$TPR = \frac{TP}{TP + FN} = \frac{1}{N}\sum_{i=0}^{N-1} \hat{\delta}\left(\hat{\mathbf{y}}_i -
-        \mathbf{y}_i\right)$</td>
-    </tr>
-    <tr>
-      <td>Overall F1-measure</td>
-      <td>$F1 = 2 \cdot \left(\frac{PPV \cdot TPR}
-          {PPV + TPR}\right)$</td>
     </tr>
     <tr>
       <td>Precision by label</td>
@@ -428,203 +228,23 @@ The following code snippets illustrate how to load a sample dataset, train a mul
 the data, and evaluate the performance of the algorithm by several multiclass classification evaluation metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`MulticlassMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MulticlassMetrics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.MLUtils
-
-// Load training data in LIBSVM format
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")
-
-// Split data into training (60%) and test (40%)
-val Array(training, test) = data.randomSplit(Array(0.6, 0.4), seed = 11L)
-training.cache()
-
-// Run training algorithm to build the model
-val model = new LogisticRegressionWithLBFGS()
-  .setNumClasses(3)
-  .run(training)
-
-// Compute raw scores on the test set
-val predictionAndLabels = test.map { case LabeledPoint(label, features) =>
-  val prediction = model.predict(features)
-  (prediction, label)
-}
-
-// Instantiate metrics object
-val metrics = new MulticlassMetrics(predictionAndLabels)
-
-// Confusion matrix
-println("Confusion matrix:")
-println(metrics.confusionMatrix)
-
-// Overall Statistics
-val precision = metrics.precision
-val recall = metrics.recall // same as true positive rate
-val f1Score = metrics.fMeasure
-println("Summary Statistics")
-println(s"Precision = $precision")
-println(s"Recall = $recall")
-println(s"F1 Score = $f1Score")
-
-// Precision by label
-val labels = metrics.labels
-labels.foreach { l =>
-    println(s"Precision($l) = " + metrics.precision(l))
-}
-
-// Recall by label
-labels.foreach { l =>
-    println(s"Recall($l) = " + metrics.recall(l))
-}
-
-// False positive rate by label
-labels.foreach { l =>
-    println(s"FPR($l) = " + metrics.falsePositiveRate(l))
-}
-
-// F-measure by label
-labels.foreach { l =>
-    println(s"F1-Score($l) = " + metrics.fMeasure(l))
-}
-
-// Weighted stats
-println(s"Weighted precision: ${metrics.weightedPrecision}")
-println(s"Weighted recall: ${metrics.weightedRecall}")
-println(s"Weighted F1 score: ${metrics.weightedFMeasure}")
-println(s"Weighted false positive rate: ${metrics.weightedFalsePositiveRate}")
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/MulticlassMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`MulticlassMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MulticlassMetrics.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.classification.LogisticRegressionModel;
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS;
-import org.apache.spark.mllib.evaluation.MulticlassMetrics;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
-
-public class MulticlassClassification {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Multiclass Classification Metrics");
-    SparkContext sc = new SparkContext(conf);
-    String path = "data/mllib/sample_multiclass_classification_data.txt";
-    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc, path).toJavaRDD();
-
-    // Split initial RDD into two... [60% training data, 40% testing data].
-    JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[] {0.6, 0.4}, 11L);
-    JavaRDD<LabeledPoint> training = splits[0].cache();
-    JavaRDD<LabeledPoint> test = splits[1];
-
-    // Run training algorithm to build the model.
-    final LogisticRegressionModel model = new LogisticRegressionWithLBFGS()
-      .setNumClasses(3)
-      .run(training.rdd());
-
-    // Compute raw scores on the test set.
-    JavaRDD<Tuple2<Object, Object>> predictionAndLabels = test.map(
-      new Function<LabeledPoint, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(LabeledPoint p) {
-          Double prediction = model.predict(p.features());
-          return new Tuple2<Object, Object>(prediction, p.label());
-        }
-      }
-    );
-
-    // Get evaluation metrics.
-    MulticlassMetrics metrics = new MulticlassMetrics(predictionAndLabels.rdd());
-
-    // Confusion matrix
-    Matrix confusion = metrics.confusionMatrix();
-    System.out.println("Confusion matrix: \n" + confusion);
-
-    // Overall statistics
-    System.out.println("Precision = " + metrics.precision());
-    System.out.println("Recall = " + metrics.recall());
-    System.out.println("F1 Score = " + metrics.fMeasure());
-
-    // Stats by labels
-    for (int i = 0; i < metrics.labels().length; i++) {
-        System.out.format("Class %f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
-        System.out.format("Class %f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
-        System.out.format("Class %f F1 score = %f\n", metrics.labels()[i], metrics.fMeasure(metrics.labels()[i]));
-    }
-
-    //Weighted stats
-    System.out.format("Weighted precision = %f\n", metrics.weightedPrecision());
-    System.out.format("Weighted recall = %f\n", metrics.weightedRecall());
-    System.out.format("Weighted F1 score = %f\n", metrics.weightedFMeasure());
-    System.out.format("Weighted false positive rate = %f\n", metrics.weightedFalsePositiveRate());
-
-    // Save and load model
-    model.save(sc, "myModelPath");
-    LogisticRegressionModel sameModel = LogisticRegressionModel.load(sc, "myModelPath");
-  }
-}
-
-{% endhighlight %}
+ {% include_example java/org/apache/spark/examples/mllib/JavaMulticlassClassificationMetricsExample.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`MulticlassMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MulticlassMetrics) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.classification import LogisticRegressionWithLBFGS
-from pyspark.mllib.util import MLUtils
-from pyspark.mllib.evaluation import MulticlassMetrics
-
-# Load training data in LIBSVM format
-data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_multiclass_classification_data.txt")
-
-# Split data into training (60%) and test (40%)
-training, test = data.randomSplit([0.6, 0.4], seed = 11L)
-training.cache()
-
-# Run training algorithm to build the model
-model = LogisticRegressionWithLBFGS.train(training, numClasses=3)
-
-# Compute raw scores on the test set
-predictionAndLabels = test.map(lambda lp: (float(model.predict(lp.features)), lp.label))
-
-# Instantiate metrics object
-metrics = MulticlassMetrics(predictionAndLabels)
-
-# Overall statistics
-precision = metrics.precision()
-recall = metrics.recall()
-f1Score = metrics.fMeasure()
-print("Summary Stats")
-print("Precision = %s" % precision)
-print("Recall = %s" % recall)
-print("F1 Score = %s" % f1Score)
-
-# Statistics by class
-labels = data.map(lambda lp: lp.label).distinct().collect()
-for label in sorted(labels):
-    print("Class %s precision = %s" % (label, metrics.precision(label)))
-    print("Class %s recall = %s" % (label, metrics.recall(label)))
-    print("Class %s F1 Measure = %s" % (label, metrics.fMeasure(label, beta=1.0)))
-
-# Weighted stats
-print("Weighted recall = %s" % metrics.weightedRecall)
-print("Weighted precision = %s" % metrics.weightedPrecision)
-print("Weighted F(1) Score = %s" % metrics.weightedFMeasure())
-print("Weighted F(0.5) Score = %s" % metrics.weightedFMeasure(beta=0.5))
-print("Weighted false positive rate = %s" % metrics.weightedFalsePositiveRate)
-{% endhighlight %}
+{% include_example python/mllib/multi_class_metrics_example.py %}
 
 </div>
 </div>
@@ -730,7 +350,7 @@ $$I_A(x) = \begin{cases}1 & \text{if $x \in A$}, \\ 0 & \text{otherwise}.\end{ca
 
 **Examples**
 
-The following code snippets illustrate how to evaluate the performance of a multilabel classifer. The examples
+The following code snippets illustrate how to evaluate the performance of a multilabel classifier. The examples
 use the fake prediction and label data for multilabel classification that is shown below.
 
 Document predictions:
@@ -758,153 +378,23 @@ True classes:
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`MultilabelMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.MultilabelMetrics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.evaluation.MultilabelMetrics
-import org.apache.spark.rdd.RDD;
-
-val scoreAndLabels: RDD[(Array[Double], Array[Double])] = sc.parallelize(
-  Seq((Array(0.0, 1.0), Array(0.0, 2.0)),
-    (Array(0.0, 2.0), Array(0.0, 1.0)),
-    (Array(), Array(0.0)),
-    (Array(2.0), Array(2.0)),
-    (Array(2.0, 0.0), Array(2.0, 0.0)),
-    (Array(0.0, 1.0, 2.0), Array(0.0, 1.0)),
-    (Array(1.0), Array(1.0, 2.0))), 2)
-
-// Instantiate metrics object
-val metrics = new MultilabelMetrics(scoreAndLabels)
-
-// Summary stats
-println(s"Recall = ${metrics.recall}")
-println(s"Precision = ${metrics.precision}")
-println(s"F1 measure = ${metrics.f1Measure}")
-println(s"Accuracy = ${metrics.accuracy}")
-
-// Individual label stats
-metrics.labels.foreach(label => println(s"Class $label precision = ${metrics.precision(label)}"))
-metrics.labels.foreach(label => println(s"Class $label recall = ${metrics.recall(label)}"))
-metrics.labels.foreach(label => println(s"Class $label F1-score = ${metrics.f1Measure(label)}"))
-
-// Micro stats
-println(s"Micro recall = ${metrics.microRecall}")
-println(s"Micro precision = ${metrics.microPrecision}")
-println(s"Micro F1 measure = ${metrics.microF1Measure}")
-
-// Hamming loss
-println(s"Hamming loss = ${metrics.hammingLoss}")
-
-// Subset accuracy
-println(s"Subset accuracy = ${metrics.subsetAccuracy}")
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/MultiLabelMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`MultilabelMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/MultilabelMetrics.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.mllib.evaluation.MultilabelMetrics;
-import org.apache.spark.SparkConf;
-import java.util.Arrays;
-import java.util.List;
-
-public class MultilabelClassification {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Multilabel Classification Metrics");
-    JavaSparkContext sc = new JavaSparkContext(conf);
-
-    List<Tuple2<double[], double[]>> data = Arrays.asList(
-        new Tuple2<double[], double[]>(new double[]{0.0, 1.0}, new double[]{0.0, 2.0}),
-        new Tuple2<double[], double[]>(new double[]{0.0, 2.0}, new double[]{0.0, 1.0}),
-        new Tuple2<double[], double[]>(new double[]{}, new double[]{0.0}),
-        new Tuple2<double[], double[]>(new double[]{2.0}, new double[]{2.0}),
-        new Tuple2<double[], double[]>(new double[]{2.0, 0.0}, new double[]{2.0, 0.0}),
-        new Tuple2<double[], double[]>(new double[]{0.0, 1.0, 2.0}, new double[]{0.0, 1.0}),
-        new Tuple2<double[], double[]>(new double[]{1.0}, new double[]{1.0, 2.0})
-        );
-    JavaRDD<Tuple2<double[], double[]>> scoreAndLabels = sc.parallelize(data);
-
-    // Instantiate metrics object
-    MultilabelMetrics metrics = new MultilabelMetrics(scoreAndLabels.rdd());
-
-    // Summary stats
-    System.out.format("Recall = %f\n", metrics.recall());
-    System.out.format("Precision = %f\n", metrics.precision());
-    System.out.format("F1 measure = %f\n", metrics.f1Measure());
-    System.out.format("Accuracy = %f\n", metrics.accuracy());
-
-    // Stats by labels
-    for (int i = 0; i < metrics.labels().length - 1; i++) {
-        System.out.format("Class %1.1f precision = %f\n", metrics.labels()[i], metrics.precision(metrics.labels()[i]));
-        System.out.format("Class %1.1f recall = %f\n", metrics.labels()[i], metrics.recall(metrics.labels()[i]));
-        System.out.format("Class %1.1f F1 score = %f\n", metrics.labels()[i], metrics.f1Measure(metrics.labels()[i]));
-    }
-
-    // Micro stats
-    System.out.format("Micro recall = %f\n", metrics.microRecall());
-    System.out.format("Micro precision = %f\n", metrics.microPrecision());
-    System.out.format("Micro F1 measure = %f\n", metrics.microF1Measure());
-
-    // Hamming loss
-    System.out.format("Hamming loss = %f\n", metrics.hammingLoss());
-
-    // Subset accuracy
-    System.out.format("Subset accuracy = %f\n", metrics.subsetAccuracy());
-
-  }
-}
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaMultiLabelClassificationMetricsExample.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`MultilabelMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.MultilabelMetrics) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.evaluation import MultilabelMetrics
-
-scoreAndLabels = sc.parallelize([
-    ([0.0, 1.0], [0.0, 2.0]),
-    ([0.0, 2.0], [0.0, 1.0]),
-    ([], [0.0]),
-    ([2.0], [2.0]),
-    ([2.0, 0.0], [2.0, 0.0]),
-    ([0.0, 1.0, 2.0], [0.0, 1.0]),
-    ([1.0], [1.0, 2.0])])
-
-# Instantiate metrics object
-metrics = MultilabelMetrics(scoreAndLabels)
-
-# Summary stats
-print("Recall = %s" % metrics.recall())
-print("Precision = %s" % metrics.precision())
-print("F1 measure = %s" % metrics.f1Measure())
-print("Accuracy = %s" % metrics.accuracy)
-
-# Individual label stats
-labels = scoreAndLabels.flatMap(lambda x: x[1]).distinct().collect()
-for label in labels:
-    print("Class %s precision = %s" % (label, metrics.precision(label)))
-    print("Class %s recall = %s" % (label, metrics.recall(label)))
-    print("Class %s F1 Measure = %s" % (label, metrics.f1Measure(label)))
-
-# Micro stats
-print("Micro precision = %s" % metrics.microPrecision)
-print("Micro recall = %s" % metrics.microRecall)
-print("Micro F1 measure = %s" % metrics.microF1Measure)
-
-# Hamming loss
-print("Hamming loss = %s" % metrics.hammingLoss)
-
-# Subset accuracy
-print("Subset accuracy = %s" % metrics.subsetAccuracy)
-
-{% endhighlight %}
+{% include_example python/mllib/multi_label_metrics_example.py %}
 
 </div>
 </div>
@@ -1016,279 +506,23 @@ expanded world of non-positive weights are "the same as never having interacted 
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RankingMetrics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.evaluation.{RegressionMetrics, RankingMetrics}
-import org.apache.spark.mllib.recommendation.{ALS, Rating}
-
-// Read in the ratings data
-val ratings = sc.textFile("data/mllib/sample_movielens_data.txt").map { line =>
-  val fields = line.split("::")
-  Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
-}.cache()
-
-// Map ratings to 1 or 0, 1 indicating a movie that should be recommended
-val binarizedRatings = ratings.map(r => Rating(r.user, r.product, if (r.rating > 0) 1.0 else 0.0)).cache()
-
-// Summarize ratings
-val numRatings = ratings.count()
-val numUsers = ratings.map(_.user).distinct().count()
-val numMovies = ratings.map(_.product).distinct().count()
-println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
-
-// Build the model
-val numIterations = 10
-val rank = 10
-val lambda = 0.01
-val model = ALS.train(ratings, rank, numIterations, lambda)
-
-// Define a function to scale ratings from 0 to 1
-def scaledRating(r: Rating): Rating = {
-  val scaledRating = math.max(math.min(r.rating, 1.0), 0.0)
-  Rating(r.user, r.product, scaledRating)
-}
-
-// Get sorted top ten predictions for each user and then scale from [0, 1]
-val userRecommended = model.recommendProductsForUsers(10).map{ case (user, recs) =>
-  (user, recs.map(scaledRating))
-}
-
-// Assume that any movie a user rated 3 or higher (which maps to a 1) is a relevant document
-// Compare with top ten most relevant documents
-val userMovies = binarizedRatings.groupBy(_.user)
-val relevantDocuments = userMovies.join(userRecommended).map{ case (user, (actual, predictions)) =>
-  (predictions.map(_.product), actual.filter(_.rating > 0.0).map(_.product).toArray)
-}
-
-// Instantiate metrics object
-val metrics = new RankingMetrics(relevantDocuments)
-
-// Precision at K
-Array(1, 3, 5).foreach{ k =>
-  println(s"Precision at $k = ${metrics.precisionAt(k)}")
-}
-
-// Mean average precision
-println(s"Mean average precision = ${metrics.meanAveragePrecision}")
-
-// Normalized discounted cumulative gain
-Array(1, 3, 5).foreach{ k =>
-  println(s"NDCG at $k = ${metrics.ndcgAt(k)}")
-}
-
-// Get predictions for each data point
-val allPredictions = model.predict(ratings.map(r => (r.user, r.product))).map(r => ((r.user, r.product), r.rating))
-val allRatings = ratings.map(r => ((r.user, r.product), r.rating))
-val predictionsAndLabels = allPredictions.join(allRatings).map{ case ((user, product), (predicted, actual)) =>
-  (predicted, actual)
-}
-
-// Get the RMSE using regression metrics
-val regressionMetrics = new RegressionMetrics(predictionsAndLabels)
-println(s"RMSE = ${regressionMetrics.rootMeanSquaredError}")
-
-// R-squared
-println(s"R-squared = ${regressionMetrics.r2}")
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/RankingMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) and [`RankingMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RankingMetrics.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.function.Function;
-import java.util.*;
-import org.apache.spark.mllib.evaluation.RegressionMetrics;
-import org.apache.spark.mllib.evaluation.RankingMetrics;
-import org.apache.spark.mllib.recommendation.ALS;
-import org.apache.spark.mllib.recommendation.Rating;
-
-// Read in the ratings data
-public class Ranking {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Ranking Metrics");
-    JavaSparkContext sc = new JavaSparkContext(conf);
-    String path = "data/mllib/sample_movielens_data.txt";
-    JavaRDD<String> data = sc.textFile(path);
-    JavaRDD<Rating> ratings = data.map(
-      new Function<String, Rating>() {
-        public Rating call(String line) {
-          String[] parts = line.split("::");
-          return new Rating(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Double.parseDouble(parts[2]) - 2.5);
-        }
-      }
-    );
-    ratings.cache();
-
-    // Train an ALS model
-    final MatrixFactorizationModel model = ALS.train(JavaRDD.toRDD(ratings), 10, 10, 0.01);
-
-    // Get top 10 recommendations for every user and scale ratings from 0 to 1
-    JavaRDD<Tuple2<Object, Rating[]>> userRecs = model.recommendProductsForUsers(10).toJavaRDD();
-    JavaRDD<Tuple2<Object, Rating[]>> userRecsScaled = userRecs.map(
-      new Function<Tuple2<Object, Rating[]>, Tuple2<Object, Rating[]>>() {
-        public Tuple2<Object, Rating[]> call(Tuple2<Object, Rating[]> t) {
-          Rating[] scaledRatings = new Rating[t._2().length];
-          for (int i = 0; i < scaledRatings.length; i++) {
-            double newRating = Math.max(Math.min(t._2()[i].rating(), 1.0), 0.0);
-            scaledRatings[i] = new Rating(t._2()[i].user(), t._2()[i].product(), newRating);
-          }
-          return new Tuple2<Object, Rating[]>(t._1(), scaledRatings);
-        }
-      }
-    );
-    JavaPairRDD<Object, Rating[]> userRecommended = JavaPairRDD.fromJavaRDD(userRecsScaled);
-
-    // Map ratings to 1 or 0, 1 indicating a movie that should be recommended
-    JavaRDD<Rating> binarizedRatings = ratings.map(
-      new Function<Rating, Rating>() {
-        public Rating call(Rating r) {
-          double binaryRating;
-          if (r.rating() > 0.0) {
-            binaryRating = 1.0;
-          }
-          else {
-            binaryRating = 0.0;
-          }
-          return new Rating(r.user(), r.product(), binaryRating);
-        }
-      }
-    );
-
-    // Group ratings by common user
-    JavaPairRDD<Object, Iterable<Rating>> userMovies = binarizedRatings.groupBy(
-      new Function<Rating, Object>() {
-        public Object call(Rating r) {
-          return r.user();
-        }
-      }
-    );
-
-    // Get true relevant documents from all user ratings
-    JavaPairRDD<Object, List<Integer>> userMoviesList = userMovies.mapValues(
-      new Function<Iterable<Rating>, List<Integer>>() {
-        public List<Integer> call(Iterable<Rating> docs) {
-          List<Integer> products = new ArrayList<Integer>();
-          for (Rating r : docs) {
-            if (r.rating() > 0.0) {
-              products.add(r.product());
-            }
-          }
-          return products;
-        }
-      }
-    );
-
-    // Extract the product id from each recommendation
-    JavaPairRDD<Object, List<Integer>> userRecommendedList = userRecommended.mapValues(
-      new Function<Rating[], List<Integer>>() {
-        public List<Integer> call(Rating[] docs) {
-          List<Integer> products = new ArrayList<Integer>();
-          for (Rating r : docs) {
-            products.add(r.product());
-          }
-          return products;
-        }
-      }
-    );
-    JavaRDD<Tuple2<List<Integer>, List<Integer>>> relevantDocs = userMoviesList.join(userRecommendedList).values();
-
-    // Instantiate the metrics object
-    RankingMetrics metrics = RankingMetrics.of(relevantDocs);
-
-    // Precision and NDCG at k
-    Integer[] kVector = {1, 3, 5};
-    for (Integer k : kVector) {
-      System.out.format("Precision at %d = %f\n", k, metrics.precisionAt(k));
-      System.out.format("NDCG at %d = %f\n", k, metrics.ndcgAt(k));
-    }
-
-    // Mean average precision
-    System.out.format("Mean average precision = %f\n", metrics.meanAveragePrecision());
-
-    // Evaluate the model using numerical ratings and regression metrics
-    JavaRDD<Tuple2<Object, Object>> userProducts = ratings.map(
-      new Function<Rating, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(Rating r) {
-          return new Tuple2<Object, Object>(r.user(), r.product());
-        }
-      }
-    );
-    JavaPairRDD<Tuple2<Integer, Integer>, Object> predictions = JavaPairRDD.fromJavaRDD(
-      model.predict(JavaRDD.toRDD(userProducts)).toJavaRDD().map(
-        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
-          public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r){
-            return new Tuple2<Tuple2<Integer, Integer>, Object>(
-              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-          }
-        }
-    ));
-    JavaRDD<Tuple2<Object, Object>> ratesAndPreds =
-      JavaPairRDD.fromJavaRDD(ratings.map(
-        new Function<Rating, Tuple2<Tuple2<Integer, Integer>, Object>>() {
-          public Tuple2<Tuple2<Integer, Integer>, Object> call(Rating r){
-            return new Tuple2<Tuple2<Integer, Integer>, Object>(
-              new Tuple2<Integer, Integer>(r.user(), r.product()), r.rating());
-          }
-        }
-    )).join(predictions).values();
-
-    // Create regression metrics object
-    RegressionMetrics regressionMetrics = new RegressionMetrics(ratesAndPreds.rdd());
-
-    // Root mean squared error
-    System.out.format("RMSE = %f\n", regressionMetrics.rootMeanSquaredError());
-
-    // R-squared
-    System.out.format("R-squared = %f\n", regressionMetrics.r2());
-  }
-}
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRankingMetricsExample.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) and [`RankingMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RankingMetrics) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.recommendation import ALS, Rating
-from pyspark.mllib.evaluation import RegressionMetrics, RankingMetrics
-
-#  Read in the ratings data
-lines = sc.textFile("data/mllib/sample_movielens_data.txt")
-
-def parseLine(line):
-    fields = line.split("::")
-    return Rating(int(fields[0]), int(fields[1]), float(fields[2]) - 2.5)
-ratings = lines.map(lambda r: parseLine(r))
-
-# Train a model on to predict user-product ratings
-model = ALS.train(ratings, 10, 10, 0.01)
-
-# Get predicted ratings on all existing user-product pairs
-testData = ratings.map(lambda p: (p.user, p.product))
-predictions = model.predictAll(testData).map(lambda r: ((r.user, r.product), r.rating))
-
-ratingsTuple = ratings.map(lambda r: ((r.user, r.product), r.rating))
-scoreAndLabels = predictions.join(ratingsTuple).map(lambda tup: tup[1])
-
-# Instantiate regression metrics to compare predicted and actual ratings
-metrics = RegressionMetrics(scoreAndLabels)
-
-# Root mean sqaured error
-print("RMSE = %s" % metrics.rootMeanSquaredError)
-
-# R-squared
-print("R-squared = %s" % metrics.r2)
-
-{% endhighlight %}
+{% include_example python/mllib/ranking_metrics_example.py %}
 
 </div>
 </div>
@@ -1314,7 +548,7 @@ variable from a number of independent variables.
       <td>$RMSE = \sqrt{\frac{\sum_{i=0}^{N-1} (\mathbf{y}_i - \hat{\mathbf{y}}_i)^2}{N}}$</td>
     </tr>
     <tr>
-      <td>Mean Absoloute Error (MAE)</td>
+      <td>Mean Absolute Error (MAE)</td>
       <td>$MAE=\sum_{i=0}^{N-1} \left|\mathbf{y}_i - \hat{\mathbf{y}}_i\right|$</td>
     </tr>
     <tr>
@@ -1336,162 +570,23 @@ The following code snippets illustrate how to load a sample dataset, train a lin
 and evaluate the performance of the algorithm by several regression metrics.
 
 <div data-lang="scala" markdown="1">
+Refer to the [`RegressionMetrics` Scala docs](api/scala/index.html#org.apache.spark.mllib.evaluation.RegressionMetrics) for details on the API.
 
-{% highlight scala %}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.regression.LinearRegressionModel
-import org.apache.spark.mllib.regression.LinearRegressionWithSGD
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.evaluation.RegressionMetrics
-import org.apache.spark.mllib.util.MLUtils
-
-// Load the data
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_linear_regression_data.txt").cache()
-
-// Build the model
-val numIterations = 100
-val model = LinearRegressionWithSGD.train(data, numIterations)
-
-// Get predictions
-val valuesAndPreds = data.map{ point =>
-  val prediction = model.predict(point.features)
-  (prediction, point.label)
-}
-
-// Instantiate metrics object
-val metrics = new RegressionMetrics(valuesAndPreds)
-
-// Squared error
-println(s"MSE = ${metrics.meanSquaredError}")
-println(s"RMSE = ${metrics.rootMeanSquaredError}")
-
-// R-squared
-println(s"R-squared = ${metrics.r2}")
-
-// Mean absolute error
-println(s"MAE = ${metrics.meanAbsoluteError}")
-
-// Explained variance
-println(s"Explained variance = ${metrics.explainedVariance}")
-
-{% endhighlight %}
+{% include_example scala/org/apache/spark/examples/mllib/RegressionMetricsExample.scala %}
 
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [`RegressionMetrics` Java docs](api/java/org/apache/spark/mllib/evaluation/RegressionMetrics.html) for details on the API.
 
-{% highlight java %}
-import scala.Tuple2;
-
-import org.apache.spark.api.java.*;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.regression.LinearRegressionModel;
-import org.apache.spark.mllib.regression.LinearRegressionWithSGD;
-import org.apache.spark.mllib.evaluation.RegressionMetrics;
-import org.apache.spark.SparkConf;
-
-public class LinearRegression {
-  public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("Linear Regression Example");
-    JavaSparkContext sc = new JavaSparkContext(conf);
-
-    // Load and parse the data
-    String path = "data/mllib/sample_linear_regression_data.txt";
-    JavaRDD<String> data = sc.textFile(path);
-    JavaRDD<LabeledPoint> parsedData = data.map(
-      new Function<String, LabeledPoint>() {
-        public LabeledPoint call(String line) {
-          String[] parts = line.split(" ");
-          double[] v = new double[parts.length - 1];
-          for (int i = 1; i < parts.length - 1; i++)
-            v[i - 1] = Double.parseDouble(parts[i].split(":")[1]);
-          return new LabeledPoint(Double.parseDouble(parts[0]), Vectors.dense(v));
-        }
-      }
-    );
-    parsedData.cache();
-
-    // Building the model
-    int numIterations = 100;
-    final LinearRegressionModel model =
-      LinearRegressionWithSGD.train(JavaRDD.toRDD(parsedData), numIterations);
-
-    // Evaluate model on training examples and compute training error
-    JavaRDD<Tuple2<Object, Object>> valuesAndPreds = parsedData.map(
-      new Function<LabeledPoint, Tuple2<Object, Object>>() {
-        public Tuple2<Object, Object> call(LabeledPoint point) {
-          double prediction = model.predict(point.features());
-          return new Tuple2<Object, Object>(prediction, point.label());
-        }
-      }
-    );
-
-    // Instantiate metrics object
-    RegressionMetrics metrics = new RegressionMetrics(valuesAndPreds.rdd());
-
-    // Squared error
-    System.out.format("MSE = %f\n", metrics.meanSquaredError());
-    System.out.format("RMSE = %f\n", metrics.rootMeanSquaredError());
-
-    // R-squared
-    System.out.format("R Squared = %f\n", metrics.r2());
-
-    // Mean absolute error
-    System.out.format("MAE = %f\n", metrics.meanAbsoluteError());
-
-    // Explained variance
-    System.out.format("Explained Variance = %f\n", metrics.explainedVariance());
-
-    // Save and load model
-    model.save(sc.sc(), "myModelPath");
-    LinearRegressionModel sameModel = LinearRegressionModel.load(sc.sc(), "myModelPath");
-  }
-}
-
-{% endhighlight %}
+{% include_example java/org/apache/spark/examples/mllib/JavaRegressionMetricsExample.java %}
 
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [`RegressionMetrics` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.evaluation.RegressionMetrics) for more details on the API.
 
-{% highlight python %}
-from pyspark.mllib.regression import LabeledPoint, LinearRegressionWithSGD
-from pyspark.mllib.evaluation import RegressionMetrics
-from pyspark.mllib.linalg import DenseVector
-
-# Load and parse the data
-def parsePoint(line):
-    values = line.split()
-    return LabeledPoint(float(values[0]), DenseVector([float(x.split(':')[1]) for x in values[1:]]))
-
-data = sc.textFile("data/mllib/sample_linear_regression_data.txt")
-parsedData = data.map(parsePoint)
-
-# Build the model
-model = LinearRegressionWithSGD.train(parsedData)
-
-# Get predictions
-valuesAndPreds = parsedData.map(lambda p: (float(model.predict(p.features)), p.label))
-
-# Instantiate metrics object
-metrics = RegressionMetrics(valuesAndPreds)
-
-# Squared Error
-print("MSE = %s" % metrics.meanSquaredError)
-print("RMSE = %s" % metrics.rootMeanSquaredError)
-
-# R-squared
-print("R-squared = %s" % metrics.r2)
-
-# Mean absolute error
-print("MAE = %s" % metrics.meanAbsoluteError)
-
-# Explained variance
-print("Explained variance = %s" % metrics.explainedVariance)
-
-{% endhighlight %}
+{% include_example python/mllib/regression_metrics_example.py %}
 
 </div>
 </div>

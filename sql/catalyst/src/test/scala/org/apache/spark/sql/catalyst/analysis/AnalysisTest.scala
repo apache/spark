@@ -17,27 +17,31 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.net.URI
+import java.util.Locale
+
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.SimpleCatalystConf
+import org.apache.spark.sql.internal.SQLConf
 
 trait AnalysisTest extends PlanTest {
 
-  val (caseSensitiveAnalyzer, caseInsensitiveAnalyzer) = {
-    val caseSensitiveConf = new SimpleCatalystConf(true)
-    val caseInsensitiveConf = new SimpleCatalystConf(false)
+  protected val caseSensitiveAnalyzer = makeAnalyzer(caseSensitive = true)
+  protected val caseInsensitiveAnalyzer = makeAnalyzer(caseSensitive = false)
 
-    val caseSensitiveCatalog = new SimpleCatalog(caseSensitiveConf)
-    val caseInsensitiveCatalog = new SimpleCatalog(caseInsensitiveConf)
-
-    caseSensitiveCatalog.registerTable(Seq("TaBlE"), TestRelations.testRelation)
-    caseInsensitiveCatalog.registerTable(Seq("TaBlE"), TestRelations.testRelation)
-
-    new Analyzer(caseSensitiveCatalog, EmptyFunctionRegistry, caseSensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
-    } ->
-    new Analyzer(caseInsensitiveCatalog, EmptyFunctionRegistry, caseInsensitiveConf) {
-      override val extendedResolutionRules = EliminateSubQueries :: Nil
+  private def makeAnalyzer(caseSensitive: Boolean): Analyzer = {
+    val conf = new SQLConf().copy(SQLConf.CASE_SENSITIVE -> caseSensitive)
+    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf)
+    catalog.createDatabase(
+      CatalogDatabase("default", "", new URI("loc"), Map.empty),
+      ignoreIfExists = false)
+    catalog.createTempView("TaBlE", TestRelations.testRelation, overrideIfExists = true)
+    catalog.createTempView("TaBlE2", TestRelations.testRelation2, overrideIfExists = true)
+    catalog.createTempView("TaBlE3", TestRelations.testRelation3, overrideIfExists = true)
+    new Analyzer(catalog, conf) {
+      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
     }
   }
 
@@ -55,11 +59,30 @@ trait AnalysisTest extends PlanTest {
     comparePlans(actualPlan, expectedPlan)
   }
 
+  protected override def comparePlans(
+      plan1: LogicalPlan,
+      plan2: LogicalPlan,
+      checkAnalysis: Boolean = false): Unit = {
+    // Analysis tests may have not been fully resolved, so skip checkAnalysis.
+    super.comparePlans(plan1, plan2, checkAnalysis)
+  }
+
   protected def assertAnalysisSuccess(
       inputPlan: LogicalPlan,
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    analyzer.checkAnalysis(analyzer.execute(inputPlan))
+    val analysisAttempt = analyzer.execute(inputPlan)
+    try analyzer.checkAnalysis(analysisAttempt) catch {
+      case a: AnalysisException =>
+        fail(
+          s"""
+            |Failed to Analyze Plan
+            |$inputPlan
+            |
+            |Partial Analysis
+            |$analysisAttempt
+          """.stripMargin, a)
+    }
   }
 
   protected def assertAnalysisError(
@@ -67,12 +90,21 @@ trait AnalysisTest extends PlanTest {
       expectedErrors: Seq[String],
       caseSensitive: Boolean = true): Unit = {
     val analyzer = getAnalyzer(caseSensitive)
-    // todo: make sure we throw AnalysisException during analysis
-    val e = intercept[Exception] {
+    val e = intercept[AnalysisException] {
       analyzer.checkAnalysis(analyzer.execute(inputPlan))
     }
-    assert(expectedErrors.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains),
-      s"Expected to throw Exception contains: ${expectedErrors.mkString(", ")}, " +
-        s"actually we get ${e.getMessage}")
+
+    if (!expectedErrors.map(_.toLowerCase(Locale.ROOT)).forall(
+        e.getMessage.toLowerCase(Locale.ROOT).contains)) {
+      fail(
+        s"""Exception message should contain the following substrings:
+           |
+           |  ${expectedErrors.mkString("\n  ")}
+           |
+           |Actual exception message:
+           |
+           |  ${e.getMessage}
+         """.stripMargin)
+    }
   }
 }

@@ -22,11 +22,13 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.util.Utils
 
-/** Prints out environmental information, sleeps, and then exits. Made to
-  * test driver submission in the standalone scheduler. */
+/**
+ * Prints out environmental information, sleeps, and then exits. Made to
+ * test driver submission in the standalone scheduler.
+ */
 object DriverSubmissionTest {
   def main(args: Array[String]) {
-    if (args.size < 1) {
+    if (args.length < 1) {
       println("Usage: DriverSubmissionTest <seconds-to-sleep>")
       System.exit(0)
     }

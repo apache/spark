@@ -29,27 +29,13 @@ private[spark] trait RpcEnvFactory {
 }
 
 /**
- * A trait that requires RpcEnv thread-safely sending messages to it.
- *
- * Thread-safety means processing of one message happens before processing of the next message by
- * the same [[ThreadSafeRpcEndpoint]]. In the other words, changes to internal fields of a
- * [[ThreadSafeRpcEndpoint]] are visible when processing the next message, and fields in the
- * [[ThreadSafeRpcEndpoint]] need not be volatile or equivalent.
- *
- * However, there is no guarantee that the same thread will be executing the same
- * [[ThreadSafeRpcEndpoint]] for different messages.
- */
-private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint
-
-
-/**
  * An end point for the RPC that defines what functions to trigger given a message.
  *
  * It is guaranteed that `onStart`, `receive` and `onStop` will be called in sequence.
  *
  * The life-cycle of an endpoint is:
  *
- * constructor -> onStart -> receive* -> onStop
+ * {@code constructor -> onStart -> receive* -> onStop}
  *
  * Note: `receive` can be called concurrently. If you want `receive` to be thread-safe, please use
  * [[ThreadSafeRpcEndpoint]]
@@ -77,16 +63,16 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.send]] or [[RpcCallContext.reply)]]. If receiving a
-   * unmatched message, [[SparkException]] will be thrown and sent to `onError`.
+   * Process messages from `RpcEndpointRef.send` or `RpcCallContext.reply`. If receiving a
+   * unmatched message, `SparkException` will be thrown and sent to `onError`.
    */
   def receive: PartialFunction[Any, Unit] = {
     case _ => throw new SparkException(self + " does not implement 'receive'")
   }
 
   /**
-   * Process messages from [[RpcEndpointRef.ask]]. If receiving a unmatched message,
-   * [[SparkException]] will be thrown and sent to `onError`.
+   * Process messages from `RpcEndpointRef.ask`. If receiving a unmatched message,
+   * `SparkException` will be thrown and sent to `onError`.
    */
   def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case _ => context.sendFailure(new SparkException(self + " won't reply anything"))
@@ -98,20 +84,6 @@ private[spark] trait RpcEndpoint {
   def onError(cause: Throwable): Unit = {
     // By default, throw e and let RpcEnv handle it
     throw cause
-  }
-
-  /**
-   * Invoked before [[RpcEndpoint]] starts to handle any message.
-   */
-  def onStart(): Unit = {
-    // By default, do nothing.
-  }
-
-  /**
-   * Invoked when [[RpcEndpoint]] is stopping.
-   */
-  def onStop(): Unit = {
-    // By default, do nothing.
   }
 
   /**
@@ -137,6 +109,21 @@ private[spark] trait RpcEndpoint {
   }
 
   /**
+   * Invoked before [[RpcEndpoint]] starts to handle any message.
+   */
+  def onStart(): Unit = {
+    // By default, do nothing.
+  }
+
+  /**
+   * Invoked when [[RpcEndpoint]] is stopping. `self` will be `null` in this method and you cannot
+   * use it to send or ask messages.
+   */
+  def onStop(): Unit = {
+    // By default, do nothing.
+  }
+
+  /**
    * A convenient method to stop [[RpcEndpoint]].
    */
   final def stop(): Unit = {
@@ -146,3 +133,16 @@ private[spark] trait RpcEndpoint {
     }
   }
 }
+
+/**
+ * A trait that requires RpcEnv thread-safely sending messages to it.
+ *
+ * Thread-safety means processing of one message happens before processing of the next message by
+ * the same [[ThreadSafeRpcEndpoint]]. In the other words, changes to internal fields of a
+ * [[ThreadSafeRpcEndpoint]] are visible when processing the next message, and fields in the
+ * [[ThreadSafeRpcEndpoint]] need not be volatile or equivalent.
+ *
+ * However, there is no guarantee that the same thread will be executing the same
+ * [[ThreadSafeRpcEndpoint]] for different messages.
+ */
+private[spark] trait ThreadSafeRpcEndpoint extends RpcEndpoint

@@ -20,8 +20,8 @@ package org.apache.spark.mllib.linalg.distributed
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class CoordinateMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 

@@ -52,8 +52,6 @@ from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
 
-from py4j.java_collections import ListConverter, MapConverter
-
 
 __all__ = ["RDD"]
 
@@ -70,7 +68,8 @@ def portable_hash(x):
     >>> portable_hash((None, 1)) & 0xffffffff
     219750521
     """
-    if sys.version >= '3.3' and 'PYTHONHASHSEED' not in os.environ:
+
+    if sys.version_info >= (3, 2, 3) and 'PYTHONHASHSEED' not in os.environ:
         raise Exception("Randomness of hash of string should be disabled via PYTHONHASHSEED")
 
     if x is None:
@@ -115,7 +114,7 @@ def _parse_memory(s):
     2048
     """
     units = {'g': 1024, 'm': 1, 't': 1 << 20, 'k': 1.0 / 1024}
-    if s[-1] not in units:
+    if s[-1].lower() not in units:
         raise ValueError("invalid format: " + s)
     return int(float(s[:-1]) * units[s[-1].lower()])
 
@@ -128,7 +127,7 @@ def _load_from_socket(port, serializer):
         af, socktype, proto, canonname, sa = res
         sock = socket.socket(af, socktype, proto)
         try:
-            sock.settimeout(3)
+            sock.settimeout(15)
             sock.connect(sa)
         except socket.error:
             sock.close()
@@ -137,12 +136,11 @@ def _load_from_socket(port, serializer):
         break
     if not sock:
         raise Exception("could not open socket")
-    try:
-        rf = sock.makefile("rb", 65536)
-        for item in serializer.load_stream(rf):
-            yield item
-    finally:
-        sock.close()
+    # The RDD materialization time is unpredicable, if we set a timeout for socket reading
+    # operation, it will very possibly fail. See SPARK-18281.
+    sock.settimeout(None)
+    # The socket will be automatically closed when garbage-collected.
+    return serializer.load_stream(sock.makefile("rb", 65536))
 
 
 def ignore_unicode_prefix(f):
@@ -220,18 +218,18 @@ class RDD(object):
 
     def cache(self):
         """
-        Persist this RDD with the default storage level (C{MEMORY_ONLY_SER}).
+        Persist this RDD with the default storage level (C{MEMORY_ONLY}).
         """
         self.is_cached = True
-        self.persist(StorageLevel.MEMORY_ONLY_SER)
+        self.persist(StorageLevel.MEMORY_ONLY)
         return self
 
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY):
         """
         Set this RDD's storage level to persist its values across operations
         after the first time it is computed. This can only be used to assign
         a new storage level if the RDD does not have a storage level set yet.
-        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+        If no storage level is specified defaults to (C{MEMORY_ONLY}).
 
         >>> rdd = sc.parallelize(["b", "a", "c"])
         >>> rdd.persist().is_cached
@@ -265,13 +263,44 @@ class RDD(object):
 
     def isCheckpointed(self):
         """
-        Return whether this RDD has been checkpointed or not
+        Return whether this RDD is checkpointed and materialized, either reliably or locally.
         """
         return self._jrdd.rdd().isCheckpointed()
+
+    def localCheckpoint(self):
+        """
+        Mark this RDD for local checkpointing using Spark's existing caching layer.
+
+        This method is for users who wish to truncate RDD lineages while skipping the expensive
+        step of replicating the materialized data in a reliable distributed file system. This is
+        useful for RDDs with long lineages that need to be truncated periodically (e.g. GraphX).
+
+        Local checkpointing sacrifices fault-tolerance for performance. In particular, checkpointed
+        data is written to ephemeral local storage in the executors instead of to a reliable,
+        fault-tolerant storage. The effect is that if an executor fails during the computation,
+        the checkpointed data may no longer be accessible, causing an irrecoverable job failure.
+
+        This is NOT safe to use with dynamic allocation, which removes executors along
+        with their cached blocks. If you must use both features, you are advised to set
+        L{spark.dynamicAllocation.cachedExecutorIdleTimeout} to a high value.
+
+        The checkpoint directory set through L{SparkContext.setCheckpointDir()} is not used.
+        """
+        self._jrdd.rdd().localCheckpoint()
+
+    def isLocallyCheckpointed(self):
+        """
+        Return whether this RDD is marked for local checkpointing.
+
+        Exposed for testing.
+        """
+        return self._jrdd.rdd().isLocallyCheckpointed()
 
     def getCheckpointFile(self):
         """
         Gets the name of the file to which this RDD was checkpointed
+
+        Not defined if RDD is checkpointed locally.
         """
         checkpointFile = self._jrdd.rdd().getCheckpointFile()
         if checkpointFile.isDefined():
@@ -388,6 +417,9 @@ class RDD(object):
             with replacement: expected number of times each element is chosen; fraction must be >= 0
         :param seed: seed for the random number generator
 
+        .. note:: This is not guaranteed to provide exactly the fraction specified of the total
+            count of the given :class:`DataFrame`.
+
         >>> rdd = sc.parallelize(range(100), 4)
         >>> 6 <= rdd.sample(False, 0.1, 81).count() <= 14
         True
@@ -425,6 +457,9 @@ class RDD(object):
     def takeSample(self, withReplacement, num, seed=None):
         """
         Return a fixed-size sampled subset of this RDD.
+
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
@@ -535,7 +570,7 @@ class RDD(object):
         Return the intersection of this RDD and another one. The output will
         not contain any duplicate elements, even if the input RDDs did.
 
-        Note that this method performs a shuffle internally.
+        .. note:: This method performs a shuffle internally.
 
         >>> rdd1 = sc.parallelize([1, 10, 2, 3, 4, 5])
         >>> rdd2 = sc.parallelize([1, 6, 2, 3, 7, 8])
@@ -573,7 +608,7 @@ class RDD(object):
         sort records by their keys.
 
         >>> rdd = sc.parallelize([(0, 5), (3, 8), (2, 6), (0, 8), (3, 8), (1, 3)])
-        >>> rdd2 = rdd.repartitionAndSortWithinPartitions(2, lambda x: x % 2, 2)
+        >>> rdd2 = rdd.repartitionAndSortWithinPartitions(2, lambda x: x % 2, True)
         >>> rdd2.glom().collect()
         [[(0, 5), (0, 8), (2, 6)], [(1, 3), (3, 8), (3, 8)]]
         """
@@ -592,7 +627,6 @@ class RDD(object):
     def sortByKey(self, ascending=True, numPartitions=None, keyfunc=lambda x: x):
         """
         Sorts this RDD, which is assumed to consist of (key, value) pairs.
-        # noqa
 
         >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
         >>> sc.parallelize(tmp).sortByKey().first()
@@ -686,7 +720,7 @@ class RDD(object):
                                              other._jrdd_deserializer)
         return RDD(self._jrdd.cartesian(other._jrdd), self.ctx, deserializer)
 
-    def groupBy(self, f, numPartitions=None):
+    def groupBy(self, f, numPartitions=None, partitionFunc=portable_hash):
         """
         Return an RDD of grouped items.
 
@@ -695,7 +729,7 @@ class RDD(object):
         >>> sorted([(x, sorted(y)) for (x, y) in result])
         [(0, [2, 8]), (1, [1, 1, 3, 5])]
         """
-        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions)
+        return self.map(lambda x: (f(x), x)).groupByKey(numPartitions, partitionFunc)
 
     @ignore_unicode_prefix
     def pipe(self, command, env=None, checkCode=False):
@@ -751,8 +785,8 @@ class RDD(object):
         Applies a function to each partition of this RDD.
 
         >>> def f(iterator):
-        ...      for x in iterator:
-        ...           print(x)
+        ...     for x in iterator:
+        ...          print(x)
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
         """
         def func(it):
@@ -766,6 +800,9 @@ class RDD(object):
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
+
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
         """
         with SCCallSiteSync(self.context) as css:
             port = self.ctx._jvm.PythonRDD.collectAndServe(self._jrdd.rdd())
@@ -839,8 +876,7 @@ class RDD(object):
     def fold(self, zeroValue, op):
         """
         Aggregate the elements of each partition, and then the results for all
-        the partitions, using a given associative and commutative function and
-        a neutral "zero value."
+        the partitions, using a given associative function and a neutral "zero value."
 
         The function C{op(t1, t2)} is allowed to modify C{t1} and return it
         as its result value to avoid object allocation; however, it should not
@@ -861,7 +897,7 @@ class RDD(object):
         def func(iterator):
             acc = zeroValue
             for obj in iterator:
-                acc = op(obj, acc)
+                acc = op(acc, obj)
             yield acc
         # collecting result of mapPartitions here ensures that the copy of
         # zeroValue provided to each partition is unique from the one provided
@@ -1023,20 +1059,20 @@ class RDD(object):
 
         If your histogram is evenly spaced (e.g. [0, 10, 20, 30]),
         this can be switched from an O(log n) inseration to O(1) per
-        element(where n = # buckets).
+        element (where n is the number of buckets).
 
-        Buckets must be sorted and not contain any duplicates, must be
+        Buckets must be sorted, not contain any duplicates, and have
         at least two elements.
 
-        If `buckets` is a number, it will generates buckets which are
+        If `buckets` is a number, it will generate buckets which are
         evenly spaced between the minimum and maximum of the RDD. For
-        example, if the min value is 0 and the max is 100, given buckets
-        as 2, the resulting buckets will be [0,50) [50,100]. buckets must
-        be at least 1 If the RDD contains infinity, NaN throws an exception
-        If the elements in RDD do not vary (max == min) always returns
-        a single bucket.
+        example, if the min value is 0 and the max is 100, given `buckets`
+        as 2, the resulting buckets will be [0,50) [50,100]. `buckets` must
+        be at least 1. An exception is raised if the RDD contains infinity.
+        If the elements in the RDD do not vary (max == min), a single bucket
+        will be used.
 
-        It will return an tuple of buckets and histogram.
+        The return value is a tuple of buckets and histogram.
 
         >>> rdd = sc.parallelize(range(51))
         >>> rdd.histogram(2)
@@ -1211,9 +1247,12 @@ class RDD(object):
 
     def top(self, num, key=None):
         """
-        Get the top N elements from a RDD.
+        Get the top N elements from an RDD.
 
-        Note: It returns the list sorted in descending order.
+        .. note:: This method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
+
+        .. note:: It returns the list sorted in descending order.
 
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
@@ -1232,8 +1271,11 @@ class RDD(object):
 
     def takeOrdered(self, num, key=None):
         """
-        Get the N elements from a RDD ordered in ascending order or as
+        Get the N elements from an RDD ordered in ascending order or as
         specified by the optional key function.
+
+        .. note:: this method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
         [1, 2, 3, 4, 5, 6]
@@ -1255,6 +1297,9 @@ class RDD(object):
         to satisfy the limit.
 
         Translated from the Scala implementation in RDD#take().
+
+        .. note:: this method should only be used if the resulting array is expected
+            to be small, as all the data is loaded into the driver's memory.
 
         >>> sc.parallelize([2, 3, 4, 5, 6]).cache().take(2)
         [2, 3]
@@ -1319,8 +1364,9 @@ class RDD(object):
 
     def isEmpty(self):
         """
-        Returns true if and only if the RDD contains no elements at all. Note that an RDD
-        may be empty even when it has at least 1 partition.
+        Returns true if and only if the RDD contains no elements at all.
+
+        .. note:: an RDD may be empty even when it has at least 1 partition.
 
         >>> sc.parallelize([]).isEmpty()
         True
@@ -1511,6 +1557,9 @@ class RDD(object):
         """
         Return the key-value pairs in this RDD to the master as a dictionary.
 
+        .. note:: this method should only be used if the resulting data is expected
+            to be small, as all the data is loaded into the driver's memory.
+
         >>> m = sc.parallelize([(1, 2), (3, 4)]).collectAsMap()
         >>> m[1]
         2
@@ -1539,26 +1588,27 @@ class RDD(object):
         """
         return self.map(lambda x: x[1])
 
-    def reduceByKey(self, func, numPartitions=None):
+    def reduceByKey(self, func, numPartitions=None, partitionFunc=portable_hash):
         """
-        Merge the values for each key using an associative reduce function.
+        Merge the values for each key using an associative and commutative reduce function.
 
         This will also perform the merging locally on each mapper before
         sending results to a reducer, similarly to a "combiner" in MapReduce.
 
-        Output will be hash-partitioned with C{numPartitions} partitions, or
+        Output will be partitioned with C{numPartitions} partitions, or
         the default parallelism level if C{numPartitions} is not specified.
+        Default partitioner is hash-partition.
 
         >>> from operator import add
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> sorted(rdd.reduceByKey(add).collect())
         [('a', 2), ('b', 1)]
         """
-        return self.combineByKey(lambda x: x, func, func, numPartitions)
+        return self.combineByKey(lambda x: x, func, func, numPartitions, partitionFunc)
 
     def reduceByKeyLocally(self, func):
         """
-        Merge the values for each key using an associative reduce function, but
+        Merge the values for each key using an associative and commutative reduce function, but
         return the results immediately to the master as a dictionary.
 
         This will also perform the merging locally on each mapper before
@@ -1739,14 +1789,13 @@ class RDD(object):
 
     # TODO: add control over map-side aggregation
     def combineByKey(self, createCombiner, mergeValue, mergeCombiners,
-                     numPartitions=None):
+                     numPartitions=None, partitionFunc=portable_hash):
         """
         Generic function to combine the elements for each key using a custom
         set of aggregation functions.
 
         Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined
-        type" C.  Note that V and C can be different -- for example, one might
-        group an RDD of type (Int, Int) into an RDD of type (Int, List[Int]).
+        type" C.
 
         Users provide three functions:
 
@@ -1754,15 +1803,31 @@ class RDD(object):
               a one-element list)
             - C{mergeValue}, to merge a V into a C (e.g., adds it to the end of
               a list)
-            - C{mergeCombiners}, to combine two C's into a single one.
+            - C{mergeCombiners}, to combine two C's into a single one (e.g., merges
+              the lists)
+
+        To avoid memory allocation, both mergeValue and mergeCombiners are allowed to
+        modify and return their first argument instead of creating a new C.
 
         In addition, users can control the partitioning of the output RDD.
 
-        >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
-        >>> def f(x): return x
-        >>> def add(a, b): return a + str(b)
-        >>> sorted(x.combineByKey(str, add, add).collect())
-        [('a', '11'), ('b', '1')]
+        .. note:: V and C can be different -- for example, one might group an RDD of type
+            (Int, Int) into an RDD of type (Int, List[Int]).
+
+        >>> x = sc.parallelize([("a", 1), ("b", 1), ("a", 2)])
+        >>> def to_list(a):
+        ...     return [a]
+        ...
+        >>> def append(a, b):
+        ...     a.append(b)
+        ...     return a
+        ...
+        >>> def extend(a, b):
+        ...     a.extend(b)
+        ...     return a
+        ...
+        >>> sorted(x.combineByKey(to_list, append, extend).collect())
+        [('a', [1, 2]), ('b', [1])]
         """
         if numPartitions is None:
             numPartitions = self._defaultReducePartitions()
@@ -1777,7 +1842,7 @@ class RDD(object):
             return merger.items()
 
         locally_combined = self.mapPartitions(combineLocally, preservesPartitioning=True)
-        shuffled = locally_combined.partitionBy(numPartitions)
+        shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def _mergeCombiners(iterator):
             merger = ExternalMerger(agg, memory, serializer)
@@ -1786,7 +1851,8 @@ class RDD(object):
 
         return shuffled.mapPartitions(_mergeCombiners, preservesPartitioning=True)
 
-    def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None):
+    def aggregateByKey(self, zeroValue, seqFunc, combFunc, numPartitions=None,
+                       partitionFunc=portable_hash):
         """
         Aggregate the values of each key, using given combine functions and a neutral
         "zero value". This function can return a different result type, U, than the type
@@ -1800,9 +1866,9 @@ class RDD(object):
             return copy.deepcopy(zeroValue)
 
         return self.combineByKey(
-            lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions)
+            lambda v: seqFunc(createZero(), v), seqFunc, combFunc, numPartitions, partitionFunc)
 
-    def foldByKey(self, zeroValue, func, numPartitions=None):
+    def foldByKey(self, zeroValue, func, numPartitions=None, partitionFunc=portable_hash):
         """
         Merge the values for each key using an associative function "func"
         and a neutral "zeroValue" which may be added to the result an
@@ -1817,20 +1883,21 @@ class RDD(object):
         def createZero():
             return copy.deepcopy(zeroValue)
 
-        return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions)
+        return self.combineByKey(lambda v: func(createZero(), v), func, func, numPartitions,
+                                 partitionFunc)
 
     def _memory_limit(self):
         return _parse_memory(self.ctx._conf.get("spark.python.worker.memory", "512m"))
 
     # TODO: support variant with custom partitioner
-    def groupByKey(self, numPartitions=None):
+    def groupByKey(self, numPartitions=None, partitionFunc=portable_hash):
         """
         Group the values for each key in the RDD into a single sequence.
         Hash-partitions the resulting RDD with numPartitions partitions.
 
-        Note: If you are grouping in order to perform an aggregation (such as a
-        sum or average) over each key, using reduceByKey or aggregateByKey will
-        provide much better performance.
+        .. note:: If you are grouping in order to perform an aggregation (such as a
+            sum or average) over each key, using reduceByKey or aggregateByKey will
+            provide much better performance.
 
         >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
         >>> sorted(rdd.groupByKey().mapValues(len).collect())
@@ -1859,7 +1926,7 @@ class RDD(object):
             return merger.items()
 
         locally_combined = self.mapPartitions(combine, preservesPartitioning=True)
-        shuffled = locally_combined.partitionBy(numPartitions)
+        shuffled = locally_combined.partitionBy(numPartitions, partitionFunc)
 
         def groupByKey(it):
             merger = ExternalGroupBy(agg, memory, serializer)
@@ -2001,8 +2068,7 @@ class RDD(object):
          >>> len(rdd.repartition(10).glom().collect())
          10
         """
-        jrdd = self._jrdd.repartition(numPartitions)
-        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+        return self.coalesce(numPartitions, shuffle=True)
 
     def coalesce(self, numPartitions, shuffle=False):
         """
@@ -2013,8 +2079,18 @@ class RDD(object):
         >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
         [[1, 2, 3, 4, 5]]
         """
-        jrdd = self._jrdd.coalesce(numPartitions)
-        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+        if shuffle:
+            # Decrease the batch size in order to distribute evenly the elements across output
+            # partitions. Otherwise, repartition will possibly produce highly skewed partitions.
+            batchSize = min(10, self.ctx._batchSize or 1024)
+            ser = BatchedSerializer(PickleSerializer(), batchSize)
+            selfCopy = self._reserialize(ser)
+            jrdd_deserializer = selfCopy._jrdd_deserializer
+            jrdd = selfCopy._jrdd.coalesce(numPartitions, shuffle)
+        else:
+            jrdd_deserializer = self._jrdd_deserializer
+            jrdd = self._jrdd.coalesce(numPartitions, shuffle)
+        return RDD(jrdd, self.ctx, jrdd_deserializer)
 
     def zip(self, other):
         """
@@ -2193,7 +2269,7 @@ class RDD(object):
         return values.collect()
 
     def _to_java_object_rdd(self):
-        """ Return an JavaRDD of Object by unpickling
+        """ Return a JavaRDD of Object by unpickling
 
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.
@@ -2256,9 +2332,9 @@ class RDD(object):
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of
-        "HyperLogLog in Practice: Algorithmic Engineering of a State
-        of The Art Cardinality Estimation Algorithm", available
-        <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
+        `"HyperLogLog in Practice: Algorithmic Engineering of a State
+        of The Art Cardinality Estimation Algorithm", available here
+        <http://dx.doi.org/10.1145/2452376.2452456>`_.
 
         :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
@@ -2281,17 +2357,17 @@ class RDD(object):
         """
         Return an iterator that contains all of the elements in this RDD.
         The iterator will consume as much memory as the largest partition in this RDD.
+
         >>> rdd = sc.parallelize(range(10))
         >>> [x for x in rdd.toLocalIterator()]
         [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
-        for partition in range(self.getNumPartitions()):
-            rows = self.context.runJob(self, lambda x: x, [partition])
-            for row in rows:
-                yield row
+        with SCCallSiteSync(self.context) as css:
+            port = self.ctx._jvm.PythonRDD.toLocalIteratorAndServe(self._jrdd.rdd())
+        return _load_from_socket(port, self._jrdd_deserializer)
 
 
-def _prepare_for_python_RDD(sc, command, obj=None):
+def _prepare_for_python_RDD(sc, command):
     # the serialized command will be compressed by broadcast
     ser = CloudPickleSerializer()
     pickled_command = ser.dumps(command)
@@ -2299,16 +2375,18 @@ def _prepare_for_python_RDD(sc, command, obj=None):
         # The broadcast will have same life cycle as created PythonRDD
         broadcast = sc.broadcast(pickled_command)
         pickled_command = ser.dumps(broadcast)
-    # There is a bug in py4j.java_gateway.JavaClass with auto_convert
-    # https://github.com/bartdag/py4j/issues/161
-    # TODO: use auto_convert once py4j fix the bug
-    broadcast_vars = ListConverter().convert(
-        [x._jbroadcast for x in sc._pickled_broadcast_vars],
-        sc._gateway._gateway_client)
+    broadcast_vars = [x._jbroadcast for x in sc._pickled_broadcast_vars]
     sc._pickled_broadcast_vars.clear()
-    env = MapConverter().convert(sc.environment, sc._gateway._gateway_client)
-    includes = ListConverter().convert(sc._python_includes, sc._gateway._gateway_client)
-    return pickled_command, broadcast_vars, env, includes
+    return pickled_command, broadcast_vars, sc.environment, sc._python_includes
+
+
+def _wrap_function(sc, func, deserializer, serializer, profiler=None):
+    assert deserializer, "deserializer should not be empty"
+    assert serializer, "serializer should not be empty"
+    command = (func, profiler, deserializer, serializer)
+    pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
+    return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
+                                  sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
 class PipelinedRDD(RDD):
@@ -2372,14 +2450,10 @@ class PipelinedRDD(RDD):
         else:
             profiler = None
 
-        command = (self.func, profiler, self._prev_jrdd_deserializer,
-                   self._jrdd_deserializer)
-        pickled_cmd, bvars, env, includes = _prepare_for_python_RDD(self.ctx, command, self)
-        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
-                                             bytearray(pickled_cmd),
-                                             env, includes, self.preservesPartitioning,
-                                             self.ctx.pythonExec, self.ctx.pythonVer,
-                                             bvars, self.ctx._javaAccumulator)
+        wrapped_func = _wrap_function(self.ctx, self.func, self._prev_jrdd_deserializer,
+                                      self._jrdd_deserializer, profiler)
+        python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(), wrapped_func,
+                                             self.preservesPartitioning)
         self._jrdd_val = python_rdd.asJavaRDD()
 
         if profiler:

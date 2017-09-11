@@ -18,11 +18,10 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.mllib.util.MLUtils
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * An example app for randomly generated and sampled RDDs. Run with
@@ -53,14 +52,13 @@ object SampledRDDs {
         """.stripMargin)
     }
 
-    parser.parse(args, defaultParams).map { params =>
-      run(params)
-    } getOrElse {
-      sys.exit(1)
+    parser.parse(args, defaultParams) match {
+      case Some(params) => run(params)
+      case _ => sys.exit(1)
     }
   }
 
-  def run(params: Params) {
+  def run(params: Params): Unit = {
     val conf = new SparkConf().setAppName(s"SampledRDDs with $params")
     val sc = new SparkContext(conf)
 
@@ -79,7 +77,7 @@ object SampledRDDs {
     val sampledRDD = examples.sample(withReplacement = true, fraction = fraction)
     println(s"  RDD.sample(): sample has ${sampledRDD.count()} examples")
     val sampledArray = examples.takeSample(withReplacement = true, num = expectedSampleSize)
-    println(s"  RDD.takeSample(): sample has ${sampledArray.size} examples")
+    println(s"  RDD.takeSample(): sample has ${sampledArray.length} examples")
 
     println()
 

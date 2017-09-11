@@ -30,7 +30,7 @@ dependencies, and can support different cluster managers and deploy modes that S
 
 {% highlight bash %}
 ./bin/spark-submit \
-  --class <main-class>
+  --class <main-class> \
   --master <master-url> \
   --deploy-mode <deploy-mode> \
   --conf <key>=<value> \
@@ -58,8 +58,8 @@ for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
-the drivers and the executors. Note that `cluster` mode is currently not supported for
-Mesos clusters. Currently only YARN supports cluster mode for Python applications.
+the drivers and the executors. Currently, standalone mode does not support cluster mode for Python
+applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
@@ -92,8 +92,8 @@ run it with `--help`. Here are a few examples of common options:
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
-  --deploy-mode cluster
-  --supervise
+  --deploy-mode cluster \
+  --supervise \
   --executor-memory 20G \
   --total-executor-cores 100 \
   /path/to/examples.jar \
@@ -103,7 +103,8 @@ run it with `--help`. Here are a few examples of common options:
 export HADOOP_CONF_DIR=XXX
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
-  --master yarn-cluster \  # can also be `yarn-client` for client mode
+  --master yarn \
+  --deploy-mode cluster \  # can be client for client mode
   --executor-memory 20G \
   --num-executors 50 \
   /path/to/examples.jar \
@@ -114,6 +115,18 @@ export HADOOP_CONF_DIR=XXX
   --master spark://207.184.161.138:7077 \
   examples/src/main/python/pi.py \
   1000
+
+# Run on a Mesos cluster in cluster deploy mode with supervise
+./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master mesos://207.184.161.138:7077 \
+  --deploy-mode cluster \
+  --supervise \
+  --executor-memory 20G \
+  --total-executor-cores 100 \
+  http://path/to/examples.jar \
+  1000
+
 {% endhighlight %}
 
 # Master URLs
@@ -122,21 +135,25 @@ The master URL passed to Spark can be in one of the following formats:
 
 <table class="table">
 <tr><th>Master URL</th><th>Meaning</th></tr>
-<tr><td> local </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
-<tr><td> local[K] </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
-<tr><td> local[*] </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
-<tr><td> spark://HOST:PORT </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
+<tr><td> <code>local</code> </td><td> Run Spark locally with one worker thread (i.e. no parallelism at all). </td></tr>
+<tr><td> <code>local[K]</code> </td><td> Run Spark locally with K worker threads (ideally, set this to the number of cores on your machine). </td></tr>
+<tr><td> <code>local[K,F]</code> </td><td> Run Spark locally with K worker threads and F maxFailures (see <a href="configuration.html#scheduling">spark.task.maxFailures</a> for an explanation of this variable) </td></tr>
+<tr><td> <code>local[*]</code> </td><td> Run Spark locally with as many worker threads as logical cores on your machine.</td></tr>
+<tr><td> <code>local[*,F]</code> </td><td> Run Spark locally with as many worker threads as logical cores on your machine and F maxFailures.</td></tr>
+<tr><td> <code>spark://HOST:PORT</code> </td><td> Connect to the given <a href="spark-standalone.html">Spark standalone
         cluster</a> master. The port must be whichever one your master is configured to use, which is 7077 by default.
 </td></tr>
-<tr><td> mesos://HOST:PORT </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
+<tr><td> <code>spark://HOST1:PORT1,HOST2:PORT2</code> </td><td> Connect to the given <a href="spark-standalone.html#standby-masters-with-zookeeper">Spark standalone
+        cluster with standby masters with Zookeeper</a>. The list must have all the master hosts in the high availability cluster set up with Zookeeper. The port must be whichever each master is configured to use, which is 7077 by default.
+</td></tr>
+<tr><td> <code>mesos://HOST:PORT</code> </td><td> Connect to the given <a href="running-on-mesos.html">Mesos</a> cluster.
         The port must be whichever one your is configured to use, which is 5050 by default.
         Or, for a Mesos cluster using ZooKeeper, use <code>mesos://zk://...</code>.
+        To submit with <code>--deploy-mode cluster</code>, the HOST:PORT should be configured to connect to the <a href="running-on-mesos.html#cluster-mode">MesosClusterDispatcher</a>.
 </td></tr>
-<tr><td> yarn-client </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-client mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
-</td></tr>
-<tr><td> yarn-cluster </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
-cluster mode. The cluster location will be found based on the HADOOP_CONF_DIR or YARN_CONF_DIR variable.
+<tr><td> <code>yarn</code> </td><td> Connect to a <a href="running-on-yarn.html"> YARN </a> cluster in
+        <code>client</code> or <code>cluster</code> mode depending on the value of <code>--deploy-mode</code>.
+        The cluster location will be found based on the <code>HADOOP_CONF_DIR</code> or <code>YARN_CONF_DIR</code> variable.
 </td></tr>
 </table>
 
@@ -159,8 +176,9 @@ debugging information by running `spark-submit` with the `--verbose` option.
 
 # Advanced Dependency Management
 When using `spark-submit`, the application jar along with any jars included with the `--jars` option
-will be automatically transferred to the cluster. Spark uses the following URL scheme to allow
-different strategies for disseminating jars:
+will be automatically transferred to the cluster. URLs supplied after `--jars` must be separated by commas. That list is included on the driver and executor classpaths. Directory expansion does not work with `--jars`.
+
+Spark uses the following URL scheme to allow different strategies for disseminating jars:
 
 - **file:** - Absolute paths and `file:/` URIs are served by the driver's HTTP file server, and
   every executor pulls the file from the driver HTTP server.
@@ -174,9 +192,11 @@ This can use up a significant amount of space over time and will need to be clea
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
 
-Users may also include any other dependencies by supplying a comma-delimited list of maven coordinates 
-with `--packages`. All transitive dependencies will be handled when using this command. Additional 
-repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`. 
+Users may also include any other dependencies by supplying a comma-delimited list of Maven coordinates
+with `--packages`. All transitive dependencies will be handled when using this command. Additional
+repositories (or resolvers in SBT) can be added in a comma-delimited fashion with the flag `--repositories`.
+(Note that credentials for password-protected repositories can be supplied in some cases in the repository URI,
+such as in `https://user:password@host/...`. Be careful when supplying credentials this way.)
 These commands can be used with `pyspark`, `spark-shell`, and `spark-submit` to include Spark Packages.
 
 For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries

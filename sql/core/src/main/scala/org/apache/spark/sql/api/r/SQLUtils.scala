@@ -18,26 +18,73 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.{Locale, Map => JMap}
 
-import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.api.r.SerDe
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Alias, Expression, NamedExpression}
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, DataFrame, GroupedData, Row, SQLContext, SaveMode}
-
+import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
-private[r] object SQLUtils {
-  def createSQLContext(jsc: JavaSparkContext): SQLContext = {
-    new SQLContext(jsc)
+import org.apache.spark.SparkContext
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.api.r.SerDe
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.command.ShowTablesCommand
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.types._
+
+private[sql] object SQLUtils extends Logging {
+  SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
+
+  private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
   }
 
-  def getJavaSparkContext(sqlCtx: SQLContext): JavaSparkContext = {
-    new JavaSparkContext(sqlCtx.sparkContext)
+  def getOrCreateSparkSession(
+      jsc: JavaSparkContext,
+      sparkConfigMap: JMap[Object, Object],
+      enableHiveSupport: Boolean): SparkSession = {
+    val spark =
+      if (SparkSession.hiveClassesArePresent && enableHiveSupport &&
+          jsc.sc.conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase(Locale.ROOT) ==
+            "hive") {
+        SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+      } else {
+        if (enableHiveSupport) {
+          logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +
+            s"Spark is not built with Hive or ${CATALOG_IMPLEMENTATION.key} is not set to " +
+            "'hive', falling back to without Hive support.")
+        }
+        SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
+      }
+    setSparkContextSessionConf(spark, sparkConfigMap)
+    spark
   }
 
-  def createStructType(fields : Seq[StructField]): StructType = {
+  def setSparkContextSessionConf(
+      spark: SparkSession,
+      sparkConfigMap: JMap[Object, Object]): Unit = {
+    for ((name, value) <- sparkConfigMap.asScala) {
+      spark.sessionState.conf.setConfString(name.toString, value.toString)
+    }
+    for ((name, value) <- sparkConfigMap.asScala) {
+      spark.sparkContext.conf.set(name.toString, value.toString)
+    }
+  }
+
+  def getSessionConf(spark: SparkSession): JMap[String, String] = {
+    spark.conf.getAll.asJava
+  }
+
+  def getJavaSparkContext(spark: SparkSession): JavaSparkContext = {
+    new JavaSparkContext(spark.sparkContext)
+  }
+
+  def createStructType(fields: Seq[StructField]): StructType = {
     StructType(fields)
   }
 
@@ -46,86 +93,95 @@ private[r] object SQLUtils {
     def r: Regex = new Regex(sc.parts.mkString, sc.parts.tail.map(_ => "x"): _*)
   }
 
-  def getSQLDataType(dataType: String): DataType = {
-    dataType match {
-      case "byte" => org.apache.spark.sql.types.ByteType
-      case "integer" => org.apache.spark.sql.types.IntegerType
-      case "float" => org.apache.spark.sql.types.FloatType
-      case "double" => org.apache.spark.sql.types.DoubleType
-      case "numeric" => org.apache.spark.sql.types.DoubleType
-      case "character" => org.apache.spark.sql.types.StringType
-      case "string" => org.apache.spark.sql.types.StringType
-      case "binary" => org.apache.spark.sql.types.BinaryType
-      case "raw" => org.apache.spark.sql.types.BinaryType
-      case "logical" => org.apache.spark.sql.types.BooleanType
-      case "boolean" => org.apache.spark.sql.types.BooleanType
-      case "timestamp" => org.apache.spark.sql.types.TimestampType
-      case "date" => org.apache.spark.sql.types.DateType
-      case r"\Aarray<(.*)${elemType}>\Z" => {
-        org.apache.spark.sql.types.ArrayType(getSQLDataType(elemType))
-      }
-      case r"\Amap<(.*)${keyType},(.*)${valueType}>\Z" => {
-        if (keyType != "string" && keyType != "character") {
-          throw new IllegalArgumentException("Key type of a map must be string or character")
-        }
-        org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
-      }
-      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
-    }
-  }
-
   def createStructField(name: String, dataType: String, nullable: Boolean): StructField = {
-    val dtObj = getSQLDataType(dataType)
+    val dtObj = CatalystSqlParser.parseDataType(dataType)
     StructField(name, dtObj, nullable)
   }
 
-  def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
-    val num = schema.fields.size
+  def createDF(rdd: RDD[Array[Byte]], schema: StructType, sparkSession: SparkSession): DataFrame = {
+    val num = schema.fields.length
     val rowRDD = rdd.map(bytesToRow(_, schema))
-    sqlContext.createDataFrame(rowRDD, schema)
+    sparkSession.createDataFrame(rowRDD, schema)
   }
 
   def dfToRowRDD(df: DataFrame): JavaRDD[Array[Byte]] = {
-    df.map(r => rowToRBytes(r))
+    df.rdd.map(r => rowToRBytes(r))
   }
 
   private[this] def doConversion(data: Object, dataType: DataType): Object = {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
         new java.lang.Float(d)
+      // Scala Map is the only allowed external type of map type in Row.
+      case m: java.util.Map[_, _] => m.asScala
       case _ => data
     }
   }
 
-  private[this] def bytesToRow(bytes: Array[Byte], schema: StructType): Row = {
+  private[sql] def bytesToRow(bytes: Array[Byte], schema: StructType): Row = {
     val bis = new ByteArrayInputStream(bytes)
     val dis = new DataInputStream(bis)
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
-      doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
-    }.toSeq)
+      doConversion(SerDe.readObject(dis, jvmObjectTracker = null), schema.fields(i).dataType)
+    })
   }
 
-  private[this] def rowToRBytes(row: Row): Array[Byte] = {
+  private[sql] def rowToRBytes(row: Row): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
 
     val cols = (0 until row.length).map(row(_).asInstanceOf[Object]).toArray
-    SerDe.writeObject(dos, cols)
+    SerDe.writeObject(dos, cols, jvmObjectTracker = null)
     bos.toByteArray()
   }
 
-  def dfToCols(df: DataFrame): Array[Array[Any]] = {
-    // localDF is Array[Row]
-    val localDF = df.collect()
-    val numCols = df.columns.length
+  // Schema for DataFrame of serialized R data
+  // TODO: introduce a user defined type for serialized R data.
+  val SERIALIZED_R_DATA_SCHEMA = StructType(Seq(StructField("R", BinaryType)))
 
-    // result is Array[Array[Any]]
-    (0 until numCols).map { colIdx =>
-      localDF.map { row =>
-        row(colIdx)
+  /**
+   * The helper function for dapply() on R side.
+   */
+  def dapply(
+      df: DataFrame,
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      schema: StructType): DataFrame = {
+    val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
+    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
+    df.mapPartitionsInR(func, packageNames, bv, realSchema)
+  }
+
+  /**
+   * The helper function for gapply() on R side.
+   */
+  def gapply(
+      gd: RelationalGroupedDataset,
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      schema: StructType): DataFrame = {
+    val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
+    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
+    gd.flatMapGroupsInR(func, packageNames, bv, realSchema)
+  }
+
+
+  def dfToCols(df: DataFrame): Array[Array[Any]] = {
+    val localDF: Array[Row] = df.collect()
+    val numCols = df.columns.length
+    val numRows = localDF.length
+
+    val colArray = new Array[Array[Any]](numCols)
+    for (colNo <- 0 until numCols) {
+      colArray(colNo) = new Array[Any](numRows)
+      for (rowNo <- 0 until numRows) {
+        colArray(colNo)(rowNo) = localDF(rowNo)(colNo)
       }
-    }.toArray
+    }
+    colArray
   }
 
   def saveMode(mode: String): SaveMode = {
@@ -137,18 +193,45 @@ private[r] object SQLUtils {
     }
   }
 
-  def loadDF(
-      sqlContext: SQLContext,
-      source: String,
-      options: java.util.Map[String, String]): DataFrame = {
-    sqlContext.read.format(source).options(options).load()
+  def readSqlObject(dis: DataInputStream, dataType: Char): Object = {
+    dataType match {
+      case 's' =>
+        // Read StructType for DataFrame
+        val fields = SerDe.readList(dis, jvmObjectTracker = null).asInstanceOf[Array[Object]]
+        Row.fromSeq(fields)
+      case _ => null
+    }
   }
 
-  def loadDF(
-      sqlContext: SQLContext,
-      source: String,
-      schema: StructType,
-      options: java.util.Map[String, String]): DataFrame = {
-    sqlContext.read.format(source).schema(schema).options(options).load()
+  def writeSqlObject(dos: DataOutputStream, obj: Object): Boolean = {
+    obj match {
+      // Handle struct type in DataFrame
+      case v: GenericRowWithSchema =>
+        dos.writeByte('s')
+        SerDe.writeObject(dos, v.schema.fieldNames, jvmObjectTracker = null)
+        SerDe.writeObject(dos, v.values, jvmObjectTracker = null)
+        true
+      case _ =>
+        false
+    }
+  }
+
+  def getTables(sparkSession: SparkSession, databaseName: String): DataFrame = {
+    databaseName match {
+      case n: String if n != null && n.trim.nonEmpty =>
+        Dataset.ofRows(sparkSession, ShowTablesCommand(Some(n), None))
+      case _ =>
+        Dataset.ofRows(sparkSession, ShowTablesCommand(None, None))
+    }
+  }
+
+  def getTableNames(sparkSession: SparkSession, databaseName: String): Array[String] = {
+    val db = databaseName match {
+      case _ if databaseName != null && databaseName.trim.nonEmpty =>
+        databaseName
+      case _ =>
+        sparkSession.catalog.currentDatabase
+    }
+    sparkSession.sessionState.catalog.listTables(db).map(_.table).toArray
   }
 }

@@ -22,14 +22,14 @@ import java.io.{File, FileOutputStream, InputStream, IOException}
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
-import org.apache.spark.Logging
 import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.Command
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.WorkerCommandBuilder
 import org.apache.spark.util.Utils
 
 /**
- ** Utilities for running commands with the spark classpath.
+ * Utilities for running commands with the spark classpath.
  */
 private[deploy]
 object CommandUtils extends Logging {
@@ -44,7 +44,7 @@ object CommandUtils extends Logging {
       memory: Int,
       sparkHome: String,
       substituteArguments: String => String,
-      classPaths: Seq[String] = Seq[String](),
+      classPaths: Seq[String] = Seq.empty,
       env: Map[String, String] = sys.env): ProcessBuilder = {
     val localCommand = buildLocalCommand(
       command, securityMgr, substituteArguments, classPaths, env)
@@ -73,7 +73,7 @@ object CommandUtils extends Logging {
       command: Command,
       securityMgr: SecurityManager,
       substituteArguments: String => String,
-      classPath: Seq[String] = Seq[String](),
+      classPath: Seq[String] = Seq.empty,
       env: Map[String, String]): Command = {
     val libraryPathName = Utils.libraryPathEnvName
     val libraryPathEntries = command.libraryPathEntries
@@ -96,7 +96,7 @@ object CommandUtils extends Logging {
       command.arguments.map(substituteArguments),
       newEnvironment,
       command.classPathEntries ++ classPath,
-      Seq[String](), // library path already captured in environment variable
+      Seq.empty, // library path already captured in environment variable
       // filter out auth secret from java options
       command.javaOpts.filterNot(_.startsWith("-D" + SecurityManager.SPARK_AUTH_SECRET_CONF)))
   }

@@ -17,57 +17,46 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.mllib.linalg.{VectorUDT, Vectors}
-import org.apache.spark.ml.clustering.KMeans
-import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.types.{StructField, StructType}
+// scalastyle:off println
 
+// $example on$
+import org.apache.spark.ml.clustering.KMeans
+// $example off$
+import org.apache.spark.sql.SparkSession
 
 /**
- * An example demonstrating a k-means clustering.
+ * An example demonstrating k-means clustering.
  * Run with
  * {{{
- * bin/run-example ml.KMeansExample <file> <k>
+ * bin/run-example ml.KMeansExample
  * }}}
  */
 object KMeansExample {
 
-  final val FEATURES_COL = "features"
-
   def main(args: Array[String]): Unit = {
-    if (args.length != 2) {
-      // scalastyle:off println
-      System.err.println("Usage: ml.KMeansExample <file> <k>")
-      // scalastyle:on println
-      System.exit(1)
-    }
-    val input = args(0)
-    val k = args(1).toInt
+    val spark = SparkSession
+      .builder
+      .appName(s"${this.getClass.getSimpleName}")
+      .getOrCreate()
 
-    // Creates a Spark context and a SQL context
-    val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    // $example on$
+    // Loads data.
+    val dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    // Loads data
-    val rowRDD = sc.textFile(input).filter(_.nonEmpty)
-      .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
-    val schema = StructType(Array(StructField(FEATURES_COL, new VectorUDT, false)))
-    val dataset = sqlContext.createDataFrame(rowRDD, schema)
-
-    // Trains a k-means model
-    val kmeans = new KMeans()
-      .setK(k)
-      .setFeaturesCol(FEATURES_COL)
+    // Trains a k-means model.
+    val kmeans = new KMeans().setK(2).setSeed(1L)
     val model = kmeans.fit(dataset)
 
-    // Shows the result
-    // scalastyle:off println
-    println("Final Centers: ")
-    model.clusterCenters.foreach(println)
-    // scalastyle:on println
+    // Evaluate clustering by computing Within Set Sum of Squared Errors.
+    val WSSSE = model.computeCost(dataset)
+    println(s"Within Set Sum of Squared Errors = $WSSSE")
 
-    sc.stop()
+    // Shows the result.
+    println("Cluster Centers: ")
+    model.clusterCenters.foreach(println)
+    // $example off$
+
+    spark.stop()
   }
 }
+// scalastyle:on println

@@ -20,7 +20,7 @@ package org.apache.spark.mllib.classification
 import scala.collection.JavaConverters._
 import scala.util.Random
 
-import org.jblas.DoubleMatrix
+import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.Vectors
@@ -45,12 +45,11 @@ object SVMSuite {
     nPoints: Int,
     seed: Int): Seq[LabeledPoint] = {
     val rnd = new Random(seed)
-    val weightsMat = new DoubleMatrix(1, weights.length, weights : _*)
+    val weightsMat = new BDV(weights)
     val x = Array.fill[Array[Double]](nPoints)(
         Array.fill[Double](weights.length)(rnd.nextDouble() * 2.0 - 1.0))
     val y = x.map { xi =>
-      val yD = new DoubleMatrix(1, xi.length, xi: _*).dot(weightsMat) +
-        intercept + 0.01 * rnd.nextGaussian()
+      val yD = new BDV(xi).dot(weightsMat) + intercept + 0.01 * rnd.nextGaussian()
       if (yD < 0) 0.0 else 1.0
     }
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))

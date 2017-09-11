@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Objects
+
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * ::DeveloperApi::
  * The data type for User Defined Types (UDTs).
  *
  * This interface allows a user to make their own classes more interoperable with SparkSQL;
@@ -35,9 +34,12 @@ import org.apache.spark.annotation.DeveloperApi
  *
  * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
+ *
+ * Note: This was previously a developer API in Spark 1.x. We are making this private in Spark 2.0
+ * because we will very likely create a new version of this that works better with Datasets.
  */
-@DeveloperApi
-abstract class UserDefinedType[UserType] extends DataType with Serializable {
+private[spark]
+abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */
   def sqlType: DataType
@@ -50,11 +52,8 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
 
   /**
    * Convert the user type to a SQL datum
-   *
-   * TODO: Can we make this take obj: UserType?  The issue is in
-   *       CatalystTypeConverters.convertToCatalyst, where we need to convert Any to UserType.
    */
-  def serialize(obj: Any): Any
+  def serialize(obj: UserType): Any
 
   /** Convert a SQL datum to the user type */
   def deserialize(datum: Any): UserType
@@ -71,10 +70,7 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   def userClass: java.lang.Class[UserType]
 
-  /**
-   * The default size of a value of the UserDefinedType is 4096 bytes.
-   */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = sqlType.defaultSize
 
   /**
    * For UDT, asNullable will not change the nullability of its internal sqlType and just returns
@@ -82,12 +78,26 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    */
   override private[spark] def asNullable: UserDefinedType[UserType] = this
 
-  override private[sql] def acceptsType(dataType: DataType) =
-    this.getClass == dataType.getClass
+  override private[sql] def acceptsType(dataType: DataType) = dataType match {
+    case other: UserDefinedType[_] =>
+      this.getClass == other.getClass ||
+        this.userClass.isAssignableFrom(other.userClass)
+    case _ => false
+  }
+
+  override def sql: String = sqlType.sql
+
+  override def hashCode(): Int = getClass.hashCode()
+
+  override def equals(other: Any): Boolean = other match {
+    case that: UserDefinedType[_] => this.acceptsType(that)
+    case _ => false
+  }
+
+  override def catalogString: String = sqlType.simpleString
 }
 
 /**
- * ::DeveloperApi::
  * The user defined type in Python.
  *
  * Note: This can only be accessed via Python UDF, or accessed as serialized object.
@@ -110,4 +120,11 @@ private[sql] class PythonUserDefinedType(
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
   }
+
+  override def equals(other: Any): Boolean = other match {
+    case that: PythonUserDefinedType => pyUDT == that.pyUDT
+    case _ => false
+  }
+
+  override def hashCode(): Int = Objects.hashCode(pyUDT)
 }

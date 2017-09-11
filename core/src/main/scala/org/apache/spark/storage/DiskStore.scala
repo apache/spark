@@ -17,152 +17,310 @@
 
 package org.apache.spark.storage
 
-import java.io.{IOException, File, FileOutputStream, RandomAccessFile}
+import java.io._
 import java.nio.ByteBuffer
+import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
+import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.Logging
-import org.apache.spark.serializer.Serializer
+import scala.collection.mutable.ListBuffer
+
+import com.google.common.io.Closeables
+import io.netty.channel.{DefaultFileRegion, FileRegion}
+import io.netty.util.AbstractReferenceCounted
+
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
+import org.apache.spark.security.CryptoStreamUtils
 import org.apache.spark.util.Utils
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Stores BlockManager blocks on disk.
  */
-private[spark] class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManager)
-  extends BlockStore(blockManager) with Logging {
+private[spark] class DiskStore(
+    conf: SparkConf,
+    diskManager: DiskBlockManager,
+    securityManager: SecurityManager) extends Logging {
 
-  val minMemoryMapBytes = blockManager.conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+  private val minMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapThreshold", "2m")
+  private val maxMemoryMapBytes = conf.getSizeAsBytes("spark.storage.memoryMapLimitForTests",
+    Int.MaxValue.toString)
+  private val blockSizes = new ConcurrentHashMap[String, Long]()
 
-  override def getSize(blockId: BlockId): Long = {
-    diskManager.getFile(blockId.name).length
-  }
+  def getSize(blockId: BlockId): Long = blockSizes.get(blockId.name)
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel): PutResult = {
-    // So that we do not modify the input offsets !
-    // duplicate does not copy buffer, so inexpensive
-    val bytes = _bytes.duplicate()
+  /**
+   * Invokes the provided callback function to write the specific block.
+   *
+   * @throws IllegalStateException if the block already exists in the disk store.
+   */
+  def put(blockId: BlockId)(writeFunc: WritableByteChannel => Unit): Unit = {
+    if (contains(blockId)) {
+      throw new IllegalStateException(s"Block $blockId is already present in the disk store")
+    }
     logDebug(s"Attempting to put block $blockId")
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
-    val channel = new FileOutputStream(file).getChannel
-    Utils.tryWithSafeFinally {
-      while (bytes.remaining > 0) {
-        channel.write(bytes)
+    val out = new CountingWritableChannel(openForWrite(file))
+    var threwException: Boolean = true
+    try {
+      writeFunc(out)
+      blockSizes.put(blockId.name, out.getCount)
+      threwException = false
+    } finally {
+      try {
+        out.close()
+      } catch {
+        case ioe: IOException =>
+          if (!threwException) {
+            threwException = true
+            throw ioe
+          }
+      } finally {
+         if (threwException) {
+          remove(blockId)
+        }
       }
-    } {
-      channel.close()
     }
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(bytes.limit), finishTime - startTime))
-    PutResult(bytes.limit(), Right(bytes.duplicate()))
+      file.getName,
+      Utils.bytesToString(file.length()),
+      finishTime - startTime))
   }
 
-  override def putArray(
-      blockId: BlockId,
-      values: Array[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-    putIterator(blockId, values.toIterator, level, returnValues)
-  }
-
-  override def putIterator(
-      blockId: BlockId,
-      values: Iterator[Any],
-      level: StorageLevel,
-      returnValues: Boolean): PutResult = {
-
-    logDebug(s"Attempting to write values for block $blockId")
-    val startTime = System.currentTimeMillis
-    val file = diskManager.getFile(blockId)
-    val outputStream = new FileOutputStream(file)
-    try {
-      Utils.tryWithSafeFinally {
-        blockManager.dataSerializeStream(blockId, outputStream, values)
-      } {
-        // Close outputStream here because it should be closed before file is deleted.
-        outputStream.close()
-      }
-    } catch {
-      case e: Throwable =>
-        if (file.exists()) {
-          file.delete()
-        }
-        throw e
-    }
-
-    val length = file.length
-
-    val timeTaken = System.currentTimeMillis - startTime
-    logDebug("Block %s stored as %s file on disk in %d ms".format(
-      file.getName, Utils.bytesToString(length), timeTaken))
-
-    if (returnValues) {
-      // Return a byte buffer for the contents of the file
-      val buffer = getBytes(blockId).get
-      PutResult(length, Right(buffer))
-    } else {
-      PutResult(length, null)
+  def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
+    put(blockId) { channel =>
+      bytes.writeFully(channel)
     }
   }
 
-  private def getBytes(file: File, offset: Long, length: Long): Option[ByteBuffer] = {
-    val channel = new RandomAccessFile(file, "r").getChannel
-    Utils.tryWithSafeFinally {
-      // For small files, directly read rather than memory map
-      if (length < minMemoryMapBytes) {
-        val buf = ByteBuffer.allocate(length.toInt)
-        channel.position(offset)
-        while (buf.remaining() != 0) {
-          if (channel.read(buf) == -1) {
-            throw new IOException("Reached EOF before filling buffer\n" +
-              s"offset=$offset\nfile=${file.getAbsolutePath}\nbuf.remaining=${buf.remaining}")
-          }
-        }
-        buf.flip()
-        Some(buf)
-      } else {
-        Some(channel.map(MapMode.READ_ONLY, offset, length))
-      }
-    } {
-      channel.close()
-    }
-  }
-
-  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
+  def getBytes(blockId: BlockId): BlockData = {
     val file = diskManager.getFile(blockId.name)
-    getBytes(file, 0, file.length)
+    val blockSize = getSize(blockId)
+
+    securityManager.getIOEncryptionKey() match {
+      case Some(key) =>
+        // Encrypted blocks cannot be memory mapped; return a special object that does decryption
+        // and provides InputStream / FileRegion implementations for reading the data.
+        new EncryptedBlockData(file, blockSize, conf, key)
+
+      case _ =>
+        new DiskBlockData(minMemoryMapBytes, maxMemoryMapBytes, file, blockSize)
+    }
   }
 
-  def getBytes(segment: FileSegment): Option[ByteBuffer] = {
-    getBytes(segment.file, segment.offset, segment.length)
-  }
-
-  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
-    getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
-  }
-
-  /**
-   * A version of getValues that allows a custom serializer. This is used as part of the
-   * shuffle short-circuit code.
-   */
-  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    // TODO: Should bypass getBytes and use a stream based implementation, so that
-    // we won't use a lot of memory during e.g. external sort merge.
-    getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
-  }
-
-  override def remove(blockId: BlockId): Boolean = {
+  def remove(blockId: BlockId): Boolean = {
+    blockSizes.remove(blockId.name)
     val file = diskManager.getFile(blockId.name)
     if (file.exists()) {
-      file.delete()
+      val ret = file.delete()
+      if (!ret) {
+        logWarning(s"Error deleting ${file.getPath()}")
+      }
+      ret
     } else {
       false
     }
   }
 
-  override def contains(blockId: BlockId): Boolean = {
+  def contains(blockId: BlockId): Boolean = {
     val file = diskManager.getFile(blockId.name)
     file.exists()
   }
+
+  private def openForWrite(file: File): WritableByteChannel = {
+    val out = new FileOutputStream(file).getChannel()
+    try {
+      securityManager.getIOEncryptionKey().map { key =>
+        CryptoStreamUtils.createWritableChannel(out, conf, key)
+      }.getOrElse(out)
+    } catch {
+      case e: Exception =>
+        Closeables.close(out, true)
+        file.delete()
+        throw e
+    }
+  }
+
+}
+
+private class DiskBlockData(
+    minMemoryMapBytes: Long,
+    maxMemoryMapBytes: Long,
+    file: File,
+    blockSize: Long) extends BlockData {
+
+  override def toInputStream(): InputStream = new FileInputStream(file)
+
+  /**
+  * Returns a Netty-friendly wrapper for the block's data.
+  *
+  * Please see `ManagedBuffer.convertToNetty()` for more details.
+  */
+  override def toNetty(): AnyRef = new DefaultFileRegion(file, 0, size)
+
+  override def toChunkedByteBuffer(allocator: (Int) => ByteBuffer): ChunkedByteBuffer = {
+    Utils.tryWithResource(open()) { channel =>
+      var remaining = blockSize
+      val chunks = new ListBuffer[ByteBuffer]()
+      while (remaining > 0) {
+        val chunkSize = math.min(remaining, maxMemoryMapBytes)
+        val chunk = allocator(chunkSize.toInt)
+        remaining -= chunkSize
+        JavaUtils.readFully(channel, chunk)
+        chunk.flip()
+        chunks += chunk
+      }
+      new ChunkedByteBuffer(chunks.toArray)
+    }
+  }
+
+  override def toByteBuffer(): ByteBuffer = {
+    require(blockSize < maxMemoryMapBytes,
+      s"can't create a byte buffer of size $blockSize" +
+      s" since it exceeds ${Utils.bytesToString(maxMemoryMapBytes)}.")
+    Utils.tryWithResource(open()) { channel =>
+      if (blockSize < minMemoryMapBytes) {
+        // For small files, directly read rather than memory map.
+        val buf = ByteBuffer.allocate(blockSize.toInt)
+        JavaUtils.readFully(channel, buf)
+        buf.flip()
+        buf
+      } else {
+        channel.map(MapMode.READ_ONLY, 0, file.length)
+      }
+    }
+  }
+
+  override def size: Long = blockSize
+
+  override def dispose(): Unit = {}
+
+  private def open() = new FileInputStream(file).getChannel
+}
+
+private class EncryptedBlockData(
+    file: File,
+    blockSize: Long,
+    conf: SparkConf,
+    key: Array[Byte]) extends BlockData {
+
+  override def toInputStream(): InputStream = Channels.newInputStream(open())
+
+  override def toNetty(): Object = new ReadableChannelFileRegion(open(), blockSize)
+
+  override def toChunkedByteBuffer(allocator: Int => ByteBuffer): ChunkedByteBuffer = {
+    val source = open()
+    try {
+      var remaining = blockSize
+      val chunks = new ListBuffer[ByteBuffer]()
+      while (remaining > 0) {
+        val chunkSize = math.min(remaining, Int.MaxValue)
+        val chunk = allocator(chunkSize.toInt)
+        remaining -= chunkSize
+        JavaUtils.readFully(source, chunk)
+        chunk.flip()
+        chunks += chunk
+      }
+
+      new ChunkedByteBuffer(chunks.toArray)
+    } finally {
+      source.close()
+    }
+  }
+
+  override def toByteBuffer(): ByteBuffer = {
+    // This is used by the block transfer service to replicate blocks. The upload code reads
+    // all bytes into memory to send the block to the remote executor, so it's ok to do this
+    // as long as the block fits in a Java array.
+    assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
+    val dst = ByteBuffer.allocate(blockSize.toInt)
+    val in = open()
+    try {
+      JavaUtils.readFully(in, dst)
+      dst.flip()
+      dst
+    } finally {
+      Closeables.close(in, true)
+    }
+  }
+
+  override def size: Long = blockSize
+
+  override def dispose(): Unit = { }
+
+  private def open(): ReadableByteChannel = {
+    val channel = new FileInputStream(file).getChannel()
+    try {
+      CryptoStreamUtils.createReadableChannel(channel, conf, key)
+    } catch {
+      case e: Exception =>
+        Closeables.close(channel, true)
+        throw e
+    }
+  }
+
+}
+
+private class ReadableChannelFileRegion(source: ReadableByteChannel, blockSize: Long)
+  extends AbstractReferenceCounted with FileRegion {
+
+  private var _transferred = 0L
+
+  private val buffer = ByteBuffer.allocateDirect(64 * 1024)
+  buffer.flip()
+
+  override def count(): Long = blockSize
+
+  override def position(): Long = 0
+
+  override def transfered(): Long = _transferred
+
+  override def transferTo(target: WritableByteChannel, pos: Long): Long = {
+    assert(pos == transfered(), "Invalid position.")
+
+    var written = 0L
+    var lastWrite = -1L
+    while (lastWrite != 0) {
+      if (!buffer.hasRemaining()) {
+        buffer.clear()
+        source.read(buffer)
+        buffer.flip()
+      }
+      if (buffer.hasRemaining()) {
+        lastWrite = target.write(buffer)
+        written += lastWrite
+      } else {
+        lastWrite = 0
+      }
+    }
+
+    _transferred += written
+    written
+  }
+
+  override def deallocate(): Unit = source.close()
+}
+
+private class CountingWritableChannel(sink: WritableByteChannel) extends WritableByteChannel {
+
+  private var count = 0L
+
+  def getCount: Long = count
+
+  override def write(src: ByteBuffer): Int = {
+    val written = sink.write(src)
+    if (written > 0) {
+      count += written
+    }
+    written
+  }
+
+  override def isOpen(): Boolean = sink.isOpen()
+
+  override def close(): Unit = sink.close()
+
 }

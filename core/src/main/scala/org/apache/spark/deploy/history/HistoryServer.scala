@@ -21,16 +21,19 @@ import java.util.NoSuchElementException
 import java.util.zip.ZipOutputStream
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import com.google.common.cache._
+import scala.util.control.NonFatal
+import scala.xml.Node
+
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource,
-  UIRoot}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
+import org.apache.spark.status.api.v1.{ApiRootResource, ApplicationInfo, ApplicationsListResource, UIRoot}
 import org.apache.spark.ui.{SparkUI, UIUtils, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{ShutdownHookManager, SignalLogger, Utils}
+import org.apache.spark.util.{ShutdownHookManager, SystemClock, Utils}
 
 /**
  * A web server that renders SparkUIs of completed applications.
@@ -48,31 +51,20 @@ class HistoryServer(
     provider: ApplicationHistoryProvider,
     securityManager: SecurityManager,
     port: Int)
-  extends WebUI(securityManager, port, conf) with Logging with UIRoot {
+  extends WebUI(securityManager, securityManager.getSSLOptions("historyServer"), port, conf)
+  with Logging with UIRoot with ApplicationCacheOperations {
 
   // How many applications to retain
   private val retainedApplications = conf.getInt("spark.history.retainedApplications", 50)
 
-  private val appLoader = new CacheLoader[String, SparkUI] {
-    override def load(key: String): SparkUI = {
-      val parts = key.split("/")
-      require(parts.length == 1 || parts.length == 2, s"Invalid app key $key")
-      val ui = provider
-        .getAppUI(parts(0), if (parts.length > 1) Some(parts(1)) else None)
-        .getOrElse(throw new NoSuchElementException(s"no app with key $key"))
-      attachSparkUI(ui)
-      ui
-    }
-  }
+  // How many applications the summary ui displays
+  private[history] val maxApplications = conf.get(HISTORY_UI_MAX_APPS);
 
-  private val appCache = CacheBuilder.newBuilder()
-    .maximumSize(retainedApplications)
-    .removalListener(new RemovalListener[String, SparkUI] {
-      override def onRemoval(rm: RemovalNotification[String, SparkUI]): Unit = {
-        detachSparkUI(rm.getValue())
-      }
-    })
-    .build(appLoader)
+  // application
+  private val appCache = new ApplicationCache(this, retainedApplications, new SystemClock())
+
+  // and its metrics, for testing as well as monitoring
+  val cacheMetrics = appCache.metrics
 
   private val loaderServlet = new HttpServlet {
     protected override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
@@ -103,7 +95,9 @@ class HistoryServer(
       // Note we don't use the UI retrieved from the cache; the cache loader above will register
       // the app's UI, and all we need to do is redirect the user to the same URI that was
       // requested, and the proper data should be served at that point.
-      res.sendRedirect(res.encodeRedirectURL(req.getRequestURI()))
+      // Also, make sure that the redirect url contains the query string present in the request.
+      val requestURI = req.getRequestURI + Option(req.getQueryString).map("?" + _).getOrElse("")
+      res.sendRedirect(res.encodeRedirectURL(requestURI))
     }
 
     // SPARK-5983 ensure TRACE is not supported
@@ -113,7 +107,7 @@ class HistoryServer(
   }
 
   def getSparkUI(appKey: String): Option[SparkUI] = {
-    Option(appCache.get(appKey))
+    appCache.getSparkUI(appKey)
   }
 
   initialize()
@@ -146,19 +140,34 @@ class HistoryServer(
   override def stop() {
     super.stop()
     provider.stop()
+    appCache.stop()
   }
 
   /** Attach a reconstructed UI to this server. Only valid after bind(). */
-  private def attachSparkUI(ui: SparkUI) {
+  override def attachSparkUI(
+      appId: String,
+      attemptId: Option[String],
+      ui: SparkUI,
+      completed: Boolean) {
     assert(serverInfo.isDefined, "HistoryServer must be bound before attaching SparkUIs")
     ui.getHandlers.foreach(attachHandler)
     addFilters(ui.getHandlers, conf)
   }
 
   /** Detach a reconstructed UI from this server. Only valid after bind(). */
-  private def detachSparkUI(ui: SparkUI) {
+  override def detachSparkUI(appId: String, attemptId: Option[String], ui: SparkUI): Unit = {
     assert(serverInfo.isDefined, "HistoryServer must be bound before detaching SparkUIs")
     ui.getHandlers.foreach(detachHandler)
+  }
+
+  /**
+   * Get the application UI and whether or not it is completed
+   * @param appId application ID
+   * @param attemptId attempt ID
+   * @return If found, the Spark UI and any history information to be used in the cache
+   */
+  override def getAppUI(appId: String, attemptId: Option[String]): Option[LoadedAppUI] = {
+    provider.getAppUI(appId, attemptId)
   }
 
   /**
@@ -166,12 +175,24 @@ class HistoryServer(
    *
    * @return List of all known applications.
    */
-  def getApplicationList(): Iterable[ApplicationHistoryInfo] = {
+  def getApplicationList(): Iterator[ApplicationHistoryInfo] = {
     provider.getListing()
   }
 
+  def getEventLogsUnderProcess(): Int = {
+    provider.getEventLogsUnderProcess()
+  }
+
+  def getLastUpdatedTime(): Long = {
+    provider.getLastUpdatedTime()
+  }
+
   def getApplicationInfoList: Iterator[ApplicationInfo] = {
-    getApplicationList().iterator.map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+    getApplicationList().map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
+  }
+
+  def getApplicationInfo(appId: String): Option[ApplicationInfo] = {
+    provider.getApplicationInfo(appId).map(ApplicationsListResource.appHistoryInfoToPublicAppInfo)
   }
 
   override def writeEventLogs(
@@ -182,18 +203,31 @@ class HistoryServer(
   }
 
   /**
+   * @return html text to display when the application list is empty
+   */
+  def emptyListingHtml(): Seq[Node] = {
+    provider.getEmptyListingHtml()
+  }
+
+  /**
    * Returns the provider configuration to show in the listing page.
    *
    * @return A map with the provider's configuration.
    */
   def getProviderConfig(): Map[String, String] = provider.getConfig()
 
+  /**
+   * Load an application UI and attach it to the web server.
+   * @param appId application ID
+   * @param attemptId optional attempt ID
+   * @return true if the application was found and loaded.
+   */
   private def loadAppUi(appId: String, attemptId: Option[String]): Boolean = {
     try {
-      appCache.get(appId + attemptId.map { id => s"/$id" }.getOrElse(""))
+      appCache.get(appId, attemptId)
       true
     } catch {
-      case e: Exception => e.getCause() match {
+      case NonFatal(e) => e.getCause() match {
         case nsee: NoSuchElementException =>
           false
 
@@ -202,6 +236,17 @@ class HistoryServer(
     }
   }
 
+  /**
+   * String value for diagnostics.
+   * @return a multi-line description of the server state.
+   */
+  override def toString: String = {
+    s"""
+      | History Server;
+      | provider = $provider
+      | cache = $appCache
+    """.stripMargin
+  }
 }
 
 /**
@@ -220,11 +265,11 @@ object HistoryServer extends Logging {
 
   val UI_PATH_PREFIX = "/history"
 
-  def main(argStrings: Array[String]) {
-    SignalLogger.register(log)
+  def main(argStrings: Array[String]): Unit = {
+    Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = createSecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
@@ -242,6 +287,29 @@ object HistoryServer extends Logging {
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
+  }
+
+  /**
+   * Create a security manager.
+   * This turns off security in the SecurityManager, so that the History Server can start
+   * in a Spark cluster where security is enabled.
+   * @param config configuration for the SecurityManager constructor
+   * @return the security manager for use in constructing the History Server.
+   */
+  private[history] def createSecurityManager(config: SparkConf): SecurityManager = {
+    if (config.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)) {
+      logDebug(s"Clearing ${SecurityManager.SPARK_AUTH_CONF}")
+      config.set(SecurityManager.SPARK_AUTH_CONF, "false")
+    }
+
+    if (config.getBoolean("spark.acls.enable", config.getBoolean("spark.ui.acls.enable", false))) {
+      logInfo("Either spark.acls.enable or spark.ui.acls.enable is configured, clearing it and " +
+        "only using spark.history.ui.acl.enable")
+      config.set("spark.acls.enable", "false")
+      config.set("spark.ui.acls.enable", "false")
+    }
+
+    new SecurityManager(config)
   }
 
   def initSecurity() {

@@ -31,7 +31,8 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
 
   def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
-    while (i < ordering.size) {
+    val size = ordering.size
+    while (i < size) {
       val order = ordering(i)
       val left = order.child.eval(a)
       val right = order.child.eval(b)
@@ -39,15 +40,19 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       if (left == null && right == null) {
         // Both null, continue looking.
       } else if (left == null) {
-        return if (order.direction == Ascending) -1 else 1
+        return if (order.nullOrdering == NullsFirst) -1 else 1
       } else if (right == null) {
-        return if (order.direction == Ascending) 1 else -1
+        return if (order.nullOrdering == NullsFirst) 1 else -1
       } else {
         val comparison = order.dataType match {
           case dt: AtomicType if order.direction == Ascending =>
             dt.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
           case dt: AtomicType if order.direction == Descending =>
             dt.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+          case a: ArrayType if order.direction == Ascending =>
+            a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case a: ArrayType if order.direction == Descending =>
+            a.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
           case s: StructType if order.direction == Ascending =>
             s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
           case s: StructType if order.direction == Descending =>
@@ -72,7 +77,7 @@ object InterpretedOrdering {
    */
   def forSchema(dataTypes: Seq[DataType]): InterpretedOrdering = {
     new InterpretedOrdering(dataTypes.zipWithIndex.map {
-      case (dt, index) => new SortOrder(BoundReference(index, dt, nullable = true), Ascending)
+      case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     })
   }
 }
@@ -86,6 +91,8 @@ object RowOrdering {
     case NullType => true
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
+    case array: ArrayType => isOrderable(array.elementType)
+    case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
     case _ => false
   }
 

@@ -21,9 +21,11 @@ import scala.collection.JavaConverters._
 
 import com.google.common.util.concurrent.AtomicLongMap
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.util.Utils
 
 object RuleExecutor {
   protected val timeMap = AtomicLongMap.create[String]()
@@ -37,7 +39,7 @@ object RuleExecutor {
     val maxSize = map.keys.map(_.toString.length).max
     map.toSeq.sortBy(_._2).reverseMap { case (k, v) =>
       s"${k.padTo(maxSize, " ").mkString} $v"
-    }.mkString("\n")
+    }.mkString("\n", "\n", "")
   }
 }
 
@@ -59,8 +61,15 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   protected case class Batch(name: String, strategy: Strategy, rules: Rule[TreeType]*)
 
   /** Defines a sequence of rule batches, to be overridden by the implementation. */
-  protected val batches: Seq[Batch]
+  protected def batches: Seq[Batch]
 
+  /**
+   * Defines a check function that checks for structural integrity of the plan after the execution
+   * of each rule. For example, we can check whether a plan is still resolved after each rule in
+   * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
+   * `false` if the given plan doesn't pass the structural integrity check.
+   */
+  protected def isPlanIntegral(plan: TreeType): Boolean = true
 
   /**
    * Executes the batches of rules defined by the subclass. The batches are executed serially
@@ -92,13 +101,25 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
                 """.stripMargin)
             }
 
+            // Run the structural integrity checker against the plan after each rule.
+            if (!isPlanIntegral(result)) {
+              val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
+                "the structural integrity of the plan is broken."
+              throw new TreeNodeException(result, message, null)
+            }
+
             result
         }
         iteration += 1
         if (iteration > batch.strategy.maxIterations) {
           // Only log if this is a rule that is supposed to run more than once.
           if (iteration != 2) {
-            logInfo(s"Max iterations (${iteration - 1}) reached for batch ${batch.name}")
+            val message = s"Max iterations (${iteration - 1}) reached for batch ${batch.name}"
+            if (Utils.isTesting) {
+              throw new TreeNodeException(curPlan, message, null)
+            } else {
+              logWarning(message)
+            }
           }
           continue = false
         }
@@ -115,7 +136,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
         logDebug(
           s"""
           |=== Result of Batch ${batch.name} ===
-          |${sideBySide(plan.treeString, curPlan.treeString).mkString("\n")}
+          |${sideBySide(batchStartPlan.treeString, curPlan.treeString).mkString("\n")}
         """.stripMargin)
       } else {
         logTrace(s"Batch ${batch.name} has no effect.")

@@ -20,21 +20,20 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.apache.spark</groupId>
-  <artifactId>spark-repl_2.10</artifactId>
+  <artifactId>spark-repl_2.11</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project REPL</name>
   <url>http://spark.apache.org/</url>
 
   <properties>
     <sbt.project.name>repl</sbt.project.name>
-    <extra.source.dir>scala-2.10/src/main/scala</extra.source.dir>
-    <extra.testsource.dir>scala-2.10/src/test/scala</extra.testsource.dir>
+    <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>
+    <extra.testsource.dir>scala-2.11/src/test/scala</extra.testsource.dir>
   </properties>
 
   <dependencies>
@@ -49,12 +48,6 @@
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
-      <version>${project.version}</version>
-      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -78,6 +71,10 @@
       <version>${scala.version}</version>
     </dependency>
     <dependency>
+      <groupId>jline</groupId>
+      <artifactId>jline</artifactId>
+    </dependency>
+     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>jul-to-slf4j</artifactId>
     </dependency>
@@ -90,6 +87,26 @@
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+    </dependency>
+
+    <!--
+      This spark-tags test-dep is needed even though it isn't used in this module, otherwise testing-cmds that exclude
+      them will yield errors.
+    -->
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.apache.xbean</groupId>
+      <artifactId>xbean-asm5-shaded</artifactId>
     </dependency>
 
     <!-- Explicit listing of transitive deps that are shaded. Otherwise, odd compiler crashes. -->
@@ -153,30 +170,17 @@
       </plugin>
     </plugins>
   </build>
+  
+  <!--
   <profiles>
     <profile>
-      <id>scala-2.10</id>
-      <activation>
-        <property><name>!scala-2.11</name></property>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>${jline.groupid}</groupId>
-          <artifactId>jline</artifactId>
-          <version>${jline.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
-
-    <profile>
-      <id>scala-2.11</id>
-      <activation>
-        <property><name>scala-2.11</name></property>
-      </activation>
+      <id>scala-2.12</id>
       <properties>
-        <extra.source.dir>scala-2.11/src/main/scala</extra.source.dir>
-        <extra.testsource.dir>scala-2.11/src/test/scala</extra.testsource.dir>
+        <extra.source.dir>scala-2.12/src/main/scala</extra.source.dir>
+        <extra.testsource.dir>scala-2.12/src/test/scala</extra.testsource.dir>
       </properties>
     </profile>
   </profiles>
+  -->
+
 </project>

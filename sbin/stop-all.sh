@@ -20,23 +20,23 @@
 # Stop all spark daemons.
 # Run this on the master node.
 
-
-sbin="`dirname "$0"`"
-sbin="`cd "$sbin"; pwd`"
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
 # Load the Spark configuration
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
 # Stop the slaves, then the master
-"$sbin"/stop-slaves.sh
-"$sbin"/stop-master.sh
+"${SPARK_HOME}/sbin"/stop-slaves.sh
+"${SPARK_HOME}/sbin"/stop-master.sh
 
 if [ "$1" == "--wait" ]
 then
   printf "Waiting for workers to shut down..."
   while true
   do
-    running=`$sbin/slaves.sh ps -ef | grep -v grep | grep deploy.worker.Worker`
+    running=`${SPARK_HOME}/sbin/slaves.sh ps -ef | grep -v grep | grep deploy.worker.Worker`
     if [ -z "$running" ]
     then
       printf "\nAll workers successfully shut down.\n"

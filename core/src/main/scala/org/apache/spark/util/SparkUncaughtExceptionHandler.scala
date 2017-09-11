@@ -17,26 +17,31 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
- * The default uncaught exception handler for Executors terminates the whole process, to avoid
- * getting into a bad state indefinitely. Since Executors are relatively lightweight, it's better
- * to fail fast when things go wrong.
+ * The default uncaught exception handler for Spark daemons. It terminates the whole process for
+ * any Errors, and also terminates the process for Exceptions when the exitOnException flag is true.
+ *
+ * @param exitOnUncaughtException Whether to exit the process on UncaughtException.
  */
-private[spark] object SparkUncaughtExceptionHandler
+private[spark] class SparkUncaughtExceptionHandler(val exitOnUncaughtException: Boolean = true)
   extends Thread.UncaughtExceptionHandler with Logging {
 
   override def uncaughtException(thread: Thread, exception: Throwable) {
     try {
-      logError("Uncaught exception in thread " + thread, exception)
+      // Make it explicit that uncaught exceptions are thrown when container is shutting down.
+      // It will help users when they analyze the executor logs
+      val inShutdownMsg = if (ShutdownHookManager.inShutdown()) "[Container in shutdown] " else ""
+      val errMsg = "Uncaught exception in thread "
+      logError(inShutdownMsg + errMsg + thread, exception)
 
       // We may have been called from a shutdown hook. If so, we must not call System.exit().
       // (If we do, we will deadlock.)
       if (!ShutdownHookManager.inShutdown()) {
         if (exception.isInstanceOf[OutOfMemoryError]) {
           System.exit(SparkExitCode.OOM)
-        } else {
+        } else if (exitOnUncaughtException) {
           System.exit(SparkExitCode.UNCAUGHT_EXCEPTION)
         }
       }

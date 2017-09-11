@@ -23,10 +23,12 @@ import scala.util.Random
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
+import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
+import org.apache.spark.internal.config._
+import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{FileBasedWriteAheadLogSegment, FileBasedWriteAheadLogWriter}
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
 
 class WriteAheadLogBackedBlockRDDSuite
   extends SparkFunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
@@ -39,25 +41,51 @@ class WriteAheadLogBackedBlockRDDSuite
 
   var sparkContext: SparkContext = null
   var blockManager: BlockManager = null
+  var serializerManager: SerializerManager = null
   var dir: File = null
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
+    initSparkContext()
     dir = Utils.createTempDir()
   }
 
   override def afterEach(): Unit = {
-    Utils.deleteRecursively(dir)
-  }
-
-  override def beforeAll(): Unit = {
-    sparkContext = new SparkContext(conf)
-    blockManager = sparkContext.env.blockManager
+    try {
+      Utils.deleteRecursively(dir)
+    } finally {
+      super.afterEach()
+    }
   }
 
   override def afterAll(): Unit = {
+    try {
+      stopSparkContext()
+    } finally {
+      super.afterAll()
+    }
+  }
+
+  private def initSparkContext(_conf: Option[SparkConf] = None): Unit = {
+    if (sparkContext == null) {
+      sparkContext = new SparkContext(_conf.getOrElse(conf))
+      blockManager = sparkContext.env.blockManager
+      serializerManager = sparkContext.env.serializerManager
+    }
+  }
+
+  private def stopSparkContext(): Unit = {
     // Copied from LocalSparkContext, simpler than to introduced test dependencies to core tests.
-    sparkContext.stop()
-    System.clearProperty("spark.driver.port")
+    try {
+      if (sparkContext != null) {
+        sparkContext.stop()
+      }
+      System.clearProperty("spark.driver.port")
+      blockManager = null
+      serializerManager = null
+    } finally {
+      sparkContext = null
+    }
   }
 
   test("Read data available in both block manager and write ahead log") {
@@ -91,13 +119,22 @@ class WriteAheadLogBackedBlockRDDSuite
       numPartitions = 5, numPartitionsInBM = 0, numPartitionsInWAL = 5, testStoreInBM = true)
   }
 
+  test("read data in block manager and WAL with encryption on") {
+    stopSparkContext()
+    try {
+      val testConf = conf.clone().set(IO_ENCRYPTION_ENABLED, true)
+      initSparkContext(Some(testConf))
+      testRDD(numPartitions = 5, numPartitionsInBM = 3, numPartitionsInWAL = 2)
+    } finally {
+      stopSparkContext()
+    }
+  }
+
   /**
    * Test the WriteAheadLogBackedRDD, by writing some partitions of the data to block manager
-   * and the rest to a write ahead log, and then reading reading it all back using the RDD.
+   * and the rest to a write ahead log, and then reading it all back using the RDD.
    * It can also test if the partitions that were read from the log were again stored in
    * block manager.
-   *
-   *
    *
    * @param numPartitions Number of partitions in RDD
    * @param numPartitionsInBM Number of partitions to write to the BlockManager.
@@ -173,7 +210,7 @@ class WriteAheadLogBackedBlockRDDSuite
     assert(rdd.collect() === data.flatten)
 
     // Verify that the block fetching is skipped when isBlockValid is set to false.
-    // This is done by using a RDD whose data is only in memory but is set to skip block fetching
+    // This is done by using an RDD whose data is only in memory but is set to skip block fetching
     // Using that RDD will throw exception, as it skips block fetching even if the blocks are in
     // in BlockManager.
     if (testIsBlockValid) {
@@ -213,7 +250,7 @@ class WriteAheadLogBackedBlockRDDSuite
     require(blockData.size === blockIds.size)
     val writer = new FileBasedWriteAheadLogWriter(new File(dir, "logFile").toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
-      writer.write(blockManager.dataSerialize(id, data.iterator))
+      writer.write(serializerManager.dataSerialize(id, data.iterator).toByteBuffer)
     }
     writer.close()
     segments

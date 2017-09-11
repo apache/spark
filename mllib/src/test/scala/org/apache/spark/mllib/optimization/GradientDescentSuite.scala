@@ -25,7 +25,7 @@ import org.scalatest.Matchers
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{MLUtils, LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext, MLUtils}
 import org.apache.spark.mllib.util.TestingUtils._
 
 object GradientDescentSuite {
@@ -131,7 +131,7 @@ class GradientDescentSuite extends SparkFunSuite with MLlibTestSparkContext with
     assert(
       loss1(0) ~= (loss0(0) + (math.pow(initialWeightsWithIntercept(0), 2) +
         math.pow(initialWeightsWithIntercept(1), 2)) / 2) absTol 1E-5,
-      """For non-zero weights, the regVal should be \frac{1}{2}\sum_i w_i^2.""")
+      """For non-zero weights, the regVal should be 0.5 * sum(w_i ^ 2).""")
 
     assert(
       (newWeights1(0) ~= (newWeights0(0) - initialWeightsWithIntercept(0)) absTol 1E-5) &&

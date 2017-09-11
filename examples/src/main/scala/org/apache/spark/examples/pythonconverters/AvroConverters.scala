@@ -21,13 +21,13 @@ import java.util.{Collection => JCollection, Map => JMap}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.generic.{GenericFixed, IndexedRecord}
-import org.apache.avro.mapred.AvroWrapper
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type._
+import org.apache.avro.generic.{GenericFixed, IndexedRecord}
+import org.apache.avro.mapred.AvroWrapper
 
-import org.apache.spark.api.python.Converter
 import org.apache.spark.SparkException
+import org.apache.spark.api.python.Converter
 
 
 object AvroConversionUtil extends Serializable {
@@ -79,7 +79,10 @@ object AvroConversionUtil extends Serializable {
 
   def unpackBytes(obj: Any): Array[Byte] = {
     val bytes: Array[Byte] = obj match {
-      case buf: java.nio.ByteBuffer => buf.array()
+      case buf: java.nio.ByteBuffer =>
+        val arr = new Array[Byte](buf.remaining())
+        buf.get(arr)
+        arr
       case arr: Array[Byte] => arr
       case other => throw new SparkException(
         s"Unknown BYTES type ${other.getClass.getName}")

@@ -26,8 +26,8 @@ import scala.collection.JavaConverters._
 
 import com.google.common.io.{ByteStreams, Files}
 
-import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.api.r.RUtils
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{RedirectThread, Utils}
 
 private[deploy] object RPackageUtils extends Logging {
@@ -92,6 +92,9 @@ private[deploy] object RPackageUtils extends Logging {
    * Exposed for testing.
    */
   private[deploy] def checkManifestForR(jar: JarFile): Boolean = {
+    if (jar.getManifest == null) {
+      return false
+    }
     val manifest = jar.getManifest.getMainAttributes
     manifest.getValue(hasRPackage) != null && manifest.getValue(hasRPackage).trim == "true"
   }
@@ -100,20 +103,29 @@ private[deploy] object RPackageUtils extends Logging {
    * Runs the standard R package installation code to build the R package from source.
    * Multiple runs don't cause problems.
    */
-  private def rPackageBuilder(dir: File, printStream: PrintStream, verbose: Boolean): Boolean = {
+  private def rPackageBuilder(
+      dir: File,
+      printStream: PrintStream,
+      verbose: Boolean,
+      libDir: String): Boolean = {
     // this code should be always running on the driver.
-    val pathToSparkR = RUtils.localSparkRPackagePath.getOrElse(
-      throw new SparkException("SPARK_HOME not set. Can't locate SparkR package."))
     val pathToPkg = Seq(dir, "R", "pkg").mkString(File.separator)
-    val installCmd = baseInstallCmd ++ Seq(pathToSparkR, pathToPkg)
+    val installCmd = baseInstallCmd ++ Seq(libDir, pathToPkg)
     if (verbose) {
       print(s"Building R package with the command: $installCmd", printStream)
     }
     try {
       val builder = new ProcessBuilder(installCmd.asJava)
       builder.redirectErrorStream(true)
+
+      // Put the SparkR package directory into R library search paths in case this R package
+      // may depend on SparkR.
       val env = builder.environment()
-      env.clear()
+      val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
+      env.put("SPARKR_PACKAGE_DIR", rPackageDir.mkString(","))
+      env.put("R_PROFILE_USER",
+        Seq(rPackageDir(0), "SparkR", "profile", "general.R").mkString(File.separator))
+
       val process = builder.start()
       new RedirectThread(process.getInputStream, printStream, "redirect R packaging").start()
       process.waitFor() == 0
@@ -167,21 +179,31 @@ private[deploy] object RPackageUtils extends Logging {
       val file = new File(Utils.resolveURI(jarPath))
       if (file.exists()) {
         val jar = new JarFile(file)
-        if (checkManifestForR(jar)) {
-          print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
-          val rSource = extractRFolder(jar, printStream, verbose)
-          try {
-            if (!rPackageBuilder(rSource, printStream, verbose)) {
-              print(s"ERROR: Failed to build R package in $file.", printStream)
-              print(RJarDoc, printStream)
+        Utils.tryWithSafeFinally {
+          if (checkManifestForR(jar)) {
+            print(s"$file contains R source code. Now installing package.", printStream, Level.INFO)
+            val rSource = extractRFolder(jar, printStream, verbose)
+            if (RUtils.rPackages.isEmpty) {
+              RUtils.rPackages = Some(Utils.createTempDir().getAbsolutePath)
             }
-          } finally {
-            rSource.delete() // clean up
+            try {
+              if (!rPackageBuilder(rSource, printStream, verbose, RUtils.rPackages.get)) {
+                print(s"ERROR: Failed to build R package in $file.", printStream)
+                print(RJarDoc, printStream)
+              }
+            } finally {
+              // clean up
+              if (!rSource.delete()) {
+                logWarning(s"Error deleting ${rSource.getPath()}")
+              }
+            }
+          } else {
+            if (verbose) {
+              print(s"$file doesn't contain R source code, skipping...", printStream)
+            }
           }
-        } else {
-          if (verbose) {
-            print(s"$file doesn't contain R source code, skipping...", printStream)
-          }
+        } {
+          jar.close()
         }
       } else {
         print(s"WARN: $file resolved as dependency, but not found.", printStream, Level.WARNING)
@@ -206,17 +228,23 @@ private[deploy] object RPackageUtils extends Logging {
     }
   }
 
-  /** Zips all the libraries found with SparkR in the R/lib directory for distribution with Yarn. */
+  /** Zips all the R libraries built for distribution to the cluster. */
   private[deploy] def zipRLibraries(dir: File, name: String): File = {
     val filesToBundle = listFilesRecursively(dir, Seq(".zip"))
     // create a zip file from scratch, do not append to existing file.
     val zipFile = new File(dir, name)
-    zipFile.delete()
+    if (!zipFile.delete()) {
+      logWarning(s"Error deleting ${zipFile.getPath()}")
+    }
     val zipOutputStream = new ZipOutputStream(new FileOutputStream(zipFile, false))
     try {
       filesToBundle.foreach { file =>
-        // get the relative paths for proper naming in the zip file
-        val relPath = file.getAbsolutePath.replaceFirst(dir.getAbsolutePath, "")
+        // Get the relative paths for proper naming in the ZIP file. Note that
+        // we convert dir to URI to force / and then remove trailing / that show up for
+        // directories because the separator should always be / for according to ZIP
+        // specification and therefore `relPath` here should be, for example,
+        // "/packageTest/def.R" or "/test.R".
+        val relPath = file.toURI.toString.replaceFirst(dir.toURI.toString.stripSuffix("/"), "")
         val fis = new FileInputStream(file)
         val zipEntry = new ZipEntry(relPath)
         zipOutputStream.putNextEntry(zipEntry)

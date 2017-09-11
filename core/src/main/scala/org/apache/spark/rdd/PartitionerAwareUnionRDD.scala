@@ -31,12 +31,13 @@ import org.apache.spark.util.Utils
 private[spark]
 class PartitionerAwareUnionRDDPartition(
     @transient val rdds: Seq[RDD[_]],
-    val idx: Int
+    override val index: Int
   ) extends Partition {
-  var parents = rdds.map(_.partitions(idx)).toArray
+  var parents = rdds.map(_.partitions(index)).toArray
 
-  override val index = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -59,7 +60,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     sc: SparkContext,
     var rdds: Seq[RDD[T]]
   ) extends RDD[T](sc, rdds.map(x => new OneToOneDependency(x))) {
-  require(rdds.length > 0)
+  require(rdds.nonEmpty)
   require(rdds.forall(_.partitioner.isDefined))
   require(rdds.flatMap(_.partitioner).toSet.size == 1,
     "Parent RDDs have different partitioners: " + rdds.flatMap(_.partitioner))
@@ -68,9 +69,9 @@ class PartitionerAwareUnionRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val numPartitions = partitioner.get.numPartitions
-    (0 until numPartitions).map(index => {
+    (0 until numPartitions).map { index =>
       new PartitionerAwareUnionRDDPartition(rdds, index)
-    }).toArray
+    }.toArray
   }
 
   // Get the location where most of the partitions of parent RDDs are located
@@ -78,11 +79,10 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     logDebug("Finding preferred location for " + this + ", partition " + s.index)
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
     val locations = rdds.zip(parentPartitions).flatMap {
-      case (rdd, part) => {
+      case (rdd, part) =>
         val parentLocations = currPrefLocs(rdd, part)
         logDebug("Location of " + rdd + " partition " + part.index + " = " + parentLocations)
         parentLocations
-      }
     }
     val location = if (locations.isEmpty) {
       None

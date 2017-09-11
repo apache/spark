@@ -18,6 +18,7 @@
 package org.apache.spark.graphx.lib
 
 import scala.reflect.ClassTag
+
 import org.apache.spark.graphx._
 
 /** Label Propagation algorithm. */
@@ -42,6 +43,8 @@ object LabelPropagation {
    * @return a graph with vertex attributes containing the label of community affiliation
    */
   def run[VD, ED: ClassTag](graph: Graph[VD, ED], maxSteps: Int): Graph[VertexId, ED] = {
+    require(maxSteps > 0, s"Maximum of steps must be greater than 0, but got ${maxSteps}")
+
     val lpaGraph = graph.mapVertices { case (vid, _) => vid }
     def sendMessage(e: EdgeTriplet[VertexId, ED]): Iterator[(VertexId, Map[VertexId, Long])] = {
       Iterator((e.srcId, Map(e.dstAttr -> 1L)), (e.dstId, Map(e.srcAttr -> 1L)))
@@ -52,7 +55,7 @@ object LabelPropagation {
         val count1Val = count1.getOrElse(i, 0L)
         val count2Val = count2.getOrElse(i, 0L)
         i -> (count1Val + count2Val)
-      }.toMap
+      }(collection.breakOut) // more efficient alternative to [[collection.Traversable.toMap]]
     }
     def vertexProgram(vid: VertexId, attr: Long, message: Map[VertexId, Long]): VertexId = {
       if (message.isEmpty) attr else message.maxBy(_._2)._1

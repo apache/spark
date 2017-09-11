@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler.rate
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Implements a proportional-integral-derivative (PID) controller which acts on
@@ -26,7 +26,7 @@ import org.apache.spark.Logging
  * case of Spark Streaming the error is the difference between the measured processing
  * rate (number of elements/processing delay) and the previous rate.
  *
- * @see https://en.wikipedia.org/wiki/PID_controller
+ * @see <a href="https://en.wikipedia.org/wiki/PID_controller">PID controller (Wikipedia)</a>
  *
  * @param batchIntervalMillis the batch duration, in milliseconds
  * @param proportional how much the correction should depend on the current

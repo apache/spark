@@ -18,22 +18,24 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
-class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
+class IsotonicRegressionSuite
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  import testImplicits._
+
   private def generateIsotonicInput(labels: Seq[Double]): DataFrame = {
-    sqlContext.createDataFrame(
-      labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
-    ).toDF("label", "features", "weight")
+    labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
+      .toDF("label", "features", "weight")
   }
 
   private def generatePredictionInput(features: Seq[Double]): DataFrame = {
-    sqlContext.createDataFrame(features.map(Tuple1.apply))
-      .toDF("features")
+    features.map(Tuple1.apply).toDF("features")
   }
 
   test("isotonic regression predictions") {
@@ -44,7 +46,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val predictions = model
       .transform(dataset)
-      .select("prediction").map { case Row(pred) =>
+      .select("prediction").rdd.map { case Row(pred) =>
         pred
       }.collect()
 
@@ -64,7 +66,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val predictions = model
       .transform(features)
-      .select("prediction").map {
+      .select("prediction").rdd.map {
         case Row(pred) => pred
       }.collect()
 
@@ -91,8 +93,7 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = ir.fit(dataset)
 
-    // copied model must have the same parent.
-    MLTestingUtils.checkCopy(model)
+    MLTestingUtils.checkCopyAndUids(ir, model)
 
     model.transform(dataset)
       .select("label", "features", "prediction", "weight")
@@ -143,10 +144,10 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   test("vector features column with feature index") {
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = Seq(
       (4.0, Vectors.dense(0.0, 1.0)),
       (3.0, Vectors.dense(0.0, 2.0)),
-      (5.0, Vectors.sparse(2, Array(1), Array(3.0))))
+      (5.0, Vectors.sparse(2, Array(1), Array(3.0)))
     ).toDF("label", "features")
 
     val ir = new IsotonicRegression()
@@ -158,10 +159,47 @@ class IsotonicRegressionSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val predictions = model
       .transform(features)
-      .select("prediction").map {
+      .select("prediction").rdd.map {
       case Row(pred) => pred
     }.collect()
 
     assert(predictions === Array(3.5, 5.0, 5.0, 5.0))
   }
+
+  test("read/write") {
+    val dataset = generateIsotonicInput(Seq(1, 2, 3, 1, 6, 17, 16, 17, 18))
+
+    def checkModelData(model: IsotonicRegressionModel, model2: IsotonicRegressionModel): Unit = {
+      assert(model.boundaries === model2.boundaries)
+      assert(model.predictions === model2.predictions)
+      assert(model.isotonic === model2.isotonic)
+    }
+
+    val ir = new IsotonicRegression()
+    testEstimatorAndModelReadWrite(ir, dataset, IsotonicRegressionSuite.allParamSettings,
+      IsotonicRegressionSuite.allParamSettings, checkModelData)
+  }
+
+  test("should support all NumericType labels and weights, and not support other types") {
+    val ir = new IsotonicRegression()
+    MLTestingUtils.checkNumericTypes[IsotonicRegressionModel, IsotonicRegression](
+      ir, spark, isClassification = false) { (expected, actual) =>
+        assert(expected.boundaries === actual.boundaries)
+        assert(expected.predictions === actual.predictions)
+      }
+  }
+}
+
+object IsotonicRegressionSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = Map(
+    "predictionCol" -> "myPrediction",
+    "isotonic" -> true,
+    "featureIndex" -> 0
+  )
 }

@@ -24,7 +24,7 @@ import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 import org.apache.spark.util.Utils
 
 private[deploy] sealed trait DeployMessage extends Serializable
@@ -34,6 +34,16 @@ private[deploy] object DeployMessages {
 
   // Worker to Master
 
+  /**
+   * @param id the worker id
+   * @param host the worker host
+   * @param port the worker post
+   * @param worker the worker endpoint ref
+   * @param cores the core number of worker
+   * @param memory the memory size of worker
+   * @param workerWebUiUrl the worker Web UI address
+   * @param masterAddress the master address used by the worker to connect
+   */
   case class RegisterWorker(
       id: String,
       host: String,
@@ -41,10 +51,10 @@ private[deploy] object DeployMessages {
       worker: RpcEndpointRef,
       cores: Int,
       memory: Int,
-      webUiPort: Int,
-      publicAddress: String)
+      workerWebUiUrl: String,
+      masterAddress: RpcAddress)
     extends DeployMessage {
-    Utils.checkHost(host, "Required hostname")
+    Utils.checkHost(host)
     assert (port > 0)
   }
 
@@ -65,13 +75,36 @@ private[deploy] object DeployMessages {
   case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
      driverIds: Seq[String])
 
+  /**
+   * A worker will send this message to the master when it registers with the master. Then the
+   * master will compare them with the executors and drivers in the master and tell the worker to
+   * kill the unknown executors and drivers.
+   */
+  case class WorkerLatestState(
+      id: String,
+      executors: Seq[ExecutorDescription],
+      driverIds: Seq[String]) extends DeployMessage
+
   case class Heartbeat(workerId: String, worker: RpcEndpointRef) extends DeployMessage
 
   // Master to Worker
 
-  case class RegisteredWorker(master: RpcEndpointRef, masterWebUiUrl: String) extends DeployMessage
+  sealed trait RegisterWorkerResponse
 
-  case class RegisterWorkerFailed(message: String) extends DeployMessage
+  /**
+   * @param master the master ref
+   * @param masterWebUiUrl the master Web UI address
+   * @param masterAddress the master address used by the worker to connect. It should be
+   *                      [[RegisterWorker.masterAddress]].
+   */
+  case class RegisteredWorker(
+      master: RpcEndpointRef,
+      masterWebUiUrl: String,
+      masterAddress: RpcAddress) extends DeployMessage with RegisterWorkerResponse
+
+  case class RegisterWorkerFailed(message: String) extends DeployMessage with RegisterWorkerResponse
+
+  case object MasterInStandby extends DeployMessage with RegisterWorkerResponse
 
   case class ReconnectWorker(masterUrl: String) extends DeployMessage
 
@@ -117,13 +150,15 @@ private[deploy] object DeployMessages {
 
   // TODO(matei): replace hostPort with host
   case class ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) {
-    Utils.checkHostPort(hostPort, "Required hostport")
+    Utils.checkHostPort(hostPort)
   }
 
   case class ExecutorUpdated(id: Int, state: ExecutorState, message: Option[String],
-    exitStatus: Option[Int])
+    exitStatus: Option[Int], workerLost: Boolean)
 
   case class ApplicationRemoved(message: String)
+
+  case class WorkerRemoved(id: String, host: String, message: String)
 
   // DriverClient <-> Master
 
@@ -169,7 +204,7 @@ private[deploy] object DeployMessages {
       completedDrivers: Array[DriverInfo],
       status: MasterState) {
 
-    Utils.checkHost(host, "Required hostname")
+    Utils.checkHost(host)
     assert (port > 0)
 
     def uri: String = "spark://" + host + ":" + port
@@ -187,7 +222,7 @@ private[deploy] object DeployMessages {
     drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
     cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
 
-    Utils.checkHost(host, "Required hostname")
+    Utils.checkHost(host)
     assert (port > 0)
   }
 

@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -19,21 +19,21 @@ package org.apache.spark.deploy.rest
 
 import java.io.DataOutputStream
 import java.net.{HttpURLConnection, URL}
+import java.nio.charset.StandardCharsets
 import javax.servlet.http.HttpServletResponse
 
 import scala.collection.mutable
 
-import com.google.common.base.Charsets
-import org.scalatest.BeforeAndAfterEach
 import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
+import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
+import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
+import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
-import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
-import org.apache.spark.deploy.master.DriverState._
 
 /**
  * Tests for the REST application submission protocol used in standalone cluster mode.
@@ -43,8 +43,12 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var server: Option[RestSubmissionServer] = None
 
   override def afterEach() {
-    rpcEnv.foreach(_.shutdown())
-    server.foreach(_.stop())
+    try {
+      rpcEnv.foreach(_.shutdown())
+      server.foreach(_.stop())
+    } finally {
+      super.afterEach()
+    }
   }
 
   test("construct submit request") {
@@ -404,7 +408,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   /**
    * Start a [[StandaloneRestServer]] that communicates with the given endpoint.
-   * If `faulty` is true, start an [[FaultyStandaloneRestServer]] instead.
+   * If `faulty` is true, start a [[FaultyStandaloneRestServer]] instead.
    * Return the master URL that corresponds to the address of this server.
    */
   private def startServer(
@@ -494,7 +498,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
     if (body.nonEmpty) {
       conn.setDoOutput(true)
       val out = new DataOutputStream(conn.getOutputStream)
-      out.write(body.getBytes(Charsets.UTF_8))
+      out.write(body.getBytes(StandardCharsets.UTF_8))
       out.close()
     }
     conn

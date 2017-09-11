@@ -35,7 +35,7 @@ There are several useful things to note about this architecture:
    processes, and these communicate with each other, it is relatively easy to run it even on a
    cluster manager that also supports other applications (e.g. Mesos/YARN).
 3. The driver program must listen for and accept incoming connections from its executors throughout
-   its lifetime (e.g., see [spark.driver.port and spark.fileserver.port in the network config
+   its lifetime (e.g., see [spark.driver.port in the network config
    section](configuration.html#networking)). As such, the driver program must be network
    addressable from the worker nodes.
 4. Because the driver schedules tasks on the cluster, it should be run close to the worker
@@ -52,9 +52,11 @@ The system currently supports three cluster managers:
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications.
 * [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
-
-In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
-cluster on Amazon EC2.
+* [Kubernetes (experimental)](https://github.com/apache-spark-on-k8s/spark) -- In addition to the above,
+there is experimental support for Kubernetes. Kubernetes is an open-source platform
+for providing container-centric infrastructure. Kubernetes support is being actively
+developed in an [apache-spark-on-k8s](https://github.com/apache-spark-on-k8s/) Github organization. 
+For documentation, refer to that project's README.
 
 # Submitting Applications
 

@@ -19,11 +19,10 @@ package org.apache.spark.mllib.util
 
 import java.{util => ju}
 
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{Since, DeveloperApi}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix}
 import org.apache.spark.rdd.RDD
 
@@ -105,8 +104,7 @@ object MFDataGenerator {
 
     // optionally generate testing data
     if (test) {
-      val testSampSize = math.min(
-        math.round(sampSize * testSampFact), math.round(mn - sampSize)).toInt
+      val testSampSize = math.min(math.round(sampSize * testSampFact).toInt, mn - sampSize)
       val testOmega = shuffled.slice(sampSize, sampSize + testSampSize)
       val testOrdered = testOmega.sortWith(_ < _).toArray
       val testData: RDD[(Int, Int, Double)] = sc.parallelize(testOrdered)

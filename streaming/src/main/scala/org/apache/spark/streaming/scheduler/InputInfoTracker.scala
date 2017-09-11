@@ -19,9 +19,9 @@ package org.apache.spark.streaming.scheduler
 
 import scala.collection.mutable
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.streaming.{Time, StreamingContext}
+import org.apache.spark.internal.Logging
+import org.apache.spark.streaming.{StreamingContext, Time}
 
 /**
  * :: DeveloperApi ::
@@ -66,8 +66,8 @@ private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging
       new mutable.HashMap[Int, StreamInputInfo]())
 
     if (inputInfos.contains(inputInfo.inputStreamId)) {
-      throw new IllegalStateException(s"Input stream ${inputInfo.inputStreamId} for batch" +
-        s"$batchTime is already added into InputInfoTracker, this is a illegal state")
+      throw new IllegalStateException(s"Input stream ${inputInfo.inputStreamId} for batch " +
+        s"$batchTime is already added into InputInfoTracker, this is an illegal state")
     }
     inputInfos += ((inputInfo.inputStreamId, inputInfo))
   }

@@ -18,12 +18,15 @@
 package org.apache.spark
 
 import java.lang.ref.{ReferenceQueue, WeakReference}
+import java.util.Collections
+import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue, ScheduledExecutorService, TimeUnit}
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
+import scala.collection.JavaConverters._
 
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Classes that represent cleaning tasks.
@@ -56,23 +59,40 @@ private class CleanupTaskWeakReference(
  */
 private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
-  private val referenceBuffer = new ArrayBuffer[CleanupTaskWeakReference]
-    with SynchronizedBuffer[CleanupTaskWeakReference]
+  /**
+   * A buffer to ensure that `CleanupTaskWeakReference`s are not garbage collected as long as they
+   * have not been handled by the reference queue.
+   */
+  private val referenceBuffer =
+    Collections.newSetFromMap[CleanupTaskWeakReference](new ConcurrentHashMap)
 
   private val referenceQueue = new ReferenceQueue[AnyRef]
 
-  private val listeners = new ArrayBuffer[CleanerListener]
-    with SynchronizedBuffer[CleanerListener]
+  private val listeners = new ConcurrentLinkedQueue[CleanerListener]()
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
+
+  private val periodicGCService: ScheduledExecutorService =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("context-cleaner-periodic-gc")
+
+  /**
+   * How often to trigger a garbage collection in this JVM.
+   *
+   * This context cleaner triggers cleanups only when weak references are garbage collected.
+   * In long-running applications with large driver JVMs, where there is little memory pressure
+   * on the driver, this may happen very occasionally or not at all. Not cleaning at all may
+   * lead to executors running out of disk space after a while.
+   */
+  private val periodicGCInterval =
+    sc.conf.getTimeAsSeconds("spark.cleaner.periodicGC.interval", "30min")
 
   /**
    * Whether the cleaning thread will block on cleanup tasks (other than shuffle, which
    * is controlled by the `spark.cleaner.referenceTracking.blocking.shuffle` parameter).
    *
    * Due to SPARK-3015, this is set to true by default. This is intended to be only a temporary
-   * workaround for the issue, which is ultimately caused by the way the BlockManager actors
-   * issue inter-dependent blocking Akka messages to each other at high frequencies. This happens,
+   * workaround for the issue, which is ultimately caused by the way the BlockManager endpoints
+   * issue inter-dependent blocking RPC messages to each other at high frequencies. This happens,
    * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
    * longer in scope.
    */
@@ -86,7 +106,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
    * exceptions on cleanup of shuffle blocks, as reported in SPARK-3139. To avoid that, this
    * parameter by default disables blocking on shuffle cleanups. Note that this does not affect
    * the cleanup of RDDs and broadcasts. This is intended to be a temporary workaround,
-   * until the real Akka issue (referred to in the comment above `blockOnCleanupTasks`) is
+   * until the real RPC issue (referred to in the comment above `blockOnCleanupTasks`) is
    * resolved.
    */
   private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
@@ -96,7 +116,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Attach a listener object to get information of when objects are cleaned. */
   def attachListener(listener: CleanerListener): Unit = {
-    listeners += listener
+    listeners.add(listener)
   }
 
   /** Start the cleaner. */
@@ -104,6 +124,9 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     cleaningThread.setDaemon(true)
     cleaningThread.setName("Spark Context Cleaner")
     cleaningThread.start()
+    periodicGCService.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = System.gc()
+    }, periodicGCInterval, periodicGCInterval, TimeUnit.SECONDS)
   }
 
   /**
@@ -119,14 +142,15 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
       cleaningThread.interrupt()
     }
     cleaningThread.join()
+    periodicGCService.shutdown()
   }
 
-  /** Register a RDD for cleanup when it is garbage collected. */
+  /** Register an RDD for cleanup when it is garbage collected. */
   def registerRDDForCleanup(rdd: RDD[_]): Unit = {
     registerForCleanup(rdd, CleanRDD(rdd.id))
   }
 
-  def registerAccumulatorForCleanup(a: Accumulable[_, _]): Unit = {
+  def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
     registerForCleanup(a, CleanAccum(a.id))
   }
 
@@ -147,7 +171,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Register an object for cleanup. */
   private def registerForCleanup(objectForCleanup: AnyRef, task: CleanupTask): Unit = {
-    referenceBuffer += new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue)
+    referenceBuffer.add(new CleanupTaskWeakReference(task, objectForCleanup, referenceQueue))
   }
 
   /** Keep cleaning RDD, shuffle, and broadcast state. */
@@ -158,10 +182,10 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
           .map(_.asInstanceOf[CleanupTaskWeakReference])
         // Synchronize here to avoid being interrupted on stop()
         synchronized {
-          reference.map(_.task).foreach { task =>
-            logDebug("Got cleaning task " + task)
-            referenceBuffer -= reference.get
-            task match {
+          reference.foreach { ref =>
+            logDebug("Got cleaning task " + ref.task)
+            referenceBuffer.remove(ref)
+            ref.task match {
               case CleanRDD(rddId) =>
                 doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
               case CleanShuffle(shuffleId) =>
@@ -187,20 +211,20 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug("Cleaning RDD " + rddId)
       sc.unpersistRDD(rddId, blocking)
-      listeners.foreach(_.rddCleaned(rddId))
+      listeners.asScala.foreach(_.rddCleaned(rddId))
       logInfo("Cleaned RDD " + rddId)
     } catch {
       case e: Exception => logError("Error cleaning RDD " + rddId, e)
     }
   }
 
-  /** Perform shuffle cleanup, asynchronously. */
+  /** Perform shuffle cleanup. */
   def doCleanupShuffle(shuffleId: Int, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning shuffle " + shuffleId)
       mapOutputTrackerMaster.unregisterShuffle(shuffleId)
       blockManagerMaster.removeShuffle(shuffleId, blocking)
-      listeners.foreach(_.shuffleCleaned(shuffleId))
+      listeners.asScala.foreach(_.shuffleCleaned(shuffleId))
       logInfo("Cleaned shuffle " + shuffleId)
     } catch {
       case e: Exception => logError("Error cleaning shuffle " + shuffleId, e)
@@ -212,7 +236,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug(s"Cleaning broadcast $broadcastId")
       broadcastManager.unbroadcast(broadcastId, true, blocking)
-      listeners.foreach(_.broadcastCleaned(broadcastId))
+      listeners.asScala.foreach(_.broadcastCleaned(broadcastId))
       logDebug(s"Cleaned broadcast $broadcastId")
     } catch {
       case e: Exception => logError("Error cleaning broadcast " + broadcastId, e)
@@ -223,8 +247,8 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanupAccum(accId: Long, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning accumulator " + accId)
-      Accumulators.remove(accId)
-      listeners.foreach(_.accumCleaned(accId))
+      AccumulatorContext.remove(accId)
+      listeners.asScala.foreach(_.accumCleaned(accId))
       logInfo("Cleaned accumulator " + accId)
     } catch {
       case e: Exception => logError("Error cleaning accumulator " + accId, e)
@@ -239,7 +263,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     try {
       logDebug("Cleaning rdd checkpoint data " + rddId)
       ReliableRDDCheckpointData.cleanCheckpoint(sc, rddId)
-      listeners.foreach(_.checkpointCleaned(rddId))
+      listeners.asScala.foreach(_.checkpointCleaned(rddId))
       logInfo("Cleaned rdd checkpoint data " + rddId)
     }
     catch {
@@ -260,9 +284,9 @@ private object ContextCleaner {
  * Listener class used for testing when any item has been cleaned by the Cleaner class.
  */
 private[spark] trait CleanerListener {
-  def rddCleaned(rddId: Int)
-  def shuffleCleaned(shuffleId: Int)
-  def broadcastCleaned(broadcastId: Long)
-  def accumCleaned(accId: Long)
-  def checkpointCleaned(rddId: Long)
+  def rddCleaned(rddId: Int): Unit
+  def shuffleCleaned(shuffleId: Int): Unit
+  def broadcastCleaned(broadcastId: Long): Unit
+  def accumCleaned(accId: Long): Unit
+  def checkpointCleaned(rddId: Long): Unit
 }

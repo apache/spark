@@ -18,13 +18,27 @@
 package org.apache.spark.mllib.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors, Matrices}
+import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
+
+  test("gmm fails on high dimensional data") {
+    val rdd = sc.parallelize(Seq(
+      Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(0, 4), Array(3.0, 8.0)),
+      Vectors.sparse(GaussianMixture.MAX_NUM_FEATURES + 1, Array(1, 5), Array(4.0, 9.0))))
+    val gm = new GaussianMixture()
+    withClue(s"GMM should restrict the maximum number of features to be < " +
+      s"${GaussianMixture.MAX_NUM_FEATURES}") {
+      intercept[IllegalArgumentException] {
+        gm.run(rdd)
+      }
+    }
+  }
+
   test("single cluster") {
     val data = sc.parallelize(Array(
       Vectors.dense(6.0, 9.0),
@@ -182,7 +196,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
     )
 
-    val data2: Array[Vector] = Array.tabulate(25){ i: Int =>
+    val data2: Array[Vector] = Array.tabulate(25) { i: Int =>
       Vectors.dense(Array.tabulate(50)(i + _.toDouble))
     }
 

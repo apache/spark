@@ -17,15 +17,13 @@
 
 package org.apache.spark.mllib.evaluation
 
-import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.evaluation.binary._
 import org.apache.spark.rdd.{RDD, UnionRDD}
 import org.apache.spark.sql.DataFrame
 
 /**
- * :: Experimental ::
  * Evaluator for binary classification.
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
@@ -43,7 +41,6 @@ import org.apache.spark.sql.DataFrame
  *                partition boundaries.
  */
 @Since("1.0.0")
-@Experimental
 class BinaryClassificationMetrics @Since("1.3.0") (
     @Since("1.3.0") val scoreAndLabels: RDD[(Double, Double)],
     @Since("1.3.0") val numBins: Int) extends Logging {
@@ -61,7 +58,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * @param scoreAndLabels a DataFrame with two double columns: score and label
    */
   private[mllib] def this(scoreAndLabels: DataFrame) =
-    this(scoreAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(scoreAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   /**
    * Unpersist intermediate RDDs used in the computation.
@@ -81,7 +78,8 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * Returns the receiver operating characteristic (ROC) curve,
    * which is an RDD of (false positive rate, true positive rate)
    * with (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
-   * @see http://en.wikipedia.org/wiki/Receiver_operating_characteristic
+   * @see <a href="http://en.wikipedia.org/wiki/Receiver_operating_characteristic">
+   * Receiver operating characteristic (Wikipedia)</a>
    */
   @Since("1.0.0")
   def roc(): RDD[(Double, Double)] = {
@@ -100,15 +98,16 @@ class BinaryClassificationMetrics @Since("1.3.0") (
 
   /**
    * Returns the precision-recall curve, which is an RDD of (recall, precision),
-   * NOT (precision, recall), with (0.0, 1.0) prepended to it.
-   * @see http://en.wikipedia.org/wiki/Precision_and_recall
+   * NOT (precision, recall), with (0.0, p) prepended to it, where p is the precision
+   * associated with the lowest recall on the curve.
+   * @see <a href="http://en.wikipedia.org/wiki/Precision_and_recall">
+   * Precision and recall (Wikipedia)</a>
    */
   @Since("1.0.0")
   def pr(): RDD[(Double, Double)] = {
     val prCurve = createCurve(Recall, Precision)
-    val sc = confusions.context
-    val first = sc.makeRDD(Seq((0.0, 1.0)), 1)
-    first.union(prCurve)
+    val (_, firstPrecision) = prCurve.first()
+    confusions.context.parallelize(Seq((0.0, firstPrecision)), 1).union(prCurve)
   }
 
   /**
@@ -121,7 +120,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
    * Returns the (threshold, F-Measure) curve.
    * @param beta the beta factor in F-Measure computation.
    * @return an RDD of (threshold, F-Measure) pairs.
-   * @see http://en.wikipedia.org/wiki/F1_score
+   * @see <a href="http://en.wikipedia.org/wiki/F1_score">F1 score (Wikipedia)</a>
    */
   @Since("1.0.0")
   def fMeasureByThreshold(beta: Double): RDD[(Double, Double)] = createCurve(FMeasure(beta))
@@ -192,8 +191,7 @@ class BinaryClassificationMetrics @Since("1.3.0") (
       Iterator(agg)
     }.collect()
     val partitionwiseCumulativeCounts =
-      agg.scanLeft(new BinaryLabelCounter())(
-        (agg: BinaryLabelCounter, c: BinaryLabelCounter) => agg.clone() += c)
+      agg.scanLeft(new BinaryLabelCounter())((agg, c) => agg.clone() += c)
     val totalCount = partitionwiseCumulativeCounts.last
     logInfo(s"Total counts: $totalCount")
     val cumulativeCounts = binnedCounts.mapPartitionsWithIndex(
