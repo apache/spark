@@ -1657,7 +1657,7 @@ class LogisticRegressionTest(SparkSessionTestCase):
 
 class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
 
-    def test_multilayer_perceptron_classifier(self):
+    def test_raw_and_probability_prediction(self):
 
         data_path = "data/mllib/sample_multiclass_classification_data.txt"
         df = self.spark.read.format("libsvm").load(data_path)
