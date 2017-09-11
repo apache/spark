@@ -3264,6 +3264,15 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
                     'The length of returned value should be the same as input value'):
                 df.select(raise_exception()).collect()
 
+    def test_vectorized_udf_mix_udf(self):
+        from pyspark.sql.functions import udf
+        df = self.spark.range(10)
+        row_by_row_udf = udf(lambda x: x, LongType())
+        pd_udf = pandas_udf(lambda x: x, LongType())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'cannot mix vectorized udf and normal udf'):
+                df.select(row_by_row_udf(col('id')), pd_udf(col('id'))).collect()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *
