@@ -597,22 +597,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext with Eventu
 
   test("SPARK-19446: DebugFilesystem.assertNoOpenStreams should report " +
     "open streams to help debugging") {
+    val fs = new DebugFilesystem()
+    fs.initialize(new URI("file:///"), new Configuration())
     val file = File.createTempFile("SPARK19446", "temp")
-    try {
-      val fs = new DebugFilesystem()
-      fs.initialize(new URI("file:///"), new Configuration())
-      Files.write(Array.ofDim[Byte](1000), file)
-      val path = new Path("file:///" + file.getCanonicalPath)
-      val stream = fs.open(path)
-      val exc = intercept[RuntimeException] {
-        DebugFilesystem.assertNoOpenStreams()
-      }
-      assert(exc != null)
-      assert(exc.getCause() != null)
-      stream.close()
-    } finally {
-      file.delete()
+    file.deleteOnExit()
+    Files.write(Array.ofDim[Byte](1000), file)
+    val path = new Path("file:///" + file.getCanonicalPath)
+    val stream = fs.open(path)
+    val exc = intercept[RuntimeException] {
+      DebugFilesystem.assertNoOpenStreams()
     }
+    assert(exc != null)
+    assert(exc.getCause() != null)
+    stream.close()
   }
 }
 
