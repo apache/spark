@@ -77,6 +77,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
+    // No need to hold the file open until records need to be loaded.
+    // This is to prevent too many files open issue partially.
     try (InputStream bs = new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
         DataInputStream dataIn = new DataInputStream(serializerManager.wrapStream(blockId, bs))) {
       this.numRecords = dataIn.readInt();
@@ -87,8 +89,6 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     this.file = file;
     this.blockId = blockId;
     this.serializerManager = serializerManager;
-
-    logger.debug("bufSize: {}, file: {}, records: {}", buffSize, file, this.numRecords);
   }
 
   private void initStreams() throws IOException {
@@ -125,7 +125,9 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       taskContext.killTaskIfInterrupted();
     }
     if (this.din == null) {
-      // Good time to init (if all files are opened, we can get Too Many files exception)
+      // It is time to initialize and hold the input stream of the spill file
+      // for loading records. Keeping the input stream open too early will very possibly
+      // encounter too many file open issue.
       initStreams();
     }
     recordLength = din.readInt();
