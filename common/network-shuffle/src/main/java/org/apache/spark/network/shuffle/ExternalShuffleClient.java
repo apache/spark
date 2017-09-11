@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -49,6 +48,7 @@ public class ExternalShuffleClient extends ShuffleClient {
   private final TransportConf conf;
   private final boolean authEnabled;
   private final SecretKeyHolder secretKeyHolder;
+  private final long registrationTimeoutMs;
 
   protected TransportClientFactory clientFactory;
   protected String appId;
@@ -60,10 +60,12 @@ public class ExternalShuffleClient extends ShuffleClient {
   public ExternalShuffleClient(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean authEnabled) {
+      boolean authEnabled,
+      long registrationTimeoutMs) {
     this.conf = conf;
     this.secretKeyHolder = secretKeyHolder;
     this.authEnabled = authEnabled;
+    this.registrationTimeoutMs = registrationTimeoutMs;
   }
 
   protected void checkInit() {
@@ -88,15 +90,15 @@ public class ExternalShuffleClient extends ShuffleClient {
       String execId,
       String[] blockIds,
       BlockFetchingListener listener,
-      File[] shuffleFiles) {
+      TempShuffleFileManager tempShuffleFileManager) {
     checkInit();
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
           (blockIds1, listener1) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockFetcher(client, appId, execId, blockIds1, listener1, conf,
-              shuffleFiles).start();
+            new OneForOneBlockFetcher(client, appId, execId,
+              blockIds1, listener1, conf, tempShuffleFileManager).start();
           };
 
       int maxRetries = conf.maxIORetries();
@@ -132,7 +134,7 @@ public class ExternalShuffleClient extends ShuffleClient {
     checkInit();
     try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
       ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
-      client.sendRpcSync(registerMessage, 5000 /* timeoutMs */);
+      client.sendRpcSync(registerMessage, registrationTimeoutMs);
     }
   }
 

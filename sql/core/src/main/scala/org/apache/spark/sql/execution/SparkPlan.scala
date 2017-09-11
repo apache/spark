@@ -56,25 +56,22 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 
   protected def sparkContext = sqlContext.sparkContext
 
-  // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of subexpressionEliminationEnabled will be set by the deserializer after the
-  // constructor has run.
+  // sqlContext will be null when SparkPlan nodes are created without the active sessions.
+  // So far, this only happens in the test cases.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
   } else {
     false
   }
 
+  // whether we should fallback when hitting compilation errors caused by codegen
+  private val codeGenFallBack = (sqlContext == null) || sqlContext.conf.codegenFallback
+
   /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SparkSession.setActiveSession(sqlContext.sparkSession)
     super.makeCopy(newArgs)
   }
-
-  /**
-   * @return Metadata that describes more details of this SparkPlan.
-   */
-  def metadata: Map[String, String] = Map.empty
 
   /**
    * @return All metrics containing metrics of this SparkPlan.
@@ -375,8 +372,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     try {
       GeneratePredicate.generate(expression, inputSchema)
     } catch {
-      case e @ (_: JaninoRuntimeException | _: CompileException)
-          if sqlContext == null || sqlContext.conf.wholeStageFallback =>
+      case _ @ (_: JaninoRuntimeException | _: CompileException) if codeGenFallBack =>
         genInterpretedPredicate(expression, inputSchema)
     }
   }

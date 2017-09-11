@@ -280,7 +280,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
   Seq(Some(5), None).foreach { minNumPostShufflePartitions =>
     val testNameNote = minNumPostShufflePartitions match {
-      case Some(numPartitions) => "(minNumPostShufflePartitions: 3)"
+      case Some(numPartitions) => "(minNumPostShufflePartitions: " + numPartitions + ")"
       case None => ""
     }
 
@@ -377,7 +377,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: complex query 1$testNameNote") {
-      val test = { spark: SparkSession =>
+      val test: (SparkSession) => Unit = { spark: SparkSession =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -429,7 +429,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: complex query 2$testNameNote") {
-      val test = { spark: SparkSession =>
+      val test: (SparkSession) => Unit = { spark: SparkSession =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)

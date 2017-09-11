@@ -156,7 +156,7 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
 case class ReuseSubquery(conf: SQLConf) extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.subqueryReuseEnabled) {
+    if (!conf.exchangeReuseEnabled) {
       return plan
     }
     // Build a hash map using schema of subqueries to avoid O(N*N) sameResult calls.

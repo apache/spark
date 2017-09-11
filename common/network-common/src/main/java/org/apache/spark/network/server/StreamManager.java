@@ -83,4 +83,31 @@ public abstract class StreamManager {
    */
   public void checkAuthorization(TransportClient client, long streamId) { }
 
+  /**
+   * Return the number of chunks being transferred and not finished yet in this StreamManager.
+   */
+  public long chunksBeingTransferred() {
+    return 0;
+  }
+
+  /**
+   * Called when start sending a chunk.
+   */
+  public void chunkBeingSent(long streamId) { }
+
+  /**
+   * Called when start sending a stream.
+   */
+  public void streamBeingSent(String streamId) { }
+
+  /**
+   * Called when a chunk is successfully sent.
+   */
+  public void chunkSent(long streamId) { }
+
+  /**
+   * Called when a stream is successfully sent.
+   */
+  public void streamSent(String streamId) { }
+
 }

@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class TypeCoercionSuite extends PlanTest {
+class TypeCoercionSuite extends AnalysisTest {
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.
@@ -768,6 +768,63 @@ class TypeCoercionSuite extends PlanTest {
     )
   }
 
+  test("type coercion for Stack") {
+    val rule = TypeCoercion.StackCoercion
+
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal(null))),
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal.create(null, IntegerType))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1.0), Literal(null), Literal(3.0))),
+      Stack(Seq(Literal(3), Literal(1.0), Literal.create(null, DoubleType), Literal(3.0))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal("2"), Literal("3"))),
+      Stack(Seq(Literal(3), Literal.create(null, StringType), Literal("2"), Literal("3"))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))),
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal(null),
+        Literal(null), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal.create(null, StringType),
+        Literal.create(null, IntegerType), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(1),
+        Literal("2"), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, StringType), Literal(1),
+        Literal("2"), Literal.create(null, IntegerType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(null),
+        Literal(1), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, IntegerType), Literal.create(null, StringType),
+        Literal(1), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
+  }
+
   test("BooleanEquality type cast") {
     val be = TypeCoercion.BooleanEquality
     // Use something more than a literal to avoid triggering the simplification rules.
@@ -1051,6 +1108,42 @@ class TypeCoercionSuite extends PlanTest {
     ruleTest(PromoteStrings,
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
+  }
+
+  test("cast WindowFrame boundaries to the type they operate upon") {
+    // Can cast frame boundaries to order dataType.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(3), Literal(2147483648L))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Cast(3, LongType), Literal(2147483648L)))
+    )
+    // Cannot cast frame boundaries to order dataType.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal.default(DateType), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal.default(DateType), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L)))
+    )
+    // Should not cast SpecialFrameBoundary.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing)),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
+    )
   }
 }
 

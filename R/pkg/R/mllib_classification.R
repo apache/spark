@@ -62,11 +62,18 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #'                        of models will be always returned on the original scale, so it will be transparent for
 #'                        users. Note that with/without standardization, the models should be always converged
 #'                        to the same solution when no regularization is applied.
-#' @param threshold The threshold in binary classification, in range [0, 1].
+#' @param threshold The threshold in binary classification applied to the linear model prediction.
+#'                  This threshold can be any real number, where Inf will make all predictions 0.0
+#'                  and -Inf will make all predictions 1.0.
 #' @param weightCol The weight column name.
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
 #'                         or the number of partitions are large, this param could be adjusted to a larger size.
 #'                         This is an expert parameter. Default value should be good for most cases.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.svmLinear} returns a fitted linear SVM model.
 #' @rdname spark.svmLinear
@@ -96,7 +103,8 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @note spark.svmLinear since 2.2.0
 setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, maxIter = 100, tol = 1E-6, standardization = TRUE,
-                   threshold = 0.0, weightCol = NULL, aggregationDepth = 2) {
+                   threshold = 0.0, weightCol = NULL, aggregationDepth = 2,
+                   handleInvalid = c("error", "keep", "skip")) {
             formula <- paste(deparse(formula), collapse = "")
 
             if (!is.null(weightCol) && weightCol == "") {
@@ -105,10 +113,12 @@ setMethod("spark.svmLinear", signature(data = "SparkDataFrame", formula = "formu
               weightCol <- as.character(weightCol)
             }
 
+            handleInvalid <- match.arg(handleInvalid)
+
             jobj <- callJStatic("org.apache.spark.ml.r.LinearSVCWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam), as.integer(maxIter),
                                 as.numeric(tol), as.logical(standardization), as.numeric(threshold),
-                                weightCol, as.integer(aggregationDepth))
+                                weightCol, as.integer(aggregationDepth), handleInvalid)
             new("LinearSVCModel", jobj = jobj)
           })
 
@@ -202,6 +212,25 @@ function(object, path, overwrite = FALSE) {
 #' @param aggregationDepth The depth for treeAggregate (greater than or equal to 2). If the dimensions of features
 #'                         or the number of partitions are large, this param could be adjusted to a larger size.
 #'                         This is an expert parameter. Default value should be good for most cases.
+#' @param lowerBoundsOnCoefficients The lower bounds on coefficients if fitting under bound constrained optimization.
+#'                                  The bound matrix must be compatible with the shape (1, number of features) for binomial
+#'                                  regression, or (number of classes, number of features) for multinomial regression.
+#'                                  It is a R matrix.
+#' @param upperBoundsOnCoefficients The upper bounds on coefficients if fitting under bound constrained optimization.
+#'                                  The bound matrix must be compatible with the shape (1, number of features) for binomial
+#'                                  regression, or (number of classes, number of features) for multinomial regression.
+#'                                  It is a R matrix.
+#' @param lowerBoundsOnIntercepts The lower bounds on intercepts if fitting under bound constrained optimization.
+#'                                The bounds vector size must be equal to 1 for binomial regression, or the number
+#'                                of classes for multinomial regression.
+#' @param upperBoundsOnIntercepts The upper bounds on intercepts if fitting under bound constrained optimization.
+#'                                The bound vector size must be equal to 1 for binomial regression, or the number
+#'                                of classes for multinomial regression.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.logit} returns a fitted logistic regression model.
 #' @rdname spark.logit
@@ -239,8 +268,13 @@ function(object, path, overwrite = FALSE) {
 setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, regParam = 0.0, elasticNetParam = 0.0, maxIter = 100,
                    tol = 1E-6, family = "auto", standardization = TRUE,
-                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2) {
+                   thresholds = 0.5, weightCol = NULL, aggregationDepth = 2,
+                   lowerBoundsOnCoefficients = NULL, upperBoundsOnCoefficients = NULL,
+                   lowerBoundsOnIntercepts = NULL, upperBoundsOnIntercepts = NULL,
+                   handleInvalid = c("error", "keep", "skip")) {
             formula <- paste(deparse(formula), collapse = "")
+            row <- 0
+            col <- 0
 
             if (!is.null(weightCol) && weightCol == "") {
               weightCol <- NULL
@@ -248,12 +282,54 @@ setMethod("spark.logit", signature(data = "SparkDataFrame", formula = "formula")
               weightCol <- as.character(weightCol)
             }
 
+            if (!is.null(lowerBoundsOnIntercepts)) {
+                lowerBoundsOnIntercepts <- as.array(lowerBoundsOnIntercepts)
+            }
+
+            if (!is.null(upperBoundsOnIntercepts)) {
+                upperBoundsOnIntercepts <- as.array(upperBoundsOnIntercepts)
+            }
+
+            if (!is.null(lowerBoundsOnCoefficients)) {
+              if (class(lowerBoundsOnCoefficients) != "matrix") {
+                stop("lowerBoundsOnCoefficients must be a matrix.")
+              }
+              row <- nrow(lowerBoundsOnCoefficients)
+              col <- ncol(lowerBoundsOnCoefficients)
+              lowerBoundsOnCoefficients <- as.array(as.vector(lowerBoundsOnCoefficients))
+            }
+
+            if (!is.null(upperBoundsOnCoefficients)) {
+              if (class(upperBoundsOnCoefficients) != "matrix") {
+                stop("upperBoundsOnCoefficients must be a matrix.")
+              }
+
+              if (!is.null(lowerBoundsOnCoefficients) && (row != nrow(upperBoundsOnCoefficients)
+                || col != ncol(upperBoundsOnCoefficients))) {
+                stop(paste0("dimension of upperBoundsOnCoefficients ",
+                           "is not the same as lowerBoundsOnCoefficients", sep = ""))
+              }
+
+              if (is.null(lowerBoundsOnCoefficients)) {
+                row <- nrow(upperBoundsOnCoefficients)
+                col <- ncol(upperBoundsOnCoefficients)
+              }
+
+              upperBoundsOnCoefficients <- as.array(as.vector(upperBoundsOnCoefficients))
+            }
+
+            handleInvalid <- match.arg(handleInvalid)
+
             jobj <- callJStatic("org.apache.spark.ml.r.LogisticRegressionWrapper", "fit",
                                 data@sdf, formula, as.numeric(regParam),
                                 as.numeric(elasticNetParam), as.integer(maxIter),
                                 as.numeric(tol), as.character(family),
                                 as.logical(standardization), as.array(thresholds),
-                                weightCol, as.integer(aggregationDepth))
+                                weightCol, as.integer(aggregationDepth),
+                                as.integer(row), as.integer(col),
+                                lowerBoundsOnCoefficients, upperBoundsOnCoefficients,
+                                lowerBoundsOnIntercepts, upperBoundsOnIntercepts,
+                                handleInvalid)
             new("LogisticRegressionModel", jobj = jobj)
           })
 
@@ -335,7 +411,12 @@ setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "char
 #' @param stepSize stepSize parameter.
 #' @param seed seed parameter for weights initialization.
 #' @param initialWeights initialWeights parameter for weights initialization, it should be a
-#' numeric vector.
+#'        numeric vector.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional arguments passed to the method.
 #' @return \code{spark.mlp} returns a fitted Multilayer Perceptron Classification Model.
 #' @rdname spark.mlp
@@ -367,7 +448,8 @@ setMethod("write.ml", signature(object = "LogisticRegressionModel", path = "char
 #' @note spark.mlp since 2.1.0
 setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
           function(data, formula, layers, blockSize = 128, solver = "l-bfgs", maxIter = 100,
-                   tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL) {
+                   tol = 1E-6, stepSize = 0.03, seed = NULL, initialWeights = NULL,
+                   handleInvalid = c("error", "keep", "skip")) {
             formula <- paste(deparse(formula), collapse = "")
             if (is.null(layers)) {
               stop ("layers must be a integer vector with length > 1.")
@@ -382,10 +464,11 @@ setMethod("spark.mlp", signature(data = "SparkDataFrame", formula = "formula"),
             if (!is.null(initialWeights)) {
               initialWeights <- as.array(as.numeric(na.omit(initialWeights)))
             }
+            handleInvalid <- match.arg(handleInvalid)
             jobj <- callJStatic("org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper",
                                 "fit", data@sdf, formula, as.integer(blockSize), as.array(layers),
                                 as.character(solver), as.integer(maxIter), as.numeric(tol),
-                                as.numeric(stepSize), seed, initialWeights)
+                                as.numeric(stepSize), seed, initialWeights, handleInvalid)
             new("MultilayerPerceptronClassificationModel", jobj = jobj)
           })
 
@@ -455,6 +538,11 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
 #'               operators are supported, including '~', '.', ':', '+', and '-'.
 #' @param smoothing smoothing parameter.
+#' @param handleInvalid How to handle invalid data (unseen labels or NULL values) in features and label
+#'                      column of string type.
+#'                      Supported options: "skip" (filter out rows with invalid data),
+#'                                         "error" (throw an error), "keep" (put invalid data in a special additional
+#'                                         bucket, at index numLabels). Default is "error".
 #' @param ... additional argument(s) passed to the method. Currently only \code{smoothing}.
 #' @return \code{spark.naiveBayes} returns a fitted naive Bayes model.
 #' @rdname spark.naiveBayes
@@ -484,10 +572,12 @@ setMethod("write.ml", signature(object = "MultilayerPerceptronClassificationMode
 #' }
 #' @note spark.naiveBayes since 2.0.0
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
-          function(data, formula, smoothing = 1.0) {
+          function(data, formula, smoothing = 1.0,
+                   handleInvalid = c("error", "keep", "skip")) {
             formula <- paste(deparse(formula), collapse = "")
+            handleInvalid <- match.arg(handleInvalid)
             jobj <- callJStatic("org.apache.spark.ml.r.NaiveBayesWrapper", "fit",
-            formula, data@sdf, smoothing)
+                                formula, data@sdf, smoothing, handleInvalid)
             new("NaiveBayesModel", jobj = jobj)
           })
 

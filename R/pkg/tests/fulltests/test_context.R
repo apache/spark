@@ -100,6 +100,7 @@ test_that("job group functions can be called", {
   setJobGroup("groupId", "job description", TRUE)
   cancelJobGroup("groupId")
   clearJobGroup()
+  setJobDescription("job description")
 
   suppressWarnings(setJobGroup(sc, "groupId", "job description", TRUE))
   suppressWarnings(cancelJobGroup(sc, "groupId"))

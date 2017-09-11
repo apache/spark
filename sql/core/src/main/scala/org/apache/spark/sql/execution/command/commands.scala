@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.util.UUID
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -26,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.{logical, QueryPlan}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -35,6 +38,11 @@ import org.apache.spark.sql.types._
  * wrapped in `ExecutedCommand` during execution.
  */
 trait RunnableCommand extends logical.Command {
+
+  // The map used to record the metrics of running the command. This will be passed to
+  // `ExecutedCommand` during query planning.
+  lazy val metrics: Map[String, SQLMetric] = Map.empty
+
   def run(sparkSession: SparkSession, children: Seq[SparkPlan]): Seq[Row] = {
     throw new NotImplementedError
   }
@@ -47,8 +55,14 @@ trait RunnableCommand extends logical.Command {
 /**
  * A physical operator that executes the run method of a `RunnableCommand` and
  * saves the result to prevent multiple executions.
+ *
+ * @param cmd the `RunnableCommand` this operator will run.
+ * @param children the children physical plans ran by the `RunnableCommand`.
  */
 case class ExecutedCommandExec(cmd: RunnableCommand, children: Seq[SparkPlan]) extends SparkPlan {
+
+  override lazy val metrics: Map[String, SQLMetric] = cmd.metrics
+
   /**
    * A concrete command should override this lazy field to wrap up any side effects caused by the
    * command or any other computation that should be evaluated exactly once. The value of this field
@@ -117,7 +131,8 @@ case class ExplainCommand(
         // This is used only by explaining `Dataset/DataFrame` created by `spark.readStream`, so the
         // output mode does not matter since there is no `Sink`.
         new IncrementalExecution(
-          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>", 0, OffsetSeqMetadata(0, 0))
+          sparkSession, logicalPlan, OutputMode.Append(), "<unknown>",
+          UUID.randomUUID, 0, OffsetSeqMetadata(0, 0))
       } else {
         sparkSession.sessionState.executePlan(logicalPlan)
       }

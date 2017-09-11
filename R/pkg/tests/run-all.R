@@ -30,10 +30,10 @@ if (.Platform$OS.type == "windows") {
 install.spark()
 
 sparkRDir <- file.path(Sys.getenv("SPARK_HOME"), "R")
-sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 sparkRWhitelistSQLDirs <- c("spark-warehouse", "metastore_db")
 invisible(lapply(sparkRWhitelistSQLDirs,
                  function(x) { unlink(file.path(sparkRDir, x), recursive = TRUE, force = TRUE)}))
+sparkRFilesBefore <- list.files(path = sparkRDir, all.files = TRUE)
 
 sparkRTestMaster <- "local[1]"
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
@@ -43,6 +43,8 @@ if (identical(Sys.getenv("NOT_CRAN"), "true")) {
 test_package("SparkR")
 
 if (identical(Sys.getenv("NOT_CRAN"), "true")) {
+  # set random seed for predictable results. mostly for base's sample() in tree and classification
+  set.seed(42)
   # for testthat 1.0.2 later, change reporter from "summary" to default_reporter()
   testthat:::run_tests("SparkR",
                        file.path(sparkRDir, "pkg", "tests", "fulltests"),

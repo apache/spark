@@ -63,7 +63,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         var maybeRelation: Option[HadoopFsRelation] = None
         val maybeAnalyzedPredicate = query.queryExecution.optimizedPlan.collect {
-          case PhysicalOperation(_, filters, LogicalRelation(relation: HadoopFsRelation, _, _)) =>
+          case PhysicalOperation(_, filters,
+                                 LogicalRelation(relation: HadoopFsRelation, _, _, _)) =>
             maybeRelation = Some(relation)
             filters
         }.flatten.reduceLeftOption(_ && _)
@@ -505,7 +506,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
             sparkContext.register(accu)
 
             val df = spark.read.parquet(path).filter("a < 100")
-            df.foreachPartition(_.foreach(v => accu.add(0)))
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
             df.collect
 
             if (enablePushDown) {
@@ -544,7 +545,8 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
     Seq(true, false).foreach { vectorized =>
       withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString,
-          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString) {
+          SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> true.toString,
+          SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "false") {
         withTempPath { path =>
           Seq(Some(1), None).toDF("col.dots").write.parquet(path.getAbsolutePath)
           val readBack = spark.read.parquet(path.getAbsolutePath).where("`col.dots` IS NOT NULL")

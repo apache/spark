@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.DriverManager
 import java.util.Properties
 
 import scala.collection.JavaConverters.propertiesAsScalaMapConverter
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -323,8 +324,9 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("partitionColumn", "foo")
         .save()
     }.getMessage
-    assert(e.contains("If 'partitionColumn' is specified then 'lowerBound', 'upperBound'," +
-      " and 'numPartitions' are required."))
+    assert(e.contains("When reading JDBC data sources, users need to specify all or none " +
+      "for the following options: 'partitionColumn', 'lowerBound', 'upperBound', and " +
+      "'numPartitions'"))
   }
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
@@ -466,7 +468,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
         .option("createTableColumnTypes", "`name char(20)") // incorrectly quoted column
         .jdbc(url1, "TEST.USERDBTYPETEST", properties)
     }.getMessage()
-    assert(msg.contains("no viable alternative at input"))
+    assert(msg.contains("extraneous input"))
   }
 
   test("SPARK-10849: jdbc CreateTableColumnTypes duplicate columns") {
@@ -478,7 +480,7 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
           .jdbc(url1, "TEST.USERDBTYPETEST", properties)
       }.getMessage()
       assert(msg.contains(
-        "Found duplicate column(s) in createTableColumnTypes option value: name, NaMe"))
+        "Found duplicate column(s) in the createTableColumnTypes option value: `name`"))
     }
   }
 
@@ -505,5 +507,12 @@ class JDBCWriteSuite extends SharedSQLContext with BeforeAndAfter {
       assert(msg.contains("createTableColumnTypes option column Name not found in " +
         "schema struct<name:string,id:int>"))
     }
+  }
+
+  test("SPARK-19726: INSERT null to a NOT NULL column") {
+    val e = intercept[SparkException] {
+      sql("INSERT INTO PEOPLE1 values (null, null)")
+    }.getMessage
+    assert(e.contains("NULL not allowed for column \"NAME\""))
   }
 }

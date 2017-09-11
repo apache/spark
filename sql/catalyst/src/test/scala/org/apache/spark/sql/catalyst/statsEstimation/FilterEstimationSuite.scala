@@ -620,7 +620,7 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         rowCount = Some(expectedRowCount),
         attributeStats = expectedAttributeMap)
 
-      val filterStats = filter.stats(conf)
+      val filterStats = filter.stats
       assert(filterStats.sizeInBytes == expectedStats.sizeInBytes)
       assert(filterStats.rowCount == expectedStats.rowCount)
       val rowCountValue = filterStats.rowCount.getOrElse(0)

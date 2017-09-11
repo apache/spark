@@ -240,6 +240,7 @@ object FunctionRegistry {
     expression[Log1p]("log1p"),
     expression[Log2]("log2"),
     expression[Log]("ln"),
+    expression[Remainder]("mod"),
     expression[UnaryMinus]("negative"),
     expression[Pi]("pi"),
     expression[Pmod]("pmod"),
@@ -304,6 +305,9 @@ object FunctionRegistry {
     expression[Chr]("char"),
     expression[Chr]("chr"),
     expression[Base64]("base64"),
+    expression[BitLength]("bit_length"),
+    expression[Length]("char_length"),
+    expression[Length]("character_length"),
     expression[Concat]("concat"),
     expression[ConcatWs]("concat_ws"),
     expression[Decode]("decode"),
@@ -320,11 +324,13 @@ object FunctionRegistry {
     expression[Levenshtein]("levenshtein"),
     expression[Like]("like"),
     expression[Lower]("lower"),
+    expression[OctetLength]("octet_length"),
     expression[StringLocate]("locate"),
     expression[StringLPad]("lpad"),
     expression[StringTrimLeft]("ltrim"),
     expression[JsonTuple]("json_tuple"),
     expression[ParseUrl]("parse_url"),
+    expression[StringLocate]("position"),
     expression[FormatString]("printf"),
     expression[RegExpExtract]("regexp_extract"),
     expression[RegExpReplace]("regexp_replace"),
@@ -340,6 +346,8 @@ object FunctionRegistry {
     expression[StringSplit]("split"),
     expression[Substring]("substr"),
     expression[Substring]("substring"),
+    expression[Left]("left"),
+    expression[Right]("right"),
     expression[SubstringIndex]("substring_index"),
     expression[StringTranslate]("translate"),
     expression[StringTrim]("trim"),
@@ -549,7 +557,9 @@ object FunctionRegistry {
     }
     val clazz = scala.reflect.classTag[Cast].runtimeClass
     val usage = "_FUNC_(expr) - Casts the value `expr` to the target data type `_FUNC_`."
-    (name, (new ExpressionInfo(clazz.getCanonicalName, null, name, usage, null), builder))
+    val expressionInfo =
+      new ExpressionInfo(clazz.getCanonicalName, null, name, usage, "", "", "", "")
+    (name, (expressionInfo, builder))
   }
 
   /**
@@ -559,7 +569,21 @@ object FunctionRegistry {
     val clazz = scala.reflect.classTag[T].runtimeClass
     val df = clazz.getAnnotation(classOf[ExpressionDescription])
     if (df != null) {
-      new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      if (df.extended().isEmpty) {
+        new ExpressionInfo(
+          clazz.getCanonicalName,
+          null,
+          name,
+          df.usage(),
+          df.arguments(),
+          df.examples(),
+          df.note(),
+          df.since())
+      } else {
+        // This exists for the backward compatibility with old `ExpressionDescription`s defining
+        // the extended description in `extended()`.
+        new ExpressionInfo(clazz.getCanonicalName, null, name, df.usage(), df.extended())
+      }
     } else {
       new ExpressionInfo(clazz.getCanonicalName, name)
     }
