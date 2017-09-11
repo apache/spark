@@ -82,7 +82,12 @@ private[shared] object SharedParamsCodeGen {
         "all instance weights as 1.0"),
       ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
-        isValid = "ParamValidators.gtEq(2)", isExpertParam = true))
+        isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
+      ParamDesc[Boolean]("collectSubModels", "whether to collect sub models when tuning fitting",
+        Some("false"), isExpertParam = true),
+      ParamDesc[String]("persistSubModelsPath", "The path to persist sub models when " +
+        "tuning fitting", Some("\"\""), isExpertParam = true)
+    )
 
     val code = genSharedParams(params)
     val file = "src/main/scala/org/apache/spark/ml/param/shared/sharedParams.scala"

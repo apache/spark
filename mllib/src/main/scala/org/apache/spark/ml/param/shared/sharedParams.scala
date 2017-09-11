@@ -402,4 +402,38 @@ private[ml] trait HasAggregationDepth extends Params {
   /** @group expertGetParam */
   final def getAggregationDepth: Int = $(aggregationDepth)
 }
+
+/**
+ * Trait for shared param collectSubModels (default: false).
+ */
+private[ml] trait HasCollectSubModels extends Params {
+
+  /**
+   * Param for whether to collect sub models when tuning fitting.
+   * @group expertParam
+   */
+  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect sub models when tuning fitting")
+
+  setDefault(collectSubModels, false)
+
+  /** @group expertGetParam */
+  final def getCollectSubModels: Boolean = $(collectSubModels)
+}
+
+/**
+ * Trait for shared param persistSubModelsPath (default: "").
+ */
+private[ml] trait HasPersistSubModelsPath extends Params {
+
+  /**
+   * Param for The path to persist sub models when tuning fitting.
+   * @group expertParam
+   */
+  final val persistSubModelsPath: Param[String] = new Param[String](this, "persistSubModelsPath", "The path to persist sub models when tuning fitting")
+
+  setDefault(persistSubModelsPath, "")
+
+  /** @group expertGetParam */
+  final def getPersistSubModelsPath: String = $(persistSubModelsPath)
+}
 // scalastyle:on

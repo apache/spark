@@ -17,16 +17,19 @@
 
 package org.apache.spark.ml.tuning
 
+import java.io.File
+
 import org.apache.spark.SparkFunSuite
+
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
 import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.param.{ParamMap}
+import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, Identifiable, MLTestingUtils}
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
@@ -160,11 +163,17 @@ class TrainValidationSplitSuite
       .setTrainRatio(0.5)
       .setEstimatorParamMaps(paramMaps)
       .setSeed(42L)
+      .setParallelism(2)
+      .setCollectSubModels(true)
+      .setPersistSubModelsPath("tvsSubModels")
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.getSeed === tvs2.getSeed)
+    assert(tvs.getParallelism === tvs2.getParallelism)
+    assert(tvs.getCollectSubModels === tvs2.getCollectSubModels)
+    assert(tvs.getPersistSubModelsPath === tvs2.getPersistSubModelsPath)
 
     ValidatorParamsSuiteHelpers
       .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
@@ -176,6 +185,53 @@ class TrainValidationSplitSuite
       case other =>
         throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
           s" LogisticRegression but found ${other.getClass.getName}")
+    }
+  }
+
+  test("TrainValidationSplit expose sub models") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 3))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val subdirName = Identifiable.randomUID("testSubModels")
+    val subPath = new File(tempDir, subdirName)
+    val persistSubModelsPath = new File(subPath, "subModels").toString
+
+    val tvs = new TrainValidationSplit()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setParallelism(1)
+      .setCollectSubModels(true)
+      .setPersistSubModelsPath(persistSubModelsPath)
+
+    val tvsModel = tvs.fit(dataset)
+
+    val subModels = Array.fill[LogisticRegressionModel](lrParamMaps.length)(null)
+    for (i <- 0 until lrParamMaps.length) {
+      val subModelPath = new File(persistSubModelsPath, i.toString).toString
+      subModels(i) = LogisticRegressionModel.load(subModelPath)
+    }
+
+    assert(tvsModel.subModels != null && tvsModel.subModels.length == lrParamMaps.length)
+
+    val savingPathWithoutSubModels = new File(subPath, "tvsModel2").getPath
+    tvsModel.save(savingPathWithoutSubModels)
+    val tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
+    assert(tvsModel2.subModels === null)
+
+    val savingPathWithSubModels = new File(subPath, "tvsModel3").getPath
+    tvsModel.save(savingPathWithSubModels, persistSubModels = true)
+    val tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
+    assert(tvsModel3.subModels != null && tvsModel3.subModels.length == lrParamMaps.length)
+
+    for (i <- 0 until lrParamMaps.length) {
+      assert(tvsModel.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
+        subModels(i).uid)
+      assert(tvsModel3.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
+        subModels(i).uid)
     }
   }
 
