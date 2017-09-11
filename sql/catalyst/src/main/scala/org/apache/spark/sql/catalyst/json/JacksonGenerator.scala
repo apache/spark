@@ -29,7 +29,7 @@ import org.apache.spark.sql.types._
 /**
  * `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
  * Once it is initialized with `StructType`, it can be used to write out a struct or an array of
- * struct. Once it is initialized with ``MapType``, it can be used to write out a map or an array
+ * struct. Once it is initialized with `MapType`, it can be used to write out a map or an array
  * of map. An exception will be thrown if trying to write out a struct if it is initialized with
  * a `MapType`, and vice verse.
  */
@@ -43,12 +43,9 @@ private[sql] class JacksonGenerator(
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
   // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
-  dataType match {
-    case _: StructType | _: MapType =>
-    case _ => throw new UnsupportedOperationException(
-      s"`JacksonGenerator` only supports to be initialized with a `StructType` " +
-          s"or `MapType` but got ${dataType.simpleString}")
-  }
+  require(dataType.isInstanceOf[StructType] | dataType.isInstanceOf[MapType],
+    "JacksonGenerator only supports to be initialized with a StructType " +
+      s"or MapType but got ${dataType.simpleString}")
 
   // `ValueWriter`s for all fields of the schema
   private lazy val rootFieldWriters: Array[ValueWriter] = dataType match {
@@ -239,7 +236,7 @@ private[sql] class JacksonGenerator(
   def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
 
   /**
-   * Transforms a `MapData` to JSON object using Jackson
+   * Transforms a single `MapData` to JSON object using Jackson
    *
    * @param map a map to convert
    */

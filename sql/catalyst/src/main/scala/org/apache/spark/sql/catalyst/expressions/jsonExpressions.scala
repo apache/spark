@@ -714,7 +714,7 @@ case class StructsToJson(
       }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
-          s"a map or array of map.")
+          "a map or array of map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
