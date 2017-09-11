@@ -702,27 +702,10 @@ case class StructsToJson(
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case ArrayType(mt: MapType, _) =>
-      try {
-        val st = StructType(StructField("a", mt) :: Nil)
-        JacksonUtils.verifySchema(st)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case MapType(_: DataType, st: StructType, _: Boolean) =>
-      try {
-        JacksonUtils.verifySchema(st)
-        TypeCheckResult.TypeCheckSuccess
-      } catch {
-        case e: UnsupportedOperationException =>
-          TypeCheckResult.TypeCheckFailure(e.getMessage)
-      }
-    case mt: MapType =>
+    case _: MapType | ArrayType(_: MapType, _) =>
       // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
       try {
-        val st = StructType(StructField("a", mt) :: Nil)
+        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
         JacksonUtils.verifySchema(st)
         TypeCheckResult.TypeCheckSuccess
       } catch {
