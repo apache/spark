@@ -445,6 +445,8 @@ final class ShuffleBlockFetcherIterator(
                   fetchRequests += FetchRequest(address, Array((blockId, size)))
                   result = null
                 }
+                bytesInFlight -= size
+                fetchUpToMaxBytes()
             } finally {
               // TODO: release the buf here to free memory earlier
               originalInput.close()
