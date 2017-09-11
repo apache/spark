@@ -712,8 +712,16 @@ case class StructsToJson(
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
-    case _: MapType =>
-      TypeCheckResult.TypeCheckSuccess
+    case mt: MapType =>
+      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
+      try {
+        val st = StructType(StructField("a", mt) :: Nil)
+        JacksonUtils.verifySchema(st)
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
           s"an arbitrary map.")
