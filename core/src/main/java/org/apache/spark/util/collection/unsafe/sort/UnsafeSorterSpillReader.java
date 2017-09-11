@@ -46,13 +46,18 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
   // Variables that change with every record read:
   private int recordLength;
   private long keyPrefix;
-  private int numRecords;
+  private final int numRecords;
   private int numRecordsRemaining;
 
   private byte[] arr = new byte[1024 * 1024];
   private Object baseObject = arr;
   private final long baseOffset = Platform.BYTE_ARRAY_OFFSET;
   private final TaskContext taskContext = TaskContext.get();
+
+  private final long buffSize;
+  private final File file;
+  private final BlockId blockId;
+  private final SerializerManager serializerManager;
 
   public UnsafeSorterSpillReader(
       SerializerManager serializerManager,
@@ -72,12 +77,27 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
       bufferSizeBytes = DEFAULT_BUFFER_SIZE_BYTES;
     }
 
+    try (InputStream bs = new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
+        DataInputStream dataIn = new DataInputStream(serializerManager.wrapStream(blockId, bs))) {
+      this.numRecords = dataIn.readInt();
+      this.numRecordsRemaining = numRecords;
+    }
+
+    this.buffSize = bufferSizeBytes;
+    this.file = file;
+    this.blockId = blockId;
+    this.serializerManager = serializerManager;
+
+    logger.debug("bufSize: {}, file: {}, records: {}", buffSize, file, this.numRecords);
+  }
+
+  private void initStreams() throws IOException {
     final InputStream bs =
-        new NioBufferedFileInputStream(file, (int) bufferSizeBytes);
+        new NioBufferedFileInputStream(file, (int) buffSize);
     try {
       this.in = serializerManager.wrapStream(blockId, bs);
       this.din = new DataInputStream(this.in);
-      numRecords = numRecordsRemaining = din.readInt();
+      this.numRecordsRemaining = din.readInt();
     } catch (IOException e) {
       Closeables.close(bs, /* swallowIOException = */ true);
       throw e;
@@ -103,6 +123,10 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
     // `getNumRecords()` instead of `hasNext()` to know when to stop.
     if (taskContext != null) {
       taskContext.killTaskIfInterrupted();
+    }
+    if (this.din == null) {
+      // Good time to init (if all files are opened, we can get Too Many files exception)
+      initStreams();
     }
     recordLength = din.readInt();
     keyPrefix = din.readLong();
