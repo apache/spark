@@ -29,9 +29,9 @@ import org.apache.spark.sql.types._
 /**
  * `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
  * Once it is initialized with `StructType`, it can be used to write out a struct or an array of
- * struct. Once it is initialized with `MapType`, it can be used to write out a map. An exception
- * will be thrown if trying to write out a struct if it is initialized with a `MapType`,
- * and vice verse.
+ * struct. Once it is initialized with ``MapType``, it can be used to write out a map or an array
+ * of map. An exception will be thrown if trying to write out a struct if it is initialized with
+ * a `MapType`, and vice verse.
  */
 private[sql] class JacksonGenerator(
     dataType: DataType,
@@ -240,9 +240,7 @@ private[sql] class JacksonGenerator(
    *
    * @param array The array of rows or maps to convert
    */
-  def write(array: ArrayData): Unit = {
-    writeArray(writeArrayData(array, arrElementWriter))
-  }
+  def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
 
   /**
    * Transforms a `MapData` to JSON object using Jackson
