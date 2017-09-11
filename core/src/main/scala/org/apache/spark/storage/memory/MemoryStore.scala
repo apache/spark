@@ -325,6 +325,10 @@ private[spark] class MemoryStore(
 
     // Whether there is still enough memory for us to continue unrolling this block
     var keepUnrolling = true
+    // Number of elements unrolled so far
+    var elementsUnrolled = 0L
+    // How often to check whether we need to request more memory
+    val memoryCheckPeriod = 16
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     // Keep track of unroll memory used by this particular block / putIterator() operation
@@ -347,9 +351,6 @@ private[spark] class MemoryStore(
       ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
-    // Since each time the size of 'bbos' growth is a 'chunkSize', so every time we apply for
-    // additional 'chunkSize' memory to avoid unnecessary synchronization.
-    var additionalMemoryRequest = chunkSize
     // Request enough memory to begin unrolling
     keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
 
@@ -362,7 +363,7 @@ private[spark] class MemoryStore(
 
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock + additionalMemoryRequest
+        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
@@ -373,22 +374,18 @@ private[spark] class MemoryStore(
     // Unroll this block safely, checking whether we have exceeded our threshold
     while (values.hasNext && keepUnrolling) {
       serializationStream.writeObject(values.next())(classTag)
-      reserveAdditionalMemoryIfNecessary()
+      elementsUnrolled += 1
+      if (elementsUnrolled % memoryCheckPeriod == 0) {
+        reserveAdditionalMemoryIfNecessary()
+      }
     }
 
     // Make sure that we have enough memory to store the block. By this point, it is possible that
     // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
-    // perform one final call to attempt to allocate additional memory if necessary. If the task
-    // reserved more memory than it needed, then release the extra memory that will not be used.
+    // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
       serializationStream.close()
-      if (bbos.size < unrollMemoryUsedByThisBlock) {
-        val excessUnrollMemory = unrollMemoryUsedByThisBlock - bbos.size
-        releaseUnrollMemoryForThisTask(memoryMode, excessUnrollMemory)
-      } else {
-        additionalMemoryRequest = 0
-        reserveAdditionalMemoryIfNecessary()
-      }
+      reserveAdditionalMemoryIfNecessary
     }
 
     if (keepUnrolling) {
