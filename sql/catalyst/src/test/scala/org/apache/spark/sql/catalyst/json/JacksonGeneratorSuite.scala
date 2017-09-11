@@ -100,17 +100,6 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     }
   }
 
-  test("error handling: initial with StructType but error calling write an array of maps") {
-    val dataType = StructType(StructField("a", IntegerType) :: Nil)
-    val input = new GenericArrayData(
-      ArrayBasedMapData(Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
-    val writer = new CharArrayWriter()
-    val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[ClassCastException] {
-      gen.write(input)
-    }
-  }
-
   test("error handling: initial with MapType and write out a row") {
     val dataType = MapType(StringType, IntegerType)
     val input = InternalRow(1)
@@ -121,13 +110,4 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     }
   }
 
-  test("error handling: initial with MapType and write out an array of rows") {
-    val dataType = MapType(StringType, IntegerType)
-    val input = new GenericArrayData(InternalRow(1) :: InternalRow(2) :: Nil)
-    val writer = new CharArrayWriter()
-    val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[ClassCastException] {
-      gen.write(input)
-    }
-  }
 }
