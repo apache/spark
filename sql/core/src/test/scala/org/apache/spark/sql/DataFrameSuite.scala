@@ -1966,7 +1966,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-17913: compare long and string type column may return confusing result") {
     val df = Seq(123L -> "123", 19157170390056973L -> "19157170390056971").toDF("i", "j")
-    checkAnswer(df.select($"i" === $"j"), Row(true) :: Row(false) :: Nil)
+    checkAnswer(df.select($"i" === $"j"), Row(true) :: Row(true) :: Nil)
   }
 
   test("SPARK-19691 Calculating percentile of decimal column fails with ClassCastException") {
