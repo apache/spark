@@ -385,7 +385,7 @@ private[spark] class MemoryStore(
     // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
       serializationStream.close()
-      reserveAdditionalMemoryIfNecessary
+      reserveAdditionalMemoryIfNecessary()
     }
 
     if (keepUnrolling) {
