@@ -22,14 +22,14 @@ import org.json4s.{DefaultFormats, _}
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
 import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types.{DoubleType, StringType, StructField, StructType}
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
@@ -93,9 +93,9 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
    * paramMap and the corresponding metric of trained model.
    */
   protected def getTuningSummaryDF(metrics: Array[Double]): DataFrame = {
-    val params = $(estimatorParamMaps)
-    require(params.nonEmpty, "estimator param maps should not be empty")
-    require(params.length == metrics.length, "estimator param maps number should match metrics")
+    val paramMaps = $(estimatorParamMaps)
+    require(paramMaps.nonEmpty, "estimator param maps should not be empty")
+    require(paramMaps.length == metrics.length, "estimator param maps number should match metrics")
     val metricName = $(evaluator) match {
       case b: BinaryClassificationEvaluator => b.getMetricName
       case m: MulticlassClassificationEvaluator => m.getMetricName
@@ -104,13 +104,32 @@ private[ml] trait ValidatorParams extends HasSeed with Params {
     }
     val spark = SparkSession.builder().getOrCreate()
     val sc = spark.sparkContext
-    val fields = params(0).toSeq.sortBy(_.param.name).map(_.param.name) ++ Seq(metricName)
-    val schema = new StructType(fields.map(name => StructField(name, StringType)).toArray)
-    val rows = sc.parallelize(params.zip(metrics)).map { case (param, metric) =>
-      val values = param.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString)
+
+    val tuningParamPairs = paramMaps.flatMap(map => map.toSeq)
+    val tuningParams = tuningParamPairs.map(_.param.asInstanceOf[Param[Any]]).distinct
+      .sortBy(_.name)
+    val schema = new StructType(tuningParams.map(p => StructField(p.toString, StringType))
+         ++ Array(StructField(metricName, DoubleType)))
+    val rows = paramMaps.zip(metrics).map { case (pMap, metric) =>
+      val est = $(estimator).copy(pMap)
+      val values = tuningParams.map { param =>
+        est match {
+          case pipeline: Pipeline =>
+            val candidates = pipeline.getStages.flatMap { stage =>
+              stage.extractParamMap().get(param)
+            }
+            if(candidates.nonEmpty) {
+              param.jsonEncode(candidates.head)
+            } else {
+              param.jsonEncode(est.getOrDefault(param))
+            }
+          case _ =>
+            param.jsonEncode(est.getOrDefault(param))
+        }
+      } ++ Seq(metric)
       Row.fromSeq(values)
     }
-    spark.createDataFrame(rows, schema)
+    spark.createDataFrame(sc.parallelize(rows), schema)
   }
 }
 

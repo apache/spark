@@ -22,7 +22,7 @@ import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, MulticlassClassificationEvaluator, RegressionEvaluator}
-import org.apache.spark.ml.feature.HashingTF
+import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
@@ -68,7 +68,7 @@ class CrossValidatorSuite
 
   test("cross validation with tuning summary") {
     val lr = new LogisticRegression
-    val lrParamMaps = new ParamGridBuilder()
+    val lrParamMaps: Array[ParamMap] = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(0.001, 1.0, 1000.0))
       .addGrid(lr.maxIter, Array(0, 2))
       .build()
@@ -80,9 +80,55 @@ class CrossValidatorSuite
       .setNumFolds(3)
     val cvModel = cv.fit(dataset)
     val expected = lrParamMaps.zip(cvModel.avgMetrics).map { case (map, metric) =>
-      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString))
+      Row.fromSeq(map.toSeq.sortBy(_.param.toString).map(_.value.toString) ++ Seq(metric))
     }
     assert(cvModel.tuningSummary.collect().toSet === expected.toSet)
+    assert(cvModel.tuningSummary.columns.last === eval.getMetricName)
+  }
+
+  test("CrossValidation tuningSummary with Pipeline") {
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+    val scalar = new MinMaxScaler().setInputCol("features").setOutputCol("scaled")
+    val lr = new LogisticRegression().setFeaturesCol("scaled")
+    val pipeline = new Pipeline().setStages(Array(scalar, lr))
+
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1.0))
+      .addGrid(lr.maxIter, Array(0, 2))
+      .addGrid(scalar.min, Array(0.0, -1.0))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(pipeline)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+    val cvModel = cv.fit(dataset)
+    val expected = lrParamMaps.zip(cvModel.avgMetrics).map { case (map, metric) =>
+      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric))
+    }
+    assert(cvModel.tuningSummary.collect().toSet === expected.toSet)
+    assert(cvModel.tuningSummary.columns.last === eval.getMetricName)
+  }
+
+  test("CV tuningSummary with non-overlapping params") {
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+    val lr = new LogisticRegression
+    val lrParamMaps = Array(new ParamMap().put(lr.maxIter, 0),
+      new ParamMap().put(lr.regParam, 0.01))
+    val eval = new BinaryClassificationEvaluator
+    val cv = new CrossValidator()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setNumFolds(3)
+    val cvModel = cv.fit(dataset)
+    val expected = Seq((0, 0.0, cvModel.avgMetrics(0)),
+      (lr.getOrDefault(lr.maxIter), 0.01, cvModel.avgMetrics(1))
+    ).map(t => (t._1.toString, t._2.toString, t._3))
+      .toDF(lr.maxIter.name, lr.regParam.name, eval.getMetricName)
+
+    assert(cvModel.tuningSummary.collect().toSet === expected.collect().toSet)
     assert(cvModel.tuningSummary.columns.last === eval.getMetricName)
   }
 

@@ -18,10 +18,11 @@
 package org.apache.spark.ml.tuning
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.feature.MinMaxScaler
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
@@ -64,7 +65,7 @@ class TrainValidationSplitSuite
     assert(tvsModel.validationMetrics.length === lrParamMaps.length)
   }
 
-  test("train validation split with tuning summary") {
+  test("train validation split tuningSummary") {
     val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
@@ -78,9 +79,51 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
     val tvsModel = tvs.fit(dataset)
     val expected = lrParamMaps.zip(tvsModel.validationMetrics).map { case (map, metric) =>
-      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric.toString))
+      Row.fromSeq(map.toSeq.sortBy(_.param.name).map(_.value.toString) ++ Seq(metric))
     }
     assert(tvsModel.tuningSummary.collect().toSet === expected.toSet)
+    assert(tvsModel.tuningSummary.columns.last === eval.getMetricName)
+  }
+
+  test("tuningSummary with non-overlapping params") {
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+    val lr = new LogisticRegression
+    val lrParamMaps = Array(new ParamMap().put(lr.maxIter, 0),
+      new ParamMap().put(lr.regParam, 0.01))
+    val eval = new BinaryClassificationEvaluator
+    val tvs = new TrainValidationSplit()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+    val tvsModel = tvs.fit(dataset)
+    val expected = Seq((0, lr.getOrDefault(lr.regParam), tvsModel.validationMetrics(0)),
+      (lr.getOrDefault(lr.maxIter), 0.01, tvsModel.validationMetrics(1))
+    ).map(t => (t._1.toString, t._2.toString, t._3))
+      .toDF(lr.maxIter.name, lr.regParam.name, eval.getMetricName)
+
+    assert(tvsModel.tuningSummary.collect().toSet === expected.collect().toSet)
+    assert(tvsModel.tuningSummary.columns.last === eval.getMetricName)
+  }
+
+  test("train validation split tuningSummary with Pipeline") {
+    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+    val scalar = new MinMaxScaler().setInputCol("features").setOutputCol("scaled")
+    val lr = new LogisticRegression().setFeaturesCol("scaled")
+    val pipeline = new Pipeline().setStages(Array(scalar, lr))
+
+    val lrParamMaps = Array(new ParamMap().put(lr.maxIter, 0),
+      new ParamMap().put(scalar.min, -1.0))
+    val eval = new BinaryClassificationEvaluator
+    val tvs = new TrainValidationSplit()
+      .setEstimator(pipeline)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+    val tvsModel = tvs.fit(dataset)
+    val expected = Seq((0, scalar.getOrDefault(scalar.min), tvsModel.validationMetrics(0)),
+      (lr.getOrDefault(lr.maxIter), -1.0, tvsModel.validationMetrics(1))
+    ).map(t => (t._1.toString, t._2.toString, t._3))
+      .toDF(lr.maxIter.name, scalar.min.name, eval.getMetricName)
+    assert(tvsModel.tuningSummary.collect().toSet === expected.collect().toSet)
     assert(tvsModel.tuningSummary.columns.last === eval.getMetricName)
   }
 
