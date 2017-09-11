@@ -156,16 +156,14 @@ final class ShuffleBlockFetcherIterator(
   // The currentResult is set to null to prevent releasing the buffer again on cleanup()
   private[storage] def releaseCurrentResultBuffer(): Unit = {
     // Release the current buffer if necessary
-    if (currentResult != null) {
-      currentResult match {
-        case SuccessFetchResult(_, _, size, buf, _) =>
-          buf.release()
-          bytesInFlight -= size
-          // Send fetch requests up to maxBytesInFlight
-          fetchUpToMaxBytes()
-        case _ =>
-      }
-    }
+    currentResult match {
+       case SuccessFetchResult(_, _, size, buf, _) =>
+         buf.release()
+         bytesInFlight -= size
+         // Send fetch requests up to maxBytesInFlight
+         fetchUpToMaxBytes()
+       case _ =>
+     }
     currentResult = null
   }
 
