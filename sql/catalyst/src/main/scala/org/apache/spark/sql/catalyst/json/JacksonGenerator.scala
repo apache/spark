@@ -224,7 +224,10 @@ private[sql] class JacksonGenerator(
    * @param row The row to convert
    */
   def write(row: InternalRow): Unit = {
-    writeObject(writeFields(row, dataType.asInstanceOf[StructType], rootFieldWriters))
+    writeObject(writeFields(
+      fieldWriters = rootFieldWriters,
+      row = row,
+      schema = dataType.asInstanceOf[StructType]))
   }
 
 
@@ -233,7 +236,10 @@ private[sql] class JacksonGenerator(
    *
    * @param array The array of rows or maps to convert
    */
-  def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
+  def write(array: ArrayData): Unit = writeArray(writeArrayData(
+    fieldWriter = arrElementWriter,
+    array = array
+  ))
 
   /**
    * Transforms a single `MapData` to JSON object using Jackson
@@ -241,7 +247,10 @@ private[sql] class JacksonGenerator(
    * @param map a map to convert
    */
   def write(map: MapData): Unit = {
-    writeObject(writeMapData(map, dataType.asInstanceOf[MapType], mapElementWriter))
+    writeObject(writeMapData(
+      fieldWriter = mapElementWriter,
+      map = map,
+      mapType = dataType.asInstanceOf[MapType]))
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')

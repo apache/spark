@@ -95,7 +95,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = ArrayBasedMapData(Map("a" -> 1))
     val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[Exception] {
+    intercept[UnsupportedOperationException] {
       gen.write(input)
     }
   }
@@ -106,7 +106,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
       ArrayBasedMapData(Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
     val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[Exception] {
+    intercept[ClassCastException] {
       gen.write(input)
     }
   }
@@ -116,7 +116,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = InternalRow(1)
     val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[Exception] {
+    intercept[UnsupportedOperationException] {
       gen.write(input)
     }
   }
@@ -126,7 +126,7 @@ class JacksonGeneratorSuite extends SparkFunSuite {
     val input = new GenericArrayData(InternalRow(1) :: InternalRow(2) :: Nil)
     val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[Exception] {
+    intercept[ClassCastException] {
       gen.write(input)
     }
   }
