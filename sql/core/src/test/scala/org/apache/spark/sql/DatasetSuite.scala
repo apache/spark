@@ -20,10 +20,13 @@ package org.apache.spark.sql
 import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.Partition
+import org.apache.spark.rdd._
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.{LogicalRDD, RDDScanExec}
+import org.apache.spark.sql.execution.datasources.{FilePartition, FileScanRDD}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -127,6 +130,39 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDatasetUnorderly(
       ds.coalesce(1),
       data: _*)
+  }
+
+  test("coalesce, custom") {
+    withTempPath { path =>
+      val maxSplitSize = 512
+      val testData = (1 to 1000).map(i => ClassData(i.toString, i))
+      testData.toDS().repartition(50).write.format("csv").save(path.toString)
+
+      withSQLConf(
+        SQLConf.FILES_MAX_PARTITION_BYTES.key -> (maxSplitSize / 3).toString,
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0"
+      ) {
+        val ds = spark.read.format("csv")
+          .schema("a STRING, b INT")
+          .load(path.toString)
+          .as[ClassData]
+
+        val coalescedDataSet =
+          ds.coalesce(4, Some(new DatasetSizeBasedPartitionCoalescer(maxSplitSize)))
+
+        assert(coalescedDataSet.rdd.partitions.length <= 50)
+
+        val expectedPartitionCount = ds.rdd.partitions.size
+        val totalPartitionCount = coalescedDataSet.rdd.partitions.map { p1 =>
+          val splitSizes = p1.asInstanceOf[CoalescedRDDPartition].parents.map { p2 =>
+            p2.asInstanceOf[FilePartition].files.map(_.length).sum
+          }
+          assert(splitSizes.sum <= maxSplitSize)
+          splitSizes.size
+        }.sum
+        assert(totalPartitionCount === expectedPartitionCount)
+      }
+    }
   }
 
   test("as tuple") {
@@ -1426,3 +1462,14 @@ case class CircularReferenceClassB(cls: CircularReferenceClassA)
 case class CircularReferenceClassC(ar: Array[CircularReferenceClassC])
 case class CircularReferenceClassD(map: Map[String, CircularReferenceClassE])
 case class CircularReferenceClassE(id: String, list: List[CircularReferenceClassD])
+
+class DatasetSizeBasedPartitionCoalescer(maxSize: Int) extends SizeBasedCoalescer(maxSize) {
+
+  override def getPartitions(parent: RDD[_]): Array[Partition] = {
+    parent.firstParent.partitions
+  }
+
+  override def getPartitionSize(partition: Partition): Long = {
+    partition.asInstanceOf[FilePartition].files.map(x => x.length - x.start).sum
+  }
+}

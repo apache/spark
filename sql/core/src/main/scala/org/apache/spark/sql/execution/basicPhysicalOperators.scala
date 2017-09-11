@@ -20,14 +20,13 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, SparkException, TaskContext}
-import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
+import org.apache.spark.{InterruptibleIterator, TaskContext}
+import org.apache.spark.rdd.{EmptyRDD, PartitionCoalescer, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, ExpressionCanonicalizer}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.sql.types.LongType
 import org.apache.spark.util.ThreadUtils
 import org.apache.spark.util.random.{BernoulliCellSampler, PoissonSampler}
@@ -561,7 +560,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * Physical plan for returning a new RDD that has exactly `numPartitions` partitions.
  * Similar to coalesce defined on an [[RDD]], this operation results in a narrow dependency, e.g.
  * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
- * the 100 new partitions will claim 10 of the current partitions.  If a larger number of partitions
+ * the 100 new partitions will claim 10 of the current partitions. If a larger number of partitions
  * is requested, it will stay at the current number of partitions.
  *
  * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
@@ -570,8 +569,16 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
  * you see ShuffleExchange. This will add a shuffle step, but means the
  * current upstream partitions will be executed in parallel (per whatever
  * the current partitioning is).
+ *
+ * If you want to define how to coalesce partitions, you can set a custom strategy
+ * to coalesce partitions in `coalescer`.
+ *
+ * @param numPartitions Number of partitions this coalescer tries to reduce partitions into
+ * @param child the SparkPlan
+ * @param coalescer Optional coalescer that an user specifies
  */
-case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecNode {
+case class CoalesceExec(numPartitions: Int, child: SparkPlan, coalescer: Option[PartitionCoalescer])
+  extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = {
@@ -580,7 +587,7 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().coalesce(numPartitions, shuffle = false)
+    child.execute().coalesce(numPartitions, shuffle = false, coalescer)
   }
 }
 

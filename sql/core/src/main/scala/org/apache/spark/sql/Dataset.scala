@@ -33,7 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
 import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{PartitionCoalescer, RDD}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
@@ -2694,6 +2694,31 @@ class Dataset[T] private[sql](
   def repartition(partitionExprs: Column*): Dataset[T] = withTypedPlan {
     RepartitionByExpression(
       partitionExprs.map(_.expr), logicalPlan, sparkSession.sessionState.conf.numShufflePartitions)
+  }
+
+  /**
+   * Returns a new Dataset that an user-defined `PartitionCoalescer` reduces into fewer partitions.
+   * `userDefinedCoalescer` is the same with a coalescer used in the `RDD` coalesce function.
+   *
+   * If a larger number of partitions is requested, it will stay at the current
+   * number of partitions. Similar to coalesce defined on an `RDD`, this operation results in
+   * a narrow dependency, e.g. if you go from 1000 partitions to 100 partitions, there will not
+   * be a shuffle, instead each of the 100 new partitions will claim 10 of the current partitions.
+   *
+   * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+   * this may result in your computation taking place on fewer nodes than
+   * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+   * you can call repartition. This will add a shuffle step, but means the
+   * current upstream partitions will be executed in parallel (per whatever
+   * the current partitioning is).
+   *
+   * @group typedrel
+   * @since 2.3.0
+   */
+  def coalesce(
+      numPartitions: Int,
+      userDefinedCoalescer: Option[PartitionCoalescer]): Dataset[T] = withTypedPlan {
+    Repartition(numPartitions, shuffle = false, logicalPlan, userDefinedCoalescer)
   }
 
   /**
