@@ -208,6 +208,7 @@ class ShuffleReadMetrics private[spark](
     val localBlocksFetched: Long,
     val fetchWaitTime: Long,
     val remoteBytesRead: Long,
+    val remoteBytesReadToDisk: Long,
     val localBytesRead: Long,
     val recordsRead: Long)
 
@@ -249,6 +250,7 @@ class ShuffleReadMetricDistributions private[spark](
     val localBlocksFetched: IndexedSeq[Double],
     val fetchWaitTime: IndexedSeq[Double],
     val remoteBytesRead: IndexedSeq[Double],
+    val remoteBytesReadToDisk: IndexedSeq[Double],
     val totalBlocksFetched: IndexedSeq[Double])
 
 class ShuffleWriteMetricDistributions private[spark](

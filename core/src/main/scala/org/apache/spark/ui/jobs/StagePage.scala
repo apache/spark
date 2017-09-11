@@ -565,7 +565,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val executorTable = new ExecutorTable(stageId, stageAttemptId, parent)
 
       val maybeAccumulableTable: Seq[Node] =
-        if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq()
+        if (hasAccumulators) { <h4>Accumulators</h4> ++ accumulableTable } else Seq.empty
 
       val aggMetrics =
         <span class="collapse-aggregated-metrics collapse-table"
@@ -835,7 +835,8 @@ private[ui] class TaskTableRowData(
     val speculative: Boolean,
     val status: String,
     val taskLocality: String,
-    val executorIdAndHost: String,
+    val executorId: String,
+    val host: String,
     val launchTime: Long,
     val duration: Long,
     val formatDuration: String,
@@ -1017,7 +1018,8 @@ private[ui] class TaskDataSource(
       info.speculative,
       info.status,
       info.taskLocality.toString,
-      s"${info.executorId} / ${info.host}",
+      info.executorId,
+      info.host,
       info.launchTime,
       duration,
       formatDuration,
@@ -1047,7 +1049,8 @@ private[ui] class TaskDataSource(
       case "Attempt" => Ordering.by(_.attempt)
       case "Status" => Ordering.by(_.status)
       case "Locality Level" => Ordering.by(_.taskLocality)
-      case "Executor ID / Host" => Ordering.by(_.executorIdAndHost)
+      case "Executor ID" => Ordering.by(_.executorId)
+      case "Host" => Ordering.by(_.host)
       case "Launch Time" => Ordering.by(_.launchTime)
       case "Duration" => Ordering.by(_.duration)
       case "Scheduler Delay" => Ordering.by(_.schedulerDelay)
@@ -1200,7 +1203,7 @@ private[ui] class TaskPagedTable(
     val taskHeadersAndCssClasses: Seq[(String, String)] =
       Seq(
         ("Index", ""), ("ID", ""), ("Attempt", ""), ("Status", ""), ("Locality Level", ""),
-        ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
+        ("Executor ID", ""), ("Host", ""), ("Launch Time", ""), ("Duration", ""),
         ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
         ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
         ("GC Time", ""),
@@ -1271,8 +1274,9 @@ private[ui] class TaskPagedTable(
       <td>{if (task.speculative) s"${task.attempt} (speculative)" else task.attempt.toString}</td>
       <td>{task.status}</td>
       <td>{task.taskLocality}</td>
+      <td>{task.executorId}</td>
       <td>
-        <div style="float: left">{task.executorIdAndHost}</div>
+        <div style="float: left">{task.host}</div>
         <div style="float: right">
         {
           task.logs.map {

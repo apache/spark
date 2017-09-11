@@ -585,17 +585,6 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 }
 
 /**
- * A plan node that does nothing but lie about the output of its child.  Used to spice a
- * (hopefully structurally equivalent) tree from a different optimization sequence into an already
- * resolved tree.
- */
-case class OutputFakerExec(output: Seq[Attribute], child: SparkPlan) extends SparkPlan {
-  def children: Seq[SparkPlan] = child :: Nil
-
-  protected override def doExecute(): RDD[InternalRow] = child.execute()
-}
-
-/**
  * Physical plan for a subquery.
  */
 case class SubqueryExec(name: String, child: SparkPlan) extends UnaryExecNode {

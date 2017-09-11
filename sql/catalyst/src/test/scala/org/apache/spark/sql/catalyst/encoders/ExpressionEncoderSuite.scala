@@ -355,9 +355,15 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
     checkNullable[String](true)
   }
 
-  test("null check for map key") {
+  test("null check for map key: String") {
     val encoder = ExpressionEncoder[Map[String, Int]]()
     val e = intercept[RuntimeException](encoder.toRow(Map(("a", 1), (null, 2))))
+    assert(e.getMessage.contains("Cannot use null as map key"))
+  }
+
+  test("null check for map key: Integer") {
+    val encoder = ExpressionEncoder[Map[Integer, String]]()
+    val e = intercept[RuntimeException](encoder.toRow(Map((1, "a"), (null, "b"))))
     assert(e.getMessage.contains("Cannot use null as map key"))
   }
 

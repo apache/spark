@@ -79,7 +79,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val input = LocalRelation('a.int, 'b.int)
     val attrA = input.output(0)
     val attrB = input.output(1)
-    val query = Deduplicate(Seq(attrA), input, streaming = false) // dropDuplicates("a")
+    val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
@@ -95,9 +95,9 @@ class ReplaceOperatorSuite extends PlanTest {
   }
 
   test("don't replace streaming Deduplicate") {
-    val input = LocalRelation('a.int, 'b.int)
+    val input = LocalRelation(Seq('a.int, 'b.int), isStreaming = true)
     val attrA = input.output(0)
-    val query = Deduplicate(Seq(attrA), input, streaming = true) // dropDuplicates("a")
+    val query = Deduplicate(Seq(attrA), input) // dropDuplicates("a")
     val optimized = Optimize.execute(query.analyze)
 
     comparePlans(optimized, query)

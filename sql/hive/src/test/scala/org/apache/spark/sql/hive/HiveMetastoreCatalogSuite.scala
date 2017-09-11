@@ -80,17 +80,17 @@ class DataSourceWithHiveMetastoreCatalogSuite
   ).coalesce(1)
 
   Seq(
-    "parquet" -> (
+    "parquet" -> ((
       "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
       "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
       "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"
-    ),
+    )),
 
-    "orc" -> (
+    "orc" -> ((
       "org.apache.hadoop.hive.ql.io.orc.OrcInputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat",
       "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
-    )
+    ))
   ).foreach { case (provider, (inputFormat, outputFormat, serde)) =>
     test(s"Persist non-partitioned $provider relation into metastore as managed table") {
       withTable("t") {

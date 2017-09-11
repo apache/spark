@@ -194,7 +194,12 @@ private class ShuffleStatus(numPartitions: Int) {
    */
   def invalidateSerializedMapOutputStatusCache(): Unit = synchronized {
     if (cachedSerializedBroadcast != null) {
-      cachedSerializedBroadcast.destroy()
+      // Prevent errors during broadcast cleanup from crashing the DAGScheduler (see SPARK-21444)
+      Utils.tryLogNonFatalError {
+        // Use `blocking = false` so that this operation doesn't hang while trying to send cleanup
+        // RPCs to dead executors.
+        cachedSerializedBroadcast.destroy(blocking = false)
+      }
       cachedSerializedBroadcast = null
     }
     cachedSerializedMapStatus = null
