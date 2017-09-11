@@ -65,16 +65,16 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
 
   /**
    * param for metric name in evaluation
-   * (supports `"squaredSilhouette"` (default))
+   * (supports `"silhouette"` (default))
    * @group param
    */
   @Since("2.3.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("squaredSilhouette"))
+    val allowedParams = ParamValidators.inArray(Array("silhouette"))
     new Param(
       this,
       "metricName",
-      "metric name in evaluation (squaredSilhouette)",
+      "metric name in evaluation (silhouette)",
       allowedParams
     )
   }
@@ -87,19 +87,15 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
   @Since("2.3.0")
   def setMetricName(value: String): this.type = set(metricName, value)
 
-  setDefault(metricName -> "squaredSilhouette")
+  setDefault(metricName -> "silhouette")
 
   @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
     SchemaUtils.checkColumnType(dataset.schema, $(predictionCol), IntegerType)
 
-    // Silhouette is reasonable only when the number of clusters is grater then 1
-    assert(dataset.select($(predictionCol)).distinct().count() > 1,
-      "Number of clusters must be greater than one.")
-
     $(metricName) match {
-      case "squaredSilhouette" => SquaredEuclideanSilhouette.computeSilhouetteScore(
+      case "silhouette" => SquaredEuclideanSilhouette.computeSilhouetteScore(
         dataset,
         $(predictionCol),
         $(featuresCol)
@@ -145,7 +141,7 @@ object ClusteringEvaluator
  * where `$a_{i}$` is the average dissimilarity of `i` with all other data
  * within the same cluster, `$b_{i}$` is the lowest average dissimilarity
  * of `i` to any other cluster, of which `i` is not a member.
- * `$a_{i}$` can be interpreted as as how well `i` is assigned to its cluster
+ * `$a_{i}$` can be interpreted as how well `i` is assigned to its cluster
  * (the smaller the value, the better the assignment), while `$b_{i}$` is
  * a measure of how well `i` has not been assigned to its "neighboring cluster",
  * ie. the nearest cluster to `i`.
@@ -238,7 +234,7 @@ object ClusteringEvaluator
  *
  * <blockquote>
  *   $$
- *   \frac{\sum\limits_{i=1}^N d(X, C_{i} )^2}{N} =
+ *   \frac{\sum\limits_{i=1}^N d(X, C_{i} )}{N} =
  *   \frac{N\xi_{X} + \Psi_{\Gamma} - 2 \sum\limits_{j=1}^D Y_{\Gamma j} x_{j}}{N} =
  *   \xi_{X} + \frac{\Psi_{\Gamma} }{N} - 2 \frac{\sum\limits_{j=1}^D Y_{\Gamma j} x_{j}}{N}
  *   $$
@@ -296,7 +292,8 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * about a cluster which are needed by the algorithm.
    *
    * @param df The DataFrame which contains the input data
-   * @param predictionCol The name of the column which contains the cluster id for the point.
+   * @param predictionCol The name of the column which contains the predicted cluster id
+   *                      for the point.
    * @param featuresCol The name of the column which contains the feature vector of the point.
    * @return A [[scala.collection.immutable.Map]] which associates each cluster id
    *         to a [[ClusterStats]] object (which contains the precomputed values `N`,
@@ -398,7 +395,8 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * Compute the mean Silhouette values of all samples.
    *
    * @param dataset The input dataset (previously clustered) on which compute the Silhouette.
-   * @param predictionCol The name of the column which contains the cluster id for the point.
+   * @param predictionCol The name of the column which contains the predicted cluster id
+   *                      for the point.
    * @param featuresCol The name of the column which contains the feature vector of the point.
    * @return The average of the Silhouette values of the clustered data.
    */
@@ -416,6 +414,9 @@ private[evaluation] object SquaredEuclideanSilhouette {
     // compute aggregate values for clusters needed by the algorithm
     val clustersStatsMap = SquaredEuclideanSilhouette
       .computeClusterStats(dfWithSquaredNorm, predictionCol, featuresCol)
+
+    // Silhouette is reasonable only when the number of clusters is grater then 1
+    assert(clustersStatsMap.size > 1, "Number of clusters must be greater than one.")
 
     val bClustersStatsMap = dataset.sparkSession.sparkContext.broadcast(clustersStatsMap)
 
