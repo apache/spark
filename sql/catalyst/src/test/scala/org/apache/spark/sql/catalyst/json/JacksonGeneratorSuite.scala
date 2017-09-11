@@ -23,84 +23,70 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 class JacksonGeneratorSuite extends SparkFunSuite {
 
   val gmtId = DateTimeUtils.TimeZoneGMT.getID
   val option = new JSONOptions(Map.empty, gmtId)
-  val writer = new CharArrayWriter()
-  def getAndReset(gen: JacksonGenerator): UTF8String = {
-    gen.flush()
-    val json = writer.toString
-    writer.reset()
-    UTF8String.fromString(json)
-  }
 
   test("initial with StructType and write out a row") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = InternalRow(1)
+    val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
-    assert(getAndReset(gen) === UTF8String.fromString("""{"a":1}"""))
+    gen.flush()
+    assert(writer.toString === """{"a":1}""")
   }
 
   test("initial with StructType and write out rows") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = new GenericArrayData(InternalRow(1) :: InternalRow(2) :: Nil)
+    val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
-    assert(getAndReset(gen) === UTF8String.fromString("""[{"a":1},{"a":2}]"""))
+    gen.flush()
+    assert(writer.toString === """[{"a":1},{"a":2}]""")
   }
 
   test("initial with StructType and write out an array with single empty row") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = new GenericArrayData(InternalRow(null) :: Nil)
+    val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
-    assert(getAndReset(gen) === UTF8String.fromString("""[{}]"""))
+    gen.flush()
+    assert(writer.toString === """[{}]""")
   }
 
   test("initial with StructType and write out an empty array") {
     val dataType = StructType(StructField("a", IntegerType) :: Nil)
     val input = new GenericArrayData(Nil)
+    val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
-    assert(getAndReset(gen) === UTF8String.fromString("""[]"""))
+    gen.flush()
+    assert(writer.toString === """[]""")
   }
 
   test("initial with Map and write out a map data") {
     val dataType = MapType(StringType, IntegerType)
     val input = ArrayBasedMapData(Map("a" -> 1))
+    val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
-    assert(getAndReset(gen) === UTF8String.fromString("""{"a":1}"""))
+    gen.flush()
+    assert(writer.toString === """{"a":1}""")
   }
 
   test("initial with Map and write out an array of maps") {
     val dataType = MapType(StringType, IntegerType)
     val input = new GenericArrayData(
       ArrayBasedMapData(Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
+    val writer = new CharArrayWriter()
     val gen = new JacksonGenerator(dataType, writer, option)
     gen.write(input)
-    assert(getAndReset(gen) === UTF8String.fromString("""[{"a":1},{"b":2}]"""))
-  }
-
-  test("error handling : inital with StructType and write out a map data") {
-    val dataType = StructType(StructField("a", IntegerType) :: Nil)
-    val input = ArrayBasedMapData(Map("a" -> 1))
-    val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[UnsupportedOperationException] {
-      gen.write(input)
-    }
-  }
-
-  test("error handling : inital with MapType and write out a row") {
-    val dataType = MapType(StringType, IntegerType)
-    val input = InternalRow(1)
-    val gen = new JacksonGenerator(dataType, writer, option)
-    intercept[UnsupportedOperationException] {
-      gen.write(input)
-    }
+    gen.flush()
+    assert(writer.toString === """[{"a":1},{"b":2}]""")
   }
 }
