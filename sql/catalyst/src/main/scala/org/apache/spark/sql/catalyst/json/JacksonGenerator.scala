@@ -228,12 +228,10 @@ private[sql] class JacksonGenerator(
    *
    * @param row The row to convert
    */
-  def write(row: InternalRow): Unit = dataType match {
-    case st: StructType =>
-      writeObject(writeFields(row, st, rootFieldWriters))
-    case _ => throw new UnsupportedOperationException(
-      s"`JacksonGenerator` can only be used to write out a row when initialized with `StructType`.")
+  def write(row: InternalRow): Unit = {
+    writeObject(writeFields(row, dataType.asInstanceOf[StructType], rootFieldWriters))
   }
+
 
   /**
    * Transforms multiple `InternalRow`s or `MapData`s to JSON array using Jackson
@@ -247,10 +245,8 @@ private[sql] class JacksonGenerator(
    *
    * @param map a map to convert
    */
-  def write(map: MapData): Unit = dataType match {
-    case mt: MapType => writeObject(writeMapData(map, mt, mapElementWriter))
-    case _ => throw new UnsupportedOperationException(
-      s"`JacksonGenerator` can only be used to write out a map when initialized with `MapType`.")
+  def write(map: MapData): Unit = {
+    writeObject(writeMapData(map, dataType.asInstanceOf[MapType], mapElementWriter))
   }
 
   def writeLineEnding(): Unit = gen.writeRaw('\n')
