@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources.{CreateTable, _}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.StructType
 
@@ -385,7 +385,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
    *   ]
    *   [LOCATION path]
    *   [COMMENT table_comment]
-   *   [AS select_statement];
+   *   [TBLPROPERTIES (property_name=property_value, ...)]
+   *   [[AS] select_statement];
    * }}}
    */
   override def visitCreateTable(ctx: CreateTableContext): LogicalPlan = withOrigin(ctx) {
@@ -400,6 +401,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       Option(ctx.partitionColumnNames)
         .map(visitIdentifierList(_).toArray)
         .getOrElse(Array.empty[String])
+    val properties = Option(ctx.tableProps).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
@@ -410,7 +412,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
         "LOCATION and 'path' in OPTIONS are both used to indicate the custom table path, " +
           "you can only specify one of them.", ctx)
     }
-    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI(_)))
+    val customLocation = storage.locationUri.orElse(location.map(CatalogUtils.stringToURI))
 
     val tableType = if (customLocation.isDefined) {
       CatalogTableType.EXTERNAL
@@ -426,6 +428,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       provider = Some(provider),
       partitionColumnNames = partitionColumnNames,
       bucketSpec = bucketSpec,
+      properties = properties,
       comment = Option(ctx.comment).map(string))
 
     // Determine the storage mode.
@@ -1508,5 +1511,82 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       expressions: Seq[Expression],
       query: LogicalPlan): LogicalPlan = {
     RepartitionByExpression(expressions, query, conf.numShufflePartitions)
+  }
+
+  /**
+   * Return the parameters for [[InsertIntoDir]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   INSERT OVERWRITE DIRECTORY
+   *   [path]
+   *   [OPTIONS table_property_list]
+   *   select_statement;
+   * }}}
+   */
+  override def visitInsertOverwriteDir(
+      ctx: InsertOverwriteDirContext): InsertDirParams = withOrigin(ctx) {
+    if (ctx.LOCAL != null) {
+      throw new ParseException(
+        "LOCAL is not supported in INSERT OVERWRITE DIRECTORY to data source", ctx)
+    }
+
+    val options = Option(ctx.options).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    var storage = DataSource.buildStorageFormatFromOptions(options)
+
+    val path = Option(ctx.path).map(string).getOrElse("")
+
+    if (!(path.isEmpty ^ storage.locationUri.isEmpty)) {
+      throw new ParseException(
+        "Directory path and 'path' in OPTIONS should be specified one, but not both", ctx)
+    }
+
+    if (!path.isEmpty) {
+      val customLocation = Some(CatalogUtils.stringToURI(path))
+      storage = storage.copy(locationUri = customLocation)
+    }
+
+    val provider = ctx.tableProvider.qualifiedName.getText
+
+    (false, storage, Some(provider))
+  }
+
+  /**
+   * Return the parameters for [[InsertIntoDir]] logical plan.
+   *
+   * Expected format:
+   * {{{
+   *   INSERT OVERWRITE [LOCAL] DIRECTORY
+   *   path
+   *   [ROW FORMAT row_format]
+   *   [STORED AS file_format]
+   *   select_statement;
+   * }}}
+   */
+  override def visitInsertOverwriteHiveDir(
+      ctx: InsertOverwriteHiveDirContext): InsertDirParams = withOrigin(ctx) {
+    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+    val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+      .getOrElse(CatalogStorageFormat.empty)
+
+    val path = string(ctx.path)
+    // The path field is required
+    if (path.isEmpty) {
+      operationNotAllowed("INSERT OVERWRITE DIRECTORY must be accompanied by path", ctx)
+    }
+
+    val defaultStorage = HiveSerDe.getDefaultStorage(conf)
+
+    val storage = CatalogStorageFormat(
+      locationUri = Some(CatalogUtils.stringToURI(path)),
+      inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+      outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+      serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      compressed = false,
+      properties = rowStorage.properties ++ fileStorage.properties)
+
+    (ctx.LOCAL != null, storage, Some(DDLUtils.HIVE_PROVIDER))
   }
 }

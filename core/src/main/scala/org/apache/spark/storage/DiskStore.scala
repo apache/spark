@@ -21,21 +21,19 @@ import java.io._
 import java.nio.ByteBuffer
 import java.nio.channels.{Channels, ReadableByteChannel, WritableByteChannel}
 import java.nio.channels.FileChannel.MapMode
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ListBuffer
 
-import com.google.common.io.{ByteStreams, Closeables, Files}
+import com.google.common.io.Closeables
 import io.netty.channel.{DefaultFileRegion, FileRegion}
 import io.netty.util.AbstractReferenceCounted
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.security.CryptoStreamUtils
-import org.apache.spark.util.{ByteBufferInputStream, Utils}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**

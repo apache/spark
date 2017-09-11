@@ -19,6 +19,9 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.sql.{Dataset, Row}
 
 final class TestProbabilisticClassificationModel(
     override val uid: String,
@@ -90,5 +93,62 @@ object ProbabilisticClassifierSuite {
     "probabilityCol" -> "myProbability",
     "thresholds" -> Array(0.4, 0.6)
   )
+
+  /**
+   * Helper for testing that a ProbabilisticClassificationModel computes
+   * the same predictions across all combinations of output columns
+   * (rawPrediction/probability/prediction) turned on/off. Makes sure the
+   * output column values match by comparing vs. the case with all 3 output
+   * columns turned on.
+   */
+  def testPredictMethods[
+      FeaturesType,
+      M <: ProbabilisticClassificationModel[FeaturesType, M]](
+    model: M, testData: Dataset[_]): Unit = {
+
+    val allColModel = model.copy(ParamMap.empty)
+      .setRawPredictionCol("rawPredictionAll")
+      .setProbabilityCol("probabilityAll")
+      .setPredictionCol("predictionAll")
+    val allColResult = allColModel.transform(testData)
+
+    for (rawPredictionCol <- Seq("", "rawPredictionSingle")) {
+      for (probabilityCol <- Seq("", "probabilitySingle")) {
+        for (predictionCol <- Seq("", "predictionSingle")) {
+          val newModel = model.copy(ParamMap.empty)
+            .setRawPredictionCol(rawPredictionCol)
+            .setProbabilityCol(probabilityCol)
+            .setPredictionCol(predictionCol)
+
+          val result = newModel.transform(allColResult)
+
+          import org.apache.spark.sql.functions._
+
+          val resultRawPredictionCol =
+            if (rawPredictionCol.isEmpty) col("rawPredictionAll") else col(rawPredictionCol)
+          val resultProbabilityCol =
+            if (probabilityCol.isEmpty) col("probabilityAll") else col(probabilityCol)
+          val resultPredictionCol =
+            if (predictionCol.isEmpty) col("predictionAll") else col(predictionCol)
+
+          result.select(
+            resultRawPredictionCol, col("rawPredictionAll"),
+            resultProbabilityCol, col("probabilityAll"),
+            resultPredictionCol, col("predictionAll")
+          ).collect().foreach {
+            case Row(
+              rawPredictionSingle: Vector, rawPredictionAll: Vector,
+              probabilitySingle: Vector, probabilityAll: Vector,
+              predictionSingle: Double, predictionAll: Double
+            ) => {
+              assert(rawPredictionSingle ~== rawPredictionAll relTol 1E-3)
+              assert(probabilitySingle ~== probabilityAll relTol 1E-3)
+              assert(predictionSingle ~== predictionAll relTol 1E-3)
+            }
+          }
+        }
+      }
+    }
+  }
 
 }

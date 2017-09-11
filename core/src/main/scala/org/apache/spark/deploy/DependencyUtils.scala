@@ -18,15 +18,13 @@
 package org.apache.spark.deploy
 
 import java.io.File
-import java.nio.file.Files
 
-import scala.collection.mutable.HashMap
-
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.util.MutableURLClassLoader
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 private[deploy] object DependencyUtils {
 
@@ -51,41 +49,22 @@ private[deploy] object DependencyUtils {
     SparkSubmitUtils.resolveMavenCoordinates(packages, ivySettings, exclusions = exclusions)
   }
 
-  def createTempDir(): File = {
-    val targetDir = Files.createTempDirectory("tmp").toFile
-    // scalastyle:off runtimeaddshutdownhook
-    Runtime.getRuntime.addShutdownHook(new Thread() {
-      override def run(): Unit = {
-        FileUtils.deleteQuietly(targetDir)
-      }
-    })
-    // scalastyle:on runtimeaddshutdownhook
-    targetDir
-  }
-
-  def resolveAndDownloadJars(jars: String, userJar: String): String = {
-    val targetDir = DependencyUtils.createTempDir()
-    val hadoopConf = new Configuration()
-    val sparkProperties = new HashMap[String, String]()
-    val securityProperties = List("spark.ssl.fs.trustStore", "spark.ssl.trustStore",
-      "spark.ssl.fs.trustStorePassword", "spark.ssl.trustStorePassword",
-      "spark.ssl.fs.protocol", "spark.ssl.protocol")
-
-    securityProperties.foreach { pName =>
-      sys.props.get(pName).foreach { pValue =>
-        sparkProperties.put(pName, pValue)
-      }
-    }
-
+  def resolveAndDownloadJars(
+      jars: String,
+      userJar: String,
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+      secMgr: SecurityManager): String = {
+    val targetDir = Utils.createTempDir()
     Option(jars)
       .map {
-        SparkSubmit.resolveGlobPaths(_, hadoopConf)
+        resolveGlobPaths(_, hadoopConf)
           .split(",")
           .filterNot(_.contains(userJar.split("/").last))
           .mkString(",")
       }
       .filterNot(_ == "")
-      .map(SparkSubmit.downloadFileList(_, targetDir, sparkProperties, hadoopConf))
+      .map(downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr))
       .orNull
   }
 
@@ -96,4 +75,73 @@ private[deploy] object DependencyUtils {
       }
     }
   }
+
+  /**
+   * Download a list of remote files to temp local files. If the file is local, the original file
+   * will be returned.
+   *
+   * @param fileList A comma separated file list.
+   * @param targetDir A temporary directory for which downloaded files.
+   * @param sparkConf Spark configuration.
+   * @param hadoopConf Hadoop configuration.
+   * @param secMgr Spark security manager.
+   * @return A comma separated local files list.
+   */
+  def downloadFileList(
+      fileList: String,
+      targetDir: File,
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+      secMgr: SecurityManager): String = {
+    require(fileList != null, "fileList cannot be null.")
+    fileList.split(",")
+      .map(downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr))
+      .mkString(",")
+  }
+
+  /**
+   * Download a file from the remote to a local temporary directory. If the input path points to
+   * a local path, returns it with no operation.
+   *
+   * @param path A file path from where the files will be downloaded.
+   * @param targetDir A temporary directory for which downloaded files.
+   * @param sparkConf Spark configuration.
+   * @param hadoopConf Hadoop configuration.
+   * @param secMgr Spark security manager.
+   * @return Path to the local file.
+   */
+  def downloadFile(
+      path: String,
+      targetDir: File,
+      sparkConf: SparkConf,
+      hadoopConf: Configuration,
+      secMgr: SecurityManager): String = {
+    require(path != null, "path cannot be null.")
+    val uri = Utils.resolveURI(path)
+
+    uri.getScheme match {
+      case "file" | "local" => path
+      case _ =>
+        val fname = new Path(uri).getName()
+        val localFile = Utils.doFetchFile(uri.toString(), targetDir, fname, sparkConf, secMgr,
+          hadoopConf)
+        localFile.toURI().toString()
+    }
+  }
+
+  def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
+    require(paths != null, "paths cannot be null.")
+    paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
+      val uri = Utils.resolveURI(path)
+      uri.getScheme match {
+        case "local" | "http" | "https" | "ftp" => Array(path)
+        case _ =>
+          val fs = FileSystem.get(uri, hadoopConf)
+          Option(fs.globStatus(new Path(uri))).map { status =>
+            status.filter(_.isFile).map(_.getPath.toUri.toString)
+          }.getOrElse(Array(path))
+      }
+    }.mkString(",")
+  }
+
 }

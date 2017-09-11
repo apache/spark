@@ -2683,7 +2683,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @rdname union
 #' @name union
 #' @aliases union,SparkDataFrame,SparkDataFrame-method
-#' @seealso \link{rbind}
+#' @seealso \link{rbind} \link{unionByName}
 #' @export
 #' @examples
 #'\dontrun{
@@ -2714,6 +2714,40 @@ setMethod("unionAll",
             union(x, y)
           })
 
+#' Return a new SparkDataFrame containing the union of rows, matched by column names
+#'
+#' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
+#' and another SparkDataFrame. This is different from \code{union} function, and both
+#' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
+#' into account. Input SparkDataFrames can have different data types in the schema.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
+#' This function resolves columns by name (not by position).
+#'
+#' @param x A SparkDataFrame
+#' @param y A SparkDataFrame
+#' @return A SparkDataFrame containing the result of the union.
+#' @family SparkDataFrame functions
+#' @rdname unionByName
+#' @name unionByName
+#' @aliases unionByName,SparkDataFrame,SparkDataFrame-method
+#' @seealso \link{rbind} \link{union}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- select(createDataFrame(mtcars), "carb", "am", "gear")
+#' df2 <- select(createDataFrame(mtcars), "am", "gear", "carb")
+#' head(unionByName(df1, df2))
+#' }
+#' @note unionByName since 2.3.0
+setMethod("unionByName",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            unioned <- callJMethod(x@sdf, "unionByName", y@sdf)
+            dataFrame(unioned)
+          })
+
 #' Union two or more SparkDataFrames
 #'
 #' Union two or more SparkDataFrames by row. As in R's \code{rbind}, this method
@@ -2730,7 +2764,7 @@ setMethod("unionAll",
 #' @aliases rbind,SparkDataFrame-method
 #' @rdname rbind
 #' @name rbind
-#' @seealso \link{union}
+#' @seealso \link{union} \link{unionByName}
 #' @export
 #' @examples
 #'\dontrun{

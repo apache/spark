@@ -24,11 +24,11 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 
 import org.apache.spark.SparkFunSuite
 
-class EventLoopSuite extends SparkFunSuite with Timeouts {
+class EventLoopSuite extends SparkFunSuite with TimeLimits {
 
   test("EventLoop") {
     val buffer = new ConcurrentLinkedQueue[Int]

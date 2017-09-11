@@ -122,7 +122,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def containerInfo(conf: SparkConf): ContainerInfo = {
+  def containerInfo(conf: SparkConf): ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -149,8 +149,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .getOrElse(List.empty)
 
       if (containerType == ContainerInfo.Type.DOCKER) {
-        containerInfo
-          .setDocker(dockerInfo(image, forcePullImage, portMaps, params))
+        containerInfo.setDocker(dockerInfo(image, forcePullImage, portMaps, params))
       } else {
         containerInfo.setMesos(mesosInfo(image, forcePullImage))
       }
@@ -171,7 +170,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       containerInfo.addNetworkInfos(info)
     }
 
-    containerInfo.build()
+    containerInfo
   }
 
   private def dockerInfo(
