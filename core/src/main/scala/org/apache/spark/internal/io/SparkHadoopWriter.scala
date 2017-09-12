@@ -116,7 +116,8 @@ object SparkHadoopWriter extends Logging {
     config.initWriter(taskContext, sparkPartitionId)
     var recordsWritten = 0L
     
-    // Initialize callback function after the writer.
+    // We must initialize the callback for calculating bytes written after the statistic table 
+    // is initialized in FileSystem which is happened in initWriter.
     val (outputMetrics, callback) = initHadoopOutputMetrics(context)
 
     // Write all rows in RDD partition.
