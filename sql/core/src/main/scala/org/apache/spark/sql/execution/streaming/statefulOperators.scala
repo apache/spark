@@ -366,6 +366,14 @@ case class StateStoreSaveExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (keyExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(keyExpressions) :: Nil
+    }
+  }
 }
 
 /** Physical operator for executing streaming Deduplicate. */
