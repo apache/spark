@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusAlgo
+import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
 import org.apache.spark.sql.types._
 
 // scalastyle:off
@@ -84,11 +84,11 @@ case class HyperLogLogPlusPlus(
 
   override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
 
-  val hllppAlgo = new HyperLogLogPlusPlusAlgo(relativeSD)
+  val hllppHelper = new HyperLogLogPlusPlusHelper(relativeSD)
 
   /** Allocate enough words to store all registers. */
   override val aggBufferAttributes: Seq[AttributeReference] = {
-    Seq.tabulate(hllppAlgo.numWords) { i =>
+    Seq.tabulate(hllppHelper.numWords) { i =>
       AttributeReference(s"MS[$i]", LongType)()
     }
   }
@@ -101,7 +101,7 @@ case class HyperLogLogPlusPlus(
   /** Fill all words with zeros. */
   override def initialize(buffer: InternalRow): Unit = {
     var word = 0
-    while (word < hllppAlgo.numWords) {
+    while (word < hllppHelper.numWords) {
       buffer.setLong(mutableAggBufferOffset + word, 0)
       word += 1
     }
@@ -113,7 +113,7 @@ case class HyperLogLogPlusPlus(
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
-      hllppAlgo.update(buffer, mutableAggBufferOffset, v, child.dataType)
+      hllppHelper.update(buffer, mutableAggBufferOffset, v, child.dataType)
     }
   }
 
@@ -121,7 +121,7 @@ case class HyperLogLogPlusPlus(
    * Merge the HLL++ buffers.
    */
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
-    hllppAlgo.merge(buffer1 = buffer1, buffer2 = buffer2,
+    hllppHelper.merge(buffer1 = buffer1, buffer2 = buffer2,
       offset1 = mutableAggBufferOffset, offset2 = inputAggBufferOffset)
   }
 
@@ -129,7 +129,7 @@ case class HyperLogLogPlusPlus(
    * Compute the HyperLogLog estimate.
    */
   override def eval(buffer: InternalRow): Any = {
-    hllppAlgo.query(buffer, mutableAggBufferOffset)
+    hllppHelper.query(buffer, mutableAggBufferOffset)
   }
 }
 

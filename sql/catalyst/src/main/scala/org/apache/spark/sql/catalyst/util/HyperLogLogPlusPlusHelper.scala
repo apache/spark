@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.expressions.XxHash64Function
 import org.apache.spark.sql.types._
 
 // A helper class for HyperLogLogPlusPlus.
-class HyperLogLogPlusPlusAlgo(relativeSD: Double) extends Serializable {
-  import HyperLogLogPlusPlusAlgo._
+class HyperLogLogPlusPlusHelper(relativeSD: Double) extends Serializable {
+  import HyperLogLogPlusPlusHelper._
 
   /**
    * HLL++ uses 'p' bits for addressing. The more addressing bits we use, the more precise the
@@ -257,7 +257,7 @@ class HyperLogLogPlusPlusAlgo(relativeSD: Double) extends Serializable {
  * for more information.
  */
 // scalastyle:on
-object HyperLogLogPlusPlusAlgo {
+object HyperLogLogPlusPlusHelper {
 
   /**
    * The size of a word used for storing registers: 64 Bits.

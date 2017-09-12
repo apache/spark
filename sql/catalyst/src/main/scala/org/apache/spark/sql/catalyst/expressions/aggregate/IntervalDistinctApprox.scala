@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionDescription}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusAlgo}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.types._
 
 /**
@@ -107,9 +107,9 @@ case class IntervalDistinctApprox(
 
   // N endpoints construct N-1 intervals, creating a HLLPP for each interval
   private lazy val hllppArray = {
-    val array = new Array[HyperLogLogPlusPlusAlgo](endpoints.length - 1)
+    val array = new Array[HyperLogLogPlusPlusHelper](endpoints.length - 1)
     for (i <- array.indices) {
-      array(i) = new HyperLogLogPlusPlusAlgo(relativeSD)
+      array(i) = new HyperLogLogPlusPlusHelper(relativeSD)
     }
     array
   }
