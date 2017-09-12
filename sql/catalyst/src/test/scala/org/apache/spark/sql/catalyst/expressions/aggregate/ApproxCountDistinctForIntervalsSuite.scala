@@ -69,7 +69,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals"))
   }
 
-  /** Create an IntervalDistinctApprox instance and an input and output buffer. */
+  /** Create an ApproxCountDistinctForIntervals instance and an input and output buffer. */
   private def createEstimator(
       endpoints: Array[Double],
       rsd: Double = 0.05,
@@ -87,7 +87,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     buffer
   }
 
-  test("merging IntervalDistinctApprox instances") {
+  test("merging ApproxCountDistinctForIntervals instances") {
     val (ida, input, buffer1a) = createEstimator(Array[Double](0, 10, 2000, 345678, 1000000))
     val buffer1b = createBuffer(ida)
     val buffer2 = createBuffer(ida)

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLog
 import org.apache.spark.sql.types._
 
 /**
- * The IntervalDistinctApprox function counts the approximate number of distinct values (ndv) in
+ * This function counts the approximate number of distinct values (ndv) in
  * intervals constructed from endpoints specified in `endpointsExpression`. The endpoints will be
  * sorted into ascending order. To count ndv's in these intervals, apply the HyperLogLogPlusPlus
  * algorithm in each of them.

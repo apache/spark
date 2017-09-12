@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.Decimal
 class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private val table = "IntervalDistinctApprox_test"
+  private val table = "ApproxCountDistinctForIntervals_test_table"
 
   private def checkNdv(ndv: Long, expectedNdv: Long, rsd: Double): Unit = {
     // ndv is an approximate value, so we make sure we have the value, and it should be
