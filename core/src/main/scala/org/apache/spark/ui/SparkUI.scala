@@ -50,7 +50,7 @@ private[spark] class SparkUI private (
     val operationGraphListener: RDDOperationGraphListener,
     var appName: String,
     val basePath: String,
-    val lastUpdateTime: Long = -1L,
+    val lastUpdateTime: Option[Long] = None,
     val startTime: Long)
   extends WebUI(securityManager, securityManager.getSSLOptions("ui"), SparkUI.getUIPort(conf),
     conf, basePath, "SparkUI")
@@ -177,7 +177,7 @@ private[spark] object SparkUI {
       securityManager: SecurityManager,
       appName: String,
       basePath: String,
-      lastUpdateTime: Long,
+      lastUpdateTime: Option[Long],
       startTime: Long): SparkUI = {
     val sparkUI = create(
       None, conf, listenerBus, securityManager, appName, basePath,
@@ -207,7 +207,7 @@ private[spark] object SparkUI {
       appName: String,
       basePath: String = "",
       jobProgressListener: Option[JobProgressListener] = None,
-      lastUpdateTime: Long = -1L,
+      lastUpdateTime: Option[Long] = None,
       startTime: Long): SparkUI = {
 
     val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
