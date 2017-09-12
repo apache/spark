@@ -2112,8 +2112,24 @@ class UserDefinedFunction(object):
         return wrapper
 
 
+def _create_udf(f, returnType, vectorized):
+
+    def _udf(f, returnType=StringType(), vectorized=vectorized):
+        udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
+        return udf_obj._wrapped()
+
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type, vectorized=vectorized)
+    else:
+        return _udf(f=f, returnType=returnType, vectorized=vectorized)
+
+
 @since(1.3)
-def udf(f=None, returnType=StringType(), vectorized=False):
+def udf(f=None, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
@@ -2143,18 +2159,21 @@ def udf(f=None, returnType=StringType(), vectorized=False):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType(), vectorized=False):
-        udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
-        return udf_obj._wrapped()
+    return _create_udf(f, returnType=returnType, vectorized=False)
 
-    # decorator @udf, @udf() or @udf(dataType())
-    if f is None or isinstance(f, (str, DataType)):
-        # If DataType has been passed as a positional argument
-        # for decorator use it as a returnType
-        return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type, vectorized=vectorized)
-    else:
-        return _udf(f=f, returnType=returnType, vectorized=vectorized)
+
+@since(2.3)
+def pandas_udf(f=None, returnType=StringType()):
+    """
+    Creates a :class:`Column` expression representing a user defined function (UDF) that accepts
+    `Pandas.Series` as input arguments and outputs a `Pandas.Series` of the same length.
+
+    :param f: python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+    # TODO: doctest
+    """
+    return _create_udf(f, returnType=returnType, vectorized=True)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
