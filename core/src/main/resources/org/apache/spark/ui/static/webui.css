@@ -252,3 +252,12 @@ a.expandbutton {
 .table-cell-width-limited td {
   max-width: 600px;
 }
+
+.title-table {
+  clear: left;
+  display: inline-block;
+}
+
+.table-dataTable{
+  width="100%";
+}

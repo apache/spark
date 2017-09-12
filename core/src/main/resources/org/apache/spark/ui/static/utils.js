@@ -46,3 +46,64 @@ function formatBytes(bytes, type) {
     var i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
+
+function formatLogsCells(execLogs, type) {
+    if (type !== 'display') return Object.keys(execLogs);
+    if (!execLogs) return;
+    var result = '';
+    $.each(execLogs, function (logName, logUrl) {
+        result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
+    });
+    return result;
+}
+
+function getStandAloneAppId(cb) {
+    var words = document.baseURI.split('/');
+    var ind = words.indexOf("proxy");
+    if (ind > 0) {
+        var appId = words[ind + 1];
+        cb(appId);
+        return;
+    }
+    ind = words.indexOf("history");
+    if (ind > 0) {
+        var appId = words[ind + 1];
+        cb(appId);
+        return;
+    }
+    //Looks like Web UI is running in standalone mode
+    //Let's get application-id using REST End Point
+    $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
+        if (response && response.length > 0) {
+            var appId = response[0].id
+            cb(appId);
+            return;
+        }
+    });
+}
+
+// This function is a helper function for sorting in datatable.
+// When the data is in duration (e.g. 12ms 2s 2min 2h )
+// It will convert the string into integer for correct ordering
+function ConvertDurationString(data) {
+    data = data.toString();
+    var units = data.replace(/[\d\.]/g, '' )
+                    .replace(' ', '')
+                    .toLowerCase();
+    var multiplier = 1;
+
+    switch(units) {
+        case 's':
+            multiplier = 1000;
+            break;
+        case 'min':
+            multiplier = 600000;
+            break;
+        case 'h':
+            multiplier = 3600000;
+            break;
+        default:
+            break;
+    }
+    return parseFloat(data) * multiplier;
+}

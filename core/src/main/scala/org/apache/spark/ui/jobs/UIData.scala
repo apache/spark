@@ -34,6 +34,7 @@ private[spark] object UIData {
     var taskTime : Long = 0
     var failedTasks : Int = 0
     var succeededTasks : Int = 0
+    var killedTasks : Int = 0
     var reasonToNumKilled : Map[String, Int] = Map.empty
     var inputBytes : Long = 0
     var inputRecords : Long = 0
