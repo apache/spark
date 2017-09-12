@@ -84,7 +84,7 @@ class SpecialLengths(object):
 class PythonEvalType(object):
     NON_UDF = 0
     SQL_BATCHED_UDF = 1
-    SQL_ARROW_UDF = 2
+    SQL_PANDAS_UDF = 2
 
 
 class Serializer(object):

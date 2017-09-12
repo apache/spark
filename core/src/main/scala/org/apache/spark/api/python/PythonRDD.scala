@@ -89,7 +89,7 @@ private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 private[spark] object PythonEvalType {
   val NON_UDF = 0
   val SQL_BATCHED_UDF = 1
-  val SQL_ARROW_UDF = 2
+  val SQL_PANDAS_UDF = 2
 }
 
 private[spark] object PythonRunner {

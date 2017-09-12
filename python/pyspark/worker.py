@@ -104,7 +104,7 @@ def read_udfs(pickleSer, infile, eval_type):
 
     func = lambda _, it: map(mapper, it)
 
-    if eval_type == PythonEvalType.SQL_ARROW_UDF:
+    if eval_type == PythonEvalType.SQL_PANDAS_UDF:
         ser = ArrowPandasSerializer()
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)

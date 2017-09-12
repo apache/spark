@@ -108,7 +108,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
       // Output iterator for results from Python.
       val outputIterator = new PythonRunner(
-          pyFuncs, bufferSize, reuseWorker, PythonEvalType.SQL_ARROW_UDF, argOffsets).
+          pyFuncs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets).
         compute(inputIterator, context.partitionId(), context)
 
       val joined = new JoinedRow
