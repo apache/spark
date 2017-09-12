@@ -484,7 +484,7 @@ object SQLConf {
   val GROUPING_WITH_UNION = buildConf("spark.sql.grouping.union.enabled")
     .doc("When true, the grouping analytics (i.e., cube, rollup, grouping sets) will be " +
       "implemented by Union with a number of aggregates for each group. " +
-      "When false, the grouping analytics will be implemented by a single aggregate on Expand.")
+      "When false, the grouping analytics will be implemented by one aggregate on Expand.")
     .booleanConf
     .createWithDefault(false)
 
