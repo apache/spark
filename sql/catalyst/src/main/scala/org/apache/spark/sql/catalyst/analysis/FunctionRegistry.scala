@@ -270,6 +270,7 @@ object FunctionRegistry {
     expression[Remainder]("%"),
 
     // aggregate functions
+    expression[IntervalDistinctApprox]("interval_distinct_approx"),
     expression[HyperLogLogPlusPlus]("approx_count_distinct"),
     expression[Average]("avg"),
     expression[Corr]("corr"),
