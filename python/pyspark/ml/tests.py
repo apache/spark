@@ -1548,10 +1548,24 @@ class OneVsRestTests(SparkSessionTestCase):
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
+        ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+    def test_parallelism_doesnt_change_output(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        ovrPar1 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=1)
+        modelPar1 = ovrPar1.fit(df)
+        ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
+        modelPar2 = ovrPar2.fit(df)
+        for i, model in enumerate(modelPar1.models):
+            self.assertTrue(np.allclose(model.coefficients.toArray(),
+                                        modelPar2.models[i].coefficients.toArray(), atol=1E-4))
+            self.assertTrue(np.allclose(model.intercept, modelPar2.models[i].intercept, atol=1E-4))
 
     def test_support_for_weightCol(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8), 1.0),

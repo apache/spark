@@ -16,6 +16,7 @@
 #
 
 import operator
+from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -1567,7 +1568,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCo
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1612,22 +1613,23 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None, weightCol=None):
+                 classifier=None, weightCol=None, parallelism=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None, weightCol=None)
+                 classifier=None, weightCol=None, parallelism=1):
         """
         super(OneVsRest, self).__init__()
+        self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
-                  classifier=None, weightCol=None):
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  classifier=None, weightCol=None, parallelism=1):
         """
-        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, \
-                  classifier=None, weightCol=None):
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  classifier=None, weightCol=None, parallelism=1):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -1674,8 +1676,9 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
                 paramMap[classifier.weightCol] = weightCol
             return classifier.fit(trainingDataset, paramMap)
 
-        # TODO: Parallel training for all classes.
-        models = [trainSingleClass(i) for i in range(numClasses)]
+        pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
+
+        models = pool.map(trainSingleClass, range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
@@ -1709,8 +1712,9 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
+        parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       classifier=classifier)
+                       classifier=classifier, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -1723,6 +1727,7 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
         _java_obj.setClassifier(self.getClassifier()._to_java())
+        _java_obj.setParallelism(self.getParallelism())
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
