@@ -123,7 +123,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   /**
    * Replace the aliased expression in [[Alias]] with the alias name if both exist in constraints.
    * Thus non-converging inference can be prevented.
-   * E.g. `a = f(a, b)`,  `a = f(b, c) && c = g(a, b)`.
+   * E.g. `Alias(b, f(a)), a = b` infers `f(a) = f(f(a))` without eliminating aliased expressions.
    * Also, the size of constraints is reduced without losing any information.
    * When the inferred filters are pushed down the operators that generate the alias,
    * the alias names used in filters are replaced by the aliased expressions.
@@ -145,9 +145,9 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   }
 
   private def replaceConstraints(
-    constraints: Set[Expression],
-    source: Expression,
-    destination: Attribute): Set[Expression] = constraints.map(_ transform {
+      constraints: Set[Expression],
+      source: Expression,
+      destination: Attribute): Set[Expression] = constraints.map(_ transform {
     case e: Expression if e.semanticEquals(source) => destination
   })
 }
