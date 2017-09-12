@@ -529,7 +529,7 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         """
         if self.hasSummary:
             java_lrt_summary = self._call_java("summary")
-            if (self.numClasses <= 2):
+            if self.numClasses <= 2:
                 return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
             else:
                 return LogisticRegressionTrainingSummary(java_lrt_summary)
