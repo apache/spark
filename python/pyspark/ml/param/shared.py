@@ -610,10 +610,10 @@ class HasAggregationDepth(Params):
 
 class HasParallelism(Params):
     """
-    Mixin for param parallelism: number of threads to use when fitting models in parallel.
+    Mixin for param parallelism: the number of threads to use when running parallel algorithms (>= 1).
     """
 
-    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms.", typeConverter=TypeConverters.toInt)
+    parallelism = Param(Params._dummy(), "parallelism", "the number of threads to use when running parallel algorithms (>= 1).", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasParallelism, self).__init__()
