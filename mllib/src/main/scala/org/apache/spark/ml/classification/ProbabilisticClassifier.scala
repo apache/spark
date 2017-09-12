@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import java.util.Arrays
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
@@ -246,9 +248,7 @@ private[ml] object ProbabilisticClassificationModel {
         i += 1
       }
     } else {
-      var i = 0
-      val size = v.size
-      java.util.Arrays.fill(v.values, 1.0 / size)
+      Arrays.fill(v.values, 1.0 / v.size)
     }
   }
 }
