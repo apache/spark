@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundRefer
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
 
-class IntervalDistinctApproxSuite extends SparkFunSuite {
+class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
 
   test("fails analysis if parameters are invalid") {
     def assertEqual[T](left: T, right: T): Unit = {
@@ -34,7 +34,7 @@ class IntervalDistinctApproxSuite extends SparkFunSuite {
     val wrongColumnTypes = Seq(BinaryType, BooleanType, StringType, ArrayType(IntegerType),
       MapType(IntegerType, IntegerType), StructType(Seq(StructField("s", IntegerType))))
     wrongColumnTypes.foreach { dataType =>
-      val wrongColumn = new IntervalDistinctApprox(
+      val wrongColumn = new ApproxCountDistinctForIntervals(
         AttributeReference("a", dataType)(),
         endpointsExpression = CreateArray(Seq(1, 10).map(Literal(_))))
       assert(
@@ -45,7 +45,7 @@ class IntervalDistinctApproxSuite extends SparkFunSuite {
         })
     }
 
-    var wrongEndpoints = new IntervalDistinctApprox(
+    var wrongEndpoints = new ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = Literal(0.5d))
     assert(
@@ -54,14 +54,14 @@ class IntervalDistinctApproxSuite extends SparkFunSuite {
         case _ => false
       })
 
-    wrongEndpoints = new IntervalDistinctApprox(
+    wrongEndpoints = new ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Seq(AttributeReference("b", DoubleType)())))
     assertEqual(
       wrongEndpoints.checkInputDataTypes(),
       TypeCheckFailure("The intervals provided must be constant literals"))
 
-    wrongEndpoints = new IntervalDistinctApprox(
+    wrongEndpoints = new ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
     assertEqual(
@@ -73,15 +73,15 @@ class IntervalDistinctApproxSuite extends SparkFunSuite {
   private def createEstimator(
       endpoints: Array[Double],
       rsd: Double = 0.05,
-      dt: DataType = IntegerType): (IntervalDistinctApprox, InternalRow, InternalRow) = {
+      dt: DataType = IntegerType): (ApproxCountDistinctForIntervals, InternalRow, InternalRow) = {
     val input = new SpecificInternalRow(Seq(dt))
-    val ida = IntervalDistinctApprox(
+    val ida = ApproxCountDistinctForIntervals(
       BoundReference(0, dt, nullable = true), CreateArray(endpoints.map(Literal(_))), rsd)
     val buffer = createBuffer(ida)
     (ida, input, buffer)
   }
 
-  private def createBuffer(ida: IntervalDistinctApprox): InternalRow = {
+  private def createBuffer(ida: ApproxCountDistinctForIntervals): InternalRow = {
     val buffer = new SpecificInternalRow(ida.aggBufferAttributes.map(_.dataType))
     ida.initialize(buffer)
     buffer
@@ -129,7 +129,7 @@ class IntervalDistinctApproxSuite extends SparkFunSuite {
         endpoints: Array[Double],
         value: Double,
         expectedIntervalIndex: Int): Unit = {
-      val ida = IntervalDistinctApprox(
+      val ida = ApproxCountDistinctForIntervals(
         BoundReference(0, DoubleType, nullable = true), CreateArray(endpoints.map(Literal(_))))
       assert(ida.findHllppIndex(value) == expectedIntervalIndex)
     }

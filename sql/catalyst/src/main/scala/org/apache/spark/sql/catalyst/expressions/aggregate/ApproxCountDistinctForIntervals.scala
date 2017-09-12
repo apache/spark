@@ -22,7 +22,7 @@ import java.util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExpectsInputTypes, Expression, ExpressionDescription}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.types._
 
@@ -47,15 +47,16 @@ import org.apache.spark.sql.types._
   """,
   extended = """
     Examples:
-      > SELECT interval_distinct_approx(10.0, array(5, 15, 25), 0.01);
+      > SELECT approx_count_distinct_for_intervals(10.0, array(5, 15, 25), 0.01);
        [1, 0]
   """)
-case class IntervalDistinctApprox(
+case class ApproxCountDistinctForIntervals(
     child: Expression,
     endpointsExpression: Expression,
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+    inputAggBufferOffset: Int = 0)
+  extends ImperativeAggregate with ExpectsInputTypes {
 
   def this(child: Expression, endpointsExpression: Expression) = {
     this(
@@ -79,7 +80,7 @@ case class IntervalDistinctApprox(
     Seq(TypeCollection(NumericType, TimestampType, DateType), ArrayType)
   }
 
-  // Mark as lazy so that intervalExpression is not evaluated during tree transformation.
+  // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
   lazy val endpoints: Array[Double] = {
     val doubleArray = (endpointsExpression.dataType, endpointsExpression.eval()) match {
       case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
@@ -149,9 +150,9 @@ case class IntervalDistinctApprox(
       val doubleValue = child.dataType match {
         case n: NumericType =>
           n.numeric.toDouble(value.asInstanceOf[n.InternalType])
-        case d: DateType =>
+        case _: DateType =>
           value.asInstanceOf[Int].toDouble
-        case t: TimestampType =>
+        case _: TimestampType =>
           value.asInstanceOf[Long].toDouble
       }
 
@@ -243,5 +244,5 @@ case class IntervalDistinctApprox(
 
   override def dataType: DataType = ArrayType(LongType)
 
-  override def prettyName: String = "interval_distinct_approx"
+  override def prettyName: String = "approx_count_distinct_for_intervals"
 }

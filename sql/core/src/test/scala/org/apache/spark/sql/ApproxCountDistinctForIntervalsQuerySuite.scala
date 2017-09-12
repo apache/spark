@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.Decimal
 
 
-class IntervalDistinctApproxQuerySuite extends QueryTest with SharedSQLContext {
+class ApproxCountDistinctForIntervalsQuerySuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private val table = "IntervalDistinctApprox_test"
@@ -46,7 +46,7 @@ class IntervalDistinctApproxQuerySuite extends QueryTest with SharedSQLContext {
       // empty input row
       val emptyValues: Seq[Option[Double]] = Seq(None, None)
       emptyValues.toDF("col").createOrReplaceTempView(table)
-      val query = s"SELECT interval_distinct_approx(col, array(0.1, 0.9)) FROM $table"
+      val query = s"SELECT approx_count_distinct_for_intervals(col, array(0.1, 0.9)) FROM $table"
       checkAnswer(spark.sql(query), Row(Array(0L)))
 
       // add some non-empty row
@@ -88,15 +88,15 @@ class IntervalDistinctApproxQuerySuite extends QueryTest with SharedSQLContext {
         spark.sql(
           s"""
              |SELECT
-             |  interval_distinct_approx(c1, array(3, 5, 7)),
-             |  interval_distinct_approx(c2, array(3, 5, 7)),
-             |  interval_distinct_approx(c3, array(3, 5, 7)),
-             |  interval_distinct_approx(c4, array(3, 5, 7)),
-             |  interval_distinct_approx(c5, array(3, 5, 7)),
-             |  interval_distinct_approx(c6, array(3, 5, 7)),
-             |  interval_distinct_approx(c7, array(3, 5, 7)),
-             |  interval_distinct_approx(c8, array(${dateEndpoints.mkString(", ")})),
-             |  interval_distinct_approx(c9, array(${tsEndpoints.mkString(", ")}))
+             |  approx_count_distinct_for_intervals(c1, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c2, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c3, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c4, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c5, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c6, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c7, array(3, 5, 7)),
+             |  approx_count_distinct_for_intervals(c8, array(${dateEndpoints.mkString(", ")})),
+             |  approx_count_distinct_for_intervals(c9, array(${tsEndpoints.mkString(", ")}))
              |FROM $table
            """.stripMargin).collect().head
 
