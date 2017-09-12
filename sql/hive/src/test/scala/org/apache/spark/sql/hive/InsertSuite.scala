@@ -34,7 +34,7 @@ case class TestData(key: Int, value: String)
 
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
-class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
+class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     with SQLTestUtils {
   import spark.implicits._
 
@@ -50,47 +50,53 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   }
 
   test("insertInto() HiveTable") {
-    sql("CREATE TABLE createAndInsertTest (key int, value string)")
+    withTable("createAndInsertTest") {
+      sql("CREATE TABLE createAndInsertTest (key int, value string)")
 
-    // Add some data.
-    testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
+      // Add some data.
+      testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
 
-    // Make sure the table has also been updated.
-    checkAnswer(
-      sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq
-    )
+      // Make sure the table has also been updated.
+      checkAnswer(
+        sql("SELECT * FROM createAndInsertTest"),
+        testData.collect().toSeq
+      )
 
-    // Add more data.
-    testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
+      // Add more data.
+      testData.write.mode(SaveMode.Append).insertInto("createAndInsertTest")
 
-    // Make sure the table has been updated.
-    checkAnswer(
-      sql("SELECT * FROM createAndInsertTest"),
-      testData.toDF().collect().toSeq ++ testData.toDF().collect().toSeq
-    )
+      // Make sure the table has been updated.
+      checkAnswer(
+        sql("SELECT * FROM createAndInsertTest"),
+        testData.toDF().collect().toSeq ++ testData.toDF().collect().toSeq
+      )
 
-    // Now overwrite.
-    testData.write.mode(SaveMode.Overwrite).insertInto("createAndInsertTest")
+      // Now overwrite.
+      testData.write.mode(SaveMode.Overwrite).insertInto("createAndInsertTest")
 
-    // Make sure the registered table has also been updated.
-    checkAnswer(
-      sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq
-    )
+      // Make sure the registered table has also been updated.
+      checkAnswer(
+        sql("SELECT * FROM createAndInsertTest"),
+        testData.collect().toSeq
+      )
+    }
   }
 
   test("Double create fails when allowExisting = false") {
-    sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
-
-    intercept[AnalysisException] {
+    withTable("doubleCreateAndInsertTest") {
       sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
+
+      intercept[AnalysisException] {
+        sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
+      }
     }
   }
 
   test("Double create does not fail when allowExisting = true") {
-    sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
-    sql("CREATE TABLE IF NOT EXISTS doubleCreateAndInsertTest (key int, value string)")
+    withTable("doubleCreateAndInsertTest") {
+      sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
+      sql("CREATE TABLE IF NOT EXISTS doubleCreateAndInsertTest (key int, value string)")
+    }
   }
 
   test("SPARK-4052: scala.collection.Map as value type of MapType") {
@@ -268,29 +274,33 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
   test("Test partition mode = strict") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "strict")) {
-      sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
-      val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
+      withTable("partitioned") {
+        sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+        val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd"))
           .toDF("id", "data", "part")
 
-      intercept[SparkException] {
-        data.write.insertInto("partitioned")
+        intercept[SparkException] {
+          data.write.insertInto("partitioned")
+        }
       }
     }
   }
 
   test("Detect table partitioning") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
-      sql("CREATE TABLE source (id bigint, data string, part string)")
-      val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd")).toDF()
+      withTable("source", "partitioned") {
+        sql("CREATE TABLE source (id bigint, data string, part string)")
+        val data = (1 to 10).map(i => (i, s"data-$i", if ((i % 2) == 0) "even" else "odd")).toDF()
 
-      data.write.insertInto("source")
-      checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
+        data.write.insertInto("source")
+        checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
 
-      sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
-      // this will pick up the output partitioning from the table definition
-      spark.table("source").write.insertInto("partitioned")
+        sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
+        // this will pick up the output partitioning from the table definition
+        spark.table("source").write.insertInto("partitioned")
 
-      checkAnswer(sql("SELECT * FROM partitioned"), data.collect().toSeq)
+        checkAnswer(sql("SELECT * FROM partitioned"), data.collect().toSeq)
+      }
     }
   }
 
@@ -461,19 +471,23 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
   testPartitionedTable("insertInto() should reject missing columns") {
     tableName =>
-      sql("CREATE TABLE t (a INT, b INT)")
+      withTable("t") {
+        sql("CREATE TABLE t (a INT, b INT)")
 
-      intercept[AnalysisException] {
-        spark.table("t").write.insertInto(tableName)
+        intercept[AnalysisException] {
+          spark.table("t").write.insertInto(tableName)
+        }
       }
   }
 
   testPartitionedTable("insertInto() should reject extra columns") {
     tableName =>
-      sql("CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)")
+      withTable("t") {
+        sql("CREATE TABLE t (a INT, b INT, c INT, d INT, e INT)")
 
-      intercept[AnalysisException] {
-        spark.table("t").write.insertInto(tableName)
+        intercept[AnalysisException] {
+          spark.table("t").write.insertInto(tableName)
+        }
       }
   }
 
@@ -532,6 +546,186 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
         sql("INSERT OVERWRITE TABLE test_table SELECT 1")
         checkAnswer(sql("SELECT * FROM test_table"), Row(1))
       }
+    }
+  }
+
+  test("insert overwrite to dir from hive metastore table") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path}' SELECT * FROM src where key < 10")
+
+      sql(
+        s"""
+           |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+           |STORED AS orc
+           |SELECT * FROM src where key < 10
+         """.stripMargin)
+
+      // use orc data source to check the data of path is right.
+      withTempView("orc_source") {
+        sql(
+          s"""
+             |CREATE TEMPORARY VIEW orc_source
+             |USING org.apache.spark.sql.hive.orc
+             |OPTIONS (
+             |  PATH '${dir.getCanonicalPath}'
+             |)
+           """.stripMargin)
+
+        checkAnswer(
+          sql("select * from orc_source"),
+          sql("select * from src where key < 10"))
+      }
+    }
+  }
+
+  test("insert overwrite to local dir from temp table") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      withTempDir { dir =>
+        val path = dir.toURI.getPath
+
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY '${path}'
+             |STORED AS orc
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        // use orc data source to check the data of path is right.
+        checkAnswer(
+          spark.read.orc(dir.getCanonicalPath),
+          sql("select * from test_insert_table"))
+      }
+    }
+  }
+
+  test("insert overwrite to dir from temp table") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      withTempDir { dir =>
+        val pathUri = dir.toURI
+
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY '${pathUri}'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY '${pathUri}'
+             |STORED AS orc
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+
+        // use orc data source to check the data of path is right.
+        checkAnswer(
+          spark.read.orc(dir.getCanonicalPath),
+          sql("select * from test_insert_table"))
+      }
+    }
+  }
+
+  test("multi insert overwrite to dir") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      withTempDir { dir =>
+        val pathUri = dir.toURI
+
+        withTempDir { dir2 =>
+          val pathUri2 = dir2.toURI
+
+          sql(
+            s"""
+               |FROM test_insert_table
+               |INSERT OVERWRITE DIRECTORY '${pathUri}'
+               |STORED AS orc
+               |SELECT id
+               |INSERT OVERWRITE DIRECTORY '${pathUri2}'
+               |STORED AS orc
+               |SELECT *
+             """.stripMargin)
+
+          // use orc data source to check the data of path is right.
+          checkAnswer(
+            spark.read.orc(dir.getCanonicalPath),
+            sql("select id from test_insert_table"))
+
+          checkAnswer(
+            spark.read.orc(dir2.getCanonicalPath),
+            sql("select * from test_insert_table"))
+        }
+      }
+    }
+  }
+
+  test("insert overwrite to dir to illegal path") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      val e = intercept[IllegalArgumentException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE LOCAL DIRECTORY 'abc://a'
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+      }.getMessage
+
+      assert(e.contains("Wrong FS: abc://a, expected: file:///"))
+    }
+  }
+
+  test("insert overwrite to dir with mixed syntax") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      val e = intercept[ParseException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY 'file://tmp'
+             |USING json
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+      }.getMessage
+
+      assert(e.contains("mismatched input 'ROW'"))
+    }
+  }
+
+  test("insert overwrite to dir with multi inserts") {
+    withTempView("test_insert_table") {
+      spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")
+
+      val e = intercept[ParseException] {
+        sql(
+          s"""
+             |INSERT OVERWRITE DIRECTORY 'file://tmp2'
+             |USING json
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+             |INSERT OVERWRITE DIRECTORY 'file://tmp2'
+             |USING json
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |SELECT * FROM test_insert_table
+           """.stripMargin)
+      }.getMessage
+
+      assert(e.contains("mismatched input 'ROW'"))
     }
   }
 }

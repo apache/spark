@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -352,6 +353,20 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
         self.assertFalse(testParams.hasParam("notAParameter"))
+        self.assertTrue(testParams.hasParam(u"maxIter"))
+
+    def test_resolveparam(self):
+        testParams = TestParams()
+        self.assertEqual(testParams._resolveParam(testParams.maxIter), testParams.maxIter)
+        self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
+
+        self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
+        if sys.version_info[0] >= 3:
+            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
+            e_cls = AttributeError
+        else:
+            e_cls = UnicodeEncodeError
+        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
 
     def test_params(self):
         testParams = TestParams()
@@ -1533,10 +1548,24 @@ class OneVsRestTests(SparkSessionTestCase):
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01)
-        ovr = OneVsRest(classifier=lr)
+        ovr = OneVsRest(classifier=lr, parallelism=1)
         model = ovr.fit(df)
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "prediction"])
+
+    def test_parallelism_doesnt_change_output(self):
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        ovrPar1 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=1)
+        modelPar1 = ovrPar1.fit(df)
+        ovrPar2 = OneVsRest(classifier=LogisticRegression(maxIter=5, regParam=.01), parallelism=2)
+        modelPar2 = ovrPar2.fit(df)
+        for i, model in enumerate(modelPar1.models):
+            self.assertTrue(np.allclose(model.coefficients.toArray(),
+                                        modelPar2.models[i].coefficients.toArray(), atol=1E-4))
+            self.assertTrue(np.allclose(model.intercept, modelPar2.models[i].intercept, atol=1E-4))
 
     def test_support_for_weightCol(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8), 1.0),
@@ -1638,6 +1667,26 @@ class LogisticRegressionTest(SparkSessionTestCase):
                 np.allclose(model.coefficientMatrix.toArray()[i], expected[i], atol=1E-4))
         self.assertTrue(
             np.allclose(model.interceptVector.toArray(), [-0.9057, -1.1392, -0.0033], atol=1E-4))
+
+
+class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
+
+    def test_raw_and_probability_prediction(self):
+
+        data_path = "data/mllib/sample_multiclass_classification_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 4, 3],
+                                             blockSize=128, seed=123)
+        model = mlp.fit(df)
+        test = self.sc.parallelize([Row(features=Vectors.dense(0.1, 0.1, 0.25, 0.25))]).toDF()
+        result = model.transform(test).head()
+        expected_prediction = 2.0
+        expected_probability = [0.0, 0.0, 1.0]
+        expected_rawPrediction = [57.3955, -124.5462, 67.9943]
+        self.assertTrue(result.prediction, expected_prediction)
+        self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
 
 
 class FPGrowthTests(SparkSessionTestCase):
