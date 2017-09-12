@@ -26,10 +26,11 @@ import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasPredictionCol}
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{avg, col, udf}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
+ *
  * Evaluator for clustering results.
  * The metric computes the Silhouette measure
  * using the squared Euclidean distance.
@@ -72,11 +73,7 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("silhouette"))
     new Param(
-      this,
-      "metricName",
-      "metric name in evaluation (silhouette)",
-      allowedParams
-    )
+      this, "metricName", "metric name in evaluation (silhouette)", allowedParams)
   }
 
   /** @group getParam */
@@ -92,13 +89,12 @@ class ClusteringEvaluator @Since("2.3.0") (@Since("2.3.0") override val uid: Str
   @Since("2.3.0")
   override def evaluate(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.checkColumnType(dataset.schema, $(predictionCol), IntegerType)
+    SchemaUtils.checkNumericType(dataset.schema, $(predictionCol))
 
     $(metricName) match {
-      case "silhouette" => SquaredEuclideanSilhouette.computeSilhouetteScore(
-        dataset,
-        $(predictionCol),
-        $(featuresCol)
+      case "silhouette" =>
+        SquaredEuclideanSilhouette.computeSilhouetteScore(
+          dataset, $(predictionCol), $(featuresCol)
       )
     }
   }
@@ -302,11 +298,12 @@ private[evaluation] object SquaredEuclideanSilhouette {
   def computeClusterStats(
     df: DataFrame,
     predictionCol: String,
-    featuresCol: String): Map[Int, ClusterStats] = {
+    featuresCol: String): Map[Double, ClusterStats] = {
     val numFeatures = df.select(col(featuresCol)).first().getAs[Vector](0).size
-    val clustersStatsRDD = df.select(col(predictionCol), col(featuresCol), col("squaredNorm"))
+    val clustersStatsRDD = df.select(
+        col(predictionCol).cast(DoubleType), col(featuresCol), col("squaredNorm"))
       .rdd
-      .map { row => (row.getInt(0), (row.getAs[Vector](1), row.getDouble(2))) }
+      .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2))) }
       .aggregateByKey[(DenseVector, Double, Long)]((Vectors.zeros(numFeatures).toDense, 0.0, 0L))(
         seqOp = {
           case (
@@ -345,9 +342,9 @@ private[evaluation] object SquaredEuclideanSilhouette {
    * @return The Silhouette for the point.
    */
   def computeSilhouetteCoefficient(
-     broadcastedClustersMap: Broadcast[Map[Int, ClusterStats]],
+     broadcastedClustersMap: Broadcast[Map[Double, ClusterStats]],
      features: Vector,
-     clusterId: Int,
+     clusterId: Double,
      squaredNorm: Double): Double = {
 
     def compute(squaredNorm: Double, point: Vector, clusterStats: ClusterStats): Double = {
@@ -421,12 +418,13 @@ private[evaluation] object SquaredEuclideanSilhouette {
     val bClustersStatsMap = dataset.sparkSession.sparkContext.broadcast(clustersStatsMap)
 
     val computeSilhouetteCoefficientUDF = udf {
-      computeSilhouetteCoefficient(bClustersStatsMap, _: Vector, _: Int, _: Double)
+      computeSilhouetteCoefficient(bClustersStatsMap, _: Vector, _: Double, _: Double)
     }
 
     val silhouetteScore = dfWithSquaredNorm
       .select(avg(
-        computeSilhouetteCoefficientUDF(col(featuresCol), col(predictionCol), col("squaredNorm"))
+        computeSilhouetteCoefficientUDF(
+          col(featuresCol), col(predictionCol).cast(DoubleType), col("squaredNorm"))
       ))
       .collect()(0)
       .getDouble(0)

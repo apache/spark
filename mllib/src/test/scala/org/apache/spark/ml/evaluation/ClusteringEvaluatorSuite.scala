@@ -54,7 +54,6 @@ class ClusteringEvaluatorSuite
   */
   test("squared euclidean Silhouette") {
     val iris = ClusteringEvaluatorSuite.irisDataset(spark)
-      .withColumn("label", $"label".cast(IntegerType))
     val evaluator = new ClusteringEvaluator()
         .setFeaturesCol("features")
         .setPredictionCol("label")
@@ -64,8 +63,7 @@ class ClusteringEvaluatorSuite
 
   test("number of clusters must be greater than one") {
     val iris = ClusteringEvaluatorSuite.irisDataset(spark)
-      .withColumn("label", $"label".cast(IntegerType))
-      .where($"label" === 0)
+      .where($"label" === 0.0)
     val evaluator = new ClusteringEvaluator()
       .setFeaturesCol("features")
       .setPredictionCol("label")
