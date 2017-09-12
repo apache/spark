@@ -255,12 +255,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   }
 
   override def getListing(): Iterator[ApplicationHistoryInfo] = {
+    // Return the listing in end time descending order.
     listing.view(classOf[ApplicationInfoWrapper])
       .index("endTime")
       .reverse()
       .iterator()
       .asScala
-      .map(_.toAppHistoryInfo)
+      .map(_.toAppHistoryInfo())
   }
 
   override def getApplicationInfo(appId: String): Option[ApplicationHistoryInfo] = {
@@ -641,6 +642,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  /**
+   * Return the last known size of the given event log, recorded the last time the file
+   * system scanner detected a change in the file.
+   */
   private def recordedFileSize(log: Path): Long = {
     try {
       listing.read(classOf[LogInfo], log.toString()).fileSize
@@ -699,7 +704,11 @@ private[history] object FsHistoryProvider {
 
   private val LOG_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerLogStart\""
 
-  /** Current version of the data written to the listing database. */
+  /**
+   * Current version of the data written to the listing database. When opening an existing
+   * db, if the version does not match this value, the FsHistoryProvider will throw away
+   * all data and re-generate the listing data from the event logs.
+   */
   private val CURRENT_LISTING_VERSION = 1L
 }
 
@@ -716,12 +725,12 @@ private class KVStoreScalaSerializer extends KVStoreSerializer {
 }
 
 private[history] case class KVStoreMetadata(
-  val version: Long,
-  val logDir: String)
+  version: Long,
+  logDir: String)
 
 private[history] case class LogInfo(
-  @KVIndexParam val logPath: String,
-  val fileSize: Long)
+  @KVIndexParam logPath: String,
+  fileSize: Long)
 
 private[history] class AttemptInfoWrapper(
     val info: v1.ApplicationAttemptInfo,

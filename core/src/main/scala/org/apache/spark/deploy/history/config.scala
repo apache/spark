@@ -40,6 +40,8 @@ private[spark] object config {
     .createWithDefaultString("7d")
 
   val LOCAL_STORE_DIR = ConfigBuilder("spark.history.store.path")
+    .doc("Local directory where to cache application history information. By default this is " +
+      "not set, meaning all history information will be kept in memory.")
     .stringConf
     .createOptional
 
