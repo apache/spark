@@ -20,7 +20,8 @@ import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs.{GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
+import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo, TaskInfo}
+import org.apache.spark.ui.exec.ExecutorsListener
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
 import org.apache.spark.ui.jobs.UIData.{InputMetricsUIData => InternalInputMetrics, OutputMetricsUIData => InternalOutputMetrics, ShuffleReadMetricsUIData => InternalShuffleReadMetrics, ShuffleWriteMetricsUIData => InternalShuffleWriteMetrics, TaskMetricsUIData => InternalTaskMetrics}
@@ -48,7 +49,8 @@ private[v1] class AllStagesResource(ui: SparkUI) {
       }
     } yield {
       stageUiData.lastUpdateTime = ui.lastUpdateTime
-      AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = false)
+      AllStagesResource.stageUiToStageData(
+        status, stageInfo, stageUiData, ui.executorsListener, includeDetails = false)
     }
   }
 }
@@ -58,6 +60,7 @@ private[v1] object AllStagesResource {
       status: StageStatus,
       stageInfo: StageInfo,
       stageUiData: StageUIData,
+      executorLog: ExecutorsListener = null,
       includeDetails: Boolean): StageData = {
 
     val taskLaunchTimes = stageUiData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0)
@@ -70,23 +73,37 @@ private[v1] object AllStagesResource {
       }
 
     val taskData = if (includeDetails) {
-      Some(stageUiData.taskData.map { case (k, v) =>
-        k -> convertTaskData(v, stageUiData.lastUpdateTime) })
+      Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v,
+        stageUiData.lastUpdateTime, executorLog) } )
     } else {
       None
     }
+
     val executorSummary = if (includeDetails) {
       Some(stageUiData.executorSummary.map { case (k, summary) =>
         k -> new ExecutorStageSummary(
           taskTime = summary.taskTime,
           failedTasks = summary.failedTasks,
           succeededTasks = summary.succeededTasks,
+          killedTasks = summary.killedTasks,
           inputBytes = summary.inputBytes,
+          inputRecords = summary.inputRecords,
           outputBytes = summary.outputBytes,
+          outputRecords = summary.outputRecords,
           shuffleRead = summary.shuffleRead,
+          shuffleReadRecords = summary.shuffleReadRecords,
           shuffleWrite = summary.shuffleWrite,
+          shuffleWriteRecords = summary.shuffleWriteRecords,
           memoryBytesSpilled = summary.memoryBytesSpilled,
-          diskBytesSpilled = summary.diskBytesSpilled
+          diskBytesSpilled = summary.diskBytesSpilled,
+          blacklisted = summary.isBlacklisted,
+          host = executorLog.getExecutorHost(k.toString),
+          executorLogs = if (executorLog != null) {
+            executorLog.executorToTaskSummary.get(k.toString)
+              .map(_.executorLogs).getOrElse(Map.empty)
+          } else {
+            Map.empty
+          }
         )
       })
     } else {
@@ -138,21 +155,61 @@ private[v1] object AllStagesResource {
     }
   }
 
-  def convertTaskData(uiData: TaskUIData, lastUpdateTime: Option[Long]): TaskData = {
+  private def getGettingResultTime(info: TaskInfo, currentTime: Long): Long = {
+    if (info.gettingResult) {
+      if (info.finished) {
+        info.finishTime - info.gettingResultTime
+      } else {
+        // The task is still fetching the result.
+        System.currentTimeMillis() - info.gettingResultTime
+      }
+    } else {
+      0L
+    }
+  }
+
+  private def getSchedulerDelay(
+      info: TaskInfo, metrics: InternalTaskMetrics, currentTime: Long): Long = {
+    if (info.finished) {
+      val totalExecutionTime = info.finishTime - info.launchTime
+      val executorOverhead = metrics.executorDeserializeTime +
+        metrics.resultSerializationTime
+      math.max(
+        0,
+        totalExecutionTime - metrics.executorRunTime - executorOverhead -
+          getGettingResultTime(info, currentTime))
+    } else {
+      // The task is still running and the metrics like executorRunTime are not available.
+      0L
+    }
+  }
+
+  def convertTaskData(uiData: TaskUIData, lastUpdateTime: Option[Long],
+    executorLog: ExecutorsListener): TaskData = {
+    var currentTime = System.currentTimeMillis()
     new TaskData(
       taskId = uiData.taskInfo.taskId,
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attemptNumber,
       launchTime = new Date(uiData.taskInfo.launchTime),
-      duration = uiData.taskDuration(lastUpdateTime),
+  duration = uiData.taskDuration(lastUpdateTime),
+      gettingResultTime = getGettingResultTime(uiData.taskInfo, currentTime),
+      schedulerDelay = getSchedulerDelay(uiData.taskInfo, uiData.metrics.get, currentTime),
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,
       status = uiData.taskInfo.status,
       taskLocality = uiData.taskInfo.taskLocality.toString(),
+      taskState = uiData.taskInfo.status.toString,
       speculative = uiData.taskInfo.speculative,
       accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
       errorMessage = uiData.errorMessage,
-      taskMetrics = uiData.metrics.map { convertUiTaskMetrics }
+      taskMetrics = uiData.metrics.map { convertUiTaskMetrics },
+      executorLogs = if (executorLog != null) {
+        executorLog.executorToTaskSummary.get(uiData.taskInfo.executorId)
+          .map(_.executorLogs).getOrElse(Map.empty)
+      } else {
+        Map.empty
+      }
     )
   }
 
@@ -252,6 +309,7 @@ private[v1] object AllStagesResource {
       executorDeserializeCpuTime = internal.executorDeserializeCpuTime,
       executorRunTime = internal.executorRunTime,
       executorCpuTime = internal.executorCpuTime,
+      peakExecutionMemory = internal.peakExecutionMemory,
       resultSize = internal.resultSize,
       jvmGcTime = internal.jvmGCTime,
       resultSerializationTime = internal.resultSerializationTime,
