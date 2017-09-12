@@ -954,7 +954,7 @@ class SparkSubmitSuite
 
     val args2 = Seq(
       "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
-      "--conf", "spark.yarn.dist.forceDownloadResources=true",
+      "--conf", "spark.yarn.dist.forceDownloadSchemes=http,https",
       "--name", "testApp",
       "--master", "yarn",
       "--deploy-mode", "client",

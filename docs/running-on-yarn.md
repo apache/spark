@@ -212,12 +212,11 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.dist.forceDownloadResources</code></td>
-  <td><code>false</code></td>
+  <td><code>spark.yarn.dist.forceDownloadSchemes</code></td>
+  <td><code>(none)</code></td>
   <td>
-    Whether to download remote HTTP(s) resources to local and upload to Hadoop FS. This is only 
-    honored in Hadoop 2.9+ environment to bypass the build-in HTTP(s) FileSystem and use Spark's 
-    own logic to handle remote HTTP(s) resources"
+    Comma-separated schemes in which remote resources have to download to local disk and upload 
+    to Hadoop FS.
   </td>
 </tr>
 <tr>

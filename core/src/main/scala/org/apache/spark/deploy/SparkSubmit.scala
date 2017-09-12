@@ -368,28 +368,29 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }.orNull
     }
 
-    // Using a dummy http URI to check if HTTP(s) FileSystem is available, it returns true in
-    // Hadoop 2.9+, otherwise it returns false.
-    val isHttpFsAvailable = Try { FileSystem.get(Utils.resolveURI("http://foo/bar"), hadoopConf) }
-      .map(_ => true)
-      .getOrElse(false)
-    // When running in YARN cluster manager, we check the configuration
-    // "spark.yarn.dist.forceDownloadResources", if true we always download remote HTTP(s)
-    // resources to local and then re-upload them to Hadoop FS, if false we need to check the
-    // availability of HTTP(s) FileSystem to decide wether to use HTTP(s) FS to handle resources
-    // or not.
-    if (clusterManager == YARN && (sparkConf.get(FORCE_DOWNLOAD_RESOURCES) || !isHttpFsAvailable)) {
-      // This security manager will not need an auth secret, but set a dummy value in case
-      // spark.authenticate is enabled, otherwise an exception is thrown.
+    // When running in YARN cluster manager,
+    if (clusterManager == YARN) {
       sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
       val secMgr = new SecurityManager(sparkConf)
+      val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
-      def downloadHttpResource(resource: String): String = {
+      // Check the scheme list provided by "spark.yarn.dist.forceDownloadSchemes" to see if current
+      // resource's scheme is included in this list, or Hadoop FileSystem doesn't support current
+      // scheme, if so Spark will download the resources to local disk and upload to Hadoop FS.
+      def shouldDownload(scheme: String): Boolean = {
+        val isFsAvailable = Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }
+          .map(_ => true).getOrElse(false)
+        forceDownloadSchemes.contains(scheme) || !isFsAvailable
+      }
+
+      def downloadResource(resource: String): String = {
         val uri = Utils.resolveURI(resource)
         uri.getScheme match {
           case "local" | "file" => resource
-          case "http" | "https" | "ftp" =>
+          case e if shouldDownload(e) =>
             if (deployMode == CLIENT) {
+              // In client mode, we already download the resources, so figuring out the local one
+              // should be enough.
               val fileName = new Path(uri).getName
               new File(targetDir, fileName).toURI.toString
             } else {
@@ -399,18 +400,18 @@ object SparkSubmit extends CommandLineUtils with Logging {
         }
       }
 
-      args.primaryResource = Option(args.primaryResource).map { downloadHttpResource }.orNull
+      args.primaryResource = Option(args.primaryResource).map { downloadResource }.orNull
       args.files = Option(args.files).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
       }.orNull
       args.pyFiles = Option(args.pyFiles).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
       }.orNull
       args.jars = Option(args.jars).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
       }.orNull
       args.archives = Option(args.archives).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadHttpResource }.mkString(",")
+        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
       }.orNull
     }
 
