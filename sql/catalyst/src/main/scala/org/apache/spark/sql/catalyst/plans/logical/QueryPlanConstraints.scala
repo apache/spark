@@ -108,7 +108,7 @@ trait QueryPlanConstraints { self: LogicalPlan =>
    * additional constraint of the form `b = 5`.
    */
   private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
-    val aliasedConstraints = eliminateAliasChildInConstraints(constraints)
+    val aliasedConstraints = eliminateAliasedExpressionInConstraints(constraints)
     var inferredConstraints = Set.empty[Expression]
     aliasedConstraints.foreach {
       case eq @ EqualTo(l: Attribute, r: Attribute) =>
@@ -121,13 +121,15 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   }
 
   /**
-   * Replace child of [[Alias]] with alias name, if both exist in constraints.
-   * Thus non-converging inference can be prevented,
-   * for cases like `a = f(a, b)`,  `a = f(b, c) && c = g(a, b)`.
+   * Replace the aliased expression in [[Alias]] with the alias name if both exist in constraints.
+   * Thus non-converging inference can be prevented.
+   * E.g. `a = f(a, b)`,  `a = f(b, c) && c = g(a, b)`.
    * Also, the size of constraints is reduced without losing any information.
-   * We can always get these inferred constraints on child of [[Alias]] when pushing down filters.
+   * When the inferred filters are pushed down the operators that generate the alias,
+   * the alias names used in filters are replaced by the aliased expressions.
    */
-  private def eliminateAliasChildInConstraints(constraints: Set[Expression]): Set[Expression] = {
+  private def eliminateAliasedExpressionInConstraints(constraints: Set[Expression])
+    : Set[Expression] = {
     val attributesInEqualTo = constraints.flatMap {
       case EqualTo(l: Attribute, r: Attribute) => l :: r :: Nil
       case _ => Nil
