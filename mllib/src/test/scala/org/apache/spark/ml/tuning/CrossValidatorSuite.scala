@@ -20,7 +20,6 @@ package org.apache.spark.ml.tuning
 import java.io.File
 
 import org.apache.spark.SparkFunSuite
-
 import org.apache.spark.ml.{Estimator, Model, Pipeline}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel, OneVsRest}
 import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
