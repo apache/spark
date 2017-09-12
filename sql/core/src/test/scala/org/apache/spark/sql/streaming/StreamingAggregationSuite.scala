@@ -18,14 +18,17 @@
 package org.apache.spark.sql.streaming
 
 import java.util.{Locale, TimeZone}
+import java.util.concurrent.CountDownLatch
 
 import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset}
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.rdd.BlockRDD
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
@@ -35,8 +38,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 
-object FailureSinglton {
+object FailureSingleton {
   var firstTime = true
 }
 
@@ -49,151 +53,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   }
 
   import testImplicits._
-
-  test("simple count, update mode") {
-    /*
-    class NonLocalRelationSource extends Source {
-      private var nextData: Seq[Int] = Seq.empty
-      private var counter = 0L
-      def addData(data: Int*): Unit = {
-        nextData = data
-        counter += data.length
-      }
-
-      def noData: Unit = {
-        counter += 1
-      }
-
-      override def getOffset: Option[Offset] = if (counter == 0) None else Some(LongOffset(counter))
-      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        val rdd = spark.sparkContext.parallelize(nextData, nextData.length)
-          .map(i => InternalRow(i)) // we don't really care about the values in this test
-        nextData = Seq.empty
-        spark.internalCreateDataFrame(rdd, schema, isStreaming = true).toDF()
-      }
-      override def schema: StructType = MockSourceProvider.fakeSchema
-      override def stop(): Unit = {}
-    }
-
-    val inputSource = new NonLocalRelationSource
-    MockSourceProvider.withMockSources(inputSource) {
-      withTempDir { tempDir =>
-        val aggregated: Dataset[Long] =
-          spark.readStream
-            .format((new MockSourceProvider).getClass.getCanonicalName)
-            .load()
-            .coalesce(1)
-            .groupBy()
-            .count()
-            .as[Long]
-
-        val sq = aggregated.writeStream
-          .format("memory")
-          .outputMode("complete")
-          .queryName("agg_test")
-          .option("checkpointLocation", tempDir.getAbsolutePath)
-          .start()
-
-        try {
-
-          inputSource.addData(1)
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            1L)
-
-          inputSource.noData
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            1L)
-
-          inputSource.addData(2, 3)
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            3L)
-
-          inputSource.noData
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            3L)
-        } finally {
-          sq.stop()
-        }
-      }
-    }
-    */
-
-    withTempDir { tempDir =>
-      val inputStream = MemoryStream[Int]
-
-      val sq = inputStream.toDS()
-        .coalesce(1)
-        .groupBy()
-        .count()
-        .as[Long]
-        .writeStream
-        .format("memory")
-        .outputMode("complete")
-        .queryName("agg_test")
-        .option("checkpointLocation", tempDir.getAbsolutePath)
-        .start()
-
-      try {
-        inputStream.addData(1)
-        sq.processAllAvailable()
-
-        checkDataset(
-          spark.table("agg_test").as[Long],
-          1L)
-
-        inputStream.addData()
-        sq.processAllAvailable()
-
-        checkDataset(
-          spark.table("agg_test").as[Long],
-          1L)
-      } finally {
-        sq.stop()
-      }
-
-      val sq2 = inputStream.toDS()
-        .coalesce(2)
-        .groupBy()
-        .count()
-        .as[Long]
-        .writeStream
-        .format("memory")
-        .outputMode("complete")
-        .queryName("agg_test")
-        .option("checkpointLocation", tempDir.getAbsolutePath)
-        .start()
-
-      try {
-        inputStream.addData(2, 3)
-        sq2.processAllAvailable()
-
-        checkDataset(
-          spark.table("agg_test").as[Long],
-          3L)
-
-        inputStream.addData()
-        sq2.processAllAvailable()
-
-        checkDataset(
-          spark.table("agg_test").as[Long],
-          3L)
-      } finally {
-        sq2.stop()
-      }
-    }
-  }
 
   /*
   test("simple count, update mode") {
@@ -373,12 +232,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   testQuietly("midbatch failure") {
     val inputData = MemoryStream[Int]
-    FailureSinglton.firstTime = true
+    FailureSingleton.firstTime = true
     val aggregated =
       inputData.toDS()
           .map { i =>
-            if (i == 4 && FailureSinglton.firstTime) {
-              FailureSinglton.firstTime = false
+            if (i == 4 && FailureSingleton.firstTime) {
+              FailureSingleton.firstTime = false
               sys.error("injected failure")
             }
 
@@ -529,4 +388,188 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       CheckLastBatch((0, 0, 2), (1, 1, 3)))
   }
   */
+
+  test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned accordingly") {
+    val inputSource = new NonLocalRelationSource(spark)
+    MockSourceProvider.withMockSources(inputSource) {
+      withTempDir { tempDir =>
+        val aggregated: Dataset[Long] =
+          spark.readStream
+            .format((new MockSourceProvider).getClass.getCanonicalName)
+            .load()
+            .coalesce(1)
+            .groupBy()
+            .count()
+            .as[Long]
+
+        val sq = aggregated.writeStream
+          .format("memory")
+          .outputMode("complete")
+          .queryName("agg_test")
+          .option("checkpointLocation", tempDir.getAbsolutePath)
+          .start()
+
+        try {
+
+          inputSource.addData(1)
+          inputSource.releaseLock()
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            1L)
+
+          inputSource.addData()
+          inputSource.releaseLock()
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            1L)
+
+          inputSource.addData(2, 3)
+          inputSource.releaseLock()
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            3L)
+
+          inputSource.addData()
+          inputSource.releaseLock()
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[Long],
+            3L)
+        } finally {
+          sq.stop()
+        }
+      }
+    }
+  }
+
+  test("SPARK-21977: coalesce(1) should still be repartitioned when it has keyExpressions") {
+    val inputSource = new NonLocalRelationSource(spark)
+    MockSourceProvider.withMockSources(inputSource) {
+      withTempDir { tempDir =>
+
+        val sq = spark.readStream
+          .format((new MockSourceProvider).getClass.getCanonicalName)
+          .load()
+          .coalesce(1)
+          .groupBy('a % 1) // just to give it a fake key
+          .count()
+          .as[(Long, Long)]
+          .writeStream
+          .format("memory")
+          .outputMode("complete")
+          .queryName("agg_test")
+          .option("checkpointLocation", tempDir.getAbsolutePath)
+          .start()
+
+        try {
+
+          inputSource.addData(1)
+          inputSource.releaseLock()
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[(Long, Long)],
+            (0L, 1L))
+
+        } finally {
+          sq.stop()
+        }
+
+        val sq2 = spark.readStream
+          .format((new MockSourceProvider).getClass.getCanonicalName)
+          .load()
+          .coalesce(2)
+          .groupBy('a % 1) // just to give it a fake key
+          .count()
+          .as[(Long, Long)]
+          .writeStream
+          .format("memory")
+          .outputMode("complete")
+          .queryName("agg_test")
+          .option("checkpointLocation", tempDir.getAbsolutePath)
+          .start()
+
+        try {
+          sq2.processAllAvailable()
+          inputSource.addData(2)
+          inputSource.addData(3)
+          inputSource.addData(4)
+          inputSource.releaseLock()
+          sq2.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[(Long, Long)],
+            (0L, 4L))
+
+          inputSource.addData()
+          inputSource.releaseLock()
+          sq2.processAllAvailable()
+
+          checkDataset(
+            spark.table("agg_test").as[(Long, Long)],
+            (0L, 4L))
+        } finally {
+          sq2.stop()
+        }
+      }
+    }
+  }
+}
+
+/**
+ * LocalRelation has some optimized properties during Spark planning. In order for the bugs in
+ * SPARK-21977 to occur, we need to create a logical relation from an existing RDD. We use a
+ * BlockRDD since it accepts 0 partitions. One requirement for the one of the bugs is the use of
+ * `coalesce(1)`, which has several optimizations regarding [[SinglePartition]], and a 0 partition
+ * parentRDD.
+ */
+class NonLocalRelationSource(spark: SparkSession) extends Source {
+  private var counter = 0L
+  private val blockMgr = SparkEnv.get.blockManager
+  private var blocks: Seq[BlockId] = Seq.empty
+
+  private var streamLock: CountDownLatch = new CountDownLatch(1)
+
+  def addData(data: Int*): Unit = {
+    if (streamLock.getCount == 0) {
+      streamLock = new CountDownLatch(1)
+    }
+    synchronized {
+      if (data.nonEmpty) {
+        counter += data.length
+        val id = TestBlockId(counter.toString)
+        blockMgr.putIterator(id, data.iterator, StorageLevel.MEMORY_ONLY)
+        blocks ++= id :: Nil
+      } else {
+        counter += 1
+      }
+    }
+  }
+
+  def releaseLock(): Unit = streamLock.countDown()
+
+  override def getOffset: Option[Offset] = {
+    streamLock.await()
+    synchronized {
+      if (counter == 0) None else Some(LongOffset(counter))
+    }
+  }
+
+  override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
+    val rdd = new BlockRDD[Int](spark.sparkContext, blocks.toArray)
+      .map(i => InternalRow(i)) // we don't really care about the values in this test
+    blocks = Seq.empty
+    spark.internalCreateDataFrame(rdd, schema, isStreaming = true).toDF()
+  }
+  override def schema: StructType = MockSourceProvider.fakeSchema
+  override def stop(): Unit = {
+    blockMgr.getMatchingBlockIds(_.isInstanceOf[TestBlockId]).foreach(blockMgr.removeBlock(_))
+  }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.streaming
 
+import java.io.File
 import java.sql.Date
 import java.util.concurrent.ConcurrentHashMap
 
@@ -24,7 +25,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
-import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.{DataFrame, Dataset, Encoder}
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
@@ -33,7 +34,7 @@ import org.apache.spark.sql.execution.RDDScanExec
 import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
-import org.apache.spark.sql.streaming.util.StreamManualClock
+import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{DataType, IntegerType}
 
 /** Class to check custom state types */
@@ -871,6 +872,82 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         implicitly[Encoder[Int]], implicitly[Encoder[String]], GroupStateTimeout.NoTimeout)
     }
     assert(e.getMessage === "The output mode of function should be append or update")
+  }
+
+  test("SPARK-21977: coalesce(1) should still be repartitioned when it has keyExpressions") {
+    val inputSource = new NonLocalRelationSource(spark)
+
+    MockSourceProvider.withMockSources(inputSource) {
+      withTempDir { tempDir =>
+        val checkpoint = new File(tempDir, "checkpoint").getAbsolutePath
+        val data = new File(tempDir, "data").getAbsolutePath
+
+        def startQuery(df: Dataset[Int]): StreamingQuery = {
+          df.groupByKey(_ % 1) // just to give it a fake key
+            .flatMapGroupsWithState(OutputMode.Append(), NoTimeout()) {
+              (key: Int, values: Iterator[Int], state: GroupState[Int]) =>
+              // function that returns the values that exceed the max value ever seen in past
+              // triggers
+              val existing = state.getOption.getOrElse(Int.MinValue)
+              values.filter { value =>
+                val max = state.getOption.getOrElse(Int.MinValue)
+                if (value > max) {
+                  state.update(value)
+                }
+                value > existing
+              }
+            }
+            .writeStream
+            .format("parquet")
+            .outputMode("append")
+            .option("checkpointLocation", checkpoint)
+            .start(data)
+        }
+
+
+        val sq = startQuery(spark.readStream
+          .format((new MockSourceProvider).getClass.getCanonicalName)
+          .load()
+          .coalesce(1)
+          .as[Int])
+
+        try {
+
+          inputSource.addData(1)
+          inputSource.releaseLock()
+          sq.processAllAvailable()
+
+          checkDataset(
+            spark.read.parquet(data).as[Int],
+            1)
+
+        } finally {
+          sq.stop()
+        }
+
+        val sq2 = startQuery(spark.readStream
+          .format((new MockSourceProvider).getClass.getCanonicalName)
+          .load()
+          .coalesce(2)
+          .as[Int])
+
+        try {
+          sq2.processAllAvailable()
+          inputSource.addData(0)
+          inputSource.addData(3)
+          inputSource.addData(4)
+          inputSource.releaseLock()
+          sq2.processAllAvailable()
+
+          checkDataset(
+            spark.read.parquet(data).as[Int],
+            4, 3, 1)
+
+        } finally {
+          sq2.stop()
+        }
+      }
+    }
   }
 
   def testWithTimeout(timeoutConf: GroupStateTimeout): Unit = {

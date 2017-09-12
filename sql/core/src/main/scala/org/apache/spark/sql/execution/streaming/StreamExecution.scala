@@ -685,8 +685,7 @@ class StreamExecution(
         runId,
         currentBatchId,
         offsetSeqMetadata)
-      println("\n\n\n")
-      println(lastExecution.executedPlan) // Force the lazy generation of execution plan
+      lastExecution.executedPlan // Force the lazy generation of execution plan
     }
 
     val nextBatch =
@@ -801,6 +800,7 @@ class StreamExecution(
     if (streamDeathCause != null) {
       throw streamDeathCause
     }
+    if (!isActive) return
     awaitBatchLock.lock()
     try {
       noNewData = false

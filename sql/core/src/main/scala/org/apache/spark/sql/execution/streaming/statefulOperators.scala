@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -52,6 +52,10 @@ case class StatefulOperatorStateInfo(
  */
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
+
+  def child: SparkPlan
+
+  def keyExpressions: Seq[Attribute]
 
   protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
     stateInfo.getOrElse {
@@ -200,13 +204,16 @@ case class StateStoreRestoreExec(
       sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-        println(s"Restore iterHasNext: ${iter.hasNext}")
-        iter.flatMap { row =>
-          println(row)
-          val key = getKey(row)
-          val savedState = store.get(key)
-          numOutputRows += 1
-          row +: Option(savedState).toSeq
+        val hasInput = iter.hasNext
+        if (!hasInput && keyExpressions.isEmpty) {
+          store.iterator().map(_.value)
+        } else {
+          iter.flatMap { row =>
+            val key = getKey(row)
+            val savedState = store.get(key)
+            numOutputRows += 1
+            row +: Option(savedState).toSeq
+          }
         }
     }
   }
@@ -214,6 +221,14 @@ case class StateStoreRestoreExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (keyExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(keyExpressions) :: Nil
+    }
+  }
 }
 
 /**
