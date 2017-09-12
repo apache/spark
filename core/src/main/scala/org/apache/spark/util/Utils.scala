@@ -1193,16 +1193,17 @@ private[spark] object Utils extends Logging {
     val second = 1000
     val minute = 60 * second
     val hour = 60 * minute
+    val locale = Locale.US
 
     ms match {
       case t if t < second =>
-        "%d ms".format(t)
+        "%d ms".formatLocal(locale, t)
       case t if t < minute =>
-        "%.1f s".format(t.toFloat / second)
+        "%.1f s".formatLocal(locale, t.toFloat / second)
       case t if t < hour =>
-        "%.1f m".format(t.toFloat / minute)
+        "%.1f m".formatLocal(locale, t.toFloat / minute)
       case t =>
-        "%.2f h".format(t.toFloat / hour)
+        "%.2f h".formatLocal(locale, t.toFloat / hour)
     }
   }
 
