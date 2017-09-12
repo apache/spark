@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -352,6 +353,20 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
         self.assertFalse(testParams.hasParam("notAParameter"))
+        self.assertTrue(testParams.hasParam(u"maxIter"))
+
+    def test_resolveparam(self):
+        testParams = TestParams()
+        self.assertEqual(testParams._resolveParam(testParams.maxIter), testParams.maxIter)
+        self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
+
+        self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
+        if sys.version_info[0] >= 3:
+            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
+            e_cls = AttributeError
+        else:
+            e_cls = UnicodeEncodeError
+        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
 
     def test_params(self):
         testParams = TestParams()
@@ -455,6 +470,54 @@ class ParamTests(PySparkTestCase):
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
         )
 
+    @staticmethod
+    def check_params(test_self, py_stage, check_params_exist=True):
+        """
+        Checks common requirements for Params.params:
+          - set of params exist in Java and Python and are ordered by names
+          - param parent has the same UID as the object's UID
+          - default param value from Java matches value in Python
+          - optionally check if all params from Java also exist in Python
+        """
+        py_stage_str = "%s %s" % (type(py_stage), py_stage)
+        if not hasattr(py_stage, "_to_java"):
+            return
+        java_stage = py_stage._to_java()
+        if java_stage is None:
+            return
+        test_self.assertEqual(py_stage.uid, java_stage.uid(), msg=py_stage_str)
+        if check_params_exist:
+            param_names = [p.name for p in py_stage.params]
+            java_params = list(java_stage.params())
+            java_param_names = [jp.name() for jp in java_params]
+            test_self.assertEqual(
+                param_names, sorted(java_param_names),
+                "Param list in Python does not match Java for %s:\nJava = %s\nPython = %s"
+                % (py_stage_str, java_param_names, param_names))
+        for p in py_stage.params:
+            test_self.assertEqual(p.parent, py_stage.uid)
+            java_param = java_stage.getParam(p.name)
+            py_has_default = py_stage.hasDefault(p)
+            java_has_default = java_stage.hasDefault(java_param)
+            test_self.assertEqual(py_has_default, java_has_default,
+                                  "Default value mismatch of param %s for Params %s"
+                                  % (p.name, str(py_stage)))
+            if py_has_default:
+                if p.name == "seed":
+                    continue  # Random seeds between Spark and PySpark are different
+                java_default = _java2py(test_self.sc,
+                                        java_stage.clear(java_param).getOrDefault(java_param))
+                py_stage._clear(p)
+                py_default = py_stage.getOrDefault(p)
+                # equality test for NaN is always False
+                if isinstance(java_default, float) and np.isnan(java_default):
+                    java_default = "NaN"
+                    py_default = "NaN" if np.isnan(py_default) else "not NaN"
+                test_self.assertEqual(
+                    java_default, py_default,
+                    "Java default %s != python default %s of param %s for Params %s"
+                    % (str(java_default), str(py_default), p.name, str(py_stage)))
+
 
 class EvaluatorTests(SparkSessionTestCase):
 
@@ -511,6 +574,8 @@ class FeatureTests(SparkSessionTestCase):
                          "Model should inherit the UID from its parent estimator.")
         output = idf0m.transform(dataset)
         self.assertIsNotNone(output.head().idf)
+        # Test that parameters transferred to Python Model
+        ParamTests.check_params(self, idf0m)
 
     def test_ngram(self):
         dataset = self.spark.createDataFrame([
@@ -1590,6 +1655,26 @@ class LogisticRegressionTest(SparkSessionTestCase):
             np.allclose(model.interceptVector.toArray(), [-0.9057, -1.1392, -0.0033], atol=1E-4))
 
 
+class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
+
+    def test_raw_and_probability_prediction(self):
+
+        data_path = "data/mllib/sample_multiclass_classification_data.txt"
+        df = self.spark.read.format("libsvm").load(data_path)
+
+        mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[4, 5, 4, 3],
+                                             blockSize=128, seed=123)
+        model = mlp.fit(df)
+        test = self.sc.parallelize([Row(features=Vectors.dense(0.1, 0.1, 0.25, 0.25))]).toDF()
+        result = model.transform(test).head()
+        expected_prediction = 2.0
+        expected_probability = [0.0, 0.0, 1.0]
+        expected_rawPrediction = [57.3955, -124.5462, 67.9943]
+        self.assertTrue(result.prediction, expected_prediction)
+        self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1E-4))
+
+
 class FPGrowthTests(SparkSessionTestCase):
     def setUp(self):
         super(FPGrowthTests, self).setUp()
@@ -1656,40 +1741,6 @@ class DefaultValuesTests(PySparkTestCase):
     those in their Scala counterparts.
     """
 
-    def check_params(self, py_stage):
-        import pyspark.ml.feature
-        if not hasattr(py_stage, "_to_java"):
-            return
-        java_stage = py_stage._to_java()
-        if java_stage is None:
-            return
-        for p in py_stage.params:
-            java_param = java_stage.getParam(p.name)
-            py_has_default = py_stage.hasDefault(p)
-            java_has_default = java_stage.hasDefault(java_param)
-            self.assertEqual(py_has_default, java_has_default,
-                             "Default value mismatch of param %s for Params %s"
-                             % (p.name, str(py_stage)))
-            if py_has_default:
-                if p.name == "seed":
-                    return  # Random seeds between Spark and PySpark are different
-                java_default =\
-                    _java2py(self.sc, java_stage.clear(java_param).getOrDefault(java_param))
-                py_stage._clear(p)
-                py_default = py_stage.getOrDefault(p)
-                if isinstance(py_stage, pyspark.ml.feature.Imputer) and p.name == "missingValue":
-                    # SPARK-15040 - default value for Imputer param 'missingValue' is NaN,
-                    # and NaN != NaN, so handle it specially here
-                    import math
-                    self.assertTrue(math.isnan(java_default) and math.isnan(py_default),
-                                    "Java default %s and python default %s are not both NaN for "
-                                    "param %s for Params %s"
-                                    % (str(java_default), str(py_default), p.name, str(py_stage)))
-                    return
-                self.assertEqual(java_default, py_default,
-                                 "Java default %s != python default %s of param %s for Params %s"
-                                 % (str(java_default), str(py_default), p.name, str(py_stage)))
-
     def test_java_params(self):
         import pyspark.ml.feature
         import pyspark.ml.classification
@@ -1703,7 +1754,8 @@ class DefaultValuesTests(PySparkTestCase):
             for name, cls in inspect.getmembers(module, inspect.isclass):
                 if not name.endswith('Model') and issubclass(cls, JavaParams)\
                         and not inspect.isabstract(cls):
-                    self.check_params(cls())
+                    # NOTE: disable check_params_exist until there is parity with Scala API
+                    ParamTests.check_params(self, cls(), check_params_exist=False)
 
 
 def _squared_distance(a, b):

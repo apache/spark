@@ -20,6 +20,8 @@ package org.apache.spark.deploy.security
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.Credentials
 
+import org.apache.spark.SparkConf
+
 /**
  * Hadoop delegation token provider.
  */
@@ -46,5 +48,6 @@ private[spark] trait HadoopDelegationTokenProvider {
    */
   def obtainDelegationTokens(
     hadoopConf: Configuration,
+    sparkConf: SparkConf,
     creds: Credentials): Option[Long]
 }

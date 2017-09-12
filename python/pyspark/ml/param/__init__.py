@@ -330,7 +330,7 @@ class Params(Identifiable):
         Tests whether this instance contains a param with a given
         (string) name.
         """
-        if isinstance(paramName, str):
+        if isinstance(paramName, basestring):
             p = getattr(self, paramName, None)
             return isinstance(p, Param)
         else:
@@ -413,7 +413,7 @@ class Params(Identifiable):
         if isinstance(param, Param):
             self._shouldOwn(param)
             return param
-        elif isinstance(param, str):
+        elif isinstance(param, basestring):
             return self.getParam(param)
         else:
             raise ValueError("Cannot resolve %r as a param." % param)

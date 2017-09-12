@@ -43,7 +43,10 @@ object LocalRelation {
   }
 }
 
-case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
+case class LocalRelation(output: Seq[Attribute],
+                         data: Seq[InternalRow] = Nil,
+                         // Indicates whether this relation has data from a streaming source.
+                         override val isStreaming: Boolean = false)
   extends LeafNode with analysis.MultiInstanceRelation {
 
   // A local relation must have resolved output.
@@ -55,7 +58,7 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
    * query.
    */
   override final def newInstance(): this.type = {
-    LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
+    LocalRelation(output.map(_.newInstance()), data, isStreaming).asInstanceOf[this.type]
   }
 
   override protected def stringArgs: Iterator[Any] = {

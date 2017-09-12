@@ -966,6 +966,7 @@ private[spark] class TaskSetManager(
             "Marking task %d in stage %s (on %s) as speculatable because it ran more than %.0f ms"
               .format(index, taskSet.id, info.host, threshold))
           speculatableTasks += index
+          sched.dagScheduler.speculativeTaskSubmitted(tasks(index))
           foundTasks = true
         }
       }
