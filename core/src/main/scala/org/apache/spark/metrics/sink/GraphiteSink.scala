@@ -69,7 +69,7 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
 
   val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase(Locale.ROOT)) match {
     case Some("udp") => new GraphiteUDP(new InetSocketAddress(host, port))
-    case Some("tcp") | None => new Graphite(new InetSocketAddress(host, port))
+    case Some("tcp") | None => new Graphite(host, port)
     case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
   }
 
