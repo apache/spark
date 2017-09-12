@@ -164,7 +164,7 @@ final class OneVsRestModel private[ml] (
     val newDataset = dataset.withColumn(accColName, initUDF())
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
       newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
@@ -347,7 +347,7 @@ final class OneVsRest @Since("1.4.0") (
     }
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
