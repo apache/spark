@@ -118,7 +118,7 @@ class JsonFileFormat extends TextBasedFileFormat with DataSourceRegister {
       throw new AnalysisException(
         "Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the\n" +
         "referenced columns only include the internal corrupt record column\n" +
-        s"(named ${parsedOptions.columnNameOfCorruptRecord} by default). For example:\n" +
+        s"(named _corrupt_record by default). For example:\n" +
         "spark.read.schema(schema).json(file).filter($\"_corrupt_record\".isNotNull).count()\n" +
         "and spark.read.schema(schema).json(file).select(\"_corrupt_record\").show().\n" +
         "Instead, you can cache or save the parsed results and then send the same query.\n" +
