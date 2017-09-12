@@ -219,7 +219,8 @@ private[sql] class JacksonGenerator(
   def flush(): Unit = gen.flush()
 
   /**
-   * Transforms a single `InternalRow` to JSON object using Jackson
+   * Transforms a single `InternalRow` to JSON object using Jackson.
+   * This api calling will be validated through accessing `rootFieldWriters`.
    *
    * @param row The row to convert
    */
@@ -230,19 +231,16 @@ private[sql] class JacksonGenerator(
       schema = dataType.asInstanceOf[StructType]))
   }
 
-
   /**
    * Transforms multiple `InternalRow`s or `MapData`s to JSON array using Jackson
    *
    * @param array The array of rows or maps to convert
    */
-  def write(array: ArrayData): Unit = writeArray(writeArrayData(
-    fieldWriter = arrElementWriter,
-    array = array
-  ))
+  def write(array: ArrayData): Unit = writeArray(writeArrayData(array, arrElementWriter))
 
   /**
    * Transforms a single `MapData` to JSON object using Jackson
+   * This api calling will will be validated through accessing `mapElementWriter`.
    *
    * @param map a map to convert
    */
