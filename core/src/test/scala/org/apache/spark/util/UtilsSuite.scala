@@ -268,7 +268,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val hour = minute * 60
     def str: (Long) => String = Utils.msDurationToString(_)
 
-    val sep = new DecimalFormatSymbols(Locale.US).getDecimalSeparator
+    val sep = new DecimalFormatSymbols(Locale.getDefault).getDecimalSeparator
 
     assert(str(123) === "123 ms")
     assert(str(second) === "1" + sep + "0 s")
