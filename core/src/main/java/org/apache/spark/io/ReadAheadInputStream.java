@@ -14,7 +14,6 @@
 package org.apache.spark.io;
 
 import com.google.common.base.Preconditions;
-import org.apache.spark.storage.StorageUtils;
 import org.apache.spark.util.ThreadUtils;
 
 import javax.annotation.concurrent.GuardedBy;
@@ -300,23 +299,15 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public void close() throws IOException {
-    InterruptedException interruptedException = null;
     executorService.shutdown();
     try {
       executorService.awaitTermination(10, TimeUnit.SECONDS);
+      stateChangeLock.lock();
+      underlyingInputStream.close();
     } catch (InterruptedException e) {
-      interruptedException = e;
-    }
-    underlyingInputStream.close();
-    stateChangeLock.lock();
-    try {
-      StorageUtils.dispose(activeBuffer);
-      StorageUtils.dispose(readAheadBuffer);
+      throw new InterruptedIOException(e.getMessage());
     } finally {
       stateChangeLock.unlock();
-      if (interruptedException != null) {
-        throw new InterruptedIOException(interruptedException.getMessage());
-      }
     }
   }
 }
