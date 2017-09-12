@@ -54,7 +54,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
 
   import testImplicits._
 
-  /*
   test("simple count, update mode") {
     val inputData = MemoryStream[Int]
 
@@ -387,7 +386,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       AddData(streamInput, 0, 1, 2, 3),
       CheckLastBatch((0, 0, 2), (1, 1, 3)))
   }
-  */
 
   test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned accordingly") {
     val inputSource = new NonLocalRelationSource(spark)
