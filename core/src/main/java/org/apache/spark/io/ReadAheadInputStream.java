@@ -21,6 +21,7 @@ import javax.annotation.concurrent.GuardedBy;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -82,10 +83,11 @@ public class ReadAheadInputStream extends InputStream {
    */
   public ReadAheadInputStream(InputStream inputStream, int bufferSizeInBytes, int readAheadThresholdInBytes) {
     Preconditions.checkArgument(bufferSizeInBytes > 0,
-            "bufferSizeInBytes should be greater than 0");
+            "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
     Preconditions.checkArgument(readAheadThresholdInBytes > 0 &&
                     readAheadThresholdInBytes < bufferSizeInBytes,
-            "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes" );
+            "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes, but the" +
+                    "value is " + readAheadThresholdInBytes );
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     this.readAheadThresholdInBytes = readAheadThresholdInBytes;
@@ -95,22 +97,22 @@ public class ReadAheadInputStream extends InputStream {
   }
 
   private boolean isEndOfStream() {
-    if (!activeBuffer.hasRemaining() && !readAheadBuffer.hasRemaining() && endOfStream) {
-      return true;
-    }
-    return  false;
+    return (!activeBuffer.hasRemaining() && !readAheadBuffer.hasRemaining() && endOfStream);
   }
+
   private void readAsync(final ByteBuffer byteBuffer) throws IOException {
     stateChangeLock.lock();
-    if (endOfStream || readInProgress) {
-      stateChangeLock.unlock();
-      return;
-    }
-    byteBuffer.position(0);
-    byteBuffer.flip();
-    readInProgress = true;
     final byte[] arr = byteBuffer.array();
-    stateChangeLock.unlock();
+    try {
+      if (endOfStream || readInProgress) {
+        return;
+      }
+      byteBuffer.position(0);
+      byteBuffer.flip();
+      readInProgress = true;
+    } finally {
+      stateChangeLock.unlock();
+    }
     executorService.execute(new Runnable() {
       @Override
       public void run() {
@@ -122,7 +124,7 @@ public class ReadAheadInputStream extends InputStream {
         // So there is no race condition in both the situations.
         boolean handled = false;
         int read = 0;
-        Exception exception = new Exception("Unknown exception in ReadAheadInputStream");
+        Exception exception = null;
         try {
           while (true) {
             read = underlyingInputStream.read(arr);
@@ -159,12 +161,13 @@ public class ReadAheadInputStream extends InputStream {
     }
   }
 
-  private void waitForAsyncReadComplete() {
+  private void waitForAsyncReadComplete() throws IOException {
     stateChangeLock.lock();
     try {
-      if (readInProgress)
+      while (readInProgress)
       asyncReadComplete.await();
     } catch (InterruptedException e) {
+      throw  new InterruptedIOException(e.getMessage());
     } finally {
       stateChangeLock.unlock();
     }
@@ -189,12 +192,10 @@ public class ReadAheadInputStream extends InputStream {
     }
     stateChangeLock.lock();
     try {
-      len = readInternal(b, offset, len);
-    }
-    finally {
+      return readInternal(b, offset, len);
+    } finally {
       stateChangeLock.unlock();
     }
-    return len;
   }
 
   /**
@@ -234,10 +235,12 @@ public class ReadAheadInputStream extends InputStream {
   public int available() throws IOException {
     stateChangeLock.lock();
     // Make sure we have no integer overflow.
-    int val = (int) Math.min((long) Integer.MAX_VALUE,
-            (long) activeBuffer.remaining() + readAheadBuffer.remaining());
-    stateChangeLock.unlock();
-    return val;
+    try {
+      return (int) Math.min((long) Integer.MAX_VALUE,
+              (long) activeBuffer.remaining() + readAheadBuffer.remaining());
+    } finally {
+      stateChangeLock.unlock();
+    }
   }
 
   @Override
@@ -297,19 +300,23 @@ public class ReadAheadInputStream extends InputStream {
 
   @Override
   public void close() throws IOException {
+    InterruptedException interruptedException = null;
     executorService.shutdown();
     try {
-      executorService.awaitTermination(10, TimeUnit.MILLISECONDS);
+      executorService.awaitTermination(10, TimeUnit.SECONDS);
     } catch (InterruptedException e) {
+      interruptedException = e;
     }
     underlyingInputStream.close();
     stateChangeLock.lock();
     try {
       StorageUtils.dispose(activeBuffer);
       StorageUtils.dispose(readAheadBuffer);
-    }
-    finally {
+    } finally {
       stateChangeLock.unlock();
+      if (interruptedException != null) {
+        throw new InterruptedIOException(interruptedException.getMessage());
+      }
     }
   }
 }
