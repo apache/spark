@@ -23,7 +23,7 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
   parseArgs(args.toList)
   validateArguments()
 
-  private def parseArgs(inputArgs: List[String]) {
+  private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
     while(args.nonEmpty) {
@@ -41,8 +41,8 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
     }
   }
 
-  private def printUsageAndExit(exitCode: Int) {
-    // scalastyle:off println
+  private def printUsageAndExit(exitCode: Int): Unit = {
+    // scalastyle:off
     System.err.println("""
       |Usage: spark-submit --class <this class> <spark sql test jar> [Options]
       |Options:
@@ -54,7 +54,7 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
       |to generate the TPCDS data locally (preferably with a scale factor of 5 for benchmarking).
       |Thereafter, the value of <TPCDS data location> needs to be set to the location where the generated data is stored.
       """.stripMargin)
-    // scalastyle:on println
+    // scalastyle:on
     System.exit(exitCode)
   }
 
