@@ -30,7 +30,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -417,9 +419,29 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
             spark.table("agg_test").as[Long],
             1L)
 
+          val restore1 = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery
+            .lastExecution.executedPlan
+            .collect { case ss: StateStoreRestoreExec => ss }
+            .head
+          restore1.child match {
+            case wscg: WholeStageCodegenExec =>
+              assert(wscg.outputPartitioning.numPartitions === 1)
+              assert(wscg.child.isInstanceOf[HashAggregateExec], "Shouldn't require shuffling")
+            case _ => fail("Expected no shuffling")
+          }
+
           inputSource.addData()
           inputSource.releaseLock()
           sq.processAllAvailable()
+
+          val restore2 = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery
+            .lastExecution.executedPlan
+            .collect { case ss: StateStoreRestoreExec => ss }
+            .head
+          restore2.child match {
+            case shuffle: ShuffleExchange => assert(shuffle.newPartitioning.numPartitions === 1)
+            case _ => fail("Expected shuffling when there was no data")
+          }
 
           checkDataset(
             spark.table("agg_test").as[Long],
@@ -472,6 +494,17 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
           inputSource.releaseLock()
           sq.processAllAvailable()
 
+          val restore1 = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery
+            .lastExecution.executedPlan
+            .collect { case ss: StateStoreRestoreExec => ss }
+            .head
+          restore1.child match {
+            case shuffle: ShuffleExchange =>
+              assert(shuffle.newPartitioning.numPartitions ===
+                spark.sessionState.conf.numShufflePartitions)
+            case _ => fail(s"Expected shuffling but got: ${restore1.child}")
+          }
+
           checkDataset(
             spark.table("agg_test").as[(Long, Long)],
             (0L, 1L))
@@ -501,6 +534,19 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
           inputSource.addData(4)
           inputSource.releaseLock()
           sq2.processAllAvailable()
+
+          val restore2 = sq2.asInstanceOf[StreamingQueryWrapper].streamingQuery
+            .lastExecution.executedPlan
+            .collect { case ss: StateStoreRestoreExec => ss }
+            .head
+          restore2.child match {
+            case wscg: WholeStageCodegenExec =>
+              assert(wscg.outputPartitioning.numPartitions ===
+                spark.sessionState.conf.numShufflePartitions)
+            case _ =>
+              fail("Shouldn't require shuffling as HashAggregateExec should have asked for a " +
+                s"shuffle. But got: ${restore2.child}")
+          }
 
           checkDataset(
             spark.table("agg_test").as[(Long, Long)],

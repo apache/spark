@@ -30,8 +30,9 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProj
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
 import org.apache.spark.sql.catalyst.plans.physical.UnknownPartitioning
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
-import org.apache.spark.sql.execution.RDDScanExec
-import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream}
+import org.apache.spark.sql.execution.{RDDScanExec, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.streaming.{FlatMapGroupsWithStateExec, GroupStateImpl, MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreId, StateStoreMetrics, UnsafeRowPair}
 import org.apache.spark.sql.streaming.FlatMapGroupsWithStateSuite.MemoryStateStore
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
@@ -917,6 +918,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
           inputSource.releaseLock()
           sq.processAllAvailable()
 
+          val restore1 = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery
+            .lastExecution.executedPlan
+            .collect { case ss: FlatMapGroupsWithStateExec => ss }
+            .head
+          assert(restore1.child.outputPartitioning.numPartitions ===
+            spark.sessionState.conf.numShufflePartitions)
+
           checkDataset(
             spark.read.parquet(data).as[Int],
             1)
@@ -938,6 +946,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
           inputSource.addData(4)
           inputSource.releaseLock()
           sq2.processAllAvailable()
+
+          val restore2 = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery
+            .lastExecution.executedPlan
+            .collect { case ss: FlatMapGroupsWithStateExec => ss }
+            .head
+          assert(restore2.child.outputPartitioning.numPartitions ===
+            spark.sessionState.conf.numShufflePartitions)
 
           checkDataset(
             spark.read.parquet(data).as[Int],
