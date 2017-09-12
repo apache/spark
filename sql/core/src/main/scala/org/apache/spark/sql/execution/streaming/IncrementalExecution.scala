@@ -133,17 +133,19 @@ object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
     case ss: StatefulOperator =>
       val numPartitions = plan.sqlContext.sessionState.conf.numShufflePartitions
       val keys = ss.keyExpressions
-      val child = ss.child
       val expectedPartitioning = if (keys.isEmpty) {
         SinglePartition
       } else {
         HashPartitioning(keys, numPartitions)
       }
-      if (child.outputPartitioning.guarantees(expectedPartitioning) &&
-          child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
-        ss
-      } else {
-        ss.withNewChildren(ShuffleExchange(expectedPartitioning, child) :: Nil)
+      val children = ss.children.map { child =>
+        if (child.outputPartitioning.guarantees(expectedPartitioning) &&
+            child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
+          child
+        } else {
+          ShuffleExchange(expectedPartitioning, child)
+        }
       }
+      ss.withNewChildren(children)
   }
 }

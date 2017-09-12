@@ -53,8 +53,6 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  def child: SparkPlan
-
   def keyExpressions: Seq[Attribute]
 
   protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
