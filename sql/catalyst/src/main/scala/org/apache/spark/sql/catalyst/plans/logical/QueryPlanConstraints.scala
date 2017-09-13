@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable.Stack
+
 import org.apache.spark.sql.catalyst.expressions._
 
 
@@ -110,14 +112,29 @@ trait QueryPlanConstraints { self: LogicalPlan =>
   private def inferAdditionalConstraints(constraints: Set[Expression]): Set[Expression] = {
     val aliasedConstraints = eliminateAliasedExpressionInConstraints(constraints)
     var inferredConstraints = Set.empty[Expression]
-    aliasedConstraints.foreach {
-      case eq @ EqualTo(l: Attribute, r: Attribute) =>
-        val candidateConstraints = aliasedConstraints - eq
-        inferredConstraints ++= replaceConstraints(candidateConstraints, l, r)
-        inferredConstraints ++= replaceConstraints(candidateConstraints, r, l)
-      case _ => // No inference
+    val waitingForProcess = new Stack[Expression]
+    aliasedConstraints.collect { case eq: EqualTo => waitingForProcess.push(eq) }
+
+    while (waitingForProcess.nonEmpty) {
+      waitingForProcess.pop() match {
+        case eq @ EqualTo(l: Attribute, r: Attribute) =>
+          val candidateConstraints = aliasedConstraints - eq
+          val replacedWithRight = replaceConstraints(candidateConstraints, l, r)
+          val replacedWithLeft = replaceConstraints(candidateConstraints, r, l)
+          val inferredNewEquals = (replacedWithRight ++ replacedWithLeft).collect {
+            case eq: EqualTo => eq
+          }.asInstanceOf[Set[Expression]] -- aliasedConstraints -- inferredConstraints
+          inferredNewEquals.foreach(waitingForProcess.push(_))
+
+          inferredConstraints ++= replacedWithRight
+          inferredConstraints ++= replacedWithLeft
+        case _ => // No inference
+      }
     }
-    inferredConstraints -- constraints
+    inferredConstraints.filter {
+      case EqualTo(left, right) if left.semanticEquals(right) => false
+      case _ => true
+    } -- constraints
   }
 
   /**

@@ -397,6 +397,26 @@ class ConstraintPropagationSuite extends SparkFunSuite with PlanTest {
         IsNotNull(resolveColumn(tr, "c")))))
   }
 
+  test("Infer recursive constraints") {
+    val tr = LocalRelation('a.int, 'b.int, 'c.int)
+    verifyConstraints(tr
+     .where('a.attr === 'b.attr && 'b.attr === 'c.attr && 'a.attr > 1 && 'b.attr > 5)
+     .analyze.constraints,
+     ExpressionSet(Seq(
+      resolveColumn(tr, "a") > 1,
+      resolveColumn(tr, "b") > 1,
+      resolveColumn(tr, "c") > 1,
+      resolveColumn(tr, "a") > 5,
+      resolveColumn(tr, "b") > 5,
+      resolveColumn(tr, "c") > 5,
+      resolveColumn(tr, "a") === resolveColumn(tr, "b"),
+      resolveColumn(tr, "b") === resolveColumn(tr, "c"),
+      resolveColumn(tr, "a") === resolveColumn(tr, "c"),
+      IsNotNull(resolveColumn(tr, "a")),
+      IsNotNull(resolveColumn(tr, "b")),
+      IsNotNull(resolveColumn(tr, "c")))))
+  }
+
   test("enable/disable constraint propagation") {
     val tr = LocalRelation('a.int, 'b.string, 'c.int)
     val filterRelation = tr.where('a.attr > 10)
