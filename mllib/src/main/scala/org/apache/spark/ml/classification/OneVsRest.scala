@@ -165,7 +165,7 @@ final class OneVsRestModel private[ml] (
     val newDataset = dataset.withColumn(accColName, initUDF())
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
       newDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
@@ -303,6 +303,7 @@ final class OneVsRest @Since("1.4.0") (
    *
    * @group expertSetParam
    */
+  @Since("2.3.0")
   def setParallelism(value: Int): this.type = {
     set(parallelism, value)
   }
@@ -358,7 +359,7 @@ final class OneVsRest @Since("1.4.0") (
     }
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.rdd.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     if (handlePersistence) {
       multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
     }
