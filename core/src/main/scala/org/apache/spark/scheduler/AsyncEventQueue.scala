@@ -37,15 +37,15 @@ import org.apache.spark.util.Utils
  * Delivery will only begin when the `start()` method is called. The `stop()` method should be
  * called when no more events need to be delivered.
  *
- * Instances of `ListenerQueue` are listeners themselves, but they're not to be used like regular
+ * Instances of `AsyncEventQueue` are listeners themselves, but they're not to be used like regular
  * listeners; they are used internally by `LiveListenerBus`, and are tightly coupled to the
  * lifecycle of that implementation.
  */
-private class ListenerQueue(val name: String, conf: SparkConf)
+private class AsyncEventQueue(val name: String, conf: SparkConf)
   extends SparkListenerInterface
   with Logging {
 
-  import ListenerQueue._
+  import AsyncEventQueue._
 
   private val _listeners = new CopyOnWriteArrayList[SparkListenerInterface]()
 
@@ -308,7 +308,7 @@ private class ListenerQueue(val name: String, conf: SparkConf)
 
 }
 
-private object ListenerQueue {
+private object AsyncEventQueue {
 
   val POISON_PILL: SparkListenerInterface => Unit = { _ => Unit }
 

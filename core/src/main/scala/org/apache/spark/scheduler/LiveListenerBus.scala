@@ -80,7 +80,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
         queue.addListener(listener)
 
       case None =>
-        val newQueue = new ListenerQueue(queue, conf)
+        val newQueue = new AsyncEventQueue(queue, conf)
         newQueue.addListener(listener)
         if (started.get() && !stopped.get()) {
           newQueue.start(sparkContext, metrics)
@@ -112,7 +112,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
-    val name = listener.asInstanceOf[ListenerQueue].name
+    val name = listener.asInstanceOf[AsyncEventQueue].name
     metrics.getTimer(s"queue.$name")
   }
 
@@ -181,8 +181,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   }
 
   // Exposed for testing.
-  private[scheduler] def queues: JList[ListenerQueue] = {
-    super.listeners.asInstanceOf[JList[ListenerQueue]]
+  private[scheduler] def queues: JList[AsyncEventQueue] = {
+    super.listeners.asInstanceOf[JList[AsyncEventQueue]]
   }
 
 }
