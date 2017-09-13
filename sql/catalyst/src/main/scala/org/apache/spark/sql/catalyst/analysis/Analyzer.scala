@@ -315,7 +315,7 @@ class Analyzer(
                 s"grouping columns (${groupByExprs.mkString(",")})")
           }
         case e @ Grouping(col: Expression) =>
-          val idx = groupByExprs.indexOf(col)
+          val idx = groupByExprs.indexWhere(_.semanticEquals(col))
           if (idx >= 0) {
             Alias(Cast(BitwiseAnd(ShiftRight(gid, Literal(groupByExprs.length - 1 - idx)),
               Literal(1)), ByteType), toPrettySQL(e))()
