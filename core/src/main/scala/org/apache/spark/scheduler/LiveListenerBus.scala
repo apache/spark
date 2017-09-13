@@ -106,7 +106,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       }
   }
 
-  /** An alias for postToAll(), to avoid changing all call sites. */
+  /** Post an event to all queues. */
   def post(event: SparkListenerEvent): Unit = {
     if (!stopped.get()) {
       metrics.numEventsPosted.inc()
@@ -166,6 +166,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
     synchronized {
       queues.asScala.foreach(_.stop())
+      queues.clear()
     }
   }
 
