@@ -170,7 +170,7 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
-      array = LongArray.empty;
+      array = null;
       usableCapacity = 0;
       pos = 0;
       nullBoundaryPos = 0;

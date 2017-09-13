@@ -31,7 +31,6 @@ public final class LongArray {
 
   // This is a long so that we perform long multiplications when computing offsets.
   private static final long WIDTH = 8;
-  public static LongArray empty = new LongArray( MemoryBlock.fromLongArray( new long[0] ) );
 
   private final MemoryBlock memory;
   private final Object baseObj;
