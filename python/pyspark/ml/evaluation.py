@@ -366,22 +366,41 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     """
 
     @keyword_only
-    def __init__(self, predictionCol="prediction", featuresCol="features"):
+    def __init__(self, predictionCol="prediction", featuresCol="features",
+                 metricName="silhouette"):
         """
-        __init__(self, predictionCol="prediction", featuresCol="features")
+        __init__(self, predictionCol="prediction", featuresCol="features", \
+                 metricName="silhouette")
         """
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid)
-        self._setDefault(predictionCol="prediction", featuresCol="features")
+        self._setDefault(predictionCol="prediction", featuresCol="features",
+                         metricName="silhouette")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
+    @since("2.3.0")
+    def setMetricName(self, value):
+        """
+        Sets the value of :py:attr:`metricName`.
+        """
+        return self._set(metricName=value)
+
+    @since("2.3.0")
+    def getMetricName(self):
+        """
+        Gets the value of metricName or its default value.
+        """
+        return self.getOrDefault(self.metricName)
+
     @keyword_only
     @since("2.3.0")
-    def setParams(self, predictionCol="prediction", featuresCol="features"):
+    def setParams(self, predictionCol="prediction", featuresCol="features",
+                  metricName="silhouette"):
         """
-        setParams(self, predictionCol="prediction", featuresCol="features")
+        setParams(self, predictionCol="prediction", featuresCol="features", \
+                  metricName="silhouette")
         Sets params for clustering evaluator.
         """
         kwargs = self._input_kwargs
