@@ -41,7 +41,7 @@ import org.apache.spark.util.Utils
  * listeners; they are used internally by `LiveListenerBus`, and are tightly coupled to the
  * lifecycle of that implementation.
  */
-private class AsyncEventQueue(val name: String, conf: SparkConf)
+private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveListenerBusMetrics)
   extends SparkListenerInterface
   with Logging {
 
@@ -86,7 +86,14 @@ private class AsyncEventQueue(val name: String, conf: SparkConf)
   private val started = new AtomicBoolean(false)
   private val stopped = new AtomicBoolean(false)
 
-  private var droppedEvents: Counter = null
+  private val droppedEvents = metrics.metricRegistry.counter(s"queue.$name.numDroppedEvents")
+
+  // Remove the queue size gauge first, in case it was created by a previous incarnation of
+  // this queue that was removed from the listener bus.
+  metrics.metricRegistry.remove(s"queue.$name.size")
+  metrics.metricRegistry.register(s"queue.$name.size", new Gauge[Int] {
+    override def getValue: Int = taskQueue.size()
+  })
 
   private val dispatchThread = new Thread(s"spark-listener-group-$name") {
     setDaemon(true)
@@ -125,20 +132,9 @@ private class AsyncEventQueue(val name: String, conf: SparkConf)
    * @param sc Used to stop the SparkContext in case the a listener fails.
    * @param metrics Used to report listener performance metrics.
    */
-  private[scheduler] def start(sc: SparkContext, metrics: LiveListenerBusMetrics): Unit = {
+  private[scheduler] def start(sc: SparkContext): Unit = {
     if (started.compareAndSet(false, true)) {
       this.sc = sc
-      this.droppedEvents = metrics.metricRegistry.counter(s"queue.$name.numDroppedEvents")
-
-      // Avoid warnings in the logs if this queue is being re-created; it will reuse the same
-      // gauge as before.
-      val queueSizeGauge = s"queue.$name.size"
-      if (metrics.metricRegistry.getGauges().get(queueSizeGauge) == null) {
-        metrics.metricRegistry.register(queueSizeGauge, new Gauge[Int] {
-          override def getValue: Int = taskQueue.size()
-        })
-      }
-
       dispatchThread.start()
     } else {
       throw new IllegalStateException(s"$name already started!")

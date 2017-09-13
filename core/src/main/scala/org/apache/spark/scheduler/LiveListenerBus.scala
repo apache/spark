@@ -80,10 +80,10 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
         queue.addListener(listener)
 
       case None =>
-        val newQueue = new AsyncEventQueue(queue, conf)
+        val newQueue = new AsyncEventQueue(queue, conf, metrics)
         newQueue.addListener(listener)
         if (started.get() && !stopped.get()) {
-          newQueue.start(sparkContext, metrics)
+          newQueue.start(sparkContext)
         }
         super.addListener(newQueue)
     }
@@ -130,7 +130,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
       throw new IllegalStateException("LiveListenerBus already started.")
     }
 
-    queues.asScala.foreach(_.start(sc, metrics))
+    queues.asScala.foreach(_.start(sc))
     metricsSystem.registerSource(metrics)
   }
 
