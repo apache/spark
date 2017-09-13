@@ -1,0 +1,27 @@
+{
+  "year": 2012,
+  "make": "Tesla",
+  "model": },
+"price": 80000.65,
+"comment": null
+}
+{
+"year": 1997,
+{: "Ford",
+"model": "E350",
+"price": 35000,
+"comment": "Go get one now they are going fast"
+}
+{
+"year":2017,
+"model": "Carrera",
+"make": "Porche",
+"options": ["CRASH AVOIDANCE", "SMART HEADLIGHTS"]
+}
+{
+"year": 2015,
+"make": "Chevy",
+"model": "Volt",
+"price": 5000.10,
+"comment": null
+}
