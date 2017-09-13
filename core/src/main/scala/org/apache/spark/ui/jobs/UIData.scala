@@ -97,6 +97,7 @@ private[spark] object UIData {
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
     var isBlacklisted: Int = _
+    var jobLastUpdateTime: Option[Long] = None
 
     var schedulingPool: String = ""
     var description: Option[String] = None

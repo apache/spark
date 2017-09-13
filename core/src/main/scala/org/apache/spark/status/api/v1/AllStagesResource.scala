@@ -47,8 +47,9 @@ private[v1] class AllStagesResource(ui: SparkUI) {
         listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId))
       }
     } yield {
+      stageUiData.jobLastUpdateTime = ui.lastUpdateTime
       AllStagesResource.stageUiToStageData(
-        status, stageInfo, stageUiData, includeDetails = false, Some(ui))
+        status, stageInfo, stageUiData, includeDetails = false)
     }
   }
 }
@@ -58,8 +59,7 @@ private[v1] object AllStagesResource {
       status: StageStatus,
       stageInfo: StageInfo,
       stageUiData: StageUIData,
-      includeDetails: Boolean,
-      sparkUI: Option[SparkUI] = None): StageData = {
+      includeDetails: Boolean): StageData = {
 
     val taskLaunchTimes = stageUiData.taskData.values.map(_.taskInfo.launchTime).filter(_ > 0)
 
@@ -71,7 +71,8 @@ private[v1] object AllStagesResource {
       }
 
     val taskData = if (includeDetails) {
-      Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v, sparkUI) } )
+      Some(stageUiData.taskData.map { case (k, v) =>
+        k -> convertTaskData(v, stageUiData.jobLastUpdateTime) } )
     } else {
       None
     }
@@ -138,17 +139,13 @@ private[v1] object AllStagesResource {
     }
   }
 
-  def convertTaskData(uiData: TaskUIData, sparkUI: Option[SparkUI]): TaskData = {
+  def convertTaskData(uiData: TaskUIData, jobLastUpdateTime: Option[Long]): TaskData = {
     new TaskData(
       taskId = uiData.taskInfo.taskId,
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attemptNumber,
       launchTime = new Date(uiData.taskInfo.launchTime),
-      duration = uiData.taskDuration(
-        sparkUI match {
-          case Some(ui) => ui.lastUpdateTime
-          case None => None
-      }),
+      duration = uiData.taskDuration(jobLastUpdateTime),
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,
       status = uiData.taskInfo.status,
