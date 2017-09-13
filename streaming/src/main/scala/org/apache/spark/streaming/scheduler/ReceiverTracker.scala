@@ -23,7 +23,6 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.ExecutionContext
 import scala.language.existentials
 import scala.util.{Failure, Success}
-
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -32,6 +31,7 @@ import org.apache.spark.scheduler.{ExecutorCacheTaskLocation, TaskLocation}
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util.WriteAheadLogUtils
+import org.apache.spark.util.Utils.logTrace
 import org.apache.spark.util.{SerializableConfiguration, ThreadUtils, Utils}
 
 
@@ -601,6 +601,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
             supervisor.awaitTermination()
           } else {
             // It's restarted by TaskScheduler, but we want to reschedule it again. So exit it.
+            logTrace("The receiver won't be restarted by TaskScheduler,So exit it.")
           }
         }
 
