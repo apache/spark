@@ -190,7 +190,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("SPARK-21980: References in grouping functions should be indexed with resolver") {
+  test("SPARK-21980: References in grouping functions should be indexed with semanticEquals") {
     checkAnswer(
       courseSales.cube("course", "year")
         .agg(grouping("CouRse"), grouping("year")),
