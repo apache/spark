@@ -18,25 +18,19 @@
 package org.apache.spark.sql.sources.v2;
 
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
-import org.apache.spark.sql.types.StructType;
 
 /**
- * A variant of `DataSourceV2` which requires users to provide a schema when reading data. A data
- * source can inherit both `DataSourceV2` and `SchemaRequiredDataSourceV2` if it supports both schema
- * inference and user-specified schemas.
+ * A mix-in interface for `DataSourceV2`. Users can implement this interface to provide data reading
+ * ability and scan the data from the data source.
  */
-public interface SchemaRequiredDataSourceV2 {
+public interface ReadSupport {
 
   /**
-   * Create a `DataSourceV2Reader` to scan the data for this data source.
+   * Creates a `DataSourceV2Reader` to scan the data for this data source.
    *
-   * @param schema the full schema of this data source reader. Full schema usually maps to the
-   *               physical schema of the underlying storage of this data source reader, e.g.
-   *               CSV files, JSON files, etc, while this reader may not read data with full
-   *               schema, as column pruning or other optimizations may happen.
    * @param options the options for this data source reader, which is an immutable case-insensitive
    *                string-to-string map.
    * @return a reader that implements the actual read logic.
    */
-  DataSourceV2Reader createReader(StructType schema, DataSourceV2Options options);
+  DataSourceV2Reader createReader(DataSourceV2Options options);
 }

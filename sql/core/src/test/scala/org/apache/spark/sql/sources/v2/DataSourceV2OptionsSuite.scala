@@ -15,22 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.downward;
+package org.apache.spark.sql.sources.v2
 
-import org.apache.spark.sql.types.StructType;
+import scala.collection.JavaConverters._
+
+import org.apache.spark.SparkFunSuite
 
 /**
- * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to only read the
- * required columns/nested fields during scan.
+ * A simple test suite to verify `DataSourceV2Options`.
  */
-public interface ColumnPruningSupport {
+class DataSourceV2OptionsSuite extends SparkFunSuite {
 
-  /**
-   * Apply column pruning w.r.t. the given requiredSchema.
-   *
-   * Implementation should try its best to prune the unnecessary columns/nested fields, but it's
-   * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
-   * fields, and only prune top-level columns.
-   */
-  void pruneColumns(StructType requiredSchema);
+  test("key is case-insensitive") {
+    val options = new DataSourceV2Options(Map("foo" -> "bar").asJava)
+    assert(options.get("foo").get() == "bar")
+    assert(options.get("FoO").get() == "bar")
+    assert(!options.get("abc").isPresent)
+  }
+
+  test("value is case-sensitive") {
+    val options = new DataSourceV2Options(Map("foo" -> "bAr").asJava)
+    assert(options.get("foo").get == "bAr")
+  }
 }

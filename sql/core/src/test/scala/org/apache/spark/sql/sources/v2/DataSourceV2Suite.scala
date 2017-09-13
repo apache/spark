@@ -25,8 +25,6 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.sources.{Filter, GreaterThan}
 import org.apache.spark.sql.sources.v2.reader._
-import org.apache.spark.sql.sources.v2.reader.downward.{ColumnPruningSupport, FilterPushDownSupport}
-import org.apache.spark.sql.sources.v2.reader.scan.UnsafeRowScan
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
@@ -84,7 +82,7 @@ class DataSourceV2Suite extends QueryTest with SharedSQLContext {
   }
 }
 
-class SimpleDataSourceV2 extends DataSourceV2 {
+class SimpleDataSourceV2 extends DataSourceV2 with ReadSupport {
 
   class Reader extends DataSourceV2Reader {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
@@ -114,10 +112,10 @@ class SimpleReadTask(start: Int, end: Int) extends ReadTask[Row] with DataReader
 
 
 
-class AdvancedDataSourceV2 extends DataSourceV2 {
+class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
 
   class Reader extends DataSourceV2Reader
-    with ColumnPruningSupport with FilterPushDownSupport {
+    with SupportsPushDownRequiredColumns with SupportsPushDownFilters {
 
     var requiredSchema = new StructType().add("i", "int").add("j", "int")
     var filters = Array.empty[Filter]
@@ -183,9 +181,9 @@ class AdvancedReadTask(start: Int, end: Int, requiredSchema: StructType)
 }
 
 
-class UnsafeRowDataSourceV2 extends DataSourceV2 {
+class UnsafeRowDataSourceV2 extends DataSourceV2 with ReadSupport {
 
-  class Reader extends DataSourceV2Reader with UnsafeRowScan {
+  class Reader extends DataSourceV2Reader with SupportsScanUnsafeRow {
     override def readSchema(): StructType = new StructType().add("i", "int").add("j", "int")
 
     override def createUnsafeRowReadTasks(): JList[ReadTask[UnsafeRow]] = {
@@ -219,7 +217,7 @@ class UnsafeRowReadTask(start: Int, end: Int)
   override def close(): Unit = {}
 }
 
-class SchemaRequiredDataSource extends SchemaRequiredDataSourceV2 {
+class SchemaRequiredDataSource extends DataSourceV2 with ReadSupportWithSchema {
 
   class Reader(val readSchema: StructType) extends DataSourceV2Reader {
     override def createReadTasks(): JList[ReadTask[Row]] =

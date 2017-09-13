@@ -15,13 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2;
+package org.apache.spark.sql.sources.v2.reader;
+
+import org.apache.spark.sql.sources.Filter;
 
 /**
- * The base interface for data source v2 implementations.
+ * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
+ * filters to the data source and reduce the size of the data to be read.
  *
- * Note that this is an empty interface, data source implementations should mix-in at least one of
- * the plug-in interfaces like `ReadSupport`. Otherwise it's just a dummy data source which is
- * un-readable/writable.
+ * Note that, if users implement both this interface and `SupportsPushDownCatalystFilters`, Spark
+ * will ignore this interface and only process `SupportsPushDownCatalystFilters`.
  */
-public interface DataSourceV2 {}
+public interface SupportsPushDownFilters {
+
+  /**
+   * Pushes down filters, and returns unsupported filters.
+   */
+  Filter[] pushFilters(Filter[] filters);
+}

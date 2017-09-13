@@ -19,15 +19,14 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader
-import org.apache.spark.sql.sources.v2.reader.upward.StatisticsSupport
+import org.apache.spark.sql.sources.v2.reader.{DataSourceV2Reader, SupportsReportStatistics}
 
 case class DataSourceV2Relation(
     output: Seq[AttributeReference],
     reader: DataSourceV2Reader) extends LeafNode {
 
   override def computeStats(): Statistics = reader match {
-    case r: StatisticsSupport =>
+    case r: SupportsReportStatistics =>
       Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))
     case _ =>
       Statistics(sizeInBytes = conf.defaultSizeInBytes)

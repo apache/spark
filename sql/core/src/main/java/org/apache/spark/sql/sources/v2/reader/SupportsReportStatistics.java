@@ -15,21 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.downward;
-
-import org.apache.spark.sql.sources.Filter;
+package org.apache.spark.sql.sources.v2.reader;
 
 /**
- * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
- * filters to the data source and reduce the size of the data to be read.
- *
- * Note that, if users implement both this interface and `CatalystFilterPushDownSupport`, Spark
- * will ignore this interface and only process `CatalystFilterPushDownSupport`.
+ * A mix in interface for `DataSourceV2Reader`. Users can implement this interface to report
+ * statistics to Spark.
  */
-public interface FilterPushDownSupport {
-
-  /**
-   * Pushes down filters, and returns unsupported filters.
-   */
-  Filter[] pushFilters(Filter[] filters);
+public interface SupportsReportStatistics {
+  Statistics getStatistics();
 }

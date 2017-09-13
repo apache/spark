@@ -33,7 +33,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, SchemaRequiredDataSourceV2}
+import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, ReadSupport, ReadSupportWithSchema}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -183,23 +183,21 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
 
     val cls = DataSource.lookupDataSource(source)
-    val isDataSourceV2 = classOf[DataSourceV2].isAssignableFrom(cls) ||
-      classOf[SchemaRequiredDataSourceV2].isAssignableFrom(cls)
-    if (isDataSourceV2) {
+    if (classOf[DataSourceV2].isAssignableFrom(cls)) {
       val dataSource = cls.newInstance()
       val options = new DataSourceV2Options(extraOptions.asJava)
 
       val reader = (cls.newInstance(), userSpecifiedSchema) match {
-        case (ds: SchemaRequiredDataSourceV2, Some(schema)) =>
+        case (ds: ReadSupportWithSchema, Some(schema)) =>
           ds.createReader(schema, options)
 
-        case (ds: DataSourceV2, None) =>
+        case (ds: ReadSupport, None) =>
           ds.createReader(options)
 
-        case (_: SchemaRequiredDataSourceV2, None) =>
+        case (_: ReadSupportWithSchema, None) =>
           throw new AnalysisException(s"A schema needs to be specified when using $dataSource.")
 
-        case (ds: DataSourceV2, Some(schema)) =>
+        case (ds: ReadSupport, Some(schema)) =>
           val reader = ds.createReader(options)
           if (reader.readSchema() != schema) {
             throw new AnalysisException(s"$ds does not allow user-specified schemas.")
@@ -207,7 +205,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           reader
 
         case _ =>
-          throw new AnalysisException(s"$cls is not a valid Spark SQL Data Source.")
+          throw new AnalysisException(s"$cls does not support data reading.")
       }
 
       Dataset.ofRows(sparkSession, DataSourceV2Relation(reader))

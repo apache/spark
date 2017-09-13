@@ -15,35 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.scan;
-
-import java.util.List;
+package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
-import org.apache.spark.sql.sources.v2.reader.ReadTask;
+import org.apache.spark.sql.catalyst.expressions.Expression;
 
 /**
- * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to output
- * unsafe rows directly and avoid the row copy at Spark side.
+ * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
+ * arbitrary expressions as predicates to the data source. This is an experimental and unstable
+ * interface as `Expression` is not public and may get changed in future Spark versions.
  *
- * Note that, this is an experimental and unstable interface, as `UnsafeRow` is not public and
- * may get changed in future Spark versions.
+ * Note that, if users implement both this interface and `SupportsPushDownFilters`, Spark will
+ * ignore `SupportsPushDownFilters` and only process this interface.
  */
 @Experimental
 @InterfaceStability.Unstable
-public interface UnsafeRowScan extends DataSourceV2Reader {
-
-  @Override
-  default List<ReadTask<Row>> createReadTasks() {
-    throw new IllegalStateException("createReadTasks should not be called with UnsafeRowScan.");
-  }
+public interface SupportsPushDownCatalystFilters {
 
   /**
-   * Similar to `DataSourceV2Reader.createReadTasks`, but return data in unsafe row format.
+   * Pushes down filters, and returns unsupported filters.
    */
-  List<ReadTask<UnsafeRow>> createUnsafeRowReadTasks();
+  Expression[] pushCatalystFilters(Expression[] filters);
 }

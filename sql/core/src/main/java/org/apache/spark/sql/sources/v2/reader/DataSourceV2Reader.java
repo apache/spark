@@ -28,13 +28,15 @@ import org.apache.spark.sql.types.StructType;
  * this data source reader.
  *
  * There are mainly 3 kinds of query optimizations:
- *   1. push operators downward to the data source, e.g., column pruning, filter push down, etc.
- *   2. propagate information upward to Spark, e.g., report statistics, report ordering, etc.
- *   3. special scans like columnar scan, unsafe row scan, etc. Note that a data source reader can
- *      implement at most one special scan.
+ *   1. Operators push-down. E.g., filter push-down, required columns push-down(aka column
+ *      pruning), etc. These push-down interfaces are named like `SupportsPushDownXXX`.
+ *   2. Information Reporting. E.g., statistics reporting, ordering reporting, etc. These
+ *      reporting interfaces are named like `SupportsReportingXXX`.
+ *   3. Special scan. E.g, columnar scan, unsafe row scan, etc. Note that a data source reader can
+ *      implement at most one special scan. These scan interfaces are named like `SupportsScanXXX`.
  *
- * Spark first applies all operator push-down optimizations which this data source supports. Then
- * Spark collects information this data source provides for further optimizations. Finally Spark
+ * Spark first applies all operator push-down optimizations that this data source supports. Then
+ * Spark collects information this data source reported for further optimizations. Finally Spark
  * issues the scan request and does the actual data reading.
  */
 public interface DataSourceV2Reader {

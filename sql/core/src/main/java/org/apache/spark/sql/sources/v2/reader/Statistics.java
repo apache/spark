@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.upward;
+package org.apache.spark.sql.sources.v2.reader;
 
 import java.util.OptionalLong;
 

@@ -23,8 +23,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * An immutable case-insensitive string-to-string map, which is used to represent data source
- * options.
+ * An immutable string-to-string map in which keys are case-insensitive. This is used to represent
+ * data source options.
  */
 public class DataSourceV2Options {
   private final Map<String, String> keyLowerCasedMap;

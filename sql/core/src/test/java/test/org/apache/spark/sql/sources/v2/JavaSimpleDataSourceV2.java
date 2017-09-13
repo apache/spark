@@ -24,12 +24,13 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceV2Options;
+import org.apache.spark.sql.sources.v2.ReadSupport;
 import org.apache.spark.sql.sources.v2.reader.DataReader;
 import org.apache.spark.sql.sources.v2.reader.ReadTask;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaSimpleDataSourceV2 implements DataSourceV2 {
+public class JavaSimpleDataSourceV2 implements DataSourceV2, ReadSupport {
 
   class Reader implements DataSourceV2Reader {
     private final StructType schema = new StructType().add("i", "int").add("j", "int");

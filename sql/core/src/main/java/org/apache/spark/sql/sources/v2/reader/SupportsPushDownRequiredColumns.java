@@ -15,12 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader.upward;
+package org.apache.spark.sql.sources.v2.reader;
+
+import org.apache.spark.sql.types.StructType;
 
 /**
- * A mix in interface for `DataSourceV2Reader`. Users can implement this interface to report
- * statistics to Spark.
+ * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
+ * required columns and only read these columns during scan.
  */
-public interface StatisticsSupport {
-  Statistics getStatistics();
+public interface SupportsPushDownRequiredColumns {
+
+  /**
+   * Applies column pruning w.r.t. the given requiredSchema.
+   *
+   * Implementation should try its best to prune the unnecessary columns or nested fields, but it's
+   * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
+   * fields, and only prune top-level columns.
+   *
+   * Note that, data source implementations should update `DataSourceReader.readSchema` after
+   * applying column pruning.
+   */
+  void pruneColumns(StructType requiredSchema);
 }

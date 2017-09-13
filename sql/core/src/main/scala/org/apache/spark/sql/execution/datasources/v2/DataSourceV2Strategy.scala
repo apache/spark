@@ -24,17 +24,17 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.sources.v2.reader.downward.{CatalystFilterPushDownSupport, ColumnPruningSupport, FilterPushDownSupport}
+import org.apache.spark.sql.sources.v2.reader._
 
 object DataSourceV2Strategy extends Strategy {
   // TODO: write path
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, DataSourceV2Relation(output, reader)) =>
       val stayUpFilters: Seq[Expression] = reader match {
-        case r: CatalystFilterPushDownSupport =>
+        case r: SupportsPushDownCatalystFilters =>
           r.pushCatalystFilters(filters.toArray)
 
-        case r: FilterPushDownSupport =>
+        case r: SupportsPushDownFilters =>
           // A map from original Catalyst expressions to corresponding translated data source
           // filters. If a predicate is not in this map, it means it cannot be pushed down.
           val translatedMap: Map[Expression, Filter] = filters.flatMap { p =>
@@ -65,7 +65,7 @@ object DataSourceV2Strategy extends Strategy {
       // TODO: nested fields pruning
       val requiredColumns = (projectSet ++ filterSet).toSeq.map(attrMap)
       reader match {
-        case r: ColumnPruningSupport =>
+        case r: SupportsPushDownRequiredColumns =>
           r.pruneColumns(requiredColumns.toStructType)
         case _ =>
       }

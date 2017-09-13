@@ -20,13 +20,14 @@ package test.org.apache.spark.sql.sources.v2;
 import java.util.List;
 
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.sources.v2.DataSourceV2;
 import org.apache.spark.sql.sources.v2.DataSourceV2Options;
-import org.apache.spark.sql.sources.v2.SchemaRequiredDataSourceV2;
+import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.sources.v2.reader.ReadTask;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaSchemaRequiredDataSource implements SchemaRequiredDataSourceV2 {
+public class JavaSchemaRequiredDataSource implements DataSourceV2, ReadSupportWithSchema {
 
   class Reader implements DataSourceV2Reader {
     private final StructType schema;
