@@ -46,7 +46,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
   /**
    * Add a listener to listen events. This method is thread-safe and can be called in any thread.
    */
-  def addListener(listener: L): Unit = {
+  final def addListener(listener: L): Unit = {
     listenersPlusTimers.add((listener, getTimer(listener)))
   }
 
@@ -54,7 +54,7 @@ private[spark] trait ListenerBus[L <: AnyRef, E] extends Logging {
    * Remove a listener and it won't receive any events. This method is thread-safe and can be called
    * in any thread.
    */
-  def removeListener(listener: L): Unit = {
+  final def removeListener(listener: L): Unit = {
     listenersPlusTimers.asScala.find(_._1 eq listener).foreach { listenerAndTimer =>
       listenersPlusTimers.remove(listenerAndTimer)
     }
