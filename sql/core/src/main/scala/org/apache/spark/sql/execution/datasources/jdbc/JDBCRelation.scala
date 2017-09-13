@@ -112,13 +112,11 @@ private[sql] case class JDBCRelation(
   override val needConversion: Boolean = false
 
   override val schema: StructType = {
-    val schema = JDBCRDD.resolveTable(jdbcOptions)
-    val customSchema = jdbcOptions.customSchema
-    if (customSchema.isDefined) {
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, customSchema.get,
-        sqlContext.sessionState.conf.resolver)
-    } else {
-      schema
+    val tableSchema = JDBCRDD.resolveTable(jdbcOptions)
+    jdbcOptions.customSchema match {
+      case Some(customSchema) => JdbcUtils.getCustomSchema(
+        tableSchema, customSchema, sparkSession.sessionState.conf.resolver)
+      case None => tableSchema
     }
   }
 

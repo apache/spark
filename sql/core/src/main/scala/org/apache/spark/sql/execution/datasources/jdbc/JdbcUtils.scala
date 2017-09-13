@@ -302,7 +302,6 @@ object JdbcUtils extends Logging {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
       val metadata = new MetadataBuilder()
-        .putString("name", columnName)
         .putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
@@ -772,26 +771,25 @@ object JdbcUtils extends Logging {
    * Parses the user specified customSchema option value to DataFrame schema,
    * and returns it if it's all columns are equals to default schema's.
    */
-  def parseUserSpecifiedColumnTypes(
-       schema: StructType,
-       columnTypes: String,
-       nameEquality: Resolver): StructType = {
-    val userSchema = CatalystSqlParser.parseTableSchema(columnTypes)
+  def getCustomSchema(
+      tableSchema: StructType,
+      customSchema: String,
+      nameEquality: Resolver): StructType = {
+    val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
     SchemaUtils.checkColumnNameDuplication(
       userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
-    if (userSchema.size != schema.size) {
-      throw new AnalysisException("Please provide all the columns, " +
-          s"all columns are: ${schema.fields.map(_.name).mkString(",")}")
+    val colNames = tableSchema.fieldNames.mkString(",")
+    val errorMsg = s"Please provide all the columns, all columns are: $colNames"
+    if (userSchema.size != tableSchema.size) {
+      throw new AnalysisException(errorMsg)
     }
 
     // This is resolved by names, only check the column names.
     userSchema.fieldNames.foreach { col =>
-      schema.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new AnalysisException(
-          s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column $col not found in " +
-            s"schema ${schema.catalogString}")
+      tableSchema.find(f => nameEquality(f.name, col)).getOrElse {
+        throw new AnalysisException(errorMsg)
       }
     }
     userSchema

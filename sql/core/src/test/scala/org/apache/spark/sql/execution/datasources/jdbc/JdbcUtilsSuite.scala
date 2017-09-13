@@ -24,62 +24,62 @@ import org.apache.spark.sql.types._
 
 class JdbcUtilsSuite extends SparkFunSuite {
 
-  val schema = StructType(Seq(
+  val tableSchema = StructType(Seq(
     StructField("C1", StringType, false), StructField("C2", IntegerType, false)))
   val caseSensitive = org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
   val caseInsensitive = org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
 
   test("Parse user specified column types") {
     assert(
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 DATE, C2 STRING", caseInsensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "C1 DATE, C2 STRING", caseInsensitive) ===
       StructType(Seq(StructField("C1", DateType, true), StructField("C2", StringType, true))))
-    assert(JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 DATE, C2 STRING", caseSensitive) ===
+    assert(JdbcUtils.getCustomSchema(tableSchema, "C1 DATE, C2 STRING", caseSensitive) ===
       StructType(Seq(StructField("C1", DateType, true), StructField("C2", StringType, true))))
     assert(
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 DATE, C2 STRING", caseInsensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("C2", StringType, true))))
-    assert(JdbcUtils.parseUserSpecifiedColumnTypes(
-      schema, "c1 DECIMAL(38, 0), C2 STRING", caseInsensitive) ===
+    assert(JdbcUtils.getCustomSchema(
+      tableSchema, "c1 DECIMAL(38, 0), C2 STRING", caseInsensitive) ===
       StructType(Seq(StructField("c1", DecimalType(38, 0), true),
         StructField("C2", StringType, true))))
 
     // Throw AnalysisException
     val duplicate = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 DATE, c1 STRING", caseInsensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, c1 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("c1", StringType, true)))
     }
     assert(duplicate.getMessage.contains(
       "Found duplicate column(s) in the customSchema option value"))
 
     val allColumns = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "C1 STRING", caseSensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "C1 STRING", caseSensitive) ===
         StructType(Seq(StructField("C1", DateType, true)))
     }
     assert(allColumns.getMessage.contains("Please provide all the columns,"))
 
     val caseSensitiveColumnNotFound = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c1 DATE, C2 STRING", caseSensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "c1 DATE, C2 STRING", caseSensitive) ===
         StructType(Seq(StructField("c1", DateType, true), StructField("C2", StringType, true)))
     }
     assert(caseSensitiveColumnNotFound.getMessage.contains(
-      s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column c1 not found in schema"))
+      "Please provide all the columns, all columns are: C1,C2;"))
 
     val caseInsensitiveColumnNotFound = intercept[AnalysisException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 DATE, C2 STRING", caseInsensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "c3 DATE, C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
     assert(caseInsensitiveColumnNotFound.getMessage.contains(
-      s"${JDBCOptions.JDBC_CUSTOM_DATAFRAME_COLUMN_TYPES} option column c3 not found in schema"))
+      "Please provide all the columns, all columns are: C1,C2;"))
 
     // Throw ParseException
     val dataTypeNotSupported = intercept[ParseException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 DATEE, C2 STRING", caseInsensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "c3 DATEE, C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
     assert(dataTypeNotSupported.getMessage.contains("DataType datee is not supported"))
 
     val mismatchedInput = intercept[ParseException]{
-      JdbcUtils.parseUserSpecifiedColumnTypes(schema, "c3 DATE. C2 STRING", caseInsensitive) ===
+      JdbcUtils.getCustomSchema(tableSchema, "c3 DATE. C2 STRING", caseInsensitive) ===
         StructType(Seq(StructField("c3", DateType, true), StructField("C2", StringType, true)))
     }
     assert(mismatchedInput.getMessage.contains("mismatched input '.' expecting"))
