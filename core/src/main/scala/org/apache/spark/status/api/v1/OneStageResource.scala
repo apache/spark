@@ -36,7 +36,7 @@ private[v1] class OneStageResource(ui: SparkUI) {
     withStage(stageId) { stageAttempts =>
       stageAttempts.map { stage =>
         AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
-          includeDetails = true)
+          includeDetails = true, Some(ui))
       }
     }
   }
@@ -48,7 +48,7 @@ private[v1] class OneStageResource(ui: SparkUI) {
       @PathParam("stageAttemptId") stageAttemptId: Int): StageData = {
     withStageAttempt(stageId, stageAttemptId) { stage =>
       AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
-        includeDetails = true)
+        includeDetails = true, Some(ui))
     }
   }
 
@@ -81,7 +81,8 @@ private[v1] class OneStageResource(ui: SparkUI) {
       @DefaultValue("20") @QueryParam("length") length: Int,
       @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
     withStageAttempt(stageId, stageAttemptId) { stage =>
-      val tasks = stage.ui.taskData.values.map{AllStagesResource.convertTaskData}.toIndexedSeq
+      val tasks = stage.ui.taskData.values.map{
+        AllStagesResource.convertTaskData(_, Some(ui))}.toIndexedSeq
         .sorted(OneStageResource.ordering(sortBy))
       tasks.slice(offset, offset + length)
     }
