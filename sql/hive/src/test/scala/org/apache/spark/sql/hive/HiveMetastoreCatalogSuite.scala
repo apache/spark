@@ -99,8 +99,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton with SQLTestUtils {
           |c24 struct<c:varchar(10),d:int>
           |)
         """.stripMargin)
-
-      // c24 struct<c:varchar(10),d:int>
+      
       val schema = hiveClient.getTable("default", "t").schema
       val expectedSchema = new StructType()
         .add("c1", "boolean")
