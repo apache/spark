@@ -212,7 +212,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     Random.nextBytes(bytes)
 
     val os = new ByteArrayOutputStream()
-    Utils.copyStream(new ByteArrayInputStream(bytes), os)
+    Utils.copyStream(new ByteArrayInputStream(bytes), os, true)
 
     assert(os.toByteArray.toList.equals(bytes.toList))
   }
@@ -488,7 +488,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
-      assume(before.split(",").length > 1)
+      assume(before.split(",").length >= 1)
       def resolve(uri: String): String = Utils.resolveURIs(uri)
       assert(resolve(before) === after)
       assert(resolve(after) === after)
