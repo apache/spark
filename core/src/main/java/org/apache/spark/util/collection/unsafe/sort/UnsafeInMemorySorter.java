@@ -29,6 +29,7 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
@@ -348,8 +349,7 @@ public final class UnsafeInMemorySorter {
           array, nullBoundaryPos, (pos - nullBoundaryPos) / 2L, 0, 7,
           radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
-        MemoryBlock unused = new MemoryBlock(
-          array.getBaseObject(),
+        MemoryBlock unused = array.memoryBlock().allocate(
           array.getBaseOffset() + pos * 8L,
           (array.size() - pos) * 8L);
         LongArray buffer = new LongArray(unused);

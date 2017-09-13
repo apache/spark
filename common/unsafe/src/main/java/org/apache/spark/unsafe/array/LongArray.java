@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.array;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**

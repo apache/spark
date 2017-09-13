@@ -22,6 +22,7 @@ import java.util.Comparator;
 import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.util.collection.unsafe.sort.RadixSort;
@@ -180,8 +181,7 @@ final class ShuffleInMemorySorter {
         PackedRecordPointer.PARTITION_ID_START_BYTE_INDEX,
         PackedRecordPointer.PARTITION_ID_END_BYTE_INDEX, false, false);
     } else {
-      MemoryBlock unused = new MemoryBlock(
-        array.getBaseObject(),
+      MemoryBlock unused = array.memoryBlock().allocate(
         array.getBaseOffset() + pos * 8L,
         (array.size() - pos) * 8L);
       LongArray buffer = new LongArray(unused);

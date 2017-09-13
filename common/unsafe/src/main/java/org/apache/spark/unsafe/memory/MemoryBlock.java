@@ -22,10 +22,9 @@ import javax.annotation.Nullable;
 import org.apache.spark.unsafe.Platform;
 
 /**
- * A consecutive block of memory, starting at a {@link MemoryLocation} with a fixed size.
+ * A declaration of interfaces of MemoryBloock classes .
  */
-public class MemoryBlock extends MemoryLocation {
-
+public interface MemoryBlock {
   /** Special `pageNumber` value for pages which were not allocated by TaskMemoryManagers */
   public static final int NO_PAGE_NUMBER = -1;
 
@@ -45,38 +44,26 @@ public class MemoryBlock extends MemoryLocation {
    */
   public static final int FREED_IN_ALLOCATOR_PAGE_NUMBER = -3;
 
-  private final long length;
-
-  /**
-   * Optional page number; used when this MemoryBlock represents a page allocated by a
-   * TaskMemoryManager. This field is public so that it can be modified by the TaskMemoryManager,
-   * which lives in a different package.
-   */
-  public int pageNumber = NO_PAGE_NUMBER;
-
-  public MemoryBlock(@Nullable Object obj, long offset, long length) {
-    super(obj, offset);
-    this.length = length;
-  }
-
   /**
    * Returns the size of the memory block.
    */
-  public long size() {
-    return length;
-  }
+  long size();
 
-  /**
-   * Creates a memory block pointing to the memory used by the long array.
-   */
-  public static MemoryBlock fromLongArray(final long[] array) {
-    return new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length * 8L);
-  }
+  Object getBaseObject();
+
+  long getBaseOffset();
+
+  void setPageNumber(int pageNum);
+
+  int getPageNumber();
 
   /**
    * Fills the memory block with the specified byte value.
    */
-  public void fill(byte value) {
-    Platform.setMemory(obj, offset, length, value);
-  }
+  void fill(byte value);
+
+  /**
+   * Instantiate the same type of MemoryBlock with new offset and size
+   */
+  MemoryBlock allocate(long offset, long size);
 }

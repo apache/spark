@@ -19,39 +19,76 @@ package org.apache.spark.unsafe.memory;
 
 import org.apache.spark.unsafe.Platform;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+
 /**
  * A simple {@link MemoryAllocator} that uses {@code Unsafe} to allocate off-heap memory.
  */
 public class UnsafeMemoryAllocator implements MemoryAllocator {
 
-  @Override
-  public MemoryBlock allocate(long size) throws OutOfMemoryError {
-    long address = Platform.allocateMemory(size);
-    MemoryBlock memory = new MemoryBlock(null, address, size);
-    if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
-      memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+  private static Method bufAddrMethod;
+  static {
+    try {
+      Class cb = UnsafeMemoryAllocator.class.getClassLoader().loadClass("java.nio.DirectByteBuffer");
+      bufAddrMethod = cb.getMethod("address");
+      bufAddrMethod.setAccessible(true);
     }
-    return memory;
+    catch(Exception ex) {
+      throw new RuntimeException(ex.getMessage(), ex);
+    }
+  }
+
+  @Override
+  public OffHeapMemoryBlock allocate(long size) throws OutOfMemoryError {
+    try {
+      Object b = ByteBuffer.allocateDirect((int)size);
+      long addr = (long)bufAddrMethod.invoke(b);
+      return new OffHeapMemoryBlock(b, addr, size);
+    } catch (IllegalAccessException e) {
+      throw new RuntimeException(e.getMessage(), e);
+    } catch (InvocationTargetException e) {
+      Throwable tex = e.getTargetException();
+      if( tex instanceof OutOfMemoryError) {
+        throw (OutOfMemoryError) tex;
+      }
+      else {
+        throw new RuntimeException(e.getMessage(), e);
+      }
+    }
   }
 
   @Override
   public void free(MemoryBlock memory) {
-    assert (memory.obj == null) :
+    assert(memory instanceof OffHeapMemoryBlock);
+    assert (memory.getBaseObject() == null) :
       "baseObject not null; are you trying to use the off-heap allocator to free on-heap memory?";
-    assert (memory.pageNumber != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
+    assert (memory.getPageNumber() != MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER) :
       "page has already been freed";
-    assert ((memory.pageNumber == MemoryBlock.NO_PAGE_NUMBER)
-            || (memory.pageNumber == MemoryBlock.FREED_IN_TMM_PAGE_NUMBER)) :
+    assert ((memory.getPageNumber() == MemoryBlock.NO_PAGE_NUMBER)
+            || (memory.getPageNumber() == MemoryBlock.FREED_IN_TMM_PAGE_NUMBER)) :
       "TMM-allocated pages must be freed via TMM.freePage(), not directly in allocator free()";
 
     if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
       memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_FREED_VALUE);
     }
-    Platform.freeMemory(memory.offset);
+
     // As an additional layer of defense against use-after-free bugs, we mutate the
     // MemoryBlock to reset its pointer.
-    memory.offset = 0;
+    ((OffHeapMemoryBlock)memory).setBaseOffset(0);
     // Mark the page as freed (so we can detect double-frees).
-    memory.pageNumber = MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER;
+    memory.setPageNumber(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER);
+
+    // DirectByteBuffers are deallocated automatically by JVM when they become
+    // unreachable much like normal Objects in heap
+  }
+
+  public OffHeapMemoryBlock reallocate(OffHeapMemoryBlock block, long oldSize, long newSize) {
+    OffHeapMemoryBlock nb = this.allocate(newSize);
+    if( block.getBaseOffset() != 0 )
+      Platform.copyMemory(block, block.getBaseOffset(), nb, nb.getBaseOffset(), oldSize);
+
+    return nb;
   }
 }
