@@ -41,7 +41,7 @@ import org.apache.spark.metrics.source.Source
  * has started will events be actually propagated to all attached listeners. This listener bus
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
-private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
+private[spark] class LiveListenerBus(conf: SparkConf) {
 
   import LiveListenerBus._
 
@@ -60,8 +60,10 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
   /** When `droppedEventsCounter` was logged last time in milliseconds. */
   @volatile private var lastReportTimestamp = 0L
 
+  private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
+
   /** Add a listener to the default queue. */
-  override def addListener(listener: SparkListenerInterface): Unit = {
+  def addListener(listener: SparkListenerInterface): Unit = {
     addToQueue(listener, "default")
   }
 
@@ -85,35 +87,34 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
         if (started.get() && !stopped.get()) {
           newQueue.start(sparkContext)
         }
-        super.addListener(newQueue)
+        queues.add(newQueue)
     }
   }
 
-  override def removeListener(listener: SparkListenerInterface): Unit = synchronized {
+  def removeListener(listener: SparkListenerInterface): Unit = synchronized {
     // Remove listener from all queues it was added to, and stop queues that have become empty.
     queues.asScala
-      .filter(!_.removeListener(listener))
+      .filter { queue =>
+        queue.removeListener(listener)
+        queue.listeners.isEmpty()
+      }
       .foreach { toRemove =>
         if (started.get() && !stopped.get()) {
           toRemove.stop()
         }
-        super.removeListener(toRemove)
+        queues.remove(toRemove)
       }
   }
 
   /** An alias for postToAll(), to avoid changing all call sites. */
-  def post(event: SparkListenerEvent): Unit = postToAll(event)
-
-  override def postToAll(event: SparkListenerEvent): Unit = {
+  def post(event: SparkListenerEvent): Unit = {
     if (!stopped.get()) {
       metrics.numEventsPosted.inc()
-      super.postToAll(event)
+      val it = queues.iterator()
+      while (it.hasNext()) {
+        it.next().post(event)
+      }
     }
-  }
-
-  override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
-    val name = listener.asInstanceOf[AsyncEventQueue].name
-    metrics.getTimer(s"queue.$name")
   }
 
   /**
@@ -168,7 +169,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
     }
   }
 
-  override private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag]():
+  private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag]():
       Seq[T] = {
     val c = implicitly[ClassTag[T]].runtimeClass
     queues.asScala.flatMap { queue =>
@@ -176,13 +177,13 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
     }
   }
 
-  override private[spark] def listeners: JList[SparkListenerInterface] = {
+  private[spark] def listeners: JList[SparkListenerInterface] = {
     queues.asScala.flatMap(_.listeners.asScala).asJava
   }
 
-  // Exposed for testing.
-  private[scheduler] def queues: JList[AsyncEventQueue] = {
-    super.listeners.asInstanceOf[JList[AsyncEventQueue]]
+  // For testing only.
+  private[scheduler] def activeQueues(): Seq[String] = {
+    queues.asScala.map(_.name).toSeq
   }
 
 }

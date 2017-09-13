@@ -461,19 +461,19 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.addListener(counter1)
     bus.addToQueue(counter2, "other")
     bus.addToQueue(counter3, "other")
-    assert(bus.queues.asScala.map(_.name) === Seq("default", "other"))
+    assert(bus.activeQueues() === Seq("default", "other"))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 3)
 
     bus.removeListener(counter1)
-    assert(bus.queues.asScala.map(_.name) === Seq("other"))
+    assert(bus.activeQueues() === Seq("other"))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 2)
 
     bus.removeListener(counter2)
-    assert(bus.queues.asScala.map(_.name) === Seq("other"))
+    assert(bus.activeQueues() === Seq("other"))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 1)
 
     bus.removeListener(counter3)
-    assert(bus.queues.isEmpty)
+    assert(bus.activeQueues().isEmpty)
     assert(bus.findListenersByClass[BasicJobCounter]().isEmpty)
   }
 

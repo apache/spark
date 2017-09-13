@@ -165,8 +165,8 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     eventLogger.start()
     listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
     listenerBus.addListener(eventLogger)
-    listenerBus.postToAll(applicationStart)
-    listenerBus.postToAll(applicationEnd)
+    listenerBus.post(applicationStart)
+    listenerBus.post(applicationEnd)
     listenerBus.stop()
     eventLogger.stop()
 
