@@ -303,6 +303,7 @@ final class OneVsRest @Since("1.4.0") (
    *
    * @group expertSetParam
    */
+  @Since("2.3.0")
   def setParallelism(value: Int): this.type = {
     set(parallelism, value)
   }
