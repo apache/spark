@@ -162,7 +162,9 @@ public final class UnsafeInMemorySorter {
    */
   public void free() {
     if (consumer != null) {
-      consumer.freeArray(array);
+      if (null != array) {
+        consumer.freeArray(array);
+      }
       array = null;
     }
   }
