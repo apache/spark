@@ -29,7 +29,6 @@ import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UnsafeAlignedOffset;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
@@ -218,9 +217,9 @@ public final class UnsafeInMemorySorter {
       throw new SparkOutOfMemoryError("Not enough memory to grow pointer array");
     }
     Platform.copyMemory(
-      array.getBaseObject(),
+      array.memoryBlock(),
       array.getBaseOffset(),
-      newArray.getBaseObject(),
+      newArray.memoryBlock(),
       newArray.getBaseOffset(),
       pos * 8L);
     consumer.freeArray(array);
