@@ -332,7 +332,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
 @inherit_doc
 class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
-                                        JavaMLReadable, JavaMLWritable):
+                          JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
