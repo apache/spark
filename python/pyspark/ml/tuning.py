@@ -258,7 +258,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
 
-        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
+        parallelism = self.getParallelism()
+        if parallelism < 1:
+            raise ValueError("parallelism should >= 1.")
+        pool = ThreadPool(processes=min(parallelism, numModels))
 
         for i in range(nFolds):
             validateLB = i * h
@@ -267,13 +270,13 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
             validation = df.filter(condition).cache()
             train = df.filter(~condition).cache()
 
-            def singleTrain(index):
-                model = est.fit(train, epm[index])
+            def singleTrain(paramMap):
+                model = est.fit(train, paramMap)
                 # TODO: duplicate evaluator to take extra params from input
-                metric = eva.evaluate(model.transform(validation, epm[index]))
+                metric = eva.evaluate(model.transform(validation, paramMap))
                 return metric
 
-            currentFoldMetrics = pool.map(singleTrain, range(numModels))
+            currentFoldMetrics = pool.map(singleTrain, epm)
             for k in range(numModels):
                 metrics[k] += (currentFoldMetrics[k] / nFolds)
             validation.unpersist()
@@ -522,13 +525,16 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         validation = df.filter(condition).cache()
         train = df.filter(~condition).cache()
 
-        def singleTrain(index):
-            model = est.fit(train, epm[index])
-            metric = eva.evaluate(model.transform(validation, epm[index]))
+        def singleTrain(paramMap):
+            model = est.fit(train, paramMap)
+            metric = eva.evaluate(model.transform(validation, paramMap))
             return metric
 
-        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
-        metrics = pool.map(singleTrain, range(numModels))
+        parallelism = self.getParallelism()
+        if parallelism < 1:
+            raise ValueError("parallelism should >= 1.")
+        pool = ThreadPool(processes=min(parallelism, numModels))
+        metrics = pool.map(singleTrain, epm)
         train.unpersist()
         validation.unpersist()
 
