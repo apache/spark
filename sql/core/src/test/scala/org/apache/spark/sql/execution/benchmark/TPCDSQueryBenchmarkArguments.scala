@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import java.util.Locale
+
+
 class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
   var dataLocation: String = null
   var queryFilter: Set[String] = Set.empty
@@ -34,7 +37,7 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
           args = tail
 
         case ("--query-filter") :: value :: tail =>
-          queryFilter = value.split(",").map(_.trim).toSet
+          queryFilter = value.toLowerCase(Locale.ROOT).split(",").map(_.trim).toSet
           args = tail
 
         case _ =>

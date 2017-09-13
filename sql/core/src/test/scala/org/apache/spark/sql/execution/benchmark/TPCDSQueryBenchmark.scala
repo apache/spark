@@ -30,7 +30,7 @@ import org.apache.spark.util.Benchmark
 /**
  * Benchmark to measure TPCDS query performance.
  * To run this:
- *  spark-submit --class <this class> <spark sql test jar> <TPCDS data location>
+ *  spark-submit --class <this class> <spark sql test jar> --data-location <TPCDS data location>
  */
 object TPCDSQueryBenchmark extends Logging {
   val conf =
@@ -119,7 +119,8 @@ object TPCDSQueryBenchmark extends Logging {
         benchmarkArgs.queryFilter.contains(queryName)
       }
       if (queries.isEmpty) {
-        throw new RuntimeException("Bad query name filter: " + benchmarkArgs.queryFilter)
+        throw new RuntimeException(
+          s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
       }
       queries
     } else {
