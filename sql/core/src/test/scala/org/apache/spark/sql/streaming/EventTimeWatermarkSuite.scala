@@ -300,6 +300,38 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     )
   }
 
+  test("2stream") {
+    import org.apache.spark.sql.functions.lit
+
+    val inputData = MemoryStream[Int]
+
+    val windowedAggregation = inputData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select(lit("window"), $"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    val secondData = MemoryStream[Int]
+
+    val secondAggregation = secondData.toDF()
+      .withColumn("eventTime", $"value".cast("timestamp"))
+      .withWatermark("eventTime", "10 seconds")
+      .select(lit("secondary"), 'value.as[Long], lit(0))
+
+    testStream(windowedAggregation.union(secondAggregation))(
+      AddData(secondData, 11),     // Set up right watermark at 1
+      AddData(inputData, 10, 11, 12),
+      CheckAnswer(("secondary", 11, 0)),
+      AddData(inputData, 25),     // Advance left watermark to 15 seconds - right still at 1
+      CheckAnswer(("secondary", 11, 0)),
+      AddData(secondData, 31),     // Advance right watermark to 21 seconds
+      CheckAnswer(("secondary", 11, 0), ("secondary", 31, 0)),
+      AddData(inputData, 25),      // Trigger another batch on left stream
+      CheckAnswer(("secondary", 11, 0), ("secondary", 31, 0), ("window", 10, 3))
+    )
+  }
+
   test("complete mode") {
     val inputData = MemoryStream[Int]
 

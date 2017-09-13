@@ -130,6 +130,13 @@ class StreamExecution(
   protected var offsetSeqMetadata = OffsetSeqMetadata(
     batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
+  /**
+   * A map from watermarked attributes to their current watermark. The minimum watermark
+   * timestamp present here will be used as the overall query watermark in offsetSeqMetadata;
+   * the query watermark is what's logged and used to age out old state.
+   */
+  protected var attributeWatermarkMsMap: AttributeMap[Long] = AttributeMap(Seq())
+
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
   override val runId: UUID = UUID.randomUUID
@@ -560,13 +567,24 @@ class StreamExecution(
     }
     if (hasNewData) {
       var batchWatermarkMs = offsetSeqMetadata.batchWatermarkMs
-      // Update the eventTime watermark if we find one in the plan.
+      // Update the eventTime watermarks if we find any in the plan.
       if (lastExecution != null) {
         lastExecution.executedPlan.collect {
           case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
             logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
-            e.eventTimeStats.value.max - e.delayMs
-        }.headOption.foreach { newWatermarkMs =>
+            e
+        }.foreach { e =>
+          val newAttributeWatermarkMs = e.eventTimeStats.value.max - e.delayMs
+          val mappedWatermarkMs: Option[Long] = attributeWatermarkMsMap.get(e.eventTime)
+          if (mappedWatermarkMs.isEmpty || newAttributeWatermarkMs > mappedWatermarkMs.get) {
+            attributeWatermarkMsMap = AttributeMap(
+              attributeWatermarkMsMap.toSeq ++ Seq((e.eventTime, newAttributeWatermarkMs)))
+          }
+        }
+
+        // Update the query watermark to the minimum of all attribute watermarks.
+        if(!attributeWatermarkMsMap.isEmpty) {
+          val newWatermarkMs = attributeWatermarkMsMap.minBy(_._2)._2
           if (newWatermarkMs > batchWatermarkMs) {
             logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
             batchWatermarkMs = newWatermarkMs
