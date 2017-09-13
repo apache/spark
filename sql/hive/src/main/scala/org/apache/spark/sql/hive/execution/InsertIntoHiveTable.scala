@@ -70,7 +70,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     query: LogicalPlan,
     overwrite: Boolean,
-    ifPartitionNotExists: Boolean) extends SaveAsHiveFile with HiveTmpPath {
+    ifPartitionNotExists: Boolean) extends SaveAsHiveFile {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
