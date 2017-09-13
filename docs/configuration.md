@@ -1529,6 +1529,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.blacklist.alwaysBlacklistedNodes</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of cluster nodes that will be put in the scheduler blacklist at the start of the Spark Context.
+    These nodes are permanently blacklisted and are exempt from the spark.blacklist.timeout mechanism.
+    If the cluster manager allocates executors on nodes in the blacklist, they will be rejected by the scheduler.
+    This feature can be used to prevent running executors/tasks on a user-specified list of cluster nodes.
+    Dependency: requires spark.blacklist.enabled=true
+  </td>
+</tr>
+<tr>
   <td><code>spark.speculation</code></td>
   <td>false</td>
   <td>
