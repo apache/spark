@@ -87,7 +87,7 @@ class StreamSuite extends StreamTest {
     Console.withOut(outputStream) {
       joined.explain()
     }
-    print(outputStream.toString)
+    assert(outputStream.toString.contains("StreamingRelation"))
   }
 
   test("SPARK-20432: union one stream with itself") {
