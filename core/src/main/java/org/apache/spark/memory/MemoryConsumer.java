@@ -111,8 +111,6 @@ public abstract class MemoryConsumer {
   /**
    * Allocate a memory block with at least `required` bytes.
    *
-   * Throws IOException if there is not enough memory.
-   *
    * @throws OutOfMemoryError
    */
   protected MemoryBlock allocatePage(long required) {

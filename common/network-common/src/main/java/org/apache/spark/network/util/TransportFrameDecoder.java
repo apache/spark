@@ -121,7 +121,7 @@ public class TransportFrameDecoder extends ChannelInboundHandlerAdapter {
     return nextFrameSize;
   }
 
-  private ByteBuf decodeNext() throws Exception {
+  private ByteBuf decodeNext() {
     long frameSize = decodeFrameSize();
     if (frameSize == UNKNOWN_FRAME_SIZE || totalSize < frameSize) {
       return null;
