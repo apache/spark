@@ -1921,10 +1921,12 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a [[StructType]] or [[ArrayType]] of [[StructType]]s into a
-    JSON string. Throws an exception, in the case of an unsupported type.
+    Converts a column containing a [[StructType]], [[ArrayType]] of [[StructType]]s,
+    a [[MapType]] or [[ArrayType]] of [[MapType]] into a JSON string.
+    Throws an exception, in the case of an unsupported type.
 
-    :param col: name of column containing the struct or array of the structs
+    :param col: name of column containing the struct, array of the structs, the map or
+        array of the maps.
     :param options: options to control converting. accepts the same options as the json datasource
 
     >>> from pyspark.sql import Row
@@ -1937,6 +1939,14 @@ def to_json(col, options={}):
     >>> df = spark.createDataFrame(data, ("key", "value"))
     >>> df.select(to_json(df.value).alias("json")).collect()
     [Row(json=u'[{"age":2,"name":"Alice"},{"age":3,"name":"Bob"}]')]
+    >>> data = [(1, {"name": "Alice"})]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'{"name":"Alice"}')]
+    >>> data = [(1, [{"name": "Alice"}, {"name": "Bob"}])]
+    >>> df = spark.createDataFrame(data, ("key", "value"))
+    >>> df.select(to_json(df.value).alias("json")).collect()
+    [Row(json=u'[{"name":"Alice"},{"name":"Bob"}]')]
     """
 
     sc = SparkContext._active_spark_context
