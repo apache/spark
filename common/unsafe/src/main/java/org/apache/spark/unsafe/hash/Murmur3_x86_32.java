@@ -18,6 +18,7 @@
 package org.apache.spark.unsafe.hash;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * 32-bit Murmur3 hasher.  This is based on Guava's Murmur3_32HashFunction.
@@ -59,6 +60,18 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
+  public static int hashUnsafeBytes(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
+    int lengthAligned = lengthInBytes - lengthInBytes % 4;
+    int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
+    for (int i = lengthAligned; i < lengthInBytes; i++) {
+      int halfWord = Platform.getByte(base, offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return fmix(h1, lengthInBytes);
+  }
+
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
     // This is not compatible with original and another implementations.
     // But remain it for backward compatibility for the components existing before 2.3.
@@ -76,7 +89,7 @@ public final class Murmur3_x86_32 {
   public static int hashUnsafeBytes2(Object base, long offset, int lengthInBytes, int seed) {
     // This is compatible with original and another implementations.
     // Use this method for new components after Spark 2.3.
-    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
+    assert (lengthInBytes >= 0) : "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
     int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
     int k1 = 0;
@@ -85,6 +98,17 @@ public final class Murmur3_x86_32 {
     }
     h1 ^= mixK1(k1);
     return fmix(h1, lengthInBytes);
+  }
+
+  private static int hashBytesByInt(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes % 4 == 0);
+    int h1 = seed;
+    for (int i = 0; i < lengthInBytes; i += 4) {
+      int halfWord = Platform.getInt(base, offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return h1;
   }
 
   private static int hashBytesByInt(Object base, long offset, int lengthInBytes, int seed) {

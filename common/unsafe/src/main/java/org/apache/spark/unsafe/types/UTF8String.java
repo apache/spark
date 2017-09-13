@@ -33,6 +33,8 @@ import com.esotericsoftware.kryo.io.Output;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 import static org.apache.spark.unsafe.Platform.*;
 
@@ -50,11 +52,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   // These are only updated by readExternal() or read()
   @Nonnull
-  private Object base;
+  private MemoryBlock base;
   private long offset;
   private int numBytes;
 
-  public Object getBaseObject() { return base; }
+  public MemoryBlock getBaseObject() { return base; }
   public long getBaseOffset() { return offset; }
 
   private static int[] bytesOfCodePointInUTF8 = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
@@ -99,7 +101,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Creates an UTF8String from given address (base and offset) and length.
    */
-  public static UTF8String fromAddress(Object base, long offset, int numBytes) {
+  public static UTF8String fromAddress(MemoryBlock base, long offset, int numBytes) {
     return new UTF8String(base, offset, numBytes);
   }
 
@@ -119,7 +121,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(spaces);
   }
 
-  protected UTF8String(Object base, long offset, int numBytes) {
+  protected UTF8String(byte[] bytes, long offset, int numBytes) {
+    this(ByteArrayMemoryBlock.fromArray(bytes), offset, numBytes);
+  }
+
+  protected UTF8String(MemoryBlock base, long offset, int numBytes) {
     this.base = base;
     this.offset = offset;
     this.numBytes = numBytes;
@@ -127,7 +133,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   // for serialization
   public UTF8String() {
-    this(null, 0, 0);
+    this((MemoryBlock)null, 0, 0);
   }
 
   /**
@@ -135,7 +141,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * The target memory address must already been allocated, and have enough space to hold all the
    * bytes in this string.
    */
-  public void writeToMemory(Object target, long targetOffset) {
+  public void writeToMemory(byte[] target, long targetOffset) {
+    Platform.copyMemory(base, offset, target, targetOffset, numBytes);
+  }
+
+  public void writeToMemory(MemoryBlock target, long targetOffset) {
     Platform.copyMemory(base, offset, target, targetOffset, numBytes);
   }
 
@@ -156,8 +166,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   @Nonnull
   public ByteBuffer getByteBuffer() {
-    if (base instanceof byte[] && offset >= BYTE_ARRAY_OFFSET) {
-      final byte[] bytes = (byte[]) base;
+    if (base instanceof ByteArrayMemoryBlock && offset >= BYTE_ARRAY_OFFSET) {
+      final byte[] bytes = ((ByteArrayMemoryBlock) base).getByteArray();
 
       // the offset includes an object header... this is only needed for unsafe copies
       final long arrayOffset = offset - BYTE_ARRAY_OFFSET;
@@ -257,9 +267,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public byte[] getBytes() {
     // avoid copy if `base` is `byte[]`
-    if (offset == BYTE_ARRAY_OFFSET && base instanceof byte[]
-      && ((byte[]) base).length == numBytes) {
-      return (byte[]) base;
+    if (offset == BYTE_ARRAY_OFFSET && base instanceof ByteArrayMemoryBlock
+      && (((ByteArrayMemoryBlock) base).getByteArray()).length == numBytes) {
+      return ((ByteArrayMemoryBlock) base).getByteArray();
     } else {
       byte[] bytes = new byte[numBytes];
       copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
@@ -1367,8 +1377,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();
-    base = new byte[numBytes];
-    in.readFully((byte[]) base);
+    base = ByteArrayMemoryBlock.fromArray(new byte[numBytes]);
+    in.readFully( ((ByteArrayMemoryBlock)base).getByteArray() );
   }
 
   @Override
@@ -1382,8 +1392,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public void read(Kryo kryo, Input in) {
     this.offset = BYTE_ARRAY_OFFSET;
     this.numBytes = in.readInt();
-    this.base = new byte[numBytes];
-    in.read((byte[]) base);
+    base = ByteArrayMemoryBlock.fromArray(new byte[numBytes]);
+    in.read( ((ByteArrayMemoryBlock)base).getByteArray() );
   }
 
 }

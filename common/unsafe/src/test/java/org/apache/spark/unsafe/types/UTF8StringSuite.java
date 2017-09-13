@@ -26,6 +26,8 @@ import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.IntArrayMemoryBlock;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -515,7 +517,8 @@ public class UTF8StringSuite {
     final byte[] test = "01234567".getBytes(StandardCharsets.UTF_8);
 
     for (int i = 1; i <= Platform.BYTE_ARRAY_OFFSET; ++i) {
-      UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET - i, test.length + i)
+      UTF8String.fromAddress(ByteArrayMemoryBlock.fromArray(test),
+        Platform.BYTE_ARRAY_OFFSET - i, test.length + i)
           .writeTo(outputStream);
       final ByteBuffer buffer = ByteBuffer.wrap(outputStream.toByteArray(), i, test.length);
       assertEquals("01234567", StandardCharsets.UTF_8.decode(buffer).toString());
@@ -530,7 +533,8 @@ public class UTF8StringSuite {
 
     for (int i = 0; i < test.length; ++i) {
       for (int j = 0; j < test.length - i; ++j) {
-        UTF8String.fromAddress(test, Platform.BYTE_ARRAY_OFFSET + i, j)
+        UTF8String.fromAddress(ByteArrayMemoryBlock.fromArray(test),
+          Platform.BYTE_ARRAY_OFFSET + i, j)
             .writeTo(outputStream);
 
         assertArrayEquals(Arrays.copyOfRange(test, i, i + j), outputStream.toByteArray());
@@ -561,7 +565,8 @@ public class UTF8StringSuite {
 
     for (final long offset : offsets) {
       try {
-        fromAddress(test, BYTE_ARRAY_OFFSET + offset, test.length)
+        fromAddress(ByteArrayMemoryBlock.fromArray(test),
+          BYTE_ARRAY_OFFSET + offset, test.length)
             .writeTo(outputStream);
 
         throw new IllegalStateException(Long.toString(offset));
@@ -605,7 +610,7 @@ public class UTF8StringSuite {
     }
 
     final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-    fromAddress(array, Platform.INT_ARRAY_OFFSET, length)
+    fromAddress(IntArrayMemoryBlock.fromArray(array), Platform.INT_ARRAY_OFFSET, length)
         .writeTo(outputStream);
     assertEquals("大千世界", outputStream.toString("UTF-8"));
   }
