@@ -169,12 +169,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     }
   }
 
-  private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag]():
-      Seq[T] = {
-    val c = implicitly[ClassTag[T]].runtimeClass
-    queues.asScala.flatMap { queue =>
-      queue.listeners.asScala.filter(_.getClass() == c).map(_.asInstanceOf[T])
-    }
+  private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag](): Seq[T] = {
+    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }
   }
 
   private[spark] def listeners: JList[SparkListenerInterface] = {
