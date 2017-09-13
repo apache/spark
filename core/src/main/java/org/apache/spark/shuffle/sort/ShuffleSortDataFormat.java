@@ -61,9 +61,9 @@ final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, Lo
   @Override
   public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
     Platform.copyMemory(
-      src.getBaseObject(),
+      src.memoryBlock(),
       src.getBaseOffset() + srcPos * 8L,
-      dst.getBaseObject(),
+      dst.memoryBlock(),
       dst.getBaseOffset() + dstPos * 8L,
       length * 8L
     );

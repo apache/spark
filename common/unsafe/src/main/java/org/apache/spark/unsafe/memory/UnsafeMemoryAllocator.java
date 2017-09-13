@@ -49,11 +49,10 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
     } catch (IllegalAccessException e) {
       throw new RuntimeException(e.getMessage(), e);
     } catch (InvocationTargetException e) {
-      Throwable tex = e.getTargetException();
-      if( tex instanceof OutOfMemoryError) {
-        throw (OutOfMemoryError) tex;
-      }
-      else {
+      Throwable ex = e.getTargetException();
+      if (ex instanceof OutOfMemoryError) {
+        throw (OutOfMemoryError) ex;
+      } else {
         throw new RuntimeException(e.getMessage(), e);
       }
     }
@@ -85,10 +84,10 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
   }
 
   public OffHeapMemoryBlock reallocate(OffHeapMemoryBlock block, long oldSize, long newSize) {
-    OffHeapMemoryBlock nb = this.allocate(newSize);
-    if( block.getBaseOffset() != 0 )
-      Platform.copyMemory(block, block.getBaseOffset(), nb, nb.getBaseOffset(), oldSize);
+    OffHeapMemoryBlock mb = this.allocate(newSize);
+    if (block.getBaseOffset() != 0)
+      Platform.copyMemory(block, block.getBaseOffset(), mb, mb.getBaseOffset(), oldSize);
 
-    return nb;
+    return mb;
   }
 }

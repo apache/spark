@@ -25,6 +25,8 @@ public class OffHeapMemoryBlock implements MemoryBlock {
   private final long length;
   private int pageNumber = -1;
 
+  static public final OffHeapMemoryBlock NULL = new OffHeapMemoryBlock(null, 0, 0);
+
   public OffHeapMemoryBlock(Object directBuffer, long address, long size) {
     this.address = address;
     this.length = size;

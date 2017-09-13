@@ -68,7 +68,7 @@ public class ByteArrayMemoryBlock extends MemoryLocation implements MemoryBlock 
   /**
    * Creates a memory block pointing to the memory used by the byte array.
    */
-  public static ByteArrayMemoryBlock fromByteArray(final byte[] array) {
+  public static ByteArrayMemoryBlock fromArray(final byte[] array) {
     return new ByteArrayMemoryBlock(array, Platform.BYTE_ARRAY_OFFSET, array.length);
   }
 }

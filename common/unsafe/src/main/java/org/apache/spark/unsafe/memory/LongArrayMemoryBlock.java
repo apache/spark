@@ -69,7 +69,7 @@ public class LongArrayMemoryBlock extends MemoryLocation implements MemoryBlock 
   /**
    * Creates a memory block pointing to the memory used by the long array.
    */
-  public static LongArrayMemoryBlock fromLongArray(final long[] array) {
+  public static LongArrayMemoryBlock fromArray(final long[] array) {
     return new LongArrayMemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length*8);
   }
 }

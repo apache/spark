@@ -78,14 +78,14 @@ class RadixSortSuite extends SparkFunSuite with Logging {
   private def generateTestData(size: Long, rand: => Long): (Array[JLong], LongArray) = {
     val ref = Array.tabulate[Long](Ints.checkedCast(size)) { i => rand }
     val extended = ref ++ Array.fill[Long](Ints.checkedCast(size))(0)
-    (ref.map(i => new JLong(i)), new LongArray(LongArrayMemoryBlock.fromLongArray(extended)))
+    (ref.map(i => new JLong(i)), new LongArray(LongArrayMemoryBlock.fromArray(extended)))
   }
 
   private def generateKeyPrefixTestData(size: Long, rand: => Long): (LongArray, LongArray) = {
     val ref = Array.tabulate[Long](Ints.checkedCast(size * 2)) { i => rand }
     val extended = ref ++ Array.fill[Long](Ints.checkedCast(size * 2))(0)
-    (new LongArray(LongArrayMemoryBlock.fromLongArray(ref)),
-     new LongArray(LongArrayMemoryBlock.fromLongArray(extended)))
+    (new LongArray(LongArrayMemoryBlock.fromArray(ref)),
+     new LongArray(LongArrayMemoryBlock.fromArray(extended)))
   }
 
   private def collectToArray(array: LongArray, offset: Int, length: Long): Array[Long] = {
@@ -111,7 +111,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
 
   private def referenceKeyPrefixSort(buf: LongArray, lo: Long, hi: Long, refCmp: PrefixComparator) {
     val sortBuffer =
-      new LongArray(LongArrayMemoryBlock.fromLongArray(new Array[Long](buf.size().toInt)))
+      new LongArray(LongArrayMemoryBlock.fromArray(new Array[Long](buf.size().toInt)))
     new Sorter(new UnsafeSortDataFormat(sortBuffer)).sort(
       buf, Ints.checkedCast(lo), Ints.checkedCast(hi), new Comparator[RecordPointerAndKeyPrefix] {
         override def compare(

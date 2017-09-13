@@ -68,7 +68,7 @@ public class IntArrayMemoryBlock extends MemoryLocation implements MemoryBlock {
   /**
    * Creates a memory block pointing to the memory used by the int array.
    */
-  public static IntArrayMemoryBlock fromIntArray(final int[] array) {
+  public static IntArrayMemoryBlock fromArray(final int[] array) {
     return new IntArrayMemoryBlock(array, Platform.INT_ARRAY_OFFSET, array.length*4);
   }
 }

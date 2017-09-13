@@ -105,9 +105,9 @@ class ExternalSorterSuite extends SparkFunSuite with LocalSparkContext {
     // the form [150000000, 150000001, 150000002, ...., 300000000, 0, 1, 2, ..., 149999999]
     // that can trigger copyRange() in TimSort.mergeLo() or TimSort.mergeHi()
     val ref = Array.tabulate[Long](size) { i => if (i < size / 2) size / 2 + i else i }
-    val buf = new LongArray(LongArrayMemoryBlock.fromLongArray(ref))
+    val buf = new LongArray(LongArrayMemoryBlock.fromArray(ref))
     val tmp = new Array[Long](size/2)
-    val tmpBuf = new LongArray(LongArrayMemoryBlock.fromLongArray(tmp))
+    val tmpBuf = new LongArray(LongArrayMemoryBlock.fromArray(tmp))
 
     new Sorter(new UnsafeSortDataFormat(tmpBuf)).sort(
       buf, 0, size, new Comparator[RecordPointerAndKeyPrefix] {
