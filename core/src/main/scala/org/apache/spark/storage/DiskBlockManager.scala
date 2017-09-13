@@ -66,7 +66,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         old
       } else {
         val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        if (!newDir.exists() && !newDir.mkdir()) {
+        if (!newDir.exists() && !newDir.mkdirs()) {
           throw new IOException(s"Failed to create local dir in $newDir.")
         }
         subDirs(dirId)(subDirId) = newDir

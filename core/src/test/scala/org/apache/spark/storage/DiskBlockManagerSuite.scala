@@ -79,6 +79,16 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
   }
 
+  test("working correctly if local dirs are deleted") {
+    //  DisckBlockManager's local dirs deletion can happen externally,
+    //  for example when they are located in the '/tmp' folder (which is default)
+    diskBlockManager.localDirs.foreach(Utils.deleteRecursively(_))
+    val blockId = new TestBlockId("test")
+    val newFile = diskBlockManager.getFile(blockId)
+    writeToFile(newFile, 10)
+    assert(diskBlockManager.containsBlock(blockId))
+  }
+
   def writeToFile(file: File, numBytes: Int) {
     val writer = new FileWriter(file, true)
     for (i <- 0 until numBytes) writer.write(i)
