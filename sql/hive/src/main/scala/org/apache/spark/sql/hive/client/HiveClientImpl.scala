@@ -136,6 +136,8 @@ private[hive] class HiveClientImpl(
       // its own state by newState()
       val ret = SessionState.get
       if (ret != null) {
+        // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
+        // instance constructed, we need to follow that change here.
         Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
           ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
         }

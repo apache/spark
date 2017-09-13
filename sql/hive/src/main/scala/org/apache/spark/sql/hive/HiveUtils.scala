@@ -176,9 +176,9 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
-   * Configurations needed to create a [[HiveClient]].
+   * Change time configurations needed to create a [[HiveClient]] into unified [[Long]] format.
    */
-  private[hive] def hiveClientConfigurations(hadoopConf: Configuration): Map[String, String] = {
+  private[hive] def formatTimeVarsForHiveClient(hadoopConf: Configuration): Map[String, String] = {
     // Hive 0.14.0 introduces timeout operations in HiveConf, and changes default values of a bunch
     // of time `ConfVar`s by adding time suffixes (`s`, `ms`, and `d` etc.).  This breaks backwards-
     // compatibility when users are trying to connecting to a Hive metastore of lower version,
@@ -231,11 +231,23 @@ private[spark] object HiveUtils extends Logging {
     }.toMap
   }
 
+  /**
+   * Generate an instance of [[HiveConf]] from [[SparkConf]]& hadoop [[Configuration]] &
+   * formatted extra time configurations with an isolated classloader needed if isolationOn
+   * for [[HiveClient]] construction
+   * @param sparkConf a [[SparkConf]] object specifying Spark parameters
+   * @param classLoader an isolated classloader needed if isolationOn for [[HiveClient]]
+   *                    construction
+   * @param hadoopConf a hadoop [[Configuration]] object, Optional if we want generated it from
+   *                   the sparkConf
+   * @param extraTimeConfs time configurations in the form of long values from the given hadoopConf
+   */
+
   private[hive] def newHiveConfigurations(
       sparkConf: SparkConf = new SparkConf(loadDefaults = true),
       classLoader: ClassLoader = null)(
       hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(sparkConf))(
-      extraConfig: Map[String, String] = hiveClientConfigurations(hadoopConf)): HiveConf = {
+      extraTimeConfs: Map[String, String] = formatTimeVarsForHiveClient(hadoopConf)): HiveConf = {
     val hiveConf = new HiveConf(classOf[SessionState])
     // HiveConf is a Hadoop Configuration, which has a field of classLoader and
     // the initial value will be the current thread's context class loader
@@ -256,7 +268,7 @@ private[spark] object HiveUtils extends Logging {
     // 2: we set all spark confs to this hiveConf.
     // 3: we set all entries in config to this hiveConf.
     (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ sparkConf.getAll.toMap ++ extraConfig).foreach {
+      ++ sparkConf.getAll.toMap ++ extraTimeConfs).foreach {
       case (k, v) =>
         logDebug(
           s"""
@@ -316,7 +328,7 @@ private[spark] object HiveUtils extends Logging {
   protected[hive] def newClientForMetadata(
       conf: SparkConf,
       hadoopConf: Configuration): HiveClient = {
-    val configurations = hiveClientConfigurations(hadoopConf)
+    val configurations = formatTimeVarsForHiveClient(hadoopConf)
     newClientForMetadata(conf, hadoopConf, configurations)
   }
 
