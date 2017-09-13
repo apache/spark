@@ -968,6 +968,36 @@ class JDBCSuite extends SparkFunSuite
     assert(e2.contains("User specified schema not supported with `jdbc`"))
   }
 
+  test("jdbc API support custom schema") {
+    val parts = Array[String]("THEID < 2", "THEID >= 2")
+    val props = new Properties()
+    props.put("customSchema", "NAME STRING, THEID BIGINT")
+    val schema = StructType(Seq(
+      StructField("NAME", StringType, true), StructField("THEID", LongType, true)))
+    val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
+    assert(df.schema.size === 2)
+    assert(df.schema === schema)
+    assert(df.count() === 3)
+  }
+
+  test("jdbc API custom schema DDL-like strings.") {
+    withTempView("people_view") {
+      sql(
+        s"""
+           |CREATE TEMPORARY VIEW people_view
+           |USING org.apache.spark.sql.jdbc
+           |OPTIONS (uRl '$url', DbTaBlE 'TEST.PEOPLE', User 'testUser', PassWord 'testPass',
+           |customSchema 'NAME STRING, THEID INT')
+        """.stripMargin.replaceAll("\n", " "))
+      val schema = StructType(
+        Seq(StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
+      val df = sql("select * from people_view")
+      assert(df.schema.size === 2)
+      assert(df.schema === schema)
+      assert(df.count() === 3)
+    }
+  }
+
   test("SPARK-15648: teradataDialect StringType data mapping") {
     val teradataDialect = JdbcDialects.get("jdbc:teradata://127.0.0.1/db")
     assert(teradataDialect.getJDBCType(StringType).
