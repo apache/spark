@@ -55,7 +55,7 @@ case class InsertIntoHiveDirCommand(
     isLocal: Boolean,
     storage: CatalogStorageFormat,
     query: LogicalPlan,
-    overwrite: Boolean) extends SaveAsHiveFile with HiveTmpPath {
+    overwrite: Boolean) extends SaveAsHiveFile {
 
   override def children: Seq[LogicalPlan] = query :: Nil
 
