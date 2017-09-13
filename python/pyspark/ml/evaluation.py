@@ -364,6 +364,10 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
 
     .. versionadded:: 2.3.0
     """
+    metricName = Param(Params._dummy(), "metricName",
+                       "metric name in evaluation "
+                       "(silhouette)",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", featuresCol="features",
