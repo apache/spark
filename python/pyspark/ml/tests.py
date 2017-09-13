@@ -1023,7 +1023,8 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsSerialModel = tvs.fit(dataset)
         tvs.setParallelism(2)
         tvsParallelModel = tvs.fit(dataset)
-        self.assertEqual(sorted(tvsSerialModel.validationMetrics), sorted(tvsParallelModel.validationMetrics))
+        self.assertEqual(sorted(tvsSerialModel.validationMetrics),
+                         sorted(tvsParallelModel.validationMetrics))
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.
