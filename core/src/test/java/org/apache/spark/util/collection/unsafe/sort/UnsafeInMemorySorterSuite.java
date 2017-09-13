@@ -139,4 +139,44 @@ public class UnsafeInMemorySorterSuite {
     }
     assertEquals(dataToSort.length, iterLength);
   }
+
+  @Test
+  public void freeAfterOOM() {
+    final TestMemoryManager testMemoryManager = new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
+    final TaskMemoryManager memoryManager = new TaskMemoryManager(
+            testMemoryManager, 0);
+    final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
+    final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
+    final Object baseObject = dataPage.getBaseObject();
+    // Write the records into the data page:
+    long position = dataPage.getBaseOffset();
+
+    final HashPartitioner hashPartitioner = new HashPartitioner(4);
+    // Use integer comparison for comparing prefixes (which are partition ids, in this case)
+    final PrefixComparator prefixComparator = PrefixComparators.LONG;
+    final RecordComparator recordComparator = new RecordComparator() {
+      @Override
+      public int compare(
+              Object leftBaseObject,
+              long leftBaseOffset,
+              Object rightBaseObject,
+              long rightBaseOffset) {
+        return 0;
+      }
+    };
+    UnsafeInMemorySorter sorter = new UnsafeInMemorySorter(consumer, memoryManager,
+            recordComparator, prefixComparator, 100, shouldUseRadixSort());
+
+    testMemoryManager.markExecutionAsOutOfMemoryOnce();
+    try {
+      sorter.reset();
+    } catch( OutOfMemoryError oom ) {
+      //as expected
+    }
+    // this currently fails on NPE at org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
+    sorter.free();
+    //simulate a 'back to back' free.
+    sorter.free();
+  }
+
 }
