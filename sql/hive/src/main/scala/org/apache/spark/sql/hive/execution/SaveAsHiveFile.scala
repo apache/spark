@@ -31,6 +31,7 @@ import org.apache.hadoop.hive.ql.exec.TaskRunner
 
 import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
@@ -50,7 +51,8 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       hadoopConf: Configuration,
       fileSinkConf: FileSinkDesc,
       outputLocation: String,
-      partitionAttributes: Seq[Attribute] = Nil): Unit = {
+      customPartitionLocations: Map[TablePartitionSpec, String] = Map.empty,
+      partitionAttributes: Seq[Attribute] = Nil): Set[String] = {
 
     val isCompressed = hadoopConf.get("hive.exec.compress.output", "false").toBoolean
     if (isCompressed) {
@@ -76,7 +78,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       plan = plan,
       fileFormat = new HiveFileFormat(fileSinkConf),
       committer = committer,
-      outputSpec = FileFormatWriter.OutputSpec(outputLocation, Map.empty),
+      outputSpec = FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
       bucketSpec = None,
