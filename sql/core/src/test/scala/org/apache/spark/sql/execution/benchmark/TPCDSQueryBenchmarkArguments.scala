@@ -27,16 +27,20 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
   parseArgs(args.toList)
   validateArguments()
 
+  private def optionMatch(optionName: String, s: String): Boolean = {
+    optionName == s.toLowerCase(Locale.ROOT)
+  }
+
   private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
-    while(args.nonEmpty) {
+    while (args.nonEmpty) {
       args match {
-        case ("--data-location") :: value :: tail =>
+        case optName :: value :: tail if optionMatch("--data-location", optName) =>
           dataLocation = value
           args = tail
 
-        case ("--query-filter") :: value :: tail =>
+        case optName :: value :: tail if optionMatch("--query-filter", optName) =>
           queryFilter = value.toLowerCase(Locale.ROOT).split(",").map(_.trim).toSet
           args = tail
 
