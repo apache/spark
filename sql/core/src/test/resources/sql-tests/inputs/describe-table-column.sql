@@ -13,6 +13,8 @@ DESC FORMATTED desc_col_temp_table desc_col_temp_table.key;
 -- Describe a non-existent column
 DESC desc_col_temp_table key1;
 
+DROP VIEW desc_col_temp_table;
+
 -- Test persistent table
 CREATE TABLE desc_col_table (key int COMMENT 'column_comment') USING PARQUET;
 
@@ -24,12 +26,16 @@ DESC EXTENDED desc_col_table key;
 
 DESC FORMATTED desc_col_table key;
 
+DROP TABLE desc_col_table;
+
 -- Test complex columns
-CREATE TABLE desc_col_complex_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET;
+CREATE TABLE desc_complex_col_table (`a.b` int, col struct<x:int, y:string>) USING PARQUET;
 
-DESC FORMATTED desc_col_complex_table `a.b`;
+DESC FORMATTED desc_complex_col_table `a.b`;
 
-DESC FORMATTED desc_col_complex_table col;
+DESC FORMATTED desc_complex_col_table col;
 
 -- Describe a nested column
-DESC FORMATTED desc_col_complex_table col.x;
+DESC FORMATTED desc_complex_col_table col.x;
+
+DROP TABLE desc_complex_col_table;
