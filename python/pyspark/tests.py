@@ -653,7 +653,7 @@ class RDDTests(ReusedPySparkTestCase):
         )
         self.assertSetEqual(
             set(rdd.zip(rdd.zip(rdd)).collect()),
-            set([((x, (x, x)) for x in range(10)])
+            set([(x, (x, x)) for x in range(10)])
         )
 
     def test_deleting_input_files(self):
