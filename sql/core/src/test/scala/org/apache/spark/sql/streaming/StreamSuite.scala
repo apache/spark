@@ -76,6 +76,22 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
   }
 
+
+  test("explain join") {
+    // Make a table and ensure it will be broadcast.
+    val smallTable = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+
+    // Join the input stream with a table.
+    val inputData = MemoryStream[Int]
+    val joined = inputData.toDF().join(smallTable, smallTable("number") === $"value")
+
+    val outputStream = new java.io.ByteArrayOutputStream()
+    Console.withOut(outputStream) {
+      joined.explain()
+    }
+    assert(outputStream.toString.contains("StreamingRelation"))
+  }
+
   test("SPARK-20432: union one stream with itself") {
     val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load().select("a")
     val unioned = df.union(df)
@@ -337,7 +353,9 @@ class StreamSuite extends StreamTest {
 
         override def stop(): Unit = {}
       }
-      val df = Dataset[Int](sqlContext.sparkSession, StreamingExecutionRelation(source))
+      val df = Dataset[Int](
+        sqlContext.sparkSession,
+        StreamingExecutionRelation(source, sqlContext.sparkSession))
       testStream(df)(
         // `ExpectFailure(isFatalError = true)` verifies two things:
         // - Fatal errors can be propagated to `StreamingQuery.exception` and
