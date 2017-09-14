@@ -2102,6 +2102,55 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new Dataset by adding columns or replacing the existing columns that has
+   * the same names.
+   */
+  private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
+    require(colNames.size == cols.size,
+      s"The size of column names: ${colNames.size} isn't equal to " +
+        s"the size of columns: ${cols.size}")
+    require(colNames.distinct.size == colNames.size,
+      s"It is disallowed to use duplicate column names: $colNames")
+
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val output = queryExecution.analyzed.output
+
+    val columnMap = colNames.zip(cols).toMap
+
+    val replacedAndExistingColumns = output.map { field =>
+      val dupColumn = columnMap.find { case (colName, col) =>
+        resolver(field.name, colName)
+      }
+      if (dupColumn.isDefined) {
+        val colName = dupColumn.get._1
+        val col = dupColumn.get._2
+        col.as(colName)
+      } else {
+        Column(field)
+      }
+    }
+
+    val newColumns = columnMap.filter { case (colName, col) =>
+      !output.exists(f => resolver(f.name, colName))
+    }.map { case (colName, col) => col.as(colName) }
+
+    select(replacedAndExistingColumns ++ newColumns : _*)
+  }
+
+  /**
+   * Returns a new Dataset by adding columns with metadata.
+   */
+  private[spark] def withColumns(
+      colNames: Seq[String],
+      cols: Seq[Column],
+      metadata: Seq[Metadata]): DataFrame = {
+    val newCols = colNames.zip(cols).zip(metadata).map { case ((colName, col), metadata) =>
+      col.as(colName, metadata)
+    }
+    withColumns(colNames, newCols)
+  }
+
+  /**
    * Returns a new Dataset by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
