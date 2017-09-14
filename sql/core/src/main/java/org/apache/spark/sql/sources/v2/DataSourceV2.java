@@ -18,7 +18,8 @@
 package org.apache.spark.sql.sources.v2;
 
 /**
- * The base interface for data source v2 implementations.
+ * The base interface for data source v2. Implementations must have a public, no arguments
+ * constructor.
  *
  * Note that this is an empty interface, data source implementations should mix-in at least one of
  * the plug-in interfaces like `ReadSupport`. Otherwise it's just a dummy data source which is

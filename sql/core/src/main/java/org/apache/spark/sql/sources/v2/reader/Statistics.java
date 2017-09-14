@@ -20,7 +20,8 @@ package org.apache.spark.sql.sources.v2.reader;
 import java.util.OptionalLong;
 
 /**
- * An interface to represent statistics for a data source.
+ * An interface to represent statistics for a data source, which is returned by
+ * `SupportsReportStatistics`.
  */
 public interface Statistics {
   OptionalLong sizeInBytes();
