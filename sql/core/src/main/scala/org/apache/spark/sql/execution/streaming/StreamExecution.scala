@@ -166,7 +166,7 @@ class StreamExecution(
           nextSourceId += 1
           // We still need to use the previous `output` instead of `source.schema` as attributes in
           // "df.logicalPlan" has already used attributes of the previous `output`.
-          StreamingExecutionRelation(source, output)
+          StreamingExecutionRelation(source, output)(sparkSession)
         })
     }
     sources = _logicalPlan.collect { case s: StreamingExecutionRelation => s.source }

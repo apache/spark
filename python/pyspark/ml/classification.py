@@ -529,9 +529,11 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_blrt_summary = self._call_java("summary")
-            # Note: Once multiclass is added, update this to return correct summary
-            return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
+            java_lrt_summary = self._call_java("summary")
+            if self.numClasses <= 2:
+                return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
+            else:
+                return LogisticRegressionTrainingSummary(java_lrt_summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -587,6 +589,14 @@ class LogisticRegressionSummary(JavaWrapper):
         return self._call_java("probabilityCol")
 
     @property
+    @since("2.3.0")
+    def predictionCol(self):
+        """
+        Field in "predictions" which gives the prediction of each class.
+        """
+        return self._call_java("predictionCol")
+
+    @property
     @since("2.0.0")
     def labelCol(self):
         """
@@ -603,6 +613,110 @@ class LogisticRegressionSummary(JavaWrapper):
         as a vector.
         """
         return self._call_java("featuresCol")
+
+    @property
+    @since("2.3.0")
+    def labels(self):
+        """
+        Returns the sequence of labels in ascending order. This order matches the order used
+        in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
+
+        Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
+        training set is missing a label, then all of the arrays over labels
+        (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
+        expected numClasses.
+        """
+        return self._call_java("labels")
+
+    @property
+    @since("2.3.0")
+    def truePositiveRateByLabel(self):
+        """
+        Returns true positive rate for each label (category).
+        """
+        return self._call_java("truePositiveRateByLabel")
+
+    @property
+    @since("2.3.0")
+    def falsePositiveRateByLabel(self):
+        """
+        Returns false positive rate for each label (category).
+        """
+        return self._call_java("falsePositiveRateByLabel")
+
+    @property
+    @since("2.3.0")
+    def precisionByLabel(self):
+        """
+        Returns precision for each label (category).
+        """
+        return self._call_java("precisionByLabel")
+
+    @property
+    @since("2.3.0")
+    def recallByLabel(self):
+        """
+        Returns recall for each label (category).
+        """
+        return self._call_java("recallByLabel")
+
+    @since("2.3.0")
+    def fMeasureByLabel(self, beta=1.0):
+        """
+        Returns f-measure for each label (category).
+        """
+        return self._call_java("fMeasureByLabel", beta)
+
+    @property
+    @since("2.3.0")
+    def accuracy(self):
+        """
+        Returns accuracy.
+        (equals to the total number of correctly classified instances
+        out of the total number of instances.)
+        """
+        return self._call_java("accuracy")
+
+    @property
+    @since("2.3.0")
+    def weightedTruePositiveRate(self):
+        """
+        Returns weighted true positive rate.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedTruePositiveRate")
+
+    @property
+    @since("2.3.0")
+    def weightedFalsePositiveRate(self):
+        """
+        Returns weighted false positive rate.
+        """
+        return self._call_java("weightedFalsePositiveRate")
+
+    @property
+    @since("2.3.0")
+    def weightedRecall(self):
+        """
+        Returns weighted averaged recall.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedRecall")
+
+    @property
+    @since("2.3.0")
+    def weightedPrecision(self):
+        """
+        Returns weighted averaged precision.
+        """
+        return self._call_java("weightedPrecision")
+
+    @since("2.3.0")
+    def weightedFMeasure(self, beta=1.0):
+        """
+        Returns weighted averaged f-measure.
+        """
+        return self._call_java("weightedFMeasure", beta)
 
 
 @inherit_doc
@@ -1659,8 +1773,7 @@ class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, Java
             multiclassLabeled = dataset.select(labelCol, featuresCol)
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -1814,8 +1927,7 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
 

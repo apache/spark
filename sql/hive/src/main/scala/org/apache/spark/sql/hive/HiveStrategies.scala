@@ -160,8 +160,7 @@ object HiveAnalysis extends Rule[LogicalPlan] {
       CreateHiveTableAsSelectCommand(tableDesc, query, mode)
 
     case InsertIntoDir(isLocal, storage, provider, child, overwrite)
-      if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER =>
-
+        if DDLUtils.isHiveTable(provider) =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(child, outputPath)
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.benchmark
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -29,9 +30,9 @@ import org.apache.spark.util.Benchmark
 /**
  * Benchmark to measure TPCDS query performance.
  * To run this:
- *  spark-submit --class <this class> <spark sql test jar> <TPCDS data location>
+ *  spark-submit --class <this class> <spark sql test jar> --data-location <TPCDS data location>
  */
-object TPCDSQueryBenchmark {
+object TPCDSQueryBenchmark extends Logging {
   val conf =
     new SparkConf()
       .setMaster("local[1]")
@@ -90,7 +91,9 @@ object TPCDSQueryBenchmark {
       benchmark.addCase(name) { i =>
         spark.sql(queryString).collect()
       }
+      logInfo(s"\n\n===== TPCDS QUERY BENCHMARK OUTPUT FOR $name =====\n")
       benchmark.run()
+      logInfo(s"\n\n===== FINISHED $name =====\n")
     }
   }
 
@@ -110,6 +113,20 @@ object TPCDSQueryBenchmark {
       "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
       "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
-    tpcdsAll(benchmarkArgs.dataLocation, queries = tpcdsQueries)
+    // If `--query-filter` defined, filters the queries that this option selects
+    val queriesToRun = if (benchmarkArgs.queryFilter.nonEmpty) {
+      val queries = tpcdsQueries.filter { case queryName =>
+        benchmarkArgs.queryFilter.contains(queryName)
+      }
+      if (queries.isEmpty) {
+        throw new RuntimeException(
+          s"Empty queries to run. Bad query name filter: ${benchmarkArgs.queryFilter}")
+      }
+      queries
+    } else {
+      tpcdsQueries
+    }
+
+    tpcdsAll(benchmarkArgs.dataLocation, queries = queriesToRun)
   }
 }
