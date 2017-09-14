@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, View}
+import org.apache.spark.sql.execution.datasources.TimestampTableTimeZone
 import org.apache.spark.sql.types.MetadataBuilder
 import org.apache.spark.sql.util.SchemaUtils
 
@@ -121,6 +122,10 @@ case class CreateViewCommand(
     val database = name.database.get
     throw new AnalysisException(
       s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
+  }
+
+  properties.get(TimestampTableTimeZone.TIMEZONE_PROPERTY).foreach { _ =>
+    throw new AnalysisException("Timezone cannot be set for view")
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

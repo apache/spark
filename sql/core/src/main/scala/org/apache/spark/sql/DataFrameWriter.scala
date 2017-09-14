@@ -28,8 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation, TimestampTableTimeZone}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
@@ -216,8 +215,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def save(path: String): Unit = {
     this.extraOptions += ("path" -> path)
-    val destStr = s"for path $path"
-    ParquetFileFormat.checkTableTz(destStr, extraOptions.toMap)
+    TimestampTableTimeZone.checkTableTz(s"for path $path", extraOptions.toMap)
     save()
   }
 
@@ -269,9 +267,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def insertInto(tableName: String): Unit = {
-    extraOptions.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY).foreach { tz =>
+    extraOptions.get(TimestampTableTimeZone.TIMEZONE_PROPERTY).foreach { tz =>
       throw new AnalysisException("Cannot provide a table timezone on insert; tried to insert " +
-        s"$tableName with ${ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY}=$tz")
+        s"$tableName with ${TimestampTableTimeZone.TIMEZONE_PROPERTY}=$tz")
     }
     insertInto(df.sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName))
   }
@@ -414,8 +412,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       CatalogTableType.MANAGED
     }
     val props =
-      extraOptions.filterKeys(key => key == ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY).toMap
-    ParquetFileFormat.checkTableTz(tableIdent, props)
+      extraOptions.filterKeys(key => key == TimestampTableTimeZone.TIMEZONE_PROPERTY).toMap
+    TimestampTableTimeZone.checkTableTz(tableIdent, props)
 
     val tableDesc = CatalogTable(
       identifier = tableIdent,

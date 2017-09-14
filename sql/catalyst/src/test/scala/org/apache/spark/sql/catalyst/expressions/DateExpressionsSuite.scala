@@ -745,13 +745,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("parquet_timestamp_correction") {
     def test(t: String, fromTz: String, toTz: String, expected: String): Unit = {
       checkEvaluation(
-        ParquetTimestampCorrection(
+        TimestampTimezoneCorrection(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
           Literal.create(fromTz, StringType),
           Literal.create(toTz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
       checkEvaluation(
-        ParquetTimestampCorrection(
+        TimestampTimezoneCorrection(
           Literal.create(if (t != null) Timestamp.valueOf(t) else null, TimestampType),
           NonFoldableLiteral.create(fromTz, StringType),
           NonFoldableLiteral.create(toTz, StringType)),

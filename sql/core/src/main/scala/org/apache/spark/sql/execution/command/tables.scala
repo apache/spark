@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
+import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils, TimestampTableTimeZone}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -128,7 +128,7 @@ case class CreateTableCommand(
     Seq.empty[Row]
   }
 
-  ParquetFileFormat.checkTableTz(table.identifier, table.properties)
+  TimestampTableTimeZone.checkTableTz(table.identifier, table.properties)
 }
 
 

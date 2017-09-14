@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, JSONOptions}
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser}
+import org.apache.spark.sql.execution.datasources.{DataSource, FailureSafeParser, TimestampTableTimeZone}
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
@@ -179,6 +179,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       throw new AnalysisException("Hive data source can only be used with tables, you can not " +
         "read files of Hive data source directly.")
     }
+    TimestampTableTimeZone.checkTableTz("", extraOptions.toMap)
 
     sparkSession.baseRelationToDataFrame(
       DataSource.apply(

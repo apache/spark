@@ -14,16 +14,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.command.CreateDataSourceTableAsSelectCommand
-import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType}
 
 /**
@@ -31,12 +30,13 @@ import org.apache.spark.sql.types.{StringType, TimestampType}
  * like TIMESTAMP WITHOUT TIMEZONE.  This gives correct behavior if you process data with
  * machines in different timezones, or if you access the data from multiple SQL engines.
  */
-case class ParquetTimeZoneCorrection(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
+    extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     // we can't use transformUp because we want to terminate recursion if there was already
     // timestamp correction, to keep this idempotent.
-    val r = plan match {
+    plan match {
       case insertIntoHadoopFs: InsertIntoHadoopFsRelationCommand =>
         if (!insertIntoHadoopFs.query.isInstanceOf[Project]) {
           throw new AnalysisException("Expected the child of InsertIntoHadoopFsRelationCommand " +
@@ -45,25 +45,13 @@ case class ParquetTimeZoneCorrection(sparkSession: SparkSession) extends Rule[Lo
         // The query might be reading from a parquet table which requires a different conversion;
         // this makes sure we apply the correct conversions there.
         val (fixedQuery, _) = readConversion(insertIntoHadoopFs.query)
-
-        val tableTz = extractTableTz(insertIntoHadoopFs.catalogTable, insertIntoHadoopFs.options)
-        val x = tableTz.map{ tz =>
-          writeConversion(
-            writer = insertIntoHadoopFs,
-            innerQuery = fixedQuery,
-            tableTz = tz,
-            copyWriter = insertIntoFsCopy(insertIntoHadoopFs, _)
-          )
-        }.getOrElse(insertIntoHadoopFs)
-        logDebug(s"converted $plan to $x")
-        x
+        writeConversion(insertIntoHadoopFs.copy(query = fixedQuery))
 
       case other =>
         // recurse into children to see if we're reading data that needs conversion
         val (convertedPlan, _) = readConversion(plan)
         convertedPlan
     }
-    r
   }
 
   private def readConversion(
@@ -117,7 +105,7 @@ case class ParquetTimeZoneCorrection(sparkSession: SparkSession) extends Rule[Lo
     var hasCorrection = false
     exprs.foreach { expr =>
       expr.foreach {
-        case _: ParquetTimestampCorrection =>
+        case _: TimestampTimezoneCorrection =>
           hasCorrection = true
         case other => // no-op
       }
@@ -131,36 +119,26 @@ case class ParquetTimeZoneCorrection(sparkSession: SparkSession) extends Rule[Lo
     insert.copy(query = newQuery)
   }
 
-  private def createDatasourceTableCopy(
-      insert: CreateDataSourceTableAsSelectCommand,
-      newQuery: LogicalPlan): CreateDataSourceTableAsSelectCommand = {
-    insert.copy(query = newQuery)
-  }
-
   private def writeConversion(
-      writer: LogicalPlan,
-      innerQuery: LogicalPlan,
-      tableTz: String,
-      copyWriter: LogicalPlan => LogicalPlan): LogicalPlan = {
+      insertIntoHadoopFs: InsertIntoHadoopFsRelationCommand): InsertIntoHadoopFsRelationCommand = {
+    val query = insertIntoHadoopFs.query
+    val tableTz = extractTableTz(insertIntoHadoopFs.catalogTable, insertIntoHadoopFs.options)
     val internalTz = sparkSession.sessionState.conf.sessionLocalTimeZone
-    if (tableTz != internalTz) {
+    if (tableTz.isDefined && tableTz != internalTz) {
       val (foundTsFields, modifiedFields, _) =
-        convertTzForAllTimestamps(innerQuery, internalTz, tableTz)
+        convertTzForAllTimestamps(query, internalTz, tableTz.get)
       if (foundTsFields) {
-        val adjustedFields =
-          new Project(modifiedFields, innerQuery)
-        val converted = copyWriter(adjustedFields)
-        converted
+        insertIntoHadoopFs.copy(query = new Project(modifiedFields, query))
       } else {
-        writer
+        insertIntoHadoopFs
       }
     } else {
-      writer
+      insertIntoHadoopFs
     }
   }
 
   private def extractTableTz(options: Map[String, String]): Option[String] = {
-    options.get(ParquetFileFormat.PARQUET_TIMEZONE_TABLE_PROPERTY)
+    options.get(TimestampTableTimeZone.TIMEZONE_PROPERTY)
   }
 
   private def extractTableTz(
@@ -192,7 +170,7 @@ case class ParquetTimeZoneCorrection(sparkSession: SparkSession) extends Rule[Lo
       if (field.dataType == TimestampType) {
         foundTs = true
         val adjustedTs = Alias(
-          ParquetTimestampCorrection(
+          TimestampTimezoneCorrection(
             exp,
             Literal.create(fromTz, StringType),
             Literal.create(toTz, StringType)
@@ -208,5 +186,27 @@ case class ParquetTimeZoneCorrection(sparkSession: SparkSession) extends Rule[Lo
       }
     }
     (foundTs, modifiedFields, replacements)
+  }
+}
+
+private[sql] object TimestampTableTimeZone {
+  val TIMEZONE_PROPERTY = "table.timezone"
+  /**
+   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
+   */
+  private[sql] def checkTableTz(table: TableIdentifier, properties: Map[String, String]): Unit = {
+    checkTableTz(s"in table ${table.toString}", properties)
+  }
+
+  /**
+   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
+   */
+  private[sql] def checkTableTz(dest: String, properties: Map[String, String]): Unit = {
+    properties.get(TIMEZONE_PROPERTY).foreach { tz =>
+      if (!DateTimeUtils.isValidTimezone(tz)) {
+        throw new AnalysisException(s"Cannot set $TIMEZONE_PROPERTY to invalid " +
+          s"timezone $tz $dest")
+      }
+    }
   }
 }

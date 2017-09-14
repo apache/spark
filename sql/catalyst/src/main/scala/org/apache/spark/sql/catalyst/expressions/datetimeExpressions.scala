@@ -1219,7 +1219,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
  * We intentionally do not provide an ExpressionDescription as this is not meant to be exposed to
  * users, its only used for internal conversions.
  */
-private[spark] case class ParquetTimestampCorrection(
+private[spark] case class TimestampTimezoneCorrection(
     time: Expression,
     from: Expression,
     to: Expression)
@@ -1235,7 +1235,7 @@ private[spark] case class ParquetTimestampCorrection(
   override def children: Seq[Expression] = Seq(time, from, to)
   override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, StringType, StringType)
   override def dataType: DataType = TimestampType
-  override def prettyName: String = "parquet_timestamp_correction"
+  override def prettyName: String = "timestamp_timezone_correction"
 
   override def nullSafeEval(time: Any, from: Any, to: Any): Any = {
     DateTimeUtils.convertTz(

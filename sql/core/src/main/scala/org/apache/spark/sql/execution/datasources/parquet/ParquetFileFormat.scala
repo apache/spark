@@ -646,25 +646,4 @@ object ParquetFileFormat extends Logging {
         Failure(cause)
     }.toOption
   }
-
-  private[spark] val PARQUET_TIMEZONE_TABLE_PROPERTY = "parquet.mr.int96.write.zone"
-
-  /**
-   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
-   */
-  private[spark] def checkTableTz(table: TableIdentifier, properties: Map[String, String]): Unit = {
-    checkTableTz(s"in table ${table.toString}", properties)
-  }
-
-  /**
-   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
-   */
-  private[spark] def checkTableTz(dest: String, properties: Map[String, String]): Unit = {
-    properties.get(PARQUET_TIMEZONE_TABLE_PROPERTY).foreach { tz =>
-      if (!DateTimeUtils.isValidTimezone(tz)) {
-        throw new AnalysisException(s"Cannot set $PARQUET_TIMEZONE_TABLE_PROPERTY to invalid " +
-          s"timezone $tz $dest")
-      }
-    }
-  }
 }
