@@ -73,7 +73,8 @@ private[v1] object AllStagesResource {
       }
 
     val taskData = if (includeDetails) {
-      Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v, stageUiData.lastUpdateTime, executorLog) } )
+      Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v,
+        stageUiData.lastUpdateTime, executorLog) } )
     } else {
       None
     }
@@ -183,7 +184,8 @@ private[v1] object AllStagesResource {
     }
   }
 
-  def convertTaskData(uiData: TaskUIData, lastUpdateTime: Option[Long], executorLog: ExecutorsListener): TaskData = {
+  def convertTaskData(uiData: TaskUIData, lastUpdateTime: Option[Long],
+    executorLog: ExecutorsListener): TaskData = {
     var currentTime = System.currentTimeMillis()
     new TaskData(
       taskId = uiData.taskInfo.taskId,
