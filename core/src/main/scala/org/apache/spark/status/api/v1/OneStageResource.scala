@@ -35,7 +35,7 @@ private[v1] class OneStageResource(ui: SparkUI) {
   def stageData(@PathParam("stageId") stageId: Int): Seq[StageData] = {
     withStage(stageId) { stageAttempts =>
       stageAttempts.map { stage =>
-        stage.ui.jobLastUpdateTime = ui.lastUpdateTime
+        stage.ui.lastUpdateTime = ui.lastUpdateTime
         AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
           includeDetails = true)
       }
@@ -48,7 +48,7 @@ private[v1] class OneStageResource(ui: SparkUI) {
       @PathParam("stageId") stageId: Int,
       @PathParam("stageAttemptId") stageAttemptId: Int): StageData = {
     withStageAttempt(stageId, stageAttemptId) { stage =>
-      stage.ui.jobLastUpdateTime = ui.lastUpdateTime
+      stage.ui.lastUpdateTime = ui.lastUpdateTime
       AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
         includeDetails = true)
     }
@@ -83,8 +83,8 @@ private[v1] class OneStageResource(ui: SparkUI) {
       @DefaultValue("20") @QueryParam("length") length: Int,
       @DefaultValue("ID") @QueryParam("sortBy") sortBy: TaskSorting): Seq[TaskData] = {
     withStageAttempt(stageId, stageAttemptId) { stage =>
-      val tasks = stage.ui.taskData.values.map{
-        AllStagesResource.convertTaskData(_, ui.lastUpdateTime)}.toIndexedSeq
+      val tasks = stage.ui.taskData.values
+        .map{ AllStagesResource.convertTaskData(_, ui.lastUpdateTime)}.toIndexedSeq
         .sorted(OneStageResource.ordering(sortBy))
       tasks.slice(offset, offset + length)
     }
