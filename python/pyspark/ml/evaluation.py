@@ -365,8 +365,7 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     .. versionadded:: 2.3.0
     """
     metricName = Param(Params._dummy(), "metricName",
-                       "metric name in evaluation "
-                       "(silhouette)",
+                       "metric name in evaluation (silhouette)",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only
