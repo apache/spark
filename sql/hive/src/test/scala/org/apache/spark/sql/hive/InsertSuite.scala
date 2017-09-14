@@ -728,4 +728,70 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       assert(e.contains("mismatched input 'ROW'"))
     }
   }
+  
+  test("[SPARK-21786] The 'spark.sql.parquet.compression.codec' " +
+    "configuration doesn't take effect on tables with partition field(s)") {
+    withTempDir { tmpDir =>
+      withTempView("table_source") {
+        (0 until 10000).toDF("a").createOrReplaceTempView("table_source")
+
+        val tableWithPartition = "table_with_partition"
+        val tableNoPartition = "table_no_partition"
+        withTable(tableWithPartition, tableNoPartition) {
+          sql(
+            s"""
+               |CREATE TABLE $tableNoPartition(a int)
+               |STORED AS PARQUET
+               |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/$tableNoPartition'
+            """.stripMargin)
+          sql(
+            s"""
+               |CREATE TABLE $tableWithPartition(a int)
+               |PARTITIONED BY (p int)
+               |STORED AS PARQUET
+               |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/$tableWithPartition'
+            """.stripMargin)
+
+          def insertOverwriteTable(tableName: String, codec: String, isPartitioned: Boolean): Unit = {
+            withSQLConf("spark.sql.parquet.compression.codec" -> codec) {
+              sql(
+                s"""
+              |INSERT OVERWRITE TABLE $tableName
+              |${if (isPartitioned) "partition (p=10000)" else "" }
+              |SELECT * from table_source
+           """.stripMargin)
+            }
+          }
+
+          def getDirFiles(file: File): List[File] = {
+            if (!file.exists()) Nil
+            else if (file.isFile) List(file)
+            else {
+              file.listFiles().filterNot(_.getName.startsWith(".hive-staging"))
+                .groupBy(_.isFile).flatMap {
+                case (isFile, files) if isFile => files.toList
+                case (_, dirs) => dirs.flatMap(getDirFiles)
+              }.toList
+            }
+          }
+
+          def getTableSize(tableName: String, codec: String, isPartitioned: Boolean = false): Long = {
+            insertOverwriteTable(tableName, codec, isPartitioned)
+            val path = s"${tmpDir.toURI.toString.stripSuffix("/")}/$tableName"
+            val dir = new File(path)
+            val files = getDirFiles(dir).filter(_.getName.startsWith("part-"))
+            files.map(_.length()).sum
+          }
+
+          //In fact, partitioned and unpartitioned table meta information is slightly different,
+          //and partitioned tables are slightly larger, but the differences are not very large.
+          //Think less than 1024Byte
+          val maxDiff = 1024
+          assert(getTableSize(tableWithPartition, "uncompressed", true) - getTableSize(tableNoPartition, "uncompressed") < maxDiff)
+          assert(getTableSize(tableWithPartition, "gzip", true) - getTableSize(tableNoPartition, "gzip") < maxDiff)
+          assert(getTableSize(tableWithPartition, "uncompressed", true) - getTableSize(tableWithPartition, "gzip", true) > maxDiff)
+        }
+      }
+    }
+  }
 }
