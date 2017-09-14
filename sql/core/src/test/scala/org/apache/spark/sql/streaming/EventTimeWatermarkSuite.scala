@@ -321,44 +321,32 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .queryName("test")
       .start()
 
-    def populateNewWatermarkFromData(stream: MemoryStream[Int], data: Int*): Unit = {
+    def generateAndAssertNewWatermark(
+        stream: MemoryStream[Int],
+        data: Seq[Int],
+        watermark: Int): Unit = {
       stream.addData(data)
       union.processAllAvailable()
       // add a dummy batch so lastExecution has the new watermark
       stream.addData(0)
       union.processAllAvailable()
-    }
 
-    def assertQueryWatermark(watermark: Int): Unit = {
       assert(union.asInstanceOf[StreamingQueryWrapper].streamingQuery
         .lastExecution.offsetSeqMetadata.batchWatermarkMs
         == watermark)
     }
 
-    populateNewWatermarkFromData(first, 11)
-    assertQueryWatermark(1000)
-
+    generateAndAssertNewWatermark(first, Seq(11), 1000)
     // Watermark stays at 1 from the left when right watermark moves to 2
-    populateNewWatermarkFromData(second, 12)
-    assertQueryWatermark(1000)
-
+    generateAndAssertNewWatermark(second, Seq(12), 1000)
     // Watermark switches to right side value 2 when left watermark goes higher
-    populateNewWatermarkFromData(first, 21)
-    assertQueryWatermark(2000)
-
+    generateAndAssertNewWatermark(first, Seq(21), 2000)
     // Watermark goes back to left
-    populateNewWatermarkFromData(second, 22, 32, 42)
-    assertQueryWatermark(11000)
-
+    generateAndAssertNewWatermark(second, Seq(22, 32, 42), 11000)
     // Watermark stays on left as long as it's below right
-    populateNewWatermarkFromData(first, 31)
-    assertQueryWatermark(21000)
-
-    populateNewWatermarkFromData(first, 41)
-    assertQueryWatermark(31000)
-
-    populateNewWatermarkFromData(first, 51)
-    assertQueryWatermark(32000)
+    generateAndAssertNewWatermark(first, Seq(31), 21000)
+    generateAndAssertNewWatermark(first, Seq(41), 31000)
+    generateAndAssertNewWatermark(first, Seq(51), 41000)
   }
 
   test("complete mode") {
