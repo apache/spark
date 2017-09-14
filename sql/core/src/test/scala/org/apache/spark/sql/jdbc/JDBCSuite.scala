@@ -971,12 +971,15 @@ class JDBCSuite extends SparkFunSuite
   test("jdbc API support custom schema") {
     val parts = Array[String]("THEID < 2", "THEID >= 2")
     val props = new Properties()
-    props.put("customSchema", "NAME STRING, THEID BIGINT")
+    props.put("customSchema", "name STRING, THEID BIGINT")
     val schema = StructType(Seq(
       StructField("NAME", StringType, true), StructField("THEID", LongType, true)))
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", parts, props)
     assert(df.schema.size === 2)
-    assert(df.schema === schema)
+    df.schema.zip(schema).foreach {
+      case (c, v) =>
+        assert(c.dataType === v.dataType)
+    }
     assert(df.count() === 3)
   }
 
@@ -993,7 +996,10 @@ class JDBCSuite extends SparkFunSuite
         Seq(StructField("NAME", StringType, true), StructField("THEID", IntegerType, true)))
       val df = sql("select * from people_view")
       assert(df.schema.size === 2)
-      assert(df.schema === schema)
+      df.schema.zip(schema).foreach {
+        case (c, v) =>
+          assert(c.dataType === v.dataType)
+      }
       assert(df.count() === 3)
     }
   }

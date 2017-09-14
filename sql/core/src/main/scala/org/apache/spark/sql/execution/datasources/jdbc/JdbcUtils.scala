@@ -775,24 +775,25 @@ object JdbcUtils extends Logging {
       tableSchema: StructType,
       customSchema: String,
       nameEquality: Resolver): StructType = {
-    val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
+    if (null != customSchema && customSchema.nonEmpty) {
+      val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-    SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the customSchema option value", nameEquality)
+      SchemaUtils.checkColumnNameDuplication(
+        userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
-    val colNames = tableSchema.fieldNames.mkString(",")
-    val errorMsg = s"Please provide all the columns, all columns are: $colNames"
-    if (userSchema.size != tableSchema.size) {
-      throw new AnalysisException(errorMsg)
-    }
-
-    // This is resolved by names, only check the column names.
-    userSchema.fieldNames.foreach { col =>
-      tableSchema.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new AnalysisException(errorMsg)
+      // This is resolved by names, use the custom filed dataType to replace the default dateType.
+      val newSchema = tableSchema.map { col =>
+        userSchema.find(f => nameEquality(f.name, col.name)) match {
+          case Some(c) =>
+            col.copy(dataType = c.dataType, nullable = c.nullable)
+          case None =>
+            col
+        }
       }
+      StructType(newSchema)
+    } else {
+      tableSchema
     }
-    userSchema
   }
 
   /**
