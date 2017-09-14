@@ -60,12 +60,12 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  public static int hashUnsafeBytes(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+  public static int hashUnsafeBytesMB(MemoryBlock base, long offset, int lengthInBytes, int seed) {
     assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
     int lengthAligned = lengthInBytes - lengthInBytes % 4;
-    int h1 = hashBytesByInt(base, offset, lengthAligned, seed);
+    int h1 = hashBytesByIntMB(base, offset, lengthAligned, seed);
     for (int i = lengthAligned; i < lengthInBytes; i++) {
-      int halfWord = Platform.getByte(base, offset + i);
+      int halfWord = MemoryBlock.getByte(base, offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }
@@ -100,11 +100,11 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  private static int hashBytesByInt(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+  private static int hashBytesByIntMB(MemoryBlock base, long offset, int lengthInBytes, int seed) {
     assert (lengthInBytes % 4 == 0);
     int h1 = seed;
     for (int i = 0; i < lengthInBytes; i += 4) {
-      int halfWord = Platform.getInt(base, offset + i);
+      int halfWord = MemoryBlock.getInt(base, offset + i);
       int k1 = mixK1(halfWord);
       h1 = mixH1(h1, k1);
     }

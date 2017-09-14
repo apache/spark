@@ -17,8 +17,6 @@
 
 package org.apache.spark.unsafe.array;
 
-import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
@@ -69,7 +67,7 @@ public final class LongArray {
    */
   public void zeroOut() {
     for (long off = baseOffset; off < baseOffset + length * WIDTH; off += WIDTH) {
-      Platform.putLong(memory, off, 0);
+      MemoryBlock.putLong(memory, off, 0);
     }
   }
 
@@ -79,7 +77,7 @@ public final class LongArray {
   public void set(int index, long value) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    Platform.putLong(memory, baseOffset + index * WIDTH, value);
+    MemoryBlock.putLong(memory, baseOffset + index * WIDTH, value);
   }
 
   /**
@@ -88,6 +86,6 @@ public final class LongArray {
   public long get(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    return Platform.getLong(memory, baseOffset + index * WIDTH);
+    return MemoryBlock.getLong(memory, baseOffset + index * WIDTH);
   }
 }

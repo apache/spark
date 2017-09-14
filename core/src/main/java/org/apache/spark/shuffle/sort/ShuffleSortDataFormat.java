@@ -17,8 +17,8 @@
 
 package org.apache.spark.shuffle.sort;
 
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.SortDataFormat;
 
 final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, LongArray> {
@@ -60,7 +60,7 @@ final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, Lo
 
   @Override
   public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
-    Platform.copyMemory(
+    MemoryBlock.copyMemory(
       src.memoryBlock(),
       src.getBaseOffset() + srcPos * 8L,
       dst.memoryBlock(),

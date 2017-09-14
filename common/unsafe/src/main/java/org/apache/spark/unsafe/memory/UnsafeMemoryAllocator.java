@@ -23,6 +23,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
+import sun.nio.ch.DirectBuffer;
+
 /**
  * A simple {@link MemoryAllocator} that uses {@code Unsafe} to allocate off-heap memory.
  */
@@ -42,20 +44,12 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
   @Override
   public OffHeapMemoryBlock allocate(long size) throws OutOfMemoryError {
-    try {
-      Object b = ByteBuffer.allocateDirect((int)size);
-      long addr = (long)bufAddrMethod.invoke(b);
-      return new OffHeapMemoryBlock(b, addr, size);
-    } catch (IllegalAccessException e) {
-      throw new RuntimeException(e.getMessage(), e);
-    } catch (InvocationTargetException e) {
-      Throwable ex = e.getTargetException();
-      if (ex instanceof OutOfMemoryError) {
-        throw (OutOfMemoryError) ex;
-      } else {
-        throw new RuntimeException(e.getMessage(), e);
-      }
+    Object buffer = ByteBuffer.allocateDirect((int)size);
+    if (buffer instanceof DirectBuffer) {
+      long addr = ((DirectBuffer) buffer).address();
+      return new OffHeapMemoryBlock(buffer, addr, size);
     }
+    throw new UnsupportedOperationException("A ByteBuffer does not have an address in off-heap");
   }
 
   @Override
@@ -86,7 +80,7 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
   public OffHeapMemoryBlock reallocate(OffHeapMemoryBlock block, long oldSize, long newSize) {
     OffHeapMemoryBlock mb = this.allocate(newSize);
     if (block.getBaseOffset() != 0)
-      Platform.copyMemory(block, block.getBaseOffset(), mb, mb.getBaseOffset(), oldSize);
+      MemoryBlock.copyMemory(block, block.getBaseOffset(), mb, mb.getBaseOffset(), oldSize);
 
     return mb;
   }

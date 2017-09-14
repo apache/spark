@@ -22,16 +22,16 @@ import org.apache.spark.unsafe.Platform;
 /**
  * A consecutive block of memory, starting at a {@link MemoryLocation} with a fixed size.
  */
-public class LongArrayMemoryBlock extends MemoryLocation implements MemoryBlock {
+public class LongArrayMemoryBlock extends MemoryBlock {
 
   private final long size;
 
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
-   * TaskMemoryManager. This field is public so that it can be modified by the TaskMemoryManager,
-   * which lives in a different package.
+   * TaskMemoryManager. This field can be updated using setPageNumber method so that
+   * this can be modified by the TaskMemoryManage, which lives in a different package.
    */
-  private int pageNumber = -1;
+  private int pageNumber = NO_PAGE_NUMBER;
 
   public LongArrayMemoryBlock(long[] obj, long offset, long size) {
     super(obj, offset);

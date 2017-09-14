@@ -18,7 +18,6 @@
 package org.apache.spark.unsafe.types;
 
 import org.apache.spark.unsafe.Platform;
-import org.apache.spark.unsafe.memory.MemoryBlock;
 
 import java.util.Arrays;
 

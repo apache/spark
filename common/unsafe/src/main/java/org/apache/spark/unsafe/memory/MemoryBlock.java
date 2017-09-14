@@ -17,14 +17,14 @@
 
 package org.apache.spark.unsafe.memory;
 
-import javax.annotation.Nullable;
-
 import org.apache.spark.unsafe.Platform;
 
+import javax.annotation.Nullable;
+
 /**
- * A declaration of interfaces of MemoryBloock classes .
+ * A declaration of interfaces of MemoryBlock classes .
  */
-public interface MemoryBlock {
+public abstract class MemoryBlock {
   /** Special `pageNumber` value for pages which were not allocated by TaskMemoryManagers */
   public static final int NO_PAGE_NUMBER = -1;
 
@@ -44,26 +44,180 @@ public interface MemoryBlock {
    */
   public static final int FREED_IN_ALLOCATOR_PAGE_NUMBER = -3;
 
+  @Nullable
+  protected Object obj;
+
+  protected long offset;
+
+  public MemoryBlock(@Nullable Object obj, long offset) {
+    this.obj = obj;
+    this.offset = offset;
+  }
+
+  public MemoryBlock() {
+    this(null, 0);
+  }
+
+  public final Object getBaseObject() {
+    return obj;
+  }
+
+  public final long getBaseOffset() {
+    return offset;
+  }
+
+  public final void resetObjAndOffset() {
+    this.obj = null;
+    this.offset = 0;
+  }
+
   /**
    * Returns the size of the memory block.
    */
-  long size();
+  public abstract long size();
 
-  Object getBaseObject();
+  public abstract void setPageNumber(int pageNum);
 
-  long getBaseOffset();
-
-  void setPageNumber(int pageNum);
-
-  int getPageNumber();
+  public abstract int getPageNumber();
 
   /**
    * Fills the memory block with the specified byte value.
    */
-  void fill(byte value);
+  public abstract void fill(byte value);
 
   /**
    * Instantiate the same type of MemoryBlock with new offset and size
    */
-  MemoryBlock allocate(long offset, long size);
+  public abstract MemoryBlock allocate(long offset, long size);
+
+
+  public static final int getInt(MemoryBlock object, long offset) {
+    return Platform.getInt(object.getBaseObject(), offset);
+  }
+
+  public static final void putInt(MemoryBlock object, long offset, int value) {
+    Platform.putInt(object.getBaseObject(), offset, value);
+  }
+
+
+  public static final boolean getBoolean(MemoryBlock object, long offset) {
+    return Platform.getBoolean(object.getBaseObject(), offset);
+  }
+
+  public static final void putBoolean(MemoryBlock object, long offset, boolean value) {
+    Platform.putBoolean(object.getBaseObject(), offset, value);
+  }
+
+  public static final byte getByte(MemoryBlock object, long offset) {
+    return Platform.getByte(object.getBaseObject(), offset);
+  }
+
+  public static final void putByte(MemoryBlock object, long offset, byte value) {
+    Platform.putByte(object.getBaseObject(), offset, value);
+  }
+
+  public static final short getShort(MemoryBlock object, long offset) {
+    return Platform.getShort(object.getBaseObject(), offset);
+  }
+
+  public static final void putShort(MemoryBlock object, long offset, short value) {
+    Platform.putShort(object.getBaseObject(), offset, value);
+  }
+
+  public static final long getLong(MemoryBlock object, long offset) {
+    return Platform.getLong(object.getBaseObject(), offset);
+  }
+
+  public static final void putLong(MemoryBlock object, long offset, long value) {
+    Platform.putLong(object.getBaseObject(), offset, value);
+  }
+
+  public static final float getFloat(MemoryBlock object, long offset) {
+    return Platform.getFloat(object.getBaseObject(), offset);
+  }
+
+  public static final void putFloat(MemoryBlock object, long offset, float value) {
+    Platform.putFloat(object.getBaseObject(), offset, value);
+  }
+
+  public static final double getDouble(MemoryBlock object, long offset) {
+    return Platform.getDouble(object.getBaseObject(), offset);
+  }
+
+  public static final void putDouble(MemoryBlock object, long offset, double value) {
+    Platform.putDouble(object.getBaseObject(), offset, value);
+  }
+
+  public static final Object getObjectVolatile(MemoryBlock object, long offset) {
+    return Platform.getObjectVolatile(object.getBaseObject(), offset);
+  }
+
+  public static final void putObjectVolatile(MemoryBlock object, long offset, Object value) {
+    Platform.putObjectVolatile(object.getBaseObject(), offset, value);
+  }
+
+  public static final void copyMemory(
+      MemoryBlock src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static final void copyMemory(
+      byte[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static final void copyMemory(
+      short[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static final void copyMemory(
+      int[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static final void copyMemory(
+      long[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+      float[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+      double[] src, long srcOffset, MemoryBlock dst, long dstOffset, long length) {
+    Platform.copyMemory(src, srcOffset, dst.getBaseObject(), dstOffset, length);
+  }
+
+  public static void copyMemory(
+      MemoryBlock src, long srcOffset, byte[] dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+      MemoryBlock src, long srcOffset, short[] dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+      MemoryBlock src, long srcOffset, int[] dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+      MemoryBlock src, long srcOffset, long[] dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+      MemoryBlock src, long srcOffset, float[] dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
+
+  public static void copyMemory(
+      MemoryBlock src, long srcOffset, double[] dst, long dstOffset, long length) {
+    Platform.copyMemory(src.getBaseObject(), srcOffset, dst, dstOffset, length);
+  }
 }

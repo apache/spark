@@ -20,9 +20,7 @@ package org.apache.spark.shuffle.sort;
 import java.util.Comparator;
 
 import org.apache.spark.memory.MemoryConsumer;
-import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
-import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 import org.apache.spark.util.collection.unsafe.sort.RadixSort;
@@ -106,7 +104,7 @@ final class ShuffleInMemorySorter {
 
   public void expandPointerArray(LongArray newArray) {
     assert(newArray.size() > array.size());
-    Platform.copyMemory(
+    MemoryBlock.copyMemory(
       array.memoryBlock(),
       array.getBaseOffset(),
       newArray.memoryBlock(),
