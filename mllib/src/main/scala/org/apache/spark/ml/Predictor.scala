@@ -141,7 +141,7 @@ abstract class Predictor[
       case p: HasWeightCol if isDefined(p.weightCol) && $(p.weightCol).nonEmpty =>
         val weightMeta = dataset.schema($(p.weightCol)).metadata
         cols.append(col($(p.weightCol)).cast(DoubleType).as($(p.weightCol), weightMeta))
-      case _ => _
+      case _ =>
     }
 
     val selected = dataset.select(cols: _*)
