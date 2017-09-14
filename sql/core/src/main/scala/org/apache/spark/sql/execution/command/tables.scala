@@ -632,8 +632,7 @@ case class DescribeTableCommand(
 }
 
 /**
- * A command to list the info for a column, including name, data type, column stats and comment.
- * This function creates a [[DescribeColumnCommand]] logical plan.
+ * A command to list the info for a column, including name, data type, comment and column stats.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -809,8 +808,7 @@ case class ShowTablePropertiesCommand(table: TableIdentifier, propertyKey: Optio
 }
 
 /**
- * A command to list the column names for a table. This function creates a
- * [[ShowColumnsCommand]] logical plan.
+ * A command to list the column names for a table.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -848,8 +846,6 @@ case class ShowColumnsCommand(
  *
  * 1. If the command is called for a non partitioned table.
  * 2. If the partition spec refers to the columns that are not defined as partitioning columns.
- *
- * This function creates a [[ShowPartitionsCommand]] logical plan
  *
  * The syntax of using this command in SQL is:
  * {{{
