@@ -19,6 +19,7 @@ import sys
 import decimal
 import time
 import datetime
+import dateutil
 import calendar
 import json
 import re
@@ -178,6 +179,9 @@ class DateType(AtomicType):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
+_is_utc = datetime.datetime.now(dateutil.tz.tzlocal()).tzname() == "UTC"
+
+
 class TimestampType(AtomicType):
     """Timestamp (datetime.datetime) data type.
     """
@@ -196,7 +200,8 @@ class TimestampType(AtomicType):
     def fromInternal(self, ts):
         if ts is not None:
             # using int to avoid precision loss in float
-            return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+            y, m, d, hh, mm, ss, _, _, _ = time.gmtime(ts // 1000000) if _is_utc else time.localtime(ts // 1000000)
+            datetime.datetime(y, m, d, hh, mm, ss, ts % 1000000)
 
 
 class DecimalType(FractionalType):
