@@ -1861,6 +1861,24 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.security.keytab</code></td>
+  <td>(none)</td>
+  <td>
+  The full path to the file that contains the keytab for the principal specified above.
+  This keytab will be copied to the node running the YARN Application Master via the Secure Distributed Cache,
+  for renewing the login tickets and the delegation tokens periodically (on in YARN mode). All 
+  the client deploy mode also support using principal/keytab to access secure Hadoop cluster.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.security.principal</code></td>
+  <td>(none)</td>
+  <td>
+  Principal to be used to login to KDC, while running on secure Hadoop Cluster. All the client 
+  deploy mode also support using principal/keytab to access secure Hadoop cluster.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>

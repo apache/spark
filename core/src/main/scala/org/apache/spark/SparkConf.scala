@@ -662,7 +662,11 @@ private[spark] object SparkConf extends Logging {
     "spark.yarn.jars" -> Seq(
       AlternateConfig("spark.yarn.jar", "2.0")),
     "spark.yarn.access.hadoopFileSystems" -> Seq(
-      AlternateConfig("spark.yarn.access.namenodes", "2.2"))
+      AlternateConfig("spark.yarn.access.namenodes", "2.2")),
+    "spark.security.principal" -> Seq(
+      AlternateConfig("spark.yarn.principal", "2.3")),
+    "spark.security.keytab" -> Seq(
+      AlternateConfig("spark.yarn.keytab", "2.3"))
   )
 
   /**

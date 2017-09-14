@@ -190,3 +190,52 @@ configure those ports.
 See the [configuration page](configuration.html) for more details on the security configuration
 parameters, and <a href="{{site.SPARK_GITHUB_URL}}/tree/master/core/src/main/scala/org/apache/spark/SecurityManager.scala">
 <code>org.apache.spark.SecurityManager</code></a> for implementation details about security.
+
+## Running in a Secure Cluster
+
+Kerberos is used in a secure Hadoop cluster to authenticate principals associated with services 
+and clients. This allows clients to make requests of these authenticated services; the services 
+to grant rights to the authenticated principals.
+
+Hadoop services issue *hadoop tokens* to grant access to the services and data.
+Clients must first acquire tokens for the services they will access and pass them along with their
+application as it is launched in the YARN cluster.
+
+For a Spark application to interact with any of the Hadoop filesystem 
+(for example hdfs, webhdfs, etc), HBase and Hive, it must acquire the relevant tokens
+using the Kerberos credentials of the user launching the application
+—that is, the principal whose identity will become that of the launched Spark application.
+
+This is normally done at launch time: in a secure cluster Spark will automatically obtain a
+token for the cluster's default Hadoop filesystem, and potentially for HBase and Hive.
+
+An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
+the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
+and `spark.security.credentials.hbase.enabled` is not set to `false`.
+
+Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
+includes a URI of the metadata store in `"hive.metastore.uris`, and
+`spark.security.credentials.hive.enabled` is not set to `false`.
+
+If an application needs to interact with other secure Hadoop filesystems, then
+the tokens needed to access these clusters must be explicitly requested at
+launch time. This is done by listing them in the `spark.yarn.access.hadoopFileSystems` property.
+
+```
+spark.yarn.access.hadoopFileSystems hdfs://ireland.example.org:8020/,webhdfs://frankfurt.example.org:50070/
+```
+
+Spark on YARN, Standalone and Mesos client mode, local mode supports accessing secure cluster 
+through Kerberos, user could either configure `--principal` (`spark.security.principal`) and 
+`--keytab` (`spark.security.keytab`) to get Kerberos authentication, or `kinit` before 
+application start.
+ 
+Spark on YARN supports token renewal for long running application if principal and keytab is
+provided, whereas Standalone and Mesos client doesn't support it currently. 
+
+Spark on YARN supports integrating with other security-aware services through Java Services 
+mechanism (see `java.util.ServiceLoader`). To do that, implementations of `org.apache.spark.deploy.yarn.security.ServiceCredentialProvider`
+should be available to Spark by listing their names in the corresponding file in the jar's
+`META-INF/services` directory. These plug-ins can be disabled by setting
+`spark.security.credentials.{service}.enabled` to `false`, where `{service}` is the name of
+credential provider.
