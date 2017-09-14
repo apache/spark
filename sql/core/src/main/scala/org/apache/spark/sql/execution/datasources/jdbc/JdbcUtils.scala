@@ -784,10 +784,8 @@ object JdbcUtils extends Logging {
       // This is resolved by names, use the custom filed dataType to replace the default dateType.
       val newSchema = tableSchema.map { col =>
         userSchema.find(f => nameEquality(f.name, col.name)) match {
-          case Some(c) =>
-            col.copy(dataType = c.dataType, nullable = c.nullable)
-          case None =>
-            col
+          case Some(c) => col.copy(dataType = c.dataType, metadata = Metadata.empty)
+          case None => col
         }
       }
       StructType(newSchema)
