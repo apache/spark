@@ -85,7 +85,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   // These variables are reset after spilling:
-  @VisibleForTesting @Nullable volatile UnsafeInMemorySorter inMemSorter;
+  private @Nullable volatile UnsafeInMemorySorter inMemSorter;
 
   private MemoryBlock currentPage = null;
   private long pageCursor = -1;
@@ -486,6 +486,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       }
       return spillMerger.getSortedIterator();
     }
+  }
+
+  @VisibleForTesting boolean hasSpaceForAnotherRecord() {
+    return inMemSorter.hasSpaceForAnotherRecord();
   }
 
   /**
