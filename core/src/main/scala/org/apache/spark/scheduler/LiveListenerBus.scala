@@ -211,22 +211,26 @@ private[spark] class LiveListenerBusMetrics(conf: SparkConf)
   val numEventsPosted: Counter = metricRegistry.counter(MetricRegistry.name("numEventsPosted"))
 
   // Guarded by synchronization.
-  private val allTimers = mutable.Map[String, Timer]()
+  private val perListenerClassTimers = mutable.Map[String, Timer]()
 
   /**
    * Returns a timer tracking the processing time of the given listener class.
    * events processed by that listener. This method is thread-safe.
    */
-  def getTimer(name: String): Option[Timer] = synchronized {
-    val maxTimed = conf.get(LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED)
-    allTimers.get(name).orElse {
-      if (allTimers.size == maxTimed) {
-        logError(s"Not measuring processing time for listener $name because a " +
-          s"maximum of $maxTimed are already timed.")
-        None
-      } else {
-        allTimers(name) = metricRegistry.timer(s"$name.listenerProcessingTime")
-        allTimers.get(name)
+  def getTimerForListenerClass(cls: Class[_ <: SparkListenerInterface]): Option[Timer] = {
+    synchronized {
+      val className = cls.getName
+      val maxTimed = conf.get(LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED)
+      perListenerClassTimers.get(className).orElse {
+        if (perListenerClassTimers.size == maxTimed) {
+          logError(s"Not measuring processing time for listener class $className because a " +
+            s"maximum of $maxTimed listener classes are already timed.")
+          None
+        } else {
+          perListenerClassTimers(className) =
+            metricRegistry.timer(MetricRegistry.name("listenerProcessingTime", className))
+          perListenerClassTimers.get(className)
+        }
       }
     }
   }

@@ -101,7 +101,7 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
   }
 
   override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
-    metrics.getTimer(listener.getClass().getName())
+    metrics.getTimerForListenerClass(listener.getClass.asSubclass(classOf[SparkListenerInterface]))
   }
 
   /**
