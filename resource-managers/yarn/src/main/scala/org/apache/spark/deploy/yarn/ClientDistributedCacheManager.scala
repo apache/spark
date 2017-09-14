@@ -73,7 +73,7 @@ private[spark] class ClientDistributedCacheManager() extends Logging {
     amJarRsrc.setType(resourceType)
     val visibility = getVisibility(conf, destPath.toUri(), statCache)
     amJarRsrc.setVisibility(visibility)
-    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(destPath))
+    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(fs.resolvePath(destPath)))    
     amJarRsrc.setTimestamp(destStatus.getModificationTime())
     amJarRsrc.setSize(destStatus.getLen())
     require(link != null && link.nonEmpty, "You must specify a valid link name.")

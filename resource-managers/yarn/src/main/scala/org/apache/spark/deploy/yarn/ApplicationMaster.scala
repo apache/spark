@@ -150,10 +150,11 @@ private[spark] class ApplicationMaster(
         size: String,
         vis: String): Unit = {
       val uri = new URI(file)
+      val fs = FileSystem.get(uri, yarnConf)
       val amJarRsrc = Records.newRecord(classOf[LocalResource])
       amJarRsrc.setType(rtype)
       amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
-      amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
+      amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(fs.resolvePath(new Path(uri))));
       amJarRsrc.setTimestamp(timestamp.toLong)
       amJarRsrc.setSize(size.toLong)
 
