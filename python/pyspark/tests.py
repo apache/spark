@@ -644,6 +644,19 @@ class RDDTests(ReusedPySparkTestCase):
             set([(x, (y, y)) for x in range(10) for y in range(10)])
         )
 
+    def test_zip_chaining(self):
+        # Tests for SPARK-21985
+        rdd = self.sc.parallelize(range(3), 2)
+        self.assertSetEqual(
+            set(rdd.zip(rdd).zip(rdd).collect()),
+            set(zip(zip(range(3), range(3)), range(3)))
+        )
+
+        self.assertSetEqual(
+            set(rdd.zip(rdd.zip(rdd)).collect()),
+            set(zip(range(3), zip(range(3), range(3))))
+        )
+
     def test_deleting_input_files(self):
         # Regression test for SPARK-1025
         tempFile = tempfile.NamedTemporaryFile(delete=False)
