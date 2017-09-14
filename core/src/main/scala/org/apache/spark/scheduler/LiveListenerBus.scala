@@ -189,11 +189,14 @@ private[spark] object LiveListenerBus {
   // Allows for Context to check whether stop() call is made within listener thread
   val withinListenerThread: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 
-  /** Queue name where status-related listeners are grouped together. */
+  /** Name of queue where status-related listeners are grouped together. */
   val APP_STATUS_QUEUE = "appStatus"
 
-  /** Queue name where executor management-related listeners are grouped together. */
+  /** Name of queue where executor management-related listeners are grouped together. */
   val EXECUTOR_MGMT_QUEUE = "executorMgmt"
+
+  /** Name of queue where the event log listener is placed. */
+  val EVENT_LOG_QUEUE = "eventLog"
 }
 
 private[spark] class LiveListenerBusMetrics(conf: SparkConf)
