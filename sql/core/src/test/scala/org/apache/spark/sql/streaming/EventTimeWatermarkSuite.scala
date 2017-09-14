@@ -301,35 +301,35 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   test("2stream") {
-    import org.apache.spark.sql.functions.lit
+    val first = MemoryStream[Int]
 
-    val inputData = MemoryStream[Int]
-
-    val windowedAggregation = inputData.toDF()
+    val firstAggregation = first.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .groupBy(window($"eventTime", "5 seconds") as 'window)
-      .agg(count("*") as 'count)
-      .select(lit("window"), $"window".getField("start").cast("long").as[Long], $"count".as[Long])
+      .select('value)
 
-    val secondData = MemoryStream[Int]
+    val second = MemoryStream[Int]
 
-    val secondAggregation = secondData.toDF()
+    val secondAggregation = second.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
-      .select(lit("secondary"), 'value.as[Long], lit(0))
+      .select('value)
 
-    testStream(windowedAggregation.union(secondAggregation))(
-      AddData(secondData, 11),     // Set up right watermark at 1
-      AddData(inputData, 10, 11, 12),
-      CheckAnswer(("secondary", 11, 0)),
-      AddData(inputData, 25),     // Advance left watermark to 15 seconds - right still at 1
-      CheckAnswer(("secondary", 11, 0)),
-      AddData(secondData, 31),     // Advance right watermark to 21 seconds
-      CheckAnswer(("secondary", 11, 0), ("secondary", 31, 0)),
-      AddData(inputData, 25),      // Trigger another batch on left stream
-      CheckAnswer(("secondary", 11, 0), ("secondary", 31, 0), ("window", 10, 3))
-    )
+    testStream(firstAggregation.union(secondAggregation))(
+      AddData(first, 11),     // Set left watermark at,
+      CheckLastBatch(11),
+      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 1000),
+      AddData(second, 12),    // Set right watermark at 2; overall should still be 1
+      CheckLastBatch(12),
+      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 1000),
+      AddData(first, 21),     // Left is now further so we should take right watermark
+      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 2000),
+      AddData(second, 22, 32, 42), // Right is further, go back to taking left watermark
+      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 11000),
+      AddData(first, 31), //  Left watermark should keep being output as long as it's behind
+      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 21000),
+      AddData(first, 41),
+      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 31000))
   }
 
   test("complete mode") {
