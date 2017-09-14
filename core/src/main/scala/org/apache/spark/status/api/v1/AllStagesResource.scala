@@ -71,7 +71,7 @@ private[v1] object AllStagesResource {
 
     val taskData = if (includeDetails) {
       Some(stageUiData.taskData.map { case (k, v) =>
-        k -> convertTaskData(v, stageUiData.lastUpdateTime) } )
+        k -> convertTaskData(v, stageUiData.lastUpdateTime) })
     } else {
       None
     }
