@@ -511,9 +511,6 @@ public class UnsafeExternalSorterSuite {
     verifyIntIterator(sorter.getIterator(279), 279, 300);
   }
 
-  @Rule
-  public ExpectedException exceptions = ExpectedException.none();
-
   @Test
   public void testOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
@@ -530,25 +527,21 @@ public class UnsafeExternalSorterSuite {
     // and ended up with a failed assertion.
     // we also expect the location of the OOM to be org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
     memoryManager.markConseqOOM(2);
-    exceptions.expect(OutOfMemoryError.class);
-    exceptions.expect(
-            new TypeSafeMatcher<OutOfMemoryError>() {
-              Matcher<java.lang.String> stringMatcher = Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset");
-              @Override
-              public void describeTo(Description description) {
-                stringMatcher.describeTo(description);
-              }
+    OutOfMemoryError expectedOOM = null;
+    try {
+      insertNumber(sorter, 1024);
+    }
+    // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
+    catch( OutOfMemoryError oom ){
+      expectedOOM = oom;
+    }
 
-              protected boolean matchesSafely(OutOfMemoryError item) {
-                StringOutputStream stringOutputStream = new StringOutputStream();
-                PrintWriter printWriter = new PrintWriter(stringOutputStream);
-                item.printStackTrace( printWriter );
-                printWriter.flush();
-                return stringMatcher.matches(stringOutputStream.toString());
-              }
-            }
-    );
-    insertNumber(sorter, 1024);
+    assertNotNull("expected OutOfMmoryError but it seems operation surprisingly succeeded"
+            ,expectedOOM);
+    String oomStackTrace = Utils.exceptionString(expectedOOM);
+    assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"
+            , oomStackTrace
+            , Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
   }
 
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
