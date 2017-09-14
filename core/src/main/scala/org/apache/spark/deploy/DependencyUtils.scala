@@ -121,6 +121,11 @@ private[deploy] object DependencyUtils {
 
     uri.getScheme match {
       case "file" | "local" => path
+      case "http" | "https" | "ftp" if Utils.isTesting =>
+        // This is only used for SparkSubmitSuite unit test. Instead of downloading file remotely,
+        // return a dummy local path instead.
+        val file = new File(uri.getPath)
+        new File(targetDir, file.getName).toURI.toString
       case _ =>
         val fname = new Path(uri).getName()
         val localFile = Utils.doFetchFile(uri.toString(), targetDir, fname, sparkConf, secMgr,

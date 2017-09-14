@@ -368,19 +368,22 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }.orNull
     }
 
-    // When running in YARN cluster manager,
+    // When running in YARN, for some remote resources with scheme:
+    //   1. Hadoop FileSystem doesn't support them.
+    //   2. We explicitly bypass Hadoop FileSystem with "spark.yarn.dist.forceDownloadSchemes".
+    // We will download them to local disk prior to add to YARN's distributed cache.
+    // For yarn client mode, since we already download them with above code, so we only need to
+    // gifure out the local path to replace the remote one.
     if (clusterManager == YARN) {
       sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
       val secMgr = new SecurityManager(sparkConf)
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
-      // Check the scheme list provided by "spark.yarn.dist.forceDownloadSchemes" to see if current
-      // resource's scheme is included in this list, or Hadoop FileSystem doesn't support current
-      // scheme, if so Spark will download the resources to local disk and upload to Hadoop FS.
       def shouldDownload(scheme: String): Boolean = {
-        val isFsAvailable = Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }
-          .map(_ => true).getOrElse(false)
-        forceDownloadSchemes.contains(scheme) || !isFsAvailable
+        val isFsAvailable = () => {
+          Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isSuccess
+        }
+        forceDownloadSchemes.contains(scheme) || !isFsAvailable()
       }
 
       def downloadResource(resource: String): String = {
@@ -388,11 +391,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
         uri.getScheme match {
           case "local" | "file" => resource
           case e if shouldDownload(e) =>
-            if (deployMode == CLIENT) {
-              // In client mode, we already download the resources, so figuring out the local one
-              // should be enough.
-              val fileName = new Path(uri).getName
-              new File(targetDir, fileName).toURI.toString
+            val file = new File(targetDir, new Path(uri).getName)
+            if (file.exists()) {
+              file.toURI.toString
             } else {
               downloadFile(resource, targetDir, sparkConf, hadoopConf, secMgr)
             }
