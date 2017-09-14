@@ -24,6 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.hadoop.fs.Path
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
+import scala.collection.mutable
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -61,7 +62,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val logData = fileSystem.open(logFilePath)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster()
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -69,9 +70,9 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     } finally {
       logData.close()
     }
-    assert(eventMonster.loggedEvents.size === 2)
-    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
-    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
+    assert(eventMonster.events.size === 2)
+    assert(eventMonster.events(0) === applicationStart)
+    assert(eventMonster.events(1) === applicationEnd)
   }
 
   /**
@@ -107,7 +108,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
     val replayer = new ReplayListenerBus()
 
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster()
     replayer.addListener(eventMonster)
 
     // Verify the replay returns the events given the input maybe truncated.
@@ -115,7 +116,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     Utils.tryWithResource(new EarlyEOFInputStream(logData, buffered.size - 10)) { failingStream =>
       replayer.replay(failingStream, logFilePath.toString, true)
 
-      assert(eventMonster.loggedEvents.size === 1)
+      assert(eventMonster.events.size === 1)
       assert(failingStream.didFail)
     }
 
@@ -177,7 +178,7 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
 
     // Replay events
     val logData = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
-    val eventMonster = new EventMonster(conf)
+    val eventMonster = new EventMonster()
     try {
       val replayer = new ReplayListenerBus()
       replayer.addListener(eventMonster)
@@ -189,11 +190,11 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
     val originalEvents = sc.eventLogger.get.loggedEvents
-    val replayedEvents = eventMonster.loggedEvents
+    val replayedEvents = eventMonster.events
     originalEvents.zip(replayedEvents).foreach { case (e1, e2) =>
       // Don't compare the JSON here because accumulators in StageInfo may be out of order
       JsonProtocolSuite.assertEquals(
-        JsonProtocol.sparkEventFromJson(e1), JsonProtocol.sparkEventFromJson(e2))
+        JsonProtocol.sparkEventFromJson(e1), e2)
     }
   }
 
@@ -209,11 +210,62 @@ class ReplayListenerSuite extends SparkFunSuite with BeforeAndAfter with LocalSp
    * This child listener inherits only the event buffering functionality, but does not actually
    * log the events.
    */
-  private class EventMonster(conf: SparkConf)
-    extends EventLoggingListener("test", None, new URI("testdir"), conf) {
+  private class EventMonster() extends SparkListener {
+    val events: mutable.Buffer[SparkListenerEvent] = mutable.Buffer()
 
-    override def start() { }
+    def addEvent(ev: SparkListenerEvent): Unit = events.append(ev)
 
+      override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = addEvent(event)
+
+      override def onTaskStart(event: SparkListenerTaskStart): Unit = addEvent(event)
+
+      override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit =
+        addEvent(event)
+
+      override def onTaskEnd(event: SparkListenerTaskEnd): Unit = addEvent(event)
+
+      override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit =
+        addEvent(event)
+
+      // Events that trigger a flush
+      override def onStageCompleted(event: SparkListenerStageCompleted): Unit = addEvent(event)
+
+      override def onJobStart(event: SparkListenerJobStart): Unit = addEvent(event)
+
+      override def onJobEnd(event: SparkListenerJobEnd): Unit = addEvent(event)
+
+      override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit =
+        addEvent(event)
+
+      override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit =
+        addEvent(event)
+
+      override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = addEvent(event)
+
+      override def onApplicationStart(event: SparkListenerApplicationStart): Unit =
+        addEvent(event)
+
+      override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = addEvent(event)
+      override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = addEvent(event)
+
+      override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = addEvent(event)
+
+      override def onExecutorBlacklisted(event: SparkListenerExecutorBlacklisted): Unit =
+        addEvent(event)
+
+      override def onExecutorUnblacklisted(event: SparkListenerExecutorUnblacklisted): Unit =
+        addEvent(event)
+
+      override def onNodeBlacklisted(event: SparkListenerNodeBlacklisted): Unit = addEvent(event)
+
+      override def onNodeUnblacklisted(event: SparkListenerNodeUnblacklisted): Unit =
+        addEvent(event)
+
+      override def onOtherEvent(event: SparkListenerEvent): Unit = {
+        if (event.logEvent) {
+          addEvent(event)
+        }
+      }
   }
 
   /*

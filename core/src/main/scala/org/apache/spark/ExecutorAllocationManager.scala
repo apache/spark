@@ -217,7 +217,7 @@ private[spark] class ExecutorAllocationManager(
    * the scheduling task.
    */
   def start(): Unit = {
-    listenerBus.addListener(listener)
+    listenerBus.addListener(listener, true)
 
     val scheduleTask = new Runnable() {
       override def run(): Unit = {

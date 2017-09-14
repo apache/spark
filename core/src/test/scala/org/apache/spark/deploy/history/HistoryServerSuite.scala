@@ -388,6 +388,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
       .set("spark.history.cache.window", "250ms")
+      .set("spark.eventLog.testing", "true")
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)

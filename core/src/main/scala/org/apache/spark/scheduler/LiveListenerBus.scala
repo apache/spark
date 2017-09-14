@@ -18,19 +18,20 @@
 package org.apache.spark.scheduler
 
 import java.util.concurrent._
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
 
-import scala.collection.mutable
-import scala.util.DynamicVariable
-
-import com.codahale.metrics.{Counter, Gauge, MetricRegistry, Timer}
+import com.codahale.metrics.Timer
+import scala.reflect.ClassTag
+import scala.util.{DynamicVariable, Try}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.metrics.source.Source
-import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.bus._
+import org.apache.spark.scheduler.bus.BusQueue.{GenericProcessor, GroupOfListener}
+import org.apache.spark.util.WithListenerBus
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -39,98 +40,114 @@ import org.apache.spark.util.Utils
  * has started will events be actually propagated to all attached listeners. This listener bus
  * is stopped when `stop()` is called, and it will drop further events after stopping.
  */
-private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
-
-  self =>
+private[spark] class LiveListenerBus(conf: SparkConf)
+  extends WithListenerBus[SparkListenerInterface, SparkListenerEvent] with Logging{
 
   import LiveListenerBus._
 
   private var sparkContext: SparkContext = _
+  private var metricsSystem: MetricsSystem = _
 
-  // Cap the capacity of the event queue so we get an explicit error (rather than
-  // an OOM exception) if it's perpetually being added to more quickly than it's being drained.
-  private val eventQueue =
-    new LinkedBlockingQueue[SparkListenerEvent](conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+  private val defaultListenerPool = GroupOfListener("default")
+  private val defaultListenerQueue = BusQueue(
+    conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
+    defaultListenerPool,
+    BusQueue.ALL_MESSAGES)
 
-  private[spark] val metrics = new LiveListenerBusMetrics(conf, eventQueue)
+  @volatile private var otherListenerQueues = Seq.empty[BusQueue]
 
-  // Indicate if `start()` is called
-  private val started = new AtomicBoolean(false)
-  // Indicate if `stop()` is called
+  // start, stop and add/remove listener should be mutually exclusive
+  private val startStopAddRemoveLock = new ReentrantLock()
+  // Will be set modified in a synchronized function
+  @volatile private var started = false
   private val stopped = new AtomicBoolean(false)
 
-  /** A counter for dropped events. It will be reset every time we log it. */
-  private val droppedEventsCounter = new AtomicLong(0L)
+   /**
+    * if isolatedIfPossible is true, add the listener to an isolated pool.
+    * Otherwise add it to the default pool.
+    * This method is thread-safe and can be called in any thread.
+    */
+  final override def addListener(listener: SparkListenerInterface,
+                                 isolatedIfPossible: Boolean): Unit = {
+    startStopAddRemoveLock.lock()
+    Try{
+      if (isolatedIfPossible) {
+         addQueue(BusQueue(
+          conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
+          listener,
+          BusQueue.ALL_MESSAGES))
+      } else {
+        defaultListenerPool.addListener(listener)
+      }
+    }
+    startStopAddRemoveLock.unlock()
+  }
 
-  /** When `droppedEventsCounter` was logged last time in milliseconds. */
-  @volatile private var lastReportTimestamp = 0L
+   /**
+    * Add a generic listener to an isolated pool.
+    */
+  def addProcessor(processor: SparkListenerEvent => Unit,
+                   busName: String,
+                   eventFilter: Option[SparkListenerEvent => Boolean] = None): Unit = {
+    addQueue(BusQueue(
+      busName,
+      conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY),
+      processor,
+      eventFilter.getOrElse(BusQueue.ALL_MESSAGES))
+    )
+  }
 
-  // Indicate if we are processing some event
-  // Guarded by `self`
-  private var processingEvent = false
+  def removeProcessor(processorBusName: String): Unit = {
+    startStopAddRemoveLock.lock()
+    Try {
+    val queue = otherListenerQueues
+      .filter(q => q.processor.isInstanceOf[GenericProcessor])
+      .find(_.processor.asInstanceOf[GenericProcessor].name == processorBusName)
+    queue.foreach { q =>
+      otherListenerQueues = otherListenerQueues.filter(_ != q)
+      q.askStop()
+      q.waitForStop()
+    }
+  }
+    startStopAddRemoveLock.unlock()
+  }
 
-  private val logDroppedEvent = new AtomicBoolean(false)
+  private def addQueue(queue : BusQueue): Unit = {
+    startStopAddRemoveLock.lock()
+    Try {
+      if (started) {
+        queue.start(sparkContext, metricsSystem)
+      }
+      otherListenerQueues = otherListenerQueues :+ queue
+    }
+    startStopAddRemoveLock.unlock()
+  }
 
-  // A counter that represents the number of events produced and consumed in the queue
-  private val eventLock = new Semaphore(0)
-
-  private val listenerThread = new Thread(name) {
-    setDaemon(true)
-    override def run(): Unit = Utils.tryOrStopSparkContext(sparkContext) {
-      LiveListenerBus.withinListenerThread.withValue(true) {
-        val timer = metrics.eventProcessingTime
-        while (true) {
-          eventLock.acquire()
-          self.synchronized {
-            processingEvent = true
-          }
-          try {
-            val event = eventQueue.poll
-            if (event == null) {
-              // Get out of the while loop and shutdown the daemon thread
-              if (!stopped.get) {
-                throw new IllegalStateException("Polling `null` from eventQueue means" +
-                  " the listener bus has been stopped. So `stopped` must be true")
-              }
-              return
-            }
-            val timerContext = timer.time()
-            try {
-              postToAll(event)
-            } finally {
-              timerContext.stop()
-            }
-          } finally {
-            self.synchronized {
-              processingEvent = false
-            }
-          }
+   /**
+    * Remove a listener
+    * This method is thread-safe and can be called in any thread
+    */
+  final override def removeListener(listener: SparkListenerInterface): Unit = {
+    startStopAddRemoveLock.lock()
+    Try {
+      // First we try to delete it from the default queue
+      defaultListenerPool.removeListener(listener)
+      // Then from the other queue.
+      val holder = otherListenerQueues.find(q => q.listeners.contains(listener))
+      holder.foreach{q =>
+        val listeners = q.listeners
+        if (listeners.size > 1) {
+          throw new IllegalArgumentException("Cannot remove a listener from a fixed group")
+        } else {
+          // First we remove the queue from the list (no more message will be posted)
+          otherListenerQueues = otherListenerQueues.filter(_ != q)
+          // Then stop it
+          q.askStop()
+          q.waitForStop()
         }
       }
     }
-  }
-
-  override protected def getTimer(listener: SparkListenerInterface): Option[Timer] = {
-    metrics.getTimerForListenerClass(listener.getClass.asSubclass(classOf[SparkListenerInterface]))
-  }
-
-  /**
-   * Start sending events to attached listeners.
-   *
-   * This first sends out all buffered events posted before this listener bus has started, then
-   * listens for any additional events asynchronously while the listener bus is still running.
-   * This should only be called once.
-   *
-   * @param sc Used to stop the SparkContext in case the listener thread dies.
-   */
-  def start(sc: SparkContext, metricsSystem: MetricsSystem): Unit = {
-    if (started.compareAndSet(false, true)) {
-      sparkContext = sc
-      metricsSystem.registerSource(metrics)
-      listenerThread.start()
-    } else {
-      throw new IllegalStateException(s"$name already started!")
-    }
+    startStopAddRemoveLock.unlock()
   }
 
   def post(event: SparkListenerEvent): Unit = {
@@ -139,30 +156,67 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
       logDebug(s"$name has already stopped! Dropping event $event")
       return
     }
-    metrics.numEventsPosted.inc()
-    val eventAdded = eventQueue.offer(event)
-    if (eventAdded) {
-      eventLock.release()
-    } else {
-      onDropEvent(event)
-    }
+    defaultListenerQueue.post(event)
+    otherListenerQueues.foreach(q => q.post(event))
+  }
 
-    val droppedEvents = droppedEventsCounter.get
-    if (droppedEvents > 0) {
-      // Don't log too frequently
-      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-        // There may be multiple threads trying to decrease droppedEventsCounter.
-        // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
-        // then that thread will update it.
-        if (droppedEventsCounter.compareAndSet(droppedEvents, 0)) {
-          val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
-          logWarning(s"Dropped $droppedEvents SparkListenerEvents since " +
-            new java.util.Date(prevLastReportTimestamp))
-        }
+  /**
+    * For testing only
+    */
+  override private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag] =
+    defaultListenerQueue.findListenersByClass ++ otherListenerQueues.flatMap(_.findListenersByClass)
+
+  override private[spark] def listeners =
+    defaultListenerQueue.listeners ++ otherListenerQueues.flatMap(_.listeners)
+
+   /**
+    * Start sending events to attached listeners.
+    *
+    * This first sends out all buffered events posted before this listener bus has started, then
+    * listens for any additional events asynchronously while the listener bus is still running.
+    * This should only be called once.
+    *
+    */
+  def start(sc: SparkContext, ms: MetricsSystem): Unit = {
+    startStopAddRemoveLock.lock()
+    if (!started) {
+      Try {
+        sparkContext = sc
+        metricsSystem = ms
+        defaultListenerQueue.start(sc, ms)
+        otherListenerQueues.foreach(_.start(sc, ms))
+        started = true
+      }
+      startStopAddRemoveLock.unlock()
+    } else {
+      startStopAddRemoveLock.unlock()
+      throw new IllegalStateException("LiveListener bus already started!")
+    }
+  }
+
+   /**
+    * Stop the listener bus. It will wait until the queued events have been processed, but drop the
+    * new events after stopping.
+    */
+  def stop(): Unit = {
+    startStopAddRemoveLock.lock()
+    if (!started) {
+      startStopAddRemoveLock.unlock()
+      throw new IllegalStateException("Attempted to stop the LiveListener " +
+        "bus that has not yet started!")
+    }
+    Try {
+      if (!stopped.get) {
+        stopped.set(true)
+        defaultListenerQueue.askStop()
+        otherListenerQueues.foreach(_.askStop())
+        defaultListenerQueue.waitForStop()
+        otherListenerQueues.foreach(_.waitForStop())
+      } else {
+        // Keep quiet
       }
     }
+    startStopAddRemoveLock.unlock()
   }
 
   /**
@@ -172,7 +226,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
    * Exposed for testing.
    */
   @throws(classOf[TimeoutException])
-  def waitUntilEmpty(timeoutMillis: Long): Unit = {
+  private[spark] def waitUntilEmpty(timeoutMillis: Long): Unit = {
     val finishTime = System.currentTimeMillis + timeoutMillis
     while (!queueIsEmpty) {
       if (System.currentTimeMillis > finishTime) {
@@ -189,51 +243,24 @@ private[spark] class LiveListenerBus(conf: SparkConf) extends SparkListenerBus {
    * For testing only. Return whether the listener daemon thread is still alive.
    * Exposed for testing.
    */
-  def listenerThreadIsAlive: Boolean = listenerThread.isAlive
+  private[scheduler] def listenerThreadIsAlive: Boolean =
+    defaultListenerQueue.isAlive && otherListenerQueues.forall(_.isAlive)
+
+   /**
+    * Exposed for testing.
+    */
+  private[scheduler] def metricsFromMainQueue:
+  (QueueMetrics, Map[SparkListenerInterface, Option[Timer]]) = (
+    defaultListenerQueue.metrics,
+    defaultListenerPool.listeners.toMap
+  )
 
   /**
    * Return whether the event queue is empty.
-   *
-   * The use of synchronized here guarantees that all events that once belonged to this queue
-   * have already been processed by all attached listeners, if this returns true.
    */
-  private def queueIsEmpty: Boolean = synchronized { eventQueue.isEmpty && !processingEvent }
+  private def queueIsEmpty: Boolean =
+    defaultListenerQueue.isQueueEmpty && otherListenerQueues.forall(_.isQueueEmpty)
 
-  /**
-   * Stop the listener bus. It will wait until the queued events have been processed, but drop the
-   * new events after stopping.
-   */
-  def stop(): Unit = {
-    if (!started.get()) {
-      throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
-    }
-    if (stopped.compareAndSet(false, true)) {
-      // Call eventLock.release() so that listenerThread will poll `null` from `eventQueue` and know
-      // `stop` is called.
-      eventLock.release()
-      listenerThread.join()
-    } else {
-      // Keep quiet
-    }
-  }
-
-  /**
-   * If the event queue exceeds its capacity, the new events will be dropped. The subclasses will be
-   * notified with the dropped events.
-   *
-   * Note: `onDropEvent` can be called in any thread.
-   */
-  def onDropEvent(event: SparkListenerEvent): Unit = {
-    metrics.numDroppedEvents.inc()
-    droppedEventsCounter.incrementAndGet()
-    if (logDroppedEvent.compareAndSet(false, true)) {
-      // Only log the following message once to avoid duplicated annoying logs.
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with " +
-        "the rate at which tasks are being started by the scheduler.")
-    }
-    logTrace(s"Dropping event $event")
-  }
 }
 
 private[spark] object LiveListenerBus {
@@ -242,66 +269,5 @@ private[spark] object LiveListenerBus {
 
   /** The thread name of Spark listener bus */
   val name = "SparkListenerBus"
-}
-
-private[spark] class LiveListenerBusMetrics(
-    conf: SparkConf,
-    queue: LinkedBlockingQueue[_])
-  extends Source with Logging {
-
-  override val sourceName: String = "LiveListenerBus"
-  override val metricRegistry: MetricRegistry = new MetricRegistry
-
-  /**
-   * The total number of events posted to the LiveListenerBus. This is a count of the total number
-   * of events which have been produced by the application and sent to the listener bus, NOT a
-   * count of the number of events which have been processed and delivered to listeners (or dropped
-   * without being delivered).
-   */
-  val numEventsPosted: Counter = metricRegistry.counter(MetricRegistry.name("numEventsPosted"))
-
-  /**
-   * The total number of events that were dropped without being delivered to listeners.
-   */
-  val numDroppedEvents: Counter = metricRegistry.counter(MetricRegistry.name("numEventsDropped"))
-
-  /**
-   * The amount of time taken to post a single event to all listeners.
-   */
-  val eventProcessingTime: Timer = metricRegistry.timer(MetricRegistry.name("eventProcessingTime"))
-
-  /**
-   * The number of messages waiting in the queue.
-   */
-  val queueSize: Gauge[Int] = {
-    metricRegistry.register(MetricRegistry.name("queueSize"), new Gauge[Int]{
-      override def getValue: Int = queue.size()
-    })
-  }
-
-  // Guarded by synchronization.
-  private val perListenerClassTimers = mutable.Map[String, Timer]()
-
-  /**
-   * Returns a timer tracking the processing time of the given listener class.
-   * events processed by that listener. This method is thread-safe.
-   */
-  def getTimerForListenerClass(cls: Class[_ <: SparkListenerInterface]): Option[Timer] = {
-    synchronized {
-      val className = cls.getName
-      val maxTimed = conf.get(LISTENER_BUS_METRICS_MAX_LISTENER_CLASSES_TIMED)
-      perListenerClassTimers.get(className).orElse {
-        if (perListenerClassTimers.size == maxTimed) {
-          logError(s"Not measuring processing time for listener class $className because a " +
-            s"maximum of $maxTimed listener classes are already timed.")
-          None
-        } else {
-          perListenerClassTimers(className) =
-            metricRegistry.timer(MetricRegistry.name("listenerProcessingTime", className))
-          perListenerClassTimers.get(className)
-        }
-      }
-    }
-  }
 }
 

@@ -23,6 +23,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterEach
 import org.scalatest.mockito.MockitoSugar
+import scala.collection.mutable
 
 import org.apache.spark._
 import org.apache.spark.internal.config
@@ -42,7 +43,6 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with M
     conf = new SparkConf().setAppName("test").setMaster("local")
       .set(config.BLACKLIST_ENABLED.key, "true")
     scheduler = mockTaskSchedWithConf(conf)
-
     clock.setTime(0)
 
     listenerBusMock = mock[LiveListenerBus]

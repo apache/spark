@@ -52,6 +52,7 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.bus.BusQueue.GroupOfListener
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.storage._
@@ -522,7 +523,10 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addListener(logger)
+        listenerBus.addProcessor(
+          ev => logger.log(ev),
+          "eventLoggerListener",
+          Some(EventLoggingListener.EVENT_FILTER))
         Some(logger)
       } else {
         None
@@ -2349,13 +2353,12 @@ class SparkContext(config: SparkConf) extends Logging {
     try {
       val listenerClassNames: Seq[String] =
         conf.get("spark.extraListeners", "").split(',').map(_.trim).filter(_ != "")
-      for (className <- listenerClassNames) {
-        // Use reflection to find the right constructor
+      val extraListeners = listenerClassNames.map { className =>
         val constructors = {
           val listenerClass = Utils.classForName(className)
           listenerClass
-              .getConstructors
-              .asInstanceOf[Array[Constructor[_ <: SparkListenerInterface]]]
+            .getConstructors
+            .asInstanceOf[Array[Constructor[_ <: SparkListenerInterface]]]
         }
         val constructorTakingSparkConf = constructors.find { c =>
           c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
@@ -2378,8 +2381,13 @@ class SparkContext(config: SparkConf) extends Logging {
                 " parameter from breaking Spark's ability to find a valid constructor.")
           }
         }
-        listenerBus.addListener(listener)
-        logInfo(s"Registered listener $className")
+        logInfo(s"listener $className created")
+        listener
+      }
+      if (extraListeners.nonEmpty) {
+        val group = GroupOfListener(extraListeners, "extraListeners")
+        listenerBus.addListener(group, true)
+        logInfo("extra-listeners registered")
       }
     } catch {
       case e: Exception =>

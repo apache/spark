@@ -27,7 +27,12 @@ private[spark] trait SparkListenerBus
 
   protected override def doPostEvent(
       listener: SparkListenerInterface,
-      event: SparkListenerEvent): Unit = {
+      event: SparkListenerEvent): Unit = SparkListenerEventDispatcher.dispatch(listener, event)
+}
+
+private[spark] object SparkListenerEventDispatcher {
+
+  def dispatch(listener: SparkListenerInterface, event: SparkListenerEvent): Unit = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
         listener.onStageSubmitted(stageSubmitted)
@@ -76,5 +81,4 @@ private[spark] trait SparkListenerBus
       case _ => listener.onOtherEvent(event)
     }
   }
-
 }
