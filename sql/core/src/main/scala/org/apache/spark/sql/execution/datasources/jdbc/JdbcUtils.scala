@@ -301,12 +301,11 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder()
-        .putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+      fields(i) = StructField(columnName, columnType, nullable)
       i = i + 1
     }
     new StructType(fields)
@@ -784,7 +783,7 @@ object JdbcUtils extends Logging {
       // This is resolved by names, use the custom filed dataType to replace the default dateType.
       val newSchema = tableSchema.map { col =>
         userSchema.find(f => nameEquality(f.name, col.name)) match {
-          case Some(c) => col.copy(dataType = c.dataType, metadata = Metadata.empty)
+          case Some(c) => col.copy(dataType = c.dataType)
           case None => col
         }
       }
