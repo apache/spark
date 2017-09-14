@@ -24,9 +24,10 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Column, DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.storage.StorageLevel
 
 /**
  * (private[ml])  Trait for parameters for prediction (regression and classification).
@@ -99,23 +100,13 @@ abstract class Predictor[
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
 
-    // Cast LabelCol to DoubleType and keep the metadata.
-    val labelMeta = dataset.schema($(labelCol)).metadata
-    val labelCasted = dataset.withColumn($(labelCol), col($(labelCol)).cast(DoubleType), labelMeta)
+    val dataframe = preprocess(dataset)
 
-    // Cast WeightCol to DoubleType and keep the metadata.
-    val casted = this match {
-      case p: HasWeightCol =>
-        if (isDefined(p.weightCol) && $(p.weightCol).nonEmpty) {
-          val weightMeta = dataset.schema($(p.weightCol)).metadata
-          labelCasted.withColumn($(p.weightCol), col($(p.weightCol)).cast(DoubleType), weightMeta)
-        } else {
-          labelCasted
-        }
-      case _ => labelCasted
-    }
+    val model = copyValues(train(dataframe).setParent(this))
 
-    copyValues(train(casted).setParent(this))
+    postprocess(dataframe)
+
+    model
   }
 
   override def copy(extra: ParamMap): Learner
@@ -129,6 +120,64 @@ abstract class Predictor[
    * @return  Fitted model
    */
   protected def train(dataset: Dataset[_]): M
+
+  /**
+   * Pre-process the input dataset to an intermediate dataframe.
+   * Developers can override this for specific purpose.
+   *
+   * @param dataset  Original training dataset
+   * @return  Intermediate dataframe
+   */
+  protected def preprocess(dataset: Dataset[_]): DataFrame = {
+    val cols = collection.mutable.ArrayBuffer[Column]()
+    cols.append(col($(featuresCol)))
+
+    // Cast LabelCol to DoubleType and keep the metadata.
+    val labelMeta = dataset.schema($(labelCol)).metadata
+    cols.append(col($(labelCol)).cast(DoubleType).as($(labelCol), labelMeta))
+
+    // Cast WeightCol to DoubleType and keep the metadata.
+    this match {
+      case p: HasWeightCol if isDefined(p.weightCol) && $(p.weightCol).nonEmpty =>
+        val weightMeta = dataset.schema($(p.weightCol)).metadata
+        cols.append(col($(p.weightCol)).cast(DoubleType).as($(p.weightCol), weightMeta))
+      case _ => _
+    }
+
+    val selected = dataset.select(cols: _*)
+
+    val cached = this match {
+      case p: HasHandlePersistence =>
+        if (dataset.storageLevel == StorageLevel.NONE) {
+          if ($(p.handlePersistence)) {
+            selected.persist(StorageLevel.MEMORY_AND_DISK)
+          } else {
+            logWarning("The input dataset is uncached, which may hurt performance if its " +
+              "upstreams are also uncached.")
+          }
+        }
+        selected
+      case _ => selected
+    }
+
+    cached
+  }
+
+  /**
+   * Post-process the intermediate dataframe.
+   * Developers can override this for specific purpose.
+   *
+   * @param dataset  Intermediate training dataframe
+   */
+  protected def postprocess(dataset: DataFrame): Unit = {
+    this match {
+      case _: HasHandlePersistence =>
+        if (dataset.storageLevel != StorageLevel.NONE) {
+          dataset.unpersist(blocking = false)
+        }
+      case _ =>
+    }
+  }
 
   /**
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.
