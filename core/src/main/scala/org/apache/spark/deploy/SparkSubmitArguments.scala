@@ -196,8 +196,14 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
     queue = Option(queue).orElse(sparkProperties.get("spark.yarn.queue")).orNull
-    keytab = Option(keytab).orElse(sparkProperties.get("spark.yarn.keytab")).orNull
-    principal = Option(principal).orElse(sparkProperties.get("spark.yarn.principal")).orNull
+    keytab = Option(keytab)
+      .orElse(sparkProperties.get("spark.security.keytab"))
+      .orElse(sparkProperties.get("spark.yarn.keytab"))
+      .orNull
+    principal = Option(principal)
+      .orElse(sparkProperties.get("spark.security.principal"))
+      .orElse(sparkProperties.get("spark.yarn.principal"))
+      .orNull
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && !isR && primaryResource != null) {
@@ -576,13 +582,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --executor-cores NUM        Number of cores per executor. (Default: 1 in YARN mode,
         |                              or all available cores on the worker in standalone mode)
         |
-        | YARN-only:
-        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
-        |  --num-executors NUM         Number of executors to launch (Default: 2).
-        |                              If dynamic allocation is enabled, the initial number of
-        |                              executors will be at least NUM.
-        |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
-        |                              working directory of each executor.
+        | Client deploy mode and YARN only:
         |  --principal PRINCIPAL       Principal to be used to login to KDC, while running on
         |                              secure HDFS.
         |  --keytab KEYTAB             The full path to the file that contains the keytab for the
@@ -590,6 +590,13 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |                              the node running the Application Master via the Secure
         |                              Distributed Cache, for renewing the login tickets and the
         |                              delegation tokens periodically.
+        | YARN-only:
+        |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
+        |  --num-executors NUM         Number of executors to launch (Default: 2).
+        |                              If dynamic allocation is enabled, the initial number of
+        |                              executors will be at least NUM.
+        |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
+        |                              working directory of each executor.
       """.stripMargin
     )
 

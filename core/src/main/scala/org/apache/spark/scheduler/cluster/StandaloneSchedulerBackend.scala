@@ -25,6 +25,7 @@ import scala.concurrent.Future
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
@@ -181,6 +182,14 @@ private[spark] class StandaloneSchedulerBackend(
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }
+
+  override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = {
+    if (sc.deployMode == "client") {
+      Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
+    } else {
+      None
+    }
+  }
 
   /**
    * Request executors from the Master by specifying the total number desired,

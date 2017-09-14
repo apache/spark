@@ -40,6 +40,7 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -111,9 +112,9 @@ private[hive] class HiveClientImpl(
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
       // Set up kerberos credentials for UserGroupInformation.loginUser within current class loader
-      if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-        val principal = sparkConf.get("spark.yarn.principal")
-        val keytab = sparkConf.get("spark.yarn.keytab")
+      if (sparkConf.contains(PRINCIPAL) && sparkConf.contains(KEYTAB)) {
+        val principal = sparkConf.get(PRINCIPAL).get
+        val keytab = sparkConf.get(KEYTAB).get
         SparkHadoopUtil.get.loginUserFromKeytab(principal, keytab)
       }
       try {
