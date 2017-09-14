@@ -1702,7 +1702,7 @@ setMethod("to_date",
 
 #' @details
 #' \code{to_json}: Converts a column containing a \code{structType}, array of \code{structType},
-#  a \code{mapType} or array of \code{mapType} into a Column of JSON string.
+#' a \code{mapType} or array of \code{mapType} into a Column of JSON string.
 #' Resolving the Column can fail if an unsupported type is encountered.
 #'
 #' @rdname column_collection_functions
@@ -1725,7 +1725,7 @@ setMethod("to_date",
 #'
 #' # Converts an array of maps into a JSON array
 #' df2 <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
-#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#' df2 <- mutate(df2, people_json = to_json(df2$people))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
           function(x, ...) {

@@ -1921,8 +1921,8 @@ def from_json(col, schema, options={}):
 @since(2.1)
 def to_json(col, options={}):
     """
-    Converts a column containing a [[StructType]], [[ArrayType]] of [[StructType]]s,
-    a [[MapType]] or [[ArrayType]] of [[MapType]] into a JSON string.
+    Converts a column containing a :class:`StructType, :class:`ArrayType` of :class:`StructType`s,
+    a :class`MapType` or :class:`ArrayType` of :class:`MapType` into a JSON string.
     Throws an exception, in the case of an unsupported type.
 
     :param col: name of column containing the struct, array of the structs, the map or
