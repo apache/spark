@@ -646,14 +646,14 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_chaining(self):
         # Tests for SPARK-21985
-        rdd = self.sc.parallelize(range(10), 2)
+        rdd = self.sc.parallelize('abc')
         self.assertSetEqual(
             set(rdd.zip(rdd).zip(rdd).collect()),
-            set([((x, x), x) for x in range(10)])
+            set([((x, x), x) for x in 'abc'])
         )
         self.assertSetEqual(
             set(rdd.zip(rdd.zip(rdd)).collect()),
-            set([(x, (x, x)) for x in range(10)])
+            set([(x, (x, x)) for x in 'abc'])
         )
 
     def test_deleting_input_files(self):

@@ -97,7 +97,7 @@ class Serializer(object):
 
     def _load_stream_without_unbatching(self, stream):
         """
-        Return an iterator of deserialized batches (lists) of objects from the input stream.
+        Return an iterator of deserialized batches (iterable) of objects from the input stream.
         if the serializer does not operate on batches the default implementation returns an
         iterator of single element lists.
         """
