@@ -17,19 +17,31 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import java.util.Locale
+
+
 class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
   var dataLocation: String = null
+  var queryFilter: Set[String] = Set.empty
 
   parseArgs(args.toList)
   validateArguments()
 
+  private def optionMatch(optionName: String, s: String): Boolean = {
+    optionName == s.toLowerCase(Locale.ROOT)
+  }
+
   private def parseArgs(inputArgs: List[String]): Unit = {
     var args = inputArgs
 
-    while(args.nonEmpty) {
+    while (args.nonEmpty) {
       args match {
-        case ("--data-location") :: value :: tail =>
+        case optName :: value :: tail if optionMatch("--data-location", optName) =>
           dataLocation = value
+          args = tail
+
+        case optName :: value :: tail if optionMatch("--query-filter", optName) =>
+          queryFilter = value.toLowerCase(Locale.ROOT).split(",").map(_.trim).toSet
           args = tail
 
         case _ =>
@@ -47,6 +59,7 @@ class TPCDSQueryBenchmarkArguments(val args: Array[String]) {
       |Usage: spark-submit --class <this class> <spark sql test jar> [Options]
       |Options:
       |  --data-location      Path to TPCDS data
+      |  --query-filter       Queries to filter, e.g., q3,q5,q13
       |
       |------------------------------------------------------------------------------------------------------------------
       |In order to run this benchmark, please follow the instructions at
