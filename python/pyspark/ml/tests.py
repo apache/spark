@@ -1530,12 +1530,6 @@ class TrainingSummaryTest(SparkSessionTestCase):
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.accuracy, s.accuracy)
-        self.assertAlmostEqual(sameSummary.weightedTruePositiveRate, s.weightedTruePositiveRate)
-        self.assertAlmostEqual(sameSummary.weightedFalsePositiveRate, s.weightedFalsePositiveRate)
-        self.assertAlmostEqual(sameSummary.weightedRecall, s.weightedRecall)
-        self.assertAlmostEqual(sameSummary.weightedPrecision, s.weightedPrecision)
-        self.assertAlmostEqual(sameSummary.weightedFMeasure(), s.weightedFMeasure())
-        self.assertAlmostEqual(sameSummary.weightedFMeasure(1.0), s.weightedFMeasure(1.0))
 
     def test_gaussian_mixture_summary(self):
         data = [(Vectors.dense(1.0),), (Vectors.dense(5.0),), (Vectors.dense(10.0),),
