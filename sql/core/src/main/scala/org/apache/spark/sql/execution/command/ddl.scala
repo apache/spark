@@ -801,7 +801,11 @@ object DDLUtils {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
-    table.provider.isDefined && table.provider.get.toLowerCase(Locale.ROOT) == HIVE_PROVIDER
+    isHiveTable(table.provider)
+  }
+
+  def isHiveTable(provider: Option[String]): Boolean = {
+    provider.isDefined && provider.get.toLowerCase(Locale.ROOT) == HIVE_PROVIDER
   }
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
