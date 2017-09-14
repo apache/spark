@@ -53,8 +53,6 @@ case class StatefulOperatorStateInfo(
 trait StatefulOperator extends SparkPlan {
   def stateInfo: Option[StatefulOperatorStateInfo]
 
-  def keyExpressions: Seq[Attribute]
-
   protected def getStateInfo: StatefulOperatorStateInfo = attachTree(this) {
     stateInfo.getOrElse {
       throw new IllegalStateException("State location not present for execution")
@@ -204,6 +202,10 @@ case class StateStoreRestoreExec(
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
+          // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
+          // the `HashAggregateExec` will output a 0 value for the partial merge. We need to
+          // restore the value, so that we don't overwrite our state with a 0 value, but rather
+          // merge the 0 with existing state.
           store.iterator().map(_.value)
         } else {
           iter.flatMap { row =>

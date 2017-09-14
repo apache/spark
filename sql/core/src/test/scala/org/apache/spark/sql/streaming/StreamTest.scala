@@ -167,7 +167,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
   case class StartStream(
       trigger: Trigger = Trigger.ProcessingTime(0),
       triggerClock: Clock = new SystemClock,
-      additionalConfs: Map[String, String] = Map.empty)
+      additionalConfs: Map[String, String] = Map.empty,
+      queryName: String = null)
     extends StreamAction
 
   /** Advance the trigger clock's time manually. */
@@ -355,7 +356,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
         action match {
-          case StartStream(trigger, triggerClock, additionalConfs) =>
+          case StartStream(trigger, triggerClock, additionalConfs, queryName) =>
             verify(currentStream == null, "stream already running")
             verify(triggerClock.isInstanceOf[SystemClock]
               || triggerClock.isInstanceOf[StreamManualClock],
@@ -378,7 +379,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
               sparkSession
                 .streams
                 .startQuery(
-                  None,
+                  Option(queryName),
                   Some(metadataRoot),
                   stream,
                   sink,

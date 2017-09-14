@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.StructType
@@ -389,19 +390,29 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       CheckLastBatch((0, 0, 2), (1, 1, 3)))
   }
 
+  /**
+   * This method verifies certain properties in the SparkPlan of a streaming aggregation.
+   * First of all, it checks that the child of a `StateStoreRestoreExec` creates the desired
+   * data distribution, where the child could be an Exchange, or a `HashAggregateExec` which already
+   * provides the expected data distribution.
+   *
+   * The second thing it checks that the child provides the expected number of partitions.
+   *
+   * The third thing it checks that we don't add an unnecessary shuffle in-between
+   * `StateStoreRestoreExec` and `StateStoreSaveExec`.
+   */
   private def checkAggregationChain(
-      sq: StreamingQuery,
-      requiresShuffling: Boolean,
-      expectedPartition: Int): Unit = {
-    val executedPlan = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery
-      .lastExecution.executedPlan
+      se: StreamExecution,
+      expectShuffling: Boolean,
+      expectedPartition: Int): Boolean = {
+    val executedPlan = se.lastExecution.executedPlan
     val restore = executedPlan
       .collect { case ss: StateStoreRestoreExec => ss }
       .head
     restore.child match {
       case node: UnaryExecNode =>
         assert(node.outputPartitioning.numPartitions === expectedPartition)
-        if (requiresShuffling) {
+        if (expectShuffling) {
           assert(node.isInstanceOf[Exchange], s"Expected a shuffle, got: ${node.child}")
         } else {
           assert(!node.isInstanceOf[Exchange], "Didn't expect a shuffle")
@@ -418,10 +429,20 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
         reachedRestore = p.isInstanceOf[StateStoreRestoreExec]
       }
     }
+    true
   }
 
-  test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned accordingly") {
-    val inputSource = new NonLocalRelationSource(spark)
+  /** Add blocks of data to the `BlockRDDBackedSource`. */
+  case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      data.foreach(source.addData)
+      source.releaseLock()
+      (source, LongOffset(source.counter))
+    }
+  }
+
+  test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned to 1") {
+    val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       withTempDir { tempDir =>
         val aggregated: Dataset[Long] =
@@ -433,150 +454,77 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
             .count()
             .as[Long]
 
-        val sq = aggregated.writeStream
-          .format("memory")
-          .outputMode("complete")
-          .queryName("agg_test")
-          .option("checkpointLocation", tempDir.getAbsolutePath)
-          .start()
-
-        try {
-
-          inputSource.addData(1)
-          inputSource.releaseLock()
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            1L)
-
-          checkAggregationChain(sq, requiresShuffling = false, 1)
-
-          inputSource.addData()
-          inputSource.releaseLock()
-          sq.processAllAvailable()
-
-          checkAggregationChain(sq, requiresShuffling = true, 1)
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            1L)
-
-          inputSource.addData(2, 3)
-          inputSource.releaseLock()
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            3L)
-
-          inputSource.addData()
-          inputSource.releaseLock()
-          sq.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[Long],
-            3L)
-        } finally {
-          sq.stop()
-        }
+        testStream(aggregated, Complete())(
+          AddBlockData(inputSource, Seq(1)),
+          CheckLastBatch(1),
+          AssertOnQuery(se => checkAggregationChain(se, expectShuffling = false, 1)),
+          AddBlockData(inputSource), // create an empty trigger
+          AssertOnQuery(se => checkAggregationChain(se, expectShuffling = true, 1)),
+          CheckLastBatch(1),
+          AddBlockData(inputSource, Seq(2, 3)),
+          CheckLastBatch(3),
+          AddBlockData(inputSource),
+          CheckLastBatch(3),
+          StopStream
+        )
       }
     }
   }
 
   test("SPARK-21977: coalesce(1) should still be repartitioned when it has keyExpressions") {
-    val inputSource = new NonLocalRelationSource(spark)
+    val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       withTempDir { tempDir =>
 
-        val sq = spark.readStream
-          .format((new MockSourceProvider).getClass.getCanonicalName)
-          .load()
-          .coalesce(1)
-          .groupBy('a % 1) // just to give it a fake key
-          .count()
-          .as[(Long, Long)]
-          .writeStream
-          .format("memory")
-          .outputMode("complete")
-          .queryName("agg_test")
-          .option("checkpointLocation", tempDir.getAbsolutePath)
-          .start()
-
-        try {
-
-          inputSource.addData(1)
-          inputSource.releaseLock()
-          sq.processAllAvailable()
-
-          checkAggregationChain(
-            sq,
-            requiresShuffling = true,
-            spark.sessionState.conf.numShufflePartitions)
-
-          checkDataset(
-            spark.table("agg_test").as[(Long, Long)],
-            (0L, 1L))
-
-        } finally {
-          sq.stop()
+        def createDf(partitions: Int): Dataset[(Long, Long)] = {
+          spark.readStream
+            .format((new MockSourceProvider).getClass.getCanonicalName)
+            .load()
+            .coalesce(partitions)
+            .groupBy('a % 1) // just to give it a fake key
+            .count()
+            .as[(Long, Long)]
         }
 
-        val sq2 = spark.readStream
-          .format((new MockSourceProvider).getClass.getCanonicalName)
-          .load()
-          .coalesce(2)
-          .groupBy('a % 1) // just to give it a fake key
-          .count()
-          .as[(Long, Long)]
-          .writeStream
-          .format("memory")
-          .outputMode("complete")
-          .queryName("agg_test")
-          .option("checkpointLocation", tempDir.getAbsolutePath)
-          .start()
+        val confs = Map(SQLConf.CHECKPOINT_LOCATION.key -> tempDir.getAbsolutePath)
 
-        try {
-          sq2.processAllAvailable()
-          inputSource.addData(2)
-          inputSource.addData(3)
-          inputSource.addData(4)
-          inputSource.releaseLock()
-          sq2.processAllAvailable()
+        testStream(createDf(1), Complete())(
+          StartStream(additionalConfs = confs, queryName = "agg_test"),
+          AddBlockData(inputSource, Seq(1)),
+          AssertOnQuery { se =>
+            checkAggregationChain(
+              se,
+              expectShuffling = true,
+              spark.sessionState.conf.numShufflePartitions)
+          },
+          CheckLastBatch((0L, 1L)),
+          StopStream
+        )
 
-          checkAggregationChain(
-            sq2,
-            requiresShuffling = false, // doesn't require extra shuffle as HashAggregate adds it
-            spark.sessionState.conf.numShufflePartitions)
-
-          checkDataset(
-            spark.table("agg_test").as[(Long, Long)],
-            (0L, 4L))
-
-          inputSource.addData()
-          inputSource.releaseLock()
-          sq2.processAllAvailable()
-
-          checkDataset(
-            spark.table("agg_test").as[(Long, Long)],
-            (0L, 4L))
-        } finally {
-          sq2.stop()
-        }
+        testStream(createDf(2), Complete())(
+          StartStream(additionalConfs = confs, queryName = "agg_test"),
+          AddBlockData(inputSource, Seq(2), Seq(3), Seq(4)),
+          AssertOnQuery { se =>
+            checkAggregationChain(
+              se,
+              expectShuffling = false,
+              spark.sessionState.conf.numShufflePartitions)
+          },
+          CheckLastBatch((0L, 4L)),
+          AddBlockData(inputSource),
+          CheckLastBatch((0L, 4L)),
+          StopStream
+        )
       }
     }
   }
 }
 
 /**
- * LocalRelation has some optimized properties during Spark planning. In order for the bugs in
- * SPARK-21977 to occur, we need to create a logical relation from an existing RDD. We use a
- * BlockRDD since it accepts 0 partitions. One requirement for the one of the bugs is the use of
- * `coalesce(1)`, which has several optimizations regarding [[SinglePartition]], and a 0 partition
- * parentRDD.
+ * A Streaming Source that is backed by a BlockRDD and that can create RDDs with 0 blocks at will.
  */
-class NonLocalRelationSource(spark: SparkSession) extends Source {
-  private var counter = 0L
+class BlockRDDBackedSource(spark: SparkSession) extends Source {
+  var counter = 0L
   private val blockMgr = SparkEnv.get.blockManager
   private var blocks: Seq[BlockId] = Seq.empty
 
@@ -588,13 +536,11 @@ class NonLocalRelationSource(spark: SparkSession) extends Source {
     }
     synchronized {
       if (data.nonEmpty) {
-        counter += data.length
         val id = TestBlockId(counter.toString)
         blockMgr.putIterator(id, data.iterator, StorageLevel.MEMORY_ONLY)
         blocks ++= id :: Nil
-      } else {
-        counter += 1
       }
+      counter += 1
     }
   }
 

@@ -21,10 +21,10 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SparkSession, Strategy}
+import org.apache.spark.sql.{AnalysisException, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, SinglePartition}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -119,9 +119,8 @@ class IncrementalExecution(
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] = Seq(
-    state,
-    EnsureStatefulOpPartitioning) ++ super.preparations
+  override def preparations: Seq[Rule[SparkPlan]] =
+    Seq(state, EnsureStatefulOpPartitioning) ++ super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
@@ -130,15 +129,17 @@ class IncrementalExecution(
 object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
   // Needs to be transformUp to avoid extra shuffles
   override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case ss: StatefulOperator =>
+    case so: StatefulOperator =>
       val numPartitions = plan.sqlContext.sessionState.conf.numShufflePartitions
-      val keys = ss.keyExpressions
-      val expectedPartitioning = if (keys.isEmpty) {
-        SinglePartition
-      } else {
-        HashPartitioning(keys, numPartitions)
-      }
-      val children = ss.children.map { child =>
+      val distributions = so.requiredChildDistribution
+      val children = so.children.zip(distributions).map { case (child, reqDistribution) =>
+        val expectedPartitioning = reqDistribution match {
+          case AllTuples => SinglePartition
+          case ClusteredDistribution(keys) => HashPartitioning(keys, numPartitions)
+          case _ => throw new AnalysisException("Unexpected distribution expected for " +
+            s"Stateful Operator: $so. Expect AllTuples or ClusteredDistribution but got " +
+            s"$reqDistribution.")
+        }
         if (child.outputPartitioning.guarantees(expectedPartitioning) &&
             child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
           child
@@ -146,6 +147,6 @@ object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
           ShuffleExchange(expectedPartitioning, child)
         }
       }
-      ss.withNewChildren(children)
+      so.withNewChildren(children)
   }
 }
