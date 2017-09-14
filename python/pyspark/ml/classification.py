@@ -1576,8 +1576,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
             multiclassLabeled = dataset.select(labelCol, featuresCol)
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -1690,8 +1689,7 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
 
