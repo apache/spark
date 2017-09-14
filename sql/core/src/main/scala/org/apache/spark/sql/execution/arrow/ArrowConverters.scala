@@ -82,6 +82,7 @@ private[sql] object ArrowConverters {
 
     val root = VectorSchemaRoot.create(arrowSchema, allocator)
     val arrowWriter = ArrowWriter.create(root)
+
     var closed = false
 
     context.addTaskCompletionListener { _ =>
