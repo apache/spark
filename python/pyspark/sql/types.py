@@ -19,7 +19,7 @@ import sys
 import decimal
 import time
 import datetime
-import dateutil
+import dateutil.tz
 import calendar
 import json
 import re
