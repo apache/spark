@@ -19,7 +19,6 @@ import sys
 import decimal
 import time
 import datetime
-import dateutil.tz
 import calendar
 import json
 import re
@@ -179,7 +178,7 @@ class DateType(AtomicType):
             return datetime.date.fromordinal(v + self.EPOCH_ORDINAL)
 
 
-_is_utc = datetime.datetime.now(dateutil.tz.tzlocal()).tzname() == "UTC"
+_is_utc = time.tzname[time.daylight] == "UTC"
 
 
 class TimestampType(AtomicType):
