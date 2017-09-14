@@ -164,7 +164,6 @@ class CrossValidatorSuite
       .setSeed(42L)
       .setParallelism(2)
       .setCollectSubModels(true)
-      .setPersistSubModelsPath("cvSubModels")
 
     val cv2 = testDefaultReadWrite(cv, testParams = false)
 
@@ -173,7 +172,6 @@ class CrossValidatorSuite
     assert(cv.getSeed === cv2.getSeed)
     assert(cv.getParallelism === cv2.getParallelism)
     assert(cv.getCollectSubModels === cv2.getCollectSubModels)
-    assert(cv.getPersistSubModelsPath === cv2.getPersistSubModelsPath)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -212,19 +210,8 @@ class CrossValidatorSuite
       .setNumFolds(numFolds)
       .setParallelism(1)
       .setCollectSubModels(true)
-      .setPersistSubModelsPath(persistSubModelsPath)
 
     val cvModel = cv.fit(dataset)
-
-    val subModels = Array.fill(numFolds)(Array.fill[LogisticRegressionModel](
-      lrParamMaps.length)(null))
-    for (i <- 0 until numFolds) {
-      val splitPath = new File(persistSubModelsPath, i.toString)
-      for (j <- 0 until lrParamMaps.length) {
-        val subModelPath = new File(splitPath, j.toString).toString
-        subModels(i)(j) = LogisticRegressionModel.load(subModelPath)
-      }
-    }
 
     assert(cvModel.subModels != null && cvModel.subModels.length == numFolds)
     cvModel.subModels.foreach(array => assert(array.length == lrParamMaps.length))
@@ -243,9 +230,7 @@ class CrossValidatorSuite
     for (i <- 0 until numFolds) {
       for (j <- 0 until lrParamMaps.length) {
         assert(cvModel.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid ===
-          subModels(i)(j).uid)
-        assert(cvModel3.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid ===
-          subModels(i)(j).uid)
+          cvModel3.subModels(i)(j).asInstanceOf[LogisticRegressionModel].uid)
       }
     }
   }

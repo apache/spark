@@ -84,9 +84,7 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
         isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
       ParamDesc[Boolean]("collectSubModels", "whether to collect sub models when tuning fitting",
-        Some("false"), isExpertParam = true),
-      ParamDesc[String]("persistSubModelsPath", "The path to persist sub models when " +
-        "tuning fitting", Some("\"\""), isExpertParam = true)
+        Some("false"), isExpertParam = true)
     )
 
     val code = genSharedParams(params)

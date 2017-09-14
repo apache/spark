@@ -33,7 +33,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasCollectSubModels, HasParallelism, HasPersistSubModelsPath}
+import org.apache.spark.ml.param.shared.{HasCollectSubModels, HasParallelism}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.StructType
@@ -68,7 +68,7 @@ private[ml] trait TrainValidationSplitParams extends ValidatorParams {
 class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[TrainValidationSplitModel]
   with TrainValidationSplitParams with HasParallelism with HasCollectSubModels
-  with HasPersistSubModelsPath with MLWritable with Logging {
+  with MLWritable with Logging {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
@@ -106,10 +106,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
   @Since("2.3.0")
   def setCollectSubModels(value: Boolean): this.type = set(collectSubModels, value)
 
-  /** @group expertSetParam */
-  @Since("2.3.0")
-  def setPersistSubModelsPath(value: String): this.type = set(persistSubModelsPath, value)
-
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): TrainValidationSplitModel = {
     val schema = dataset.schema
@@ -131,7 +127,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
     validationDataset.cache()
 
     val collectSubModelsParam = $(collectSubModels)
-    val persistSubModelsPathParam = $(persistSubModelsPath)
 
     var subModels: Array[Model[_]] = if (collectSubModelsParam) {
       Array.fill[Model[_]](epm.length)(null)
@@ -145,10 +140,6 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
         if (collectSubModelsParam) {
           subModels(paramIndex) = model
-        }
-        if (persistSubModelsPathParam.nonEmpty) {
-          val modelPath = new Path(persistSubModelsPathParam, paramIndex.toString).toString
-          model.asInstanceOf[MLWritable].save(modelPath)
         }
         model
       } (executionContext)

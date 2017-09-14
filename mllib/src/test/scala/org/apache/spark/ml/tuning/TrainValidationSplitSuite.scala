@@ -164,7 +164,6 @@ class TrainValidationSplitSuite
       .setSeed(42L)
       .setParallelism(2)
       .setCollectSubModels(true)
-      .setPersistSubModelsPath("tvsSubModels")
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
@@ -172,7 +171,6 @@ class TrainValidationSplitSuite
     assert(tvs.getSeed === tvs2.getSeed)
     assert(tvs.getParallelism === tvs2.getParallelism)
     assert(tvs.getCollectSubModels === tvs2.getCollectSubModels)
-    assert(tvs.getPersistSubModelsPath === tvs2.getPersistSubModelsPath)
 
     ValidatorParamsSuiteHelpers
       .compareParamMaps(tvs.getEstimatorParamMaps, tvs2.getEstimatorParamMaps)
@@ -196,7 +194,6 @@ class TrainValidationSplitSuite
     val eval = new BinaryClassificationEvaluator
     val subdirName = Identifiable.randomUID("testSubModels")
     val subPath = new File(tempDir, subdirName)
-    val persistSubModelsPath = new File(subPath, "subModels").toString
 
     val tvs = new TrainValidationSplit()
       .setEstimator(lr)
@@ -204,15 +201,8 @@ class TrainValidationSplitSuite
       .setEvaluator(eval)
       .setParallelism(1)
       .setCollectSubModels(true)
-      .setPersistSubModelsPath(persistSubModelsPath)
 
     val tvsModel = tvs.fit(dataset)
-
-    val subModels = Array.fill[LogisticRegressionModel](lrParamMaps.length)(null)
-    for (i <- 0 until lrParamMaps.length) {
-      val subModelPath = new File(persistSubModelsPath, i.toString).toString
-      subModels(i) = LogisticRegressionModel.load(subModelPath)
-    }
 
     assert(tvsModel.subModels != null && tvsModel.subModels.length == lrParamMaps.length)
 
@@ -228,9 +218,7 @@ class TrainValidationSplitSuite
 
     for (i <- 0 until lrParamMaps.length) {
       assert(tvsModel.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
-        subModels(i).uid)
-      assert(tvsModel3.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
-        subModels(i).uid)
+        tvsModel3.subModels(i).asInstanceOf[LogisticRegressionModel].uid)
     }
   }
 
