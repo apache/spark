@@ -849,7 +849,12 @@ private[hive] object HiveClientImpl {
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
 
-    val metadata = new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+    val metadata = if (hc.getType != columnType.catalogString) {
+      new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+    } else {
+      Metadata.empty
+    }
+
     val field = StructField(
       name = hc.getName,
       dataType = columnType,
