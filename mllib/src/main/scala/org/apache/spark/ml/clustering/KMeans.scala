@@ -40,7 +40,7 @@ import org.apache.spark.util.VersionUtils.majorVersion
  * Common params for KMeans and KMeansModel
  */
 private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFeaturesCol
-  with HasSeed with HasPredictionCol with HasTol {
+  with HasSeed with HasPredictionCol with HasTol with HasHandlePersistence {
 
   /**
    * The number of clusters to create (k). Must be &gt; 1. Note that it is possible for fewer than
@@ -300,20 +300,31 @@ class KMeans @Since("1.5.0") (
   @Since("1.5.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
+  /**
+   * Sets whether to handle data persistence.
+   * @group setParam
+   */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
     transformSchema(dataset.schema, logging = true)
 
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
     val instances: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
       case Row(point: Vector) => OldVectors.fromML(point)
     }
 
-    if (handlePersistence) {
-      instances.persist(StorageLevel.MEMORY_AND_DISK)
+    if (dataset.storageLevel == StorageLevel.NONE) {
+      if ($(handlePersistence)) {
+        instances.persist(StorageLevel.MEMORY_AND_DISK)
+      } else {
+        logWarning("The input dataset is uncached, which may hurt performance if its " +
+          "upstreams are also uncached.")
+      }
     }
 
-    val instr = Instrumentation.create(this, instances)
+    val instr = Instrumentation.create(this, dataset)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
     val algo = new MLlibKMeans()
       .setK($(k))
@@ -329,8 +340,8 @@ class KMeans @Since("1.5.0") (
 
     model.setSummary(Some(summary))
     instr.logSuccess(model)
-    if (handlePersistence) {
-      instances.unpersist()
+    if (instances.getStorageLevel != StorageLevel.NONE) {
+      instances.unpersist(blocking = false)
     }
     model
   }

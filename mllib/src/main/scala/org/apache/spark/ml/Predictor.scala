@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
@@ -126,10 +128,10 @@ abstract class Predictor[
    * Developers can override this for specific purpose.
    *
    * @param dataset  Original training dataset
-   * @return  Intermediate dataframe
+   * @return  Intermediate training dataframe
    */
   protected def preprocess(dataset: Dataset[_]): DataFrame = {
-    val cols = collection.mutable.ArrayBuffer[Column]()
+    val cols = ArrayBuffer[Column]()
     cols.append(col($(featuresCol)))
 
     // Cast LabelCol to DoubleType and keep the metadata.
@@ -146,7 +148,7 @@ abstract class Predictor[
 
     val selected = dataset.select(cols: _*)
 
-    val cached = this match {
+    this match {
       case p: HasHandlePersistence =>
         if (dataset.storageLevel == StorageLevel.NONE) {
           if ($(p.handlePersistence)) {
@@ -156,11 +158,10 @@ abstract class Predictor[
               "upstreams are also uncached.")
           }
         }
-        selected
-      case _ => selected
+      case _ =>
     }
 
-    cached
+    selected
   }
 
   /**

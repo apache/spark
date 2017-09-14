@@ -373,6 +373,29 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   @Since("2.0.0")
   def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
 
+  override protected def preprocess(dataset: Dataset[_]): DataFrame = {
+    val cols = collection.mutable.ArrayBuffer[Column]()
+    cols.append(col($(featuresCol)))
+
+    // Cast LabelCol to DoubleType and keep the metadata.
+    val labelMeta = dataset.schema($(labelCol)).metadata
+    cols.append(col($(labelCol)).cast(DoubleType).as($(labelCol), labelMeta))
+
+    // Cast WeightCol to DoubleType and keep the metadata.
+    if (isDefined(weightCol) && $(weightCol).nonEmpty) {
+      val weightMeta = dataset.schema($(weightCol)).metadata
+      cols.append(col($(weightCol)).cast(DoubleType).as($(weightCol), weightMeta))
+    }
+
+    // Cast OffsetCol to DoubleType and keep the metadata.
+    if (isDefined(offsetCol) && $(offsetCol).nonEmpty) {
+      val offsetMeta = dataset.schema($(offsetCol)).metadata
+      cols.append(col($(offsetCol)).cast(DoubleType).as($(offsetCol), offsetMeta))
+    }
+
+    dataset.select(cols: _*)
+  }
+
   override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val familyAndLink = FamilyAndLink(this)
 
@@ -393,7 +416,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
         "set to false. To fit a model with 0 features, fitIntercept must be set to true." )
 
     val w = if (!hasWeightCol) lit(1.0) else col($(weightCol))
-    val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol)).cast(DoubleType)
+    val offset = if (!hasOffsetCol) lit(0.0) else col($(offsetCol))
 
     val model = if (familyAndLink.family == Gaussian && familyAndLink.link == Identity) {
       // TODO: Make standardizeFeatures and standardizeLabel configurable.

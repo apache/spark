@@ -34,7 +34,7 @@ import org.apache.spark.ml._
 import org.apache.spark.ml.attribute._
 import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-import org.apache.spark.ml.param.shared.{HasParallelism, HasWeightCol}
+import org.apache.spark.ml.param.shared.{HasHandlePersistence, HasParallelism, HasWeightCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
@@ -56,7 +56,7 @@ private[ml] trait ClassifierTypeTrait {
  * Params for [[OneVsRest]].
  */
 private[ml] trait OneVsRestParams extends PredictorParams
-  with ClassifierTypeTrait with HasWeightCol {
+  with ClassifierTypeTrait with HasWeightCol with HasHandlePersistence {
 
   /**
    * param for the base binary classifier that we reduce multiclass classification into.
@@ -68,6 +68,13 @@ private[ml] trait OneVsRestParams extends PredictorParams
 
   /** @group getParam */
   def getClassifier: ClassifierType = $(classifier)
+
+  /**
+   * Sets whether to handle data persistence.
+   * @group setParam
+   */
+  @Since("2.3.0")
+  def setHandlePersistence(value: Boolean): this.type = set(handlePersistence, value)
 }
 
 private[ml] object OneVsRestParams extends ClassifierTypeTrait {
@@ -165,9 +172,13 @@ final class OneVsRestModel private[ml] (
     val newDataset = dataset.withColumn(accColName, initUDF())
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) {
-      newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+    if (dataset.storageLevel == StorageLevel.NONE) {
+      if ($(handlePersistence)) {
+        newDataset.persist(StorageLevel.MEMORY_AND_DISK)
+      } else {
+        logWarning("The input dataset is uncached, which may hurt performance if its " +
+          "upstreams are also uncached.")
+      }
     }
 
     // update the accumulator column with the result of prediction of models
@@ -191,8 +202,8 @@ final class OneVsRestModel private[ml] (
         updatedDataset.select(newColumns: _*).withColumnRenamed(tmpColName, accColName)
     }
 
-    if (handlePersistence) {
-      newDataset.unpersist()
+    if (newDataset.storageLevel != StorageLevel.NONE) {
+      newDataset.unpersist(blocking = false)
     }
 
     // output the index of the classifier with highest confidence as prediction
@@ -359,9 +370,13 @@ final class OneVsRest @Since("1.4.0") (
     }
 
     // persist if underlying dataset is not persistent.
-    val handlePersistence = dataset.storageLevel == StorageLevel.NONE
-    if (handlePersistence) {
-      multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+    if (dataset.storageLevel == StorageLevel.NONE) {
+      if ($(handlePersistence)) {
+        multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
+      } else {
+        logWarning("The input dataset is uncached, which may hurt performance if its " +
+          "upstreams are also uncached.")
+      }
     }
 
     val executionContext = getExecutionContext
@@ -392,8 +407,8 @@ final class OneVsRest @Since("1.4.0") (
       .map(ThreadUtils.awaitResult(_, Duration.Inf)).toArray[ClassificationModel[_, _]]
     instr.logNumFeatures(models.head.numFeatures)
 
-    if (handlePersistence) {
-      multiclassLabeled.unpersist()
+    if (multiclassLabeled.storageLevel != StorageLevel.NONE) {
+      multiclassLabeled.unpersist(blocking = false)
     }
 
     // extract label metadata from label column if present, or create a nominal attribute
