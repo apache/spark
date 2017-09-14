@@ -201,7 +201,7 @@ class TimestampType(AtomicType):
         if ts is not None:
             # using int to avoid precision loss in float
             y, m, d, hh, mm, ss, _, _, _ = time.gmtime(ts // 1000000) if _is_utc else time.localtime(ts // 1000000)
-            datetime.datetime(y, m, d, hh, mm, ss, ts % 1000000)
+            return datetime.datetime(y, m, d, hh, mm, ss, ts % 1000000)
 
 
 class DecimalType(FractionalType):
