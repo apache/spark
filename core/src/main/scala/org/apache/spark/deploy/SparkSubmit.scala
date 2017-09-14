@@ -373,7 +373,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
     //   2. We explicitly bypass Hadoop FileSystem with "spark.yarn.dist.forceDownloadSchemes".
     // We will download them to local disk prior to add to YARN's distributed cache.
     // For yarn client mode, since we already download them with above code, so we only need to
-    // gifure out the local path to replace the remote one.
+    // figure out the local path and replace the remote one.
     if (clusterManager == YARN) {
       sparkConf.setIfMissing(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
       val secMgr = new SecurityManager(sparkConf)
