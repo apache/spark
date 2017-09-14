@@ -303,19 +303,19 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   test("watermark with 2 streams") {
     val first = MemoryStream[Int]
 
-    val firstAggregation = first.toDF()
+    val firstDf = first.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .select('value)
 
     val second = MemoryStream[Int]
 
-    val secondAggregation = second.toDF()
+    val secondDf = second.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
       .withWatermark("eventTime", "10 seconds")
       .select('value)
 
-    val union = firstAggregation.union(secondAggregation)
+    val union = firstDf.union(secondDf)
       .writeStream
       .format("memory")
       .queryName("test")
