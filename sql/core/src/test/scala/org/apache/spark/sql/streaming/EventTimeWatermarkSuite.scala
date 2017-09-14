@@ -300,7 +300,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     )
   }
 
-  test("2stream") {
+  test("watermark with 2 streams") {
     val first = MemoryStream[Int]
 
     val firstAggregation = first.toDF()
@@ -315,21 +315,50 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withWatermark("eventTime", "10 seconds")
       .select('value)
 
-    testStream(firstAggregation.union(secondAggregation))(
-      AddData(first, 11),     // Set left watermark at,
-      CheckLastBatch(11),
-      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 1000),
-      AddData(second, 12),    // Set right watermark at 2; overall should still be 1
-      CheckLastBatch(12),
-      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 1000),
-      AddData(first, 21),     // Left is now further so we should take right watermark
-      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 2000),
-      AddData(second, 22, 32, 42), // Right is further, go back to taking left watermark
-      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 11000),
-      AddData(first, 31), //  Left watermark should keep being output as long as it's behind
-      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 21000),
-      AddData(first, 41),
-      AssertOnQuery(_.lastExecution.offsetSeqMetadata.batchWatermarkMs == 31000))
+    val union = firstAggregation.union(secondAggregation)
+      .writeStream
+      .format("memory")
+      .queryName("test")
+      .start()
+
+    def populateNewWatermarkFromData(stream: MemoryStream[Int], data: Int*): Unit = {
+      stream.addData(data)
+      union.processAllAvailable()
+      // add a dummy batch so lastExecution has the new watermark
+      stream.addData(0)
+      union.processAllAvailable()
+    }
+
+    def assertQueryWatermark(watermark: Int): Unit = {
+      assert(union.asInstanceOf[StreamingQueryWrapper].streamingQuery
+        .lastExecution.offsetSeqMetadata.batchWatermarkMs
+        == watermark)
+    }
+
+    populateNewWatermarkFromData(first, 11)
+    assertQueryWatermark(1000)
+
+    // Watermark stays at 1 from the left when right watermark moves to 2
+    populateNewWatermarkFromData(second, 12)
+    assertQueryWatermark(1000)
+
+    // Watermark switches to right side value 2 when left watermark goes higher
+    populateNewWatermarkFromData(first, 21)
+    assertQueryWatermark(2000)
+
+    // Watermark goes back to left
+    populateNewWatermarkFromData(second, 22, 32, 42)
+    assertQueryWatermark(11000)
+
+    // Watermark stays on left as long as it's below right
+    populateNewWatermarkFromData(first, 31)
+    assertQueryWatermark(21000)
+
+    populateNewWatermarkFromData(first, 41)
+    assertQueryWatermark(31000)
+
+    populateNewWatermarkFromData(first, 51)
+    assertQueryWatermark(32000)
   }
 
   test("complete mode") {
