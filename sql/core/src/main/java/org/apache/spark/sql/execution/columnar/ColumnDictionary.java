@@ -20,20 +20,25 @@ package org.apache.spark.sql.execution.columnar;
 import org.apache.spark.sql.execution.vectorized.Dictionary;
 
 public final class ColumnDictionary implements Dictionary {
-  private Object[] dictionary;
+  private int[] intDictionary;
+  private long[] longDictionary;
 
-  public ColumnDictionary(Object[] dictionary) {
-    this.dictionary = dictionary;
+  public ColumnDictionary(int[] dictionary) {
+    this.intDictionary = dictionary;
+  }
+
+  public ColumnDictionary(long[] dictionary) {
+    this.longDictionary = dictionary;
   }
 
   @Override
   public int decodeToInt(int id) {
-    return (Integer)dictionary[id];
+    return intDictionary[id];
   }
 
   @Override
   public long decodeToLong(int id) {
-    return (Long)dictionary[id];
+    return longDictionary[id];
   }
 
   @Override

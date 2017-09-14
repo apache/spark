@@ -160,15 +160,6 @@ private[sql] object ColumnAccessor {
       val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
       nativeAccessor.decompress(columnVector, numRows)
     } else {
-      val dataBuffer = columnAccessor.asInstanceOf[BasicColumnAccessor[_]].getByteBuffer
-      val nullsBuffer = dataBuffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
-
-      val numNulls = ByteBufferHelper.getInt(nullsBuffer)
-      for (i <- 0 until numNulls) {
-        val cordinal = ByteBufferHelper.getInt(nullsBuffer)
-        columnVector.putNull(cordinal)
-      }
       throw new RuntimeException("Not support non-primitive type now")
     }
   }
