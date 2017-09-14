@@ -333,9 +333,6 @@ class PairDeserializer(Serializer):
     Deserializes the JavaRDD zip() of two PythonRDDs.
     Due to pyspark batching we cannot simply use the result of the Java RDD zip,
     we additionally need to do the zip within each pair of batches.
-
-    It is the responsibility of the user of this class to ensure the batch sizes of the key and
-    value serializer are the same size. If they are not this will give incorrect results.
     """
 
     def __init__(self, key_ser, val_ser):
@@ -346,6 +343,11 @@ class PairDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+            key_batch = list(key_batch)
+            val_batch = list(val_batch)
+            if len(key_batch) != len(val_batch):
+                raise ValueError("Can not deserialize PairRDD with different number of items"
+                                 " in batches: (%d, %d)" % (len(key_batch), len(val_batch)))
             # for correctness with repeated cartesian/zip this must be returned as one batch
             yield zip(key_batch, val_batch)
 
