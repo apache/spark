@@ -56,7 +56,7 @@ public class OffHeapMemoryBlock extends MemoryBlock {
 
   @Override
   public MemoryBlock allocate(long offset, long size) {
-    return new OffHeapMemoryBlock(address, offset, size);
+    return new OffHeapMemoryBlock(directBuffer, address + offset, size);
   }
 
   @Override

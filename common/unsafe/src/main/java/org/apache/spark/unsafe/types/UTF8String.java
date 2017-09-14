@@ -1378,7 +1378,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     offset = BYTE_ARRAY_OFFSET;
     numBytes = in.readInt();
     base = ByteArrayMemoryBlock.fromArray(new byte[numBytes]);
-    in.readFully( ((ByteArrayMemoryBlock)base).getByteArray() );
+    in.readFully(((ByteArrayMemoryBlock)base).getByteArray());
   }
 
   @Override
@@ -1393,7 +1393,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     this.offset = BYTE_ARRAY_OFFSET;
     this.numBytes = in.readInt();
     base = ByteArrayMemoryBlock.fromArray(new byte[numBytes]);
-    in.read( ((ByteArrayMemoryBlock)base).getByteArray() );
+    in.read(((ByteArrayMemoryBlock)base).getByteArray());
   }
 
 }

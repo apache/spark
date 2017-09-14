@@ -232,7 +232,7 @@ public final class UnsafeArrayData extends ArrayData {
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = new ByteArrayMemoryBlock((byte[])baseObject, baseOffset, size);
+    MemoryBlock mb = new ByteArrayMemoryBlock((byte[])baseObject, baseOffset + offset, size);
     return UTF8String.fromAddress(mb, mb.getBaseOffset(), (int)mb.size());
   }
 
