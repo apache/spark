@@ -131,11 +131,11 @@ class StreamExecution(
     batchWatermarkMs = 0, batchTimestampMs = 0, sparkSession.conf)
 
   /**
-   * A map from watermarked attributes to their current watermark. The minimum watermark
-   * timestamp present here will be used as the overall query watermark in offsetSeqMetadata;
-   * the query watermark is what's logged and used to age out old state.
+   * A map of current watermarks, keyed by the position of the watermark operator in the
+   * physical plan. The minimum watermark timestamp present here will be used and persisted as the
+   * query's watermark when preparing each batch, so it's ok that this val isn't fault-tolerant.
    */
-  protected var attributeWatermarkMsMap: AttributeMap[Long] = AttributeMap(Seq())
+  protected val watermarkMsMap: MutableMap[Int, Long] = MutableMap()
 
   override val id: UUID = UUID.fromString(streamMetadata.id)
 
@@ -570,21 +570,22 @@ class StreamExecution(
       // Update the eventTime watermarks if we find any in the plan.
       if (lastExecution != null) {
         lastExecution.executedPlan.collect {
-          case e: EventTimeWatermarkExec if e.eventTimeStats.value.count > 0 =>
+          case e: EventTimeWatermarkExec => e
+        }.zipWithIndex.foreach {
+          case (e, index) if e.eventTimeStats.value.count > 0 =>
             logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
-            e
-        }.foreach { e =>
-          val newAttributeWatermarkMs = e.eventTimeStats.value.max - e.delayMs
-          val mappedWatermarkMs: Option[Long] = attributeWatermarkMsMap.get(e.eventTime)
-          if (mappedWatermarkMs.isEmpty || newAttributeWatermarkMs > mappedWatermarkMs.get) {
-            attributeWatermarkMsMap = AttributeMap(
-              attributeWatermarkMsMap.toSeq ++ Seq((e.eventTime, newAttributeWatermarkMs)))
-          }
+            val newAttributeWatermarkMs = e.eventTimeStats.value.max - e.delayMs
+            val mappedWatermarkMs: Option[Long] = watermarkMsMap.get(index)
+            if (mappedWatermarkMs.isEmpty || newAttributeWatermarkMs > mappedWatermarkMs.get) {
+              watermarkMsMap.put(index, newAttributeWatermarkMs)
+            }
+
+          case _ =>
         }
 
         // Update the query watermark to the minimum of all attribute watermarks.
-        if(!attributeWatermarkMsMap.isEmpty) {
-          val newWatermarkMs = attributeWatermarkMsMap.minBy(_._2)._2
+        if(!watermarkMsMap.isEmpty) {
+          val newWatermarkMs = watermarkMsMap.minBy(_._2)._2
           if (newWatermarkMs > batchWatermarkMs) {
             logInfo(s"Updating eventTime watermark to: $newWatermarkMs ms")
             batchWatermarkMs = newWatermarkMs

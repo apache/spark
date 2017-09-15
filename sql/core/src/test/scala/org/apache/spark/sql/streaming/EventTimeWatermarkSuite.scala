@@ -346,7 +346,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     // Watermark stays on left as long as it's below right
     generateAndAssertNewWatermark(first, Seq(31), 21000)
     generateAndAssertNewWatermark(first, Seq(41), 31000)
-    generateAndAssertNewWatermark(first, Seq(51), 41000)
+    generateAndAssertNewWatermark(first, Seq(51), 32000)
   }
 
   test("complete mode") {
