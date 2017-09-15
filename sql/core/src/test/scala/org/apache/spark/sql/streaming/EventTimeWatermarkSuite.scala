@@ -321,62 +321,44 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .queryName("test")
       .start()
 
-    def generateAndAssertNewWatermark(
-        stream: MemoryStream[Int],
-        data: Seq[Int],
-        watermark: Int): Unit = {
-      stream.addData(data)
-      assertWatermark(watermark)
-    }
-
-    def assertWatermark(watermark: Int) {
+    def getWatermarkAfterData(
+        firstData: Seq[Int] = Seq.empty,
+        secondData: Seq[Int] = Seq.empty): Long = {
+      if (firstData.nonEmpty) first.addData(firstData)
+      if (secondData.nonEmpty) second.addData(secondData)
       union.processAllAvailable()
       // add a dummy batch so lastExecution has the new watermark
       first.addData(0)
       union.processAllAvailable()
-
+      // get last watermark
       val lastExecution = union.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
-      assert(lastExecution.offsetSeqMetadata.batchWatermarkMs == watermark)
+      lastExecution.offsetSeqMetadata.batchWatermarkMs
     }
 
-    generateAndAssertNewWatermark(first, Seq(11), 1000)
+    // Global watermark starts at 0 until we get data from both sides
+    assert(getWatermarkAfterData(firstData = Seq(11)) == 0)
+    assert(getWatermarkAfterData(secondData = Seq(6)) == 1000)
     // Global watermark stays at left watermark 1 when right watermark moves to 2
-    generateAndAssertNewWatermark(second, Seq(8), 1000)
+    assert(getWatermarkAfterData(secondData = Seq(8)) == 1000)
     // Global watermark switches to right side value 2 when left watermark goes higher
-    generateAndAssertNewWatermark(first, Seq(21), 3000)
+    assert(getWatermarkAfterData(firstData = Seq(21)) == 3000)
     // Global watermark goes back to left
-    generateAndAssertNewWatermark(second, Seq(17, 28, 39), 11000)
+    assert(getWatermarkAfterData(secondData = Seq(17, 28, 39)) == 11000)
     // Global watermark stays on left as long as it's below right
-    generateAndAssertNewWatermark(first, Seq(31), 21000)
-    generateAndAssertNewWatermark(first, Seq(41), 31000)
+    assert(getWatermarkAfterData(firstData = Seq(31)) == 21000)
+    assert(getWatermarkAfterData(firstData = Seq(41)) == 31000)
     // Global watermark switches back to right again
-    generateAndAssertNewWatermark(first, Seq(51), 34000)
+    assert(getWatermarkAfterData(firstData = Seq(51)) == 34000)
 
     // Global watermark is updated correctly with simultaneous data from both sides
-    first.addData(100)
-    second.addData(100)
-    assertWatermark(90000)
-
-    first.addData(120)
-    second.addData(110)
-    assertWatermark(105000)
-
-    first.addData(130)
-    second.addData(125)
-    assertWatermark(120000)
+    assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 90000)
+    assert(getWatermarkAfterData(firstData = Seq(120), secondData = Seq(110)) == 105000)
+    assert(getWatermarkAfterData(firstData = Seq(130), secondData = Seq(125)) == 120000)
 
     // Global watermark doesn't decrement with simultaneous data
-    first.addData(100)
-    second.addData(100)
-    assertWatermark(120000)
-
-    first.addData(140)
-    second.addData(100)
-    assertWatermark(120000)
-
-    first.addData(100)
-    second.addData(135)
-    assertWatermark(130000)
+    assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 120000)
+    assert(getWatermarkAfterData(firstData = Seq(140), secondData = Seq(100)) == 120000)
+    assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(135)) == 130000)
   }
 
   test("complete mode") {

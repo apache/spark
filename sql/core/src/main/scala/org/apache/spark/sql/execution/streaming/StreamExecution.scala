@@ -132,8 +132,11 @@ class StreamExecution(
 
   /**
    * A map of current watermarks, keyed by the position of the watermark operator in the
-   * physical plan. The minimum watermark timestamp present here will be used and persisted as the
-   * query's watermark when preparing each batch, so it's ok that this val isn't fault-tolerant.
+   * physical plan.
+   *
+   * This state is 'soft state', which does not affect the correctness and semantics of watermarks
+   * and is not persisted across query restarts.
+   * The fault-tolerant watermark state is in offsetSeqMetadata.
    */
   protected val watermarkMsMap: MutableMap[Int, Long] = MutableMap()
 
@@ -573,17 +576,24 @@ class StreamExecution(
           case e: EventTimeWatermarkExec => e
         }.zipWithIndex.foreach {
           case (e, index) if e.eventTimeStats.value.count > 0 =>
-            logDebug(s"Observed event time stats: ${e.eventTimeStats.value}")
-            val newAttributeWatermarkMs = e.eventTimeStats.value.max - e.delayMs
-            val mappedWatermarkMs: Option[Long] = watermarkMsMap.get(index)
-            if (mappedWatermarkMs.isEmpty || newAttributeWatermarkMs > mappedWatermarkMs.get) {
-              watermarkMsMap.put(index, newAttributeWatermarkMs)
+            logDebug(s"Observed event time stats $index: ${e.eventTimeStats.value}")
+            val newWatermarkMs = e.eventTimeStats.value.max - e.delayMs
+            val prevWatermarkMs = watermarkMsMap.get(index)
+            if (prevWatermarkMs.isEmpty || newWatermarkMs > prevWatermarkMs.get) {
+              watermarkMsMap.put(index, newWatermarkMs)
             }
 
-          case _ =>
+          // Populate 0 if we haven't seen any data yet for this watermark node.
+          case (_, index) =>
+            if (!watermarkMsMap.isDefinedAt(index)) {
+              watermarkMsMap.put(index, 0)
+            }
         }
 
-        // Update the query watermark to the minimum of all attribute watermarks.
+        // Update the global watermark to the minimum of all watermark nodes.
+        // This is the safest option, because only the global watermark is fault-tolerant. Making
+        // it the minimum of all individual watermarks guarantees it will never advance past where
+        // any individual watermark operator would be if it were in a plan by itself.
         if(!watermarkMsMap.isEmpty) {
           val newWatermarkMs = watermarkMsMap.minBy(_._2)._2
           if (newWatermarkMs > batchWatermarkMs) {
