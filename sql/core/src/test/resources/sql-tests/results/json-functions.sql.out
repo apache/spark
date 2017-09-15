@@ -26,13 +26,13 @@ Extended Usage:
        {"time":"26/08/2015"}
       > SELECT to_json(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
-      > SELECT to_json(map('a',named_struct('b',1)));
+      > SELECT to_json(map('a', named_struct('b', 1)));
        {"a":{"b":1}}
-      > SELECT to_json(map(named_struct('a',1),named_struct('b',2)));
+      > SELECT to_json(map(named_struct('a', 1),named_struct('b', 2)));
        {"[1]":{"b":2}}
-      > SELECT to_json(map('a',1));
+      > SELECT to_json(map('a', 1));
        {"a":1}
-      > SELECT to_json(array((map('a',1))));
+      > SELECT to_json(array((map('a', 1))));
        [{"a":1}]
   
     Since: 2.2.0
