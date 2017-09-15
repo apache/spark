@@ -190,11 +190,11 @@ private[spark] class MemoryStore(
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     // How often to check whether we need to request more memory
-    val memoryCheckPeriod = 16
+    val memoryCheckPeriod = conf.getLong("spark.storage.unrollMemoryCheckPeriod", 16)
     // Memory currently reserved by this task for this particular unrolling operation
     var memoryThreshold = initialMemoryThreshold
     // Memory to request as a multiple of current vector size
-    val memoryGrowthFactor = 1.5
+    val memoryGrowthFactor = conf.getDouble("spark.storage.unrollMemoryGrowthFactor", 1.5)
     // Keep track of unroll memory used by this particular block / putIterator() operation
     var unrollMemoryUsedByThisBlock = 0L
     // Underlying vector for unrolling the block
@@ -328,7 +328,9 @@ private[spark] class MemoryStore(
     // Number of elements unrolled so far
     var elementsUnrolled = 0L
     // How often to check whether we need to request more memory
-    val memoryCheckPeriod = 16
+    val memoryCheckPeriod = conf.getLong("spark.storage.unrollMemoryCheckPeriod", 16)
+    // Memory to request as a multiple of current bbos size
+    val memoryGrowthFactor = conf.getDouble("spark.storage.unrollMemoryGrowthFactor", 1.5)
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
     // Keep track of unroll memory used by this particular block / putIterator() operation
@@ -363,7 +365,7 @@ private[spark] class MemoryStore(
 
     def reserveAdditionalMemoryIfNecessary(): Unit = {
       if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
+        val amountToRequest = (bbos.size * memoryGrowthFactor - unrollMemoryUsedByThisBlock).toLong
         keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
         if (keepUnrolling) {
           unrollMemoryUsedByThisBlock += amountToRequest
