@@ -26,28 +26,27 @@ import org.apache.spark.util.JsonProtocol
 class SQLJsonProtocolSuite extends SparkFunSuite {
 
   test("SparkPlanGraph backward compatibility: metadata") {
+    val SQLExecutionStartJsonString =
+      """
+        |{
+        |  "Event":"org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
+        |  "executionId":0,
+        |  "description":"test desc",
+        |  "details":"test detail",
+        |  "physicalPlanDescription":"test plan",
+        |  "sparkPlanInfo": {
+        |    "nodeName":"TestNode",
+        |    "simpleString":"test string",
+        |    "children":[],
+        |    "metadata":{},
+        |    "metrics":[]
+        |  },
+        |  "time":0
+        |}
+      """.stripMargin
     val reconstructedEvent = JsonProtocol.sparkEventFromJson(parse(SQLExecutionStartJsonString))
     val expectedEvent = SparkListenerSQLExecutionStart(0, "test desc", "test detail", "test plan",
       new SparkPlanInfo("TestNode", "test string", Nil, Nil), 0)
     assert(reconstructedEvent == expectedEvent)
   }
-
-  private val SQLExecutionStartJsonString =
-    """
-      |{
-      |  "Event":"org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart",
-      |  "executionId":0,
-      |  "description":"test desc",
-      |  "details":"test detail",
-      |  "physicalPlanDescription":"test plan",
-      |  "sparkPlanInfo": {
-      |    "nodeName":"TestNode",
-      |    "simpleString":"test string",
-      |    "children":[],
-      |    "metadata":{},
-      |    "metrics":[]
-      |  },
-      |  "time":0
-      |}
-    """.stripMargin
 }

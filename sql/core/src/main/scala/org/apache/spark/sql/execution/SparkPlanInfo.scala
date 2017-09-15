@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.metric.SQLMetricInfo
  * Stores information about a SQL SparkPlan.
  */
 @DeveloperApi
-@JsonIgnoreProperties(Array("metadata")) // The metadata filed was removed in Spark 2.3.
+@JsonIgnoreProperties(Array("metadata")) // The metadata field was removed in Spark 2.3.
 class SparkPlanInfo(
     val nodeName: String,
     val simpleString: String,
