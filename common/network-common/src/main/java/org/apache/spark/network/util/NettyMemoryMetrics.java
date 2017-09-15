@@ -44,7 +44,7 @@ public class NettyMemoryMetrics implements MetricSet {
   private final String metricPrefix;
 
   @VisibleForTesting
-  final static Set<String> VERBOSE_METRICS = new HashSet<>();
+  static final Set<String> VERBOSE_METRICS = new HashSet<>();
   static {
     VERBOSE_METRICS.addAll(Arrays.asList(
       "numAllocations",
