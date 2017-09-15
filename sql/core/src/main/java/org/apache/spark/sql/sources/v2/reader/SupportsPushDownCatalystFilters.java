@@ -22,13 +22,16 @@ import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.catalyst.expressions.Expression;
 
 /**
- * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
- * arbitrary expressions as predicates to the data source. This is an experimental and unstable
- * interface as `Expression` is not public and may get changed in future Spark versions.
+ * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * interface to push down arbitrary expressions as predicates to the data source.
+ * This is an experimental and unstable interface as {@link Expression} is not public and may get
+ * changed in the future Spark versions.
  *
- * Note that, if users implement both this interface and `SupportsPushDownFilters`, Spark will
- * ignore `SupportsPushDownFilters` and only process this interface.
+ * Note that, if data source readers implement both this interface and
+ * {@link SupportsPushDownFilters}, Spark will ignore {@link SupportsPushDownFilters} and only
+ * process this interface.
  */
+@InterfaceStability.Evolving
 @Experimental
 @InterfaceStability.Unstable
 public interface SupportsPushDownCatalystFilters {

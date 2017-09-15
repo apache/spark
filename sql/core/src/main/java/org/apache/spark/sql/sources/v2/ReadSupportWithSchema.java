@@ -17,21 +17,23 @@
 
 package org.apache.spark.sql.sources.v2;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * A mix-in interface for `DataSourceV2`. Users can implement this interface to provide data reading
- * ability and scan the data from the data source.
+ * A mix-in interface for {@link DataSourceV2}. Data sources can implement this interface to
+ * provide data reading ability and scan the data from the data source.
  *
- * This is a variant of `ReadSupport` that accepts user-specified schema when reading data. A data
- * source can implement both `ReadSupport` and `ReadSupportWithSchema` if it supports both schema
- * inference and user-specified schema.
+ * This is a variant of {@link ReadSupport} that accepts user-specified schema when reading data.
+ * A data source can implement both {@link ReadSupport} and {@link ReadSupportWithSchema} if it
+ * supports both schema inference and user-specified schema.
  */
+@InterfaceStability.Evolving
 public interface ReadSupportWithSchema {
 
   /**
-   * Create a `DataSourceV2Reader` to scan the data for this data source.
+   * Create a {@link DataSourceV2Reader} to scan the data from this data source.
    *
    * @param schema the full schema of this data source reader. Full schema usually maps to the
    *               physical schema of the underlying storage of this data source reader, e.g.

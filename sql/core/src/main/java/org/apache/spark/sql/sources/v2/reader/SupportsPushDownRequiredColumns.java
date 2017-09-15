@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
- * required columns and only read these columns during scan.
+ * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * interface to push down required columns to the data source and only read these columns during
+ * scan to reduce the size of the data to be read.
  */
+@InterfaceStability.Evolving
 public interface SupportsPushDownRequiredColumns {
 
   /**
@@ -32,7 +35,7 @@ public interface SupportsPushDownRequiredColumns {
    * also OK to do the pruning partially, e.g., a data source may not be able to prune nested
    * fields, and only prune top-level columns.
    *
-   * Note that, data source implementations should update `DataSourceReader.readSchema` after
+   * Note that, data source readers should update {@link DataSourceV2Reader#readSchema()} after
    * applying column pruning.
    */
   void pruneColumns(StructType requiredSchema);

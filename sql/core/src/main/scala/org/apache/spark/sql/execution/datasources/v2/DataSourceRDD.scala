@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -27,18 +29,13 @@ class DataSourceRDDPartition(val index: Int, val readTask: ReadTask[UnsafeRow])
 
 class DataSourceRDD(
     sc: SparkContext,
-    @transient private val generators: java.util.List[ReadTask[UnsafeRow]])
+    @transient private val readTasks: java.util.List[ReadTask[UnsafeRow]])
   extends RDD[UnsafeRow](sc, Nil) {
 
   override protected def getPartitions: Array[Partition] = {
-    var index = 0
-    val iter = generators.iterator()
-    val res = new Array[Partition](generators.size())
-    while (iter.hasNext) {
-      res(index) = new DataSourceRDDPartition(index, iter.next())
-      index += 1
-    }
-    res
+    readTasks.asScala.zipWithIndex.map {
+      case (readTask, index) => new DataSourceRDDPartition(index, readTask)
+    }.toArray
   }
 
   override def compute(split: Partition, context: TaskContext): Iterator[UnsafeRow] = {

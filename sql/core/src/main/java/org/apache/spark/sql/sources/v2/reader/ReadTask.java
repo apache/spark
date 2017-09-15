@@ -19,13 +19,17 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.io.Serializable;
 
+import org.apache.spark.annotation.InterfaceStability;
+
 /**
- * A read task returned by a data source reader and is responsible to create the data reader.
- * The relationship between `ReadTask` and `DataReader` is similar to `Iterable` and `Iterator`.
+ * A read task returned by {@link DataSourceV2Reader#createReadTasks()} and is responsible for
+ * creating the actual data reader. The relationship between {@link ReadTask} and {@link DataReader}
+ * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
  * Note that, the read task will be serialized and sent to executors, then the data reader will be
  * created on executors and do the actual reading.
  */
+@InterfaceStability.Evolving
 public interface ReadTask<T> extends Serializable {
 
   /**

@@ -19,9 +19,13 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.io.Closeable;
 
+import org.apache.spark.annotation.InterfaceStability;
+
 /**
- * A data reader returned by a read task and is responsible for outputting data for a RDD partition.
+ * A data reader returned by {@link ReadTask#createReader()} and is responsible for outputting data
+ * for a RDD partition.
  */
+@InterfaceStability.Evolving
 public interface DataReader<T> extends Closeable {
 
   /**

@@ -19,26 +19,33 @@ package org.apache.spark.sql.sources.v2.reader;
 
 import java.util.List;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.sources.v2.DataSourceV2Options;
+import org.apache.spark.sql.sources.v2.ReadSupport;
+import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * A data source reader that can mix in various query optimization interfaces and implement these
- * optimizations. The actual scan logic should be delegated to `ReadTask`s that are returned by
- * this data source reader.
+ * A data source reader that is returned by
+ * {@link ReadSupport#createReader(DataSourceV2Options)} or
+ * {@link ReadSupportWithSchema#createReader(StructType, DataSourceV2Options)}.
+ * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
+ * logic should be delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
  *
  * There are mainly 3 kinds of query optimizations:
  *   1. Operators push-down. E.g., filter push-down, required columns push-down(aka column
  *      pruning), etc. These push-down interfaces are named like `SupportsPushDownXXX`.
  *   2. Information Reporting. E.g., statistics reporting, ordering reporting, etc. These
  *      reporting interfaces are named like `SupportsReportingXXX`.
- *   3. Special scan. E.g, columnar scan, unsafe row scan, etc. Note that a data source reader can
- *      implement at most one special scan. These scan interfaces are named like `SupportsScanXXX`.
+ *   3. Special scans. E.g, columnar scan, unsafe row scan, etc. These scan interfaces are named
+ *      like `SupportsScanXXX`.
  *
  * Spark first applies all operator push-down optimizations that this data source supports. Then
  * Spark collects information this data source reported for further optimizations. Finally Spark
  * issues the scan request and does the actual data reading.
  */
+@InterfaceStability.Evolving
 public interface DataSourceV2Reader {
 
   /**

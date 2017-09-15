@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.sources.v2.reader;
 
+import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.sources.Filter;
 
 /**
- * A mix-in interface for `DataSourceV2Reader`. Users can implement this interface to push down
- * filters to the data source and reduce the size of the data to be read.
+ * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
+ * interface to push down filters to the data source and reduce the size of the data to be read.
  *
- * Note that, if users implement both this interface and `SupportsPushDownCatalystFilters`, Spark
- * will ignore this interface and only process `SupportsPushDownCatalystFilters`.
+ * Note that, if data source readers implement both this interface and
+ * {@link SupportsPushDownCatalystFilters}, Spark will ignore this interface and only process
+ * {@link SupportsPushDownCatalystFilters}.
  */
+@InterfaceStability.Evolving
 public interface SupportsPushDownFilters {
 
   /**

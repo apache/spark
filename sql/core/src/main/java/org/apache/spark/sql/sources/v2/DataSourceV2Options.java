@@ -22,10 +22,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.spark.annotation.InterfaceStability;
+
 /**
  * An immutable string-to-string map in which keys are case-insensitive. This is used to represent
  * data source options.
  */
+@InterfaceStability.Evolving
 public class DataSourceV2Options {
   private final Map<String, String> keyLowerCasedMap;
 
