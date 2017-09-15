@@ -413,7 +413,7 @@ class StructField(DataType):
         self.needConversion = dataType.needConversion
         self.toInternal = dataType.toInternal
         self.fromInternal = dataType.fromInternal
- 
+
     def __getstate__(self):
         """Return state values to be pickled."""
         return (self.name, self.dataType, self.nullable, self.metadata)
