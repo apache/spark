@@ -752,7 +752,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
                |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/$tableWithPartition'
             """.stripMargin)
 
-          def insertOverwriteTable(tableName: String, codec: String, 
+          def insertOverwriteTable(tableName: String, codec: String,
             isPartitioned: Boolean): Unit = {
             withSQLConf("spark.sql.parquet.compression.codec" -> codec) {
               sql(
