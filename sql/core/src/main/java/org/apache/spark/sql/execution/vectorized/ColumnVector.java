@@ -100,12 +100,11 @@ public abstract class ColumnVector implements AutoCloseable {
     @Override
     public Object[] array() {
       DataType dt = data.dataType();
-      Function<Integer, Object> getAtMethod = (Function<Integer, Object>) i -> get(i, dt);
       Object[] list = new Object[length];
       try {
         for (int i = 0; i < length; i++) {
           if (!data.isNullAt(offset + i)) {
-            list[i] = getAtMethod.call(i);
+            list[i] = get(i, dt);
           }
         }
         return list;
