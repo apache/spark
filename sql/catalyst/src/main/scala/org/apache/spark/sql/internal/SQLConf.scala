@@ -322,12 +322,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-<<<<<<< HEAD
   val PARQUET_PARTITION_PRUNING_ENABLED = buildConf("spark.sql.parquet.enablePartitionPruning")
       .doc("Enables driver-side partition pruning for Parquet.")
       .booleanConf
       .createWithDefault(true)
-=======
+
   val ORC_COMPRESSION = buildConf("spark.sql.orc.compression.codec")
     .doc("Sets the compression codec use when writing ORC files. Acceptable values include: " +
       "none, uncompressed, snappy, zlib, lzo.")
@@ -335,7 +334,6 @@ object SQLConf {
     .transform(_.toLowerCase(Locale.ROOT))
     .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo"))
     .createWithDefault("snappy")
->>>>>>> master
 
   val ORC_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.orc.filterPushdown")
     .doc("When true, enable filter pushdown for ORC files.")

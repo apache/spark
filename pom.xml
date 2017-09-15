@@ -696,11 +696,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-<<<<<<< HEAD
         <version>4.0.50.Final</version>
-=======
-        <version>4.0.47.Final</version>
->>>>>>> master
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
