@@ -62,9 +62,9 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   private val queues = new CopyOnWriteArrayList[AsyncEventQueue]()
 
-  /** Add a listener to the default queue. */
-  def addListener(listener: SparkListenerInterface): Unit = {
-    addToQueue(listener, DEFAULT_QUEUE)
+  /** Add a listener to queue shared by all non-internal listeners. */
+  def addToSharedQueue(listener: SparkListenerInterface): Unit = {
+    addToQueue(listener, SHARED_QUEUE)
   }
 
   /** Add a listener to the executor management queue. */
@@ -204,7 +204,7 @@ private[spark] object LiveListenerBus {
   // Allows for Context to check whether stop() call is made within listener thread
   val withinListenerThread: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 
-  private[scheduler] val DEFAULT_QUEUE = "default"
+  private[scheduler] val SHARED_QUEUE = "shared"
 
   private[scheduler] val APP_STATUS_QUEUE = "appStatus"
 

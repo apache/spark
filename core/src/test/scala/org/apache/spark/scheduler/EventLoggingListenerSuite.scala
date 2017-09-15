@@ -164,7 +164,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
     // A comprehensive test on JSON de/serialization of all events is in JsonProtocolSuite
     eventLogger.start()
     listenerBus.start(Mockito.mock(classOf[SparkContext]), Mockito.mock(classOf[MetricsSystem]))
-    listenerBus.addListener(eventLogger)
+    listenerBus.addToEventLogQueue(eventLogger)
     listenerBus.post(applicationStart)
     listenerBus.post(applicationEnd)
     listenerBus.stop()

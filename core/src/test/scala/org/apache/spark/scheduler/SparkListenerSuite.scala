@@ -34,6 +34,8 @@ import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
 
+  import LiveListenerBus._
+
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
@@ -43,22 +45,23 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   private val mockMetricsSystem: MetricsSystem = Mockito.mock(classOf[MetricsSystem])
 
   private def numDroppedEvents(bus: LiveListenerBus): Long = {
-    bus.metrics.metricRegistry.counter("queue.default.numDroppedEvents").getCount
+    bus.metrics.metricRegistry.counter(s"queue.$SHARED_QUEUE.numDroppedEvents").getCount
   }
 
   private def queueSize(bus: LiveListenerBus): Int = {
-    bus.metrics.metricRegistry.getGauges().get("queue.default.size").getValue().asInstanceOf[Int]
+    bus.metrics.metricRegistry.getGauges().get(s"queue.$SHARED_QUEUE.size").getValue()
+      .asInstanceOf[Int]
   }
 
   private def eventProcessingTimeCount(bus: LiveListenerBus): Long = {
-    bus.metrics.metricRegistry.timer("queue.default.listenerProcessingTime").getCount()
+    bus.metrics.metricRegistry.timer(s"queue.$SHARED_QUEUE.listenerProcessingTime").getCount()
   }
 
   test("don't call sc.stop in listener") {
     sc = new SparkContext("local", "SparkListenerSuite", new SparkConf())
     val listener = new SparkContextStoppingListener(sc)
 
-    sc.listenerBus.addListener(listener)
+    sc.listenerBus.addToSharedQueue(listener)
     sc.listenerBus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
     sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
     sc.stop()
@@ -70,7 +73,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val conf = new SparkConf()
     val counter = new BasicJobCounter
     val bus = new LiveListenerBus(conf)
-    bus.addListener(counter)
+    bus.addToSharedQueue(counter)
 
     // Metrics are initially empty.
     assert(bus.metrics.numEventsPosted.getCount === 0)
@@ -140,7 +143,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val bus = new LiveListenerBus(new SparkConf())
     val blockingListener = new BlockingListener
 
-    bus.addListener(blockingListener)
+    bus.addToSharedQueue(blockingListener)
     bus.start(mockSparkContext, mockMetricsSystem)
     bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
 
@@ -173,7 +176,7 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val listenerStarted = new Semaphore(0)
     val listenerWait = new Semaphore(0)
 
-    bus.addListener(new SparkListener {
+    bus.addToSharedQueue(new SparkListener {
       override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
         listenerStarted.release()
         listenerWait.acquire()
@@ -423,9 +426,9 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     val bus = new LiveListenerBus(new SparkConf())
 
     // Propagate events to bad listener first
-    bus.addListener(badListener)
-    bus.addListener(jobCounter1)
-    bus.addListener(jobCounter2)
+    bus.addToSharedQueue(badListener)
+    bus.addToSharedQueue(jobCounter1)
+    bus.addToSharedQueue(jobCounter2)
     bus.start(mockSparkContext, mockMetricsSystem)
 
     // Post events to all listeners, and wait until the queue is drained
@@ -453,17 +456,15 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("add and remove listeners to/from LiveListenerBus queues") {
-    import LiveListenerBus._
-
     val bus = new LiveListenerBus(new SparkConf(false))
     val counter1 = new BasicJobCounter()
     val counter2 = new BasicJobCounter()
     val counter3 = new BasicJobCounter()
 
-    bus.addListener(counter1)
+    bus.addToSharedQueue(counter1)
     bus.addToStatusQueue(counter2)
     bus.addToStatusQueue(counter3)
-    assert(bus.activeQueues() === Set(DEFAULT_QUEUE, APP_STATUS_QUEUE))
+    assert(bus.activeQueues() === Set(SHARED_QUEUE, APP_STATUS_QUEUE))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 3)
 
     bus.removeListener(counter1)

@@ -1563,7 +1563,7 @@ class SparkContext(config: SparkConf) extends Logging {
    */
   @DeveloperApi
   def addSparkListener(listener: SparkListenerInterface) {
-    listenerBus.addListener(listener)
+    listenerBus.addToSharedQueue(listener)
   }
 
   /**
@@ -2377,7 +2377,7 @@ class SparkContext(config: SparkConf) extends Logging {
                 " parameter from breaking Spark's ability to find a valid constructor.")
           }
         }
-        listenerBus.addListener(listener)
+        listenerBus.addToSharedQueue(listener)
         logInfo(s"Registered listener $className")
       }
     } catch {
