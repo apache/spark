@@ -233,7 +233,7 @@ class FileStreamSource(
     }
 
     val files = allFiles.sortBy(_.getModificationTime)(fileSortOrder).map { status =>
-      (status.getPath.toUri.toString, status.getModificationTime)
+      (status.getPath.toUri.getPath, status.getModificationTime)
     }
     val endTime = System.nanoTime
     val listingTimeMs = (endTime.toDouble - startTime) / 1000000

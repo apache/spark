@@ -362,7 +362,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
-  test("read from text files -- file name has space") {
+  test("SPARK-21996 read from text files -- file name has space") {
     withTempDirs { case (src, tmp) =>
       val textStream = createFileStream("text", src.getCanonicalPath)
       val filtered = textStream.filter($"value" contains "keep")
