@@ -767,8 +767,8 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Parses the user specified customSchema option value to DataFrame schema,
-   * and returns it if it's all columns are equals to default schema's.
+   * Parses the user specified customSchema option value to DataFrame schema, and
+   * returns a schema that is replaced by the custom schema's dataType if column name is matched.
    */
   def getCustomSchema(
       tableSchema: StructType,
@@ -780,7 +780,7 @@ object JdbcUtils extends Logging {
       SchemaUtils.checkColumnNameDuplication(
         userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
-      // This is resolved by names, use the custom filed dataType to replace the default dateType.
+      // This is resolved by names, use the custom filed dataType to replace the default dataType.
       val newSchema = tableSchema.map { col =>
         userSchema.find(f => nameEquality(f.name, col.name)) match {
           case Some(c) => col.copy(dataType = c.dataType)
