@@ -2683,7 +2683,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
 #' @rdname union
 #' @name union
 #' @aliases union,SparkDataFrame,SparkDataFrame-method
-#' @seealso \link{rbind}
+#' @seealso \link{rbind} \link{unionByName}
 #' @export
 #' @examples
 #'\dontrun{
@@ -2714,6 +2714,40 @@ setMethod("unionAll",
             union(x, y)
           })
 
+#' Return a new SparkDataFrame containing the union of rows, matched by column names
+#'
+#' Return a new SparkDataFrame containing the union of rows in this SparkDataFrame
+#' and another SparkDataFrame. This is different from \code{union} function, and both
+#' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
+#' into account. Input SparkDataFrames can have different data types in the schema.
+#'
+#' Note: This does not remove duplicate rows across the two SparkDataFrames.
+#' This function resolves columns by name (not by position).
+#'
+#' @param x A SparkDataFrame
+#' @param y A SparkDataFrame
+#' @return A SparkDataFrame containing the result of the union.
+#' @family SparkDataFrame functions
+#' @rdname unionByName
+#' @name unionByName
+#' @aliases unionByName,SparkDataFrame,SparkDataFrame-method
+#' @seealso \link{rbind} \link{union}
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' df1 <- select(createDataFrame(mtcars), "carb", "am", "gear")
+#' df2 <- select(createDataFrame(mtcars), "am", "gear", "carb")
+#' head(unionByName(df1, df2))
+#' }
+#' @note unionByName since 2.3.0
+setMethod("unionByName",
+          signature(x = "SparkDataFrame", y = "SparkDataFrame"),
+          function(x, y) {
+            unioned <- callJMethod(x@sdf, "unionByName", y@sdf)
+            dataFrame(unioned)
+          })
+
 #' Union two or more SparkDataFrames
 #'
 #' Union two or more SparkDataFrames by row. As in R's \code{rbind}, this method
@@ -2730,7 +2764,7 @@ setMethod("unionAll",
 #' @aliases rbind,SparkDataFrame-method
 #' @rdname rbind
 #' @name rbind
-#' @seealso \link{union}
+#' @seealso \link{union} \link{unionByName}
 #' @export
 #' @examples
 #'\dontrun{
@@ -2930,7 +2964,7 @@ setMethod("saveAsTable",
             invisible(callJMethod(write, "saveAsTable", tableName))
           })
 
-#' summary
+#' describe
 #'
 #' Computes statistics for numeric and string columns.
 #' If no columns are given, this function computes statistics for all numerical or string columns.
@@ -2941,7 +2975,7 @@ setMethod("saveAsTable",
 #' @return A SparkDataFrame.
 #' @family SparkDataFrame functions
 #' @aliases describe,SparkDataFrame,character-method describe,SparkDataFrame,ANY-method
-#' @rdname summary
+#' @rdname describe
 #' @name describe
 #' @export
 #' @examples
@@ -2953,6 +2987,7 @@ setMethod("saveAsTable",
 #' describe(df, "col1")
 #' describe(df, "col1", "col2")
 #' }
+#' @seealso See \link{summary} for expanded statistics and control over which statistics to compute.
 #' @note describe(SparkDataFrame, character) since 1.4.0
 setMethod("describe",
           signature(x = "SparkDataFrame", col = "character"),
@@ -2962,7 +2997,7 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
-#' @rdname summary
+#' @rdname describe
 #' @name describe
 #' @aliases describe,SparkDataFrame-method
 #' @note describe(SparkDataFrame) since 1.4.0
@@ -2973,15 +3008,50 @@ setMethod("describe",
             dataFrame(sdf)
           })
 
+#' summary
+#'
+#' Computes specified statistics for numeric and string columns. Available statistics are:
+#' \itemize{
+#' \item count
+#' \item mean
+#' \item stddev
+#' \item min
+#' \item max
+#' \item arbitrary approximate percentiles specified as a percentage (eg, "75%")
+#' }
+#' If no statistics are given, this function computes count, mean, stddev, min,
+#' approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+#' This function is meant for exploratory data analysis, as we make no guarantee about the
+#' backward compatibility of the schema of the resulting Dataset. If you want to
+#' programmatically compute summary statistics, use the \code{agg} function instead.
+#'
+#'
 #' @param object a SparkDataFrame to be summarized.
+#' @param ... (optional) statistics to be computed for all columns.
+#' @return A SparkDataFrame.
+#' @family SparkDataFrame functions
 #' @rdname summary
 #' @name summary
 #' @aliases summary,SparkDataFrame-method
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session()
+#' path <- "path/to/file.json"
+#' df <- read.json(path)
+#' summary(df)
+#' summary(df, "min", "25%", "75%", "max")
+#' summary(select(df, "age", "height"))
+#' }
 #' @note summary(SparkDataFrame) since 1.5.0
+#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for previous defaults.
+#' @seealso \link{describe}
 setMethod("summary",
           signature(object = "SparkDataFrame"),
           function(object, ...) {
-            describe(object)
+            statisticsList <- list(...)
+            sdf <- callJMethod(object@sdf, "summary", statisticsList)
+            dataFrame(sdf)
           })
 
 

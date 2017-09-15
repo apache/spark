@@ -249,6 +249,12 @@ streaming_kafka = Module(
         "external/kafka-0-8",
         "external/kafka-0-8-assembly",
     ],
+    build_profile_flags=[
+        "-Pkafka-0-8",
+    ],
+    environ={
+        "ENABLE_KAFKA_0_8_TESTS": "1"
+    },
     sbt_test_goals=[
         "streaming-kafka-0-8/test",
     ]

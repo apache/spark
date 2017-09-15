@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.scalatest.Matchers
-import org.scalatest.concurrent.Timeouts._
+import org.scalatest.concurrent.TimeLimits._
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.security.EncryptionFunSuite

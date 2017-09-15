@@ -156,9 +156,15 @@ class ChildProcAppHandle implements SparkAppHandle {
    * the exit code.
    */
   void monitorChild() {
-    while (childProc.isAlive()) {
+    Process proc = childProc;
+    if (proc == null) {
+      // Process may have already been disposed of, e.g. by calling kill().
+      return;
+    }
+
+    while (proc.isAlive()) {
       try {
-        childProc.waitFor();
+        proc.waitFor();
       } catch (Exception e) {
         LOG.log(Level.WARNING, "Exception waiting for child process to exit.", e);
       }
@@ -173,15 +179,24 @@ class ChildProcAppHandle implements SparkAppHandle {
 
       int ec;
       try {
-        ec = childProc.exitValue();
+        ec = proc.exitValue();
       } catch (Exception e) {
         LOG.log(Level.WARNING, "Exception getting child process exit code, assuming failure.", e);
         ec = 1;
       }
 
-      // Only override the success state; leave other fail states alone.
-      if (!state.isFinal() || (ec != 0 && state == State.FINISHED)) {
-        state = State.LOST;
+      State newState = null;
+      if (ec != 0) {
+        // Override state with failure if the current state is not final, or is success.
+        if (!state.isFinal() || state == State.FINISHED) {
+          newState = State.FAILED;
+        }
+      } else if (!state.isFinal()) {
+        newState = State.LOST;
+      }
+
+      if (newState != null) {
+        state = newState;
         fireEvent(false);
       }
     }

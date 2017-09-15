@@ -20,20 +20,18 @@ package org.apache.spark.deploy
 import java.io._
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
-import java.security.{KeyStore, PrivilegedExceptionAction}
-import java.security.cert.X509Certificate
+import java.security.PrivilegedExceptionAction
 import java.text.ParseException
-import javax.net.ssl._
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 import scala.util.Properties
 
-import com.google.common.io.ByteStreams
 import org.apache.commons.lang3.StringUtils
 import org.apache.hadoop.conf.{Configuration => HadoopConfiguration}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.ivy.Ivy
 import org.apache.ivy.core.LogOptions
 import org.apache.ivy.core.module.descriptor._
@@ -49,6 +47,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util._
 
@@ -67,7 +66,9 @@ private[deploy] object SparkSubmitAction extends Enumeration {
  * This program handles setting up the classpath with relevant Spark dependencies and provides
  * a layer over the different cluster managers and deploy modes that Spark supports.
  */
-object SparkSubmit extends CommandLineUtils {
+object SparkSubmit extends CommandLineUtils with Logging {
+
+  import DependencyUtils._
 
   // Cluster managers
   private val YARN = 1
@@ -112,6 +113,10 @@ object SparkSubmit extends CommandLineUtils {
   // scalastyle:on println
 
   override def main(args: Array[String]): Unit = {
+    // Initialize logging if it hasn't been done yet. Keep track of whether logging needs to
+    // be reset before the application starts.
+    val uninitLog = initializeLogIfNecessary(true, silent = true)
+
     val appArgs = new SparkSubmitArguments(args)
     if (appArgs.verbose) {
       // scalastyle:off println
@@ -119,7 +124,7 @@ object SparkSubmit extends CommandLineUtils {
       // scalastyle:on println
     }
     appArgs.action match {
-      case SparkSubmitAction.SUBMIT => submit(appArgs)
+      case SparkSubmitAction.SUBMIT => submit(appArgs, uninitLog)
       case SparkSubmitAction.KILL => kill(appArgs)
       case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
     }
@@ -152,7 +157,7 @@ object SparkSubmit extends CommandLineUtils {
    * main class.
    */
   @tailrec
-  private def submit(args: SparkSubmitArguments): Unit = {
+  private def submit(args: SparkSubmitArguments, uninitLog: Boolean): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
 
     def doRunMain(): Unit = {
@@ -184,11 +189,16 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-     // In standalone cluster mode, there are two submission gateways:
-     //   (1) The traditional RPC gateway using o.a.s.deploy.Client as a wrapper
-     //   (2) The new REST-based gateway introduced in Spark 1.3
-     // The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
-     // to use the legacy gateway if the master endpoint turns out to be not a REST server.
+    // Let the main class re-initialize the logging system once it starts.
+    if (uninitLog) {
+      Logging.uninitialize()
+    }
+
+    // In standalone cluster mode, there are two submission gateways:
+    //   (1) The traditional RPC gateway using o.a.s.deploy.Client as a wrapper
+    //   (2) The new REST-based gateway introduced in Spark 1.3
+    // The latter is the default behavior as of Spark 1.3, but Spark submit will fail over
+    // to use the legacy gateway if the master endpoint turns out to be not a REST server.
     if (args.isStandaloneCluster && args.useRest) {
       try {
         // scalastyle:off println
@@ -201,7 +211,7 @@ object SparkSubmit extends CommandLineUtils {
           printWarning(s"Master endpoint ${args.master} was not a REST server. " +
             "Falling back to legacy submission gateway instead.")
           args.useRest = false
-          submit(args)
+          submit(args, false)
       }
     // In all other modes, just run the main class as prepared
     } else {
@@ -211,14 +221,20 @@ object SparkSubmit extends CommandLineUtils {
 
   /**
    * Prepare the environment for submitting an application.
-   * This returns a 4-tuple:
-   *   (1) the arguments for the child process,
-   *   (2) a list of classpath entries for the child,
-   *   (3) a map of system properties, and
-   *   (4) the main class for the child
+   *
+   * @param args the parsed SparkSubmitArguments used for environment preparation.
+   * @param conf the Hadoop Configuration, this argument will only be set in unit test.
+   * @return a 4-tuple:
+   *        (1) the arguments for the child process,
+   *        (2) a list of classpath entries for the child,
+   *        (3) a map of system properties, and
+   *        (4) the main class for the child
+   *
    * Exposed for testing.
    */
-  private[deploy] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+  private[deploy] def prepareSubmitEnvironment(
+      args: SparkSubmitArguments,
+      conf: Option[HadoopConfiguration] = None)
       : (Seq[String], Seq[String], Map[String, String], String) = {
     // Return values
     val childArgs = new ArrayBuffer[String]()
@@ -327,8 +343,10 @@ object SparkSubmit extends CommandLineUtils {
       }
     }
 
-    val hadoopConf = new HadoopConfiguration()
-    val targetDir = DependencyUtils.createTempDir()
+    val sparkConf = new SparkConf(false)
+    args.sparkProperties.foreach { case (k, v) => sparkConf.set(k, v) }
+    val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
+    val targetDir = Utils.createTempDir()
 
     // Resolve glob path for different resources.
     args.jars = Option(args.jars).map(resolveGlobPaths(_, hadoopConf)).orNull
@@ -337,15 +355,22 @@ object SparkSubmit extends CommandLineUtils {
     args.archives = Option(args.archives).map(resolveGlobPaths(_, hadoopConf)).orNull
 
     // In client mode, download remote files.
+    var localPrimaryResource: String = null
+    var localJars: String = null
+    var localPyFiles: String = null
     if (deployMode == CLIENT) {
-      args.primaryResource = Option(args.primaryResource).map {
-        downloadFile(_, targetDir, args.sparkProperties, hadoopConf)
+      // This security manager will not need an auth secret, but set a dummy value in case
+      // spark.authenticate is enabled, otherwise an exception is thrown.
+      sparkConf.set(SecurityManager.SPARK_AUTH_SECRET_CONF, "unused")
+      val secMgr = new SecurityManager(sparkConf)
+      localPrimaryResource = Option(args.primaryResource).map {
+        downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
-      args.jars = Option(args.jars).map {
-        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
+      localJars = Option(args.jars).map {
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
-      args.pyFiles = Option(args.pyFiles).map {
-        downloadFileList(_, targetDir, args.sparkProperties, hadoopConf)
+      localPyFiles = Option(args.pyFiles).map {
+        downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
     }
 
@@ -357,7 +382,7 @@ object SparkSubmit extends CommandLineUtils {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
         args.mainClass = "org.apache.spark.deploy.PythonRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
+        args.childArgs = ArrayBuffer(localPrimaryResource, localPyFiles) ++ args.childArgs
         if (clusterManager != YARN) {
           // The YARN backend distributes the primary file differently, so don't merge it.
           args.files = mergeFileLists(args.files, args.primaryResource)
@@ -367,8 +392,8 @@ object SparkSubmit extends CommandLineUtils {
         // The YARN backend handles python files differently, so don't merge the lists.
         args.files = mergeFileLists(args.files, args.pyFiles)
       }
-      if (args.pyFiles != null) {
-        sysProps("spark.submit.pyFiles") = args.pyFiles
+      if (localPyFiles != null) {
+        sysProps("spark.submit.pyFiles") = localPyFiles
       }
     }
 
@@ -422,7 +447,7 @@ object SparkSubmit extends CommandLineUtils {
         // If an R file is provided, add it to the child arguments and list of files to deploy.
         // Usage: RRunner <main R file> [app arguments]
         args.mainClass = "org.apache.spark.deploy.RRunner"
-        args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
+        args.childArgs = ArrayBuffer(localPrimaryResource) ++ args.childArgs
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
     }
@@ -467,6 +492,7 @@ object SparkSubmit extends CommandLineUtils {
       OptionAssigner(args.queue, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.queue"),
       OptionAssigner(args.numExecutors, YARN, ALL_DEPLOY_MODES,
         sysProp = "spark.executor.instances"),
+      OptionAssigner(args.pyFiles, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.pyFiles"),
       OptionAssigner(args.jars, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.jars"),
       OptionAssigner(args.files, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.files"),
       OptionAssigner(args.archives, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.dist.archives"),
@@ -494,15 +520,28 @@ object SparkSubmit extends CommandLineUtils {
         sysProp = "spark.driver.cores"),
       OptionAssigner(args.supervise.toString, STANDALONE | MESOS, CLUSTER,
         sysProp = "spark.driver.supervise"),
-      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy")
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
+
+      // An internal option used only for spark-shell to add user jars to repl's classloader,
+      // previously it uses "spark.jars" or "spark.yarn.dist.jars" which now may be pointed to
+      // remote jars, so adding a new option to only specify local jars for spark-shell internally.
+      OptionAssigner(localJars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.repl.local.jars")
     )
 
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
-    // Also add the main application jar and any added jars to classpath in case YARN client
-    // requires these jars.
-    if (deployMode == CLIENT || isYarnCluster) {
+    if (deployMode == CLIENT) {
       childMainClass = args.mainClass
+      if (localPrimaryResource != null && isUserJar(localPrimaryResource)) {
+        childClasspath += localPrimaryResource
+      }
+      if (localJars != null) { childClasspath ++= localJars.split(",") }
+    }
+    // Add the main application jar and any added jars to classpath in case YARN client
+    // requires these jars.
+    // This assumes both primaryResource and user jars are local jars, otherwise it will not be
+    // added to the classpath of YARN client.
+    if (isYarnCluster) {
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
@@ -560,24 +599,26 @@ object SparkSubmit extends CommandLineUtils {
       if (args.isPython) {
         sysProps.put("spark.yarn.isPython", "true")
       }
-
-      if (args.pyFiles != null) {
-        sysProps("spark.submit.pyFiles") = args.pyFiles
-      }
     }
 
     // assure a keytab is available from any place in a JVM
-    if (clusterManager == YARN || clusterManager == LOCAL) {
+    if (clusterManager == YARN || clusterManager == LOCAL || clusterManager == MESOS) {
       if (args.principal != null) {
-        require(args.keytab != null, "Keytab must be specified when principal is specified")
-        SparkHadoopUtil.get.loginUserFromKeytab(args.principal, args.keytab)
-        // Add keytab and principal configurations in sysProps to make them available
-        // for later use; e.g. in spark sql, the isolated class loader used to talk
-        // to HiveMetastore will use these settings. They will be set as Java system
-        // properties and then loaded by SparkConf
-        sysProps.put("spark.yarn.keytab", args.keytab)
-        sysProps.put("spark.yarn.principal", args.principal)
+        if (args.keytab != null) {
+          require(new File(args.keytab).exists(), s"Keytab file: ${args.keytab} does not exist")
+          // Add keytab and principal configurations in sysProps to make them available
+          // for later use; e.g. in spark sql, the isolated class loader used to talk
+          // to HiveMetastore will use these settings. They will be set as Java system
+          // properties and then loaded by SparkConf
+          sysProps.put("spark.yarn.keytab", args.keytab)
+          sysProps.put("spark.yarn.principal", args.principal)
+          UserGroupInformation.loginUserFromKeytab(args.principal, args.keytab)
+        }
       }
+    }
+
+    if (clusterManager == MESOS && UserGroupInformation.isSecurityEnabled) {
+      setRMPrincipal(sysProps)
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
@@ -680,6 +721,18 @@ object SparkSubmit extends CommandLineUtils {
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)
+  }
+
+  // [SPARK-20328]. HadoopRDD calls into a Hadoop library that fetches delegation tokens with
+  // renewer set to the YARN ResourceManager.  Since YARN isn't configured in Mesos mode, we
+  // must trick it into thinking we're YARN.
+  private def setRMPrincipal(sysProps: HashMap[String, String]): Unit = {
+    val shortUserName = UserGroupInformation.getCurrentUser.getShortUserName
+    val key = s"spark.hadoop.${YarnConfiguration.RM_PRINCIPAL}"
+    // scalastyle:off println
+    printStream.println(s"Setting ${key} to ${shortUserName}")
+    // scalastyle:off println
+    sysProps.put(key, shortUserName)
   }
 
   /**
@@ -854,136 +907,6 @@ object SparkSubmit extends CommandLineUtils {
     if (merged == "") null else merged
   }
 
-  /**
-   * Download a list of remote files to temp local files. If the file is local, the original file
-   * will be returned.
-   * @param fileList A comma separated file list.
-   * @param targetDir A temporary directory for which downloaded files
-   * @param sparkProperties Spark properties
-   * @return A comma separated local files list.
-   */
-  private[deploy] def downloadFileList(
-      fileList: String,
-      targetDir: File,
-      sparkProperties: Map[String, String],
-      hadoopConf: HadoopConfiguration): String = {
-    require(fileList != null, "fileList cannot be null.")
-    fileList.split(",")
-      .map(downloadFile(_, targetDir, sparkProperties, hadoopConf))
-      .mkString(",")
-  }
-
-  /**
-   * Download a file from the remote to a local temporary directory. If the input path points to
-   * a local path, returns it with no operation.
-   * @param path A file path from where the files will be downloaded.
-   * @param targetDir A temporary directory for which downloaded files
-   * @param sparkProperties Spark properties
-   * @return A comma separated local files list.
-   */
-  private[deploy] def downloadFile(
-      path: String,
-      targetDir: File,
-      sparkProperties: Map[String, String],
-      hadoopConf: HadoopConfiguration): String = {
-    require(path != null, "path cannot be null.")
-    val uri = Utils.resolveURI(path)
-    uri.getScheme match {
-      case "file" | "local" => path
-      case "http" | "https" | "ftp" =>
-        val uc = uri.toURL.openConnection()
-        uc match {
-          case https: HttpsURLConnection =>
-            val trustStore = sparkProperties.get("spark.ssl.fs.trustStore")
-              .orElse(sparkProperties.get("spark.ssl.trustStore"))
-            val trustStorePwd = sparkProperties.get("spark.ssl.fs.trustStorePassword")
-              .orElse(sparkProperties.get("spark.ssl.trustStorePassword"))
-              .map(_.toCharArray)
-              .orNull
-            val protocol = sparkProperties.get("spark.ssl.fs.protocol")
-              .orElse(sparkProperties.get("spark.ssl.protocol"))
-            if (protocol.isEmpty) {
-              printErrorAndExit("spark ssl protocol is required when enabling SSL connection.")
-            }
-
-            val trustStoreManagers = trustStore.map { t =>
-              var input: InputStream = null
-              try {
-                input = new FileInputStream(new File(t))
-                val ks = KeyStore.getInstance(KeyStore.getDefaultType)
-                ks.load(input, trustStorePwd)
-                val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
-                tmf.init(ks)
-                tmf.getTrustManagers
-              } finally {
-                if (input != null) {
-                  input.close()
-                  input = null
-                }
-              }
-            }.getOrElse {
-              Array({
-                new X509TrustManager {
-                  override def getAcceptedIssuers: Array[X509Certificate] = null
-                  override def checkClientTrusted(
-                      x509Certificates: Array[X509Certificate], s: String) {}
-                  override def checkServerTrusted(
-                      x509Certificates: Array[X509Certificate], s: String) {}
-                }: TrustManager
-              })
-            }
-            val sslContext = SSLContext.getInstance(protocol.get)
-            sslContext.init(null, trustStoreManagers, null)
-            https.setSSLSocketFactory(sslContext.getSocketFactory)
-            https.setHostnameVerifier(new HostnameVerifier {
-              override def verify(s: String, sslSession: SSLSession): Boolean = false
-            })
-
-          case _ =>
-        }
-
-        uc.setConnectTimeout(60 * 1000)
-        uc.setReadTimeout(60 * 1000)
-        uc.connect()
-        val in = uc.getInputStream
-        val fileName = new Path(uri).getName
-        val tempFile = new File(targetDir, fileName)
-        val out = new FileOutputStream(tempFile)
-        // scalastyle:off println
-        printStream.println(s"Downloading ${uri.toString} to ${tempFile.getAbsolutePath}.")
-        // scalastyle:on println
-        try {
-          ByteStreams.copy(in, out)
-        } finally {
-          in.close()
-          out.close()
-        }
-        tempFile.toURI.toString
-      case _ =>
-        val fs = FileSystem.get(uri, hadoopConf)
-        val tmpFile = new File(targetDir, new Path(uri).getName)
-        // scalastyle:off println
-        printStream.println(s"Downloading ${uri.toString} to ${tmpFile.getAbsolutePath}.")
-        // scalastyle:on println
-        fs.copyToLocalFile(new Path(uri), new Path(tmpFile.getAbsolutePath))
-        tmpFile.toURI.toString
-    }
-  }
-
-  private[deploy] def resolveGlobPaths(paths: String, hadoopConf: HadoopConfiguration): String = {
-    require(paths != null, "paths cannot be null.")
-    paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
-      val uri = Utils.resolveURI(path)
-      uri.getScheme match {
-        case "local" | "http" | "https" | "ftp" => Array(path)
-        case _ =>
-          val fs = FileSystem.get(uri, hadoopConf)
-          Option(fs.globStatus(new Path(uri))).map { status =>
-            status.filter(_.isFile).map(_.getPath.toUri.toString)
-          }.getOrElse(Array(path))
-      }
-    }.mkString(",")
-  }
 }
 
 /** Provides utility functions to be used inside SparkSubmit. */
@@ -997,7 +920,7 @@ private[spark] object SparkSubmitUtils {
   // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
   // other spark-streaming utility components. Underscore is there to differentiate between
   // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
-  val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "launcher_", "mllib_",
+  val IVY_DEFAULT_EXCLUDES = Seq("catalyst_", "core_", "graphx_", "kvstore_", "launcher_", "mllib_",
     "mllib-local_", "network-common_", "network-shuffle_", "repl_", "sketch_", "sql_", "streaming_",
     "tags_", "unsafe_")
 

@@ -449,7 +449,7 @@ private[spark] object Utils extends Logging {
       securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean) {
+      useCache: Boolean): File = {
     val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
@@ -498,6 +498,8 @@ private[spark] object Utils extends Logging {
     if (isWindows) {
       FileUtil.chmod(targetFile.getAbsolutePath, "u+r")
     }
+
+    targetFile
   }
 
   /**
@@ -637,13 +639,13 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  private def doFetchFile(
+  def doFetchFile(
       url: String,
       targetDir: File,
       filename: String,
       conf: SparkConf,
       securityMgr: SecurityManager,
-      hadoopConf: Configuration) {
+      hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
@@ -687,6 +689,8 @@ private[spark] object Utils extends Logging {
         fetchHcfsFile(path, targetDir, fs, conf, hadoopConf, fileOverwrite,
                       filename = Some(filename))
     }
+
+    targetFile
   }
 
   /**
@@ -1182,16 +1186,17 @@ private[spark] object Utils extends Logging {
     val second = 1000
     val minute = 60 * second
     val hour = 60 * minute
+    val locale = Locale.US
 
     ms match {
       case t if t < second =>
-        "%d ms".format(t)
+        "%d ms".formatLocal(locale, t)
       case t if t < minute =>
-        "%.1f s".format(t.toFloat / second)
+        "%.1f s".formatLocal(locale, t.toFloat / second)
       case t if t < hour =>
-        "%.1f m".format(t.toFloat / minute)
+        "%.1f m".formatLocal(locale, t.toFloat / minute)
       case t =>
-        "%.2f h".format(t.toFloat / hour)
+        "%.2f h".formatLocal(locale, t.toFloat / hour)
     }
   }
 
@@ -2594,18 +2599,23 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * In YARN mode this method returns a union of the jar files pointed by "spark.jars" and the
-   * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
-   * only the "spark.jars" property.
+   * Return the jar files pointed by the "spark.jars" property. Spark internally will distribute
+   * these jars through file server. In the YARN mode, it will return an empty list, since YARN
+   * has its own mechanism to distribute jars.
    */
-  def getUserJars(conf: SparkConf, isShell: Boolean = false): Seq[String] = {
+  def getUserJars(conf: SparkConf): Seq[String] = {
     val sparkJars = conf.getOption("spark.jars")
-    if (conf.get("spark.master") == "yarn" && isShell) {
-      val yarnJars = conf.getOption("spark.yarn.dist.jars")
-      unionFileLists(sparkJars, yarnJars).toSeq
-    } else {
-      sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
-    }
+    sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+  }
+
+  /**
+   * Return the local jar files which will be added to REPL's classpath. These jar files are
+   * specified by --jars (spark.jars) or --packages, remote jars will be downloaded to local by
+   * SparkSubmit at first.
+   */
+  def getLocalUserJarsForShell(conf: SparkConf): Seq[String] = {
+    val localJars = conf.getOption("spark.repl.local.jars")
+    localJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
   }
 
   private[spark] val REDACTION_REPLACEMENT_TEXT = "*********(redacted)"
@@ -2623,9 +2633,12 @@ private[spark] object Utils extends Logging {
    * Redact the sensitive information in the given string.
    */
   def redact(conf: SparkConf, text: String): String = {
-    if (text == null || text.isEmpty || !conf.contains(STRING_REDACTION_PATTERN)) return text
-    val regex = conf.get(STRING_REDACTION_PATTERN).get
-    regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+    if (text == null || text.isEmpty || conf == null || !conf.contains(STRING_REDACTION_PATTERN)) {
+      text
+    } else {
+      val regex = conf.get(STRING_REDACTION_PATTERN).get
+      regex.replaceAllIn(text, REDACTION_REPLACEMENT_TEXT)
+    }
   }
 
   private def redact(redactionPattern: Regex, kvs: Seq[(String, String)]): Seq[(String, String)] = {

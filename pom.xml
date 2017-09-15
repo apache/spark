@@ -104,8 +104,6 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>external/kafka-0-8</module>
-    <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
@@ -144,7 +142,7 @@
     <orc.version>1.4.0</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
-    <chill.version>0.8.0</chill.version>
+    <chill.version>0.8.4</chill.version>
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.2.2</codahale.metrics.version>
@@ -933,6 +931,11 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.scala-lang.modules</groupId>
+        <artifactId>scala-parser-combinators_${scala.binary.version}</artifactId>
+        <version>1.0.4</version>
+      </dependency>
+      <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scalap</artifactId>
         <version>${scala.version}</version>
@@ -940,7 +943,7 @@
       <dependency>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest_${scala.binary.version}</artifactId>
-        <version>2.2.6</version>
+        <version>3.0.3</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -952,7 +955,7 @@
       <dependency>
         <groupId>org.scalacheck</groupId>
         <artifactId>scalacheck_${scala.binary.version}</artifactId>
-        <version>1.12.5</version> <!-- 1.13.0 appears incompatible with scalatest 2.2.6 -->
+        <version>1.13.5</version>
         <scope>test</scope>
       </dependency>
       <dependency>
@@ -2298,13 +2301,6 @@
                 <goal>testCompile</goal>
               </goals>
             </execution>
-            <execution>
-              <id>attach-scaladocs</id>
-              <phase>verify</phase>
-              <goals>
-                <goal>doc-jar</goal>
-              </goals>
-            </execution>
           </executions>
           <configuration>
             <scalaVersion>${scala.version}</scalaVersion>
@@ -2327,7 +2323,7 @@
               <javacArg>${java.version}</javacArg>
               <javacArg>-target</javacArg>
               <javacArg>${java.version}</javacArg>
-              <javacArg>-Xlint:all,-serial,-path</javacArg>
+              <javacArg>-Xlint:all,-serial,-path,-try</javacArg>
             </javacArgs>
           </configuration>
         </plugin>
@@ -2734,7 +2730,7 @@
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
-        <version>0.9.0</version>
+        <version>1.0.0</version>
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
@@ -3015,6 +3011,14 @@
     </profile>
 
     <profile>
+      <id>kafka-0-8</id>
+      <modules>
+        <module>external/kafka-0-8</module>
+        <module>external/kafka-0-8-assembly</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>test-java-home</id>
       <activation>
         <property><name>env.JAVA_HOME</name></property>
@@ -3029,12 +3033,10 @@
       <id>scala-2.11</id>
     </profile>
 
-    <!-- Draft of Scala 2.12 profile for later -->
-    <!--
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.1</scala.version>
+        <scala.version>2.12.3</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>
@@ -3053,6 +3055,7 @@
                     <bannedDependencies>
                       <excludes combine.children="append">
                         <exclude>*:*_2.11</exclude>
+                        <exclude>*:*_2.10</exclude>
                       </excludes>
                     </bannedDependencies>
                   </rules>
@@ -3063,7 +3066,6 @@
         </plugins>
       </build>
     </profile>
-    -->
 
     <!--
      This is a profile to enable the use of the ASF snapshot and staging repositories

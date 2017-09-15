@@ -46,9 +46,9 @@ class DataFrame(object):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
-    and can be created using various functions in :class:`SQLContext`::
+    and can be created using various functions in :class:`SparkSession`::
 
-        people = sqlContext.read.parquet("...")
+        people = spark.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -59,9 +59,9 @@ class DataFrame(object):
 
     A more concrete example::
 
-        # To create DataFrame using SQLContext
-        people = sqlContext.read.parquet("...")
-        department = sqlContext.read.parquet("...")
+        # To create DataFrame using SparkSession
+        people = spark.read.parquet("...")
+        department = spark.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
@@ -116,9 +116,9 @@ class DataFrame(object):
 
     @since(1.3)
     def registerTempTable(self, name):
-        """Registers this RDD as a temporary table using the given name.
+        """Registers this DataFrame as a temporary table using the given name.
 
-        The lifetime of this temporary table is tied to the :class:`SQLContext`
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
@@ -659,19 +659,69 @@ class DataFrame(object):
         return DataFrame(self._jdf.distinct(), self.sql_ctx)
 
     @since(1.3)
-    def sample(self, withReplacement, fraction, seed=None):
+    def sample(self, withReplacement=None, fraction=None, seed=None):
         """Returns a sampled subset of this :class:`DataFrame`.
+
+        :param withReplacement: Sample with replacement or not (default False).
+        :param fraction: Fraction of rows to generate, range [0.0, 1.0].
+        :param seed: Seed for sampling (default a random seed).
 
         .. note:: This is not guaranteed to provide exactly the fraction specified of the total
             count of the given :class:`DataFrame`.
 
-        >>> df.sample(False, 0.5, 42).count()
-        2
+        .. note:: `fraction` is required and, `withReplacement` and `seed` are optional.
+
+        >>> df = spark.range(10)
+        >>> df.sample(0.5, 3).count()
+        4
+        >>> df.sample(fraction=0.5, seed=3).count()
+        4
+        >>> df.sample(withReplacement=True, fraction=0.5, seed=3).count()
+        1
+        >>> df.sample(1.0).count()
+        10
+        >>> df.sample(fraction=1.0).count()
+        10
+        >>> df.sample(False, fraction=1.0).count()
+        10
         """
-        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
-        seed = seed if seed is not None else random.randint(0, sys.maxsize)
-        rdd = self._jdf.sample(withReplacement, fraction, long(seed))
-        return DataFrame(rdd, self.sql_ctx)
+
+        # For the cases below:
+        #   sample(True, 0.5 [, seed])
+        #   sample(True, fraction=0.5 [, seed])
+        #   sample(withReplacement=False, fraction=0.5 [, seed])
+        is_withReplacement_set = \
+            type(withReplacement) == bool and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(faction=0.5 [, seed])
+        is_withReplacement_omitted_kwargs = \
+            withReplacement is None and isinstance(fraction, float)
+
+        # For the case below:
+        #   sample(0.5 [, seed])
+        is_withReplacement_omitted_args = isinstance(withReplacement, float)
+
+        if not (is_withReplacement_set
+                or is_withReplacement_omitted_kwargs
+                or is_withReplacement_omitted_args):
+            argtypes = [
+                str(type(arg)) for arg in [withReplacement, fraction, seed] if arg is not None]
+            raise TypeError(
+                "withReplacement (optional), fraction (required) and seed (optional)"
+                " should be a bool, float and number; however, "
+                "got [%s]." % ", ".join(argtypes))
+
+        if is_withReplacement_omitted_args:
+            if fraction is not None:
+                seed = fraction
+            fraction = withReplacement
+            withReplacement = None
+
+        seed = long(seed) if seed is not None else None
+        args = [arg for arg in [withReplacement, fraction, seed] if arg is not None]
+        jdf = self._jdf.sample(*args)
+        return DataFrame(jdf, self.sql_ctx)
 
     @since(1.5)
     def sampleBy(self, col, fractions, seed=None):
@@ -698,7 +748,7 @@ class DataFrame(object):
         +---+-----+
 
         """
-        if not isinstance(col, str):
+        if not isinstance(col, basestring):
             raise ValueError("col must be a string, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
@@ -927,7 +977,7 @@ class DataFrame(object):
 
     @since("1.3.1")
     def describe(self, *cols):
-        """Computes statistics for numeric and string columns.
+        """Computes basic statistics for numeric and string columns.
 
         This include count, mean, stddev, min, and max. If no columns are
         given, this function computes statistics for all numerical or string columns.
@@ -955,10 +1005,69 @@ class DataFrame(object):
         |    min|                 2|Alice|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
+
+        Use summary for expanded statistics and control over which statistics to compute.
         """
         if len(cols) == 1 and isinstance(cols[0], list):
             cols = cols[0]
         jdf = self._jdf.describe(self._jseq(cols))
+        return DataFrame(jdf, self.sql_ctx)
+
+    @since("2.3.0")
+    def summary(self, *statistics):
+        """Computes specified statistics for numeric and string columns. Available statistics are:
+        - count
+        - mean
+        - stddev
+        - min
+        - max
+        - arbitrary approximate percentiles specified as a percentage (eg, 75%)
+
+        If no statistics are given, this function computes count, mean, stddev, min,
+        approximate quartiles (percentiles at 25%, 50%, and 75%), and max.
+
+        .. note:: This function is meant for exploratory data analysis, as we make no
+            guarantee about the backward compatibility of the schema of the resulting DataFrame.
+
+        >>> df.summary().show()
+        +-------+------------------+-----+
+        |summary|               age| name|
+        +-------+------------------+-----+
+        |  count|                 2|    2|
+        |   mean|               3.5| null|
+        | stddev|2.1213203435596424| null|
+        |    min|                 2|Alice|
+        |    25%|               5.0| null|
+        |    50%|               5.0| null|
+        |    75%|               5.0| null|
+        |    max|                 5|  Bob|
+        +-------+------------------+-----+
+
+        >>> df.summary("count", "min", "25%", "75%", "max").show()
+        +-------+---+-----+
+        |summary|age| name|
+        +-------+---+-----+
+        |  count|  2|    2|
+        |    min|  2|Alice|
+        |    25%|5.0| null|
+        |    75%|5.0| null|
+        |    max|  5|  Bob|
+        +-------+---+-----+
+
+        To do a summary for specific columns first select them:
+
+        >>> df.select("age", "name").summary("count").show()
+        +-------+---+----+
+        |summary|age|name|
+        +-------+---+----+
+        |  count|  2|   2|
+        +-------+---+----+
+
+        See also describe for basic statistics.
+        """
+        if len(statistics) == 1 and isinstance(statistics[0], list):
+            statistics = statistics[0]
+        jdf = self._jdf.summary(self._jseq(statistics))
         return DataFrame(jdf, self.sql_ctx)
 
     @ignore_unicode_prefix
@@ -1181,7 +1290,7 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by a distinct.
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
         """
@@ -1192,13 +1301,35 @@ class DataFrame(object):
         """ Return a new :class:`DataFrame` containing union of rows in this and another frame.
 
         This is equivalent to `UNION ALL` in SQL. To do a SQL-style set union
-        (that does deduplication of elements), use this function followed by a distinct.
+        (that does deduplication of elements), use this function followed by :func:`distinct`.
 
         Also as standard in SQL, this function resolves columns by position (not by name).
 
-        .. note:: Deprecated in 2.0, use union instead.
+        .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
         return self.union(other)
+
+    @since(2.3)
+    def unionByName(self, other):
+        """ Returns a new :class:`DataFrame` containing union of rows in this and another frame.
+
+        This is different from both `UNION ALL` and `UNION DISTINCT` in SQL. To do a SQL-style set
+        union (that does deduplication of elements), use this function followed by :func:`distinct`.
+
+        The difference between this function and :func:`union` is that this function
+        resolves columns by name (not by position):
+
+        >>> df1 = spark.createDataFrame([[1, 2, 3]], ["col0", "col1", "col2"])
+        >>> df2 = spark.createDataFrame([[4, 5, 6]], ["col1", "col2", "col0"])
+        >>> df1.unionByName(df2).show()
+        +----+----+----+
+        |col0|col1|col2|
+        +----+----+----+
+        |   1|   2|   3|
+        |   6|   4|   5|
+        +----+----+----+
+        """
+        return DataFrame(self._jdf.unionByName(other._jdf), self.sql_ctx)
 
     @since(1.3)
     def intersect(self, other):
@@ -1533,18 +1664,18 @@ class DataFrame(object):
            Added support for multiple columns.
         """
 
-        if not isinstance(col, (str, list, tuple)):
+        if not isinstance(col, (basestring, list, tuple)):
             raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
 
-        isStr = isinstance(col, str)
+        isStr = isinstance(col, basestring)
 
         if isinstance(col, tuple):
             col = list(col)
-        elif isinstance(col, str):
+        elif isStr:
             col = [col]
 
         for c in col:
-            if not isinstance(c, str):
+            if not isinstance(c, basestring):
                 raise ValueError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
@@ -1576,9 +1707,9 @@ class DataFrame(object):
         :param col2: The name of the second column
         :param method: The correlation method. Currently only supports "pearson"
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         if not method:
             method = "pearson"
@@ -1596,9 +1727,9 @@ class DataFrame(object):
         :param col1: The name of the first column
         :param col2: The name of the second column
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
@@ -1618,9 +1749,9 @@ class DataFrame(object):
         :param col2: The name of the second column. Distinct items will make the column names
             of the DataFrame.
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 

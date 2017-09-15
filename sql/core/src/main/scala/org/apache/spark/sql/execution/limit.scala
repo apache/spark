@@ -57,14 +57,6 @@ trait BaseLimitExec extends UnaryExecNode with CodegenSupport {
   val limit: Int
   override def output: Seq[Attribute] = child.output
 
-  // Do not enable whole stage codegen for a single limit.
-  override def supportCodegen: Boolean = child match {
-    case plan: CodegenSupport => plan.supportCodegen
-    case _ => false
-  }
-
-  override def executeTake(n: Int): Array[InternalRow] = child.executeTake(math.min(n, limit))
-
   protected override def doExecute(): RDD[InternalRow] = child.execute().mapPartitions { iter =>
     iter.take(limit)
   }

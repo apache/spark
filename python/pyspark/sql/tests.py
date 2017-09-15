@@ -209,6 +209,10 @@ class DataTypeTests(unittest.TestCase):
         row = Row()
         self.assertEqual(len(row), 0)
 
+    def test_struct_field_type_name(self):
+        struct_field = StructField("a", IntegerType())
+        self.assertRaises(TypeError, struct_field.typeName)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
@@ -704,6 +708,31 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(f, f_.func)
         self.assertEqual(return_type, f_.returnType)
 
+    def test_validate_column_types(self):
+        from pyspark.sql.functions import udf, to_json
+        from pyspark.sql.column import _to_java_column
+
+        self.assertTrue("Column" in _to_java_column("a").getClass().toString())
+        self.assertTrue("Column" in _to_java_column(u"a").getClass().toString())
+        self.assertTrue("Column" in _to_java_column(self.spark.range(1).id).getClass().toString())
+
+        self.assertRaisesRegexp(
+            TypeError,
+            "Invalid argument, not a string or column",
+            lambda: _to_java_column(1))
+
+        class A():
+            pass
+
+        self.assertRaises(TypeError, lambda: _to_java_column(A()))
+        self.assertRaises(TypeError, lambda: _to_java_column([]))
+
+        self.assertRaisesRegexp(
+            TypeError,
+            "Invalid argument, not a string or column",
+            lambda: udf(lambda x: x)(None))
+        self.assertRaises(TypeError, lambda: to_json(1))
+
     def test_basic_functions(self):
         rdd = self.sc.parallelize(['{"foo":"bar"}', '{"foo":"baz"}'])
         df = self.spark.read.json(rdd)
@@ -868,16 +897,6 @@ class SQLTests(ReusedPySparkTestCase):
                            "float1 + 1.5 as float1 FROM table2").first()
 
         self.assertEqual((126, -127, -32767, 32766, 2147483646, 2.5), tuple(r))
-
-        from pyspark.sql.types import _parse_schema_abstract, _infer_schema_type
-        rdd = self.sc.parallelize([(127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1),
-                                    {"a": 1}, (2,), [1, 2, 3])])
-        abstract = "byte1 short1 float1 time1 map1{} struct1(b) list1[]"
-        schema = _parse_schema_abstract(abstract)
-        typedSchema = _infer_schema_type(rdd.first(), schema)
-        df = self.spark.createDataFrame(rdd, typedSchema)
-        r = (127, -32768, 1.0, datetime(2010, 1, 1, 1, 1, 1), {"a": 1}, Row(b=2), [1, 2, 3])
-        self.assertEqual(r, tuple(df.first()))
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
@@ -1125,11 +1144,12 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_approxQuantile(self):
         df = self.sc.parallelize([Row(a=i, b=i+10) for i in range(10)]).toDF()
-        aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
-        self.assertTrue(isinstance(aq, list))
-        self.assertEqual(len(aq), 3)
+        for f in ["a", u"a"]:
+            aq = df.stat.approxQuantile(f, [0.1, 0.5, 0.9], 0.1)
+            self.assertTrue(isinstance(aq, list))
+            self.assertEqual(len(aq), 3)
         self.assertTrue(all(isinstance(q, float) for q in aq))
-        aqs = df.stat.approxQuantile(["a", "b"], [0.1, 0.5, 0.9], 0.1)
+        aqs = df.stat.approxQuantile(["a", u"b"], [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aqs, list))
         self.assertEqual(len(aqs), 2)
         self.assertTrue(isinstance(aqs[0], list))
@@ -1138,7 +1158,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(aqs[1], list))
         self.assertEqual(len(aqs[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqs[1]))
-        aqt = df.stat.approxQuantile(("a", "b"), [0.1, 0.5, 0.9], 0.1)
+        aqt = df.stat.approxQuantile((u"a", "b"), [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aqt, list))
         self.assertEqual(len(aqt), 2)
         self.assertTrue(isinstance(aqt[0], list))
@@ -1154,17 +1174,22 @@ class SQLTests(ReusedPySparkTestCase):
     def test_corr(self):
         import math
         df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
-        corr = df.stat.corr("a", "b")
+        corr = df.stat.corr(u"a", "b")
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
+
+    def test_sampleby(self):
+        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(10)]).toDF()
+        sampled = df.stat.sampleBy(u"b", fractions={0: 0.5, 1: 0.5}, seed=0)
+        self.assertTrue(sampled.count() == 3)
 
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
-        cov = df.stat.cov("a", "b")
+        cov = df.stat.cov(u"a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
     def test_crosstab(self):
         df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
-        ct = df.stat.crosstab("a", "b").collect()
+        ct = df.stat.crosstab(u"a", "b").collect()
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
             self.assertEqual(row[0], str(i))
@@ -2083,6 +2108,24 @@ class SQLTests(ReusedPySparkTestCase):
         plan = df1.join(df2.hint("broadcast"), "id")._jdf.queryExecution().executedPlan()
         self.assertEqual(1, plan.toString().count("BroadcastHashJoin"))
 
+    def test_sample(self):
+        self.assertRaisesRegexp(
+            TypeError,
+            "should be a bool, float and number",
+            lambda: self.spark.range(1).sample())
+
+        self.assertRaises(
+            TypeError,
+            lambda: self.spark.range(1).sample("a"))
+
+        self.assertRaises(
+            TypeError,
+            lambda: self.spark.range(1).sample(seed="abc"))
+
+        self.assertRaises(
+            IllegalArgumentException,
+            lambda: self.spark.range(1).sample(-1.0))
+
     def test_toDF_with_schema_string(self):
         data = [Row(key=i, value=str(i)) for i in range(100)]
         rdd = self.sc.parallelize(data, 5)
@@ -2358,9 +2401,11 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_BinaryType_serialization(self):
         # Pyrolite version <= 4.9 could not serialize BinaryType with Python3 SPARK-17808
+        # The empty bytearray is test for SPARK-21534.
         schema = StructType([StructField('mybytes', BinaryType())])
         data = [[bytearray(b'here is my data')],
-                [bytearray(b'and here is some more')]]
+                [bytearray(b'and here is some more')],
+                [bytearray(b'')]]
         df = self.spark.createDataFrame(data, schema=schema)
         df.collect()
 
@@ -2584,8 +2629,12 @@ class SQLTests2(ReusedPySparkTestCase):
         self.sc.stop()
         sc = SparkContext('local[4]', self.sc.appName)
         spark = SparkSession.builder.getOrCreate()
-        df = spark.createDataFrame([(1, 2)], ["c", "c"])
-        df.collect()
+        try:
+            df = spark.createDataFrame([(1, 2)], ["c", "c"])
+            df.collect()
+        finally:
+            spark.stop()
+            sc.stop()
 
 
 class UDFInitializationTests(unittest.TestCase):

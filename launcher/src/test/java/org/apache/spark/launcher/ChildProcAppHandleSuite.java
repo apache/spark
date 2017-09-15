@@ -46,7 +46,9 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   private static final List<String> TEST_SCRIPT = Arrays.asList(
     "#!/bin/sh",
     "echo \"output\"",
-    "echo \"error\" 1>&2");
+    "echo \"error\" 1>&2",
+    "while [ -n \"$1\" ]; do EC=$1; shift; done",
+    "exit $EC");
 
   private static File TEST_SCRIPT_PATH;
 
@@ -112,6 +114,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     assumeFalse(isWindows());
 
     Path err = Files.createTempFile("stderr", "txt");
+    err.toFile().deleteOnExit();
 
     SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectError(err.toFile())
@@ -127,6 +130,7 @@ public class ChildProcAppHandleSuite extends BaseSuite {
     assumeFalse(isWindows());
 
     Path out = Files.createTempFile("stdout", "txt");
+    out.toFile().deleteOnExit();
 
     SparkAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectOutput(out.toFile())
@@ -143,6 +147,8 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
     Path out = Files.createTempFile("stdout", "txt");
     Path err = Files.createTempFile("stderr", "txt");
+    out.toFile().deleteOnExit();
+    err.toFile().deleteOnExit();
 
     ChildProcAppHandle handle = (ChildProcAppHandle) new TestSparkLauncher()
       .redirectError(err.toFile())
@@ -157,9 +163,11 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test(expected = IllegalArgumentException.class)
   public void testBadLogRedirect() throws Exception {
+    File out = Files.createTempFile("stdout", "txt").toFile();
+    out.deleteOnExit();
     new SparkLauncher()
       .redirectError()
-      .redirectOutput(Files.createTempFile("stdout", "txt").toFile())
+      .redirectOutput(out)
       .redirectToLog("foo")
       .launch()
       .waitFor();
@@ -167,16 +175,20 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test(expected = IllegalArgumentException.class)
   public void testRedirectErrorTwiceFails() throws Exception {
+    File err = Files.createTempFile("stderr", "txt").toFile();
+    err.deleteOnExit();
     new SparkLauncher()
       .redirectError()
-      .redirectError(Files.createTempFile("stderr", "txt").toFile())
+      .redirectError(err)
       .launch()
       .waitFor();
   }
 
   @Test
   public void testProcMonitorWithOutputRedirection() throws Exception {
+    assumeFalse(isWindows());
     File err = Files.createTempFile("out", "txt").toFile();
+    err.deleteOnExit();
     SparkAppHandle handle = new TestSparkLauncher()
       .redirectError()
       .redirectOutput(err)
@@ -187,11 +199,22 @@ public class ChildProcAppHandleSuite extends BaseSuite {
 
   @Test
   public void testProcMonitorWithLogRedirection() throws Exception {
+    assumeFalse(isWindows());
     SparkAppHandle handle = new TestSparkLauncher()
       .redirectToLog(getClass().getName())
       .startApplication();
     waitFor(handle);
     assertEquals(SparkAppHandle.State.LOST, handle.getState());
+  }
+
+  @Test
+  public void testFailedChildProc() throws Exception {
+    assumeFalse(isWindows());
+    SparkAppHandle handle = new TestSparkLauncher(1)
+      .redirectToLog(getClass().getName())
+      .startApplication();
+    waitFor(handle);
+    assertEquals(SparkAppHandle.State.FAILED, handle.getState());
   }
 
   private void waitFor(SparkAppHandle handle) throws Exception {
@@ -212,7 +235,12 @@ public class ChildProcAppHandleSuite extends BaseSuite {
   private static class TestSparkLauncher extends SparkLauncher {
 
     TestSparkLauncher() {
+      this(0);
+    }
+
+    TestSparkLauncher(int ec) {
       setAppResource("outputredirtest");
+      addAppArgs(String.valueOf(ec));
     }
 
     @Override

@@ -610,7 +610,7 @@ class HiveWindowFunctionQuerySuite extends HiveComparisonTest with BeforeAndAfte
       |window w1 as (distribute by p_mfgr sort by p_name rows between 2 preceding and 2 following),
       |       w2 as (partition by p_mfgr order by p_name)
     """.stripMargin, reset = false)
-  */ 
+  */
 
   /* p_name is not a numeric column. What is Hive's semantic?
   createQueryTest("windowing.q -- 31. testWindowCrossReference",

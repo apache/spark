@@ -53,9 +53,10 @@ import org.apache.spark.util.collection.OpenHashMap
  *
  * Null (missing) values are ignored (implicitly zero in the resulting feature vector).
  *
- * Since a simple modulo is used to transform the hash function to a vector index,
- * it is advisable to use a power of two as the numFeatures parameter;
- * otherwise the features will not be mapped evenly to the vector indices.
+ * The hash function used here is also the MurmurHash 3 used in [[HashingTF]]. Since a simple modulo
+ * on the hashed value is used to determine the vector index, it is advisable to use a power of two
+ * as the numFeatures parameter; otherwise the features will not be mapped evenly to the vector
+ * indices.
  *
  * {{{
  *   val df = Seq(
@@ -64,17 +65,17 @@ import org.apache.spark.util.collection.OpenHashMap
  *   ).toDF("real", "bool", "stringNum", "string")
  *
  *   val hasher = new FeatureHasher()
- *    .setInputCols("real", "bool", "stringNum", "num")
+ *    .setInputCols("real", "bool", "stringNum", "string")
  *    .setOutputCol("features")
  *
- *   hasher.transform(df).show()
+ *   hasher.transform(df).show(false)
  *
- *   +----+-----+---------+------+--------------------+
- *   |real| bool|stringNum|string|            features|
- *   +----+-----+---------+------+--------------------+
- *   | 2.0| true|        1|   foo|(262144,[51871,63...|
- *   | 3.0|false|        2|   bar|(262144,[6031,806...|
- *   +----+-----+---------+------+--------------------+
+ *   +----+-----+---------+------+------------------------------------------------------+
+ *   |real|bool |stringNum|string|features                                              |
+ *   +----+-----+---------+------+------------------------------------------------------+
+ *   |2.0 |true |1        |foo   |(262144,[51871,63643,174475,253195],[1.0,1.0,2.0,1.0])|
+ *   |3.0 |false|2        |bar   |(262144,[6031,80619,140467,174475],[1.0,1.0,1.0,3.0]) |
+ *   +----+-----+---------+------+------------------------------------------------------+
  * }}}
  */
 @Experimental

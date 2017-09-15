@@ -22,7 +22,6 @@ import scala.collection.JavaConverters._
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -32,7 +31,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 
 /** Params for Multilayer Perceptron. */
-private[classification] trait MultilayerPerceptronParams extends PredictorParams
+private[classification] trait MultilayerPerceptronParams extends ProbabilisticClassifierParams
   with HasSeed with HasMaxIter with HasTol with HasStepSize with HasSolver {
 
   import MultilayerPerceptronClassifier._
@@ -143,7 +142,8 @@ private object LabelConverter {
 @Since("1.5.0")
 class MultilayerPerceptronClassifier @Since("1.5.0") (
     @Since("1.5.0") override val uid: String)
-  extends Predictor[Vector, MultilayerPerceptronClassifier, MultilayerPerceptronClassificationModel]
+  extends ProbabilisticClassifier[Vector, MultilayerPerceptronClassifier,
+    MultilayerPerceptronClassificationModel]
   with MultilayerPerceptronParams with DefaultParamsWritable {
 
   @Since("1.5.0")
@@ -301,13 +301,13 @@ class MultilayerPerceptronClassificationModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val layers: Array[Int],
     @Since("2.0.0") val weights: Vector)
-  extends PredictionModel[Vector, MultilayerPerceptronClassificationModel]
+  extends ProbabilisticClassificationModel[Vector, MultilayerPerceptronClassificationModel]
   with Serializable with MLWritable {
 
   @Since("1.6.0")
   override val numFeatures: Int = layers.head
 
-  private val mlpModel = FeedForwardTopology
+  private[ml] val mlpModel = FeedForwardTopology
     .multiLayerPerceptron(layers, softmaxOnTop = true)
     .model(weights)
 
@@ -335,6 +335,14 @@ class MultilayerPerceptronClassificationModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new MultilayerPerceptronClassificationModel.MultilayerPerceptronClassificationModelWriter(this)
+
+  override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
+    mlpModel.raw2ProbabilityInPlace(rawPrediction)
+  }
+
+  override protected def predictRaw(features: Vector): Vector = mlpModel.predictRaw(features)
+
+  override def numClasses: Int = layers.last
 }
 
 @Since("2.0.0")

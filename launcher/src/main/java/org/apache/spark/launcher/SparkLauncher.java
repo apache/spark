@@ -605,7 +605,7 @@ public class SparkLauncher {
   }
 
   // Visible for testing.
-  String findSparkSubmit() throws IOException {
+  String findSparkSubmit() {
     String script = isWindows() ? "spark-submit.cmd" : "spark-submit";
     return join(File.separator, builder.getSparkHome(), "bin", script);
   }
