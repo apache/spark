@@ -61,7 +61,7 @@ to the registry.
 For example, if the registry host is `registry-host` and the registry is listening on port 5000:
 
     cd $SPARK_HOME
-    docker build -t registry-host:5000/spark-base:latest -f dockerfiles/driver/spark-base .
+    docker build -t registry-host:5000/spark-base:latest -f dockerfiles/spark-base/Dockerfile .
     docker build -t registry-host:5000/spark-driver:latest -f dockerfiles/driver/Dockerfile .
     docker build -t registry-host:5000/spark-executor:latest -f dockerfiles/executor/Dockerfile .
     docker build -t registry-host:5000/spark-init:latest -f dockerfiles/init-container/Dockerfile .
