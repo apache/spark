@@ -107,8 +107,7 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
   /**
    * Start an asynchronous thread to dispatch events to the underlying listeners.
    *
-   * @param sc Used to stop the SparkContext in case the a listener fails.
-   * @param metrics Used to report listener performance metrics.
+   * @param sc Used to stop the SparkContext in case the async dispatcher fails.
    */
   private[scheduler] def start(sc: SparkContext): Unit = {
     if (started.compareAndSet(false, true)) {
