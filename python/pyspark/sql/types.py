@@ -621,7 +621,8 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
-            values = [f.fromInternal(v) if n else v for f, v, n in zip(self.fields, obj, self._needConversion)]
+            values = [f.fromInternal(v) if n else v 
+                      for f, v, n in zip(self.fields, obj, self._needConversion)]
         else:
             values = obj
         return _create_row(self.names, values)
