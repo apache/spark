@@ -495,7 +495,10 @@ private[hive] class HiveClientImpl(
     shim.dropTable(client, dbName, tableName, true, ignoreIfNotExists, purge)
   }
 
-  override def alterTable(tableName: String, table: CatalogTable): Unit = withHiveState {
+  override def alterTable(
+      dbName: String,
+      tableName: String,
+      table: CatalogTable): Unit = withHiveState {
     // getTableOption removes all the Hive-specific properties. Here, we fill them back to ensure
     // these properties are still available to the others that share the same Hive metastore.
     // If users explicitly alter these Hive-specific properties through ALTER TABLE DDL, we respect
@@ -503,7 +506,7 @@ private[hive] class HiveClientImpl(
     val hiveTable = toHiveTable(
       table.copy(properties = table.ignoredProperties ++ table.properties), Some(userName))
     // Do not use `table.qualifiedName` here because this may be a rename
-    val qualifiedTableName = s"${table.database}.$tableName"
+    val qualifiedTableName = s"$dbName.$tableName"
     shim.alterTable(client, qualifiedTableName, hiveTable)
   }
 
@@ -846,7 +849,12 @@ private[hive] object HiveClientImpl {
         throw new SparkException("Cannot recognize hive type string: " + hc.getType, e)
     }
 
-    val metadata = new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+    val metadata = if (hc.getType != columnType.catalogString) {
+      new MetadataBuilder().putString(HIVE_TYPE_STRING, hc.getType).build()
+    } else {
+      Metadata.empty
+    }
+
     val field = StructField(
       name = hc.getName,
       dataType = columnType,

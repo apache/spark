@@ -16,6 +16,7 @@
 #
 
 import operator
+from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
@@ -528,9 +529,11 @@ class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
-            java_blrt_summary = self._call_java("summary")
-            # Note: Once multiclass is added, update this to return correct summary
-            return BinaryLogisticRegressionTrainingSummary(java_blrt_summary)
+            java_lrt_summary = self._call_java("summary")
+            if self.numClasses <= 2:
+                return BinaryLogisticRegressionTrainingSummary(java_lrt_summary)
+            else:
+                return LogisticRegressionTrainingSummary(java_lrt_summary)
         else:
             raise RuntimeError("No training summary available for this %s" %
                                self.__class__.__name__)
@@ -586,6 +589,14 @@ class LogisticRegressionSummary(JavaWrapper):
         return self._call_java("probabilityCol")
 
     @property
+    @since("2.3.0")
+    def predictionCol(self):
+        """
+        Field in "predictions" which gives the prediction of each class.
+        """
+        return self._call_java("predictionCol")
+
+    @property
     @since("2.0.0")
     def labelCol(self):
         """
@@ -602,6 +613,110 @@ class LogisticRegressionSummary(JavaWrapper):
         as a vector.
         """
         return self._call_java("featuresCol")
+
+    @property
+    @since("2.3.0")
+    def labels(self):
+        """
+        Returns the sequence of labels in ascending order. This order matches the order used
+        in metrics which are specified as arrays over labels, e.g., truePositiveRateByLabel.
+
+        Note: In most cases, it will be values {0.0, 1.0, ..., numClasses-1}, However, if the
+        training set is missing a label, then all of the arrays over labels
+        (e.g., from truePositiveRateByLabel) will be of length numClasses-1 instead of the
+        expected numClasses.
+        """
+        return self._call_java("labels")
+
+    @property
+    @since("2.3.0")
+    def truePositiveRateByLabel(self):
+        """
+        Returns true positive rate for each label (category).
+        """
+        return self._call_java("truePositiveRateByLabel")
+
+    @property
+    @since("2.3.0")
+    def falsePositiveRateByLabel(self):
+        """
+        Returns false positive rate for each label (category).
+        """
+        return self._call_java("falsePositiveRateByLabel")
+
+    @property
+    @since("2.3.0")
+    def precisionByLabel(self):
+        """
+        Returns precision for each label (category).
+        """
+        return self._call_java("precisionByLabel")
+
+    @property
+    @since("2.3.0")
+    def recallByLabel(self):
+        """
+        Returns recall for each label (category).
+        """
+        return self._call_java("recallByLabel")
+
+    @since("2.3.0")
+    def fMeasureByLabel(self, beta=1.0):
+        """
+        Returns f-measure for each label (category).
+        """
+        return self._call_java("fMeasureByLabel", beta)
+
+    @property
+    @since("2.3.0")
+    def accuracy(self):
+        """
+        Returns accuracy.
+        (equals to the total number of correctly classified instances
+        out of the total number of instances.)
+        """
+        return self._call_java("accuracy")
+
+    @property
+    @since("2.3.0")
+    def weightedTruePositiveRate(self):
+        """
+        Returns weighted true positive rate.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedTruePositiveRate")
+
+    @property
+    @since("2.3.0")
+    def weightedFalsePositiveRate(self):
+        """
+        Returns weighted false positive rate.
+        """
+        return self._call_java("weightedFalsePositiveRate")
+
+    @property
+    @since("2.3.0")
+    def weightedRecall(self):
+        """
+        Returns weighted averaged recall.
+        (equals to precision, recall and f-measure)
+        """
+        return self._call_java("weightedRecall")
+
+    @property
+    @since("2.3.0")
+    def weightedPrecision(self):
+        """
+        Returns weighted averaged precision.
+        """
+        return self._call_java("weightedPrecision")
+
+    @since("2.3.0")
+    def weightedFMeasure(self, beta=1.0):
+        """
+        Returns weighted averaged f-measure.
+        """
+        return self._call_java("weightedFMeasure", beta)
 
 
 @inherit_doc
@@ -1356,7 +1471,8 @@ class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaML
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                                      HasMaxIter, HasTol, HasSeed, HasStepSize, HasSolver,
-                                     JavaMLWritable, JavaMLReadable):
+                                     JavaMLWritable, JavaMLReadable, HasProbabilityCol,
+                                     HasRawPredictionCol):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1425,11 +1541,13 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
-                 solver="l-bfgs", initialWeights=None):
+                 solver="l-bfgs", initialWeights=None, probabilityCol="probability",
+                 rawPredicitionCol="rawPrediction"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                 solver="l-bfgs", initialWeights=None)
+                 solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
+                 rawPredicitionCol="rawPrediction")
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1442,11 +1560,13 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03,
-                  solver="l-bfgs", initialWeights=None):
+                  solver="l-bfgs", initialWeights=None, probabilityCol="probability",
+                  rawPredicitionCol="rawPrediction"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxIter=100, tol=1e-6, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                  solver="l-bfgs", initialWeights=None)
+                  solver="l-bfgs", initialWeights=None, probabilityCol="probability", \
+                  rawPredicitionCol="rawPrediction"):
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self._input_kwargs
@@ -1562,7 +1682,7 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasWeightCol, HasPredictionCo
 
 
 @inherit_doc
-class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
+class OneVsRest(Estimator, OneVsRestParams, HasParallelism, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1607,22 +1727,23 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 classifier=None, weightCol=None):
+                 classifier=None, weightCol=None, parallelism=1):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 classifier=None, weightCol=None)
+                 classifier=None, weightCol=None, parallelism=1):
         """
         super(OneVsRest, self).__init__()
+        self._setDefault(parallelism=1)
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, featuresCol=None, labelCol=None, predictionCol=None,
-                  classifier=None, weightCol=None):
+    def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
+                  classifier=None, weightCol=None, parallelism=1):
         """
-        setParams(self, featuresCol=None, labelCol=None, predictionCol=None, \
-                  classifier=None, weightCol=None):
+        setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
+                  classifier=None, weightCol=None, parallelism=1):
         Sets params for OneVsRest.
         """
         kwargs = self._input_kwargs
@@ -1652,8 +1773,7 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
             multiclassLabeled = dataset.select(labelCol, featuresCol)
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             multiclassLabeled.persist(StorageLevel.MEMORY_AND_DISK)
 
@@ -1669,8 +1789,9 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
                 paramMap[classifier.weightCol] = weightCol
             return classifier.fit(trainingDataset, paramMap)
 
-        # TODO: Parallel training for all classes.
-        models = [trainSingleClass(i) for i in range(numClasses)]
+        pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
+
+        models = pool.map(trainSingleClass, range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
@@ -1704,8 +1825,9 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         labelCol = java_stage.getLabelCol()
         predictionCol = java_stage.getPredictionCol()
         classifier = JavaParams._from_java(java_stage.getClassifier())
+        parallelism = java_stage.getParallelism()
         py_stage = cls(featuresCol=featuresCol, labelCol=labelCol, predictionCol=predictionCol,
-                       classifier=classifier)
+                       classifier=classifier, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -1718,6 +1840,7 @@ class OneVsRest(Estimator, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         _java_obj = JavaParams._new_java_obj("org.apache.spark.ml.classification.OneVsRest",
                                              self.uid)
         _java_obj.setClassifier(self.getClassifier()._to_java())
+        _java_obj.setParallelism(self.getParallelism())
         _java_obj.setFeaturesCol(self.getFeaturesCol())
         _java_obj.setLabelCol(self.getLabelCol())
         _java_obj.setPredictionCol(self.getPredictionCol())
@@ -1804,8 +1927,7 @@ class OneVsRestModel(Model, OneVsRestParams, JavaMLReadable, JavaMLWritable):
         newDataset = dataset.withColumn(accColName, initUDF(dataset[origCols[0]]))
 
         # persist if underlying dataset is not persistent.
-        handlePersistence = \
-            dataset.rdd.getStorageLevel() == StorageLevel(False, False, False, False)
+        handlePersistence = dataset.storageLevel == StorageLevel(False, False, False, False)
         if handlePersistence:
             newDataset.persist(StorageLevel.MEMORY_AND_DISK)
 

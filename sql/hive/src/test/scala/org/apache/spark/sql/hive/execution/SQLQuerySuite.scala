@@ -136,49 +136,51 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     orders.toDF.createOrReplaceTempView("orders1")
     orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
 
-    sql(
-      """CREATE TABLE orders(
-        |  id INT,
-        |  make String,
-        |  type String,
-        |  price INT,
-        |  pdate String,
-        |  customer String,
-        |  city String)
-        |PARTITIONED BY (state STRING, month INT)
-        |STORED AS PARQUET
-      """.stripMargin)
-
-    sql(
-      """CREATE TABLE orderupdates(
-        |  id INT,
-        |  make String,
-        |  type String,
-        |  price INT,
-        |  pdate String,
-        |  customer String,
-        |  city String)
-        |PARTITIONED BY (state STRING, month INT)
-        |STORED AS PARQUET
-      """.stripMargin)
-
-    sql("set hive.exec.dynamic.partition.mode=nonstrict")
-    sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
-    sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
-
-    checkAnswer(
+    withTable("orders", "orderupdates") {
       sql(
-        """
-          |select orders.state, orders.month
-          |from orders
-          |join (
-          |  select distinct orders.state,orders.month
-          |  from orders
-          |  join orderupdates
-          |    on orderupdates.id = orders.id) ao
-          |  on ao.state = orders.state and ao.month = orders.month
-        """.stripMargin),
-      (1 to 6).map(_ => Row("CA", 20151)))
+        """CREATE TABLE orders(
+          |  id INT,
+          |  make String,
+          |  type String,
+          |  price INT,
+          |  pdate String,
+          |  customer String,
+          |  city String)
+          |PARTITIONED BY (state STRING, month INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql(
+        """CREATE TABLE orderupdates(
+          |  id INT,
+          |  make String,
+          |  type String,
+          |  price INT,
+          |  pdate String,
+          |  customer String,
+          |  city String)
+          |PARTITIONED BY (state STRING, month INT)
+          |STORED AS PARQUET
+        """.stripMargin)
+
+      sql("set hive.exec.dynamic.partition.mode=nonstrict")
+      sql("INSERT INTO TABLE orders PARTITION(state, month) SELECT * FROM orders1")
+      sql("INSERT INTO TABLE orderupdates PARTITION(state, month) SELECT * FROM orderupdates1")
+
+      checkAnswer(
+        sql(
+          """
+            |select orders.state, orders.month
+            |from orders
+            |join (
+            |  select distinct orders.state,orders.month
+            |  from orders
+            |  join orderupdates
+            |    on orderupdates.id = orders.id) ao
+            |  on ao.state = orders.state and ao.month = orders.month
+          """.stripMargin),
+        (1 to 6).map(_ => Row("CA", 20151)))
+    }
   }
 
   test("show functions") {
@@ -349,21 +351,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with WITH clause") {
+
     val df = Seq((1, 1)).toDF("c1", "c2")
     df.createOrReplaceTempView("table1")
-
-    sql(
-      """
-        |CREATE TABLE with_table1 AS
-        |WITH T AS (
-        |  SELECT *
-        |  FROM table1
-        |)
-        |SELECT *
-        |FROM T
-      """.stripMargin)
-    val query = sql("SELECT * FROM with_table1")
-    checkAnswer(query, Row(1, 1) :: Nil)
+    withTable("with_table1") {
+      sql(
+        """
+          |CREATE TABLE with_table1 AS
+          |WITH T AS (
+          |  SELECT *
+          |  FROM table1
+          |)
+          |SELECT *
+          |FROM T
+        """.stripMargin)
+      val query = sql("SELECT * FROM with_table1")
+      checkAnswer(query, Row(1, 1) :: Nil)
+    }
   }
 
   test("explode nested Field") {
@@ -564,86 +568,90 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-    sql(
-      """CREATE TABLE ctas2
-        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
-        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
-        | STORED AS RCFile
-        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
-        | AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin)
-
-    val storageCtas2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas2")).storage
-    assert(storageCtas2.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
-    assert(storageCtas2.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
-    assert(storageCtas2.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
-
-    sql(
-      """CREATE TABLE ctas3
-        | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
-        | STORED AS textfile AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin)
-
-    // the table schema may like (key: integer, value: string)
-    sql(
-      """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin)
-    // do nothing cause the table ctas4 already existed.
-    sql(
-      """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
-
-    checkAnswer(
-      sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
-      sql("SELECT key, value FROM src ORDER BY key, value"))
-    checkAnswer(
-      sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+    withTable("ctas1", "ctas2", "ctas3", "ctas4", "ctas5") {
+      sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       sql(
-        """
-          SELECT key, value
-          FROM src
-          ORDER BY key, value"""))
-    checkAnswer(
-      sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+        """CREATE TABLE ctas2
+          | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+          | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+          | STORED AS RCFile
+          | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+          | AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin)
+
+      val storageCtas2 = spark.sessionState.catalog.
+        getTableMetadata(TableIdentifier("ctas2")).storage
+      assert(storageCtas2.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
+      assert(storageCtas2.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
+      assert(storageCtas2.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
+
       sql(
-        """
-          SELECT key, value
-          FROM src
-          ORDER BY key, value"""))
-    intercept[AnalysisException] {
+        """CREATE TABLE ctas3
+          | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
+          | STORED AS textfile AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin)
+
+      // the table schema may like (key: integer, value: string)
       sql(
-        """CREATE TABLE ctas4 AS
+        """CREATE TABLE IF NOT EXISTS ctas4 AS
+          | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin)
+      // do nothing cause the table ctas4 already existed.
+      sql(
+        """CREATE TABLE IF NOT EXISTS ctas4 AS
           | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
-    }
-    checkAnswer(
-      sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
-      sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
 
-    sql(
-      """CREATE TABLE ctas5
-        | STORED AS parquet AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin)
-    val storageCtas5 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("ctas5")).storage
-    assert(storageCtas5.inputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
-    assert(storageCtas5.outputFormat ==
-      Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
-    assert(storageCtas5.serde ==
-      Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
-
-
-    // use the Hive SerDe for parquet tables
-    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
       checkAnswer(
-        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
         sql("SELECT key, value FROM src ORDER BY key, value"))
+      checkAnswer(
+        sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+        sql(
+          """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value"""))
+      checkAnswer(
+        sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+        sql(
+          """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value"""))
+      intercept[AnalysisException] {
+        sql(
+          """CREATE TABLE ctas4 AS
+            | SELECT key, value FROM src ORDER BY key, value""".stripMargin)
+      }
+      checkAnswer(
+        sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
+        sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
+
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin)
+      val storageCtas5 = spark.sessionState.catalog.
+        getTableMetadata(TableIdentifier("ctas5")).storage
+      assert(storageCtas5.inputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat"))
+      assert(storageCtas5.outputFormat ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat"))
+      assert(storageCtas5.serde ==
+        Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+
+
+      // use the Hive SerDe for parquet tables
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+        checkAnswer(
+          sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+          sql("SELECT key, value FROM src ORDER BY key, value"))
+      }
     }
   }
 
@@ -716,40 +724,46 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("double nested data") {
-    sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
-      .toDF().createOrReplaceTempView("nested")
-    checkAnswer(
-      sql("SELECT f1.f2.f3 FROM nested"),
-      Row(1))
+    withTable("test_ctas_1234") {
+      sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
+        .toDF().createOrReplaceTempView("nested")
+      checkAnswer(
+        sql("SELECT f1.f2.f3 FROM nested"),
+        Row(1))
 
-    sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
-    checkAnswer(
-      sql("SELECT * FROM test_ctas_1234"),
-      sql("SELECT * FROM nested").collect().toSeq)
+      sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested")
+      checkAnswer(
+        sql("SELECT * FROM test_ctas_1234"),
+        sql("SELECT * FROM nested").collect().toSeq)
 
-    intercept[AnalysisException] {
-      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      intercept[AnalysisException] {
+        sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      }
     }
   }
 
   test("test CTAS") {
-    sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
-    checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
-      sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    withTable("test_ctas_1234") {
+      sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src")
+      checkAnswer(
+        sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
+        sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+    }
   }
 
   test("SPARK-4825 save join to table") {
-    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
-    sql("CREATE TABLE test1 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test1")
-    sql("CREATE TABLE test2 (key INT, value STRING)")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    testData.write.mode(SaveMode.Append).insertInto("test2")
-    sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
-    checkAnswer(
-      table("test"),
-      sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    withTable("test1", "test2", "test") {
+      val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).toDF()
+      sql("CREATE TABLE test1 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test1")
+      sql("CREATE TABLE test2 (key INT, value STRING)")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      testData.write.mode(SaveMode.Append).insertInto("test2")
+      sql("CREATE TABLE test AS SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key")
+      checkAnswer(
+        table("test"),
+        sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
+    }
   }
 
   test("SPARK-3708 Backticks aren't handled correctly is aliases") {
@@ -1843,14 +1857,16 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
 
   test("SPARK-17108: Fix BIGINT and INT comparison failure in spark sql") {
-    sql("create table t1(a map<bigint, array<string>>)")
-    sql("select * from t1 where a[1] is not null")
+    withTable("t1", "t2", "t3") {
+      sql("create table t1(a map<bigint, array<string>>)")
+      sql("select * from t1 where a[1] is not null")
 
-    sql("create table t2(a map<int, array<string>>)")
-    sql("select * from t2 where a[1] is not null")
+      sql("create table t2(a map<int, array<string>>)")
+      sql("select * from t2 where a[1] is not null")
 
-    sql("create table t3(a map<bigint, array<string>>)")
-    sql("select * from t3 where a[1L] is not null")
+      sql("create table t3(a map<bigint, array<string>>)")
+      sql("select * from t3 where a[1L] is not null")
+    }
   }
 
   test("SPARK-17796 Support wildcard character in filename for LOAD DATA LOCAL INPATH") {
@@ -1998,6 +2014,40 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       (0 to 10).foreach(_ => testData.write.mode(SaveMode.Append).insertInto(table))
 
       assert(setOfPath.size() == pathSizeToDeleteOnExit)
+    }
+  }
+
+  test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
+    Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
+      withTable("t21912") {
+        Seq("ORC", "PARQUET").foreach { source =>
+          val m = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
+          }.getMessage
+          assert(m.contains(s"contains invalid character(s)"))
+
+          val m2 = intercept[AnalysisException] {
+            sql(s"CREATE TABLE t21912 USING $source AS SELECT 1 `col$name`")
+          }.getMessage
+          assert(m2.contains(s"contains invalid character(s)"))
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "false") {
+            val m3 = intercept[AnalysisException] {
+              sql(s"CREATE TABLE t21912(`col$name` INT) USING hive OPTIONS (fileFormat '$source')")
+            }.getMessage
+            assert(m3.contains(s"contains invalid character(s)"))
+          }
+        }
+
+        // TODO: After SPARK-21929, we need to check ORC, too.
+        Seq("PARQUET").foreach { source =>
+          sql(s"CREATE TABLE t21912(`col` INT) USING $source")
+          val m = intercept[AnalysisException] {
+            sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
+          }.getMessage
+          assert(m.contains(s"contains invalid character(s)"))
+        }
+      }
     }
   }
 }

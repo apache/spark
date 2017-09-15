@@ -256,6 +256,7 @@ class LogisticRegressionSuite
 
     val blorModel = lr.fit(smallBinaryDataset)
     assert(blorModel.summary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
+    assert(blorModel.summary.asBinary.isInstanceOf[BinaryLogisticRegressionSummary])
     assert(blorModel.binarySummary.isInstanceOf[BinaryLogisticRegressionTrainingSummary])
 
     val mlorModel = lr.setFamily("multinomial").fit(smallMultinomialDataset)
@@ -263,6 +264,11 @@ class LogisticRegressionSuite
     withClue("cannot get binary summary for multiclass model") {
       intercept[RuntimeException] {
         mlorModel.binarySummary
+      }
+    }
+    withClue("cannot cast summary to binary summary multiclass model") {
+      intercept[RuntimeException] {
+        mlorModel.summary.asBinary
       }
     }
 
@@ -496,6 +502,9 @@ class LogisticRegressionSuite
     resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
       case (pred1, pred2) => assert(pred1 === pred2)
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, LogisticRegressionModel](model, smallMultinomialDataset)
   }
 
   test("binary logistic regression: Predictor, Classifier methods") {
@@ -550,6 +559,9 @@ class LogisticRegressionSuite
     resultsUsingPredict.zip(results.select("prediction").as[Double].collect()).foreach {
       case (pred1, pred2) => assert(pred1 === pred2)
     }
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, LogisticRegressionModel](model, smallBinaryDataset)
   }
 
   test("coefficients and intercept methods") {
@@ -2404,6 +2416,18 @@ class LogisticRegressionSuite
       blorSummary.recallByThreshold.collect() === sameBlorSummary.recallByThreshold.collect())
     assert(
       blorSummary.precisionByThreshold.collect() === sameBlorSummary.precisionByThreshold.collect())
+    assert(blorSummary.labels === sameBlorSummary.labels)
+    assert(blorSummary.truePositiveRateByLabel === sameBlorSummary.truePositiveRateByLabel)
+    assert(blorSummary.falsePositiveRateByLabel === sameBlorSummary.falsePositiveRateByLabel)
+    assert(blorSummary.precisionByLabel === sameBlorSummary.precisionByLabel)
+    assert(blorSummary.recallByLabel === sameBlorSummary.recallByLabel)
+    assert(blorSummary.fMeasureByLabel === sameBlorSummary.fMeasureByLabel)
+    assert(blorSummary.accuracy === sameBlorSummary.accuracy)
+    assert(blorSummary.weightedTruePositiveRate === sameBlorSummary.weightedTruePositiveRate)
+    assert(blorSummary.weightedFalsePositiveRate === sameBlorSummary.weightedFalsePositiveRate)
+    assert(blorSummary.weightedRecall === sameBlorSummary.weightedRecall)
+    assert(blorSummary.weightedPrecision === sameBlorSummary.weightedPrecision)
+    assert(blorSummary.weightedFMeasure === sameBlorSummary.weightedFMeasure)
 
     lr.setFamily("multinomial")
     val mlorModel = lr.fit(smallMultinomialDataset)

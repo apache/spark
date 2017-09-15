@@ -512,9 +512,15 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
               val accu = new NumRowGroupsAcc
               sparkContext.register(accu)
 
+<<<<<<< HEAD
               val df = spark.read.parquet(path).filter("a < 100")
               df.foreachPartition(_.foreach(v => accu.add(0)))
               df.collect
+=======
+            val df = spark.read.parquet(path).filter("a < 100")
+            df.foreachPartition((it: Iterator[Row]) => it.foreach(v => accu.add(0)))
+            df.collect
+>>>>>>> master
 
               assert(func(accu.value))
               AccumulatorContext.remove(accu.id)

@@ -45,9 +45,9 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
-    streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingKafka010
+    streaming, streamingFlumeSink, streamingFlume, streamingKafka010
   ) = Seq(
-    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka-0-8", "streaming-kafka-0-10"
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka-0-10"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -57,6 +57,7 @@ object BuildCommons {
     "tags", "sketch", "kvstore"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
+<<<<<<< HEAD
   val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests, hadoopCloud, kubernetes, _*) =
     Seq("mesos", "yarn", "ganglia-lgpl", "streaming-kinesis-asl", "docker-integration-tests",
@@ -64,6 +65,12 @@ object BuildCommons {
       "kubernetes-integration-tests-spark-jobs", "kubernetes-integration-tests-spark-jobs-helpers",
       "kubernetes-docker-minimal-bundle"
     ).map(ProjectRef(buildLocation, _))
+=======
+  val optionallyEnabledProjects@Seq(mesos, yarn, streamingKafka, sparkGangliaLgpl,
+    streamingKinesisAsl, dockerIntegrationTests, hadoopCloud) =
+    Seq("mesos", "yarn", "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
+      "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
+>>>>>>> master
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
     Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kafka-0-10-assembly", "streaming-kinesis-asl-assembly")
@@ -92,11 +99,18 @@ object SparkBuild extends PomBuild {
   val projectsMap: mutable.Map[String, Seq[Setting[_]]] = mutable.Map.empty
 
   override val profiles = {
-    Properties.envOrNone("SBT_MAVEN_PROFILES") match {
+    val profiles = Properties.envOrNone("SBT_MAVEN_PROFILES") match {
       case None => Seq("sbt")
       case Some(v) =>
         v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
+    if (System.getProperty("scala-2.12") == "") {
+      // To activate scala-2.10 profile, replace empty property value to non-empty value
+      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
+      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
+      System.setProperty("scala-2.12", "true")
+    }
+    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -121,7 +135,7 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
     .settings(
-      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.9.0"
+      libraryDependencies += "org.scalastyle" %% "scalastyle" % "1.0.0"
     )
 
   lazy val scalaStyleOnCompile = taskKey[Unit]("scalaStyleOnCompile")
@@ -161,14 +175,15 @@ object SparkBuild extends PomBuild {
         val configUrlV = scalastyleConfigUrl.in(config).value
         val streamsV = streams.in(config).value
         val failOnErrorV = true
+        val failOnWarningV = false
         val scalastyleTargetV = scalastyleTarget.in(config).value
         val configRefreshHoursV = scalastyleConfigRefreshHours.in(config).value
         val targetV = target.in(config).value
         val configCacheFileV = scalastyleConfigUrlCacheFile.in(config).value
 
         logger.info(s"Running scalastyle on ${name.value} in ${config.name}")
-        Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV, scalaSourceV, scalastyleTargetV,
-          streamsV, configRefreshHoursV, targetV, configCacheFileV)
+        Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV, failOnWarningV, scalaSourceV,
+          scalastyleTargetV, streamsV, configRefreshHoursV, targetV, configCacheFileV)
 
         Set.empty
       }
@@ -762,7 +777,12 @@ object CopyDependencies {
 object TestSettings {
   import BuildCommons._
 
-  private val scalaBinaryVersion = "2.11"
+  private val scalaBinaryVersion =
+    if (System.getProperty("scala-2.12") == "true") {
+      "2.12"
+    } else {
+      "2.11"
+    }
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,

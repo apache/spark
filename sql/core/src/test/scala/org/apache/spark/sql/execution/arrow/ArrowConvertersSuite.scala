@@ -29,8 +29,9 @@ import org.apache.arrow.vector.file.json.JsonFileReader
 import org.apache.arrow.vector.util.Validator
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -1627,6 +1628,32 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     intercept[IllegalArgumentException] {
       collectAndValidate(df.sort($"a_i".desc), json, "validator_diff_values.json")
     }
+  }
+
+  test("roundtrip payloads") {
+    val inputRows = (0 until 9).map { i =>
+      InternalRow(i)
+    } :+ InternalRow(null)
+
+    val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
+
+    val ctx = TaskContext.empty()
+    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, ctx)
+    val outputRowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
+
+    assert(schema.equals(outputRowIter.schema))
+
+    var count = 0
+    outputRowIter.zipWithIndex.foreach { case (row, i) =>
+      if (i != 9) {
+        assert(row.getInt(0) == i)
+      } else {
+        assert(row.isNullAt(0))
+      }
+      count += 1
+    }
+
+    assert(count == inputRows.length)
   }
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
