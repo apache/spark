@@ -646,7 +646,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_chaining(self):
         # Tests for SPARK-21985
-        rdd = self.sc.parallelize('abc')
+        rdd = self.sc.parallelize('abc',2)
         self.assertSetEqual(
             set(rdd.zip(rdd).zip(rdd).collect()),
             set([((x, x), x) for x in 'abc'])
