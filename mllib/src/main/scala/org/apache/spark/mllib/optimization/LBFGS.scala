@@ -263,9 +263,6 @@ object LBFGS extends Logging {
       // broadcasted model is not needed anymore
       bcW.destroy(blocking = false)
 
-      // broadcasted model is not needed anymore
-      bcW.destroy()
-
       /**
        * regVal is sum of weight squares if it's L2 updater;
        * for other updater, the same logic is followed.
