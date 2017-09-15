@@ -453,23 +453,25 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
   }
 
   test("add and remove listeners to/from LiveListenerBus queues") {
+    import LiveListenerBus._
+
     val bus = new LiveListenerBus(new SparkConf(false))
     val counter1 = new BasicJobCounter()
     val counter2 = new BasicJobCounter()
     val counter3 = new BasicJobCounter()
 
     bus.addListener(counter1)
-    bus.addToQueue(counter2, "other")
-    bus.addToQueue(counter3, "other")
-    assert(bus.activeQueues() === Seq("default", "other"))
+    bus.addToStatusQueue(counter2)
+    bus.addToStatusQueue(counter3)
+    assert(bus.activeQueues() === Set(DEFAULT_QUEUE, APP_STATUS_QUEUE))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 3)
 
     bus.removeListener(counter1)
-    assert(bus.activeQueues() === Seq("other"))
+    assert(bus.activeQueues() === Set(APP_STATUS_QUEUE))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 2)
 
     bus.removeListener(counter2)
-    assert(bus.activeQueues() === Seq("other"))
+    assert(bus.activeQueues() === Set(APP_STATUS_QUEUE))
     assert(bus.findListenersByClass[BasicJobCounter]().size === 1)
 
     bus.removeListener(counter3)

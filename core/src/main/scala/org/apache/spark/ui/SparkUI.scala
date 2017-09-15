@@ -167,7 +167,7 @@ private[spark] object SparkUI {
       appName: String,
       startTime: Long): SparkUI = {
     create(Some(sc), conf,
-      l => sc.listenerBus.addToQueue(l, LiveListenerBus.APP_STATUS_QUEUE),
+      sc.listenerBus.addToStatusQueue,
       securityManager, appName, jobProgressListener = Some(jobProgressListener),
       startTime = startTime)
   }

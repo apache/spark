@@ -419,7 +419,7 @@ class SparkContext(config: SparkConf) extends Logging {
     // "_jobProgressListener" should be set up before creating SparkEnv because when creating
     // "SparkEnv", some messages will be posted to "listenerBus" and we should not miss them.
     _jobProgressListener = new JobProgressListener(_conf)
-    listenerBus.addToQueue(jobProgressListener, LiveListenerBus.APP_STATUS_QUEUE)
+    listenerBus.addToStatusQueue(jobProgressListener)
 
     // Create the Spark execution environment (cache, map output tracker, etc)
     _env = createSparkEnv(_conf, isLocal, listenerBus)
@@ -522,7 +522,7 @@ class SparkContext(config: SparkConf) extends Logging {
           new EventLoggingListener(_applicationId, _applicationAttemptId, _eventLogDir.get,
             _conf, _hadoopConfiguration)
         logger.start()
-        listenerBus.addToQueue(logger, LiveListenerBus.EVENT_LOG_QUEUE)
+        listenerBus.addToEventLogQueue(logger)
         Some(logger)
       } else {
         None

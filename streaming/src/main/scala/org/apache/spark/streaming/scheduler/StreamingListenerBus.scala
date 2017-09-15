@@ -76,7 +76,7 @@ private[streaming] class StreamingListenerBus(sparkListenerBus: LiveListenerBus)
    * forward them to StreamingListeners.
    */
   def start(): Unit = {
-    sparkListenerBus.addToQueue(this, LiveListenerBus.APP_STATUS_QUEUE)
+    sparkListenerBus.addToStatusQueue(this)
   }
 
   /**

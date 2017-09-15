@@ -149,7 +149,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     if (SparkSession.sqlListener.get() == null) {
       val listener = new SQLListener(sc.conf)
       if (SparkSession.sqlListener.compareAndSet(null, listener)) {
-        sc.listenerBus.addToQueue(listener, LiveListenerBus.APP_STATUS_QUEUE)
+        sc.listenerBus.addToStatusQueue(listener)
         sc.ui.foreach(new SQLTab(listener, _))
       }
     }

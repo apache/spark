@@ -64,7 +64,22 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   /** Add a listener to the default queue. */
   def addListener(listener: SparkListenerInterface): Unit = {
-    addToQueue(listener, "default")
+    addToQueue(listener, DEFAULT_QUEUE)
+  }
+
+  /** Add a listener to the executor management queue. */
+  def addToManagementQueue(listener: SparkListenerInterface): Unit = {
+    addToQueue(listener, EXECUTOR_MGMT_QUEUE)
+  }
+
+  /** Add a listener to the application status queue. */
+  def addToStatusQueue(listener: SparkListenerInterface): Unit = {
+    addToQueue(listener, APP_STATUS_QUEUE)
+  }
+
+  /** Add a listener to the event log queue. */
+  def addToEventLogQueue(listener: SparkListenerInterface): Unit = {
+    addToQueue(listener, EVENT_LOG_QUEUE)
   }
 
   /**
@@ -72,7 +87,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
    * of each other (each one uses a separate thread for delivering events), allowing slower
    * listeners to be somewhat isolated from others.
    */
-  def addToQueue(listener: SparkListenerInterface, queue: String): Unit = synchronized {
+  private def addToQueue(listener: SparkListenerInterface, queue: String): Unit = synchronized {
     if (stopped.get()) {
       throw new IllegalStateException("LiveListenerBus is stopped.")
     }
@@ -179,8 +194,8 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
   }
 
   // For testing only.
-  private[scheduler] def activeQueues(): Seq[String] = {
-    queues.asScala.map(_.name).toSeq
+  private[scheduler] def activeQueues(): Set[String] = {
+    queues.asScala.map(_.name).toSet
   }
 
 }
@@ -189,14 +204,13 @@ private[spark] object LiveListenerBus {
   // Allows for Context to check whether stop() call is made within listener thread
   val withinListenerThread: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 
-  /** Name of queue where status-related listeners are grouped together. */
-  val APP_STATUS_QUEUE = "appStatus"
+  private[scheduler] val DEFAULT_QUEUE = "default"
 
-  /** Name of queue where executor management-related listeners are grouped together. */
-  val EXECUTOR_MGMT_QUEUE = "executorMgmt"
+  private[scheduler] val APP_STATUS_QUEUE = "appStatus"
 
-  /** Name of queue where the event log listener is placed. */
-  val EVENT_LOG_QUEUE = "eventLog"
+  private[scheduler] val EXECUTOR_MGMT_QUEUE = "executorMgmt"
+
+  private[scheduler] val EVENT_LOG_QUEUE = "eventLog"
 }
 
 private[spark] class LiveListenerBusMetrics(conf: SparkConf)
