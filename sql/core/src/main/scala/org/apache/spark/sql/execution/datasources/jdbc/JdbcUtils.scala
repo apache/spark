@@ -301,12 +301,11 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder()
-        .putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
+      fields(i) = StructField(columnName, columnType, nullable)
       i = i + 1
     }
     new StructType(fields)
@@ -768,31 +767,30 @@ object JdbcUtils extends Logging {
   }
 
   /**
-   * Parses the user specified customSchema option value to DataFrame schema,
-   * and returns it if it's all columns are equals to default schema's.
+   * Parses the user specified customSchema option value to DataFrame schema, and
+   * returns a schema that is replaced by the custom schema's dataType if column name is matched.
    */
   def getCustomSchema(
       tableSchema: StructType,
       customSchema: String,
       nameEquality: Resolver): StructType = {
-    val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
+    if (null != customSchema && customSchema.nonEmpty) {
+      val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-    SchemaUtils.checkColumnNameDuplication(
-      userSchema.map(_.name), "in the customSchema option value", nameEquality)
+      SchemaUtils.checkColumnNameDuplication(
+        userSchema.map(_.name), "in the customSchema option value", nameEquality)
 
-    val colNames = tableSchema.fieldNames.mkString(",")
-    val errorMsg = s"Please provide all the columns, all columns are: $colNames"
-    if (userSchema.size != tableSchema.size) {
-      throw new AnalysisException(errorMsg)
-    }
-
-    // This is resolved by names, only check the column names.
-    userSchema.fieldNames.foreach { col =>
-      tableSchema.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new AnalysisException(errorMsg)
+      // This is resolved by names, use the custom filed dataType to replace the default dataType.
+      val newSchema = tableSchema.map { col =>
+        userSchema.find(f => nameEquality(f.name, col.name)) match {
+          case Some(c) => col.copy(dataType = c.dataType)
+          case None => col
+        }
       }
+      StructType(newSchema)
+    } else {
+      tableSchema
     }
-    userSchema
   }
 
   /**

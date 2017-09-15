@@ -97,6 +97,7 @@ private[spark] object UIData {
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
     var isBlacklisted: Int = _
+    var lastUpdateTime: Option[Long] = None
 
     var schedulingPool: String = ""
     var description: Option[String] = None
@@ -133,9 +134,9 @@ private[spark] object UIData {
       _metrics = metrics.map(TaskMetricsUIData.fromTaskMetrics)
     }
 
-    def taskDuration: Option[Long] = {
+    def taskDuration(lastUpdateTime: Option[Long] = None): Option[Long] = {
       if (taskInfo.status == "RUNNING") {
-        Some(_taskInfo.timeRunning(System.currentTimeMillis))
+        Some(_taskInfo.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis)))
       } else {
         _metrics.map(_.executorRunTime)
       }

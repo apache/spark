@@ -43,7 +43,7 @@ private[sql] class JacksonGenerator(
   private type ValueWriter = (SpecializedGetters, Int) => Unit
 
   // `JackGenerator` can only be initialized with a `StructType` or a `MapType`.
-  require(dataType.isInstanceOf[StructType] | dataType.isInstanceOf[MapType],
+  require(dataType.isInstanceOf[StructType] || dataType.isInstanceOf[MapType],
     "JacksonGenerator only supports to be initialized with a StructType " +
       s"or MapType but got ${dataType.simpleString}")
 

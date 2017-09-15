@@ -30,6 +30,7 @@ private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages"
   val progressListener = parent.jobProgressListener
   val operationGraphListener = parent.operationGraphListener
   val executorsListener = parent.executorsListener
+  val lastUpdateTime = parent.lastUpdateTime
 
   attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this))
