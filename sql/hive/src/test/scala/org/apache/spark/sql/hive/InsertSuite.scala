@@ -728,7 +728,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       assert(e.contains("mismatched input 'ROW'"))
     }
   }
-  
+
   test("[SPARK-21786] The 'spark.sql.parquet.compression.codec' " +
     "configuration doesn't take effect on tables with partition field(s)") {
     withTempDir { tmpDir =>
@@ -752,7 +752,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
                |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/$tableWithPartition'
             """.stripMargin)
 
-          def insertOverwriteTable(tableName: String, codec: String, isPartitioned: Boolean): Unit = {
+          def insertOverwriteTable(tableName: String, codec: String, 
+            isPartitioned: Boolean): Unit = {
             withSQLConf("spark.sql.parquet.compression.codec" -> codec) {
               sql(
                 s"""
@@ -775,7 +776,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             }
           }
 
-          def getTableSize(tableName: String, codec: String, isPartitioned: Boolean = false): Long = {
+          def getTableSize(tableName: String, codec: String,
+            isPartitioned: Boolean = false): Long = {
             insertOverwriteTable(tableName, codec, isPartitioned)
             val path = s"${tmpDir.toURI.toString.stripSuffix("/")}/$tableName"
             val dir = new File(path)
@@ -783,13 +785,16 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
             files.map(_.length()).sum
           }
 
-          //In fact, partitioned and unpartitioned table meta information is slightly different,
-          //and partitioned tables are slightly larger, but the differences are not very large.
-          //Think less than 1024Byte
+          // In fact, partitioned and unpartitioned table meta information is slightly different,
+          // and partitioned tables are slightly larger, but the differences are not very large.
+          // Think less than 1024Byte
           val maxDiff = 1024
-          assert(getTableSize(tableWithPartition, "uncompressed", true) - getTableSize(tableNoPartition, "uncompressed") < maxDiff)
-          assert(getTableSize(tableWithPartition, "gzip", true) - getTableSize(tableNoPartition, "gzip") < maxDiff)
-          assert(getTableSize(tableWithPartition, "uncompressed", true) - getTableSize(tableWithPartition, "gzip", true) > maxDiff)
+          assert(getTableSize(tableWithPartition, "uncompressed", true)
+            - getTableSize(tableNoPartition, "uncompressed") < maxDiff)
+          assert(getTableSize(tableWithPartition, "gzip", true)
+            - getTableSize(tableNoPartition, "gzip") < maxDiff)
+          assert(getTableSize(tableWithPartition, "uncompressed", true)
+            - getTableSize(tableWithPartition, "gzip", true) > maxDiff)
         }
       }
     }
