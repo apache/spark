@@ -312,7 +312,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
     val secondDf = second.toDF()
       .withColumn("eventTime", $"value".cast("timestamp"))
-      .withWatermark("eventTime", "10 seconds")
+      .withWatermark("eventTime", "5 seconds")
       .select('value)
 
     val union = firstDf.union(secondDf)
@@ -326,27 +326,57 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
         data: Seq[Int],
         watermark: Int): Unit = {
       stream.addData(data)
+      assertWatermark(watermark)
+    }
+
+    def assertWatermark(watermark: Int) {
       union.processAllAvailable()
       // add a dummy batch so lastExecution has the new watermark
-      stream.addData(0)
+      first.addData(0)
       union.processAllAvailable()
 
-      assert(union.asInstanceOf[StreamingQueryWrapper].streamingQuery
-        .lastExecution.offsetSeqMetadata.batchWatermarkMs
-        == watermark)
+      val lastExecution = union.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+      assert(lastExecution.offsetSeqMetadata.batchWatermarkMs == watermark)
     }
 
     generateAndAssertNewWatermark(first, Seq(11), 1000)
-    // Watermark stays at 1 from the left when right watermark moves to 2
-    generateAndAssertNewWatermark(second, Seq(12), 1000)
-    // Watermark switches to right side value 2 when left watermark goes higher
-    generateAndAssertNewWatermark(first, Seq(21), 2000)
-    // Watermark goes back to left
-    generateAndAssertNewWatermark(second, Seq(22, 32, 42), 11000)
-    // Watermark stays on left as long as it's below right
+    // Global watermark stays at left watermark 1 when right watermark moves to 2
+    generateAndAssertNewWatermark(second, Seq(8), 1000)
+    // Global watermark switches to right side value 2 when left watermark goes higher
+    generateAndAssertNewWatermark(first, Seq(21), 3000)
+    // Global watermark goes back to left
+    generateAndAssertNewWatermark(second, Seq(17, 28, 39), 11000)
+    // Global watermark stays on left as long as it's below right
     generateAndAssertNewWatermark(first, Seq(31), 21000)
     generateAndAssertNewWatermark(first, Seq(41), 31000)
-    generateAndAssertNewWatermark(first, Seq(51), 32000)
+    // Global watermark switches back to right again
+    generateAndAssertNewWatermark(first, Seq(51), 34000)
+
+    // Global watermark is updated correctly with simultaneous data from both sides
+    first.addData(100)
+    second.addData(100)
+    assertWatermark(90000)
+
+    first.addData(120)
+    second.addData(110)
+    assertWatermark(105000)
+
+    first.addData(130)
+    second.addData(125)
+    assertWatermark(120000)
+
+    // Global watermark doesn't decrement with simultaneous data
+    first.addData(100)
+    second.addData(100)
+    assertWatermark(120000)
+
+    first.addData(140)
+    second.addData(100)
+    assertWatermark(120000)
+
+    first.addData(100)
+    second.addData(135)
+    assertWatermark(130000)
   }
 
   test("complete mode") {
