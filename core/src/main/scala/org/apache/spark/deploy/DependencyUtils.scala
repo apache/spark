@@ -94,7 +94,7 @@ private[deploy] object DependencyUtils {
       hadoopConf: Configuration,
       secMgr: SecurityManager): String = {
     require(fileList != null, "fileList cannot be null.")
-    fileList.split(",")
+    Utils.stringToSeq(fileList)
       .map(downloadFile(_, targetDir, sparkConf, hadoopConf, secMgr))
       .mkString(",")
   }
@@ -136,7 +136,7 @@ private[deploy] object DependencyUtils {
 
   def resolveGlobPaths(paths: String, hadoopConf: Configuration): String = {
     require(paths != null, "paths cannot be null.")
-    paths.split(",").map(_.trim).filter(_.nonEmpty).flatMap { path =>
+    Utils.stringToSeq(paths).flatMap { path =>
       val uri = Utils.resolveURI(path)
       uri.getScheme match {
         case "local" | "http" | "https" | "ftp" => Array(path)

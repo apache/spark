@@ -905,12 +905,12 @@ class SparkSubmitSuite
     testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = true)
   }
 
-  test("force downloading remote resource if it's scheme is configured") {
+  test("force download from blacklisted schemes") {
     testRemoteResources(isHttpSchemeBlacklisted = true, supportMockHttpFs = true)
   }
 
-  private def testRemoteResources(
-      isHttpSchemeBlacklisted: Boolean, supportMockHttpFs: Boolean): Unit = {
+  private def testRemoteResources(isHttpSchemeBlacklisted: Boolean,
+      supportMockHttpFs: Boolean): Unit = {
     val hadoopConf = new Configuration()
     updateConfWithFakeS3Fs(hadoopConf)
     if (supportMockHttpFs) {
@@ -940,30 +940,25 @@ class SparkSubmitSuite
       }
     )
 
-    sys.props.put("spark.testing", "1")
-    try {
-      val appArgs = new SparkSubmitArguments(args)
-      val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))._3
+    val appArgs = new SparkSubmitArguments(args)
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))._3
 
-      val jars = sysProps("spark.yarn.dist.jars").split(",").toSet
+    val jars = sysProps("spark.yarn.dist.jars").split(",").toSet
 
-      // The URI of remote S3 resource should still be remote.
-      assert(jars.contains(tmpS3JarPath))
+    // The URI of remote S3 resource should still be remote.
+    assert(jars.contains(tmpS3JarPath))
 
-      if (supportMockHttpFs) {
-        // If Http FS is supported by yarn service, the URI of remote http resource should
-        // still be remote.
-        assert(jars.contains(tmpHttpJarPath))
-      } else {
-        // If Http FS is not supported by yarn service, or http scheme is configured to be force
-        // downloading, the URI of remote http resource should be changed to a local one.
-        val jarName = new File(tmpHttpJar.toURI).getName
-        val localHttpJar = jars.filter(_.contains(jarName))
-        localHttpJar.size should be(1)
-        localHttpJar.head should startWith("file:")
-      }
-    } finally {
-      sys.props.remove("spark.testing")
+    if (supportMockHttpFs) {
+      // If Http FS is supported by yarn service, the URI of remote http resource should
+      // still be remote.
+      assert(jars.contains(tmpHttpJarPath))
+    } else {
+      // If Http FS is not supported by yarn service, or http scheme is configured to be force
+      // downloading, the URI of remote http resource should be changed to a local one.
+      val jarName = new File(tmpHttpJar.toURI).getName
+      val localHttpJar = jars.filter(_.contains(jarName))
+      localHttpJar.size should be(1)
+      localHttpJar.head should startWith("file:")
     }
   }
 

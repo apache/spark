@@ -403,16 +403,16 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
       args.primaryResource = Option(args.primaryResource).map { downloadResource }.orNull
       args.files = Option(args.files).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
+        Utils.stringToSeq(files).map { downloadResource }.mkString(",")
       }.orNull
-      args.pyFiles = Option(args.pyFiles).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
+      args.pyFiles = Option(args.pyFiles).map { pyFiles =>
+        Utils.stringToSeq(pyFiles).map { downloadResource }.mkString(",")
       }.orNull
-      args.jars = Option(args.jars).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
+      args.jars = Option(args.jars).map { jars =>
+        Utils.stringToSeq(jars).map { downloadResource }.mkString(",")
       }.orNull
-      args.archives = Option(args.archives).map { files =>
-        files.split(",").map(_.trim).filter(_.nonEmpty).map { downloadResource }.mkString(",")
+      args.archives = Option(args.archives).map { archives =>
+        Utils.stringToSeq(archives).map { downloadResource }.mkString(",")
       }.orNull
     }
 
