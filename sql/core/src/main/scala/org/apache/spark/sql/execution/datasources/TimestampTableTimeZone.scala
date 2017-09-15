@@ -38,10 +38,6 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
     // timestamp correction, to keep this idempotent.
     plan match {
       case insertIntoHadoopFs: InsertIntoHadoopFsRelationCommand =>
-        if (!insertIntoHadoopFs.query.isInstanceOf[Project]) {
-          throw new AnalysisException("Expected the child of InsertIntoHadoopFsRelationCommand " +
-            s"to be a Project in $plan")
-        }
         // The query might be reading from a parquet table which requires a different conversion;
         // this makes sure we apply the correct conversions there.
         val (fixedQuery, _) = readConversion(insertIntoHadoopFs.query)
