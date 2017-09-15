@@ -2649,6 +2649,13 @@
     </profile>
 
     <profile>
+      <id>kubernetes</id>
+      <modules>
+        <module>resource-managers/kubernetes/core</module>
+      </modules>
+    </profile>
+
+    <profile>
       <id>hive-thriftserver</id>
       <modules>
         <module>sql/hive-thriftserver</module>
