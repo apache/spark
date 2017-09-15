@@ -19,7 +19,9 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
+// scalastyle:off println
 import scala.Predef.{println => _, _}
+// scalastyle:on println
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{ILoop, JPrintWriter}
 import scala.tools.nsc.util.stringFromStream
@@ -46,7 +48,8 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
           if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
             val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
             if (proxyUrl != null) {
-              println(s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
+              println(
+                s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
             } else {
               println(s"Spark Context Web UI is available at Spark Master Public URL")
             }

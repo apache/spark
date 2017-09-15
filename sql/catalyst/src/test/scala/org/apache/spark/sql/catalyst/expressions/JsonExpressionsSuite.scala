@@ -21,7 +21,8 @@ import java.util.Calendar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeTestUtils, DateTimeUtils, GenericArrayData, PermissiveMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -609,5 +610,74 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         gmtId),
       """{"t":"2015-12-31T16:00:00"}"""
     )
+  }
+
+  test("SPARK-21513: to_json support map[string, struct] to json") {
+    val schema = MapType(StringType, StructType(StructField("a", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map("test" -> InternalRow(1))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"test":{"a":1}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[struct, struct] to json") {
+    val schema = MapType(StructType(StructField("a", IntegerType) :: Nil),
+      StructType(StructField("b", IntegerType) :: Nil))
+    val input = Literal.create(ArrayBasedMapData(Map(InternalRow(1) -> InternalRow(2))), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"[1]":{"b":2}}"""
+    )
+  }
+
+  test("SPARK-21513: to_json support map[string, integer] to json") {
+    val schema = MapType(StringType, IntegerType)
+    val input = Literal.create(ArrayBasedMapData(Map("a" -> 1)), schema)
+    checkEvaluation(
+      StructsToJson(Map.empty, input),
+      """{"a":1}"""
+    )
+  }
+
+  test("to_json - array with maps") {
+    val inputSchema = ArrayType(MapType(StringType, IntegerType))
+    val input = new GenericArrayData(ArrayBasedMapData(
+      Map("a" -> 1)) :: ArrayBasedMapData(Map("b" -> 2)) :: Nil)
+    val output = """[{"a":1},{"b":2}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json - array with single map") {
+    val inputSchema = ArrayType(MapType(StringType, IntegerType))
+    val input = new GenericArrayData(ArrayBasedMapData(Map("a" -> 1)) :: Nil)
+    val output = """[{"a":1}]"""
+    checkEvaluation(
+      StructsToJson(Map.empty, Literal.create(input, inputSchema), gmtId),
+      output)
+  }
+
+  test("to_json: verify MapType's value type instead of key type") {
+    // Keys in map are treated as strings when converting to JSON. The type doesn't matter at all.
+    val mapType1 = MapType(CalendarIntervalType, IntegerType)
+    val schema1 = StructType(StructField("a", mapType1) :: Nil)
+    val struct1 = Literal.create(null, schema1)
+    checkEvaluation(
+      StructsToJson(Map.empty, struct1, gmtId),
+      null
+    )
+
+    // The value type must be valid for converting to JSON.
+    val mapType2 = MapType(IntegerType, CalendarIntervalType)
+    val schema2 = StructType(StructField("a", mapType2) :: Nil)
+    val struct2 = Literal.create(null, schema2)
+    intercept[TreeNodeException[_]] {
+      checkEvaluation(
+        StructsToJson(Map.empty, struct2, gmtId),
+        null
+      )
+    }
   }
 }

@@ -1491,6 +1491,14 @@ test_that("column functions", {
   j <- collect(select(df, alias(to_json(df$people), "json")))
   expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
 
+  df <- sql("SELECT map('name', 'Bob') as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "{\"name\":\"Bob\"}")
+
+  df <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
+  j <- collect(select(df, alias(to_json(df$people), "json")))
+  expect_equal(j[order(j$json), ][1], "[{\"name\":\"Bob\"},{\"name\":\"Alice\"}]")
+
   df <- read.json(mapTypeJsonPath)
   j <- collect(select(df, alias(to_json(df$info), "json")))
   expect_equal(j[order(j$json), ][1], "{\"age\":16,\"height\":176.5}")
@@ -2255,7 +2263,7 @@ test_that("isLocal()", {
   expect_false(isLocal(df))
 })
 
-test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
+test_that("union(), unionByName(), rbind(), except(), and intersect() on a DataFrame", {
   df <- read.json(jsonPath)
 
   lines <- c("{\"name\":\"Bob\", \"age\":24}",
@@ -2270,6 +2278,13 @@ test_that("union(), rbind(), except(), and intersect() on a DataFrame", {
   expect_equal(count(unioned), 6)
   expect_equal(first(unioned)$name, "Michael")
   expect_equal(count(arrange(suppressWarnings(unionAll(df, df2)), df$age)), 6)
+
+  df1 <- select(df2, "age", "name")
+  unioned1 <- arrange(unionByName(df1, df), df1$age)
+  expect_is(unioned, "SparkDataFrame")
+  expect_equal(count(unioned), 6)
+  # Here, we test if 'Michael' in df is correctly mapped to the same name.
+  expect_equal(first(unioned)$name, "Michael")
 
   unioned2 <- arrange(rbind(unioned, df, df2), df$age)
   expect_is(unioned2, "SparkDataFrame")

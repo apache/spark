@@ -44,9 +44,9 @@ object BuildCommons {
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
-    streaming, streamingFlumeSink, streamingFlume, streamingKafka, streamingKafka010
+    streaming, streamingFlumeSink, streamingFlume, streamingKafka010
   ) = Seq(
-    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka-0-8", "streaming-kafka-0-10"
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka-0-10"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
@@ -56,9 +56,9 @@ object BuildCommons {
     "tags", "sketch", "kvstore"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
-  val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
+  val optionallyEnabledProjects@Seq(mesos, yarn, streamingKafka, sparkGangliaLgpl,
     streamingKinesisAsl, dockerIntegrationTests, hadoopCloud) =
-    Seq("mesos", "yarn", "ganglia-lgpl", "streaming-kinesis-asl",
+    Seq("mesos", "yarn", "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
       "docker-integration-tests", "hadoop-cloud").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKafka010Assembly, streamingKinesisAslAssembly) =
@@ -123,7 +123,7 @@ object SparkBuild extends PomBuild {
 
   lazy val scalaStyleRules = Project("scalaStyleRules", file("scalastyle"))
     .settings(
-      libraryDependencies += "org.scalastyle" %% "scalastyle" % "0.9.0"
+      libraryDependencies += "org.scalastyle" %% "scalastyle" % "1.0.0"
     )
 
   lazy val scalaStyleOnCompile = taskKey[Unit]("scalaStyleOnCompile")
@@ -163,14 +163,15 @@ object SparkBuild extends PomBuild {
         val configUrlV = scalastyleConfigUrl.in(config).value
         val streamsV = streams.in(config).value
         val failOnErrorV = true
+        val failOnWarningV = false
         val scalastyleTargetV = scalastyleTarget.in(config).value
         val configRefreshHoursV = scalastyleConfigRefreshHours.in(config).value
         val targetV = target.in(config).value
         val configCacheFileV = scalastyleConfigUrlCacheFile.in(config).value
 
         logger.info(s"Running scalastyle on ${name.value} in ${config.name}")
-        Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV, scalaSourceV, scalastyleTargetV,
-          streamsV, configRefreshHoursV, targetV, configCacheFileV)
+        Tasks.doScalastyle(args, configV, configUrlV, failOnErrorV, failOnWarningV, scalaSourceV,
+          scalastyleTargetV, streamsV, configRefreshHoursV, targetV, configCacheFileV)
 
         Set.empty
       }

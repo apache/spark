@@ -50,6 +50,7 @@ import org.apache.spark.util.PeriodicCheckpointer
  * {{{
  *  val (rdd1, rdd2, rdd3, ...) = ...
  *  val cp = new PeriodicRDDCheckpointer(2, sc)
+ *  cp.update(rdd1)
  *  rdd1.count();
  *  // persisted: rdd1
  *  cp.update(rdd2)

@@ -104,8 +104,6 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>external/kafka-0-8</module>
-    <module>external/kafka-0-8-assembly</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
@@ -574,7 +572,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.43.Final</version>
+        <version>4.0.47.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -2463,7 +2461,7 @@
       <plugin>
         <groupId>org.scalastyle</groupId>
         <artifactId>scalastyle-maven-plugin</artifactId>
-        <version>0.9.0</version>
+        <version>1.0.0</version>
         <configuration>
           <verbose>false</verbose>
           <failOnViolation>true</failOnViolation>
@@ -2650,6 +2648,14 @@
       <id>hadoop-cloud</id>
       <modules>
         <module>hadoop-cloud</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>kafka-0-8</id>
+      <modules>
+        <module>external/kafka-0-8</module>
+        <module>external/kafka-0-8-assembly</module>
       </modules>
     </profile>
 

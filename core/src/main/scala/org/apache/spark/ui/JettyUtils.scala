@@ -21,7 +21,6 @@ import java.net.{URI, URL}
 import javax.servlet.DispatcherType
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 

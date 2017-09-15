@@ -209,6 +209,10 @@ class DataTypeTests(unittest.TestCase):
         row = Row()
         self.assertEqual(len(row), 0)
 
+    def test_struct_field_type_name(self):
+        struct_field = StructField("a", IntegerType())
+        self.assertRaises(TypeError, struct_field.typeName)
+
 
 class SQLTests(ReusedPySparkTestCase):
 
@@ -1140,11 +1144,12 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_approxQuantile(self):
         df = self.sc.parallelize([Row(a=i, b=i+10) for i in range(10)]).toDF()
-        aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
-        self.assertTrue(isinstance(aq, list))
-        self.assertEqual(len(aq), 3)
+        for f in ["a", u"a"]:
+            aq = df.stat.approxQuantile(f, [0.1, 0.5, 0.9], 0.1)
+            self.assertTrue(isinstance(aq, list))
+            self.assertEqual(len(aq), 3)
         self.assertTrue(all(isinstance(q, float) for q in aq))
-        aqs = df.stat.approxQuantile(["a", "b"], [0.1, 0.5, 0.9], 0.1)
+        aqs = df.stat.approxQuantile(["a", u"b"], [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aqs, list))
         self.assertEqual(len(aqs), 2)
         self.assertTrue(isinstance(aqs[0], list))
@@ -1153,7 +1158,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(isinstance(aqs[1], list))
         self.assertEqual(len(aqs[1]), 3)
         self.assertTrue(all(isinstance(q, float) for q in aqs[1]))
-        aqt = df.stat.approxQuantile(("a", "b"), [0.1, 0.5, 0.9], 0.1)
+        aqt = df.stat.approxQuantile((u"a", "b"), [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aqt, list))
         self.assertEqual(len(aqt), 2)
         self.assertTrue(isinstance(aqt[0], list))
@@ -1169,17 +1174,22 @@ class SQLTests(ReusedPySparkTestCase):
     def test_corr(self):
         import math
         df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
-        corr = df.stat.corr("a", "b")
+        corr = df.stat.corr(u"a", "b")
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
+
+    def test_sampleby(self):
+        df = self.sc.parallelize([Row(a=i, b=(i % 3)) for i in range(10)]).toDF()
+        sampled = df.stat.sampleBy(u"b", fractions={0: 0.5, 1: 0.5}, seed=0)
+        self.assertTrue(sampled.count() == 3)
 
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
-        cov = df.stat.cov("a", "b")
+        cov = df.stat.cov(u"a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
     def test_crosstab(self):
         df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
-        ct = df.stat.crosstab("a", "b").collect()
+        ct = df.stat.crosstab(u"a", "b").collect()
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
             self.assertEqual(row[0], str(i))
@@ -2619,8 +2629,12 @@ class SQLTests2(ReusedPySparkTestCase):
         self.sc.stop()
         sc = SparkContext('local[4]', self.sc.appName)
         spark = SparkSession.builder.getOrCreate()
-        df = spark.createDataFrame([(1, 2)], ["c", "c"])
-        df.collect()
+        try:
+            df = spark.createDataFrame([(1, 2)], ["c", "c"])
+            df.collect()
+        finally:
+            spark.stop()
+            sc.stop()
 
 
 class UDFInitializationTests(unittest.TestCase):

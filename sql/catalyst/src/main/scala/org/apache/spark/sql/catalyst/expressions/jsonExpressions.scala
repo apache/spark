@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, BadRecordException, FailFastMode, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -604,7 +604,8 @@ case class JsonToStructs(
 }
 
 /**
- * Converts a [[StructType]] or [[ArrayType]] of [[StructType]]s to a json output string.
+ * Converts a [[StructType]], [[ArrayType]] of [[StructType]]s, [[MapType]]
+ * or [[ArrayType]] of [[MapType]]s to a json output string.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -617,6 +618,14 @@ case class JsonToStructs(
        {"time":"26/08/2015"}
       > SELECT _FUNC_(array(named_struct('a', 1, 'b', 2));
        [{"a":1,"b":2}]
+      > SELECT _FUNC_(map('a', named_struct('b', 1)));
+       {"a":{"b":1}}
+      > SELECT _FUNC_(map(named_struct('a', 1),named_struct('b', 2)));
+       {"[1]":{"b":2}}
+      > SELECT _FUNC_(map('a', 1));
+       {"a":1}
+      > SELECT _FUNC_(array((map('a', 1))));
+       [{"a":1}]
   """,
   since = "2.2.0")
 // scalastyle:on line.size.limit
@@ -648,6 +657,8 @@ case class StructsToJson(
   lazy val rowSchema = child.dataType match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case mt: MapType => mt
+    case ArrayType(mt: MapType, _) => mt
   }
 
   // This converts rows to the JSON output according to the given schema.
@@ -669,6 +680,14 @@ case class StructsToJson(
         (arr: Any) =>
           gen.write(arr.asInstanceOf[ArrayData])
           getAndReset()
+      case _: MapType =>
+        (map: Any) =>
+          gen.write(map.asInstanceOf[MapData])
+          getAndReset()
+      case ArrayType(_: MapType, _) =>
+        (arr: Any) =>
+          gen.write(arr.asInstanceOf[ArrayData])
+          getAndReset()
     }
   }
 
@@ -677,14 +696,25 @@ case class StructsToJson(
   override def checkInputDataTypes(): TypeCheckResult = child.dataType match {
     case _: StructType | ArrayType(_: StructType, _) =>
       try {
-        JacksonUtils.verifySchema(rowSchema)
+        JacksonUtils.verifySchema(rowSchema.asInstanceOf[StructType])
+        TypeCheckResult.TypeCheckSuccess
+      } catch {
+        case e: UnsupportedOperationException =>
+          TypeCheckResult.TypeCheckFailure(e.getMessage)
+      }
+    case _: MapType | ArrayType(_: MapType, _) =>
+      // TODO: let `JacksonUtils.verifySchema` verify a `MapType`
+      try {
+        val st = StructType(StructField("a", rowSchema.asInstanceOf[MapType]) :: Nil)
+        JacksonUtils.verifySchema(st)
         TypeCheckResult.TypeCheckSuccess
       } catch {
         case e: UnsupportedOperationException =>
           TypeCheckResult.TypeCheckFailure(e.getMessage)
       }
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input type ${child.dataType.simpleString} must be a struct or array of structs.")
+      s"Input type ${child.dataType.simpleString} must be a struct, array of structs or " +
+          "a map or array of map.")
   }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
