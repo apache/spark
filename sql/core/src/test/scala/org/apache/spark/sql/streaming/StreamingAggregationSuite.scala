@@ -24,23 +24,22 @@ import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.rdd.BlockRDD
+import org.apache.spark.rdd.{BlockRDD, RDD}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.aggregate.HashAggregateExec
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 
 object FailureSingleton {
@@ -411,7 +410,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       .head
     restore.child match {
       case node: UnaryExecNode =>
-        assert(node.outputPartitioning.numPartitions === expectedPartition)
+        assert(node.outputPartitioning.numPartitions === expectedPartition,
+          "Didn't get the expected number of partitions.")
         if (expectShuffling) {
           assert(node.isInstanceOf[Exchange], s"Expected a shuffle, got: ${node.child}")
         } else {
@@ -435,7 +435,12 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   /** Add blocks of data to the `BlockRDDBackedSource`. */
   case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
-      data.foreach(source.addData)
+      if (data.nonEmpty) {
+        data.foreach(source.addData)
+      } else {
+        // we would like to create empty blockRDD's so add an empty block here.
+        source.addData()
+      }
       source.releaseLock()
       (source, LongOffset(source.counter))
     }
@@ -457,10 +462,14 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
         testStream(aggregated, Complete())(
           AddBlockData(inputSource, Seq(1)),
           CheckLastBatch(1),
-          AssertOnQuery(se => checkAggregationChain(se, expectShuffling = false, 1)),
+          AssertOnQuery("Verify no shuffling") { se =>
+            checkAggregationChain(se, expectShuffling = false, 1)
+          },
           AddBlockData(inputSource), // create an empty trigger
-          AssertOnQuery(se => checkAggregationChain(se, expectShuffling = true, 1)),
           CheckLastBatch(1),
+          AssertOnQuery("Verify addition of exchange operator") { se =>
+            checkAggregationChain(se, expectShuffling = true, 1)
+          },
           AddBlockData(inputSource, Seq(2, 3)),
           CheckLastBatch(3),
           AddBlockData(inputSource),
@@ -486,31 +495,30 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
             .as[(Long, Long)]
         }
 
-        val confs = Map(SQLConf.CHECKPOINT_LOCATION.key -> tempDir.getAbsolutePath)
-
         testStream(createDf(1), Complete())(
-          StartStream(additionalConfs = confs, queryName = "agg_test"),
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
           AddBlockData(inputSource, Seq(1)),
-          AssertOnQuery { se =>
+          CheckLastBatch((0L, 1L)),
+          AssertOnQuery("Verify addition of exchange operator") { se =>
             checkAggregationChain(
               se,
               expectShuffling = true,
               spark.sessionState.conf.numShufflePartitions)
           },
-          CheckLastBatch((0L, 1L)),
           StopStream
         )
 
         testStream(createDf(2), Complete())(
-          StartStream(additionalConfs = confs, queryName = "agg_test"),
+          StartStream(checkpointLocation = tempDir.getAbsolutePath),
+          Execute(se => se.processAllAvailable()),
           AddBlockData(inputSource, Seq(2), Seq(3), Seq(4)),
-          AssertOnQuery { se =>
+          CheckLastBatch((0L, 4L)),
+          AssertOnQuery("Verify no exchange added") { se =>
             checkAggregationChain(
               se,
               expectShuffling = false,
               spark.sessionState.conf.numShufflePartitions)
           },
-          CheckLastBatch((0L, 4L)),
           AddBlockData(inputSource),
           CheckLastBatch((0L, 4L)),
           StopStream

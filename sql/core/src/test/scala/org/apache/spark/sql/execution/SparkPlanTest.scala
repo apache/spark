@@ -232,6 +232,10 @@ object SparkPlanTest {
   }
 
   /**
+   *
+   */
+
+  /**
    * Runs the plan
    * @param outputPlan SparkPlan to be executed
    * @param spark SqlContext used for execution of the plan
