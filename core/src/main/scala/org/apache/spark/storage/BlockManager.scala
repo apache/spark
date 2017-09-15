@@ -991,7 +991,7 @@ private[spark] class BlockManager(
     } catch {
       // Since removeBlockInternal may throw exception,
       // we should print exception first to show root cause.
-      case e: Throwable =>
+      case NonFatal(e) =>
         logWarning(s"Putting block $blockId failed due to exception $e.")
         throw e
     } finally {
