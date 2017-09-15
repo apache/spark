@@ -398,9 +398,8 @@ class ALSModel private[ml] (
       dataset: Dataset[_],
       factors: DataFrame,
       column: String): DataFrame = {
-    dataset.select(column)
-      .distinct()
-      .join(factors, dataset(column) === factors("id"))
+    factors
+      .join(dataset.select(column), factors("id") === dataset(column), joinType = "left_semi")
       .select(factors("id"), factors("features"))
   }
 
