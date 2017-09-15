@@ -72,7 +72,19 @@ def wrap_udf(f, return_type):
         return lambda *a: f(*a)
 
 
-def read_single_udf(pickleSer, infile):
+def wrap_pandas_udf(f, return_type):
+    def verify_result_length(*a):
+        kwargs = a[-1]
+        result = f(*a[:-1], **kwargs)
+        if len(result) != kwargs["size"]:
+            raise RuntimeError("Result vector from pandas_udf was not the required length: "
+                               "expected %d, got %d\nUse input vector length or kwarg['size']"
+                               % (kwargs["size"], len(result)))
+        return result
+    return lambda *a: verify_result_length(*a)
+
+
+def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]
     row_func = None
@@ -83,7 +95,12 @@ def read_single_udf(pickleSer, infile):
         else:
             row_func = chain(row_func, f)
     # the last returnType will be the return type of UDF
-    return arg_offsets, wrap_udf(row_func, return_type)
+    if eval_type == PythonEvalType.SQL_PANDAS_UDF:
+        # A pandas_udf will take kwargs as the last argument
+        arg_offsets = arg_offsets + [-1]
+        return arg_offsets, wrap_pandas_udf(row_func, return_type)
+    else:
+        return arg_offsets, wrap_udf(row_func, return_type)
 
 
 def read_udfs(pickleSer, infile, eval_type):
@@ -91,7 +108,7 @@ def read_udfs(pickleSer, infile, eval_type):
     udfs = {}
     call_udf = []
     for i in range(num_udfs):
-        arg_offsets, udf = read_single_udf(pickleSer, infile)
+        arg_offsets, udf = read_single_udf(pickleSer, infile, eval_type)
         udfs['f%d' % i] = udf
         args = ["a[%d]" % o for o in arg_offsets]
         call_udf.append("f%d(%s)" % (i, ", ".join(args)))

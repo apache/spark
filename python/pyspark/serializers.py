@@ -231,8 +231,12 @@ class ArrowPandasSerializer(ArrowSerializer):
         """
         Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series
         """
-        table = super(ArrowPandasSerializer, self).loads(obj)
-        return [c.to_pandas() for c in table.itercolumns()]
+        import pyarrow as pa
+        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
+        batches = [reader.get_batch(i) for i in range(reader.num_record_batches)]
+        num_rows = sum([batch.num_rows for batch in batches])
+        table = pa.Table.from_batches(batches)
+        return [c.to_pandas() for c in table.itercolumns()] + [{"size": num_rows}]
 
     def __repr__(self):
         return "ArrowPandasSerializer"

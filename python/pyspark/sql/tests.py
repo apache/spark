@@ -3286,7 +3286,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
-                    'The length of returned value should be the same as input value'):
+                    'Result vector from pandas_udf was not the required length'):
                 df.select(raise_exception()).collect()
 
     def test_vectorized_udf_mix_udf(self):
