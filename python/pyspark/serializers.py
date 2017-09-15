@@ -343,6 +343,7 @@ class PairDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+            # the batch is an iterable, we need to check lengths so we convert to list if needed.
             key_batch = key_batch if hasattr(key_batch, '__len__') else list(key_batch)
             val_batch = val_batch if hasattr(val_batch, '__len__') else list(val_batch)
             if len(key_batch) != len(val_batch):
