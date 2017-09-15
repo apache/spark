@@ -26,7 +26,9 @@ import scala.util.Try
 
 import org.apache.spark._
 import org.apache.spark.api.conda.CondaEnvironment.CondaSetupInstructions
+import org.apache.spark.api.conda.CondaEnvironmentManager
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.Common.Provenance
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -328,12 +330,24 @@ private[r] object RRunner {
     thread
   }
 
-  private def createRProcess(port: Int, script: String): BufferedStreamThread = {
+
+  private def createRProcess(
+      condaSetupInstructions: Option[CondaSetupInstructions], port: Int, script: String)
+  : BufferedStreamThread = {
+    import collection.JavaConverters._
     // "spark.sparkr.r.command" is deprecated and replaced by "spark.r.command",
     // but kept here for backward compatibility.
     val sparkConf = SparkEnv.get.conf
-    var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
-    rCommand = sparkConf.get("spark.r.command", rCommand)
+    val requestedRCommand = Provenance.fromConf("spark.r.command")
+      .orElse(Provenance.fromConf("spark.sparkr.r.command"))
+    val condaEnv = condaSetupInstructions.map(CondaEnvironmentManager.createCondaEnvironment)
+    val rCommand = condaEnv.map { conda =>
+      requestedRCommand.foreach(exec => sys.error(s"It's forbidden to set the r executable " +
+        s"when using conda, but found: $exec"))
+
+      conda.condaEnvDir + "/bin/Rscript"
+    }.orElse(requestedRCommand.map(_.value))
+     .getOrElse("Rscript")
 
     val rConnectionTimeout = sparkConf.getInt(
       "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
@@ -341,6 +355,8 @@ private[r] object RRunner {
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
     val pb = new ProcessBuilder(Arrays.asList(rCommand, rOptions, rExecScript))
+    // Activate the conda environment by setting the right env variables if applicable.
+    condaEnv.map(_.activatedEnvironment()).map(_.asJava).foreach(pb.environment().putAll)
     // Unset the R_TESTS environment variable for workers.
     // This is set by R CMD check as startup.Rs
     // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)

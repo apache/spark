@@ -33,6 +33,10 @@ object Common {
     def fromConf(sparkConf: SparkConf, conf: ConfigEntry[Option[String]]): Option[Provenance] = {
       sparkConf.get(conf).map(Provenance(s"Spark config ${conf.key}", _))
     }
+
+    def fromConf(sparkConf: SparkConf, key: String): Option[Provenance] = {
+      sparkConf.getOption(key).map(Provenance(s"Spark config $key", _))
+
     def fromEnv(name: String): Option[Provenance] = {
       sys.env.get(name).map(Provenance(s"Environment variable $name", _))
     }
