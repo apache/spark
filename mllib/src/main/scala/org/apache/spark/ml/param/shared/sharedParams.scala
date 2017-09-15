@@ -44,7 +44,7 @@ private[ml] trait HasRegParam extends Params {
 private[ml] trait HasMaxIter extends Params {
 
   /**
-   * Param for maximum number of iterations (&gt;= 0).
+   * Param for maximum number of iterations (&gt;= 0). (default = 20)
    * @group param
    */
   final val maxIter: IntParam = new IntParam(this, "maxIter", "maximum number of iterations (>= 0)", ParamValidators.gtEq(0))
