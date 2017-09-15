@@ -779,7 +779,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           def getTableSize(tableName: String, codec: String,
             isPartitioned: Boolean = false): Long = {
             insertOverwriteTable(tableName, codec, isPartitioned)
-            val path = s"${tmpDir.toURI.toString.stripSuffix("/")}/$tableName"
+            val path = s"${tmpDir.getPath.stripSuffix("/")}/$tableName"
             val dir = new File(path)
             val files = getDirFiles(dir).filter(_.getName.startsWith("part-"))
             files.map(_.length()).sum
