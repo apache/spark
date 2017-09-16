@@ -96,7 +96,7 @@ def get_fernet():
     """
     try:
         from cryptography.fernet import Fernet
-    except ImportError:
+    except:
         raise AirflowException('Failed to import Fernet, it may not be installed')
     try:
         return Fernet(configuration.get('core', 'FERNET_KEY').encode('utf-8'))
@@ -506,7 +506,7 @@ class User(Base):
         return self.superuser
 
 
-class Connection(Base):
+class Connection(Base, LoggingMixin):
     """
     Placeholder to store information about different database instances
     connection information. The idea here is that scripts use references to
@@ -3957,7 +3957,7 @@ class Variable(Base, LoggingMixin):
         :return: Mixed
         """
         default_sentinel = object()
-        obj = Variable.get(key, default_var=default_sentinel, deserialize_json=False)
+        obj = Variable.get(key, default_var=default_sentinel, deserialize_json=deserialize_json)
         if obj is default_sentinel:
             if default is not None:
                 Variable.set(key, default, serialize_json=deserialize_json)
@@ -3965,10 +3965,7 @@ class Variable(Base, LoggingMixin):
             else:
                 raise ValueError('Default Value must be set')
         else:
-            if deserialize_json:
-                return json.loads(obj.val)
-            else:
-                return obj.val
+            return obj
 
     @classmethod
     @provide_session
