@@ -541,6 +541,25 @@ object CollapseProject extends Rule[LogicalPlan] {
         agg.copy(aggregateExpressions = buildCleanedProjectList(
           p.projectList, agg.aggregateExpressions))
       }
+    case agg @ Aggregate(groupingExpressions, aggregateExpressions, p: Project) =>
+      if (haveCommonNonDeterministicOutput(groupingExpressions, p.projectList) ||
+        haveCommonNonDeterministicOutput(aggregateExpressions, p.projectList)) {
+        agg
+      } else {
+        Aggregate(groupingExpressions = eliminateAliases(groupingExpressions, p.projectList),
+          aggregateExpressions = buildCleanedProjectList(aggregateExpressions, p.projectList),
+          child = p.child
+        )
+      }
+  }
+
+  private def eliminateAliases(
+      upper: Seq[Expression],
+      lower: Seq[NamedExpression]): Seq[Expression] = {
+    val aliases = collectAliases(lower)
+    upper.map(_.transform {
+      case a: Attribute if aliases.contains(a) => aliases(a).child
+    })
   }
 
   private def collectAliases(projectList: Seq[NamedExpression]): AttributeMap[Alias] = {
@@ -550,7 +569,7 @@ object CollapseProject extends Rule[LogicalPlan] {
   }
 
   private def haveCommonNonDeterministicOutput(
-      upper: Seq[NamedExpression], lower: Seq[NamedExpression]): Boolean = {
+      upper: Seq[Expression], lower: Seq[NamedExpression]): Boolean = {
     // Create a map of Aliases to their values from the lower projection.
     // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
     val aliases = collectAliases(lower)
