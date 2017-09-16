@@ -20,7 +20,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.kubernetes.{InitContainerResourceStagingServerSecretPluginImpl, OptionRequirements, SparkPodInitContainerBootstrapImpl}
 import org.apache.spark.deploy.kubernetes.config._
 import org.apache.spark.deploy.kubernetes.constants._
-import org.apache.spark.deploy.kubernetes.submit.SubmittedDependencyUploaderImpl
+import org.apache.spark.deploy.kubernetes.submit.{KubernetesFileUtils, SubmittedDependencyUploaderImpl}
 import org.apache.spark.deploy.rest.kubernetes.{ResourceStagingServerSslOptionsProviderImpl, RetrofitClientFactoryImpl}
 import org.apache.spark.util.Utils
 
@@ -62,6 +62,12 @@ private[spark] class InitContainerConfigurationStepsOrchestrator(
     submissionSparkConf.get(RESOURCE_STAGING_SERVER_INTERNAL_SSL_ENABLED)
       .orElse(submissionSparkConf.get(RESOURCE_STAGING_SERVER_SSL_ENABLED))
       .getOrElse(false)
+
+  OptionRequirements.requireSecondIfFirstIsDefined(
+    KubernetesFileUtils.getOnlySubmitterLocalFiles(sparkJars).headOption,
+    resourceStagingServerUri,
+    "Local JARs were provided, however no resource staging server URI was found.")
+
   OptionRequirements.requireNandDefined(
     maybeResourceStagingServerInternalClientCert,
     maybeResourceStagingServerInternalTrustStore,
