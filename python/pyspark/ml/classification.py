@@ -81,9 +81,9 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     >>> svm = LinearSVC(maxIter=5, regParam=0.01)
     >>> model = svm.fit(df)
     >>> model.coefficients
-    DenseVector([0.0, 0.0759, -0.6167])
+    DenseVector([0.0, 0.0844, -0.7532])
     >>> model.intercept
-    1.3113904822325306
+    1.5941035229606713
     >>> model.numClasses
     2
     >>> model.numFeatures
@@ -93,7 +93,7 @@ class LinearSVC(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, Ha
     >>> result.prediction
     1.0
     >>> result.rawPrediction
-    DenseVector([-1.8521, 1.8521])
+    DenseVector([-2.2629, 2.2629])
     >>> svm_path = temp_path + "/svm"
     >>> svm.save(svm_path)
     >>> svm2 = LinearSVC.load(svm_path)
