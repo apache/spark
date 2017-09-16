@@ -114,8 +114,11 @@ class SparkSession private(
   @InterfaceStability.Unstable
   @transient
   lazy val sharedState: SharedState = {
+    sharedStateInitialized = true
     existingSharedState.getOrElse(new SharedState(sparkContext))
   }
+
+  var sharedStateInitialized: Boolean = false
 
   /**
    * Initial options for session. This options are applied once when sessionState is created.
@@ -706,6 +709,9 @@ class SparkSession private(
    */
   def stop(): Unit = {
     sparkContext.stop()
+    if (sharedStateInitialized) {
+      sharedState.close()
+    }
   }
 
   /**

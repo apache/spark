@@ -22,7 +22,7 @@ import java.io.PrintStream
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.util.Utils
 
 /** A singleton object for the master program. The slaves should not access this. */
@@ -31,6 +31,7 @@ private[hive] object SparkSQLEnv extends Logging {
 
   var sqlContext: SQLContext = _
   var sparkContext: SparkContext = _
+  var sparkSession: SparkSession = _
 
   def init() {
     if (sqlContext == null) {
@@ -45,16 +46,10 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkConf
         .setAppName(maybeAppName.getOrElse(s"SparkSQL::${Utils.localHostName()}"))
 
-      val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
+      sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
       sparkContext = sparkSession.sparkContext
       sqlContext = sparkSession.sqlContext
 
-      val metadataHive = sparkSession
-        .sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog]
-        .client.newSession()
-      metadataHive.setOut(new PrintStream(System.out, true, "UTF-8"))
-      metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
-      metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
       sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     }
   }
@@ -65,6 +60,7 @@ private[hive] object SparkSQLEnv extends Logging {
     // Stop the SparkContext
     if (SparkSQLEnv.sparkContext != null) {
       sparkContext.stop()
+      sparkSession.close()
       sparkContext = null
       sqlContext = null
     }

@@ -109,6 +109,8 @@ object HiveThriftServer2 extends Logging {
       case e: Exception =>
         logError("Error starting HiveThriftServer2", e)
         System.exit(-1)
+    } finally {
+      executionHive.close()
     }
   }
 

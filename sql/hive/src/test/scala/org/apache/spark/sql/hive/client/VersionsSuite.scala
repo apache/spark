@@ -578,11 +578,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.setError(new PrintStream(new ByteArrayOutputStream()))
     }
 
-    test(s"$version: newSession") {
-      val newClient = client.newSession()
-      assert(newClient != null)
-    }
-
     test(s"$version: withHiveState and addJar") {
       val newClassPath = "."
       client.addJar(newClassPath)

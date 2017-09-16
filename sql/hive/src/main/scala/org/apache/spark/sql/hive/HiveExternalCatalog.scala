@@ -1267,6 +1267,11 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     client.listFunctions(db, pattern)
   }
 
+  override def close(): Unit = {
+    super.close()
+    client.close()
+  }
+
 }
 
 object HiveExternalCatalog {

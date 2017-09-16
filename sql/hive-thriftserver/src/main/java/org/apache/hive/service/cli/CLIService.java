@@ -126,6 +126,11 @@ public class CLIService extends CompositeService implements ICLIService {
     ss.setIsHiveServerQuery(true);
     SessionState.start(ss);
     ss.applyAuthorizationPolicy();
+    try {
+      ss.close();
+    } catch (IOException e) {
+      LOG.error("Failed closing Hive session state.", e);
+    }
   }
 
   private void setupBlockedUdfs() {

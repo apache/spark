@@ -360,4 +360,6 @@ abstract class ExternalCatalog
       event: ExternalCatalogEvent): Unit = {
     listener.onEvent(event)
   }
+
+  def close(): Unit = { }
 }

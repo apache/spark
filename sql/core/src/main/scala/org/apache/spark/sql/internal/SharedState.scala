@@ -87,6 +87,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
    */
   val listener: SQLListener = createListenerAndUI(sparkContext)
 
+  var externalCatalogInitialized: Boolean = false
   /**
    * A catalog that interacts with external systems.
    */
@@ -115,6 +116,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       }
     })
 
+    externalCatalogInitialized = true
     externalCatalog
   }
 
@@ -153,6 +155,12 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
       }
     }
     SparkSession.sqlListener.get()
+  }
+
+  def close(): Unit = {
+    if (externalCatalogInitialized) {
+      externalCatalog.close()
+    }
   }
 }
 
