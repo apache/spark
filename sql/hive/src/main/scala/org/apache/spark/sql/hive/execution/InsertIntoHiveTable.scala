@@ -102,9 +102,15 @@ case class InsertIntoHiveTable(
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
 
     tableDesc.getOutputFileFormatClassName match {
-      case "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat" =>
+      case formatName if formatName.endsWith("ParquetOutputFormat") =>
         val parquetCompression = sparkSession.sessionState.conf.parquetCompressionCodec
         hadoopConf.set("parquet.compression", parquetCompression)
+      case formatName if formatName.endsWith("OrcOutputFormat") =>
+        val orcCompression = sparkSession.sessionState.conf.orcCompressionCodec.toUpperCase match {
+          case "UNCOMPRESSED" => "NONE"
+          case _@x => x
+        }
+        hadoopConf.set("orc.compress", orcCompression)
       case _ =>
     }
 
