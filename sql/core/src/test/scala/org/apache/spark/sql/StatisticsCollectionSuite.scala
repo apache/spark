@@ -261,6 +261,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           assert(fetched1.get.sizeInBytes == 0)
           assert(fetched1.get.colStats.size == 2)
 
+          // compute stats based on the catalog table metadata and
+          // put the relation into the catalog cache
+          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          assert(isTableInCatalogCache(table))
+
           // insert into command
           sql(s"INSERT INTO TABLE $table SELECT 1, 'abc'")
           if (autoUpdate) {
@@ -270,6 +275,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           } else {
             checkTableStats(table, hasSizeInBytes = false, expectedRowCounts = None)
           }
+
+          // check that tableRelationCache inside the catalog was invalidated after insert
+          assert(!isTableInCatalogCache(table))
+        }
+      }
+    }
+  }
+
+  test("invalidation of tableRelationCache after inserts") {
+    val table = "invalidate_catalog_cache_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          spark.range(100).write.saveAsTable(table)
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
+
+          spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
+          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
         }
       }
     }
