@@ -301,6 +301,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   test("watermark with 2 streams") {
+    import org.apache.spark.sql.functions.sum
     val first = MemoryStream[Int]
 
     val firstDf = first.toDF()
@@ -315,50 +316,66 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
       .withWatermark("eventTime", "5 seconds")
       .select('value)
 
-    val union = firstDf.union(secondDf)
-      .writeStream
-      .format("memory")
-      .queryName("test")
-      .start()
+    withTempDir { checkpointDir =>
+      val unionWriter = firstDf.union(secondDf).agg(sum('value))
+        .writeStream
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .format("memory")
+        .outputMode("complete")
+        .queryName("test")
 
-    def getWatermarkAfterData(
-        firstData: Seq[Int] = Seq.empty,
-        secondData: Seq[Int] = Seq.empty): Long = {
-      if (firstData.nonEmpty) first.addData(firstData)
-      if (secondData.nonEmpty) second.addData(secondData)
-      union.processAllAvailable()
-      // add a dummy batch so lastExecution has the new watermark
-      first.addData(0)
-      union.processAllAvailable()
-      // get last watermark
-      val lastExecution = union.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
-      lastExecution.offsetSeqMetadata.batchWatermarkMs
+      val union = unionWriter.start()
+
+      def getWatermarkAfterData(
+                                 firstData: Seq[Int] = Seq.empty,
+                                 secondData: Seq[Int] = Seq.empty,
+                                 query: StreamingQuery = union): Long = {
+        if (firstData.nonEmpty) first.addData(firstData)
+        if (secondData.nonEmpty) second.addData(secondData)
+        query.processAllAvailable()
+        // add a dummy batch so lastExecution has the new watermark
+        first.addData(0)
+        query.processAllAvailable()
+        // get last watermark
+        val lastExecution = query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+        lastExecution.offsetSeqMetadata.batchWatermarkMs
+      }
+
+      // Global watermark starts at 0 until we get data from both sides
+      assert(getWatermarkAfterData(firstData = Seq(11)) == 0)
+      assert(getWatermarkAfterData(secondData = Seq(6)) == 1000)
+      // Global watermark stays at left watermark 1 when right watermark moves to 2
+      assert(getWatermarkAfterData(secondData = Seq(8)) == 1000)
+      // Global watermark switches to right side value 2 when left watermark goes higher
+      assert(getWatermarkAfterData(firstData = Seq(21)) == 3000)
+      // Global watermark goes back to left
+      assert(getWatermarkAfterData(secondData = Seq(17, 28, 39)) == 11000)
+      // Global watermark stays on left as long as it's below right
+      assert(getWatermarkAfterData(firstData = Seq(31)) == 21000)
+      assert(getWatermarkAfterData(firstData = Seq(41)) == 31000)
+      // Global watermark switches back to right again
+      assert(getWatermarkAfterData(firstData = Seq(51)) == 34000)
+
+      // Global watermark is updated correctly with simultaneous data from both sides
+      assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 90000)
+      assert(getWatermarkAfterData(firstData = Seq(120), secondData = Seq(110)) == 105000)
+      assert(getWatermarkAfterData(firstData = Seq(130), secondData = Seq(125)) == 120000)
+
+      // Global watermark doesn't decrement with simultaneous data
+      assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 120000)
+      assert(getWatermarkAfterData(firstData = Seq(140), secondData = Seq(100)) == 120000)
+      assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(135)) == 130000)
+
+      // Global watermark recovers after restart, but left side watermark ahead of it does not.
+      assert(getWatermarkAfterData(firstData = Seq(200), secondData = Seq(190)) == 185000)
+      union.stop()
+      val union2 = unionWriter.start()
+      assert(getWatermarkAfterData(query = union2) == 185000)
+      // Even though the left side was ahead of 185000 in the last execution, the watermark won't
+      // increment until it gets past it in this execution.
+      assert(getWatermarkAfterData(secondData = Seq(200), query = union2) == 185000)
+      assert(getWatermarkAfterData(firstData = Seq(200), query = union2) == 190000)
     }
-
-    // Global watermark starts at 0 until we get data from both sides
-    assert(getWatermarkAfterData(firstData = Seq(11)) == 0)
-    assert(getWatermarkAfterData(secondData = Seq(6)) == 1000)
-    // Global watermark stays at left watermark 1 when right watermark moves to 2
-    assert(getWatermarkAfterData(secondData = Seq(8)) == 1000)
-    // Global watermark switches to right side value 2 when left watermark goes higher
-    assert(getWatermarkAfterData(firstData = Seq(21)) == 3000)
-    // Global watermark goes back to left
-    assert(getWatermarkAfterData(secondData = Seq(17, 28, 39)) == 11000)
-    // Global watermark stays on left as long as it's below right
-    assert(getWatermarkAfterData(firstData = Seq(31)) == 21000)
-    assert(getWatermarkAfterData(firstData = Seq(41)) == 31000)
-    // Global watermark switches back to right again
-    assert(getWatermarkAfterData(firstData = Seq(51)) == 34000)
-
-    // Global watermark is updated correctly with simultaneous data from both sides
-    assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 90000)
-    assert(getWatermarkAfterData(firstData = Seq(120), secondData = Seq(110)) == 105000)
-    assert(getWatermarkAfterData(firstData = Seq(130), secondData = Seq(125)) == 120000)
-
-    // Global watermark doesn't decrement with simultaneous data
-    assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(100)) == 120000)
-    assert(getWatermarkAfterData(firstData = Seq(140), secondData = Seq(100)) == 120000)
-    assert(getWatermarkAfterData(firstData = Seq(100), secondData = Seq(135)) == 130000)
   }
 
   test("complete mode") {
