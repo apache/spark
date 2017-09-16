@@ -24,6 +24,7 @@ import json
 import re
 import base64
 from array import array
+from functools import lru_cache
 import ctypes
 
 if sys.version >= "3":
@@ -844,6 +845,7 @@ def _parse_datatype_string(s):
                 raise e
 
 
+@lru_cache(maxsize=None)
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
     >>> import pickle
