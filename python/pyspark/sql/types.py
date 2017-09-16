@@ -201,6 +201,7 @@ class TimestampType(AtomicType):
             # using int to avoid precision loss in float
             y, m, d, hh, mm, ss, _, _, _ = (time.gmtime(ts // 1000000) if _is_utc
                                             else time.localtime(ts // 1000000))
+            ss = min(ss, 59)  # leap seconds support
             return datetime.datetime(y, m, d, hh, mm, ss, ts % 1000000)
 
 
