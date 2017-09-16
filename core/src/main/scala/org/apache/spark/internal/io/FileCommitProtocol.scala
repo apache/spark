@@ -24,12 +24,12 @@ import org.apache.spark.util.Utils
 
 
 /**
- * An interface to define how a single Spark job commits its outputs. Two notes:
+ * An interface to define how a single Spark job commits its outputs. Three notes:
  *
  * 1. Implementations must be serializable, as the committer instance instantiated on the driver
  *    will be used for tasks on executors.
- * 2. Implementations should have a constructor with either 2 or 3 arguments:
- *    (jobId: String, path: String) or (jobId: String, path: String, isAppend: Boolean).
+ * 2. Implementations should have a constructor with 2 arguments:
+ *      (jobId: String, path: String)
  * 3. A committer should not be reused across multiple Spark jobs.
  *
  * The proper call sequence is:
@@ -139,19 +139,10 @@ object FileCommitProtocol {
   /**
    * Instantiates a FileCommitProtocol using the given className.
    */
-  def instantiate(className: String, jobId: String, outputPath: String, isAppend: Boolean)
+  def instantiate(className: String, jobId: String, outputPath: String)
     : FileCommitProtocol = {
     val clazz = Utils.classForName(className).asInstanceOf[Class[FileCommitProtocol]]
-
-    // First try the one with argument (jobId: String, outputPath: String, isAppend: Boolean).
-    // If that doesn't exist, try the one with (jobId: string, outputPath: String).
-    try {
-      val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String], classOf[Boolean])
-      ctor.newInstance(jobId, outputPath, isAppend.asInstanceOf[java.lang.Boolean])
-    } catch {
-      case _: NoSuchMethodException =>
-        val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
-        ctor.newInstance(jobId, outputPath)
-    }
+    val ctor = clazz.getDeclaredConstructor(classOf[String], classOf[String])
+    ctor.newInstance(jobId, outputPath)
   }
 }

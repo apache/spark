@@ -27,7 +27,7 @@ import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineS
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, ParamValidators}
-import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
+import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasHandleInvalid, HasLabelCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
@@ -35,7 +35,51 @@ import org.apache.spark.sql.types._
 /**
  * Base trait for [[RFormula]] and [[RFormulaModel]].
  */
-private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
+private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol with HasHandleInvalid {
+
+  /**
+   * R formula parameter. The formula is provided in string form.
+   * @group param
+   */
+  @Since("1.5.0")
+  val formula: Param[String] = new Param(this, "formula", "R model formula")
+
+  /** @group getParam */
+  @Since("1.5.0")
+  def getFormula: String = $(formula)
+
+  /**
+   * Force to index label whether it is numeric or string type.
+   * Usually we index label only when it is string type.
+   * If the formula was used by classification algorithms,
+   * we can force to index label even it is numeric type by setting this param with true.
+   * Default: false.
+   * @group param
+   */
+  @Since("2.1.0")
+  val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
+    "Force to index label whether it is numeric or string")
+  setDefault(forceIndexLabel -> false)
+
+  /** @group getParam */
+  @Since("2.1.0")
+  def getForceIndexLabel: Boolean = $(forceIndexLabel)
+
+  /**
+   * Param for how to handle invalid data (unseen or NULL values) in features and label column
+   * of string type. Options are 'skip' (filter out rows with invalid data),
+   * 'error' (throw an error), or 'keep' (put invalid data in a special additional
+   * bucket, at index numLabels).
+   * Default: "error"
+   * @group param
+   */
+  @Since("2.3.0")
+  final override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
+    "How to handle invalid data (unseen or NULL values) in features and label column of string " +
+    "type. Options are 'skip' (filter out rows with invalid data), error (throw an error), " +
+    "or 'keep' (put invalid data in a special additional bucket, at index numLabels).",
+    ParamValidators.inArray(StringIndexer.supportedHandleInvalids))
+  setDefault(handleInvalid, StringIndexer.ERROR_INVALID)
 
   /**
    * Param for how to order categories of a string FEATURE column used by `StringIndexer`.
@@ -68,6 +112,7 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
     "The default value is 'frequencyDesc'. When the ordering is set to 'alphabetDesc', " +
     "RFormula drops the same category as R when encoding strings.",
     ParamValidators.inArray(StringIndexer.supportedStringOrderType))
+  setDefault(stringIndexerOrderType, StringIndexer.frequencyDesc)
 
   /** @group getParam */
   @Since("2.3.0")
@@ -114,13 +159,6 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def this() = this(Identifiable.randomUID("rFormula"))
 
   /**
-   * R formula parameter. The formula is provided in string form.
-   * @group param
-   */
-  @Since("1.5.0")
-  val formula: Param[String] = new Param(this, "formula", "R model formula")
-
-  /**
    * Sets the formula to use for this transformer. Must be called before use.
    * @group setParam
    * @param value an R formula in string form (e.g. "y ~ x + z")
@@ -128,9 +166,9 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def setFormula(value: String): this.type = set(formula, value)
 
-  /** @group getParam */
-  @Since("1.5.0")
-  def getFormula: String = $(formula)
+  /** @group setParam */
+  @Since("2.3.0")
+  def setHandleInvalid(value: String): this.type = set(handleInvalid, value)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -140,23 +178,6 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  /**
-   * Force to index label whether it is numeric or string type.
-   * Usually we index label only when it is string type.
-   * If the formula was used by classification algorithms,
-   * we can force to index label even it is numeric type by setting this param with true.
-   * Default: false.
-   * @group param
-   */
-  @Since("2.1.0")
-  val forceIndexLabel: BooleanParam = new BooleanParam(this, "forceIndexLabel",
-    "Force to index label whether it is numeric or string")
-  setDefault(forceIndexLabel -> false)
-
-  /** @group getParam */
-  @Since("2.1.0")
-  def getForceIndexLabel: Boolean = $(forceIndexLabel)
-
   /** @group setParam */
   @Since("2.1.0")
   def setForceIndexLabel(value: Boolean): this.type = set(forceIndexLabel, value)
@@ -164,7 +185,6 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   /** @group setParam */
   @Since("2.3.0")
   def setStringIndexerOrderType(value: String): this.type = set(stringIndexerOrderType, value)
-  setDefault(stringIndexerOrderType, StringIndexer.frequencyDesc)
 
   /** Whether the formula specifies fitting an intercept. */
   private[ml] def hasIntercept: Boolean = {
@@ -197,6 +217,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
             .setInputCol(term)
             .setOutputCol(indexCol)
             .setStringOrderType($(stringIndexerOrderType))
+            .setHandleInvalid($(handleInvalid))
           prefixesToRewrite(indexCol + "_") = term + "_"
           (term, indexCol)
         case _ =>
@@ -205,12 +226,20 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
     }.toMap
 
     // Then we handle one-hot encoding and interactions between terms.
+    var keepReferenceCategory = false
     val encodedTerms = resolvedFormula.terms.map {
       case Seq(term) if dataset.schema(term).dataType == StringType =>
         val encodedCol = tmpColumn("onehot")
-        encoderStages += new OneHotEncoder()
+        var encoder = new OneHotEncoder()
           .setInputCol(indexed(term))
           .setOutputCol(encodedCol)
+        // Formula w/o intercept, one of the categories in the first category feature is
+        // being used as reference category, we will not drop any category for that feature.
+        if (!hasIntercept && !keepReferenceCategory) {
+          encoder = encoder.setDropLast(false)
+          keepReferenceCategory = true
+        }
+        encoderStages += encoder
         prefixesToRewrite(encodedCol + "_") = term + "_"
         encodedCol
       case Seq(term) =>
@@ -235,6 +264,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
       encoderStages += new StringIndexer()
         .setInputCol(resolvedFormula.label)
         .setOutputCol($(labelCol))
+        .setHandleInvalid($(handleInvalid))
     }
 
     val pipelineModel = new Pipeline(uid).setStages(encoderStages.toArray).fit(dataset)

@@ -64,7 +64,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     5, 5, 5, 5,
     6, 6};
 
-  private static boolean isLittleEndian = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
+  private static final boolean IS_LITTLE_ENDIAN =
+      ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
 
   private static final UTF8String COMMA_UTF8 = UTF8String.fromString(",");
   public static final UTF8String EMPTY_UTF8 = UTF8String.fromString("");
@@ -220,7 +221,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // After getting the data, we use a mask to mask out data that is not part of the string.
     long p;
     long mask = 0;
-    if (isLittleEndian) {
+    if (IS_LITTLE_ENDIAN) {
       if (numBytes >= 8) {
         p = Platform.getLong(base, offset);
       } else if (numBytes > 4) {
@@ -863,8 +864,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Wrapper over `long` to allow result of parsing long from string to be accessed via reference.
    * This is done solely for better performance and is not expected to be used by end users.
    */
-  public static class LongWrapper {
-    public long value = 0;
+  public static class LongWrapper implements Serializable {
+    public transient long value = 0;
   }
 
   /**
@@ -874,8 +875,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * {@link LongWrapper} could have been used here but using `int` directly save the extra cost of
    * conversion from `long` to `int`
    */
-  public static class IntWrapper {
-    public int value = 0;
+  public static class IntWrapper implements Serializable {
+    public transient int value = 0;
   }
 
   /**
@@ -1088,13 +1089,32 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return fromBytes(getBytes());
   }
 
+  public UTF8String copy() {
+    byte[] bytes = new byte[numBytes];
+    copyMemory(base, offset, bytes, BYTE_ARRAY_OFFSET, numBytes);
+    return fromBytes(bytes);
+  }
+
   @Override
   public int compareTo(@Nonnull final UTF8String other) {
     int len = Math.min(numBytes, other.numBytes);
-    // TODO: compare 8 bytes as unsigned long
-    for (int i = 0; i < len; i ++) {
+    int wordMax = (len / 8) * 8;
+    long roffset = other.offset;
+    Object rbase = other.base;
+    for (int i = 0; i < wordMax; i += 8) {
+      long left = getLong(base, offset + i);
+      long right = getLong(rbase, roffset + i);
+      if (left != right) {
+        if (IS_LITTLE_ENDIAN) {
+          return Long.compareUnsigned(Long.reverseBytes(left), Long.reverseBytes(right));
+        } else {
+          return Long.compareUnsigned(left, right);
+        }
+      }
+    }
+    for (int i = wordMax; i < len; i++) {
       // In UTF-8, the byte should be unsigned, so we should compare them as unsigned int.
-      int res = (getByte(i) & 0xFF) - (other.getByte(i) & 0xFF);
+      int res = (getByte(i) & 0xFF) - (Platform.getByte(rbase, roffset + i) & 0xFF);
       if (res != 0) {
         return res;
       }

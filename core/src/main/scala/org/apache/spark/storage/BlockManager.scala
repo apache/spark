@@ -988,11 +988,16 @@ private[spark] class BlockManager(
         logWarning(s"Putting block $blockId failed")
       }
       res
+    } catch {
+      // Since removeBlockInternal may throw exception,
+      // we should print exception first to show root cause.
+      case NonFatal(e) =>
+        logWarning(s"Putting block $blockId failed due to exception $e.")
+        throw e
     } finally {
       // This cleanup is performed in a finally block rather than a `catch` to avoid having to
       // catch and properly re-throw InterruptedException.
       if (exceptionWasThrown) {
-        logWarning(s"Putting block $blockId failed due to an exception")
         // If an exception was thrown then it's possible that the code in `putBody` has already
         // notified the master about the availability of this block, so we need to send an update
         // to remove this block location.
@@ -1275,11 +1280,11 @@ private[spark] class BlockManager(
     val numPeersToReplicateTo = level.replication - 1
     val startTime = System.nanoTime
 
-    var peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
-    var peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
+    val peersReplicatedTo = mutable.HashSet.empty ++ existingReplicas
+    val peersFailedToReplicateTo = mutable.HashSet.empty[BlockManagerId]
     var numFailures = 0
 
-    val initialPeers = getPeers(false).filterNot(existingReplicas.contains(_))
+    val initialPeers = getPeers(false).filterNot(existingReplicas.contains)
 
     var peersForReplication = blockReplicationPolicy.prioritize(
       blockManagerId,

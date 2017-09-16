@@ -311,7 +311,7 @@ object AggUtils {
     val saved =
       StateStoreSaveExec(
         groupingAttributes,
-        stateId = None,
+        stateInfo = None,
         outputMode = None,
         eventTimeWatermark = None,
         partialMerged2)

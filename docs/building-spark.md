@@ -90,14 +90,15 @@ like ZooKeeper and Hadoop itself.
 ## Building with Mesos support
 
     ./build/mvn -Pmesos -DskipTests clean package
+    
+## Building with Kafka 0.8 support
 
-## Building for Scala 2.10
-To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` property:
+Kafka 0.8 support must be explicitly enabled with the `kafka-0-8` profile.
+Note: Kafka 0.8 support is deprecated as of Spark 2.3.0.
 
-    ./dev/change-scala-version.sh 2.10
-    ./build/mvn -Pyarn -Dscala-2.10 -DskipTests clean package
+    ./build/mvn -Pkafka-0-8 -DskipTests clean package
 
-Note that support for Scala 2.10 is deprecated as of Spark 2.1.0 and may be removed in Spark 2.2.0.
+Kafka 0.10 support is still automatically built.
 
 ## Building submodules individually
 
@@ -119,7 +120,7 @@ should run continuous compilation (i.e. wait for changes). However, this has not
 extensively. A couple of gotchas to note:
 
 * it only scans the paths `src/main` and `src/test` (see
-[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+[docs](http://davidb.github.io/scala-maven-plugin/example_cc.html)), so it will only work
 from within certain submodules that have that structure.
 
 * you'll typically need to run `mvn install` from the project root for compilation within

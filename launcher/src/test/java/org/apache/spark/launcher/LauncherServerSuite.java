@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
@@ -171,7 +172,15 @@ public class LauncherServerSuite extends BaseSuite {
         LauncherServer.getServerInstance().getPort());
 
       client = new TestClient(s);
-      client.send(new EvilPayload());
+
+      try {
+        client.send(new EvilPayload());
+      } catch (SocketException se) {
+        // SPARK-21522: this can happen if the server closes the socket before the full message has
+        // been written, so it's expected. It may cause false positives though (socket errors
+        // happening for other reasons).
+      }
+
       waitForError(client, handle.getSecret());
       assertEquals(0, EvilPayload.EVIL_BIT);
     } finally {
