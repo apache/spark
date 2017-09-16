@@ -110,10 +110,45 @@ class CollapseProjectSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("collapse project into aggregate as child") {
+    val query = testRelation
+      .select('a.as('aa), 'b)
+      .groupBy('aa, 'b)(('aa + 1).as('aa_plus_1), ('b + 1).as('b_plus_1))
+
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer = testRelation
+      .groupBy('a, 'b)(('a + 1).as('aa_plus_1), ('b + 1).as('b_plus_1)).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("do not collapse common nondeterministic project and aggregate") {
     val query = testRelation
       .groupBy('a)('a, Rand(10).as('rand))
       .select(('rand + 1).as('rand1), ('rand + 2).as('rand2))
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("do not collapse common nondeterministic groupingExpressions and project") {
+    val query = testRelation
+      .select('a, Rand(10).as('rand))
+      .groupBy('rand + 1, 'rand + 'a)(count(1))
+
+    val optimized = Optimize.execute(query.analyze)
+    val correctAnswer = query.analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("do not collapse common nondeterministic aggregateExpressions and project") {
+    val query = testRelation
+      .select(Rand(10).as('rand))
+      .groupBy('rand)('rand + 1, 'rand + 2)
 
     val optimized = Optimize.execute(query.analyze)
     val correctAnswer = query.analyze
