@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.LongType
 
 /**
  * An [[LogicalPlanVisitor]] that computes a the statistics used in a cost-based optimizer.
