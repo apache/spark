@@ -770,7 +770,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     def checkCompressionCodec(format: String)(f: File => Unit): Unit = {
       withTempDir { tmpDir =>
         withTempView("table_source") {
-          (0 until 10000).toDF("a").createOrReplaceTempView("table_source")
+          (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
 
           withTable(tableWithPartition, tableNoPartition) {
             sql(
@@ -809,15 +809,14 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
     val orcCompression = "spark.sql.orc.compression.codec"
     checkCompressionCodec("ORC") { tmpDir =>
-      val maxDiff = 1024
       assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "none", true)
-        - getTableSize(tmpDir, tableNoPartition, orcCompression, "none") < maxDiff)
+        == getTableSize(tmpDir, tableNoPartition, orcCompression, "none"))
       assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "uncompressed", true)
         == getTableSize(tmpDir, tableNoPartition, orcCompression, "none"))
       assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "zlib", true)
-        - getTableSize(tmpDir, tableNoPartition, orcCompression, "zlib") < maxDiff)
+        == getTableSize(tmpDir, tableNoPartition, orcCompression, "zlib"))
       assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "none", true)
-        - getTableSize(tmpDir, tableWithPartition, orcCompression, "zlib", true) > maxDiff)
+        > getTableSize(tmpDir, tableWithPartition, orcCompression, "zlib", true))
     }
   }
 }
