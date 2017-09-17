@@ -160,6 +160,110 @@ private[spark] class MemoryStore(
     }
   }
 
+  private def putIterator[T](
+      blockId: BlockId,
+      values: Iterator[T],
+      classTag: ClassTag[T],
+      memoryMode: MemoryMode,
+      storeValue: (T, Boolean) => Long,
+      createMemoryEntry: () => MemoryEntry[T]): (Boolean, Long) = {
+    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
+
+    // Number of elements unrolled so far
+    var elementsUnrolled = 0
+    // Whether there is still enough memory for us to continue unrolling this block
+    var keepUnrolling = true
+    // Initial per-task memory to request for unrolling blocks (bytes).
+    val initialMemoryThreshold = unrollMemoryThreshold
+    // How often to check whether we need to request more memory
+    val memoryCheckPeriod = conf.getLong("spark.storage.memoryCheckPeriod", 16)
+    // Memory currently reserved by this task for this particular unrolling operation
+    var memoryThreshold = initialMemoryThreshold
+    // Memory to request as a multiple of current vector size
+    val memoryGrowthFactor = conf.getDouble("spark.storage.memoryGrowthFactor", 1.5)
+    // Keep track of unroll memory used by this particular block / putIterator() operation
+    var unrollMemoryUsedByThisBlock = 0L
+
+    // Request enough memory to begin unrolling
+    keepUnrolling =
+      reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
+
+    if (!keepUnrolling) {
+      logWarning(s"Failed to reserve initial memory threshold of " +
+        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
+    } else {
+      unrollMemoryUsedByThisBlock += initialMemoryThreshold
+    }
+
+    var needEstimateSize = false
+    // Unroll this block safely, checking whether we have exceeded our threshold periodically
+    while (values.hasNext && keepUnrolling) {
+      needEstimateSize = elementsUnrolled % memoryCheckPeriod == 0
+      val currentSize = storeValue(values.next(), needEstimateSize)
+      if (needEstimateSize) {
+        // If our vector's size has exceeded the threshold, request more memory
+        if (currentSize >= memoryThreshold) {
+          val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
+          keepUnrolling =
+            reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+          if (keepUnrolling) {
+            unrollMemoryUsedByThisBlock += amountToRequest
+          }
+          // New threshold is currentSize * memoryGrowthFactor
+          memoryThreshold += amountToRequest
+        }
+      }
+      elementsUnrolled += 1
+    }
+
+    if (keepUnrolling) {
+      val entry = createMemoryEntry()
+      val size = entry.size
+      def transferUnrollToStorage(amount: Long): Unit = {
+        // Synchronize so that transfer is atomic
+        memoryManager.synchronized {
+          releaseUnrollMemoryForThisTask(memoryMode, amount)
+          val success = memoryManager.acquireStorageMemory(blockId, amount, memoryMode)
+          assert(success, "transferring unroll memory to storage memory failed")
+        }
+      }
+      // Acquire storage memory if necessary to store this block in memory.
+      val enoughStorageMemory = {
+        if (unrollMemoryUsedByThisBlock <= size) {
+          val acquiredExtra =
+            memoryManager.acquireStorageMemory(
+              blockId, size - unrollMemoryUsedByThisBlock, memoryMode)
+          if (acquiredExtra) {
+            transferUnrollToStorage(unrollMemoryUsedByThisBlock)
+          }
+          acquiredExtra
+        } else { // unrollMemoryUsedByThisBlock > size
+          // If this task attempt already owns more unroll memory than is necessary to store the
+          // block, then release the extra memory that will not be used.
+          val excessUnrollMemory = unrollMemoryUsedByThisBlock - size
+          releaseUnrollMemoryForThisTask(memoryMode, excessUnrollMemory)
+          transferUnrollToStorage(size)
+          true
+        }
+      }
+
+      if (enoughStorageMemory) {
+        entries.synchronized {
+          entries.put(blockId, entry)
+        }
+        logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
+          blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
+        (true, size)
+      } else {
+        assert(currentUnrollMemoryForThisTask >= unrollMemoryUsedByThisBlock,
+          "released too much unroll memory")
+        (false, unrollMemoryUsedByThisBlock)
+      }
+    } else {
+      (false, unrollMemoryUsedByThisBlock)
+    }
+  }
+
   /**
    * Attempt to put the given block in memory store as values.
    *
@@ -181,114 +285,40 @@ private[spark] class MemoryStore(
       values: Iterator[T],
       classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
 
-    require(!contains(blockId), s"Block $blockId is already present in the MemoryStore")
-
-    // Number of elements unrolled so far
-    var elementsUnrolled = 0
-    // Whether there is still enough memory for us to continue unrolling this block
-    var keepUnrolling = true
-    // Initial per-task memory to request for unrolling blocks (bytes).
-    val initialMemoryThreshold = unrollMemoryThreshold
-    // How often to check whether we need to request more memory
-    val memoryCheckPeriod = 16
-    // Memory currently reserved by this task for this particular unrolling operation
-    var memoryThreshold = initialMemoryThreshold
-    // Memory to request as a multiple of current vector size
-    val memoryGrowthFactor = 1.5
-    // Keep track of unroll memory used by this particular block / putIterator() operation
-    var unrollMemoryUsedByThisBlock = 0L
     // Underlying vector for unrolling the block
     var vector = new SizeTrackingVector[T]()(classTag)
 
-    // Request enough memory to begin unrolling
-    keepUnrolling =
-      reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, MemoryMode.ON_HEAP)
-
-    if (!keepUnrolling) {
-      logWarning(s"Failed to reserve initial memory threshold of " +
-        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
-    } else {
-      unrollMemoryUsedByThisBlock += initialMemoryThreshold
-    }
-
-    // Unroll this block safely, checking whether we have exceeded our threshold periodically
-    while (values.hasNext && keepUnrolling) {
-      vector += values.next()
-      if (elementsUnrolled % memoryCheckPeriod == 0) {
-        // If our vector's size has exceeded the threshold, request more memory
-        val currentSize = vector.estimateSize()
-        if (currentSize >= memoryThreshold) {
-          val amountToRequest = (currentSize * memoryGrowthFactor - memoryThreshold).toLong
-          keepUnrolling =
-            reserveUnrollMemoryForThisTask(blockId, amountToRequest, MemoryMode.ON_HEAP)
-          if (keepUnrolling) {
-            unrollMemoryUsedByThisBlock += amountToRequest
-          }
-          // New threshold is currentSize * memoryGrowthFactor
-          memoryThreshold += amountToRequest
-        }
+    var currentSize = 0L
+    def storeValue(value: T, needEstimateSize: Boolean): Long = {
+      vector += value
+      if (needEstimateSize) {
+        currentSize = vector.estimateSize()
       }
-      elementsUnrolled += 1
+
+      currentSize
     }
 
-    if (keepUnrolling) {
+    def createMemoryEntry(): MemoryEntry[T] = {
       // We successfully unrolled the entirety of this block
       val arrayValues = vector.toArray
       vector = null
       val entry =
         new DeserializedMemoryEntry[T](arrayValues, SizeEstimator.estimate(arrayValues), classTag)
-      val size = entry.size
-      def transferUnrollToStorage(amount: Long): Unit = {
-        // Synchronize so that transfer is atomic
-        memoryManager.synchronized {
-          releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, amount)
-          val success = memoryManager.acquireStorageMemory(blockId, amount, MemoryMode.ON_HEAP)
-          assert(success, "transferring unroll memory to storage memory failed")
-        }
-      }
-      // Acquire storage memory if necessary to store this block in memory.
-      val enoughStorageMemory = {
-        if (unrollMemoryUsedByThisBlock <= size) {
-          val acquiredExtra =
-            memoryManager.acquireStorageMemory(
-              blockId, size - unrollMemoryUsedByThisBlock, MemoryMode.ON_HEAP)
-          if (acquiredExtra) {
-            transferUnrollToStorage(unrollMemoryUsedByThisBlock)
-          }
-          acquiredExtra
-        } else { // unrollMemoryUsedByThisBlock > size
-          // If this task attempt already owns more unroll memory than is necessary to store the
-          // block, then release the extra memory that will not be used.
-          val excessUnrollMemory = unrollMemoryUsedByThisBlock - size
-          releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP, excessUnrollMemory)
-          transferUnrollToStorage(size)
-          true
-        }
-      }
-      if (enoughStorageMemory) {
-        entries.synchronized {
-          entries.put(blockId, entry)
-        }
-        logInfo("Block %s stored as values in memory (estimated size %s, free %s)".format(
-          blockId, Utils.bytesToString(size), Utils.bytesToString(maxMemory - blocksMemoryUsed)))
-        Right(size)
-      } else {
-        assert(currentUnrollMemoryForThisTask >= unrollMemoryUsedByThisBlock,
-          "released too much unroll memory")
-        Left(new PartiallyUnrolledIterator(
-          this,
-          MemoryMode.ON_HEAP,
-          unrollMemoryUsedByThisBlock,
-          unrolled = arrayValues.toIterator,
-          rest = Iterator.empty))
-      }
+      entry
+    }
+
+    val (storedSuccess, size) =
+      putIterator(blockId, values, classTag, MemoryMode.ON_HEAP, storeValue, createMemoryEntry)
+
+    if (storedSuccess) {
+      Right(size)
     } else {
       // We ran out of space while unrolling the values for this block
       logUnrollFailureMessage(blockId, vector.estimateSize())
       Left(new PartiallyUnrolledIterator(
         this,
         MemoryMode.ON_HEAP,
-        unrollMemoryUsedByThisBlock,
+        size,
         unrolled = vector.iterator,
         rest = values))
     }
@@ -323,13 +353,8 @@ private[spark] class MemoryStore(
       case MemoryMode.OFF_HEAP => Platform.allocateDirectBuffer _
     }
 
-    // Whether there is still enough memory for us to continue unrolling this block
-    var keepUnrolling = true
     // Initial per-task memory to request for unrolling blocks (bytes).
     val initialMemoryThreshold = unrollMemoryThreshold
-    // Keep track of unroll memory used by this particular block / putIterator() operation
-    var unrollMemoryUsedByThisBlock = 0L
-    // Underlying buffer for unrolling the block
     val redirectableStream = new RedirectableOutputStream
     val chunkSize = if (initialMemoryThreshold > Int.MaxValue) {
       logWarning(s"Initial memory threshold of ${Utils.bytesToString(initialMemoryThreshold)} " +
@@ -347,70 +372,40 @@ private[spark] class MemoryStore(
       ser.serializeStream(serializerManager.wrapForCompression(blockId, redirectableStream))
     }
 
-    // Request enough memory to begin unrolling
-    keepUnrolling = reserveUnrollMemoryForThisTask(blockId, initialMemoryThreshold, memoryMode)
-
-    if (!keepUnrolling) {
-      logWarning(s"Failed to reserve initial memory threshold of " +
-        s"${Utils.bytesToString(initialMemoryThreshold)} for computing block $blockId in memory.")
-    } else {
-      unrollMemoryUsedByThisBlock += initialMemoryThreshold
-    }
-
-    def reserveAdditionalMemoryIfNecessary(): Unit = {
-      if (bbos.size > unrollMemoryUsedByThisBlock) {
-        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
-        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
-        if (keepUnrolling) {
-          unrollMemoryUsedByThisBlock += amountToRequest
-        }
+    var currentSize = 0L
+    def storeValue(value: T, needEstimateSize: Boolean): Long = {
+      serializationStream.writeObject(value)(classTag)
+      if (needEstimateSize) {
+        currentSize = bbos.size
       }
+
+      currentSize
     }
 
-    // Unroll this block safely, checking whether we have exceeded our threshold
-    while (values.hasNext && keepUnrolling) {
-      serializationStream.writeObject(values.next())(classTag)
-      reserveAdditionalMemoryIfNecessary()
-    }
-
-    // Make sure that we have enough memory to store the block. By this point, it is possible that
-    // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
-    // perform one final call to attempt to allocate additional memory if necessary.
-    if (keepUnrolling) {
-      serializationStream.close()
-      reserveAdditionalMemoryIfNecessary()
-    }
-
-    if (keepUnrolling) {
+    def createMemoryEntry(): MemoryEntry[T] = {
       val entry = SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
-      // Synchronize so that transfer is atomic
-      memoryManager.synchronized {
-        releaseUnrollMemoryForThisTask(memoryMode, unrollMemoryUsedByThisBlock)
-        val success = memoryManager.acquireStorageMemory(blockId, entry.size, memoryMode)
-        assert(success, "transferring unroll memory to storage memory failed")
-      }
-      entries.synchronized {
-        entries.put(blockId, entry)
-      }
-      logInfo("Block %s stored as bytes in memory (estimated size %s, free %s)".format(
-        blockId, Utils.bytesToString(entry.size),
-        Utils.bytesToString(maxMemory - blocksMemoryUsed)))
-      Right(entry.size)
+      entry
+    }
+
+    val (storedSuccess, size) =
+      putIterator(blockId, values, classTag, MemoryMode.OFF_HEAP, storeValue, createMemoryEntry)
+
+    if (storedSuccess) {
+      Right(size)
     } else {
       // We ran out of space while unrolling the values for this block
       logUnrollFailureMessage(blockId, bbos.size)
-      Left(
-        new PartiallySerializedBlock(
-          this,
-          serializerManager,
-          blockId,
-          serializationStream,
-          redirectableStream,
-          unrollMemoryUsedByThisBlock,
-          memoryMode,
-          bbos,
-          values,
-          classTag))
+      Left(new PartiallySerializedBlock(
+        this,
+        serializerManager,
+        blockId,
+        serializationStream,
+        redirectableStream,
+        size,
+        memoryMode,
+        bbos,
+        values,
+        classTag))
     }
   }
 
