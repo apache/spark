@@ -793,12 +793,12 @@ def ntile(n):
 # ---------------------- Date/Timestamp functions ------------------------------
 
 @since(1.5)
-def current_date():
+def current_date(timeZone=None):
     """
-    Returns the current date as a :class:`DateType` column.
+    Returns the current date in the given timezone as a :class:`DateType` column.
     """
     sc = SparkContext._active_spark_context
-    return Column(sc._jvm.functions.current_date())
+    return Column(sc._jvm.functions.current_date(timeZone))
 
 
 def current_timestamp():
