@@ -339,28 +339,20 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     Evaluator for Clustering results, which expects two input
     columns: prediction and features.
 
-    >>> from sklearn import datasets
-    >>> from pyspark.sql.types import *
-    >>> from pyspark.ml.linalg import Vectors, VectorUDT
-    >>> from pyspark.ml.evaluation import ClusteringEvaluator
+    >>> from pyspark.ml.linalg import Vectors
+    >>> scoreAndLabels = map(lambda x: (Vectors.dense(x[0]), x[1]),
+    ...     [([0.0, 0.5], 0.0), ([0.5, 0.0], 0.0), ([10.0, 11.0], 1.0),
+    ...     ([10.5, 11.5], 1.0), ([1.0, 1.0], 0.0), ([8.0, 6.0], 1.0)])
+    >>> dataset = spark.createDataFrame(scoreAndLabels, ["features", "prediction"])
     ...
-    >>> iris = datasets.load_iris()
-    >>> iris_rows = [(Vectors.dense(x), int(iris.target[i]))
-    ...     for i, x in enumerate(iris.data)]
-    >>> schema = StructType([
-    ...    StructField("features", VectorUDT(), True),
-    ...    StructField("cluster_id", IntegerType(), True)])
-    >>> rdd = spark.sparkContext.parallelize(iris_rows)
-    >>> dataset = spark.createDataFrame(rdd, schema)
-    ...
-    >>> evaluator = ClusteringEvaluator(predictionCol="cluster_id")
+    >>> evaluator = ClusteringEvaluator(predictionCol="prediction")
     >>> evaluator.evaluate(dataset)
-    0.656...
+    0.9079...
     >>> ce_path = temp_path + "/ce"
     >>> evaluator.save(ce_path)
     >>> evaluator2 = ClusteringEvaluator.load(ce_path)
     >>> str(evaluator2.getPredictionCol())
-    'cluster_id'
+    'prediction'
 
     .. versionadded:: 2.3.0
     """
@@ -378,8 +370,7 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
         super(ClusteringEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.ClusteringEvaluator", self.uid)
-        self._setDefault(predictionCol="prediction", featuresCol="features",
-                         metricName="silhouette")
+        self._setDefault(metricName="silhouette")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
