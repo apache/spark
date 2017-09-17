@@ -63,15 +63,40 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   }
 
   override def dataPreparation(conn: Connection): Unit = {
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate();
+    conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
     conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate();
-    conn.commit();
+      """INSERT INTO datetime VALUES
+        |(1, {d '1991-11-09'}, {ts '1996-01-01 01:23:45'})
+      """.stripMargin.replaceAll("\n", " ")).executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+         |CREATE TEMPORARY VIEW datetime
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', dbTable 'datetime', oracle.jdbc.mapDateToTimestamp 'false')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("CREATE TABLE datetime1 (id NUMBER(10), d DATE, t TIMESTAMP)")
+      .executeUpdate()
+    conn.commit()
+
+    sql(
+      s"""
+         |CREATE TEMPORARY VIEW datetime1
+         |USING org.apache.spark.sql.jdbc
+         |OPTIONS (url '$jdbcUrl', dbTable 'datetime1', oracle.jdbc.mapDateToTimestamp 'false')
+      """.stripMargin.replaceAll("\n", " "))
+
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
+    conn.commit()
   }
 
-
-  test("SPARK-16625 : Importing Oracle numeric types") { 
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties);
+  test("SPARK-16625 : Importing Oracle numeric types") {
+    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
     val rows = df.collect()
     assert(rows.size == 1)
     val row = rows(0)
@@ -82,7 +107,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // A value with fractions from DECIMAL(3, 2) is correct:
     assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
     // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999l)) == 0)
+    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
   }
 
 
@@ -171,5 +196,16 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getAs[Array[Byte]](8).mkString.equals("678"))
     assert(values.getDate(9).equals(dateVal))
     assert(values.getTimestamp(10).equals(timestampVal))
+  }
+
+  test("SPARK-19318: connection property keys should be case-sensitive") {
+    def checkRow(row: Row): Unit = {
+      assert(row.getDecimal(0).compareTo(BigDecimal.valueOf(1)) == 0)
+      assert(row.getDate(1).equals(Date.valueOf("1991-11-09")))
+      assert(row.getTimestamp(2).equals(Timestamp.valueOf("1996-01-01 01:23:45")))
+    }
+    checkRow(sql("SELECT * FROM datetime where id = 1").head())
+    sql("INSERT INTO TABLE datetime1 SELECT * FROM datetime where id = 1")
+    checkRow(sql("SELECT * FROM datetime1 where id = 1").head())
   }
 }

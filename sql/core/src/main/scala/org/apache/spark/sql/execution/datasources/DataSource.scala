@@ -85,7 +85,7 @@ case class DataSource(
 
   lazy val providingClass: Class[_] = DataSource.lookupDataSource(className)
   lazy val sourceInfo = sourceSchema()
-  private val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+  private val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
   /**
    * Get the schema of the given FileFormat, if provided by `userSpecifiedSchema`, or try to infer
@@ -637,7 +637,7 @@ object DataSource {
    * [[CatalogStorageFormat]]. Note that, the `path` option is removed from options after this.
    */
   def buildStorageFormatFromOptions(options: Map[String, String]): CatalogStorageFormat = {
-    val path = new CaseInsensitiveMap(options).get("path")
+    val path = CaseInsensitiveMap(options).get("path")
     val optionsWithoutPath = options.filterKeys(_.toLowerCase != "path")
     CatalogStorageFormat.empty.copy(locationUri = path, properties = optionsWithoutPath)
   }

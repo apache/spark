@@ -26,9 +26,9 @@ import org.apache.spark.util.Utils
 /**
  * User specified options for file streams.
  */
-class FileStreamOptions(parameters: CaseInsensitiveMap) extends Logging {
+class FileStreamOptions(parameters: CaseInsensitiveMap[String]) extends Logging {
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   val maxFilesPerTrigger: Option[Int] = parameters.get("maxFilesPerTrigger").map { str =>
     Try(str.toInt).toOption.filter(_ > 0).getOrElse {
