@@ -160,7 +160,6 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     val arrayType = ArrayType(IntegerType, true)
     testVector = allocate(10, arrayType)
 
-    // set the first element of the testVector
     val data = testVector.arrayData()
     var i = 0
     while (i < 6) {
@@ -171,7 +170,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
     testVector.putArray(0, 0, 1)
     testVector.putArray(1, 1, 2)
-    testVector.putArray(2, 2, 0)
+    testVector.putArray(2, 3, 0)
     testVector.putArray(3, 3, 3)
 
     val array = new ColumnVector.Array(testVector)
