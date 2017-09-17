@@ -593,12 +593,15 @@ class StructType(DataType):
 
         if self._needSerializeAnyField:
             if isinstance(obj, dict):
-                return tuple(f.toInternal(obj.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) for f, v in zip(self.fields, obj))
+                return tuple(f.toInternal(v) if c else v 
+                             for f, v, c in zip(self.fields, obj, self._needConversion))
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
-                return tuple(f.toInternal(d.get(n)) for n, f in zip(self.names, self.fields))
+                return tuple(f.toInternal(d.get(n)) if c else d.get(n)
+                             for n, f, c in zip(self.names, self.fields, self._needConversion))
             else:
                 raise ValueError("Unexpected tuple %r with StructType" % obj)
         else:
@@ -621,8 +624,8 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
-            values = [f.fromInternal(v) if n else v
-                      for f, v, n in zip(self.fields, obj, self._needConversion)]
+            values = [f.fromInternal(v) if c else v
+                      for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
             values = obj
         return _create_row(self.names, values)
