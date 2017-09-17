@@ -483,6 +483,7 @@ class StructType(DataType):
             self.names = [f.name for f in fields]
             assert all(isinstance(f, StructField) for f in fields),\
                 "fields should be a list of StructField"
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
 
@@ -529,6 +530,7 @@ class StructType(DataType):
                 data_type_f = data_type
             self.fields.append(StructField(field, data_type_f, nullable, metadata))
             self.names.append(field)
+        # Precalculated list of fields that need conversion with fromInternal/toInternal functions
         self._needConversion = [f.needConversion() for f in self]
         self._needSerializeAnyField = any(self._needConversion)
         return self
@@ -592,6 +594,7 @@ class StructType(DataType):
             return
 
         if self._needSerializeAnyField:
+            # Only calling toInternal function for fields that need conversion
             if isinstance(obj, dict):
                 return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
                              for n, f, c in zip(self.names, self.fields, self._needConversion))
@@ -624,6 +627,7 @@ class StructType(DataType):
             # it's already converted by pickler
             return obj
         if self._needSerializeAnyField:
+            # Only calling fromInternal function for fields that need conversion
             values = [f.fromInternal(v) if c else v
                       for f, v, c in zip(self.fields, obj, self._needConversion)]
         else:
