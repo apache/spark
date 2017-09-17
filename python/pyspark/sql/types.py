@@ -596,7 +596,7 @@ class StructType(DataType):
                 return tuple(f.toInternal(obj.get(n)) if c else obj.get(n)
                              for n, f, c in zip(self.names, self.fields, self._needConversion))
             elif isinstance(obj, (tuple, list)):
-                return tuple(f.toInternal(v) if c else v 
+                return tuple(f.toInternal(v) if c else v
                              for f, v, c in zip(self.fields, obj, self._needConversion))
             elif hasattr(obj, "__dict__"):
                 d = obj.__dict__
