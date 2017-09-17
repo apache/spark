@@ -395,10 +395,8 @@ public final class BytesToBytesMap extends MemoryConsumer {
     private void handleFailedDelete() {
       // remove the spill file from disk
       File file = spillWriters.removeFirst().getFile();
-      if (file != null && file.exists()) {
-        if (!file.delete()) {
-          logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
-        }
+      if (file != null && file.exists() && !file.delete()) {
+        logger.error("Was unable to delete spill file {}", file.getAbsolutePath());
       }
     }
   }
