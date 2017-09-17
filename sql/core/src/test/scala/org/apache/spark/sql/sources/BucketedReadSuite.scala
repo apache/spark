@@ -602,6 +602,28 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
     )
   }
 
+  test("SPARK-22042 ReorderJoinPredicates can break when child's partitioning is not decided") {
+    withTable("bucketed_table", "table1", "table2") {
+      df.write.format("parquet").saveAsTable("table1")
+      df.write.format("parquet").saveAsTable("table2")
+      df.write.format("parquet").bucketBy(8, "j", "k").saveAsTable("bucketed_table")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        sql("""
+              |SELECT *
+              |FROM (
+              |  SELECT a.i, a.j, a.k
+              |  FROM bucketed_table a
+              |  JOIN table1 b
+              |  ON a.i = b.i
+              |) c
+              |JOIN table2
+              |ON c.i = table2.i
+              |""".stripMargin).explain()
+      }
+    }
+  }
+
   test("error if there exists any malformed bucket files") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")

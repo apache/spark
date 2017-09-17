@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.joins.ReorderJoinPredicates
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -31,6 +32,8 @@ import org.apache.spark.sql.internal.SQLConf
  * the input partition ordering requirements are met.
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
+  private val reorderJoinPredicates = new ReorderJoinPredicates
+
   private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
 
   private def targetPostShuffleInputSize: Long = conf.targetPostShuffleInputSize
@@ -255,6 +258,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
           if (childPartitioning.guarantees(partitioning)) child else operator
         case _ => operator
       }
-    case operator: SparkPlan => ensureDistributionAndOrdering(operator)
+    case operator: SparkPlan =>
+      ensureDistributionAndOrdering(reorderJoinPredicates.apply(operator))
   }
 }
