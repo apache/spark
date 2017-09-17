@@ -97,7 +97,7 @@ class Serializer(object):
 
     def _load_stream_without_unbatching(self, stream):
         """
-        Return an iterator of deserialized batches (lists) of objects from the input stream.
+        Return an iterator of deserialized batches (iterable) of objects from the input stream.
         if the serializer does not operate on batches the default implementation returns an
         iterator of single element lists.
         """
@@ -326,6 +326,10 @@ class PairDeserializer(Serializer):
         key_batch_stream = self.key_ser._load_stream_without_unbatching(stream)
         val_batch_stream = self.val_ser._load_stream_without_unbatching(stream)
         for (key_batch, val_batch) in zip(key_batch_stream, val_batch_stream):
+            # For double-zipped RDDs, the batches can be iterators from other PairDeserializer,
+            # instead of lists. We need to convert them to lists if needed.
+            key_batch = key_batch if hasattr(key_batch, '__len__') else list(key_batch)
+            val_batch = val_batch if hasattr(val_batch, '__len__') else list(val_batch)
             if len(key_batch) != len(val_batch):
                 raise ValueError("Can not deserialize PairRDD with different number of items"
                                  " in batches: (%d, %d)" % (len(key_batch), len(val_batch)))
