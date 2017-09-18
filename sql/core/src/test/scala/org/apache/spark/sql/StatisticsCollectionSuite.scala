@@ -342,7 +342,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             if (autoUpdate) {
               assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
             } else {
-              assert(getTableFromCatalogCache(table).stats.sizeInBytes == defaultSizeInBytes)
+              assert(cachedTableSizeInBytes == defaultSizeInBytes)
             }
           }
         }
