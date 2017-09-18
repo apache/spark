@@ -108,7 +108,7 @@ private[spark] object UIData {
     def hasOutput: Boolean = outputBytes > 0
     def hasShuffleRead: Boolean = shuffleReadTotalBytes > 0
     def hasShuffleWrite: Boolean = shuffleWriteBytes > 0
-    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 || diskBytesSpilled > 0
   }
 
   /**
