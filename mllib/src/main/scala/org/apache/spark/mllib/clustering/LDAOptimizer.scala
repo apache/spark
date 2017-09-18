@@ -462,31 +462,41 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
     val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
+    val logphatPartOptionBase = if (optimizeDocConcentration) Some(BDV.zeros[Double](k)) else None
 
-    val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
+    val stats: RDD[(BDM[Double], Option[BDV[Double]])] = batch.mapPartitions { docs =>
       val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
       val stat = BDM.zeros[Double](k, vocabSize)
-      var gammaPart = List[BDV[Double]]()
+      val logphatPartOption = logphatPartOptionBase
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, expElogbetaBc.value, alpha, gammaShape, k)
         stat(::, ids) := stat(::, ids) + sstats
-        gammaPart = gammad :: gammaPart
+        logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
       }
-      Iterator((stat, gammaPart))
-    }.persist(StorageLevel.MEMORY_AND_DISK)
-    val statsSum: BDM[Double] = stats.map(_._1).treeAggregate(BDM.zeros[Double](k, vocabSize))(
-      _ += _, _ += _)
+      Iterator((stat, logphatPartOption))
+    }
+
+    val elementWiseSumInPlace = (u : (BDM[Double], Option[BDV[Double]]),
+                                 v : (BDM[Double], Option[BDV[Double]])) => {
+      u._1 += v._1
+      u._2.foreach(_ += v._2.get)
+      u
+    }
+
+    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]]) = stats
+      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase))(
+        elementWiseSumInPlace, elementWiseSumInPlace
+      )
+
     val batchResult = statsSum *:* expElogbeta.t
     // Note that this is an optimization to avoid batch.count
     val batchSize = (miniBatchFraction * corpusSize).ceil.toInt
     updateLambda(batchResult, batchSize)
 
-    if (optimizeDocConcentration) {
-      val gammat: RDD[BDV[Double]] = stats.flatMap(_._2)
-      updateAlpha(gammat, batchSize)
-    }
+    logphatOption.foreach(_ /= batchSize.toDouble)
+    logphatOption.foreach(updateAlpha(_, batchSize))
 
     expElogbetaBc.destroy(false)
     stats.unpersist()
@@ -506,17 +516,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * Update alpha based on `gammat`, the inferred topic distributions for documents in the
-   * current mini-batch. Uses Newton-Rhapson method.
+   * Update alpha based on `logphat`.
+   * Uses Newton-Rhapson method.
    * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    */
-  private def updateAlpha(gammat: RDD[BDV[Double]], N : Double): Unit = {
+  private def updateAlpha(logphat: BDV[Double], N : Double): Unit = {
     val weight = rho()
     val alpha = this.alpha.asBreeze.toDenseVector
-    val logphat: BDV[Double] = gammat.treeAggregate(BDV.zeros[Double](k))(
-      (sum, gamma) => sum += LDAUtils.dirichletExpectation(gamma),
-      _ += _ )  / N
 
     val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
