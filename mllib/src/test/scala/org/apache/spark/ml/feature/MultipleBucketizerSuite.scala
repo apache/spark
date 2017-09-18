@@ -20,6 +20,7 @@ package org.apache.spark.ml.feature
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
@@ -56,9 +57,9 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .collect().foreach {
         case Row(r1: Double, e1: Double, r2: Double, e2: Double) =>
           assert(r1 === e1,
-            s"The feature value is not correct after bucketing.  Expected $e1 but found $r1")
+            s"The feature value is not correct after bucketing. Expected $e1 but found $r1")
           assert(r2 === e2,
-            s"The feature value is not correct after bucketing.  Expected $e2 but found $r2")
+            s"The feature value is not correct after bucketing. Expected $e2 but found $r2")
       }
 
     // Check for exceptions when using a set of invalid feature values.
@@ -112,9 +113,9 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .collect().foreach {
         case Row(r1: Double, e1: Double, r2: Double, e2: Double) =>
           assert(r1 === e1,
-            s"The feature value is not correct after bucketing.  Expected $e1 but found $r1")
+            s"The feature value is not correct after bucketing. Expected $e1 but found $r1")
           assert(r2 === e2,
-            s"The feature value is not correct after bucketing.  Expected $e2 but found $r2")
+            s"The feature value is not correct after bucketing. Expected $e2 but found $r2")
       }
   }
 
@@ -145,9 +146,9 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .collect().foreach {
         case Row(r1: Double, e1: Double, r2: Double, e2: Double) =>
           assert(r1 === e1,
-            s"The feature value is not correct after bucketing.  Expected $e1 but found $r1")
+            s"The feature value is not correct after bucketing. Expected $e1 but found $r1")
           assert(r2 === e2,
-            s"The feature value is not correct after bucketing.  Expected $e2 but found $r2")
+            s"The feature value is not correct after bucketing. Expected $e2 but found $r2")
       }
 
     bucketizer.setHandleInvalid("skip")
@@ -185,5 +186,29 @@ class MultipleBucketizerSuite extends SparkFunSuite with MLlibTestSparkContext
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
     assert(t.isBucketizeMultipleInputCols())
     testDefaultReadWrite(t)
+  }
+
+  test("Bucketizer in a pipeline") {
+    val df = Seq((0.5, 0.3, 1.0, 1.0), (0.5, -0.4, 1.0, 0.0))
+      .toDF("feature1", "feature2", "expected1", "expected2")
+
+    val bucket = new Bucketizer()
+      .setInputCols(Array("feature1", "feature2"))
+      .setOutputCols(Array("result1", "result2"))
+      .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
+
+    assert(bucket.isBucketizeMultipleInputCols())
+
+    val pl = new Pipeline()
+      .setStages(Array(bucket))
+      .fit(df)
+    pl.transform(df).select("result1", "expected1", "result2", "expected2")
+      .collect().foreach {
+        case Row(r1: Double, e1: Double, r2: Double, e2: Double) =>
+          assert(r1 === e1,
+            s"The feature value is not correct after bucketing. Expected $e1 but found $r1")
+          assert(r2 === e2,
+            s"The feature value is not correct after bucketing. Expected $e2 but found $r2")
+      }
   }
 }

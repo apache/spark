@@ -144,8 +144,12 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkNumericType(schema, $(inputCol))
-    SchemaUtils.appendColumn(schema, prepOutputField(schema))
+    if (isBucketizeMultipleInputCols()) {
+      this.asInstanceOf[MultipleBucketizerInterface].transformMultipleSchema(schema)
+    } else {
+      SchemaUtils.checkNumericType(schema, $(inputCol))
+      SchemaUtils.appendColumn(schema, prepOutputField(schema))
+    }
   }
 
   @Since("1.4.1")
@@ -237,7 +241,7 @@ private[ml] trait MultipleBucketizerInterface extends HasInputCols {
     attr.toStructField()
   }
 
-  private def transformMultipleSchema(schema: StructType): StructType = {
+  private[ml] def transformMultipleSchema(schema: StructType): StructType = {
     var transformedSchema = schema
     $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>
       SchemaUtils.checkColumnType(transformedSchema, inputCol, DoubleType)
