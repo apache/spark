@@ -462,13 +462,15 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
     val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
-    val logphatPartOptionBase = if (optimizeDocConcentration) Some(BDV.zeros[Double](k)) else None
+    val optimizeDocConcentration = this.optimizeDocConcentration
+    val logphatPartOptionBase = () => if (optimizeDocConcentration) Some(BDV.zeros[Double](k))
+                                      else None
 
     val stats: RDD[(BDM[Double], Option[BDV[Double]])] = batch.mapPartitions { docs =>
       val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
       val stat = BDM.zeros[Double](k, vocabSize)
-      val logphatPartOption = logphatPartOptionBase
+      val logphatPartOption = logphatPartOptionBase()
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, expElogbetaBc.value, alpha, gammaShape, k)
@@ -486,7 +488,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     }
 
     val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]]) = stats
-      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase))(
+      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase()))(
         elementWiseSumInPlace, elementWiseSumInPlace
       )
 
