@@ -146,6 +146,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       throw new IllegalStateException("LiveListenerBus already started.")
     }
 
+    this.sparkContext = sc
     queues.asScala.foreach(_.start(sc))
     metricsSystem.registerSource(metrics)
   }
