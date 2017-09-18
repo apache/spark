@@ -63,6 +63,11 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   }
 
   override def dataPreparation(conn: Connection): Unit = {
+    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate();
+    conn.prepareStatement(
+      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate();
+    conn.commit();
+
     conn.prepareStatement("CREATE TABLE datetime (id NUMBER(10), d DATE, t TIMESTAMP)")
       .executeUpdate()
     conn.prepareStatement(
@@ -88,15 +93,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
          |USING org.apache.spark.sql.jdbc
          |OPTIONS (url '$jdbcUrl', dbTable 'datetime1', oracle.jdbc.mapDateToTimestamp 'false')
       """.stripMargin.replaceAll("\n", " "))
-
-    conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate()
-    conn.prepareStatement(
-      "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate()
-    conn.commit()
   }
 
   test("SPARK-16625 : Importing Oracle numeric types") {
-    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties)
+    val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties);
     val rows = df.collect()
     assert(rows.size == 1)
     val row = rows(0)
@@ -107,7 +107,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     // A value with fractions from DECIMAL(3, 2) is correct:
     assert(row.getDecimal(1).compareTo(BigDecimal.valueOf(1.23)) == 0)
     // A value > Int.MaxValue from DECIMAL(10) is correct:
-    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999L)) == 0)
+    assert(row.getDecimal(2).compareTo(BigDecimal.valueOf(9999999999l)) == 0)
   }
 
 
