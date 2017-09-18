@@ -60,14 +60,15 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
 
     inputRDD.mapPartitions { iter =>
+      val context = TaskContext.get()
 
       // The queue used to buffer input rows so we can drain it to
       // combine input with output from Python.
-      val queue = HybridRowQueue(TaskContext.get().taskMemoryManager(),
+      val queue = HybridRowQueue(context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
-      TaskContext.get().addTaskCompletionListener({ ctx =>
+      context.addTaskCompletionListener { _ =>
         queue.close()
-      })
+      }
 
       val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
 
@@ -86,38 +87,35 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
         }.toArray
       }.toArray
       val projection = newMutableProjection(allInputs, child.output)
-      val schema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
+      val schemaIn = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
         StructField(s"_$i", dt)
       })
 
-      // Input iterator to Python: input rows are grouped so we send them in batches to Python.
-      // For each row, add it to the queue.
+      // Iterator to construct Arrow payloads. Add rows to queue to join later with the result.
       val projectedRowIter = iter.map { inputRow =>
         queue.add(inputRow.asInstanceOf[UnsafeRow])
         projection(inputRow)
       }
 
-      val context = TaskContext.get()
-
       val inputIterator = ArrowConverters.toPayloadIterator(
-          projectedRowIter, schema, conf.arrowMaxRecordsPerBatch, context).
-        map(_.asPythonSerializable)
-
-      val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex.
-        map { case (attr, i) => attr.withName(s"_$i") })
+          projectedRowIter, schemaIn, conf.arrowMaxRecordsPerBatch, context)
+        .map(_.asPythonSerializable)
 
       // Output iterator for results from Python.
       val outputIterator = new PythonRunner(
-          pyFuncs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets).
-        compute(inputIterator, context.partitionId(), context)
-
-      val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
+          pyFuncs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets)
+        .compute(inputIterator, context.partitionId(), context)
 
       val outputRowIterator = ArrowConverters.fromPayloadIterator(
         outputIterator.map(new ArrowPayload(_)), context)
 
+      // Verify that the output schema is correct
+      val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
+        .map { case (attr, i) => attr.withName(s"_$i") })
       assert(schemaOut.equals(outputRowIterator.schema))
+
+      val joined = new JoinedRow
+      val resultProj = UnsafeProjection.create(output, output)
 
       outputRowIterator.map { outputRow =>
         resultProj(joined(queue.remove(), outputRow))
