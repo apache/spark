@@ -496,7 +496,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
     replay(fileStatus, isApplicationCompleted(fileStatus), bus, eventsFilter)
     listener.applicationInfo.foreach(addListing)
-    listing.write(new LogInfo(logPath.toString(), fileStatus.getLen()))
+    listing.write(LogInfo(logPath.toString(), fileStatus.getLen()))
   }
 
   /**
@@ -694,8 +694,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 }
 
 private[history] object FsHistoryProvider {
-  private val NOT_STARTED = "<Not Started>"
-
   private val SPARK_HISTORY_FS_NUM_REPLAY_THREADS = "spark.history.fs.numReplayThreads"
 
   private val APPL_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerApplicationStart\""
