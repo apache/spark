@@ -75,29 +75,29 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       rsd: Double = 0.05,
       dt: DataType = IntegerType): (ApproxCountDistinctForIntervals, InternalRow, InternalRow) = {
     val input = new SpecificInternalRow(Seq(dt))
-    val ida = ApproxCountDistinctForIntervals(
+    val aggFunc = ApproxCountDistinctForIntervals(
       BoundReference(0, dt, nullable = true), CreateArray(endpoints.map(Literal(_))), rsd)
-    val buffer = createBuffer(ida)
-    (ida, input, buffer)
+    val buffer = createBuffer(aggFunc)
+    (aggFunc, input, buffer)
   }
 
-  private def createBuffer(ida: ApproxCountDistinctForIntervals): InternalRow = {
-    val buffer = new SpecificInternalRow(ida.aggBufferAttributes.map(_.dataType))
-    ida.initialize(buffer)
+  private def createBuffer(aggFunc: ApproxCountDistinctForIntervals): InternalRow = {
+    val buffer = new SpecificInternalRow(aggFunc.aggBufferAttributes.map(_.dataType))
+    aggFunc.initialize(buffer)
     buffer
   }
 
   test("merging ApproxCountDistinctForIntervals instances") {
-    val (ida, input, buffer1a) = createEstimator(Array[Double](0, 10, 2000, 345678, 1000000))
-    val buffer1b = createBuffer(ida)
-    val buffer2 = createBuffer(ida)
+    val (aggFunc, input, buffer1a) = createEstimator(Array[Double](0, 10, 2000, 345678, 1000000))
+    val buffer1b = createBuffer(aggFunc)
+    val buffer2 = createBuffer(aggFunc)
 
     // Create the
     // Add the lower half
     var i = 0
     while (i < 500000) {
       input.setInt(0, i)
-      ida.update(buffer1a, input)
+      aggFunc.update(buffer1a, input)
       i += 1
     }
 
@@ -105,18 +105,18 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     i = 500000
     while (i < 1000000) {
       input.setInt(0, i)
-      ida.update(buffer1b, input)
+      aggFunc.update(buffer1b, input)
       i += 1
     }
 
     // Merge the lower and upper halves.
-    ida.merge(buffer1a, buffer1b)
+    aggFunc.merge(buffer1a, buffer1b)
 
     // Create the other buffer in reverse
     i = 999999
     while (i >= 0) {
       input.setInt(0, i)
-      ida.update(buffer2, input)
+      aggFunc.update(buffer2, input)
       i -= 1
     }
 
@@ -129,9 +129,9 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         endpoints: Array[Double],
         value: Double,
         expectedIntervalIndex: Int): Unit = {
-      val ida = ApproxCountDistinctForIntervals(
+      val aggFunc = ApproxCountDistinctForIntervals(
         BoundReference(0, DoubleType, nullable = true), CreateArray(endpoints.map(Literal(_))))
-      assert(ida.findHllppIndex(value) == expectedIntervalIndex)
+      assert(aggFunc.findHllppIndex(value) == expectedIntervalIndex)
     }
     val endpoints = Array[Double](0, 3, 6, 10)
     // value is found (value is an interval boundary)
@@ -156,37 +156,35 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     val expectedNdvs = Array[Long](3, 2, 1, 1, 1)
 
     Seq(0.01, 0.05, 0.1).foreach { relativeSD =>
-      val (ida, input, buffer) = createEstimator(endpoints.reverse, relativeSD)
-      // ida.endpoints will be sorted into ascending order
-      assert(ida.endpoints.sameElements(endpoints))
+      val (aggFunc, input, buffer) = createEstimator(endpoints, relativeSD)
 
       data.grouped(4).foreach { group =>
-        val (partialIda, partialInput, partialBuffer) =
+        val (partialaggFunc, partialInput, partialBuffer) =
           createEstimator(endpoints, relativeSD, DoubleType)
         group.foreach { x =>
           partialInput.setDouble(0, x)
-          partialIda.update(partialBuffer, partialInput)
+          partialaggFunc.update(partialBuffer, partialInput)
         }
-        ida.merge(buffer, partialBuffer)
+        aggFunc.merge(buffer, partialBuffer)
       }
       // before eval(), for intervals with the same endpoints, only the first interval counts the
       // value
       checkNDVs(
-        ndvs = ida.hllppResults(buffer),
+        ndvs = aggFunc.hllppResults(buffer),
         expectedNdvs = Array(3, 2, 0, 0, 1),
         rsd = relativeSD)
 
       // A value out of the whole range will not change the buffer
       input.setInt(0, 2)
-      ida.update(buffer, input)
+      aggFunc.update(buffer, input)
       checkNDVs(
-        ndvs = ida.hllppResults(buffer),
+        ndvs = aggFunc.hllppResults(buffer),
         expectedNdvs = Array(3, 2, 0, 0, 1),
         rsd = relativeSD)
 
       // after eval(), set the others to 1
       checkNDVs(
-        ndvs = ida.eval(buffer).asInstanceOf[ArrayData].toLongArray(),
+        ndvs = aggFunc.eval(buffer).asInstanceOf[ArrayData].toLongArray(),
         expectedNdvs = expectedNdvs,
         rsd = relativeSD)
     }

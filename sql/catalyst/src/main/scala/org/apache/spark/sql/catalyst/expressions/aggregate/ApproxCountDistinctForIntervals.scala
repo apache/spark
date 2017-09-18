@@ -22,34 +22,21 @@ import java.util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExpectsInputTypes, Expression, ExpressionDescription}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExpectsInputTypes, Expression}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.types._
 
 /**
  * This function counts the approximate number of distinct values (ndv) in
- * intervals constructed from endpoints specified in `endpointsExpression`. The endpoints will be
- * sorted into ascending order. To count ndv's in these intervals, apply the HyperLogLogPlusPlus
- * algorithm in each of them.
+ * intervals constructed from endpoints specified in `endpointsExpression`. The endpoints should be
+ * sorted into ascending order. E.g., given an array of endpoints
+ * (endpoint_1, endpoint_2, ... endpoint_N), returns the approximate ndv's for intervals
+ * [endpoint_1, endpoint_2], (endpoint_2, endpoint_3], ... (endpoint_N-1, endpoint_N].
+ * To count ndv's in these intervals, apply the HyperLogLogPlusPlus algorithm in each of them.
  * @param child to estimate the ndv's of.
- * @param endpointsExpression to construct the intervals.
+ * @param endpointsExpression to construct the intervals, should be sorted into ascending order.
  * @param relativeSD The maximum estimation error allowed in the HyperLogLogPlusPlus algorithm.
  */
-@ExpressionDescription(
-  usage = """
-    _FUNC_(col, array(endpoint_1, endpoint_2, ... endpoint_N)) - Returns the approximate
-      number of distinct values (ndv) for intervals [endpoint_1, endpoint_2],
-      (endpoint_2, endpoint_3], ... (endpoint_N-1, endpoint_N].
-
-    _FUNC_(col, array(endpoint_1, endpoint_2, ... endpoint_N), relativeSD=0.05) - Returns
-      the approximate number of distinct values (ndv) for intervals with relativeSD, the maximum
-      estimation error allowed in the HyperLogLogPlusPlus algorithm.
-  """,
-  extended = """
-    Examples:
-      > SELECT approx_count_distinct_for_intervals(10.0, array(5, 15, 25), 0.01);
-       [1, 0]
-  """)
 case class ApproxCountDistinctForIntervals(
     child: Expression,
     endpointsExpression: Expression,
@@ -81,17 +68,14 @@ case class ApproxCountDistinctForIntervals(
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
-  lazy val endpoints: Array[Double] = {
-    val doubleArray = (endpointsExpression.dataType, endpointsExpression.eval()) match {
+  lazy val endpoints: Array[Double] =
+    (endpointsExpression.dataType, endpointsExpression.eval()) match {
       case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
         val numericArray = arrayData.toObjectArray(baseType)
         numericArray.map { x =>
           baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])
         }
     }
-    util.Arrays.sort(doubleArray)
-    doubleArray
-  }
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
