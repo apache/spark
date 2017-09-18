@@ -112,7 +112,8 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       // Verify that the output schema is correct
       val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
         .map { case (attr, i) => attr.withName(s"_$i") })
-      assert(schemaOut.equals(outputRowIterator.schema))
+      assert(schemaOut.equals(outputRowIterator.schema),
+        s"Invalid schema from pandas_udf: expected $schemaOut, got ${outputRowIterator.schema}")
 
       val joined = new JoinedRow
       val resultProj = UnsafeProjection.create(output, output)

@@ -32,6 +32,7 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, PythonEvalType, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowPandasSerializer
+from pyspark.sql.types import toArrowType
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -80,7 +81,7 @@ def wrap_pandas_udf(f, return_type):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                "expected %d, got %d\nUse input vector length or kwarg['length']"
                                % (kwargs["length"], len(result)))
-        return result
+        return result, toArrowType(return_type)
     return lambda *a: verify_result_length(*a)
 
 
