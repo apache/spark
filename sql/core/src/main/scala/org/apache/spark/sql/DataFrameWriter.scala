@@ -24,11 +24,11 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
-import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation, SaveIntoDataSourceCommand}
+import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
 
@@ -371,20 +371,19 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
         val srcRelations = df.logicalPlan.collect {
-          case LogicalRelation(src: BaseRelation, _, _) => src
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta) =>
-            relation.tableMeta.identifier
+          case LogicalRelation(src: BaseRelation, _, _, _) => src
+          case relation: HiveTableRelation => relation.tableMeta.identifier
         }
 
         val tableRelation = df.sparkSession.table(tableIdentWithDB).queryExecution.analyzed
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
-          case LogicalRelation(dest: BaseRelation, _, _) if srcRelations.contains(dest) =>
+          case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           // check hive table relation when overwrite mode
-          case relation: CatalogRelation if DDLUtils.isHiveTable(relation.tableMeta)
-            && srcRelations.contains(relation.tableMeta.identifier) =>
+          case relation: HiveTableRelation
+              if srcRelations.contains(relation.tableMeta.identifier) =>
             throw new AnalysisException(
               s"Cannot overwrite table $tableName that is also being read from")
           case _ => // OK
@@ -518,9 +517,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
    * <ul>
-   * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will override `orc.compress`.</li>
+   * <li>`compression` (default is the value specified in `spark.sql.orc.compression.codec`):
+   * compression codec to use when saving to file. This can be one of the known case-insensitive
+   * shorten names(`none`, `snappy`, `zlib`, and `lzo`). This will override
+   * `orc.compress` and `spark.sql.parquet.compression.codec`. If `orc.compress` is given,
+   * it overrides `spark.sql.parquet.compression.codec`.</li>
    * </ul>
    *
    * @since 1.5.0

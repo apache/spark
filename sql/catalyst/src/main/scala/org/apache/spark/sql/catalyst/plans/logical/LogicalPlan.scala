@@ -47,7 +47,7 @@ abstract class LogicalPlan
    */
   def analyzed: Boolean = _analyzed
 
-  /** Returns true if this subtree contains any streaming data sources. */
+  /** Returns true if this subtree has data from a streaming data source. */
   def isStreaming: Boolean = children.exists(_.isStreaming == true)
 
   /**
@@ -297,7 +297,6 @@ abstract class UnaryNode extends LogicalPlan {
           case expr: Expression if expr.semanticEquals(e) =>
             a.toAttribute
         })
-        allConstraints += EqualNullSafe(e, a.toAttribute)
       case _ => // Don't change.
     }
 

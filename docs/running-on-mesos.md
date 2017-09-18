@@ -33,7 +33,8 @@ To get started, follow the steps below to install Mesos and deploy Spark jobs vi
 # Installing Mesos
 
 Spark {{site.SPARK_VERSION}} is designed for use with Mesos {{site.MESOS_VERSION}} or newer and does not
-require any special patches of Mesos.
+require any special patches of Mesos. File and environment-based secrets support requires Mesos 1.3.0 or
+newer.
 
 If you already have a Mesos cluster running, you can skip this Mesos installation step.
 
@@ -159,6 +160,8 @@ If you like to run the `MesosClusterDispatcher` with Marathon, you need to run t
 
 The `MesosClusterDispatcher` also supports writing recovery state into Zookeeper. This will allow the `MesosClusterDispatcher` to be able to recover all submitted and running containers on relaunch.   In order to enable this recovery mode, you can set SPARK_DAEMON_JAVA_OPTS in spark-env by configuring `spark.deploy.recoveryMode` and related spark.deploy.zookeeper.* configurations.
 For more information about these configurations please refer to the configurations [doc](configurations.html#deploy).
+
+You can also specify any additional jars required by the `MesosClusterDispatcher` in the classpath by setting the environment variable SPARK_DAEMON_CLASSPATH in spark-env.
 
 From the client, you can submit a job to Mesos cluster by running `spark-submit` and specifying the master URL
 to the URL of the `MesosClusterDispatcher` (e.g: mesos://dispatcher:7077). You can view driver statuses on the
@@ -428,7 +431,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.mesos.secret</code></td>
   <td>(none)</td>
   <td>
-    Set the secret with which Spark framework will use to authenticate with Mesos.
+    Set the secret with which Spark framework will use to authenticate with Mesos. Used, for example, when
+    authenticating with the registry.
   </td>
 </tr>
 <tr>
@@ -477,6 +481,43 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Mesos labels to add to the driver.  See <code>spark.mesos.task.labels</code>
     for formatting information.
+  </td>
+</tr>
+
+<tr>
+  <td><code>spark.mesos.driver.secret.envkeys</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list that, if set, the contents of the secret referenced
+    by spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
+    set to the provided environment variable in the driver's process.
+  </td>
+  </tr>
+  <tr>
+<td><code>spark.mesos.driver.secret.filenames</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list that, if set, the contents of the secret referenced by
+    spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
+    written to the provided file. Paths are relative to the container's work
+    directory.  Absolute paths must already exist.  Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.secret.names</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list of secret references. Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.secret.values</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list of secret values. Consult the Mesos Secret
+    protobuf for more information.
   </td>
 </tr>
 
@@ -534,6 +575,20 @@ See the [configuration page](configuration.html) for information on Spark config
     launched in cluster mode, also launch the driver in the given named
     network.  See
     <a href="http://mesos.apache.org/documentation/latest/cni/">the Mesos CNI docs</a>
+    for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.network.labels</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Pass network labels to CNI plugins.  This is a comma-separated list
+    of key-value pairs, where each key-value pair has the format key:value.
+    Example:
+
+    <pre>key1:val1,key2:val2</pre>
+    See
+    <a href="http://mesos.apache.org/documentation/latest/cni/#mesos-meta-data-to-cni-plugins">the Mesos CNI docs</a>
     for more details.
   </td>
 </tr>

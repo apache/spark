@@ -510,12 +510,20 @@ trait MesosSchedulerUtils extends Logging {
   }
 
   def mesosToTaskState(state: MesosTaskState): TaskState.TaskState = state match {
-    case MesosTaskState.TASK_STAGING | MesosTaskState.TASK_STARTING => TaskState.LAUNCHING
-    case MesosTaskState.TASK_RUNNING | MesosTaskState.TASK_KILLING => TaskState.RUNNING
+    case MesosTaskState.TASK_STAGING |
+         MesosTaskState.TASK_STARTING => TaskState.LAUNCHING
+    case MesosTaskState.TASK_RUNNING |
+         MesosTaskState.TASK_KILLING => TaskState.RUNNING
     case MesosTaskState.TASK_FINISHED => TaskState.FINISHED
-    case MesosTaskState.TASK_FAILED => TaskState.FAILED
+    case MesosTaskState.TASK_FAILED |
+         MesosTaskState.TASK_GONE |
+         MesosTaskState.TASK_GONE_BY_OPERATOR => TaskState.FAILED
     case MesosTaskState.TASK_KILLED => TaskState.KILLED
-    case MesosTaskState.TASK_LOST | MesosTaskState.TASK_ERROR => TaskState.LOST
+    case MesosTaskState.TASK_LOST |
+         MesosTaskState.TASK_ERROR |
+         MesosTaskState.TASK_DROPPED |
+         MesosTaskState.TASK_UNKNOWN |
+         MesosTaskState.TASK_UNREACHABLE => TaskState.LOST
   }
 
   def taskStateToMesos(state: TaskState.TaskState): MesosTaskState = state match {

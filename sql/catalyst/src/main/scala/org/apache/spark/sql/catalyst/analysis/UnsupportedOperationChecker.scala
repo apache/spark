@@ -146,6 +146,9 @@ object UnsupportedOperationChecker {
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
             "streaming DataFrames/Datasets")
 
+        case _: InsertIntoDir =>
+          throwError("InsertIntoDir is not supported with streaming DataFrames/Datasets")
+
         // mapGroupsWithState and flatMapGroupsWithState
         case m: FlatMapGroupsWithState if m.isStreaming =>
 

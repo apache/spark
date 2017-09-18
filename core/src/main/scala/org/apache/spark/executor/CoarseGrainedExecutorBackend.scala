@@ -219,6 +219,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
+      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
+        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
+        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
+      }
+
       val env = SparkEnv.createExecutorEnv(
         driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, isLocal = false)
 

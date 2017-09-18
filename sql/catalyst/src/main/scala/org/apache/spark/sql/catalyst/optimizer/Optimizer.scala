@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * Abstract class all optimizers should inherit of, contains the standard batches (extending
@@ -36,6 +37,12 @@ import org.apache.spark.sql.types._
  */
 abstract class Optimizer(sessionCatalog: SessionCatalog)
   extends RuleExecutor[LogicalPlan] {
+
+  // Check for structural integrity of the plan in test mode. Currently we only check if a plan is
+  // still resolved after the execution of each rule.
+  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
+    !Utils.isTesting || plan.resolved
+  }
 
   protected def fixedPoint = FixedPoint(SQLConf.get.optimizerMaxIterations)
 
@@ -79,11 +86,12 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       PushProjectionThroughUnion,
       ReorderJoin,
       EliminateOuterJoin,
+      InferFiltersFromConstraints,
+      BooleanSimplification,
       PushPredicateThroughJoin,
       PushDownPredicate,
       LimitPushDown,
       ColumnPruning,
-      InferFiltersFromConstraints,
       // Operator combine
       CollapseRepartition,
       CollapseProject,
@@ -378,21 +386,6 @@ object PushProjectionThroughUnion extends Rule[LogicalPlan] with PredicateHelper
     // We must promise the compiler that we did not discard the names in the case of project
     // expressions.  This is safe since the only transformation is from Attribute => Attribute.
     result.asInstanceOf[A]
-  }
-
-  /**
-   * Splits the condition expression into small conditions by `And`, and partition them by
-   * deterministic, and finally recombine them by `And`. It returns an expression containing
-   * all deterministic expressions (the first field of the returned Tuple2) and an expression
-   * containing all non-deterministic expressions (the second field of the returned Tuple2).
-   */
-  private def partitionByDeterministic(condition: Expression): (Expression, Expression) = {
-    val andConditions = splitConjunctivePredicates(condition)
-    andConditions.partition(_.deterministic) match {
-      case (deterministic, nondeterministic) =>
-        deterministic.reduceOption(And).getOrElse(Literal(true)) ->
-        nondeterministic.reduceOption(And).getOrElse(Literal(true))
-    }
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -738,8 +731,10 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
     case Filter(Literal(true, BooleanType), child) => child
     // If the filter condition always evaluate to null or false,
     // replace the input with an empty relation.
-    case Filter(Literal(null, _), child) => LocalRelation(child.output, data = Seq.empty)
-    case Filter(Literal(false, BooleanType), child) => LocalRelation(child.output, data = Seq.empty)
+    case Filter(Literal(null, _), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
+    case Filter(Literal(false, BooleanType), child) =>
+      LocalRelation(child.output, data = Seq.empty, isStreaming = plan.isStreaming)
     // If any deterministic condition is guaranteed to be true given the constraints on the child's
     // output, remove the condition
     case f @ Filter(fc, p: LogicalPlan) =>
@@ -863,6 +858,25 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
         } else {
           newUnion
         }
+      } else {
+        filter
+      }
+
+    case filter @ Filter(condition, watermark: EventTimeWatermark) =>
+      // We can only push deterministic predicates which don't reference the watermark attribute.
+      // We could in theory span() only on determinism and pull out deterministic predicates
+      // on the watermark separately. But it seems unnecessary and a bit confusing to not simply
+      // use the prefix as we do for nondeterminism in other cases.
+
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).span(
+        p => p.deterministic && !p.references.contains(watermark.eventTime))
+
+      if (pushDown.nonEmpty) {
+        val pushDownPredicate = pushDown.reduceLeft(And)
+        val newWatermark = watermark.copy(child = Filter(pushDownPredicate, watermark.child))
+        // If there is no more filter to stay up, just eliminate the filter.
+        // Otherwise, create "Filter(stayUp) <- watermark <- Filter(pushDownPredicate)".
+        if (stayUp.isEmpty) newWatermark else Filter(stayUp.reduceLeft(And), newWatermark)
       } else {
         filter
       }
@@ -1152,15 +1166,18 @@ object DecimalAggregates extends Rule[LogicalPlan] {
  * Converts local operations (i.e. ones that don't require data exchange) on LocalRelation to
  * another LocalRelation.
  *
- * This is relatively simple as it currently handles only a single case: Project.
+ * This is relatively simple as it currently handles only 2 single case: Project and Limit.
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data))
+    case Project(projectList, LocalRelation(output, data, isStreaming))
         if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       projection.initialize(0)
-      LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+      LocalRelation(projectList.map(_.toAttribute), data.map(projection), isStreaming)
+
+    case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming)) =>
+      LocalRelation(output, data.take(limit), isStreaming)
   }
 
   private def hasUnevaluableExpr(expr: Expression): Boolean = {
@@ -1185,7 +1202,7 @@ object ReplaceDistinctWithAggregate extends Rule[LogicalPlan] {
  */
 object ReplaceDeduplicateWithAggregate extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Deduplicate(keys, child, streaming) if !streaming =>
+    case Deduplicate(keys, child) if !child.isStreaming =>
       val keyExprIds = keys.map(_.exprId)
       val aggCols = child.output.map { attr =>
         if (keyExprIds.contains(attr.exprId)) {

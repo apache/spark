@@ -36,9 +36,14 @@ class TrainValidationSplitSuite
 
   import testImplicits._
 
-  test("train validation with logistic regression") {
-    val dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+  @transient var dataset: Dataset[_] = _
 
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    dataset = sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2).toDF()
+  }
+
+  test("train validation with logistic regression") {
     val lr = new LogisticRegression
     val lrParamMaps = new ParamGridBuilder()
       .addGrid(lr.regParam, Array(0.001, 1000.0))
@@ -117,6 +122,32 @@ class TrainValidationSplitSuite
     }
   }
 
+  test("train validation with parallel evaluation") {
+    val lr = new LogisticRegression
+    val lrParamMaps = new ParamGridBuilder()
+      .addGrid(lr.regParam, Array(0.001, 1000.0))
+      .addGrid(lr.maxIter, Array(0, 3))
+      .build()
+    val eval = new BinaryClassificationEvaluator
+    val cv = new TrainValidationSplit()
+      .setEstimator(lr)
+      .setEstimatorParamMaps(lrParamMaps)
+      .setEvaluator(eval)
+      .setParallelism(1)
+    val cvSerialModel = cv.fit(dataset)
+    cv.setParallelism(2)
+    val cvParallelModel = cv.fit(dataset)
+
+    val serialMetrics = cvSerialModel.validationMetrics.sorted
+    val parallelMetrics = cvParallelModel.validationMetrics.sorted
+    assert(serialMetrics === parallelMetrics)
+
+    val parentSerial = cvSerialModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    val parentParallel = cvParallelModel.bestModel.parent.asInstanceOf[LogisticRegression]
+    assert(parentSerial.getRegParam === parentParallel.getRegParam)
+    assert(parentSerial.getMaxIter === parentParallel.getMaxIter)
+  }
+
   test("read/write: TrainValidationSplit") {
     val lr = new LogisticRegression().setMaxIter(3)
     val evaluator = new BinaryClassificationEvaluator()
@@ -173,14 +204,13 @@ class TrainValidationSplitSuite
     tvs2.getEstimator match {
       case ova2: OneVsRest =>
         assert(ova.uid === ova2.uid)
-        val classifier = ova2.getClassifier
-        classifier match {
+        ova2.getClassifier match {
           case lr: LogisticRegression =>
             assert(ova.getClassifier.asInstanceOf[LogisticRegression].getMaxIter
               === lr.getMaxIter)
-          case _ =>
+          case other =>
             throw new AssertionError(s"Loaded TrainValidationSplit expected estimator of type" +
-              s" LogisticREgression but found ${classifier.getClass.getName}")
+              s" LogisticRegression but found ${other.getClass.getName}")
         }
 
       case other =>
