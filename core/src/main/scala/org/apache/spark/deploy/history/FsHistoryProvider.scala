@@ -126,7 +126,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   private val storePath = conf.get(LOCAL_STORE_DIR)
 
-  private val listing: KVStore = storePath.map { path =>
+  // Visible for testing.
+  private[history] val listing: KVStore = storePath.map { path =>
     val dbPath = new File(path, "listing.ldb")
 
     def openDB(): LevelDB = new LevelDB(dbPath, new KVStoreScalaSerializer())
@@ -707,7 +708,7 @@ private[history] object FsHistoryProvider {
    * db, if the version does not match this value, the FsHistoryProvider will throw away
    * all data and re-generate the listing data from the event logs.
    */
-  private val CURRENT_LISTING_VERSION = 1L
+  private[history] val CURRENT_LISTING_VERSION = 1L
 }
 
 /**

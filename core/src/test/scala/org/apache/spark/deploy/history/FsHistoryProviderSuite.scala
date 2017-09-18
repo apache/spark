@@ -595,7 +595,34 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       securityManager.checkUIViewPermissions("user4") should be (false)
       securityManager.checkUIViewPermissions("user5") should be (false)
     }
- }
+  }
+
+  test("mismatched version discards old listing") {
+    val conf = createTestConf()
+    val oldProvider = newProvider(conf)
+
+    val logFile1 = newLogFile("app1", None, inProgress = false)
+    writeFile(logFile1, true, None,
+      SparkListenerLogStart("2.3"),
+      SparkListenerApplicationStart("test", Some("test"), 1L, "test", None),
+      SparkListenerApplicationEnd(5L)
+    )
+
+    updateAndCheck(oldProvider) { list =>
+      list.size should be (1)
+    }
+    assert(oldProvider.listing.count(classOf[ApplicationInfoWrapper]) === 1)
+
+    // Manually overwrite the version in the listing db; this should cause the new provider to
+    // discard all data because the versions don't match.
+    val meta = new KVStoreMetadata(FsHistoryProvider.CURRENT_LISTING_VERSION + 1,
+      conf.get(LOCAL_STORE_DIR).get)
+    oldProvider.listing.setMetadata(meta)
+    oldProvider.stop()
+
+    val mistatchedVersionProvider = newProvider(conf)
+    assert(mistatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
+  }
 
   /**
    * Asks the provider to check for logs and calls a function to perform checks on the updated
