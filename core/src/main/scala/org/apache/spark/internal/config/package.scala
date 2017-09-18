@@ -388,13 +388,15 @@ package object config {
 
   private[spark] val UNROLL_MEMORY_CHECK_PERIOD =
     ConfigBuilder("spark.storage.unrollMemoryCheckPeriod")
+      .internal()
       .doc("The memory check period is used to determine how often we should check whether "
-        + "there is a need to request more memory when we try to put the given block in memory.")
+        + "there is a need to request more memory when we try to unroll the given block in memory.")
       .longConf
       .createWithDefault(16)
 
   private[spark] val UNROLL_MEMORY_GROWTH_FACTOR =
     ConfigBuilder("spark.storage.unrollMemoryGrowthFactor")
+      .internal()
       .doc("Memory to request as a multiple of the size that used to unroll the block.")
       .doubleConf
       .createWithDefault(1.5)
