@@ -112,7 +112,6 @@ private[columnar] case object PassThrough extends CompressionScheme {
       var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else capacity
       var pos = 0
       var seenNulls = 0
-      val srcArray = buffer.array
       var bufferPos = buffer.position
       while (pos < capacity) {
         if (pos != nextNullIndex) {
@@ -268,7 +267,47 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
 
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
 
-    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
+    private def putBoolean(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putBoolean(pos, value == 1)
+    }
+
+    private def getByte(buffer: ByteBuffer): Long = {
+      buffer.get().toLong
+    }
+
+    private def putByte(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putByte(pos, value.toByte)
+    }
+
+    private def getShort(buffer: ByteBuffer): Long = {
+      buffer.getShort().toLong
+    }
+
+    private def putShort(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putShort(pos, value.toShort)
+    }
+
+    private def getInt(buffer: ByteBuffer): Long = {
+      buffer.getInt().toLong
+    }
+
+    private def putInt(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putInt(pos, value.toInt)
+    }
+
+    private def getLong(buffer: ByteBuffer): Long = {
+      buffer.getLong()
+    }
+
+    private def putLong(columnVector: WritableColumnVector, pos: Int, value: Long): Unit = {
+      columnVector.putLong(pos, value)
+    }
+
+    private def decompress0(
+        columnVector: WritableColumnVector,
+        capacity: Int,
+        getFunction: (ByteBuffer) => Long,
+        putFunction: (WritableColumnVector, Int, Long) => Unit): Unit = {
       val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
       nullsBuffer.rewind()
       val nullCount = ByteBufferHelper.getInt(nullsBuffer)
@@ -277,112 +316,41 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
       var seenNulls = 0
       var runLocal = 0
       var valueCountLocal = 0
+      var currentValueLocal: Long = 0
+
+      while (valueCountLocal < runLocal || (pos < capacity)) {
+        if (pos != nextNullIndex) {
+          if (valueCountLocal == runLocal) {
+            currentValueLocal = getFunction(buffer)
+            runLocal = ByteBufferHelper.getInt(buffer)
+            valueCountLocal = 1
+          } else {
+            valueCountLocal += 1
+          }
+          putFunction(columnVector, pos, currentValueLocal)
+        } else {
+          seenNulls += 1
+          if (seenNulls < nullCount) {
+            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
+          }
+          columnVector.putNull(pos)
+        }
+        pos += 1
+      }
+    }
+
+    override def decompress(columnVector: WritableColumnVector, capacity: Int): Unit = {
       columnType.dataType match {
         case _: BooleanType =>
-          var currentValueLocal: Boolean = false
-          while (valueCountLocal < runLocal || (pos < capacity)) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.get() == 1
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              columnVector.putBoolean(pos, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              columnVector.putNull(pos)
-            }
-            pos += 1
-          }
+          decompress0(columnVector, capacity, getByte, putBoolean)
         case _: ByteType =>
-          var currentValueLocal: Byte = 0
-          while (valueCountLocal < runLocal || (pos < capacity)) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.get()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              columnVector.putByte(pos, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              columnVector.putNull(pos)
-            }
-            pos += 1
-          }
+          decompress0(columnVector, capacity, getByte, putByte)
         case _: ShortType =>
-          var currentValueLocal: Short = 0
-          while (valueCountLocal < runLocal || (pos < capacity)) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.getShort()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              columnVector.putShort(pos, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              columnVector.putNull(pos)
-            }
-            pos += 1
-          }
+          decompress0(columnVector, capacity, getShort, putShort)
         case _: IntegerType =>
-          var currentValueLocal: Int = 0
-          while (valueCountLocal < runLocal || (pos < capacity)) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.getInt()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              columnVector.putInt(pos, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              columnVector.putNull(pos)
-            }
-            pos += 1
-          }
+          decompress0(columnVector, capacity, getInt, putInt)
         case _: LongType =>
-          var currentValueLocal: Long = 0
-          while (valueCountLocal < runLocal || (pos < capacity)) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.getLong()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              columnVector.putLong(pos, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              columnVector.putNull(pos)
-            }
-            pos += 1
-          }
+          decompress0(columnVector, capacity, getLong, putLong)
         case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
       }
     }
