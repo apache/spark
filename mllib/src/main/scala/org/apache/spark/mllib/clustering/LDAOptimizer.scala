@@ -501,7 +501,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     logphatOption.foreach(updateAlpha(_, batchSize))
 
     expElogbetaBc.destroy(false)
-    stats.unpersist()
+
     this
   }
 
