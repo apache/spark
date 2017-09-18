@@ -39,7 +39,7 @@ public final class LongArray {
   private final long length;
 
   public LongArray(MemoryBlock memory) {
-    assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size > 4 billion elements";
+    assert memory.size() < (long) Integer.MAX_VALUE * 8: "Array size > 2.1 billion elements";
     this.memory = memory;
     this.baseObj = memory.getBaseObject();
     this.baseOffset = memory.getBaseOffset();

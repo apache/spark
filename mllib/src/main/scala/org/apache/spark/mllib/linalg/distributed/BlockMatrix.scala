@@ -304,8 +304,8 @@ class BlockMatrix @Since("1.3.0") (
       s"Int.MaxValue. Currently numRows: ${numRows()}")
     require(numCols() < Int.MaxValue, "The number of columns of this matrix should be less than " +
       s"Int.MaxValue. Currently numCols: ${numCols()}")
-    require(numRows() * numCols() < Int.MaxValue, "The length of the values array must be " +
-      s"less than Int.MaxValue. Currently numRows * numCols: ${numRows() * numCols()}")
+    require(numRows() * numCols() < Int.MaxValue - 8, "The length of the values array must be " +
+      s"less than ${Int.MaxValue - 8}. Currently numRows * numCols: ${numRows() * numCols()}")
     val m = numRows().toInt
     val n = numCols().toInt
     val mem = m * n / 125000
