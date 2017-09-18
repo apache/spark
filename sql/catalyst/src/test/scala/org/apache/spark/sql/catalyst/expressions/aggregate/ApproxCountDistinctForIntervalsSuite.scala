@@ -159,11 +159,11 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       val (aggFunc, input, buffer) = createEstimator(endpoints, relativeSD)
 
       data.grouped(4).foreach { group =>
-        val (partialaggFunc, partialInput, partialBuffer) =
+        val (partialAggFunc, partialInput, partialBuffer) =
           createEstimator(endpoints, relativeSD, DoubleType)
         group.foreach { x =>
           partialInput.setDouble(0, x)
-          partialaggFunc.update(partialBuffer, partialInput)
+          partialAggFunc.update(partialBuffer, partialInput)
         }
         aggFunc.merge(buffer, partialBuffer)
       }
