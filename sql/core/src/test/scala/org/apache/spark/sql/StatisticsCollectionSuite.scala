@@ -292,7 +292,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
           sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
           val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
-
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
           sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
@@ -301,4 +300,52 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("invalidation of tableRelationCache after table truncation") {
+    val table = "invalidate_catalog_cache_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTable(table) {
+          spark.range(100).write.saveAsTable(table)
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          sql(s"TRUNCATE TABLE $table")
+          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
+        }
+      }
+    }
+  }
+
+  test("invalidation of tableRelationCache after alter table add partition") {
+    val table = "invalidate_catalog_cache_table"
+    Seq(false, true).foreach { autoUpdate =>
+      withSQLConf(SQLConf.AUTO_UPDATE_SIZE.key -> autoUpdate.toString) {
+        withTempDir { dir =>
+          withTable(table) {
+            val path = dir.getCanonicalPath
+            sql(s"""
+              |CREATE TABLE $table (col1 int, col2 int)
+              |USING PARQUET
+              |PARTITIONED BY (col2)
+              |LOCATION '${dir.toURI}'""".stripMargin)
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
+            sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+            assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
+            spark.catalog.recoverPartitions(table)
+            val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
+            df.write.parquet(s"$path/col2=1")
+            sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
+            sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+            val cachedTable = getTableFromCatalogCache(table)
+            val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
+            if (autoUpdate) {
+              assert(cachedTableSizeInBytes != 0 && cachedTableSizeInBytes > 0)
+            } else {
+              assert(getTableFromCatalogCache(table).stats.sizeInBytes == conf.defaultSizeInBytes)
+            }
+          }
+        }
+      }
+    }
+  }
 }

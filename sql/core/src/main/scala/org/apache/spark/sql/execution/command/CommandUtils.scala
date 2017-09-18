@@ -44,7 +44,6 @@ object CommandUtils extends Logging {
       } else {
         catalog.alterTableStats(table.identifier, None)
       }
-      catalog.refreshTable(table.identifier)
     }
   }
 
