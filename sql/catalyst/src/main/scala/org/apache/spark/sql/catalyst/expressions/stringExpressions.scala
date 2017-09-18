@@ -519,7 +519,7 @@ object StringTrim {
 }
 
 /**
- * A function that takes a character string, removes the leading and trailing characters matching with the characters
+ * A function that takes a character string, removes the leading and trailing characters matching with any character
  * in the trim string, returns the new string.
  * If BOTH and trimStr keywords are not specified, it defaults to remove space character from both ends. The trim
  * function will have one argument, which contains the source string.
@@ -553,7 +553,7 @@ case class StringTrim(
     trimStr: Option[Expression] = None)
   extends String2TrimExpression {
 
-  def this (trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
+  def this(trimStr: Expression, srcStr: Expression) = this(srcStr, Option(trimStr))
 
   def this(srcStr: Expression) = this(srcStr, None)
 
@@ -570,9 +570,9 @@ case class StringTrim(
       null
     } else {
       if (trimStr.isDefined) {
-        return srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
+        srcString.trim(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
-        return srcString.trim()
+        srcString.trim()
       }
     }
   }
@@ -582,7 +582,7 @@ case class StringTrim(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString("\n") + s"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -599,8 +599,7 @@ case class StringTrim(
         } else {
           ${ev.value} = ${srcString.value}.trim(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString("\n") +
-        s"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -623,7 +622,7 @@ object StringTrimLeft {
  * function will have one argument, which contains the source string.
  * If LEADING and trimStr keywords are not specified, it trims the characters from left end. The ltrim function will
  * have two arguments, the first argument contains trimStr, the second argument contains the source string.
- * trimStr: the function removes any characters from the left end of the source string which matches with the characters
+ * trimStr: the function removes any character from the left end of the source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
  * LEADING: removes any character from the left end of the source string that matches characters in the trim string.
  */
@@ -668,9 +667,9 @@ case class StringTrimLeft(
       null
     } else {
       if (trimStr.isDefined) {
-        return srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
+        srcString.trimLeft(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
-        return srcString.trimLeft()
+        srcString.trimLeft()
       }
     }
   }
@@ -680,7 +679,7 @@ case class StringTrimLeft(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString("\n") + s"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -697,8 +696,7 @@ case class StringTrimLeft(
         } else {
           ${ev.value} = ${srcString.value}.trimLeft(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString("\n") +
-        s"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -721,14 +719,14 @@ object StringTrimRight {
  * rtrim function will have one argument, which contains the source string.
  * If TRAILING and trimStr keywords are specified, it trims the characters from right end. The rtrim function will
  * have two arguments, the first argument contains trimStr, the second argument contains the source string.
- * trimStr: the function removes any characters from the right end of source string which matches with the characters
+ * trimStr: the function removes any character from the right end of source string which matches with the characters
  * from trimStr, it stops at the first non-match character.
  * TRAILING: removes any character from the right end of the source string that matches characters in the trim string.
  */
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
-    _FUNC_(trimStr, str) - Removes the trailing string which contains the character from the trim string from the `str`
+    _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
@@ -766,9 +764,9 @@ case class StringTrimRight(
       null
     } else {
       if (trimStr.isDefined) {
-        return srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
+        srcString.trimRight(trimStr.get.eval(input).asInstanceOf[UTF8String])
       } else {
-        return srcString.trimRight()
+        srcString.trimRight()
       }
     }
   }
@@ -778,7 +776,7 @@ case class StringTrimRight(
     val srcString = evals(0)
 
     if (evals.length == 1) {
-      ev.copy(evals.map(_.code).mkString("\n") + s"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {
@@ -795,8 +793,7 @@ case class StringTrimRight(
         } else {
           ${ev.value} = ${srcString.value}.trimRight(${trimString.value});
         }"""
-      ev.copy(evals.map(_.code).mkString("\n") +
-        s"""
+      ev.copy(evals.map(_.code).mkString + s"""
         boolean ${ev.isNull} = false;
         UTF8String ${ev.value} = null;
         if (${srcString.isNull}) {

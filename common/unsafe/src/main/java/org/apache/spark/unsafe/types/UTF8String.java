@@ -544,8 +544,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param trimString the trim character string
    */
   public UTF8String trimLeft(UTF8String trimString) {
-    if (trimString == null)
-      return null;
+    if (trimString == null) return null;
     // the searching byte position in the source string
     int srchIdx = 0;
     // the first beginning byte position of a non-matching character
@@ -592,8 +591,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @param trimString the trim character string
    */
   public UTF8String trimRight(UTF8String trimString) {
-    if (trimString == null)
-      return null;
+    if (trimString == null) return null;
     int charIdx = 0;
     // number of characters from the source string
     int numChars = 0;
@@ -604,7 +602,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // build the position and length array
     while (charIdx < numBytes) {
       stringCharPos[numChars] = charIdx;
-      stringCharLen[numChars]= numBytesForFirstByte(getByte(charIdx));
+      stringCharLen[numChars] = numBytesForFirstByte(getByte(charIdx));
       charIdx += stringCharLen[numChars];
       numChars ++;
     }

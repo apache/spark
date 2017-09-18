@@ -1180,25 +1180,25 @@ class AstBuilder(conf: SQLConf) extends SqlBaseBaseVisitor[AnyRef] with Logging 
    */
   override def visitFunctionCall(ctx: FunctionCallContext): Expression = withOrigin(ctx) {
     def replaceFunctions(
-      funcID: FunctionIdentifier,
-      ctx: FunctionCallContext): FunctionIdentifier = {
-        val opt = ctx.trimOption
-        if (opt != null) {
-          if (ctx.qualifiedName.getText.toLowerCase != "trim") {
-            throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
-              s"doesn't support with option ${opt.getText}.", ctx)
-          }
-          opt.getType match {
-            case SqlBaseParser.BOTH => funcID
-            case SqlBaseParser.LEADING => funcID.copy(funcName = "ltrim")
-            case SqlBaseParser.TRAILING => funcID.copy(funcName = "rtrim")
-            case _ => throw new ParseException("Function trim doesn't support with " +
-              s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
-          }
-        } else {
-          funcID
+        funcID: FunctionIdentifier,
+        ctx: FunctionCallContext): FunctionIdentifier = {
+      val opt = ctx.trimOption
+      if (opt != null) {
+        if (ctx.qualifiedName.getText.toLowerCase(Locale.ROOT) != "trim") {
+          throw new ParseException(s"The specified function ${ctx.qualifiedName.getText} " +
+            s"doesn't support with option ${opt.getText}.", ctx)
         }
+        opt.getType match {
+          case SqlBaseParser.BOTH => funcID
+          case SqlBaseParser.LEADING => funcID.copy(funcName = "ltrim")
+          case SqlBaseParser.TRAILING => funcID.copy(funcName = "rtrim")
+          case _ => throw new ParseException("Function trim doesn't support with " +
+            s"type ${opt.getType}. Please use BOTH, LEADING or Trailing as trim type", ctx)
+        }
+      } else {
+        funcID
       }
+    }
     // Create the function call.
     val name = ctx.qualifiedName.getText
     val isDistinct = Option(ctx.setQuantifier()).exists(_.DISTINCT != null)
