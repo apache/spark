@@ -2684,18 +2684,38 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val str2 = Int.MaxValue.toString + "1"
       val str3 = "10"
       Seq(str1, str2, str3).toDF("c1").createOrReplaceTempView("v")
-      checkAnswer(sql("SELECT c1 from v where c1 > 0"), Row(str1) :: Row(str2) :: Row(str3) :: Nil)
-      checkAnswer(sql("SELECT c1 from v where c1 > 0L"), Row(str1) :: Row(str2) :: Row(str3) :: Nil)
+      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "true") {
+        checkAnswer(sql("SELECT c1 from v where c1 > 0"),
+          Row(str1) :: Row(str2) :: Row(str3) :: Nil)
+        checkAnswer(sql("SELECT c1 from v where c1 > 0L"),
+          Row(str1) :: Row(str2) :: Row(str3) :: Nil)
+      }
+
+      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "false") {
+        checkAnswer(sql("SELECT c1 from v where c1 > 0"), Row(str3) :: Nil)
+        checkAnswer(sql("SELECT c1 from v where c1 > 0L"), Row(str2) :: Row(str3) :: Nil)
+      }
     }
   }
 
   test("SPARK-21646: CommonTypeForBinaryComparison: DoubleType vs IntegerType") {
     withTempView("v") {
-      Seq(("0", 1), ("-0.4", 2)).toDF("a", "b").createOrReplaceTempView("v")
-      checkAnswer(sql("SELECT a FROM v WHERE a=0"), Seq(Row("0")))
-      checkAnswer(sql("SELECT a FROM v WHERE a=0L"), Seq(Row("0")))
-      checkAnswer(sql("SELECT a FROM v WHERE a=0.0"), Seq(Row("0")))
-      checkAnswer(sql("SELECT a FROM v WHERE a=-0.4"), Seq(Row("-0.4")))
+      Seq(("0", 1), ("-0.4", 2), ("0.6", 3)).toDF("a", "b").createOrReplaceTempView("v")
+      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "true") {
+        checkAnswer(sql("SELECT a FROM v WHERE a = 0"), Seq(Row("0")))
+        checkAnswer(sql("SELECT a FROM v WHERE a = 0L"), Seq(Row("0")))
+        checkAnswer(sql("SELECT a FROM v WHERE a = 0.0"), Seq(Row("0")))
+        checkAnswer(sql("SELECT a FROM v WHERE a = -0.4"), Seq(Row("-0.4")))
+        checkAnswer(sql("SELECT count(*) FROM v WHERE a > 0"), Row(1) :: Nil)
+      }
+
+      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "false") {
+        checkAnswer(sql("SELECT a FROM v WHERE a = 0"), Seq(Row("0"), Row("-0.4"), Row("0.6")))
+        checkAnswer(sql("SELECT a FROM v WHERE a = 0L"), Seq(Row("0"), Row("-0.4"), Row("0.6")))
+        checkAnswer(sql("SELECT a FROM v WHERE a = 0.0"), Seq(Row("0")))
+        checkAnswer(sql("SELECT a FROM v WHERE a = -0.4"), Seq(Row("-0.4")))
+        checkAnswer(sql("SELECT count(*) FROM v WHERE a > 0"), Row(0) :: Nil)
+      }
     }
   }
 

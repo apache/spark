@@ -968,6 +968,13 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     </p>
   </td>
 </tr>
+<tr>
+  <td><code>spark.sql.binary.comparison.compatible.with.hive</code></td>
+  <td>true</td>
+  <td>
+      Whether compatible with Hive when binary comparison.
+  </td>
+</tr>
 </table>
 
 ## JSON Datasets
