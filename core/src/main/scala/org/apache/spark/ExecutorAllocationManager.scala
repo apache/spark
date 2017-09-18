@@ -612,6 +612,7 @@ private[spark] class ExecutorAllocationManager(
     private val jobIdToJobGroup = new mutable.HashMap[Int, String]
     private val stageIdToJobId = new mutable.HashMap[Int, Int]
     private val stageIdToCompleteTaskCount = new mutable.HashMap[Int, Int]
+    private val stageIdToCompleteSpeculativeTaskCount = new mutable.HashMap[Int, Int]
 
     // Number of speculative tasks to be scheduled in each stage
     private val stageIdToNumSpeculativeTasks = new mutable.HashMap[Int, Int]
@@ -778,6 +779,12 @@ private[spark] class ExecutorAllocationManager(
           }
           if (taskEnd.taskInfo.speculative) {
             stageIdToSpeculativeTaskIndices.get(stageId).foreach {_.remove(taskIndex)}
+            val numSpeculativeTasks = stageIdToNumSpeculativeTasks(stageId) - 1
+            if (numSpeculativeTasks > 0) {
+              stageIdToNumSpeculativeTasks(stageId) = numSpeculativeTasks
+            } else {
+              stageIdToNumSpeculativeTasks.remove(stageId)
+            }
             maxConcurrentTasks = getMaxConTasks
             logDebug(s"Setting max concurrent tasks to $maxConcurrentTasks on spec. task end.")
           } else {
@@ -785,6 +792,12 @@ private[spark] class ExecutorAllocationManager(
           }
         } else {
           stageIdToCompleteTaskCount(stageId) = stageIdToCompleteTaskCount.getOrElse(stageId, 0) + 1
+          if (taskEnd.taskInfo.speculative) {
+            stageIdToCompleteSpeculativeTaskCount(stageId) =
+              stageIdToCompleteSpeculativeTaskCount.getOrElse(stageId, 0) + 1
+            maxConcurrentTasks = getMaxConTasks
+            logDebug(s"Setting max concurrent tasks to $maxConcurrentTasks on spec. task end.")
+          }
         }
       }
     }
@@ -825,22 +838,16 @@ private[spark] class ExecutorAllocationManager(
       // We can limit the no. of concurrent tasks by a job group. A job group can have multiple jobs
       // with multiple stages. We need to get all the active stages belonging to a job group to
       // calculate the total no. of pending + running tasks to decide the maximum no. of executors
-      // we need at that time to serve the outstanding tasks. This is capped by the minimum of no.
-      // of outstanding tasks and the max concurrent limit specified for the job group if any.
+      // we need at that time to serve the outstanding tasks. This is capped by the minimum no. of
+      // outstanding tasks and the max concurrent limit specified for the job group if any.
 
       def getIncompleteTasksForStage(stageId: Int, numTasks: Int): Int = {
-        var runningTasks = 0
-        if (stageIdToTaskIndices.contains(stageId)) {
-          runningTasks =
-            stageIdToTaskIndices(stageId).size - stageIdToCompleteTaskCount.getOrElse(stageId, 0)
-        }
-
-        totalPendingTasks(stageId) + runningTasks
+        totalPendingTasks(stageId) + totalRunningTasks(stageId)
       }
 
-      def sumIncompleteTasksForStages: (Int, (Int, Int)) => Int = (a, b) => {
-        val activeTasks = getIncompleteTasksForStage(b._1, b._2)
-        sumOrMax(a, activeTasks)
+      def sumIncompleteTasksForStages: (Int, (Int, Int)) => Int = (totalTasks, stageToNumTasks) => {
+        val activeTasks = getIncompleteTasksForStage(stageToNumTasks._1, stageToNumTasks._2)
+        sumOrMax(totalTasks, activeTasks)
       }
       // Get the total running & pending tasks for all stages in a job group.
       def getIncompleteTasksForJobGroup(stagesItr: mutable.HashMap[Int, Int]): Int = {
@@ -910,6 +917,28 @@ private[spark] class ExecutorAllocationManager(
      * The number of tasks currently running across all stages.
      */
     def totalRunningTasks(): Int = numRunningTasks
+
+    def totalRunningTasks(stageId: Int): Int = {
+      runningTasks(stageId) + runningSpeculativeTasks(stageId)
+    }
+
+    def runningTasks(stageId: Int): Int = {
+      if (stageIdToTaskIndices.contains(stageId)) {
+        stageIdToTaskIndices(stageId).size - stageIdToCompleteTaskCount.getOrElse(stageId, 0)
+      } else {
+        0
+      }
+    }
+
+    def runningSpeculativeTasks(stageId: Int): Int = {
+      if (stageIdToNumSpeculativeTasks.contains(stageId) &&
+          stageIdToSpeculativeTaskIndices.contains(stageId)) {
+        stageIdToSpeculativeTaskIndices(stageId).size -
+          stageIdToCompleteSpeculativeTaskCount.getOrElse(stageId, 0)
+      } else {
+        0
+      }
+    }
 
     /**
      * Return true if an executor is not currently running a task, and false otherwise.

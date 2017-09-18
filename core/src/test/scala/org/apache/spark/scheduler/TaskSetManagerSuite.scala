@@ -1320,7 +1320,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       "exec1" -> "host1",
       "exec2" -> "host2"
     ).flatMap { case (exec, host) =>
-      // offer each executor twice (simulating 2 cores per executor)
+      // offer each executor twice (simulating 3 cores per executor)
       (0 until 3).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
     }
     // tsm accepts all offers as it has tasks to run & there is no constraint for maxConcurrentTasks

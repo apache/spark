@@ -192,7 +192,7 @@ class ExecutorAllocationManagerSuite
     assert(numExecutorsTarget(manager) === 10)
   }
 
-  test("add executors when speculative tasks added - original") {
+  test("add executors when speculative tasks added") {
     sc = createSparkContext(0, 10, 0)
     val manager = sc.executorAllocationManager.get
 
@@ -417,6 +417,7 @@ class ExecutorAllocationManagerSuite
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
       .set("spark.dynamicAllocation.testing", "true")
+      .set("spark.speculation", "true")
       .set("spark.job.group1.maxConcurrentTasks", "5")
       .set("spark.job.group2.maxConcurrentTasks", "11")
       .set("spark.job.group3.maxConcurrentTasks", "17")
@@ -432,16 +433,28 @@ class ExecutorAllocationManagerSuite
     sc.listenerBus.postToAll(SparkListenerJobStart(0, 0, stages, sc.getLocalProperties))
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(0)))
 
-    // Verify that we're capped at number of max concurrent tasks in the job group
+    // Verify that we're capped at number of max concurrent tasks in the job group.
+    assert(maxNumExecutorsNeeded(manager) === 2) // There are only 2 tasks in stage 0
+
+    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
+    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(1, 2, "executor-1")))
     assert(maxNumExecutorsNeeded(manager) === 2)
 
-    // submit a speculative task
+    // submit speculative tasks
     sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(0))
-    assert(maxNumExecutorsNeeded(manager) === 3) // should increase the no.
+    assert(maxNumExecutorsNeeded(manager) === 3)
+    sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(0))
+    assert(maxNumExecutorsNeeded(manager) === 4)
+
+    val speculativeTask1 = createTaskInfo(0, 1, "executor-2", true)
+    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, speculativeTask1))
+    sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(1, 3, "executor-2", true)))
+
+    assert(maxNumExecutorsNeeded(manager) === 4) // no. of executors should remain the same
 
     // Submit another stage in the same job
     sc.listenerBus.postToAll(SparkListenerStageSubmitted(stages(1)))
-    assert(maxNumExecutorsNeeded(manager) === 5)
+    assert(maxNumExecutorsNeeded(manager) === 5) // Limited by conf to 5 or else would have been 14.
 
     // Submit a job in group 2
     sc.setJobGroup("group2", "", false)
@@ -462,11 +475,20 @@ class ExecutorAllocationManagerSuite
     sc.listenerBus.postToAll(SparkListenerJobEnd(1, 20, JobSucceeded))
     assert(maxNumExecutorsNeeded(manager) === 22) // 33 - 11
 
+    // Complete a stage in job group1
+    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(1)))
+    // Stage1 in job0 finished 10 tasks, we have 4 outstanding (2 regular + 2 speculative). The max
+    // no. of tasks is configured as 5 for group1, so now 1 executor is reduced (5-4).
+    assert(maxNumExecutorsNeeded(manager) === 21)
+    // Kill a speculative task in stage0. This will reduce the no. of executors by 1.
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(0, 0, null,
+      TaskKilled("For testing"), speculativeTask1, null))
+    assert(maxNumExecutorsNeeded(manager) === 20)
+
     // Mark job in group 1 as complete
     sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(0)))
-    sc.listenerBus.postToAll(SparkListenerStageCompleted(stages(1)))
     sc.listenerBus.postToAll(SparkListenerJobEnd(0, 10, JobSucceeded))
-    assert(maxNumExecutorsNeeded(manager) === 17) // 22 - 5
+    assert(maxNumExecutorsNeeded(manager) === 17) // 20 - 3 (2 regular tasks + 1 speculative task)
 
     // Submit a job without any job group
     sc.clearJobGroup()
@@ -478,12 +500,18 @@ class ExecutorAllocationManagerSuite
     // Submit a speculative task in unbounded job group
     sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(4))
     sc.listenerBus.postToAll(SparkListenerSpeculativeTaskSubmitted(4))
-    assert(maxNumExecutorsNeeded(manager) === 352) // should increase the no.
+    assert(maxNumExecutorsNeeded(manager) === 352) // 2 executors added for speculative execution.
+
+    val speculativeTask2 = createTaskInfo(10, 30, "executor-2", true)
+    sc.listenerBus.postToAll(SparkListenerTaskStart(4, 0, speculativeTask2))
+    sc.listenerBus.postToAll(SparkListenerTaskEnd(4, 0, null, Success, speculativeTask2, null))
+
+    assert(maxNumExecutorsNeeded(manager) === 351) // Reduce count as speculative task completed.
 
     // Mark job without job group as complete
     sc.listenerBus.postToAll(SparkListenerStageCompleted(stage4))
     sc.listenerBus.postToAll(SparkListenerJobEnd(4, 20, JobSucceeded))
-    assert(maxNumExecutorsNeeded(manager) === 17) // 350 - 333
+    assert(maxNumExecutorsNeeded(manager) === 17) // 350 (351 with speculative) - 333
   }
 
   test("cancel pending executors when no longer needed") {
