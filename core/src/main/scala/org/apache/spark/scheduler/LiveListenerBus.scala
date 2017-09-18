@@ -99,7 +99,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
       case None =>
         val newQueue = new AsyncEventQueue(queue, conf, metrics)
         newQueue.addListener(listener)
-        if (started.get() && !stopped.get()) {
+        if (started.get()) {
           newQueue.start(sparkContext)
         }
         queues.add(newQueue)
