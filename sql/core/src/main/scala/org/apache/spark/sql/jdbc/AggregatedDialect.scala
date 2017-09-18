@@ -43,6 +43,6 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = {
-    dialects.flatMap(_.isCascadingTruncateTable).headOption
+    dialects.flatMap(_.isCascadingTruncateTable()).reduceOption(_ || _)
   }
 }
