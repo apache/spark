@@ -266,8 +266,11 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
       AddData(input2, (1, 11)),
       CheckLastBatch((1, 5, 11)),
       AddData(input2, (1, 10)),
-      CheckLastBatch(),           // left time 5 is not less than right time 10 - 5
+      CheckLastBatch(),           // left time 5s is not less than right time 10s - 5s
+
+      // Increase event time watermark to 20s by adding data with time = 30s on both inputs
       AddData(input1, (1, 3), (1, 30)),
+      AddData(input2, (0, 30)),
       CheckLastBatch((1, 3, 10), (1, 3, 11)),
       // watermark:    max event time - 10s   ==>   30s - 10s = 20s
       // state constraint:    20s < leftTime < rightTime - 5s   ==>   rightTime > 25s
@@ -276,13 +279,13 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
       AddData(input2),
       CheckLastBatch(),
 
-      //
+      // input with time <= 20s ignored due to watermark
       AddData(input2, (1, 20), (1, 21), (1, 28)),
-      CheckLastBatch((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)), // 20 ignored due to watermark
+      CheckLastBatch((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
 
-      //
+      // input with time <= 20s ignored due to watermark
       AddData(input1, (1, 20), (1, 21)),
-      CheckLastBatch((1, 21, 28))                                     // 20 ignored due to watermark
+      CheckLastBatch((1, 21, 28))
     )
   }
 
