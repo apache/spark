@@ -338,10 +338,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
             sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
             val cachedTable = getTableFromCatalogCache(table)
             val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
+            val defaultSizeInBytes = conf.defaultSizeInBytes
             if (autoUpdate) {
-              assert(cachedTableSizeInBytes != 0 && cachedTableSizeInBytes > 0)
+              assert(cachedTableSizeInBytes != defaultSizeInBytes && cachedTableSizeInBytes > 0)
             } else {
-              assert(getTableFromCatalogCache(table).stats.sizeInBytes == conf.defaultSizeInBytes)
+              assert(getTableFromCatalogCache(table).stats.sizeInBytes == defaultSizeInBytes)
             }
           }
         }
