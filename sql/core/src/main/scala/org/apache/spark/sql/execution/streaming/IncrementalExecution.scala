@@ -52,6 +52,7 @@ class IncrementalExecution(
       sparkSession.sessionState.planner.strategies
 
     override def extraPlanningStrategies: Seq[Strategy] =
+      StreamingJoinStrategy ::
       StatefulAggregationStrategy ::
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
@@ -114,6 +115,16 @@ class IncrementalExecution(
           stateInfo = Some(nextStatefulOperationStateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
+
+      case j @ StreamingSymmetricHashJoinExec(lKeys, rKeys, _, cond, _, _, _, left, right) =>
+        j.copy(
+          stateInfo = Some(nextStatefulOperationStateInfo),
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          stateWatermarkPredicates =
+            StreamingSymmetricHashJoinExecHelper.getStateWatermarkPredicates(
+              left.output, right.output, lKeys, rKeys, cond,
+              Some(offsetSeqMetadata.batchWatermarkMs))
+        )
     }
   }
 

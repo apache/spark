@@ -99,7 +99,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
   }
 
   /** Get the location of the state store */
-  private[state] def getLocation(stateStoreProviderId: StateStoreProviderId): Option[String] = {
+  private[sql] def getLocation(stateStoreProviderId: StateStoreProviderId): Option[String] = {
     rpcEndpointRef.askSync[Option[String]](GetLocation(stateStoreProviderId))
   }
 

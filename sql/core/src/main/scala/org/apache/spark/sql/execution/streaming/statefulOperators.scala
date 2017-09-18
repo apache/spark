@@ -133,26 +133,9 @@ trait WatermarkSupport extends UnaryExecNode {
 
   /** Generate an expression that matches data older than the watermark */
   lazy val watermarkExpression: Option[Expression] = {
-    val optionalWatermarkAttribute =
-      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
-
-    optionalWatermarkAttribute.map { watermarkAttribute =>
-      // If we are evicting based on a window, use the end of the window.  Otherwise just
-      // use the attribute itself.
-      val evictionExpression =
-        if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-          LessThanOrEqual(
-            GetStructField(watermarkAttribute, 1),
-            Literal(eventTimeWatermark.get * 1000))
-        } else {
-          LessThanOrEqual(
-            watermarkAttribute,
-            Literal(eventTimeWatermark.get * 1000))
-        }
-
-      logInfo(s"Filtering state store on: $evictionExpression")
-      evictionExpression
-    }
+    WatermarkSupport.watermarkExpression(
+      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey)),
+      eventTimeWatermark)
   }
 
   /** Predicate based on keys that matches data older than the watermark */
@@ -176,6 +159,31 @@ trait WatermarkSupport extends UnaryExecNode {
         }
       }
     }
+  }
+}
+
+object WatermarkSupport {
+
+  /** Generate an expression on given attributes that matches data older than the watermark */
+  def watermarkExpression(
+      optionalWatermarkExpression: Option[Expression],
+      optionalWatermarkMs: Option[Long]): Option[Expression] = {
+    if (optionalWatermarkExpression.isEmpty || optionalWatermarkMs.isEmpty) return None
+
+    val watermarkAttribute = optionalWatermarkExpression.get
+    // If we are evicting based on a window, use the end of the window.  Otherwise just
+    // use the attribute itself.
+    val evictionExpression =
+      if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+        LessThanOrEqual(
+          GetStructField(watermarkAttribute, 1),
+          Literal(optionalWatermarkMs.get * 1000))
+      } else {
+        LessThanOrEqual(
+          watermarkAttribute,
+          Literal(optionalWatermarkMs.get * 1000))
+      }
+    Some(evictionExpression)
   }
 }
 

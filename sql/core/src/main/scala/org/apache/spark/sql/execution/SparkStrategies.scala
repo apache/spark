@@ -257,6 +257,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
+  object StreamingJoinStrategy extends Strategy {
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      plan match {
+        case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right)
+          if left.isStreaming && right.isStreaming =>
+
+          new StreamingSymmetricHashJoinExec(
+            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+
+        case _ => Nil
+      }
+    }
+  }
+
   /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
    */
