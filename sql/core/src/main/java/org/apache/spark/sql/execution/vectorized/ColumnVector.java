@@ -16,7 +16,6 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.catalyst.util.MapData;
