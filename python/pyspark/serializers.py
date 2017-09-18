@@ -236,7 +236,7 @@ class ArrowPandasSerializer(ArrowSerializer):
         batches = [reader.get_batch(i) for i in range(reader.num_record_batches)]
         num_rows = sum([batch.num_rows for batch in batches])
         table = pa.Table.from_batches(batches)
-        return [c.to_pandas() for c in table.itercolumns()] + [{"size": num_rows}]
+        return [c.to_pandas() for c in table.itercolumns()] + [{"length": num_rows}]
 
     def __repr__(self):
         return "ArrowPandasSerializer"

@@ -76,10 +76,10 @@ def wrap_pandas_udf(f, return_type):
     def verify_result_length(*a):
         kwargs = a[-1]
         result = f(*a[:-1], **kwargs)
-        if len(result) != kwargs["size"]:
+        if len(result) != kwargs["length"]:
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
-                               "expected %d, got %d\nUse input vector length or kwarg['size']"
-                               % (kwargs["size"], len(result)))
+                               "expected %d, got %d\nUse input vector length or kwarg['length']"
+                               % (kwargs["length"], len(result)))
         return result
     return lambda *a: verify_result_length(*a)
 

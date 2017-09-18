@@ -3232,7 +3232,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         from pyspark.sql.functions import pandas_udf
         import pandas as pd
         df = self.spark.range(100000)
-        f0 = pandas_udf(lambda **kwargs: pd.Series(1).repeat(kwargs['size']), LongType())
+        f0 = pandas_udf(lambda **kwargs: pd.Series(1).repeat(kwargs['length']), LongType())
         res = df.select(f0())
         self.assertEquals(df.select(lit(1)).collect(), res.collect())
 
