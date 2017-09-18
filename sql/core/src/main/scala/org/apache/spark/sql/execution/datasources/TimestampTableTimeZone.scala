@@ -18,6 +18,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
@@ -89,7 +90,13 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
       // now we need to adjust all names to use the new version.
       val fixedExpressions = fixedPlan.mapExpressions { outerExp =>
         val adjustedExp = outerExp.transformUp { case exp: NamedExpression =>
-          newReplacements.get(exp.exprId).getOrElse(exp)
+          try {
+            newReplacements.get(exp.exprId).getOrElse(exp)
+          } catch {
+            // UnresolvedAttributes etc. will cause problems later anyway, we just dont' want to
+            // expose the error here
+            case ue: UnresolvedException[_] => exp
+          }
         }
         logDebug(s"adjusted $outerExp to $adjustedExp using $newReplacements")
         adjustedExp

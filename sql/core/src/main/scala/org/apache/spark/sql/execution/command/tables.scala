@@ -86,8 +86,7 @@ case class CreateTableLikeCommand(
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
-        bucketSpec = sourceTableDesc.bucketSpec,
-        properties = sourceTableDesc.properties)
+        bucketSpec = sourceTableDesc.bucketSpec)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]
