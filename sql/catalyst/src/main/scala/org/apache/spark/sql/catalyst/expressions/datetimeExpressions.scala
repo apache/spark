@@ -1225,8 +1225,6 @@ private[spark] case class TimestampTimezoneCorrection(
     to: Expression)
   extends TernaryExpression with ImplicitCastInputTypes {
 
-  // modeled on ToUTCTimestamp + Conv (as an example TernaryExpression)
-
   // convertTz() does the *opposite* conversion we want, which is why from & to appear reversed
   // in all the calls to convertTz.  Its used for showing how the display time changes when we go
   // from one timezone to another.  We want to see how should change the SQLTimestamp value to

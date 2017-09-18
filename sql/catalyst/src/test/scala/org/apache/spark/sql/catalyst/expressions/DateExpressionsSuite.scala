@@ -742,7 +742,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     test(null, null, null)
   }
 
-  test("parquet_timestamp_correction") {
+  test("timestamp_timezone_correction") {
     def test(t: String, fromTz: String, toTz: String, expected: String): Unit = {
       checkEvaluation(
         TimestampTimezoneCorrection(
@@ -757,8 +757,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           NonFoldableLiteral.create(toTz, StringType)),
         if (expected != null) Timestamp.valueOf(expected) else null)
     }
-    test("2015-07-24 00:00:00", "UTC", "PST", "2015-07-23 17:00:00")
-    test("2015-01-24 00:00:00", "UTC", "PST", "2015-01-23 16:00:00")
+    // These conversions may look backwards -- but this is *NOT* saying:
+    //   when the clock says 2015-07-24 00:00:00 in PST, what would it say to somebody in UTC?
+    // Instead, its saying -- suppose somebody stored "2015-07-24 00:00:00" while in PST, but
+    // as millis-since-epoch.  What millis-since-epoch would I need to also see
+    // "2015-07-24 00:00:00" if my clock were in UTC? Just for testing convenience, we input
+    // that last value as "what would my clock in PST say for that final millis-since-epoch?"
+    test("2015-07-24 00:00:00", "PST", "UTC", "2015-07-23 17:00:00")
+    test("2015-01-24 00:00:00", "PST", "UTC", "2015-01-23 16:00:00")
     test(null, "UTC", "UTC", null)
     test("2015-07-24 00:00:00", null, null, null)
     test(null, null, null, null)
