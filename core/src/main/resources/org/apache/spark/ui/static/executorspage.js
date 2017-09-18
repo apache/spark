@@ -68,31 +68,6 @@ function createTemplateURI(appId) {
     return location.origin + "/static/executorspage-template.html";
 }
 
-function getStandAloneppId(cb) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    ind = words.indexOf("history");
-    if (ind > 0) {
-        var appId = words[ind + 1];
-        cb(appId);
-        return;
-    }
-    //Looks like Web UI is running in standalone mode
-    //Let's get application-id using REST End Point
-    $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
-        if (response && response.length > 0) {
-            var appId = response[0].id
-            cb(appId);
-            return;
-        }
-    });
-}
-
 function createRESTEndPoint(appId) {
     var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
@@ -113,16 +88,6 @@ function createRESTEndPoint(appId) {
         }
     }
     return location.origin + "/api/v1/applications/" + appId + "/allexecutors";
-}
-
-function formatLogsCells(execLogs, type) {
-    if (type !== 'display') return Object.keys(execLogs);
-    if (!execLogs) return;
-    var result = '';
-    $.each(execLogs, function (logName, logUrl) {
-        result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
-    });
-    return result;
 }
 
 function logsExist(execs) {
@@ -180,7 +145,7 @@ $(document).ready(function () {
 
     executorsSummary = $("#active-executors");
 
-    getStandAloneppId(function (appId) {
+    getStandAloneAppId(function (appId) {
 
         var endPoint = createRESTEndPoint(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {

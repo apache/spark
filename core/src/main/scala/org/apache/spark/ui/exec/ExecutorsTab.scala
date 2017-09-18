@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import scala.collection.mutable
 import scala.collection.mutable.{LinkedHashMap, ListBuffer}
 
 import org.apache.spark.{Resubmitted, SparkConf, SparkContext}
@@ -67,14 +68,13 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
     extends SparkListener {
   val executorToTaskSummary = LinkedHashMap[String, ExecutorTaskSummary]()
   var executorEvents = new ListBuffer[SparkListenerEvent]()
+  val executorIdToAddress = mutable.HashMap[String, String]()
 
   private val maxTimelineExecutors = conf.getInt("spark.ui.timeline.executors.maximum", 1000)
   private val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
 
   def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
-
   def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
-
   override def onExecutorAdded(
       executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId
@@ -168,6 +168,17 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
       isBlacklisted: Boolean): Unit = {
     val execTaskSummary = executorToTaskSummary.getOrElseUpdate(eid, ExecutorTaskSummary(eid))
     execTaskSummary.isBlacklisted = isBlacklisted
+  }
+
+  def getExecutorHost(eid: String): String = {
+    val host = activeStorageStatusList.find { id =>
+      id.blockManagerId.executorId == eid
+    }
+    if( host.nonEmpty ) {
+      return host.head.blockManagerId.hostPort
+    } else {
+      return "CANNOT FIND ADDRESS"
+    }
   }
 
   override def onExecutorBlacklisted(
