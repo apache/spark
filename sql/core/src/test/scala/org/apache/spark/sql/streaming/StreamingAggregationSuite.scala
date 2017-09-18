@@ -24,22 +24,20 @@ import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkEnv, SparkException}
-import org.apache.spark.rdd.{BlockRDD, RDD}
+import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.exchange.Exchange
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
-import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 
 object FailureSingleton {
@@ -435,13 +433,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   /** Add blocks of data to the `BlockRDDBackedSource`. */
   case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {
-      if (data.nonEmpty) {
-        data.foreach(source.addData)
-      } else {
-        // we would like to create empty blockRDD's so add an empty block here.
-        source.addData()
-      }
-      source.releaseLock()
+      source.addBlocks(data: _*)
       (source, LongOffset(source.counter))
     }
   }
@@ -449,50 +441,60 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
   test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned to 1") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
-      withTempDir { tempDir =>
-        val aggregated: Dataset[Long] =
-          spark.readStream
-            .format((new MockSourceProvider).getClass.getCanonicalName)
-            .load()
-            .coalesce(1)
-            .groupBy()
-            .count()
-            .as[Long]
+      // `coalesce(1)` changes the partitioning of data to `SinglePartition` which by default
+      // satisfies the required distributions of all aggregations. Therefore in our SparkPlan, we
+      // don't have any shuffling. However, `coalesce(1)` only guarantees that the RDD has at most 1
+      // partition. Which means that if we have an input RDD with 0 partitions, nothing gets
+      // executed. Therefore the StateStore's don't save any delta files for a given trigger. This
+      // then leads to `FileNotFoundException`s in the subsequent batch.
+      // This isn't the only problem though. Once we introduce a shuffle before
+      // `StateStoreRestoreExec`, the input to the operator is an empty iterator. When performing
+      // `groupBy().agg(...)`, `HashAggregateExec` returns a `0` value for all aggregations. If
+      // we fail to restore the previous state in `StateStoreRestoreExec`, we save the 0 value in
+      // `StateStoreSaveExec` losing all previous state.
+      val aggregated: Dataset[Long] =
+        spark.readStream.format((new MockSourceProvider).getClass.getCanonicalName)
+        .load().coalesce(1).groupBy().count().as[Long]
 
-        testStream(aggregated, Complete())(
-          AddBlockData(inputSource, Seq(1)),
-          CheckLastBatch(1),
-          AssertOnQuery("Verify no shuffling") { se =>
-            checkAggregationChain(se, expectShuffling = false, 1)
-          },
-          AddBlockData(inputSource), // create an empty trigger
-          CheckLastBatch(1),
-          AssertOnQuery("Verify addition of exchange operator") { se =>
-            checkAggregationChain(se, expectShuffling = true, 1)
-          },
-          AddBlockData(inputSource, Seq(2, 3)),
-          CheckLastBatch(3),
-          AddBlockData(inputSource),
-          CheckLastBatch(3),
-          StopStream
-        )
-      }
+      testStream(aggregated, Complete())(
+        AddBlockData(inputSource, Seq(1)),
+        CheckLastBatch(1),
+        AssertOnQuery("Verify no shuffling") { se =>
+          checkAggregationChain(se, expectShuffling = false, 1)
+        },
+        AddBlockData(inputSource), // create an empty trigger
+        CheckLastBatch(1),
+        AssertOnQuery("Verify addition of exchange operator") { se =>
+          checkAggregationChain(se, expectShuffling = true, 1)
+        },
+        AddBlockData(inputSource, Seq(2, 3)),
+        CheckLastBatch(3),
+        AddBlockData(inputSource),
+        CheckLastBatch(3),
+        StopStream
+      )
     }
   }
 
-  test("SPARK-21977: coalesce(1) should still be repartitioned when it has keyExpressions") {
+  test("SPARK-21977: coalesce(1) with aggregation should still be repartitioned when it " +
+    "has non-empty grouping keys") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
       withTempDir { tempDir =>
 
+        // `coalesce(1)` changes the partitioning of data to `SinglePartition` which by default
+        // satisfies the required distributions of all aggregations. However, when we have
+        // non-empty grouping keys, in streaming, we must repartition to
+        // `spark.sql.shuffle.partitions`, otherwise only a single StateStore is used to process
+        // all keys. This may be fine, however, if the user removes the coalesce(1) or changes to
+        // a `coalesce(2)` for example, then the default behavior is to shuffle to
+        // `spark.sql.shuffle.partitions` many StateStores. When this happens, all StateStore's
+        // except 1 will be missing their previous delta files, which causes the stream to fail
+        // with FileNotFoundException.
         def createDf(partitions: Int): Dataset[(Long, Long)] = {
           spark.readStream
             .format((new MockSourceProvider).getClass.getCanonicalName)
-            .load()
-            .coalesce(partitions)
-            .groupBy('a % 1) // just to give it a fake key
-            .count()
-            .as[(Long, Long)]
+            .load().coalesce(partitions).groupBy('a % 1).count().as[(Long, Long)]
         }
 
         testStream(createDf(1), Complete())(
@@ -536,29 +538,18 @@ class BlockRDDBackedSource(spark: SparkSession) extends Source {
   private val blockMgr = SparkEnv.get.blockManager
   private var blocks: Seq[BlockId] = Seq.empty
 
-  private var streamLock: CountDownLatch = new CountDownLatch(1)
-
-  def addData(data: Int*): Unit = {
-    if (streamLock.getCount == 0) {
-      streamLock = new CountDownLatch(1)
-    }
-    synchronized {
-      if (data.nonEmpty) {
-        val id = TestBlockId(counter.toString)
-        blockMgr.putIterator(id, data.iterator, StorageLevel.MEMORY_ONLY)
-        blocks ++= id :: Nil
-      }
+  def addBlocks(dataBlocks: Seq[Int]*): Unit = synchronized {
+    dataBlocks.foreach { data =>
+      val id = TestBlockId(counter.toString)
+      blockMgr.putIterator(id, data.iterator, StorageLevel.MEMORY_ONLY)
+      blocks ++= id :: Nil
       counter += 1
     }
+    counter += 1
   }
 
-  def releaseLock(): Unit = streamLock.countDown()
-
-  override def getOffset: Option[Offset] = {
-    streamLock.await()
-    synchronized {
-      if (counter == 0) None else Some(LongOffset(counter))
-    }
+  override def getOffset: Option[Offset] = synchronized {
+    if (counter == 0) None else Some(LongOffset(counter))
   }
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {

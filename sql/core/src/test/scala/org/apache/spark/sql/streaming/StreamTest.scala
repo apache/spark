@@ -351,6 +351,8 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
     }
 
     var manualClockExpectedTime = -1L
+    val defaultCheckpointLocation =
+      Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
     try {
       startedTest.foreach { action =>
         logInfo(s"Processing test stream action: $action")
@@ -363,8 +365,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
             if (triggerClock.isInstanceOf[StreamManualClock]) {
               manualClockExpectedTime = triggerClock.asInstanceOf[StreamManualClock].getTimeMillis()
             }
-            val metadataRoot = Option(checkpointLocation).getOrElse(
-              Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath)
+            val metadataRoot = Option(checkpointLocation).getOrElse(defaultCheckpointLocation)
 
             additionalConfs.foreach(pair => {
               val value =
