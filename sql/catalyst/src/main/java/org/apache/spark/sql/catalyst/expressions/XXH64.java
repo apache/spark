@@ -17,6 +17,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 // scalastyle: off
 /**
@@ -83,6 +84,10 @@ public final class XXH64 {
 
   public long hashUnsafeBytes(Object base, long offset, int length) {
     return hashUnsafeBytes(base, offset, length, seed);
+  }
+
+  public static long hashUnsafeBytesMB(MemoryBlock base, long offset, int length, long seed) {
+    return hashUnsafeBytes(base.getBaseObject(), offset, length, seed);
   }
 
   public static long hashUnsafeBytes(Object base, long offset, int length, long seed) {

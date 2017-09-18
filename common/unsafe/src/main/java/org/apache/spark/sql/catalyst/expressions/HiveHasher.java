@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions;
 
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 
 /**
  * Simulates Hive's hashing function from Hive v1.2.1
@@ -36,6 +37,10 @@ public class HiveHasher {
 
   public static int hashLong(long input) {
     return (int) ((input >>> 32) ^ input);
+  }
+
+  public static int hashUnsafeBytesMB(MemoryBlock base, long offset, int lengthInBytes) {
+    return hashUnsafeBytes(base.getBaseObject(), offset, lengthInBytes);
   }
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes) {
