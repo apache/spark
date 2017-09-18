@@ -30,9 +30,9 @@ class IntegralDeltaSuite extends SparkFunSuite {
   testIntegralDelta(new LongColumnStats, LONG, LongDelta)
 
   def testIntegralDelta[I <: IntegralType](
-                                            columnStats: ColumnStats,
-                                            columnType: NativeColumnType[I],
-                                            scheme: CompressionScheme) {
+      columnStats: ColumnStats,
+      columnType: NativeColumnType[I],
+      scheme: CompressionScheme) {
 
     def skeleton(input: Seq[I#InternalType]) {
       // -------------

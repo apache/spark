@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.columnar.compression
 
-import java.nio.ByteBuffer
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.{ColumnAccessor, NativeColumnAccessor}
 import org.apache.spark.sql.execution.vectorized.WritableColumnVector
