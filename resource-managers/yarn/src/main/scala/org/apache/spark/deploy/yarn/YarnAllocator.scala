@@ -566,7 +566,7 @@ private[yarn] class YarnAllocator(
       val alreadyReleased = releasedContainers.remove(containerId)
       val hostOpt = allocatedContainerToHostMap.get(containerId)
       val onHostStr = hostOpt.map(host => s" on host: $host").getOrElse("")
-      val exitReason = if (!alreadyReleased && !completedContainerIdSet.contains(containerId)) {
+      val exitReason = if (!alreadyReleased && !completedContainerIdSet.remove(containerId)) {
         // Decrement the number of executors running. The next iteration of
         // the ApplicationMaster's reporting thread will take care of allocating.
         numExecutorsRunning.decrementAndGet()
