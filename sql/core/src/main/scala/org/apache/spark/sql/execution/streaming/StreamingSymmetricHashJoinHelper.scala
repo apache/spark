@@ -63,6 +63,18 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
       rightKeys: Seq[Expression],
       condition: Option[Expression],
       eventTimeWatermark: Option[Long]): JoinStateWatermarkPredicates = {
+
+
+    // Join keys of both sides generate rows of the same fields, that is, same sequence of data
+    // types. If one side (say left side) has a column (say timestmap) that has a watermark on it,
+    // then it will never consider joining keys that are < state key watermark (i.e. event time
+    // watermark). On the other side (i.e. right side), even if there is no watermark defined,
+    // there has to be an equivalent column (i.e., timestamp). And any right side data that has the
+    // timestamp < watermark will not match will not match with left side data, as the left side get
+    // filtered with the explicitly defined watermark. So, the watermark in timestamp column in
+    // left side keys effectively causes the timestamp on the right side to have a watermark.
+    // We will use the ordinal of the left timestamp in the left keys to find the corresponding
+    // right timestamp in the right keys.
     val joinKeyOrdinalForWatermark: Option[Int] = {
       leftKeys.zipWithIndex.collectFirst {
         case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
@@ -80,7 +92,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
       val isWatermarkDefinedOnInput = oneSideInputAttributes.exists(_.metadata.contains(delayKey))
       val isWatermarkDefinedOnJoinKey = joinKeyOrdinalForWatermark.isDefined
 
-      if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 explained in the class docs
+      if (isWatermarkDefinedOnJoinKey) { // case 1 and 3 in the StreamingSymmetricHashJoinExec docs
         val keyExprWithWatermark = BoundReference(
           joinKeyOrdinalForWatermark.get,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
@@ -88,7 +100,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermark)
         expr.map(JoinStateKeyWatermarkPredicate)
 
-      } else if (isWatermarkDefinedOnInput) { // case 2 explained in the class docs
+      } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = getStateValueWatermark(
           attributesToFindStateWatemarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
@@ -100,7 +112,6 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
 
       } else {
         None
-
       }
     }
 
@@ -159,6 +170,11 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
     }
 
     val allStateWatermarks = splitConjunctivePredicates(joinCondition.get).flatMap { predicate =>
+
+      // The generated the state watermark cleanup expression is inclusive of the state watermark.
+      // If state watermark is W, all state where timestamp <= W will be cleaned up.
+      // Now when the canonicalized join condition solves to leftTime >= W, we dont want to clean
+      // up leftTime <= W. Rather we should clean up leftTime <= W - 1. Hence the -1 below.
       val stateWatermark = predicate match {
         case LessThan(l, r) => getStateWatermarkSafely(l, r)
         case LessThanOrEqual(l, r) => getStateWatermarkSafely(l, r).map(_ - 1)
@@ -192,7 +208,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
 
     def containsAttributeToFindStateConstraintFor(e: Expression): Boolean = {
       e.collectLeaves().collectFirst {
-        case a@AttributeReference(_, TimestampType, _, _)
+        case a @ AttributeReference(_, TimestampType, _, _)
           if attributesToFindStateWatermarkFor.contains(a) => a
       }.nonEmpty
     }
@@ -237,16 +253,16 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
     logDebug(s"Constraint term from join condition:\t$constraintTerm")
     val exprWithWatermarkSubstituted = (terms - constraintTerm).map { term =>
       term.transform {
-        case a@AttributeReference(_, TimestampType, _, metadata)
-          if attributesWithEventWatermark.contains(a) && a.metadata.contains(delayKey) =>
-          Literal(eventWatermark.get)
+        case a @ AttributeReference(_, TimestampType, _, metadata)
+          if attributesWithEventWatermark.contains(a) && metadata.contains(delayKey) =>
+          Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }
     }.reduceLeft(Add)
 
     // Calculate the constraint value
     logInfo(s"Final expression to evaluate constraint:\t$exprWithWatermarkSubstituted")
     val constraintValue = exprWithWatermarkSubstituted.eval().asInstanceOf[java.lang.Double]
-    Some(Double2double(constraintValue).toLong)
+    Some((Double2double(constraintValue) / 1000.0).toLong)
   }
 
   /**
@@ -265,7 +281,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
     /**
      * Recursively split the expression into its leaf terms contains attributes or literals.
      * Returns terms only of the forms:
-     *    Csat(AttributeReference), UnaryMinus(Cast(AttributeReference)),
+     *    Cast(AttributeReference), UnaryMinus(Cast(AttributeReference)),
      *    Cast(AttributeReference, Double), UnaryMinus(Cast(AttributeReference, Double))
      *    Multiply(Literal), UnaryMinus(Multiply(Literal))
      *    Multiply(Cast(Literal)), UnaryMinus(Multiple(Cast(Literal)))
@@ -273,7 +289,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
      * Note:
      * - If term needs to be negated for making it a commutative term,
      *   then it will be wrapped in UnaryMinus(...)
-     * - Each terms will be representing timestamp value or time interval in milliseconds,
+     * - Each terms will be representing timestamp value or time interval in microseconds,
      *   typed as doubles.
      */
     def collect(expr: Expression, negate: Boolean): Seq[Expression] = {
@@ -306,18 +322,25 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
           val castedLit = lit.dataType match {
             case CalendarIntervalType =>
               val calendarInterval = lit.value.asInstanceOf[CalendarInterval]
-              val millisPerMonth = CalendarInterval.MICROS_PER_DAY / 1000 * 31
-              val intervalMillis = calendarInterval.milliseconds +
-                millisPerMonth * calendarInterval.months
-              Literal(intervalMillis.toDouble)
-            case DoubleType => Multiply(lit, Literal(1000.0))
+              if (calendarInterval.months > 0) {
+                invalid = true
+                logWarning(
+                  s"Failed to extract state value watermark from condition $exprToCollectFrom " +
+                    s"as imprecise intervals like months and years cannot be used for precise" +
+                    s"watermark calculation")
+                Literal(0.0)
+              } else {
+                Literal(calendarInterval.microseconds.toDouble)
+              }
+            case DoubleType =>
+              Multiply(lit, Literal(1000000.0))
             case _: NumericType | _: TimestampType =>
-              Multiply(Cast(lit, DoubleType), Literal(1000.0))
+              Multiply(Cast(lit, DoubleType), Literal(1000000.0))
           }
           Seq(negateIfNeeded(castedLit, negate))
         case a @ _ =>
           logWarning(
-            s"Failed to extract state constraint from condition $exprToCollectFrom due to $a")
+            s"Failed to extract state value watermark from condition $exprToCollectFrom due to $a")
           invalid = true
           Seq.empty
       }

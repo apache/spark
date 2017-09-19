@@ -56,7 +56,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  *
  * If a timestamp column with event time watermark is present in the join keys or in the input
  * data, then the it uses the watermark figure out which rows in the buffer will not join with
- * and new data, and therefore can be discarded. Depending on the provided query conditions, we
+ * and the new data, and therefore can be discarded. Depending on the provided query conditions, we
  * can define thresholds on both state key (i.e. joining keys) and state value (i.e. input rows).
  * There are three kinds of queries possible regarding this as explained below.
  * Assume that watermark has been defined on both `leftTime` and `rightTime` columns used below.
@@ -85,7 +85,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  *
  *   In this case, the event-time watermark and the BETWEEN condition can be used to calculate a
  *   state watermark, i.e., time threshold for the state rows that can be discarded.
- *   For example, say the each join side has a time column, named "leftTime" and
+ *   For example, say each join side has a time column, named "leftTime" and
  *   "rightTime", and there is a join condition "leftTime > rightTime - 8 min".
  *   While processing, say the watermark on right input is "12:34". This means that from henceforth,
  *   only right inputs rows with "rightTime > 12:34" will be processed, and any older rows will be
@@ -107,7 +107,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  *   - State can be dropped from BOTH sides only when there are conditions of the above forms that
  *     define time bounds on timestamp in both directions.
  *
- * 3. When both window in join key and time range condiions are present, case 1 + 2.
+ * 3. When both window in join key and time range conditions are present, case 1 + 2.
  *    In this case, since window equality is a stricter condition than the time range, we can
  *    use the the State Key Watermark = event time watermark to discard state (similar to case 1).
  */
@@ -134,26 +134,15 @@ case class StreamingSymmetricHashJoinExec(
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), left, right)
   }
 
-  assert(joinType == Inner, s"${getClass.getSimpleName} should not take $joinType as the JoinType")
-  assert(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
+  require(joinType == Inner, s"${getClass.getSimpleName} should not take $joinType as the JoinType")
+  require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
 
   private val storeConf = new StateStoreConf(sqlContext.conf)
   private val hadoopConfBcast = sparkContext.broadcast(
     new SerializableConfiguration(SessionState.newHadoopConf(
       sparkContext.hadoopConfiguration, sqlContext.conf)))
 
-  /**
-   * Join keys of both sides generate rows of the same fields, that is, same sequence of data types.
-   * If one side (say left side) has a column (say timestmap) that has a watermark on it,
-   * then it will never consider joining keys that are < state key watermark (i.e. event time
-   * watermark). On the other side (i.e. right side), even if there is no watermark defined,
-   * there has to be an equivalent column (i.e. timestamp). And any right side data that has the
-   * timestamp < watermark will not match will not match with left side data, as the left side get
-   * filtered with the explicitly defined watermark. So, the watermark in timestamp column in
-   * left side keys effectively causes the timestamp on the right side to have a watermark.
-   * We will use the ordinal of the left timestamp in the left keys to find the corresponding
-   * right timestamp in the right keys.
-   */
+
   private val joinKeyOrdinalForWatermark: Option[Int] = {
     leftKeys.zipWithIndex.collectFirst {
       case (ne: NamedExpression, index) if ne.metadata.contains(delayKey) => index
@@ -201,24 +190,24 @@ case class StreamingSymmetricHashJoinExec(
     val leftSideJoiner = new OneSideHashJoiner(LeftSide, left.output, leftKeys, leftInputIter)
     val rightSideJoiner = new OneSideHashJoiner(RightSide, right.output, rightKeys, rightInputIter)
 
-    /*
-      Join one side input using the other side's buffered/state rows. Here is how it is done.
 
-      - `leftJoiner.joinWith(rightJoiner)` generates all rows from matching new left input with
-        stored right input, and also stores all the left input
+    //  Join one side input using the other side's buffered/state rows. Here is how it is done.
+    //
+    //  - `leftJoiner.joinWith(rightJoiner)` generates all rows from matching new left input with
+    //    stored right input, and also stores all the left input
+    //
+    //  - `rightJoiner.joinWith(leftJoiner)` generates all rows from matching new right input with
+    //    stored right input, and also stores all the right input. It also generates all rows from
+    //    matching new left input with new right input, since the new left input has become stored
+    //    by that point. This tiny asymmetry is necessary to avoid doubling.
 
-      - `leftJoiner.joinWith(rightJoiner)` generates all rows from matching new right input with
-        stored right input, and also stores all the right input. It also generates all rows from
-        matching new left input with new right input, since the new left input has become stored
-        by that point. This tiny asymmetry is necessary to avoid doubling.
-    */
-    val leftOutputIter = leftSideJoiner.joinWithOtherSide(rightSideJoiner) {
+    val leftOutputIter = leftSideJoiner.storeAndjoinWithOtherSide(rightSideJoiner) {
       (inputRow: UnsafeRow, matchedRow: UnsafeRow) =>
         joinedRow.withLeft(inputRow).withRight(matchedRow)
     }
-    val rightOutputIter = rightSideJoiner.joinWithOtherSide(leftSideJoiner) {
+    val rightOutputIter = rightSideJoiner.storeAndjoinWithOtherSide(leftSideJoiner) {
       (inputRow: UnsafeRow, matchedRow: UnsafeRow) =>
-        joinedRow.withRight(inputRow).withLeft(matchedRow)
+        joinedRow.withLeft(matchedRow).withRight(inputRow)
     }
 
     // Filter the joined rows based on the given condition.
@@ -283,7 +272,7 @@ case class StreamingSymmetricHashJoinExec(
      * @param generateJoinedRow Function to generate the joined row from the
      *                          input row from this side and the matched row from the other side
      */
-    def joinWithOtherSide(
+    def storeAndjoinWithOtherSide(
         otherSideJoiner: OneSideHashJoiner)(
         generateJoinedRow: (UnsafeRow, UnsafeRow) => JoinedRow): Iterator[InternalRow] = {
 
@@ -316,7 +305,7 @@ case class StreamingSymmetricHashJoinExec(
           joinStateManager.removeByKeyCondition(predicate.eval _)
         case Some(JoinStateValueWatermarkPredicate(expr)) =>
           val predicate = newPredicate(expr, inputAttributes)
-          joinStateManager.removeByPredicateOnValues(predicate.eval _)
+          joinStateManager.removeByValueCondition(predicate.eval _)
         case _ =>
       }
     }

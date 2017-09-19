@@ -95,7 +95,7 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       /** Remove values where `time <= threshold` */
       def removeByValue(watermark: Long): Unit = {
         val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
-        manager.removeByPredicateOnValues(
+        manager.removeByValueCondition(
           GeneratePredicate.generate(expr, inputValueAttribs).eval _)
       }
 
@@ -246,18 +246,28 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       AddData(input1, 1),
       CheckAnswer(),
       assertNumStateRows(total = 1, updated = 1),
+
       AddData(input2, 1),
       CheckLastBatch((1, 10, 2, 3)),
+      assertNumStateRows(total = 2, updated = 1),
+
       AddData(input1, 25),
-      CheckLastBatch(),
+      CheckLastBatch(), // since there is only 1 watermark operator, the watermark should be 15
+      assertNumStateRows(total = 3, updated = 1),
+
       AddData(input2, 25),
-      CheckLastBatch((25, 30, 50, 75)),   // sets the watermark to 25 - 10 = 15
+      CheckLastBatch((25, 30, 50, 75)), // watermark = 15 should remove 2 rows having window=[0,10]
+      assertNumStateRows(total = 2, updated = 1),
+
       AddData(input2, 1),
-      CheckLastBatch(),       // Does not join with previous 1 because state has been removed
+      CheckLastBatch(),       // Should not join as < 15 removed
+      // 1 row added to state because it was not filtered by watermark as no watermark on input2,
+      // but it was immediately removed from state
+      assertNumStateRows(total = 2, updated = 1),
+
       AddData(input1, 5),
-      CheckLastBatch(),
-      AddData(input2, 5),
-      CheckLastBatch()        // Does not join as new data < 15 is ignored
+      CheckLastBatch(),       // Should not join or add to state as < 15 got filtered by watermark
+      assertNumStateRows(total = 2, updated = 0)
     )
   }
 

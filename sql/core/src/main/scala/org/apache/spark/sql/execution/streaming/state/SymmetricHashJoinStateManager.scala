@@ -111,7 +111,7 @@ class SymmetricHashJoinStateManager(
   /**
    * Remove using a predicate on values. See class docs for more context and implementation details.
    */
-  def removeByPredicateOnValues(condition: UnsafeRow => Boolean): Unit = {
+  def removeByValueCondition(condition: UnsafeRow => Boolean): Unit = {
     val allKeyToNumValues = keyToNumValues.iterator
 
     var numValues: Long = 0L
