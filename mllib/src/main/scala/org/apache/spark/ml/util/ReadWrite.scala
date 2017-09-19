@@ -399,14 +399,17 @@ private[ml] object DefaultParamsReader {
    * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
    * TODO: Move to [[Metadata]] method
    */
-  def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
+  def getAndSetParams(instance: Params, metadata: Metadata,
+      skipParams: List[String] = null): Unit = {
     implicit val format = DefaultFormats
     metadata.params match {
       case JObject(pairs) =>
         pairs.foreach { case (paramName, jsonValue) =>
-          val param = instance.getParam(paramName)
-          val value = param.jsonDecode(compact(render(jsonValue)))
-          instance.set(param, value)
+          if (skipParams == null || !skipParams.contains(paramName)) {
+            val param = instance.getParam(paramName)
+            val value = param.jsonDecode(compact(render(jsonValue)))
+            instance.set(param, value)
+          }
         }
       case _ =>
         throw new IllegalArgumentException(
