@@ -190,7 +190,7 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
 }
 
 private[sql] object TimestampTableTimeZone {
-  val TIMEZONE_PROPERTY = "table.timezone"
+  val TIMEZONE_PROPERTY = "table.timezone-adjustment"
 
   /**
    * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
