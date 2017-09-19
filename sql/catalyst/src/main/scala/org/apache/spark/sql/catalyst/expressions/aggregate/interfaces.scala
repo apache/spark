@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.util.Objects
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
@@ -72,11 +74,19 @@ object AggregateExpression {
       aggregateFunction: AggregateFunction,
       mode: AggregateMode,
       isDistinct: Boolean): AggregateExpression = {
+    val state = if (aggregateFunction.resolved) {
+      Seq(aggregateFunction.toString, aggregateFunction.dataType,
+        aggregateFunction.nullable, mode, isDistinct)
+    } else {
+      Seq(aggregateFunction.toString, mode, isDistinct)
+    }
+    val hashCode = state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
+
     AggregateExpression(
       aggregateFunction,
       mode,
       isDistinct,
-      NamedExpression.newExprId)
+      ExprId(hashCode))
   }
 }
 
