@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming
 
 import java.util.{Locale, TimeZone}
-import java.util.concurrent.CountDownLatch
 
 import org.scalatest.Assertions
 import org.scalatest.BeforeAndAfterAll
@@ -430,14 +429,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     true
   }
 
-  /** Add blocks of data to the `BlockRDDBackedSource`. */
-  case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
-    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
-      source.addBlocks(data: _*)
-      (source, LongOffset(source.counter))
-    }
-  }
-
   test("SPARK-21977: coalesce(1) with 0 partition RDD should be repartitioned to 1") {
     val inputSource = new BlockRDDBackedSource(spark)
     MockSourceProvider.withMockSources(inputSource) {
@@ -528,38 +519,46 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       }
     }
   }
-}
 
-/**
- * A Streaming Source that is backed by a BlockRDD and that can create RDDs with 0 blocks at will.
- */
-class BlockRDDBackedSource(spark: SparkSession) extends Source {
-  var counter = 0L
-  private val blockMgr = SparkEnv.get.blockManager
-  private var blocks: Seq[BlockId] = Seq.empty
+  /** Add blocks of data to the `BlockRDDBackedSource`. */
+  case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
+    override def addData(query: Option[StreamExecution]): (Source, Offset) = {
+      source.addBlocks(data: _*)
+      (source, LongOffset(source.counter))
+    }
+  }
 
-  def addBlocks(dataBlocks: Seq[Int]*): Unit = synchronized {
-    dataBlocks.foreach { data =>
-      val id = TestBlockId(counter.toString)
-      blockMgr.putIterator(id, data.iterator, StorageLevel.MEMORY_ONLY)
-      blocks ++= id :: Nil
+  /**
+   * A Streaming Source that is backed by a BlockRDD and that can create RDDs with 0 blocks at will.
+   */
+  class BlockRDDBackedSource(spark: SparkSession) extends Source {
+    var counter = 0L
+    private val blockMgr = SparkEnv.get.blockManager
+    private var blocks: Seq[BlockId] = Seq.empty
+
+    def addBlocks(dataBlocks: Seq[Int]*): Unit = synchronized {
+      dataBlocks.foreach { data =>
+        val id = TestBlockId(counter.toString)
+        blockMgr.putIterator(id, data.iterator, StorageLevel.MEMORY_ONLY)
+        blocks ++= id :: Nil
+        counter += 1
+      }
       counter += 1
     }
-    counter += 1
-  }
 
-  override def getOffset: Option[Offset] = synchronized {
-    if (counter == 0) None else Some(LongOffset(counter))
-  }
+    override def getOffset: Option[Offset] = synchronized {
+      if (counter == 0) None else Some(LongOffset(counter))
+    }
 
-  override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
-    val rdd = new BlockRDD[Int](spark.sparkContext, blocks.toArray)
-      .map(i => InternalRow(i)) // we don't really care about the values in this test
-    blocks = Seq.empty
-    spark.internalCreateDataFrame(rdd, schema, isStreaming = true).toDF()
-  }
-  override def schema: StructType = MockSourceProvider.fakeSchema
-  override def stop(): Unit = {
-    blockMgr.getMatchingBlockIds(_.isInstanceOf[TestBlockId]).foreach(blockMgr.removeBlock(_))
+    override def getBatch(start: Option[Offset], end: Offset): DataFrame = synchronized {
+      val rdd = new BlockRDD[Int](spark.sparkContext, blocks.toArray)
+        .map(i => InternalRow(i)) // we don't really care about the values in this test
+      blocks = Seq.empty
+      spark.internalCreateDataFrame(rdd, schema, isStreaming = true).toDF()
+    }
+    override def schema: StructType = MockSourceProvider.fakeSchema
+    override def stop(): Unit = {
+      blockMgr.getMatchingBlockIds(_.isInstanceOf[TestBlockId]).foreach(blockMgr.removeBlock(_))
+    }
   }
 }
