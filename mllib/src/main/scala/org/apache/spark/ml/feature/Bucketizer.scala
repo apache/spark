@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Model[Bucketizer] with HasHandleInvalid with HasInputCol with HasOutputCol
-    with MultipleBucketizerInterface with DefaultParamsWritable {
+    with HasInputCols with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
@@ -98,72 +98,6 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   setDefault(handleInvalid, Bucketizer.ERROR_INVALID)
 
   /**
-   * Determines whether this `Bucketizer` is going to map multiple columns. Only if all necessary
-   * params for bucketizing multiple columns are set, we go for the path to map multiple columns.
-   * By default `Bucketizer` just maps a column of continuous features.
-   */
-  private[ml] def isBucketizeMultipleInputCols(): Boolean = {
-    isSet(inputCols) && isSet(splitsArray) && isSet(outputCols)
-  }
-
-  @Since("2.0.0")
-  override def transform(dataset: Dataset[_]): DataFrame = {
-    if (isBucketizeMultipleInputCols()) {
-      this.asInstanceOf[MultipleBucketizerInterface].transform(dataset, getHandleInvalid)
-    } else {
-      transformSingleColumn(dataset)
-    }
-  }
-
-  private def transformSingleColumn(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
-    val (filteredDataset, keepInvalid) = {
-      if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
-        // "skip" NaN option is set, will filter out NaN values in the dataset
-        (dataset.na.drop().toDF(), false)
-      } else {
-        (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
-      }
-    }
-
-    val bucketizer: UserDefinedFunction = udf { (feature: Double) =>
-      Bucketizer.binarySearchForBuckets($(splits), feature, keepInvalid)
-    }.withName("bucketizer")
-
-    val newCol = bucketizer(filteredDataset($(inputCol)).cast(DoubleType))
-    val newField = prepOutputField(filteredDataset.schema)
-    filteredDataset.withColumn($(outputCol), newCol, newField.metadata)
-  }
-
-  private def prepOutputField(schema: StructType): StructField = {
-    val buckets = $(splits).sliding(2).map(bucket => bucket.mkString(", ")).toArray
-    val attr = new NominalAttribute(name = Some($(outputCol)), isOrdinal = Some(true),
-      values = Some(buckets))
-    attr.toStructField()
-  }
-
-  @Since("1.4.0")
-  override def transformSchema(schema: StructType): StructType = {
-    if (isBucketizeMultipleInputCols()) {
-      this.asInstanceOf[MultipleBucketizerInterface].transformMultipleSchema(schema)
-    } else {
-      SchemaUtils.checkNumericType(schema, $(inputCol))
-      SchemaUtils.appendColumn(schema, prepOutputField(schema))
-    }
-  }
-
-  @Since("1.4.1")
-  override def copy(extra: ParamMap): Bucketizer = {
-    defaultCopy[Bucketizer](extra).setParent(parent)
-  }
-}
-
-/**
- * `MultipleBucketizerInterface` maps columns of continuous features to columns of feature buckets.
- */
-@Since("2.3.0")
-private[ml] trait MultipleBucketizerInterface extends HasInputCols {
-  /**
    * Parameter for specifying multiple splits parameters. Each element in this array can be used to
    * map continuous features into buckets.
    *
@@ -207,48 +141,80 @@ private[ml] trait MultipleBucketizerInterface extends HasInputCols {
   @Since("2.3.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  @Since("2.3.0")
-  private[ml] def transform(dataset: Dataset[_], handleInvalid: String): DataFrame = {
-    transformMultipleSchema(dataset.schema)
+  /**
+   * Determines whether this `Bucketizer` is going to map multiple columns. Only if all necessary
+   * params for bucketizing multiple columns are set, we go for the path to map multiple columns.
+   * By default `Bucketizer` just maps a column of continuous features.
+   */
+  private[ml] def isBucketizeMultipleInputCols(): Boolean = {
+    isSet(inputCols) && isSet(splitsArray) && isSet(outputCols)
+  }
+
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema)
+
     val (filteredDataset, keepInvalid) = {
-      if (handleInvalid == Bucketizer.SKIP_INVALID) {
+      if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
         // "skip" NaN option is set, will filter out NaN values in the dataset
         (dataset.na.drop().toDF(), false)
       } else {
-        (dataset.toDF(), handleInvalid == Bucketizer.KEEP_INVALID)
+        (dataset.toDF(), getHandleInvalid == Bucketizer.KEEP_INVALID)
       }
     }
 
-    val bucketizers: Seq[UserDefinedFunction] = $(splitsArray).map { splits =>
+    val seqOfSplits = if (isBucketizeMultipleInputCols()) {
+      $(splitsArray).toSeq
+    } else {
+      Seq($(splits))
+    }
+
+    val bucketizers: Seq[UserDefinedFunction] = seqOfSplits.zipWithIndex.map { case (splits, idx) =>
       udf { (feature: Double) =>
         Bucketizer.binarySearchForBuckets(splits, feature, keepInvalid)
-      }
+      }.withName(s"bucketizer_$idx")
     }
 
-    val newCols = $(inputCols).zipWithIndex.map { case (inputCol, idx) =>
-      bucketizers(idx)(filteredDataset(inputCol))
+    val (inputColumns, outputColumns) = if (isBucketizeMultipleInputCols()) {
+      ($(inputCols).toSeq, $(outputCols).toSeq)
+    } else {
+      (Seq($(inputCol)), Seq($(outputCol)))
     }
-    val newFields = $(outputCols).zipWithIndex.map { case (outputCol, idx) =>
-      prepOutputField(idx, outputCol)
+    val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
+      bucketizers(idx)(filteredDataset(inputCol).cast(DoubleType))
     }
-    filteredDataset.withColumns($(outputCols), newCols, newFields.map(_.metadata))
+    val newFields = outputColumns.zipWithIndex.map { case (outputCol, idx) =>
+      prepOutputField(seqOfSplits(idx), outputCol)
+    }
+    filteredDataset.withColumns(outputColumns, newCols, newFields.map(_.metadata))
   }
 
-  private def prepOutputField(idx: Int, outputCol: String): StructField = {
-    val buckets = $(splitsArray)(idx).sliding(2).map(bucket => bucket.mkString(", ")).toArray
+  private def prepOutputField(splits: Array[Double], outputCol: String): StructField = {
+    val buckets = splits.sliding(2).map(bucket => bucket.mkString(", ")).toArray
     val attr = new NominalAttribute(name = Some(outputCol), isOrdinal = Some(true),
       values = Some(buckets))
     attr.toStructField()
   }
 
-  private[ml] def transformMultipleSchema(schema: StructType): StructType = {
-    var transformedSchema = schema
-    $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>
-      SchemaUtils.checkColumnType(transformedSchema, inputCol, DoubleType)
-      transformedSchema = SchemaUtils.appendColumn(transformedSchema,
-        prepOutputField(idx, outputCol))
+  @Since("1.4.0")
+  override def transformSchema(schema: StructType): StructType = {
+    if (isBucketizeMultipleInputCols()) {
+      var transformedSchema = schema
+      $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>
+        SchemaUtils.checkNumericType(transformedSchema, inputCol)
+        transformedSchema = SchemaUtils.appendColumn(transformedSchema,
+          prepOutputField($(splitsArray)(idx), outputCol))
+      }
+      transformedSchema
+    } else {
+      SchemaUtils.checkNumericType(schema, $(inputCol))
+      SchemaUtils.appendColumn(schema, prepOutputField($(splits), $(outputCol)))
     }
-    transformedSchema
+  }
+
+  @Since("1.4.1")
+  override def copy(extra: ParamMap): Bucketizer = {
+    defaultCopy[Bucketizer](extra).setParent(parent)
   }
 }
 
