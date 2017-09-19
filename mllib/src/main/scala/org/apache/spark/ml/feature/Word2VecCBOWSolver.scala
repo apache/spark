@@ -31,6 +31,8 @@ object Word2VecCBOWSolver extends Logging {
   // power to raise the unigram distribution with
   private val power = 0.75
 
+  private val MAX_EXP = 6
+
   case class Vocabulary(
     totalWordCount: Long,
     vocabMap: Map[String, Int],
@@ -167,22 +169,25 @@ object Word2VecCBOWSolver extends Logging {
               Array.copy(syn1, vectorSize * wordIndices(i), l2Vectors, vectorSize * i, vectorSize)
             }
 
+            // propagating hidden to output in batch
             val rows = negativeSamples + 1
             val cols = vectorSize
             blas.sgemv("T", cols, rows, 1.0f, l2Vectors, 0, cols, contextVec, 0, 1, 0.0f, gb, 0, 1)
 
-            Iterator.range(0, gb.length).foreach { i =>
-              val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
-              val err = (negLabels(i) - v) * alpha
-              // computing error gradient
-              gb.update(i, err)
-              val wordId = wordIndices(i)
-              // update hidden -> output layer, syn1
-              blas.saxpy(vectorSize, err, contextVec, 0, 1, syn1, wordId * vectorSize, 1)
+            Iterator.range(0, negativeSamples + 1).foreach { i =>
+              if (gb(i) > -MAX_EXP && gb(i) < MAX_EXP) {
+                val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
+                // computing error gradient
+                val err = (negLabels(i) - v) * alpha
+                // update hidden -> output layer, syn1
+                blas.saxpy(vectorSize, err, contextVec, 0, 1, syn1, wordIndices(i) * vectorSize, 1)
+                // update for word vectors
+                blas.saxpy(vectorSize, err, l2Vectors, i * vectorSize, 1, neu1e, 0, 1)
+                gb.update(i, err)
+              } else {
+                gb.update(i, 0.0f)
+              }
             }
-
-            // update for word vectors
-            blas.sgemv("N", cols, rows, scale, l2Vectors, 0, cols, gb, 0, 1, 1.0f, neu1e, 0, 1)
 
             // update input -> hidden layer, syn0
             contextIds.foreach { i =>

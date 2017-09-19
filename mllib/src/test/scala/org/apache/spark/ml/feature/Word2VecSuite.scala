@@ -86,9 +86,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
     val codes = Map(
-      "a" -> Array(0.4902186989784241, -0.8839443325996399, -0.0797744169831276),
-      "b" -> Array(-0.381089448928833, 0.45100924372673035, 0.9186644554138184),
-      "c" -> Array(-0.1593254804611206, -0.08444130420684814, 0.4444524943828583)
+      "a" -> Array(1.1255356073379517, -2.1618645191192627, 0.34989115595817566),
+      "b" -> Array(-1.222102165222168, 1.4987282752990723, 2.844104766845703),
+      "c" -> Array(-0.8431543111801147, 0.8495243787765503, 1.5596754550933838)
     )
 
     val expected = doc.map { sentence =>
@@ -168,9 +168,9 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val doc = sc.parallelize(Seq(sentence, sentence)).map(line => line.split(" "))
 
     val codes = Map(
-      "a" -> Array(0.4902186989784241, -0.8839443325996399, -0.0797744169831276),
-      "b" -> Array(-0.381089448928833, 0.45100924372673035, 0.9186644554138184),
-      "c" -> Array(-0.1593254804611206, -0.08444130420684814, 0.4444524943828583)
+      "a" -> Array(1.1255356073379517, -2.1618645191192627, 0.34989115595817566),
+      "b" -> Array(-1.222102165222168, 1.4987282752990723, 2.844104766845703),
+      "c" -> Array(-0.8431543111801147, 0.8495243787765503, 1.5596754550933838)
     )
     val expectedVectors = codes.toSeq.sortBy(_._1).map { case (w, v) => Vectors.dense(v) }
 
@@ -249,7 +249,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       .setSeed(42L)
       .fit(docDF)
 
-    val expected = Map(("b", -0.5949568748474121), ("c", -0.0800279974937439))
+    val expected = Map(("b", -0.4275166988372803), ("c", -0.4626910090446472))
     val findSynonymsResult = model.findSynonyms("a", 2).rdd.map {
       case Row(w: String, sim: Double) => (w, sim)
     }.collectAsMap()
