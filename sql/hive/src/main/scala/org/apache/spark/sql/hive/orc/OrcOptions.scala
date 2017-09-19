@@ -22,12 +22,12 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 /**
  * Options for the ORC data source.
  */
-private[orc] class OrcOptions(@transient private val parameters: CaseInsensitiveMap)
+private[orc] class OrcOptions(@transient private val parameters: CaseInsensitiveMap[String])
   extends Serializable {
 
   import OrcOptions._
 
-  def this(parameters: Map[String, String]) = this(new CaseInsensitiveMap(parameters))
+  def this(parameters: Map[String, String]) = this(CaseInsensitiveMap(parameters))
 
   /**
    * Compression codec to use. By default snappy compression.

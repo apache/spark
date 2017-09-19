@@ -473,7 +473,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     // will be updated automatically in Hive metastore by the `alterTable` call at the end of this
     // method. Here we only update the path option if the path option already exists in storage
     // properties, to avoid adding a unnecessary path option for Hive serde tables.
-    val hasPathOption = new CaseInsensitiveMap(rawTable.storage.properties).contains("path")
+    val hasPathOption = CaseInsensitiveMap(rawTable.storage.properties).contains("path")
     val storageWithNewPath = if (rawTable.tableType == MANAGED && hasPathOption) {
       // If it's a managed table with path option and we are renaming it, then the path option
       // becomes inaccurate and we need to update it according to the new table name.
@@ -491,7 +491,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def getLocationFromStorageProps(table: CatalogTable): Option[String] = {
-    new CaseInsensitiveMap(table.storage.properties).get("path")
+    CaseInsensitiveMap(table.storage.properties).get("path")
   }
 
   private def updateLocationInStorageProps(
