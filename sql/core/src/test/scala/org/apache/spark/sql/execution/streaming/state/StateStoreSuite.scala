@@ -731,7 +731,7 @@ object StateStoreTestsHelper {
     strProj.apply(new GenericInternalRow(Array[Any](UTF8String.fromString(s)))).copy()
   }
 
-  implicit def intToRow(i: Int): UnsafeRow = {
+  def intToRow(i: Int): UnsafeRow = {
     intProj.apply(new GenericInternalRow(Array[Any](i))).copy()
   }
 
@@ -739,7 +739,7 @@ object StateStoreTestsHelper {
     row.getUTF8String(0).toString
   }
 
-  implicit def rowToInt(row: UnsafeRow): Int = {
+  def rowToInt(row: UnsafeRow): Int = {
     row.getInt(0)
   }
 

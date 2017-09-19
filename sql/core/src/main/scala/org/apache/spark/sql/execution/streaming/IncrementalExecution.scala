@@ -121,7 +121,7 @@ class IncrementalExecution(
           stateInfo = Some(nextStatefulOperationStateInfo),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
           stateWatermarkPredicates =
-            StreamingSymmetricHashJoinExecHelper.getStateWatermarkPredicates(
+            StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
               left.output, right.output, lKeys, rKeys, cond,
               Some(offsetSeqMetadata.batchWatermarkMs))
         )

@@ -27,7 +27,7 @@ import org.apache.spark.rdd.{RDD, ZippedPartitionsRDD2}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BindReferences, Expression, LessThanOrEqual, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinExecHelper._
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
@@ -44,7 +44,6 @@ import org.apache.spark.util.NextIterator
  * @param stateInfo           Information about how to retrieve the correct version of state
  * @param storeConf           Configuration for the state store.
  * @param hadoopConf          Hadoop configuration for reading state data from storage
- * @param generatePredicate   Function to generate [[Predicate]] code from watermark conditions
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
@@ -68,8 +67,7 @@ class SymmetricHashJoinStateManager(
     joinKeys: Seq[Expression],
     stateInfo: Option[StatefulOperatorStateInfo],
     storeConf: StateStoreConf,
-    hadoopConf: Configuration,
-    generatePredicate: (Expression, Seq[Attribute]) => Predicate) extends Logging {
+    hadoopConf: Configuration) extends Logging {
 
   import SymmetricHashJoinStateManager._
 
@@ -98,13 +96,12 @@ class SymmetricHashJoinStateManager(
   /**
    * Remove using a predicate on keys. See class docs for more context and implement details.
    */
-  def removeByPRedicateOnKeys(expr: Expression): Unit = {
-    val predicate = generatePredicate(expr, keyAttributes)
+  def removeByKeyCondition(condition: UnsafeRow => Boolean): Unit = {
     val allKeysToNumValues = keyToNumValues.iterator
 
     while (allKeysToNumValues.hasNext) {
       val keyToNumValue = allKeysToNumValues.next
-      if (predicate.eval(keyToNumValue.key)) {
+      if (condition(keyToNumValue.key)) {
         keyToNumValues.remove(keyToNumValue.key)
         keyWithIndexToValue.removeAllValues(keyToNumValue.key, keyToNumValue.numValue)
       }
@@ -114,11 +111,9 @@ class SymmetricHashJoinStateManager(
   /**
    * Remove using a predicate on values. See class docs for more context and implementation details.
    */
-  def removeByPredicateOnValues(expr: Expression): Unit = {
-    val predicate = generatePredicate(expr, inputValueAttributes)
-
+  def removeByPredicateOnValues(condition: UnsafeRow => Boolean): Unit = {
     keyWithIndexToValue.iterator.foreach { rowPair =>
-      if (predicate.eval(rowPair.value)) {
+      if (condition(rowPair.value)) {
         val numValues = keyToNumValues.get(rowPair.key)
         if (numValues <= 1) {
           keyWithIndexToValue.removeAllValues(rowPair.key, numValues)

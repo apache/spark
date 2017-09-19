@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinExecHelper._
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
@@ -272,8 +272,7 @@ case class StreamingSymmetricHashJoinExec(
       inputIter: Iterator[InternalRow]) {
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
-      joinSide, inputAttributes, joinKeys, stateInfo,
-      storeConf, hadoopConfBcast.value.value, newPredicate _)
+      joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
     private val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
     var numUpdatedStateRows = 0
@@ -314,9 +313,11 @@ case class StreamingSymmetricHashJoinExec(
     def removeOldState(predicate: Option[JoinStateWatermarkPredicate]): Unit = {
       predicate match {
         case Some(JoinStateKeyWatermarkPredicate(expr)) =>
-          joinStateManager.removeByPRedicateOnKeys(expr)
+          val predicate = newPredicate(expr, Seq.empty)
+          joinStateManager.removeByKeyCondition(predicate.eval _)
         case Some(JoinStateValueWatermarkPredicate(expr)) =>
-          joinStateManager.removeByPredicateOnValues(expr)
+          val predicate = newPredicate(expr, inputAttributes)
+          joinStateManager.removeByPredicateOnValues(predicate.eval _)
         case _ =>
       }
     }

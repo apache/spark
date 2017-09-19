@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExecHelper}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinExecHelper.LeftSide
+import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -86,13 +86,14 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
             BoundReference(
               1, inputValueAttribWithWatermark.dataType, inputValueAttribWithWatermark.nullable),
             Literal(threshold))
-        manager.removeByPRedicateOnKeys(expr)
+        manager.removeByKeyCondition(GeneratePredicate.generate(expr).eval _)
       }
 
       /** Remove values where `time <= threshold` */
       def removeByValue(watermark: Long): Unit = {
         val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
-        manager.removeByPredicateOnValues(expr)
+        manager.removeByPredicateOnValues(
+          GeneratePredicate.generate(expr, inputValueAttribs).eval _)
       }
 
       assert(get(20) === Seq.empty)     // initially empty
@@ -312,7 +313,7 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
               spark.sparkContext.emptyRDD)(spark))
         plan.queryExecution.optimizedPlan.asInstanceOf[Filter].condition
       }
-      StreamingSymmetricHashJoinExecHelper.getStateValueWatermark(
+      StreamingSymmetricHashJoinHelper.getStateValueWatermark(
         attributesToFindConstraintFor, attributesWithWatermark, conditionExpr, rightWatermark)
     }
 
@@ -388,15 +389,10 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
       joinKeyExprs: Seq[Expression])(f: SymmetricHashJoinStateManager => Unit): Unit = {
     val storeConf = new StateStoreConf()
 
-    def generatePredicate(expression: Expression, inputSchema: Seq[Attribute]): Predicate = {
-      GeneratePredicate.generate(expression, inputSchema)
-    }
-
     withTempDir { file =>
       val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0)
       val manager = new SymmetricHashJoinStateManager(
-        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration,
-        generatePredicate _)
+        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration)
       f(manager)
     }
     StateStore.stop()
