@@ -261,9 +261,8 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           assert(fetched1.get.sizeInBytes == 0)
           assert(fetched1.get.colStats.size == 2)
 
-          // compute stats based on the catalog table metadata and
-          // put the relation into the catalog cache
-          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          // table lookup will make the table cached
+          spark.table(table)
           assert(isTableInCatalogCache(table))
 
           // insert into command
@@ -290,10 +289,10 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           spark.range(100).write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          spark.table(table)
           val initialSizeInBytes = getTableFromCatalogCache(table).stats.sizeInBytes
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
-          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          spark.table(table)
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
         }
       }
@@ -307,9 +306,9 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         withTable(table) {
           spark.range(100).write.saveAsTable(table)
           sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          spark.table(table)
           sql(s"TRUNCATE TABLE $table")
-          sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+          spark.table(table)
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
         }
       }
@@ -329,13 +328,13 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
               |PARTITIONED BY (col2)
               |LOCATION '${dir.toURI}'""".stripMargin)
             sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-            sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+            spark.table(table)
             assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
             spark.catalog.recoverPartitions(table)
             val df = Seq((1, 2), (1, 2)).toDF("col2", "col1")
             df.write.parquet(s"$path/col2=1")
             sql(s"ALTER TABLE $table ADD PARTITION (col2=1) LOCATION '${dir.toURI}'")
-            sql(s"EXPLAIN COST SELECT DISTINCT * FROM $table")
+            spark.table(table)
             val cachedTable = getTableFromCatalogCache(table)
             val cachedTableSizeInBytes = cachedTable.stats.sizeInBytes
             val defaultSizeInBytes = conf.defaultSizeInBytes
