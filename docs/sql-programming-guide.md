@@ -969,10 +969,10 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.binary.comparison.compatible.with.hive</code></td>
-  <td>true</td>
+  <td><code>spark.sql.autoTypeCastingCompatibility</code></td>
+  <td>false</td>
   <td>
-      Whether compatible with Hive when binary comparison.
+      Whether compatible with Hive.
   </td>
 </tr>
 </table>

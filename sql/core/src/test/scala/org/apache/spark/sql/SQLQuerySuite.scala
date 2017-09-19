@@ -2684,14 +2684,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val str2 = Int.MaxValue.toString + "1"
       val str3 = "10"
       Seq(str1, str2, str3).toDF("c1").createOrReplaceTempView("v")
-      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "true") {
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "true") {
         checkAnswer(sql("SELECT c1 from v where c1 > 0"),
           Row(str1) :: Row(str2) :: Row(str3) :: Nil)
         checkAnswer(sql("SELECT c1 from v where c1 > 0L"),
           Row(str1) :: Row(str2) :: Row(str3) :: Nil)
       }
 
-      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "false") {
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "false") {
         checkAnswer(sql("SELECT c1 from v where c1 > 0"), Row(str3) :: Nil)
         checkAnswer(sql("SELECT c1 from v where c1 > 0L"), Row(str2) :: Row(str3) :: Nil)
       }
@@ -2700,21 +2700,21 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-21646: CommonTypeForBinaryComparison: DoubleType vs IntegerType") {
     withTempView("v") {
-      Seq(("0", 1), ("-0.4", 2), ("0.6", 3)).toDF("a", "b").createOrReplaceTempView("v")
-      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "true") {
-        checkAnswer(sql("SELECT a FROM v WHERE a = 0"), Seq(Row("0")))
-        checkAnswer(sql("SELECT a FROM v WHERE a = 0L"), Seq(Row("0")))
-        checkAnswer(sql("SELECT a FROM v WHERE a = 0.0"), Seq(Row("0")))
-        checkAnswer(sql("SELECT a FROM v WHERE a = -0.4"), Seq(Row("-0.4")))
-        checkAnswer(sql("SELECT count(*) FROM v WHERE a > 0"), Row(1) :: Nil)
+      Seq(("0", 1), ("-0.4", 2), ("0.6", 3)).toDF("c1", "c2").createOrReplaceTempView("v")
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "true") {
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = 0"), Seq(Row("0")))
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = 0L"), Seq(Row("0")))
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = 0.0"), Seq(Row("0")))
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = -0.4"), Seq(Row("-0.4")))
+        checkAnswer(sql("SELECT count(*) FROM v WHERE c1 > 0"), Row(1) :: Nil)
       }
 
-      withSQLConf(SQLConf.BINARY_COMPARISON_COMPATIBLE_WITH_HIVE.key -> "false") {
-        checkAnswer(sql("SELECT a FROM v WHERE a = 0"), Seq(Row("0"), Row("-0.4"), Row("0.6")))
-        checkAnswer(sql("SELECT a FROM v WHERE a = 0L"), Seq(Row("0"), Row("-0.4"), Row("0.6")))
-        checkAnswer(sql("SELECT a FROM v WHERE a = 0.0"), Seq(Row("0")))
-        checkAnswer(sql("SELECT a FROM v WHERE a = -0.4"), Seq(Row("-0.4")))
-        checkAnswer(sql("SELECT count(*) FROM v WHERE a > 0"), Row(0) :: Nil)
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "false") {
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = 0"), Seq(Row("0"), Row("-0.4"), Row("0.6")))
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = 0L"), Seq(Row("0"), Row("-0.4"), Row("0.6")))
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = 0.0"), Seq(Row("0")))
+        checkAnswer(sql("SELECT c1 FROM v WHERE c1 = -0.4"), Seq(Row("-0.4")))
+        checkAnswer(sql("SELECT count(*) FROM v WHERE c1 > 0"), Row(0) :: Nil)
       }
     }
   }
@@ -2724,9 +2724,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       val v1 = Date.valueOf("2017-09-22")
       val v2 = Date.valueOf("2017-09-09")
       Seq(v1, v2).toDF("c1").createTempView("v")
-      checkAnswer(sql("select * from v where c1 > '2017-8-1'"), Row(v1) :: Row(v2) :: Nil)
-      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as date)"),
-        Row(v1) :: Row(v2) :: Nil)
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "true") {
+        checkAnswer(sql("select c1 from v where c1 > '2017-8-1'"), Row(v1) :: Row(v2) :: Nil)
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as date)"),
+          Row(v1) :: Row(v2) :: Nil)
+      }
+
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "false") {
+        checkAnswer(sql("select c1 from v where c1 > '2017-8-1'"), Nil)
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as date)"),
+          Row(v1) :: Row(v2) :: Nil)
+      }
     }
   }
 
@@ -2734,9 +2742,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTempView("v") {
       val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
       val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
-      val df = Seq(v1, v2).toDF("c1").createTempView("v")
-      checkAnswer(sql("select * from v where c1 > '2017-8-1'"), Row(v2) :: Nil)
-      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as timestamp)"), Row(v2) :: Nil)
+      Seq(v1, v2).toDF("c1").createTempView("v")
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "true") {
+        checkAnswer(sql("select c1 from v where c1 > '2017-8-1'"), Row(v2) :: Nil)
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as timestamp)"),
+          Row(v2) :: Nil)
+      }
+
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "false") {
+        checkAnswer(sql("select c1 from v where c1 > '2017-8-1'"), Nil)
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as timestamp)"),
+          Row(v2) :: Nil)
+      }
     }
   }
 
@@ -2744,9 +2761,18 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTempView("v") {
       val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
       val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
-      val df = Seq(v1, v2).toDF("c1").createTempView("v")
-      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as date)"), Row(v2) :: Nil)
-      checkAnswer(sql("select * from v where c1 > cast('2017-8-1' as timestamp)"), Row(v2) :: Nil)
+      Seq(v1, v2).toDF("c1").createTempView("v")
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "true") {
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as date)"), Row(v2) :: Nil)
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as timestamp)"),
+          Row(v2) :: Nil)
+      }
+
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "false") {
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as date)"), Row(v2) :: Nil)
+        checkAnswer(sql("select c1 from v where c1 > cast('2017-8-1' as timestamp)"),
+          Row(v2) :: Nil)
+      }
     }
   }
 
@@ -2754,10 +2780,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withTempView("v") {
       val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
       val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
-      val df = Seq(v1, v2).toDF("c1").createTempView("v")
-      checkAnswer(sql("select * from v where c1 > 1"), Row(v1) :: Row(v2) :: Nil)
-      checkAnswer(sql("select * from v where c1 > cast(cast('2010-08-01' as timestamp) as double)"),
-        Row(v1) :: Row(v2) :: Nil)
+      Seq(v1, v2).toDF("c1").createTempView("v")
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "true") {
+        checkAnswer(sql("select c1 from v where c1 > 1"), Row(v1) :: Row(v2) :: Nil)
+        checkAnswer(sql("select c1 from v where c1 > '2017-8-1'"), Row(v2) :: Nil)
+        checkAnswer(sql("select c1 from v where c1 > '2017-08-01'"), Row(v2) :: Nil)
+        checkAnswer(
+          sql("select * from v where c1 > cast(cast('2017-08-01' as timestamp) as double)"),
+          Row(v2) :: Nil)
+      }
+
+      withSQLConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY.key -> "false") {
+        val e1 = intercept[AnalysisException] {
+          sql("select * from v where c1 > 1")
+        }
+        assert(e1.getMessage.contains("data type mismatch"))
+
+        checkAnswer(sql("select c1 from v where c1 > '2017-8-1'"), Nil)
+        checkAnswer(sql("select c1 from v where c1 > '2017-08-01'"), Row(v2) :: Nil)
+
+        val e2 = intercept[AnalysisException] {
+          sql("select * from v where c1 > cast(cast('2017-08-01' as timestamp) as double)")
+        }
+        assert(e2.getMessage.contains("data type mismatch"))
+      }
     }
   }
 }

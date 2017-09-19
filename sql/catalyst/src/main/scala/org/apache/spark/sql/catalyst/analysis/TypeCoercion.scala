@@ -115,43 +115,46 @@ object TypeCoercion {
    * is a String and the other is not. It also handles when one op is a Date and the
    * other is a Timestamp by making the target type to be String.
    */
-  val findCommonTypeForBinaryComparison: (DataType, DataType) => Option[DataType] = {
-    // We should cast all relative timestamp/date/string comparison into string comparisons
-    // This behaves as a user would expect because timestamp strings sort lexicographically.
-    // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
-    case (StringType, DateType) => Some(StringType)
-    case (DateType, StringType) => Some(StringType)
-    case (StringType, TimestampType) => Some(StringType)
-    case (TimestampType, StringType) => Some(StringType)
-    case (TimestampType, DateType) => Some(StringType)
-    case (DateType, TimestampType) => Some(StringType)
-    case (StringType, NullType) => Some(StringType)
-    case (NullType, StringType) => Some(StringType)
-    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
-    case (l, r) => None
-  }
-
-  /**
-   * Follow hive's binary comparison action:
-   * https://github.com/apache/hive/blob/rel/storage-release-2.4.0/ql/src/java/
-   * org/apache/hadoop/hive/ql/exec/FunctionRegistry.java#L781
-   */
-  val findCommonTypeCompatibleWithHive: (DataType, DataType) =>
-    Option[DataType] = {
-    case (StringType, DateType) => Some(DateType)
-    case (DateType, StringType) => Some(DateType)
-    case (StringType, TimestampType) => Some(TimestampType)
-    case (TimestampType, StringType) => Some(TimestampType)
-    case (TimestampType, DateType) => Some(TimestampType)
-    case (DateType, TimestampType) => Some(TimestampType)
-    case (StringType, NullType) => Some(StringType)
-    case (NullType, StringType) => Some(StringType)
-    case (StringType | TimestampType, r: NumericType) => Some(DoubleType)
-    case (l: NumericType, StringType | TimestampType) => Some(DoubleType)
-    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
-    case (l, r) => None
+  private def findCommonTypeForBinaryComparison(
+      plan: LogicalPlan,
+      l: DataType,
+      r: DataType): Option[DataType] =
+    if (!plan.conf.autoTypeCastingCompatibility) {
+      (l, r) match {
+        // We should cast all relative timestamp/date/string comparison into string comparisons
+        // This behaves as a user would expect because timestamp strings sort lexicographically.
+        // i.e. TimeStamp(2013-01-01 00:00 ...) < "2014" = true
+        case (StringType, DateType) => Some(StringType)
+        case (DateType, StringType) => Some(StringType)
+        case (StringType, TimestampType) => Some(StringType)
+        case (TimestampType, StringType) => Some(StringType)
+        case (TimestampType, DateType) => Some(StringType)
+        case (DateType, TimestampType) => Some(StringType)
+        case (StringType, NullType) => Some(StringType)
+        case (NullType, StringType) => Some(StringType)
+        case (l: StringType, r: AtomicType) if r != StringType => Some(r)
+        case (l: AtomicType, r: StringType) if (l != StringType) => Some(l)
+        case (l, r) => None
+      }
+    } else {
+      (l, r) match {
+        // Follow hive's binary comparison action:
+        // https://github.com/apache/hive/blob/rel/storage-release-2.4.0/ql/src/java/
+        // org/apache/hadoop/hive/ql/exec/FunctionRegistry.java#L781
+        case (StringType, DateType) => Some(DateType)
+        case (DateType, StringType) => Some(DateType)
+        case (StringType, TimestampType) => Some(TimestampType)
+        case (TimestampType, StringType) => Some(TimestampType)
+        case (TimestampType, DateType) => Some(TimestampType)
+        case (DateType, TimestampType) => Some(TimestampType)
+        case (StringType, NullType) => Some(StringType)
+        case (NullType, StringType) => Some(StringType)
+        case (StringType | TimestampType, r: NumericType) => Some(DoubleType)
+        case (l: NumericType, StringType | TimestampType) => Some(DoubleType)
+        case (l: StringType, r: AtomicType) if r != StringType => Some(r)
+        case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+        case _ => None
+      }
   }
 
   /**
@@ -375,14 +378,8 @@ object TypeCoercion {
       case p @ Equality(left @ TimestampType(), right @ StringType()) =>
         p.makeCopy(Array(left, Cast(right, TimestampType)))
       case p @ BinaryComparison(left, right)
-        if !plan.conf.binaryComparisonCompatibleWithHive &&
-          findCommonTypeForBinaryComparison(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeForBinaryComparison(left.dataType, right.dataType).get
-        p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
-      case p @ BinaryComparison(left, right)
-        if plan.conf.binaryComparisonCompatibleWithHive &&
-          findCommonTypeCompatibleWithHive(left.dataType, right.dataType).isDefined =>
-        val commonType = findCommonTypeCompatibleWithHive(left.dataType, right.dataType).get
+        if findCommonTypeForBinaryComparison(plan, left.dataType, right.dataType).isDefined =>
+        val commonType = findCommonTypeForBinaryComparison(plan, left.dataType, right.dataType).get
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType()) => Abs(Cast(e, DoubleType))
@@ -438,13 +435,9 @@ object TypeCoercion {
         val rhs = sub.output
 
         val commonTypes = lhs.zip(rhs).flatMap { case (l, r) =>
-          if (plan.conf.binaryComparisonCompatibleWithHive) {
-            findCommonTypeCompatibleWithHive(l.dataType, r.dataType)
+          findCommonTypeForBinaryComparison(plan, l.dataType, r.dataType)
               .orElse(findTightestCommonType(l.dataType, r.dataType))
-          } else {
-            findCommonTypeForBinaryComparison(l.dataType, r.dataType)
-              .orElse(findTightestCommonType(l.dataType, r.dataType))
-          }
+
         }
 
         // The number of columns/expressions must match between LHS and RHS of an
