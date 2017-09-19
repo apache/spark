@@ -21,6 +21,7 @@ import java.io.IOException
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.hive.common.StatsSetupConst
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
@@ -168,8 +169,16 @@ case class PruneHiveTablePartitions(
           session.sessionState.conf.sessionLocalTimeZone)
         val sizeInBytes = try {
           prunedPartitions.map { part =>
-            CommandUtils.calculateLocationSize(
-              session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
+            val totalSize = part.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+            val rawDataSize = part.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
+            if (totalSize.isDefined && totalSize.get > 0L) {
+              totalSize.get
+            } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+              rawDataSize.get
+            } else {
+              CommandUtils.calculateLocationSize(
+                session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
+            }
           }.sum
         } catch {
           case e: IOException =>
