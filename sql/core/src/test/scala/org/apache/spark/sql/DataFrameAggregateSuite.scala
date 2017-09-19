@@ -190,6 +190,22 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-21980: References in grouping functions should be indexed with semanticEquals") {
+    checkAnswer(
+      courseSales.cube("course", "year")
+        .agg(grouping("CouRse"), grouping("year")),
+      Row("Java", 2012, 0, 0) ::
+        Row("Java", 2013, 0, 0) ::
+        Row("Java", null, 0, 1) ::
+        Row("dotNET", 2012, 0, 0) ::
+        Row("dotNET", 2013, 0, 0) ::
+        Row("dotNET", null, 0, 1) ::
+        Row(null, 2012, 1, 0) ::
+        Row(null, 2013, 1, 0) ::
+        Row(null, null, 1, 1) :: Nil
+    )
+  }
+
   test("rollup overlapping columns") {
     checkAnswer(
       testData2.rollup($"a" + $"b" as "foo", $"b" as "bar").agg(sum($"a" - $"b") as "foo"),

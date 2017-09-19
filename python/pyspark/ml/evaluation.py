@@ -146,8 +146,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid)
-        self._setDefault(rawPredictionCol="rawPrediction", labelCol="label",
-                         metricName="areaUnderROC")
+        self._setDefault(metricName="areaUnderROC")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -224,8 +223,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid)
-        self._setDefault(predictionCol="prediction", labelCol="label",
-                         metricName="rmse")
+        self._setDefault(metricName="rmse")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 
@@ -297,8 +295,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
-        self._setDefault(predictionCol="prediction", labelCol="label",
-                         metricName="f1")
+        self._setDefault(metricName="f1")
         kwargs = self._input_kwargs
         self._set(**kwargs)
 

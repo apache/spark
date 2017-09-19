@@ -46,9 +46,9 @@ class DataFrame(object):
     """A distributed collection of data grouped into named columns.
 
     A :class:`DataFrame` is equivalent to a relational table in Spark SQL,
-    and can be created using various functions in :class:`SQLContext`::
+    and can be created using various functions in :class:`SparkSession`::
 
-        people = sqlContext.read.parquet("...")
+        people = spark.read.parquet("...")
 
     Once created, it can be manipulated using the various domain-specific-language
     (DSL) functions defined in: :class:`DataFrame`, :class:`Column`.
@@ -59,9 +59,9 @@ class DataFrame(object):
 
     A more concrete example::
 
-        # To create DataFrame using SQLContext
-        people = sqlContext.read.parquet("...")
-        department = sqlContext.read.parquet("...")
+        # To create DataFrame using SparkSession
+        people = spark.read.parquet("...")
+        department = spark.read.parquet("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id) \\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
@@ -116,9 +116,9 @@ class DataFrame(object):
 
     @since(1.3)
     def registerTempTable(self, name):
-        """Registers this RDD as a temporary table using the given name.
+        """Registers this DataFrame as a temporary table using the given name.
 
-        The lifetime of this temporary table is tied to the :class:`SQLContext`
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
@@ -748,7 +748,7 @@ class DataFrame(object):
         +---+-----+
 
         """
-        if not isinstance(col, str):
+        if not isinstance(col, basestring):
             raise ValueError("col must be a string, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
@@ -1664,18 +1664,18 @@ class DataFrame(object):
            Added support for multiple columns.
         """
 
-        if not isinstance(col, (str, list, tuple)):
+        if not isinstance(col, (basestring, list, tuple)):
             raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
 
-        isStr = isinstance(col, str)
+        isStr = isinstance(col, basestring)
 
         if isinstance(col, tuple):
             col = list(col)
-        elif isinstance(col, str):
+        elif isStr:
             col = [col]
 
         for c in col:
-            if not isinstance(c, str):
+            if not isinstance(c, basestring):
                 raise ValueError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
@@ -1707,9 +1707,9 @@ class DataFrame(object):
         :param col2: The name of the second column
         :param method: The correlation method. Currently only supports "pearson"
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         if not method:
             method = "pearson"
@@ -1727,9 +1727,9 @@ class DataFrame(object):
         :param col1: The name of the first column
         :param col2: The name of the second column
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
@@ -1749,9 +1749,9 @@ class DataFrame(object):
         :param col2: The name of the second column. Distinct items will make the column names
             of the DataFrame.
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
