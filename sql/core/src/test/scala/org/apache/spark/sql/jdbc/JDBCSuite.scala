@@ -740,11 +740,13 @@ class JDBCSuite extends SparkFunSuite
         } else {
           None
         }
+      override def isCascadingTruncateTable(): Option[Boolean] = Some(true)
     }, testH2Dialect))
     assert(agg.canHandle("jdbc:h2:xxx"))
     assert(!agg.canHandle("jdbc:h2"))
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
+    assert(agg.isCascadingTruncateTable() === Some(true))
   }
 
   test("DB2Dialect type mapping") {
