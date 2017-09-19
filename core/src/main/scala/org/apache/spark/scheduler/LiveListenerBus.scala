@@ -69,7 +69,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   /** Add a listener to the executor management queue. */
   def addToManagementQueue(listener: SparkListenerInterface): Unit = {
-    addToQueue(listener, EXECUTOR_MGMT_QUEUE)
+    addToQueue(listener, EXECUTOR_MANAGEMENT_QUEUE)
   }
 
   /** Add a listener to the application status queue. */
@@ -186,10 +186,12 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     }
   }
 
+  // For testing only.
   private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag](): Seq[T] = {
     queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }
   }
 
+  // For testing only.
   private[spark] def listeners: JList[SparkListenerInterface] = {
     queues.asScala.flatMap(_.listeners.asScala).asJava
   }
@@ -209,7 +211,7 @@ private[spark] object LiveListenerBus {
 
   private[scheduler] val APP_STATUS_QUEUE = "appStatus"
 
-  private[scheduler] val EXECUTOR_MGMT_QUEUE = "executorMgmt"
+  private[scheduler] val EXECUTOR_MANAGEMENT_QUEUE = "executorManagement"
 
   private[scheduler] val EVENT_LOG_QUEUE = "eventLog"
 }
