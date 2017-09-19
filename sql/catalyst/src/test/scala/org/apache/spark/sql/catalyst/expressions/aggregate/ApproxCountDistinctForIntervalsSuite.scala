@@ -92,8 +92,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     val buffer1b = createBuffer(aggFunc)
     val buffer2 = createBuffer(aggFunc)
 
-    // Create the
-    // Add the lower half
+    // Add the lower half to `buffer1a`.
     var i = 0
     while (i < 500000) {
       input.setInt(0, i)
@@ -101,7 +100,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       i += 1
     }
 
-    // Add the upper half
+    // Add the upper half to `buffer1b`.
     i = 500000
     while (i < 1000000) {
       input.setInt(0, i)
@@ -109,10 +108,10 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       i += 1
     }
 
-    // Merge the lower and upper halves.
+    // Merge the lower and upper halves to `buffer1a`.
     aggFunc.merge(buffer1a, buffer1b)
 
-    // Create the other buffer in reverse
+    // Create the other buffer in reverse.
     i = 999999
     while (i >= 0) {
       input.setInt(0, i)

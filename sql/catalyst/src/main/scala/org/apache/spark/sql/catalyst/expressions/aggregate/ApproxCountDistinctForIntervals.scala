@@ -96,6 +96,9 @@ case class ApproxCountDistinctForIntervals(
     for (i <- array.indices) {
       array(i) = new HyperLogLogPlusPlusHelper(relativeSD)
     }
+    // `numWords` in each HLLPPHelper should be the same because it is determined by `relativeSD`
+    // which is shared among all HLLPPHelpers.
+    assert(array.map(_.numWords).distinct.length == 1)
     array
   }
 
@@ -152,7 +155,7 @@ case class ApproxCountDistinctForIntervals(
     }
   }
 
-  // Find which interval(HyperLogLogPlusPlusAlgo) should receive the given value.
+  // Find which interval (HyperLogLogPlusPlusHelper) should receive the given value.
   def findHllppIndex(value: Double): Int = {
     var index = util.Arrays.binarySearch(endpoints, value)
     if (index >= 0) {
