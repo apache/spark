@@ -43,7 +43,12 @@ case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
-    storeVersion: Long)
+    storeVersion: Long) {
+  override def toString(): String = {
+    s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
+      s"opId = $operatorId, ver = $storeVersion]"
+  }
+}
 
 /**
  * An operator that reads or writes state from the [[StateStore]].

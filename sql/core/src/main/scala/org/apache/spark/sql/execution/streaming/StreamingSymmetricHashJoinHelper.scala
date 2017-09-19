@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsRDD2}
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, BoundReference, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, NamedExpression, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, AttributeSet, BoundReference, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, NamedExpression, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProvider, StateStoreProviderId}
@@ -40,13 +40,20 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
   case object LeftSide extends JoinSide { override def toString(): String = "left" }
   case object RightSide extends JoinSide { override def toString(): String = "right" }
 
-  sealed trait JoinStateWatermarkPredicate
+  sealed trait JoinStateWatermarkPredicate { def expr: Expression }
+  /** Predicate for watermark on state keys */
   case class JoinStateKeyWatermarkPredicate(expr: Expression) extends JoinStateWatermarkPredicate
+  /** Predicate for watermark on state values */
   case class JoinStateValueWatermarkPredicate(expr: Expression) extends JoinStateWatermarkPredicate
 
   case class JoinStateWatermarkPredicates(
     left: Option[JoinStateWatermarkPredicate] = None,
-    right: Option[JoinStateWatermarkPredicate] = None)
+    right: Option[JoinStateWatermarkPredicate] = None) {
+    override def toString(): String = {
+      s"state predicates [ left = ${left.map(_.expr).getOrElse("")}, " +
+        s"right = ${right.map(_.expr).getOrElse("")} ]"
+    }
+  }
 
   /** Get the predicates defining the state watermarks for both sides of the join */
   def getStateWatermarkPredicates(
@@ -83,8 +90,8 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
 
       } else if (isWatermarkDefinedOnInput) { // case 2 explained in the class docs
         val stateValueWatermark = getStateValueWatermark(
-          attributesToFindStateWatemarkFor = oneSideInputAttributes,
-          attributesWithEventWatermark = otherSideInputAttributes,
+          attributesToFindStateWatemarkFor = AttributeSet(oneSideInputAttributes),
+          attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermark)
         val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
@@ -111,24 +118,38 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
    *   form `leftTime + c1 < rightTime + c2`   (or <=, >, >=).
    * - We canoncalize the predicate and solve it with the event time watermark value to find the
    *  value of the state watermark.
+   * This function is supposed to make best-effort attempt to get the state watermark. If there is
+   * any error, it will return None.
    *
    * @param attributesToFindStateWatemarkFor attributes of the side whose state watermark
    *                                         is to be calculated
    * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
    * @param joinCondition                 join condition
    * @param eventWatermark                watermark defined on the input event data
-   * @return state value watermark in milliseconds
+   * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
-      attributesToFindStateWatemarkFor: Seq[Attribute],
-      attributesWithEventWatermark: Seq[Attribute],
+      attributesToFindStateWatemarkFor: AttributeSet,
+      attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long]): Option[Long] = {
+    // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
+
+    // If there is not watermark attribute, then cannot define state watermark
+    if (!attributesWithEventWatermark.exists(_.metadata.contains(delayKey))) return None
+    val attributesInCondition =
+      AttributeSet(joinCondition.get.collect { case a: AttributeReference => a })
+    if (
+      attributesInCondition.filter { attributesToFindStateWatemarkFor.contains(_)}.size > 1 ||
+      attributesInCondition.filter { attributesWithEventWatermark.contains(_)}.size > 1) {
+      // If more than attributes present in condition from one side, then it cannot be solved
+      return None
+    }
 
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
-        getStateWatemarkFromLessThenPredicate(
+        getStateWatermarkFromLessThenPredicate(
           l, r, attributesToFindStateWatemarkFor, attributesWithEventWatermark, eventWatermark)
       } catch {
         case NonFatal(e) =>
@@ -162,11 +183,11 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
    * Solving for rightTime: rightTime-with-watermark + c1 + (-c2) < leftTime
    * With watermark value:  watermark-value + c1 + (-c2) < leftTime
    */
-  private def getStateWatemarkFromLessThenPredicate(
+  private def getStateWatermarkFromLessThenPredicate(
       leftExpr: Expression,
       rightExpr: Expression,
-      attributesToFindStateWatermarkFor: Seq[Attribute],
-      attributesWithEventWatermark: Seq[Attribute],
+      attributesToFindStateWatermarkFor: AttributeSet,
+      attributesWithEventWatermark: AttributeSet,
       eventWatermark: Option[Long]): Option[Long] = {
 
     def containsAttributeToFindStateConstraintFor(e: Expression): Boolean = {

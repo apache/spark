@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.catalyst.util.quietly
@@ -299,13 +299,13 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
   test("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(
       AttributeReference("leftTime", TimestampType)(),
-      AttributeReference("leftOther", StringType)())
+      AttributeReference("leftOther", IntegerType)())
     val metadataWithWatermark = new MetadataBuilder()
       .putLong(EventTimeWatermark.delayKey, 1000)
       .build()
     val attributesWithWatermark = Seq(
       AttributeReference("rightTime", TimestampType, metadata = metadataWithWatermark)(),
-      AttributeReference("rightOther", StringType)())
+      AttributeReference("rightOther", IntegerType)())
 
     def watermarkFrom(
         conditionStr: String,
@@ -320,7 +320,8 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
         plan.queryExecution.optimizedPlan.asInstanceOf[Filter].condition
       }
       StreamingSymmetricHashJoinHelper.getStateValueWatermark(
-        attributesToFindConstraintFor, attributesWithWatermark, conditionExpr, rightWatermark)
+        AttributeSet(attributesToFindConstraintFor), AttributeSet(attributesWithWatermark),
+        conditionExpr, rightWatermark)
     }
 
     // Test comparison directionality. E.g. if leftTime < rightTime and rightTime > watermark,
@@ -388,6 +389,15 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
     assert(watermarkFrom(
       "leftTime > rightTime - interval 3 second AND rightTime < leftTime + interval 4 seconds") ===
       Some(6000))  // second condition wins
+
+    // Test invalid comparisons
+    assert(watermarkFrom("cast(leftTime AS LONG) > leftOther") === None)
+    assert(watermarkFrom("leftOther > rightOther") === None)
+    assert(watermarkFrom("cast(rightTime AS DOUBLE) < rightOther") === None)
+
+
+    // Test static comparisons
+    assert(watermarkFrom("cast(leftTime AS LONG) > 10") === Some(10000))
   }
 
   test("locality preferences of StateStoreAwareZippedRDD") {
