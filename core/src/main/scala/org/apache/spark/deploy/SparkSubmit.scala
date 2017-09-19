@@ -381,7 +381,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
       def shouldDownload(scheme: String): Boolean = {
         forceDownloadSchemes.contains(scheme) ||
-          Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isSuccess
+          Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isFailure
       }
 
       def downloadResource(resource: String): String = {
