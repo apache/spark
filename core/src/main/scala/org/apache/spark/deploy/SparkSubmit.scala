@@ -380,10 +380,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
       val forceDownloadSchemes = sparkConf.get(FORCE_DOWNLOAD_SCHEMES)
 
       def shouldDownload(scheme: String): Boolean = {
-        val isFsAvailable = () => {
+        forceDownloadSchemes.contains(scheme) ||
           Try { FileSystem.getFileSystemClass(scheme, hadoopConf) }.isSuccess
-        }
-        forceDownloadSchemes.contains(scheme) || !isFsAvailable()
       }
 
       def downloadResource(resource: String): String = {
