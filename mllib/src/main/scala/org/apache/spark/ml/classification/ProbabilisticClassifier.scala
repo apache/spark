@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import java.util.Arrays
-
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.linalg.{DenseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param.shared._
@@ -232,8 +230,7 @@ private[ml] object ProbabilisticClassificationModel {
    * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
    *
    * The input raw predictions should be nonnegative.
-   * The output vector sums to 1, when the input vector is all-0, the output values will be all
-   * equal to 1 / size.
+   * The output vector sums to 1, when the input vector is all-0, exception will be thrown.
    *
    * NOTE: This is NOT applicable to all models, only ones which effectively use class
    *       instance counts for raw predictions.
@@ -248,7 +245,7 @@ private[ml] object ProbabilisticClassificationModel {
         i += 1
       }
     } else {
-      Arrays.fill(v.values, 1.0 / v.size)
+      throw new IllegalArgumentException("All-0 vector is not allowed normalizing.")
     }
   }
 }
