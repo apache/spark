@@ -21,15 +21,14 @@ import java.util.List;
 
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.sources.v2.DataSourceV2Options;
-import org.apache.spark.sql.sources.v2.ReadSupport;
-import org.apache.spark.sql.sources.v2.ReadSupportWithSchema;
 import org.apache.spark.sql.types.StructType;
 
 /**
  * A data source reader that is returned by
- * {@link ReadSupport#createReader(DataSourceV2Options)} or
- * {@link ReadSupportWithSchema#createReader(StructType, DataSourceV2Options)}.
+ * {@link org.apache.spark.sql.sources.v2.ReadSupport#createReader(
+ * org.apache.spark.sql.sources.v2.DataSourceV2Options)} or
+ * {@link org.apache.spark.sql.sources.v2.ReadSupportWithSchema#createReader(
+ * StructType, org.apache.spark.sql.sources.v2.DataSourceV2Options)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
  * logic should be delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
  *
