@@ -2826,33 +2826,33 @@ object WritableConverter {
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
 
-  implicit def intWritableConverter(): WritableConverter[Int] =
-    simpleWritableConverter[Int, IntWritable](_.get)
+  implicit val intWritableConverter: () => WritableConverter[Int] =
+    () => simpleWritableConverter[Int, IntWritable](_.get)
 
-  implicit def longWritableConverter(): WritableConverter[Long] =
-    simpleWritableConverter[Long, LongWritable](_.get)
+  implicit val longWritableConverter: () => WritableConverter[Long] =
+    () => simpleWritableConverter[Long, LongWritable](_.get)
 
-  implicit def doubleWritableConverter(): WritableConverter[Double] =
-    simpleWritableConverter[Double, DoubleWritable](_.get)
+  implicit val doubleWritableConverter: () => WritableConverter[Double] =
+    () => simpleWritableConverter[Double, DoubleWritable](_.get)
 
-  implicit def floatWritableConverter(): WritableConverter[Float] =
-    simpleWritableConverter[Float, FloatWritable](_.get)
+  implicit val floatWritableConverter: () => WritableConverter[Float] =
+    () => simpleWritableConverter[Float, FloatWritable](_.get)
 
-  implicit def booleanWritableConverter(): WritableConverter[Boolean] =
-    simpleWritableConverter[Boolean, BooleanWritable](_.get)
+  implicit val booleanWritableConverter: () => WritableConverter[Boolean] =
+    () => simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
+  implicit val bytesWritableConverter: () => WritableConverter[Array[Byte]] = {
+    () => simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
       // getBytes method returns array which is longer then data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
     }
   }
 
-  implicit def stringWritableConverter(): WritableConverter[String] =
-    simpleWritableConverter[String, Text](_.toString)
+  implicit val stringWritableConverter: () => WritableConverter[String] =
+    () => simpleWritableConverter[String, Text](_.toString)
 
-  implicit def writableWritableConverter[T <: Writable](): WritableConverter[T] =
-    new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+  implicit def writableWritableConverter[T <: Writable : ClassTag]: () => WritableConverter[T] =
+    () => new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
 }
 
 /**
