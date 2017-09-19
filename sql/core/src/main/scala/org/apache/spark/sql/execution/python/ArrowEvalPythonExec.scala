@@ -17,110 +17,45 @@
 
 package org.apache.spark.sql.execution.python
 
-import java.io.File
-
-import scala.collection.mutable.ArrayBuffer
-
-import org.apache.spark.{SparkEnv, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonRunner}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
-import org.apache.spark.util.Utils
-
+import org.apache.spark.sql.types.StructType
 
 /**
  * A physical plan that evaluates a [[PythonUDF]],
  */
 case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], child: SparkPlan)
-  extends SparkPlan {
+  extends EvalPythonExec(udfs, output, child) {
 
-  def children: Seq[SparkPlan] = child :: Nil
+  protected override def evaluate(
+      funcs: Seq[ChainedPythonFunctions],
+      bufferSize: Int,
+      reuseWorker: Boolean,
+      argOffsets: Array[Array[Int]],
+      iter: Iterator[InternalRow],
+      schema: StructType,
+      context: TaskContext): Iterator[InternalRow] = {
+    val inputIterator = ArrowConverters.toPayloadIterator(
+      iter, schema, conf.arrowMaxRecordsPerBatch, context).map(_.asPythonSerializable)
 
-  override def producedAttributes: AttributeSet = AttributeSet(output.drop(child.output.length))
+    // Output iterator for results from Python.
+    val outputIterator = new PythonRunner(
+        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets)
+      .compute(inputIterator, context.partitionId(), context)
 
-  private def collectFunctions(udf: PythonUDF): (ChainedPythonFunctions, Seq[Expression]) = {
-    udf.children match {
-      case Seq(u: PythonUDF) =>
-        val (chained, children) = collectFunctions(u)
-        (ChainedPythonFunctions(chained.funcs ++ Seq(udf.func)), children)
-      case children =>
-        // There should not be any other UDFs, or the children can't be evaluated directly.
-        assert(children.forall(_.find(_.isInstanceOf[PythonUDF]).isEmpty))
-        (ChainedPythonFunctions(Seq(udf.func)), udf.children)
-    }
-  }
+    val outputRowIterator = ArrowConverters.fromPayloadIterator(
+      outputIterator.map(new ArrowPayload(_)), context)
 
-  protected override def doExecute(): RDD[InternalRow] = {
-    val inputRDD = child.execute().map(_.copy())
-    val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
-    val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
+    // Verify that the output schema is correct
+    val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
+      .map { case (attr, i) => attr.withName(s"_$i") })
+    assert(schemaOut.equals(outputRowIterator.schema),
+      s"Invalid schema from pandas_udf: expected $schemaOut, got ${outputRowIterator.schema}")
 
-    inputRDD.mapPartitions { iter =>
-      val context = TaskContext.get()
-
-      // The queue used to buffer input rows so we can drain it to
-      // combine input with output from Python.
-      val queue = HybridRowQueue(context.taskMemoryManager(),
-        new File(Utils.getLocalDir(SparkEnv.get.conf)), child.output.length)
-      context.addTaskCompletionListener { _ =>
-        queue.close()
-      }
-
-      val (pyFuncs, inputs) = udfs.map(collectFunctions).unzip
-
-      // flatten all the arguments
-      val allInputs = new ArrayBuffer[Expression]
-      val dataTypes = new ArrayBuffer[DataType]
-      val argOffsets = inputs.map { input =>
-        input.map { e =>
-          if (allInputs.exists(_.semanticEquals(e))) {
-            allInputs.indexWhere(_.semanticEquals(e))
-          } else {
-            allInputs += e
-            dataTypes += e.dataType
-            allInputs.length - 1
-          }
-        }.toArray
-      }.toArray
-      val projection = newMutableProjection(allInputs, child.output)
-      val schemaIn = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
-        StructField(s"_$i", dt)
-      })
-
-      // Iterator to construct Arrow payloads. Add rows to queue to join later with the result.
-      val projectedRowIter = iter.map { inputRow =>
-        queue.add(inputRow.asInstanceOf[UnsafeRow])
-        projection(inputRow)
-      }
-
-      val inputIterator = ArrowConverters.toPayloadIterator(
-          projectedRowIter, schemaIn, conf.arrowMaxRecordsPerBatch, context)
-        .map(_.asPythonSerializable)
-
-      // Output iterator for results from Python.
-      val outputIterator = new PythonRunner(
-          pyFuncs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets)
-        .compute(inputIterator, context.partitionId(), context)
-
-      val outputRowIterator = ArrowConverters.fromPayloadIterator(
-        outputIterator.map(new ArrowPayload(_)), context)
-
-      // Verify that the output schema is correct
-      val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
-        .map { case (attr, i) => attr.withName(s"_$i") })
-      assert(schemaOut.equals(outputRowIterator.schema),
-        s"Invalid schema from pandas_udf: expected $schemaOut, got ${outputRowIterator.schema}")
-
-      val joined = new JoinedRow
-      val resultProj = UnsafeProjection.create(output, output)
-
-      outputRowIterator.map { outputRow =>
-        resultProj(joined(queue.remove(), outputRow))
-      }
-    }
+    outputRowIterator
   }
 }
