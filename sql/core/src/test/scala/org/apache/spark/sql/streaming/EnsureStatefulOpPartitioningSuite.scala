@@ -120,7 +120,7 @@ class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLCont
     execution.executedPlan
   }
 
-  /** Used to emulate a [[StatefulOperator]] with the given requiredDistribution. */
+  /** Used to emulate a `StatefulOperator` with the given requiredDistribution. */
   case class TestStatefulOperator(
       child: SparkPlan,
       requiredDist: Distribution) extends UnaryExecNode with StatefulOperator {
