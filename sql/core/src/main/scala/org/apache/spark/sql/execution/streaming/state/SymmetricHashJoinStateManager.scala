@@ -97,10 +97,10 @@ class SymmetricHashJoinStateManager(
    * Remove using a predicate on keys. See class docs for more context and implement details.
    */
   def removeByKeyCondition(condition: UnsafeRow => Boolean): Unit = {
-    val allKeysToNumValues = keyToNumValues.iterator
+    val allKeyToNumValues = keyToNumValues.iterator
 
-    while (allKeysToNumValues.hasNext) {
-      val keyToNumValue = allKeysToNumValues.next
+    while (allKeyToNumValues.hasNext) {
+      val keyToNumValue = allKeyToNumValues.next
       if (condition(keyToNumValue.key)) {
         keyToNumValues.remove(keyToNumValue.key)
         keyWithIndexToValue.removeAllValues(keyToNumValue.key, keyToNumValue.numValue)
@@ -112,17 +112,58 @@ class SymmetricHashJoinStateManager(
    * Remove using a predicate on values. See class docs for more context and implementation details.
    */
   def removeByPredicateOnValues(condition: UnsafeRow => Boolean): Unit = {
-    keyWithIndexToValue.iterator.foreach { rowPair =>
-      if (condition(rowPair.value)) {
-        val numValues = keyToNumValues.get(rowPair.key)
-        if (numValues <= 1) {
-          keyWithIndexToValue.removeAllValues(rowPair.key, numValues)
-          keyToNumValues.remove(rowPair.key)
+    val allKeyToNumValues = keyToNumValues.iterator
+
+    var numValues: Long = 0L
+    var index: Long = 0L
+    var valueRemoved = false
+    var valueForIndex: UnsafeRow = null
+
+
+    while (allKeyToNumValues.hasNext) {
+      val keyToNumValue = allKeyToNumValues.next
+      val key = keyToNumValue.key
+
+      numValues = keyToNumValue.numValue
+      index = 0L
+      valueRemoved = false
+      valueForIndex = null
+
+      while (index < numValues) {
+        if (valueForIndex == null) {
+          valueForIndex = keyWithIndexToValue.get(key, index)
+        }
+        if (condition(valueForIndex)) {
+          if (numValues > 1) {
+            val valueAtMaxIndex = keyWithIndexToValue.get(key, numValues - 1)
+            keyWithIndexToValue.put(key, index, valueAtMaxIndex)
+            keyWithIndexToValue.remove(key, numValues - 1)
+            valueForIndex = valueAtMaxIndex
+          } else {
+            keyWithIndexToValue.remove(key, 0)
+            valueForIndex = null
+          }
+          numValues -= 1
+          valueRemoved = true
         } else {
-          keyWithIndexToValue.remove(rowPair.key, rowPair.valueIndex, numValues)
-          keyToNumValues.put(rowPair.key, numValues - 1)
+          valueForIndex = null
+          index += 1
         }
       }
+      if (valueRemoved) {
+        if (numValues >= 1) {
+          keyToNumValues.put(key, numValues)
+        } else {
+          keyToNumValues.remove(key)
+        }
+      }
+    }
+  }
+
+  def iterator(): Iterator[UnsafeRowPair] = {
+    val pair = new UnsafeRowPair()
+    keyWithIndexToValue.iterator.map { x =>
+      pair.withRows(x.key, x.value)
     }
   }
 
@@ -140,15 +181,14 @@ class SymmetricHashJoinStateManager(
 
   /** Get the combined metrics of all the state stores */
   def metrics: StateStoreMetrics = {
-    val keyToValueListSizeMetrics = keyToNumValues.metrics
-    val keyWithListndexToValueMetrics = keyWithIndexToValue.metrics
-    val allMetrics = Seq(keyToValueListSizeMetrics, keyWithListndexToValueMetrics)
+    val keyToNumValuesMetrics = keyToNumValues.metrics
+    val keyWithIndexToValueMetrics = keyWithIndexToValue.metrics
     def newDesc(desc: String): String = s"${joinSide.toString.toUpperCase}: $desc"
 
     StateStoreMetrics(
-      allMetrics.map(_.numKeys).sum,
-      allMetrics.map(_.memoryUsedBytes).sum,
-      keyWithListndexToValueMetrics.customMetrics.map {
+      keyWithIndexToValueMetrics.numKeys,       // represent each buffered row only once
+      keyToNumValuesMetrics.memoryUsedBytes + keyWithIndexToValueMetrics.memoryUsedBytes,
+      keyWithIndexToValueMetrics.customMetrics.map {
         case (s @ StateStoreCustomSizeMetric(_, desc), value) =>
           s.copy(desc = newDesc(desc)) -> value
         case (s @ StateStoreCustomTimingMetric(_, desc), value) =>
@@ -275,6 +315,10 @@ class SymmetricHashJoinStateManager(
 
     protected val stateStore = getStateStore(keyWithIndexSchema, inputValueAttributes.toStructType)
 
+    def get(key: UnsafeRow, valueIndex: Long): UnsafeRow = {
+      stateStore.get(keyWithIndexRow(key, valueIndex))
+    }
+
     /** Get all the values for key and all indices. */
     def getAll(key: UnsafeRow, numValues: Long): Iterator[UnsafeRow] = {
       var index = 0
@@ -302,23 +346,17 @@ class SymmetricHashJoinStateManager(
     }
 
     /**
-     * Remove value for key with index `valueIndex`. It overwrites the value at given index with
-     * the value of (key, maxIndex) and then deletes the (key, maxIndex).
+     * Remove key and value at given index. Note that this will create a hole in
+     * (key, index) and it is upto the caller to deal with it.
      */
-    def remove(key: UnsafeRow, valueIndex: Long, numValues: Long): Unit = {
-      if (numValues == 1) {
-        stateStore.remove(keyWithIndexRow(key, numValues - 1))
-      } else {
-        val valueToReplaceWith = stateStore.get(keyWithIndexRow(key, numValues - 1))
-        stateStore.put(keyWithIndexRow(key, valueIndex), valueToReplaceWith)
-        stateStore.remove(keyWithIndexRow(key, numValues - 1))
-      }
+    def remove(key: UnsafeRow, valueIndex: Long): Unit = {
+      stateStore.remove(keyWithIndexRow(key, valueIndex))
     }
 
     /** Remove all values (i.e. all the indices) for the given key. */
-    def removeAllValues(key: UnsafeRow, listSize: Long): Unit = {
+    def removeAllValues(key: UnsafeRow, numValues: Long): Unit = {
       var index = 0
-      while (index < listSize) {
+      while (index < numValues) {
         stateStore.remove(keyWithIndexRow(key, index))
         index += 1
       }

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, NamedExpression, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, JoinedRow, Literal, NamedExpression, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -222,11 +222,8 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     // Filter the joined rows based on the given condition.
-    val outputFilterFunction = if (condition.isDefined) {
-      newPredicate(condition.get, left.output ++ right.output).eval _
-    } else {
-      (_: InternalRow) => true
-    }
+    val outputFilterFunction =
+      newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output).eval _
     val filteredOutputIter =
       (leftOutputIter ++ rightOutputIter).filter(outputFilterFunction).map { row =>
         numOutputRows += 1
@@ -247,12 +244,14 @@ case class StreamingSymmetricHashJoinExec(
       commitTimeMs += timeTakenMs {
         val leftSideMetrics = leftSideJoiner.commitStateAndGetMetrics()
         val rightSideMetrics = rightSideJoiner.commitStateAndGetMetrics()
-        val stateStoreMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
+        val combinedMetrics = StateStoreMetrics.combine(Seq(leftSideMetrics, rightSideMetrics))
+
+        // Update SQL metrics
         numUpdatedStateRows +=
           (leftSideJoiner.numUpdatedStateRows + rightSideJoiner.numUpdatedStateRows)
-        numTotalStateRows += stateStoreMetrics.numKeys
-        stateMemory += stateStoreMetrics.memoryUsedBytes
-        stateStoreMetrics.customMetrics.foreach { case (metric, value) =>
+        numTotalStateRows += combinedMetrics.numKeys
+        stateMemory += combinedMetrics.memoryUsedBytes
+        combinedMetrics.customMetrics.foreach { case (metric, value) =>
           longMetric(metric.name) += value
         }
       }
@@ -302,7 +301,7 @@ case class StreamingSymmetricHashJoinExec(
         val thisRow = row.asInstanceOf[UnsafeRow]
         val key = keyGenerator(thisRow)
         joinStateManager.append(key, thisRow)
-        numUpdatedStateRows += 2
+        numUpdatedStateRows += 1
         otherSideJoiner.joinStateManager.get(key).map { thatRow =>
           generateJoinedRow(thisRow, thatRow)
         }

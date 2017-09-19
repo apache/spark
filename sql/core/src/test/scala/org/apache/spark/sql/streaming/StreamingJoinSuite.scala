@@ -25,22 +25,20 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate, Predicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
-import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProviderId, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreProviderId, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
-class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
+class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
 
   before {
     SparkSession.setActiveSession(spark)  // set this before force initializing 'joinExec'
@@ -53,8 +51,7 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
 
-  test("SymmetricHashJoinStateManager") {
-
+  test("SymmetricHashJoinStateManager - all operations") {
     val watermarkMetadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 10).build()
     val inputValueSchema = new StructType()
       .add(StructField("time", IntegerType, metadata = watermarkMetadata))
@@ -102,26 +99,35 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
           GeneratePredicate.generate(expr, inputValueAttribs).eval _)
       }
 
+      def numRows: Long = {
+        manager.metrics.numKeys
+      }
+
       assert(get(20) === Seq.empty)     // initially empty
       append(20, 2)
       assert(get(20) === Seq(2))        // should first value correctly
+      assert(numRows === 1)
 
       append(20, 3)
       assert(get(20) === Seq(2, 3))     // should append new values
       append(20, 3)
       assert(get(20) === Seq(2, 3, 3))  // should append another copy if same value added again
+      assert(numRows === 3)
 
       assert(get(30) === Seq.empty)
       append(30, 1)
       assert(get(30) === Seq(1))
       assert(get(20) === Seq(2, 3, 3))  // add another key-value should not affect existing ones
+      assert(numRows === 4)
 
       removeByKey(25)
       assert(get(20) === Seq.empty)
       assert(get(30) === Seq(1))        // should remove 20, not 30
+      assert(numRows === 1)
 
       removeByKey(30)
       assert(get(30) === Seq.empty)     // should remove 30
+      assert(numRows === 0)
 
       def appendAndTest(key: Int, values: Int*): Unit = {
         values.foreach { value => append(key, value)}
@@ -131,22 +137,27 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
       appendAndTest(40, 100, 200, 300)
       appendAndTest(50, 125)
       appendAndTest(60, 275)              // prepare for testing removeByValue
+      assert(numRows === 5)
 
       removeByValue(125)
       assert(get(40) === Seq(200, 300))
       assert(get(50) === Seq.empty)
       assert(get(60) === Seq(275))        // should remove only some values, not all
+      assert(numRows === 3)
 
       append(40, 50)
       assert(get(40) === Seq(50, 200, 300))
-      append(40, 100)
+      assert(numRows === 4)
+
       removeByValue(200)
       assert(get(40) === Seq(300))
       assert(get(60) === Seq(275))        // should remove only some values, not all
+      assert(numRows === 2)
 
       removeByValue(300)
       assert(get(40) === Seq.empty)
       assert(get(60) === Seq.empty)       // should remove all values now
+      assert(numRows === 0)
     }
   }
 
@@ -234,6 +245,7 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
     testStream(joined)(
       AddData(input1, 1),
       CheckAnswer(),
+      assertNumStateRows(total = 1, updated = 1),
       AddData(input2, 1),
       CheckLastBatch((1, 10, 2, 3)),
       AddData(input1, 25),
@@ -394,7 +406,6 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
     assert(watermarkFrom("cast(leftTime AS LONG) > leftOther") === None)
     assert(watermarkFrom("leftOther > rightOther") === None)
     assert(watermarkFrom("cast(rightTime AS DOUBLE) < rightOther") === None)
-
 
     // Test static comparisons
     assert(watermarkFrom("cast(leftTime AS LONG) > 10") === Some(10000))
