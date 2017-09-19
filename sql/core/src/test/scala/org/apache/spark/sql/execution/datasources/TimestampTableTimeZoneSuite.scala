@@ -50,10 +50,10 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
     "2016-01-01 01:29:59.123"
   )
   // We don't want to mess with timezones inside the tests themselves, since we use a shared
-  // spark context, and then we might be prone to issues from lazy vals for timezones.  Instead,
-  // we manually adjust the timezone just to determine what the desired millis (since epoch, in utc)
-  // is for various "wall-clock" times in different timezones, and then we can compare against those
-  // in our tests.
+  // spark context in the hive tests, and then we might be prone to issues from lazy vals for
+  // timezones.  Instead, we manually adjust the timezone just to determine what the desired millis
+  // (since epoch, in utc) is for various "wall-clock" times in different timezones, and then we can
+  // compare against those in our tests.
   val timestampTimezoneToMillis = {
     val originalTz = TimeZone.getDefault
     try {
@@ -72,8 +72,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
   private def createRawData(spark: SparkSession): Dataset[(String, Timestamp)] = {
     import spark.implicits._
     val df = desiredTimestampStrings.toDF("display")
-    // this will get the millis corresponding to the display time given the current *session*
-    // timezone.
+    // this will get the millis corresponding to the display time given the current session tz
     df.withColumn("ts", expr("cast(display as timestamp)")).as[(String, Timestamp)]
   }
 

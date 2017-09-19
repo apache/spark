@@ -41,29 +41,33 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
       case insertIntoHadoopFs: InsertIntoHadoopFsRelationCommand =>
         // The query might be reading from a parquet table which requires a different conversion;
         // this makes sure we apply the correct conversions there.
-        val (fixedQuery, _) = readConversion(insertIntoHadoopFs.query)
+        val (fixedQuery, _) = convertInputs(insertIntoHadoopFs.query)
         writeConversion(insertIntoHadoopFs.copy(query = fixedQuery))
 
       case other =>
         // recurse into children to see if we're reading data that needs conversion
-        val (convertedPlan, _) = readConversion(plan)
+        val (convertedPlan, _) = convertInputs(plan)
         convertedPlan
     }
   }
 
-  private def readConversion(
+  /**
+   * Apply the correction to all timestamp inputs, and replace all references to the raw attributes
+   * with the new converted inputs.
+   * @return The converted plan, and the replacements to be applied further up the plan
+   */
+  private def convertInputs(
       plan: LogicalPlan
       ): (LogicalPlan, Map[ExprId, NamedExpression]) = plan match {
     case alreadyConverted@Project(exprs, _) if hasCorrection(exprs) =>
-      logDebug(s"not transforming $alreadyConverted because its already converted")
       (alreadyConverted, Map())
     case lr@LogicalRelation(fsRelation: HadoopFsRelation, _, _, _) =>
       val tzOpt = extractTableTz(lr.catalogTable, fsRelation.options)
       tzOpt.map { tableTz =>
         // the table has a timezone set, so after reading the data, apply a conversion
 
-        // SessionTZ will make the time display correctly in SQL queries, but incorrectly if you
-        // pull Timestamp objects out (eg. with a dataset.collect())
+        // SessionTZ (instead of JVM TZ) will make the time display correctly in SQL queries, but
+        // incorrectly if you pull Timestamp objects out (eg. with a dataset.collect())
         val toTz = sparkSession.sessionState.conf.sessionLocalTimeZone
         if (toTz != tableTz) {
           logDebug(s"table tz = $tableTz; converting to current session tz = $toTz")
@@ -83,7 +87,7 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
       // first, process all the children -- this ensures we have the right renames in scope.
       var newReplacements = Map[ExprId, NamedExpression]()
       val fixedPlan = other.mapChildren { originalPlan =>
-        val (newPlan, extraReplacements) = readConversion(originalPlan)
+        val (newPlan, extraReplacements) = convertInputs(originalPlan)
         newReplacements ++= extraReplacements
         newPlan
       }
@@ -98,7 +102,6 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
             case ue: UnresolvedException[_] => exp
           }
         }
-        logDebug(s"adjusted $outerExp to $adjustedExp using $newReplacements")
         adjustedExp
       }
       (fixedExpressions, newReplacements)
@@ -114,12 +117,6 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
       }
     }
     hasCorrection
-  }
-
-  private def insertIntoFsCopy(
-      insert: InsertIntoHadoopFsRelationCommand,
-      newQuery: LogicalPlan): InsertIntoHadoopFsRelationCommand = {
-    insert.copy(query = newQuery)
   }
 
   private def writeConversion(
@@ -194,6 +191,7 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
 
 private[sql] object TimestampTableTimeZone {
   val TIMEZONE_PROPERTY = "table.timezone"
+
   /**
    * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
    */
