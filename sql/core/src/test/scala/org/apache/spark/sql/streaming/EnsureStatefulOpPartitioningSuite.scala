@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, StatefulOperator, StatefulOperatorStateInfo}
 import org.apache.spark.sql.test.SharedSQLContext
 
-class IncrementalExecutionRulesSuite extends SparkPlanTest with SharedSQLContext {
+class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLContext {
 
   import testImplicits._
   super.beforeAll()
@@ -39,39 +39,46 @@ class IncrementalExecutionRulesSuite extends SparkPlanTest with SharedSQLContext
   testEnsureStatefulOpPartitioning(
     "ClusteredDistribution generates Exchange with HashPartitioning",
     baseDf.queryExecution.sparkPlan,
-    keys => ClusteredDistribution(keys),
-    keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
+    requiredDistribution = keys => ClusteredDistribution(keys),
+    expectedPartitioning =
+      keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
     expectShuffle = true)
 
   testEnsureStatefulOpPartitioning(
     "ClusteredDistribution with coalesce(1) generates Exchange with HashPartitioning",
     baseDf.coalesce(1).queryExecution.sparkPlan,
-    keys => ClusteredDistribution(keys),
-    keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
+    requiredDistribution = keys => ClusteredDistribution(keys),
+    expectedPartitioning =
+      keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
     expectShuffle = true)
 
   testEnsureStatefulOpPartitioning(
     "AllTuples generates Exchange with SinglePartition",
     baseDf.queryExecution.sparkPlan,
-    keys => AllTuples,
-    keys => SinglePartition,
+    requiredDistribution = _ => AllTuples,
+    expectedPartitioning = _ => SinglePartition,
     expectShuffle = true)
 
   testEnsureStatefulOpPartitioning(
     "AllTuples with coalesce(1) doesn't need Exchange",
     baseDf.coalesce(1).queryExecution.sparkPlan,
-    keys => AllTuples,
-    keys => SinglePartition,
+    requiredDistribution = _ => AllTuples,
+    expectedPartitioning = _ => SinglePartition,
     expectShuffle = false)
 
+  /**
+   * For `StatefulOperator` with the given `requiredChildDistribution`, and child SparkPlan
+   * `inputPlan`, ensures that the incremental planner adds exchanges, if required, in order to
+   * ensure the expected partitioning.
+   */
   private def testEnsureStatefulOpPartitioning(
       testName: String,
       inputPlan: SparkPlan,
       requiredDistribution: Seq[Attribute] => Distribution,
       expectedPartitioning: Seq[Attribute] => Partitioning,
       expectShuffle: Boolean): Unit = {
-    test("EnsureStatefulOpPartitioning - " + testName) {
-      val operator = TestOperator(inputPlan, requiredDistribution(inputPlan.output.take(1)))
+    test(testName) {
+      val operator = TestStatefulOperator(inputPlan, requiredDistribution(inputPlan.output.take(1)))
       val executed = executePlan(operator, OutputMode.Complete())
       if (expectShuffle) {
         val exchange = executed.children.find(_.isInstanceOf[Exchange])
@@ -88,6 +95,7 @@ class IncrementalExecutionRulesSuite extends SparkPlanTest with SharedSQLContext
     }
   }
 
+  /** Executes a SparkPlan using the IncrementalPlanner used for Structured Streaming. */
   private def executePlan(
       p: SparkPlan,
       outputMode: OutputMode = OutputMode.Append()): SparkPlan = {
@@ -111,13 +119,14 @@ class IncrementalExecutionRulesSuite extends SparkPlanTest with SharedSQLContext
     }
     execution.executedPlan
   }
-}
 
-case class TestOperator(
-    child: SparkPlan,
-    requiredDist: Distribution) extends UnaryExecNode with StatefulOperator {
-  override def output: Seq[Attribute] = child.output
-  override def doExecute(): RDD[InternalRow] = child.execute()
-  override def requiredChildDistribution: Seq[Distribution] = requiredDist :: Nil
-  override def stateInfo: Option[StatefulOperatorStateInfo] = None
+  /** Used to emulate a [[StatefulOperator]] with the given requiredDistribution. */
+  case class TestStatefulOperator(
+      child: SparkPlan,
+      requiredDist: Distribution) extends UnaryExecNode with StatefulOperator {
+    override def output: Seq[Attribute] = child.output
+    override def doExecute(): RDD[InternalRow] = child.execute()
+    override def requiredChildDistribution: Seq[Distribution] = requiredDist :: Nil
+    override def stateInfo: Option[StatefulOperatorStateInfo] = None
+  }
 }
