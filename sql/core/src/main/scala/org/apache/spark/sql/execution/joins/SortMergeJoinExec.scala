@@ -101,14 +101,15 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
-  /**
-   * For SMJ, child's output must have been sorted on key or expressions with the same order as
-   * key, so we can get ordering for key from child's output ordering.
-   */
   private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
     : Seq[SortOrder] = {
-    keys.zip(childOutputOrdering).map { case (key, childOrder) =>
-      SortOrder(key, Ascending, childOrder.sameOrderExpressions + childOrder.child - key)
+    val requiredOrdering = requiredOrders(keys)
+    if (SparkPlan.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
+      keys.zip(childOutputOrdering).map { case (key, childOrder) =>
+        SortOrder(key, Ascending, childOrder.sameOrderExpressions + childOrder.child - key)
+      }
+    } else {
+      requiredOrdering
     }
   }
 

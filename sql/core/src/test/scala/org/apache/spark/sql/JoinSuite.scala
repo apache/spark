@@ -24,6 +24,9 @@ import scala.language.existentials
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.execution.SortExec
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -61,6 +64,42 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     assert(operators.size === 1)
     if (operators.head.getClass != c) {
       fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
+    }
+  }
+
+  def assertJoinOrdering(sqlString: String, numOfJoin: Int, numOfSort: Int): Any = {
+    val df = sql(sqlString)
+    val physical = df.queryExecution.sparkPlan
+    val physicalJoins = physical.collect {
+      case j: SortMergeJoinExec => j
+    }
+    val executed = df.queryExecution.executedPlan
+    val executedJoins = executed.collect {
+      case j: SortMergeJoinExec => j
+    }
+    val executedSorts = executed.collect {
+      case s: SortExec => s
+    }
+    assert(executedSorts.size == numOfSort)
+    val joinPairs = physicalJoins.zip(executedJoins)
+    assert(joinPairs.size == numOfJoin)
+
+    joinPairs.foreach {
+      case(join1, join2) =>
+        val leftKeys = join1.leftKeys
+        val rightKeys = join1.rightKeys
+        val outputOrderingPhysical = join1.outputOrdering
+        val outputOrderingExecuted = join2.outputOrdering
+
+        assert(
+          SparkPlan.orderingSatisfies(
+            outputOrderingPhysical, leftKeys.map(SortOrder(_, Ascending))))
+        assert(
+          SparkPlan.orderingSatisfies(
+            outputOrderingPhysical, rightKeys.map(SortOrder(_, Ascending))))
+        assert(outputOrderingPhysical == outputOrderingExecuted,
+          s"Physical operator $join1 did not have the same output ordering as " +
+          s"corresponding executed operator $join2")
     }
   }
 
@@ -786,5 +825,15 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         )
       }
     }
+  }
+
+  test("test SortMergeJoin output ordering") {
+    assertJoinOrdering("SELECT * FROM testData JOIN testData2 ON key = a", 1, 2)
+    assertJoinOrdering("SELECT * FROM testData t1 JOIN " +
+      "testData2 t2 ON t1.key = t2.a JOIN testData3 t3 ON t2.a = t3.a", 2, 3)
+    assertJoinOrdering("SELECT * FROM testData t1 JOIN " +
+      "testData2 t2 ON t1.key = t2.a JOIN " +
+      "testData3 t3 ON t2.a = t3.a JOIN " +
+      "testData t4 ON t1.key = t4.key", 3, 4)
   }
 }
