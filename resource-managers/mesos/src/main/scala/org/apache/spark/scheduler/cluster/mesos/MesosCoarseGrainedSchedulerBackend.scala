@@ -22,11 +22,12 @@ import java.util.{Collections, List => JList}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
-import org.apache.mesos.SchedulerDriver
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
+
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.SchedulerDriver
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
@@ -38,6 +39,7 @@ import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
+
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -59,6 +61,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
     Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
+
+  private val principal = conf.get("spark.yarn.principal", null)
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -194,6 +198,24 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.conf.getOption("spark.mesos.driver.frameworkId").map(_ + suffix)
     )
 
+    if (principal != null) {
+      logDebug(s"Principal found ($principal) starting token renewer")
+      val credentialRenewerThread = new Thread {
+        setName("MesosCredentialRenewer")
+        override def run(): Unit = {
+          val credentialRenewer =
+            new MesosCredentialRenewer(
+              conf,
+              hadoopDelegationTokenManager.get,
+              MesosCredentialRenewer.getTokenRenewalInterval(hadoopDelegationCreds.get, conf),
+              driverEndpoint)
+          credentialRenewer.scheduleTokenRenewal()
+        }
+      }
+
+      credentialRenewerThread.start()
+      credentialRenewerThread.join()
+    }
     startScheduler(driver)
   }
 

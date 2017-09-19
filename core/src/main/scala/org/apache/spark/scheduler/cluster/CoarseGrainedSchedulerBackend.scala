@@ -159,6 +159,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         scheduler.getExecutorsAliveOnHost(host).foreach { exec =>
           killExecutors(exec.toSeq, replace = true, force = true)
         }
+
+      case UpdateDelegationTokens(tokens) =>
+        logDebug("Asking each executor to update HDFS delegation tokens")
+        for ((x, executorData) <- executorDataMap) {
+          executorData.executorEndpoint.send(UpdateDelegationTokens(tokens))
+        }
+
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

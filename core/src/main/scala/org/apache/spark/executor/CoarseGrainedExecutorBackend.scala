@@ -26,6 +26,8 @@ import scala.collection.mutable
 import scala.util.{Failure, Success}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -123,6 +125,8 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+    case UpdateDelegationTokens(tokens) =>
+      CoarseGrainedExecutorBackend.addDelegationTokens(tokens, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -173,6 +177,16 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
+
+  private def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
+    logInfo(s"Found delegation tokens of ${tokens.length} bytes")
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    hadoopConf.set("hadoop.security.authentication", "Token")
+    UserGroupInformation.setConfiguration(hadoopConf)
+    val creds = SparkHadoopUtil.get.deserialize(tokens)
+    // decode tokens and add them to the credentials
+    UserGroupInformation.getCurrentUser.addCredentials(SparkHadoopUtil.get.deserialize(tokens))
+  }
 
   private def run(
       driverUrl: String,
