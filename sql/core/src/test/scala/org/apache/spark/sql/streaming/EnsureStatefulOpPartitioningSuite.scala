@@ -119,14 +119,14 @@ class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLCont
     }
     execution.executedPlan
   }
+}
 
-  /** Used to emulate a `StatefulOperator` with the given requiredDistribution. */
-  case class TestStatefulOperator(
-      child: SparkPlan,
-      requiredDist: Distribution) extends UnaryExecNode with StatefulOperator {
-    override def output: Seq[Attribute] = child.output
-    override def doExecute(): RDD[InternalRow] = child.execute()
-    override def requiredChildDistribution: Seq[Distribution] = requiredDist :: Nil
-    override def stateInfo: Option[StatefulOperatorStateInfo] = None
-  }
+/** Used to emulate a `StatefulOperator` with the given requiredDistribution. */
+case class TestStatefulOperator(
+    child: SparkPlan,
+    requiredDist: Distribution) extends UnaryExecNode with StatefulOperator {
+  override def output: Seq[Attribute] = child.output
+  override def doExecute(): RDD[InternalRow] = child.execute()
+  override def requiredChildDistribution: Seq[Distribution] = requiredDist :: Nil
+  override def stateInfo: Option[StatefulOperatorStateInfo] = None
 }
