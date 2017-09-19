@@ -37,6 +37,8 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.log4j.{Level, Logger}
 import org.apache.thrift.transport.TSocket
 
+import org.apache.spark.SparkConf
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
@@ -81,7 +83,17 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       System.exit(1)
     }
 
-    val cliConf = HiveUtils.newHiveConfigurations()()()
+    val sparkConf = new SparkConf(loadDefaults = true)
+    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
+    val extraConfigs = HiveUtils.formatTimeVarsForHiveClient(hadoopConf)
+
+    val cliConf = new HiveConf(classOf[SessionState])
+    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
+      ++ sparkConf.getAll.toMap ++ extraConfigs).foreach {
+      case (k, v) =>
+        cliConf.set(k, v)
+    }
+
     val sessionState = new CliSessionState(cliConf)
 
     sessionState.in = System.in

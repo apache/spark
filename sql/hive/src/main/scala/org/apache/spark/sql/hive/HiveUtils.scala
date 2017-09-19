@@ -232,54 +232,6 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
-   * Generate an instance of [[HiveConf]] from [[SparkConf]]& hadoop [[Configuration]] &
-   * formatted extra time configurations with an isolated classloader needed if isolationOn
-   * for [[HiveClient]] construction
-   * @param sparkConf a [[SparkConf]] object specifying Spark parameters
-   * @param classLoader an isolated classloader needed if isolationOn for [[HiveClient]]
-   *                    construction
-   * @param hadoopConf a hadoop [[Configuration]] object, Optional if we want generated it from
-   *                   the sparkConf
-   * @param extraTimeConfs time configurations in the form of long values from the given hadoopConf
-   */
-
-  private[hive] def newHiveConfigurations(
-      sparkConf: SparkConf = new SparkConf(loadDefaults = true),
-      classLoader: ClassLoader = null)(
-      hadoopConf: Configuration = SparkHadoopUtil.get.newConfiguration(sparkConf))(
-      extraTimeConfs: Map[String, String] = formatTimeVarsForHiveClient(hadoopConf)): HiveConf = {
-    val hiveConf = new HiveConf(classOf[SessionState])
-    // HiveConf is a Hadoop Configuration, which has a field of classLoader and
-    // the initial value will be the current thread's context class loader
-    // (i.e. initClassLoader at here).
-    // We call initialConf.setClassLoader(initClassLoader) at here to make
-    // this action explicit.
-    if (classLoader != null) {
-      hiveConf.setClassLoader(classLoader)
-    }
-    // 1: Take all from the hadoopConf to this hiveConf.
-    // This hadoopConf contains user settings in Hadoop's core-site.xml file
-    // and Hive's hive-site.xml file. Note, we load hive-site.xml file manually in
-    // SharedState and put settings in this hadoopConf instead of relying on HiveConf
-    // to load user settings. Otherwise, HiveConf's initialize method will override
-    // settings in the hadoopConf. This issue only shows up when spark.sql.hive.metastore.jars
-    // is not set to builtin. When spark.sql.hive.metastore.jars is builtin, the classpath
-    // has hive-site.xml. So, HiveConf will use that to override its default values.
-    // 2: we set all spark confs to this hiveConf.
-    // 3: we set all entries in config to this hiveConf.
-    (hadoopConf.iterator().asScala.map(kv => kv.getKey -> kv.getValue)
-      ++ sparkConf.getAll.toMap ++ extraTimeConfs).foreach {
-      case (k, v) =>
-        logDebug(
-          s"""
-             |Applying Hadoop/Hive/Spark and extra properties to Hive Conf:
-             |$k=${if (k.toLowerCase(Locale.ROOT).contains("password")) "xxx" else v}
-           """.stripMargin)
-        hiveConf.set(k, v)
-    }
-    hiveConf
-  }
-  /**
    * Check current Thread's SessionState type
    * @return true when SessionState.get returns an instance of CliSessionState,
    *         false when it gets non-CliSessionState instance or null
