@@ -237,15 +237,12 @@ private[ml] object ProbabilisticClassificationModel {
    */
   def normalizeToProbabilitiesInPlace(v: DenseVector): Unit = {
     val sum = v.values.sum
-    if (sum != 0) {
-      var i = 0
-      val size = v.size
-      while (i < size) {
-        v.values(i) /= sum
-        i += 1
-      }
-    } else {
-      throw new IllegalArgumentException("All-0 vector is not allowed normalizing.")
+    require(sum > 0, "All-0 vector is not allowed normalizing.")
+    var i = 0
+    val size = v.size
+    while (i < size) {
+      v.values(i) /= sum
+      i += 1
     }
   }
 }

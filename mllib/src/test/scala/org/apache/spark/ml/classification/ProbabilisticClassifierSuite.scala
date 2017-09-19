@@ -88,9 +88,8 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
 
     // all-0 input test
     val vec2 = Vectors.dense(0.0, 0.0, 0.0).toDense
-    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec2)
-    vec2.toArray.foreach { v =>
-      assert(v ~== 1.0 / 3 relTol 1e-3)
+    intercept[IllegalArgumentException] {
+      ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec2)
     }
   }
 }
