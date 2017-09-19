@@ -114,7 +114,6 @@ object Word2VecCBOWSolver extends Logging {
             windowSize,
             doSample,
             sampleTableBroadcast.value,
-            skipGramMode,
             random)
         }
 
@@ -156,51 +155,62 @@ object Word2VecCBOWSolver extends Logging {
               s"${wordCount / timeTaken * 1000} words/s")
           }
 
-          val errors = for ((contextIds, word) <- batch) yield {
-            // initialize vectors to 0
-            zeroVector(contextVec)
-            zeroVector(l2Vectors)
-            zeroVector(gb)
-            zeroVector(neu1e)
-
-            val scale = 1.0f / contextIds.length
-
-            // feed forward
-            contextIds.foreach { c =>
-              blas.saxpy(vectorSize, scale, syn0, c * vectorSize, 1, contextVec, 0, 1)
+          val errors = for ((ids, word) <- batch) yield {
+            val contexts = if (skipGramMode) {
+              ids.map(i => Seq(i))
+            } else {
+              Seq(ids)
             }
 
-            generateNegativeSamples(random, word, unigramTable, negativeSamples, wordIndices)
+            val errs = for (contextIds <- contexts) yield {
+              // initialize vectors to 0
+              zeroVector(contextVec)
+              zeroVector(l2Vectors)
+              zeroVector(gb)
+              zeroVector(neu1e)
 
-            Iterator.range(0, wordIndices.length).foreach { i =>
-              Array.copy(syn1, vectorSize * wordIndices(i), l2Vectors, vectorSize * i, vectorSize)
-            }
+              val scale = 1.0f / contextIds.length
 
-            // propagating hidden to output in batch
-            val rows = negativeSamples + 1
-            val cols = vectorSize
-            blas.sgemv("T", cols, rows, 1.0f, l2Vectors, 0, cols, contextVec, 0, 1, 0.0f, gb, 0, 1)
-
-            Iterator.range(0, negativeSamples + 1).foreach { i =>
-              if (gb(i) > -MAX_EXP && gb(i) < MAX_EXP) {
-                val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
-                // computing error gradient
-                val err = (negLabels(i) - v) * alpha
-                // update hidden -> output layer, syn1
-                blas.saxpy(vectorSize, err, contextVec, 0, 1, syn1, wordIndices(i) * vectorSize, 1)
-                // update for word vectors
-                blas.saxpy(vectorSize, err, l2Vectors, i * vectorSize, 1, neu1e, 0, 1)
-                gb.update(i, err)
-              } else {
-                gb.update(i, 0.0f)
+              // feed forward
+              contextIds.foreach { c =>
+                blas.saxpy(vectorSize, scale, syn0, c * vectorSize, 1, contextVec, 0, 1)
               }
-            }
 
-            // update input -> hidden layer, syn0
-            contextIds.foreach { i =>
-              blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, i * vectorSize, 1)
+              generateNegativeSamples(random, word, unigramTable, negativeSamples, wordIndices)
+
+              Iterator.range(0, wordIndices.length).foreach { i =>
+                Array.copy(syn1, vectorSize * wordIndices(i), l2Vectors, vectorSize * i, vectorSize)
+              }
+
+              // propagating hidden to output in batch
+              val rows = negativeSamples + 1
+              val cols = vectorSize
+              blas
+                .sgemv("T", cols, rows, 1.0f, l2Vectors, 0, cols, contextVec, 0, 1, 0.0f, gb, 0, 1)
+
+              Iterator.range(0, negativeSamples + 1).foreach { i =>
+                if (gb(i) > -MAX_EXP && gb(i) < MAX_EXP) {
+                  val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
+                  // computing error gradient
+                  val err = (negLabels(i) - v) * alpha
+                  // update hidden -> output layer, syn1
+                  blas
+                    .saxpy(vectorSize, err, contextVec, 0, 1, syn1, wordIndices(i) * vectorSize, 1)
+                  // update for word vectors
+                  blas.saxpy(vectorSize, err, l2Vectors, i * vectorSize, 1, neu1e, 0, 1)
+                  gb.update(i, err)
+                } else {
+                  gb.update(i, 0.0f)
+                }
+              }
+
+              // update input -> hidden layer, syn0
+              contextIds.foreach { i =>
+                blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, i * vectorSize, 1)
+              }
+              gb.map(math.abs).sum / alpha
             }
-            gb.map(math.abs).sum / alpha
+            errs.sum
           }
           logInfo(s"Partition: $i_, Average Batch Error = ${errors.sum / batchSize}")
         }
@@ -310,33 +320,23 @@ object Word2VecCBOWSolver extends Logging {
       window: Int,
       doSample: Boolean,
       samplingTable: Array[Float],
-      sgns: Boolean,
-      random: XORShiftRandom): Iterator[(Array[Int], Int)] = {
+      random: XORShiftRandom): Iterator[(Seq[Int], Int)] = {
     val reducedSentence = if (doSample) {
       sentence.filter(i => samplingTable(i) > random.nextFloat)
     } else {
       sentence
     }
-    val contextWordPairs = reducedSentence.iterator.zipWithIndex.map { case (word, i) =>
+    val sentenceLength = reducedSentence.length
+
+    Iterator.range(0, sentenceLength).map { i =>
       val b = window - random.nextInt(window) // (window - a) in original code
       // pick b words around the current word index
       val start = math.max(0, i - b) // c in original code, floor ar 0
-      val end = math.min(reducedSentence.length, i + b + 1) // cap at sentence length
+      val end = math.min(sentenceLength, i + b + 1) // cap at sentence length
       // make sure current word is not a part of the context
-      val contextIds = reducedSentence.view.zipWithIndex.slice(start, end)
-        .filter{case (_, pos) => pos != i}.map(_._1)
-      (contextIds.toArray, word)
-    }
-    if(sgns) {
-      // this appears a little counter-intuitive when compared with the theoretical
-      // description of skip-gram, but this just changes the order in which
-      // (word, context) pairs are used to estimate the model. The word2vec c code
-      // implements skip-gram this way as well.
-      contextWordPairs.flatMap { case (contextIds, word) =>
-        contextIds.map(id => (Array.fill(1)(id), word))
-      }
-    } else {
-      contextWordPairs
+      val contextIds = Iterator.range(start, end).filter(_ != i).map(reducedSentence(_))
+      val word = reducedSentence(i)
+      (contextIds.toSeq, word)
     }
   }
 
