@@ -262,13 +262,14 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
               // Finally, try changing the tbl timezone.  This destroys integrity
               // of the existing data, but at this point we're just checking we can change
               // the metadata
-              spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ($key="America/Los_Angeles")""")
+              spark.sql(
+                s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="America/Los_Angeles")""")
               checkHasTz(spark, tblName, Some("America/Los_Angeles"))
 
-              spark.sql(s"""ALTER TABLE $tblName UNSET TBLPROPERTIES ($key)""")
+              spark.sql(s"""ALTER TABLE $tblName UNSET TBLPROPERTIES ("$key")""")
               checkHasTz(spark, tblName, None)
 
-              spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ($key="UTC")""")
+              spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="UTC")""")
               checkHasTz(spark, tblName, Some("UTC"))
             }
           }
@@ -307,7 +308,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
 
       createAndSave.createAndSave(data.toDF(), "bad_tz_table", None, "parquet")
       hasBadTzException {
-        spark.sql(s"""ALTER TABLE bad_tz_table SET TBLPROPERTIES($key="$badVal")""")
+        spark.sql(s"""ALTER TABLE bad_tz_table SET TBLPROPERTIES("$key"="$badVal")""")
       }
     }
   }
@@ -336,14 +337,14 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
       withView("view_with_tz") {
         val exc1 = intercept[AnalysisException]{
           spark.sql(s"""CREATE VIEW view_with_tz
-                        | TBLPROPERTIES ($key="UTC")
+                        | TBLPROPERTIES ("$key"="UTC")
                         | AS SELECT * FROM ok_table
            """.stripMargin)
         }
         assert(exc1.getMessage.contains("Timezone cannot be set for view"))
         spark.sql("CREATE VIEW view_with_tz AS SELECT * FROM ok_table")
         val exc2 = intercept[AnalysisException]{
-          spark.sql(s"""ALTER VIEW view_with_tz SET TBLPROPERTIES($key="UTC")""")
+          spark.sql(s"""ALTER VIEW view_with_tz SET TBLPROPERTIES("$key"="UTC")""")
         }
         assert(exc2.getMessage.contains("Timezone cannot be set for view"))
       }

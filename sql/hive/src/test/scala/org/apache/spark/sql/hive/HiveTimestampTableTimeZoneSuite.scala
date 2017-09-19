@@ -39,7 +39,7 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
         format: String): Boolean = {
       if (format == "parquet") {
         val tblProperties = tzOpt.map { tz =>
-          s"""TBLPROPERTIES (${TimestampTableTimeZone.TIMEZONE_PROPERTY}="$tz")"""
+          s"""TBLPROPERTIES ("${TimestampTableTimeZone.TIMEZONE_PROPERTY}"="$tz")"""
         }.getOrElse("")
         spark.sql(
           s"""CREATE TABLE $table (
@@ -65,7 +65,7 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
         destFormat: String): Boolean = {
       if (destFormat == "parquet") {
         val tblProperties = destTz.map { tz =>
-          s"""TBLPROPERTIES (${TimestampTableTimeZone.TIMEZONE_PROPERTY}="$tz")"""
+          s"""TBLPROPERTIES ("${TimestampTableTimeZone.TIMEZONE_PROPERTY}"="$tz")"""
         }.getOrElse("")
         // this isn't just a "ctas" sql statement b/c that doesn't let us specify the table tz
         spark.sql(
