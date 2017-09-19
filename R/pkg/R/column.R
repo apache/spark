@@ -238,8 +238,8 @@ setMethod("between", signature(x = "Column"),
 #' @param x a Column.
 #' @param dataType a character object describing the target data type.
 #'        See
-#'        \href{https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-r-and-spark}{
-#'        Spark Data Types} for available data types.
+#'        \href{https://spark.apache.org/docs/latest/sparkr.html#data-type-mapping-between-
+#'        r-and-spark}{Spark Data Types} for available data types.
 #' @rdname cast
 #' @name cast
 #' @family colum_func
