@@ -18,7 +18,7 @@
 package org.apache.spark.ml.optim
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.ml.feature.{Instance, OffsetInstance}
+import org.apache.spark.ml.feature.Instance
 import org.apache.spark.ml.linalg._
 import org.apache.spark.rdd.RDD
 
@@ -440,7 +440,11 @@ private[ml] object WeightedLeastSquares {
     /**
      * Weighted population standard deviation of labels.
      */
-    def bStd: Double = math.sqrt(bbSum / wSum - bBar * bBar)
+    def bStd: Double = {
+      // We prevent variance from negative value caused by numerical error.
+      val variance = math.max(bbSum / wSum - bBar * bBar, 0.0)
+      math.sqrt(variance)
+    }
 
     /**
      * Weighted mean of (label * features).
@@ -471,7 +475,8 @@ private[ml] object WeightedLeastSquares {
       while (i < triK) {
         val l = j - 2
         val aw = aSum(l) / wSum
-        std(l) = math.sqrt(aaValues(i) / wSum - aw * aw)
+        // We prevent variance from negative value caused by numerical error.
+        std(l) = math.sqrt(math.max(aaValues(i) / wSum - aw * aw, 0.0))
         i += j
         j += 1
       }
@@ -489,7 +494,8 @@ private[ml] object WeightedLeastSquares {
       while (i < triK) {
         val l = j - 2
         val aw = aSum(l) / wSum
-        variance(l) = aaValues(i) / wSum - aw * aw
+        // We prevent variance from negative value caused by numerical error.
+        variance(l) = math.max(aaValues(i) / wSum - aw * aw, 0.0)
         i += j
         j += 1
       }

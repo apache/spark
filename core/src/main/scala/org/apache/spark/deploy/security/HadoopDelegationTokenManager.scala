@@ -116,7 +116,7 @@ private[spark] class HadoopDelegationTokenManager(
       creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
       if (provider.delegationTokensRequired(hadoopConf)) {
-        provider.obtainDelegationTokens(hadoopConf, creds)
+        provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +
           s" Check your configuration to see if security is disabled or not.")

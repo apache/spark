@@ -14,31 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.io;
 
-package org.apache.spark.sql.catalyst
+import org.junit.Before;
 
-import scala.util.control.NonFatal
+import java.io.IOException;
 
-import org.apache.spark.sql.{DataFrame, Dataset, QueryTest}
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+/**
+ * Tests functionality of {@link NioBufferedFileInputStream}
+ */
+public class NioBufferedInputStreamSuite extends GenericFileInputStreamSuite {
 
-
-abstract class SQLBuilderTest extends QueryTest with TestHiveSingleton {
-  protected def checkSQL(e: Expression, expectedSQL: String): Unit = {
-    val actualSQL = e.sql
-    try {
-      assert(actualSQL === expectedSQL)
-    } catch {
-      case cause: Throwable =>
-        fail(
-          s"""Wrong SQL generated for the following expression:
-             |
-             |${e.prettyName}
-             |
-             |$cause
-           """.stripMargin)
-    }
+  @Before
+  public void setUp() throws IOException {
+    super.setUp();
+    inputStream = new NioBufferedFileInputStream(inputFile);
   }
 }

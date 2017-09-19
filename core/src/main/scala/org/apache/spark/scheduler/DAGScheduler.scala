@@ -281,6 +281,13 @@ class DAGScheduler(
     eventProcessLoop.post(TaskSetFailed(taskSet, reason, exception))
   }
 
+  /**
+   * Called by the TaskSetManager when it decides a speculative task is needed.
+   */
+  def speculativeTaskSubmitted(task: Task[_]): Unit = {
+    eventProcessLoop.post(SpeculativeTaskSubmitted(task))
+  }
+
   private[scheduler]
   def getCacheLocs(rdd: RDD[_]): IndexedSeq[Seq[TaskLocation]] = cacheLocs.synchronized {
     // Note: this doesn't use `getOrElse()` because this method is called O(num tasks) times
@@ -810,6 +817,10 @@ class DAGScheduler(
     // In that case, we wouldn't have the stage anymore in stageIdToStage.
     val stageAttemptId = stageIdToStage.get(task.stageId).map(_.latestInfo.attemptId).getOrElse(-1)
     listenerBus.post(SparkListenerTaskStart(task.stageId, stageAttemptId, taskInfo))
+  }
+
+  private[scheduler] def handleSpeculativeTaskSubmitted(task: Task[_]): Unit = {
+    listenerBus.post(SparkListenerSpeculativeTaskSubmitted(task.stageId))
   }
 
   private[scheduler] def handleTaskSetFailed(
@@ -1777,6 +1788,9 @@ private[scheduler] class DAGSchedulerEventProcessLoop(dagScheduler: DAGScheduler
 
     case BeginEvent(task, taskInfo) =>
       dagScheduler.handleBeginEvent(task, taskInfo)
+
+    case SpeculativeTaskSubmitted(task) =>
+      dagScheduler.handleSpeculativeTaskSubmitted(task)
 
     case GettingResultEvent(taskInfo) =>
       dagScheduler.handleGetTaskResult(taskInfo)

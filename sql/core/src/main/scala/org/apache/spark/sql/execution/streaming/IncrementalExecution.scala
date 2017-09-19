@@ -39,7 +39,7 @@ class IncrementalExecution(
     val checkpointLocation: String,
     val runId: UUID,
     val currentBatchId: Long,
-    offsetSeqMetadata: OffsetSeqMetadata)
+    val offsetSeqMetadata: OffsetSeqMetadata)
   extends QueryExecution(sparkSession, logicalPlan) with Logging {
 
   // Modified planner with stateful operations.

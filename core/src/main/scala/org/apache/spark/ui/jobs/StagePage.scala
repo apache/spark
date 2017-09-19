@@ -299,6 +299,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           stageData.hasShuffleRead,
           stageData.hasShuffleWrite,
           stageData.hasBytesSpilled,
+          parent.lastUpdateTime,
           currentTime,
           pageSize = taskPageSize,
           sortColumn = taskSortColumn,
@@ -863,6 +864,7 @@ private[ui] class TaskDataSource(
     hasShuffleRead: Boolean,
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
+    lastUpdateTime: Option[Long],
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
@@ -889,8 +891,9 @@ private[ui] class TaskDataSource(
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
     val info = taskData.taskInfo
     val metrics = taskData.metrics
-    val duration = taskData.taskDuration.getOrElse(1L)
-    val formatDuration = taskData.taskDuration.map(d => UIUtils.formatDuration(d)).getOrElse("")
+    val duration = taskData.taskDuration(lastUpdateTime).getOrElse(1L)
+    val formatDuration =
+      taskData.taskDuration(lastUpdateTime).map(d => UIUtils.formatDuration(d)).getOrElse("")
     val schedulerDelay = metrics.map(getSchedulerDelay(info, _, currentTime)).getOrElse(0L)
     val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
     val taskDeserializationTime = metrics.map(_.executorDeserializeTime).getOrElse(0L)
@@ -1154,6 +1157,7 @@ private[ui] class TaskPagedTable(
     hasShuffleRead: Boolean,
     hasShuffleWrite: Boolean,
     hasBytesSpilled: Boolean,
+    lastUpdateTime: Option[Long],
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
@@ -1179,6 +1183,7 @@ private[ui] class TaskPagedTable(
     hasShuffleRead,
     hasShuffleWrite,
     hasBytesSpilled,
+    lastUpdateTime,
     currentTime,
     pageSize,
     sortColumn,
