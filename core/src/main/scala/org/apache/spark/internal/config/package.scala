@@ -406,7 +406,7 @@ package object config {
       .doc("Comma-separated list of schemes for which files will be downloaded to the " +
         "local disk prior to being added to YARN's distributed cache. For use in cases " +
         "where the YARN service does not support schemes that are supported by Spark, like http, " +
-        "https, ftp.")
+        "https and ftp.")
       .stringConf
       .toSequence
       .createWithDefault(Nil)

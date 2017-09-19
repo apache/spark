@@ -217,7 +217,7 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>
     Comma-separated list of schemes for which files will be downloaded to the local disk prior to 
     being added to YARN's distributed cache. For use in cases where the YARN service does not 
-    support schemes that are supported by Spark.
+    support schemes that are supported by Spark, like http, https and ftp.
   </td>
 </tr>
 <tr>
