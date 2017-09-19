@@ -22,7 +22,7 @@ import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, Executors, ExecutorService, Future, TimeUnit}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.mutable
+import scala.collection.{mutable, JavaConverters}
 import scala.xml.Node
 
 import com.google.common.io.ByteStreams
@@ -307,6 +307,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     }
   }
 
+  private def removeNotExistApps(statusList: Seq[FileStatus]): Unit = {
+    val pathList = statusList.map(_.getPath)
+    val nameList = pathList.map(_.getName)
+    applications.filterKeys(!nameList.contains(_)).keys.foreach(applications.remove(_))
+    JavaConverters.mapAsScalaMapConverter(fileToAppInfo).asScala.filterKeys(!pathList.contains(_))
+      .keys.foreach(fileToAppInfo.remove(_))
+  }
+
   /**
    * Builds the application list based on the current contents of the log directory.
    * Tries to reuse as much of the data already in memory as possible, by not reading
@@ -318,6 +326,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
       val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
         .getOrElse(Seq.empty[FileStatus])
+
+      // if the log file is not exist, update applications and fileToAppInfo
+      removeNotExistApps(statusList)
+
       // scan for modified applications, replay and merge them
       val logInfos: Seq[FileStatus] = statusList
         .filter { entry =>
