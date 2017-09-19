@@ -22,7 +22,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.execution.streaming.state.SymmetricHashJoinStateManager.StateStoreAwareZipPartitionsRDD
 import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
@@ -80,22 +79,6 @@ package object state {
         indexOrdinal,
         sessionState,
         storeCoordinator)
-    }
-
-    /**
-     * Function used by `StreamingSymmetricHashJoinExec` to zip together the partitions of two
-     * child RDDs for joining the data in corresponding partitions, while ensuring the tasks'
-     * preferred location is based on which executors have the required join state stores already
-     * loaded.
-     */
-    private [streaming] def stateStoreAwareZipPartitions[U: ClassTag, V: ClassTag](
-        dataRDD2: RDD[U],
-        stateInfo: StatefulOperatorStateInfo,
-        storeNames: Seq[String],
-        storeCoordinator: StateStoreCoordinatorRef
-      )(f: (Iterator[T], Iterator[U]) => Iterator[V]): RDD[V] = {
-      new StateStoreAwareZipPartitionsRDD(
-        dataRDD.sparkContext, f, dataRDD, dataRDD2, stateInfo, storeNames, Some(storeCoordinator))
     }
   }
 }

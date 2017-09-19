@@ -239,10 +239,11 @@ case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
 
 object StateStoreProviderId {
   private[sql] def apply(
-    stateInfo: StatefulOperatorStateInfo, storeName: String): StateStoreProviderId = {
+      stateInfo: StatefulOperatorStateInfo,
+      partitionIndex: Int,
+      storeName: String): StateStoreProviderId = {
     val storeId = StateStoreId(
-      stateInfo.checkpointLocation, stateInfo.operatorId,
-      TaskContext.getPartitionId(), storeName)
+      stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
     StateStoreProviderId(storeId, stateInfo.queryRunId)
   }
 }

@@ -191,8 +191,8 @@ class SymmetricHashJoinStateManager(
 
     /** Get the StateStore with the given schema */
     protected def getStateStore(keySchema: StructType, valueSchema: StructType): StateStore = {
-      val storeProviderId =
-        StateStoreProviderId(stateInfo.get, getStateStoreName(joinSide, stateStoreType))
+      val storeProviderId = StateStoreProviderId(
+        stateInfo.get, TaskContext.getPartitionId(), getStateStoreName(joinSide, stateStoreType))
       val store = StateStore.get(
         storeProviderId, keySchema, valueSchema, None,
         stateInfo.get.storeVersion, storeConf, hadoopConf)
@@ -352,41 +352,16 @@ object SymmetricHashJoinStateManager {
   }
 
   private sealed trait StateStoreType
+
   private case object KeyToNumValuesType extends StateStoreType {
     override def toString(): String = "keyToNumValues"
   }
+
   private case object KeyWithIndexToValuesType extends StateStoreType {
     override def toString(): String = "keyWithIndexToNumValues"
   }
 
   private def getStateStoreName(joinSide: JoinSide, storeType: StateStoreType): String = {
     s"$joinSide-$storeType"
-  }
-
-  /**
-   * A custom RDD that allows partitions to be "zipped" together, while ensuring the tasks'
-   * preferred location is based on which executors have the required join state stores already
-   * loaded. This is class is a modified verion of [[ZippedPartitionsRDD2]].
-   */
-  class StateStoreAwareZipPartitionsRDD[A: ClassTag, B: ClassTag, V: ClassTag](
-      sc: SparkContext,
-      f: (Iterator[A], Iterator[B]) => Iterator[V],
-      rdd1: RDD[A],
-      rdd2: RDD[B],
-      stateInfo: StatefulOperatorStateInfo,
-      stateStoreNames: Seq[String],
-      @transient private val storeCoordinator: Option[StateStoreCoordinatorRef])
-    extends ZippedPartitionsRDD2[A, B, V](sc, f, rdd1, rdd2) {
-
-    /**
-     * Set the preferred location of each partition using the executor that has the related
-     * [[StateStoreProvider]] already loaded.
-     */
-    override def getPreferredLocations(partition: Partition): Seq[String] = {
-      stateStoreNames.flatMap { storeName =>
-        val stateStoreProviderId = StateStoreProviderId(stateInfo, storeName)
-        storeCoordinator.flatMap(_.getLocation(stateStoreProviderId))
-      }.distinct
-    }
   }
 }

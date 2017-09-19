@@ -84,7 +84,7 @@ object StateStoreCoordinatorRef extends Logging {
  */
 class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
 
-  private[state] def reportActiveInstance(
+  private[sql] def reportActiveInstance(
       stateStoreProviderId: StateStoreProviderId,
       host: String,
       executorId: String): Unit = {
@@ -92,7 +92,7 @@ class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
   }
 
   /** Verify whether the given executor has the active instance of a state store */
-  private[state] def verifyIfInstanceActive(
+  private[sql] def verifyIfInstanceActive(
       stateStoreProviderId: StateStoreProviderId,
       executorId: String): Boolean = {
     rpcEndpointRef.askSync[Boolean](VerifyIfInstanceActive(stateStoreProviderId, executorId))

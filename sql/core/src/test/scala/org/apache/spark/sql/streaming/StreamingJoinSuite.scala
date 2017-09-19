@@ -19,19 +19,25 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
+import scala.util.Random
+
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate, Predicate}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
+import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreId, StateStoreProviderId, SymmetricHashJoinStateManager}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 
 class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
@@ -384,16 +390,59 @@ class StreamingJoinSuite extends StreamTest with BeforeAndAfter {
       Some(6000))  // second condition wins
   }
 
+  test("locality preferences of StateStoreAwareZippedRDD") {
+    import StreamingSymmetricHashJoinHelper._
+
+    withTempDir { tempDir =>
+      val queryId = UUID.randomUUID
+      val opId = 0
+      val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextString(10)).toString
+      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L)
+
+      implicit val sqlContext = spark.sqlContext
+      val coordinatorRef = sqlContext.streams.stateStoreCoordinator
+      val numPartitions = 5
+      val storeNames = Seq("name1", "name2")
+
+      val partitionAndStoreNameToLocation = {
+        for (partIndex <- 0 until numPartitions; storeName <- storeNames) yield {
+          (partIndex, storeName) -> s"host-$partIndex-$storeName"
+        }
+      }.toMap
+      partitionAndStoreNameToLocation.foreach { case ((partIndex, storeName), hostName) =>
+        val providerId = StateStoreProviderId(stateInfo, partIndex, storeName)
+        coordinatorRef.reportActiveInstance(providerId, hostName, s"exec-$hostName")
+        require(
+          coordinatorRef.getLocation(providerId) ===
+            Some(ExecutorCacheTaskLocation(hostName, s"exec-$hostName").toString))
+      }
+
+      val rdd1 = spark.sparkContext.makeRDD(1 to 10, numPartitions)
+      val rdd2 = spark.sparkContext.makeRDD((1 to 10).map(_.toString), numPartitions)
+      val rdd = rdd1.stateStoreAwareZipPartitions(rdd2, stateInfo, storeNames, coordinatorRef) {
+        (left, right) => left.zip(right)
+      }
+      require(rdd.partitions.length === numPartitions)
+      for (partIndex <- 0 until numPartitions) {
+        val expectedLocations = storeNames.map { storeName =>
+          val hostName = partitionAndStoreNameToLocation((partIndex, storeName))
+          ExecutorCacheTaskLocation(hostName, s"exec-$hostName").toString
+        }.toSet
+        assert(rdd.preferredLocations(rdd.partitions(partIndex)).toSet === expectedLocations)
+      }
+    }
+  }
+
   def withJoinStateManager(
       inputValueAttribs: Seq[Attribute],
       joinKeyExprs: Seq[Expression])(f: SymmetricHashJoinStateManager => Unit): Unit = {
-    val storeConf = new StateStoreConf()
 
     withTempDir { file =>
+      val storeConf = new StateStoreConf()
       val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0)
       val manager = new SymmetricHashJoinStateManager(
         LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration)
-      f(manager)
+      try { f(manager) } finally { manager.abortIfNeeded() }
     }
     StateStore.stop()
   }
