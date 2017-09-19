@@ -2684,6 +2684,9 @@ private[spark] object Utils extends Logging {
     redact(redactionPattern, kvs.toArray)
   }
 
+  def stringToSeq(str: String): Seq[String] = {
+    str.split(",").map(_.trim()).filter(_.nonEmpty)
+  }
 }
 
 private[util] object CallerContext extends Logging {
