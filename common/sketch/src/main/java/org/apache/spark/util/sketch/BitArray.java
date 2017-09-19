@@ -31,7 +31,7 @@ final class BitArray {
       throw new IllegalArgumentException("numBits must be positive, but got " + numBits);
     }
     long numWords = (long) Math.ceil(numBits / 64.0);
-    if (numWords > Integer.MAX_VALUE - 8) {
+    if (numWords > Integer.MAX_VALUE) {
       throw new IllegalArgumentException("Can't allocate enough space for " + numBits + " bits");
     }
     return (int) numWords;

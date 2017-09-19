@@ -236,7 +236,7 @@ private class EncryptedBlockData(
     // This is used by the block transfer service to replicate blocks. The upload code reads
     // all bytes into memory to send the block to the remote executor, so it's ok to do this
     // as long as the block fits in a Java array.
-    assert(blockSize <= Int.MaxValue - 8, "Block is too large to be wrapped in a byte buffer.")
+    assert(blockSize <= Int.MaxValue, "Block is too large to be wrapped in a byte buffer.")
     val dst = ByteBuffer.allocate(blockSize.toInt)
     val in = open()
     try {

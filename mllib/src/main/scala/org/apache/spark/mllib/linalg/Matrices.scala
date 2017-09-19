@@ -456,7 +456,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def zeros(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue - 8,
+    require(numRows.toLong * numCols <= Int.MaxValue,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, new Array[Double](numRows * numCols))
   }
@@ -469,7 +469,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def ones(numRows: Int, numCols: Int): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue - 8,
+    require(numRows.toLong * numCols <= Int.MaxValue,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(1.0))
   }
@@ -499,7 +499,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue - 8,
+    require(numRows.toLong * numCols <= Int.MaxValue,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
@@ -513,7 +513,7 @@ object DenseMatrix {
    */
   @Since("1.3.0")
   def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
-    require(numRows.toLong * numCols <= Int.MaxValue - 8,
+    require(numRows.toLong * numCols <= Int.MaxValue,
             s"$numRows x $numCols dense matrix is too large to allocate")
     new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }

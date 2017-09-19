@@ -25,7 +25,7 @@ import org.apache.spark.util.collection.WritablePartitionedPairCollection._
  * Append-only buffer of key-value pairs, each with a corresponding partition ID, that keeps track
  * of its estimated size in bytes.
  *
- * The buffer can support up to `1073741823 (2 ^ 30 - 1)` elements.
+ * The buffer can support up to 1073741819 elements.
  */
 private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
   extends WritablePartitionedPairCollection[K, V] with SizeTracker
@@ -96,5 +96,5 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 }
 
 private object PartitionedPairBuffer {
-  val MAXIMUM_CAPACITY = (Int.MaxValue - 8) / 2
+  val MAXIMUM_CAPACITY: Int = (Int.MaxValue - 8) / 2
 }
