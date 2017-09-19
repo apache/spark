@@ -978,8 +978,9 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
 }
 
 /**
- * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders that time as a
- * timestamp in the given time zone. For example, 'GMT+1' would yield '2017-07-14 03:40:00.0'.
+ * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+ * that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+ * '2017-07-14 03:40:00.0'.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -1153,8 +1154,9 @@ case class MonthsBetween(date1: Expression, date2: Expression, timeZoneId: Optio
 }
 
 /**
- * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone, and renders that
- * time as a timestamp in UTC. For example, 'GMT+1' would yield '2017-07-14 01:40:00.0'.
+ * Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time zone,
+ * and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+ * '2017-07-14 01:40:00.0'.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
