@@ -35,7 +35,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
           l @ LogicalRelation(hadoopFsRelation @ HadoopFsRelation(_, partitionSchema,
-            dataSchema, _, parquetFormat: ParquetFileFormat, _), _, _, isStreaming)) =>
+            dataSchema, _, parquetFormat: ParquetFileFormat, _), _, _, _)) =>
         val projectionFields = projects.flatMap(getFields)
         val filterFields = filters.flatMap(getFields)
         val requestedFields = (projectionFields ++ filterFields).distinct
@@ -72,7 +72,8 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
                   case att => att
                 }
             val prunedRelation =
-              LogicalRelation(prunedParquetRelation, prunedRelationOutput, None, isStreaming)
+              l.copy(relation = prunedParquetRelation, output = prunedRelationOutput,
+                catalogTable = None)
 
             val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
