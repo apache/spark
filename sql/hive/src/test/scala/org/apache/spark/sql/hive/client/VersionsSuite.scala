@@ -127,7 +127,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         hadoopConf.set("datanucleus.schema.autoCreateAll", "true")
         hadoopConf.set("hive.metastore.schema.verification", "false")
       }
-      client = buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
+      client = buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
       if (versionSpark != null) versionSpark.reset()
       versionSpark = TestHiveVersion(client)
       assert(versionSpark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
