@@ -44,11 +44,14 @@ class ExperimentalMethods private[sql]() {
    */
   @volatile var extraStrategies: Seq[Strategy] = Nil
 
+  @volatile var extraPreOptimizations: Seq[Rule[LogicalPlan]] = Nil
+
   @volatile var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
 
   override def clone(): ExperimentalMethods = {
     val result = new ExperimentalMethods
     result.extraStrategies = extraStrategies
+    result.extraPreOptimizations = extraPreOptimizations
     result.extraOptimizations = extraOptimizations
     result
   }

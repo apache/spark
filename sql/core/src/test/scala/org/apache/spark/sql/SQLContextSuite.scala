@@ -27,7 +27,11 @@ import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructT
 @deprecated("This suite is deprecated to silent compiler deprecation warnings", "2.0.0")
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
-  object DummyRule extends Rule[LogicalPlan] {
+  object DummyPostOptimizationRule extends Rule[LogicalPlan] {
+    def apply(p: LogicalPlan): LogicalPlan = p
+  }
+
+  object DummyPreOptimizationRule extends Rule[LogicalPlan] {
     def apply(p: LogicalPlan): LogicalPlan = p
   }
 
@@ -78,8 +82,14 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
   test("Catalyst optimization passes are modifiable at runtime") {
     val sqlContext = SQLContext.getOrCreate(sc)
-    sqlContext.experimental.extraOptimizations = Seq(DummyRule)
-    assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
+    sqlContext.experimental.extraOptimizations = Seq(DummyPostOptimizationRule)
+    sqlContext.experimental.extraPreOptimizations = Seq(DummyPreOptimizationRule)
+
+    val firstBatch = sqlContext.sessionState.optimizer.batches.head
+    val lastBatch = sqlContext.sessionState.optimizer.batches.last // .flatMap(_.rules)
+
+    assert(firstBatch.rules == Seq(DummyPreOptimizationRule))
+    assert(lastBatch.rules == Seq(DummyPostOptimizationRule))
   }
 
   test("get all tables") {
