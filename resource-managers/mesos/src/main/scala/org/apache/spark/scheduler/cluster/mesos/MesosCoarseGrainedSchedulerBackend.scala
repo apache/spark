@@ -199,7 +199,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     )
 
     // check that the credentials are defined, even though it's likely that auth would have failed
-    // adready if you've made it this far
+    // already if you've made it this far
     if (principal != null && hadoopDelegationCreds.isDefined) {
       logDebug(s"Principal found ($principal) starting token renewer")
       val credentialRenewerThread = new Thread {

@@ -143,13 +143,10 @@ class SparkHadoopUtil extends Logging {
   }
 
   def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
-    logInfo(s"Found delegation tokens of ${tokens.length} bytes")
     val hadoopConf = newConfiguration(sparkConf)
     hadoopConf.set("hadoop.security.authentication", "Token")
     UserGroupInformation.setConfiguration(hadoopConf)
     // decode tokens and add them to the credentials
-    val creds = deserialize(tokens)
-    uglyF(s"creds $creds id")
     addCurrentUserCredentials(deserialize(tokens))
   }
 

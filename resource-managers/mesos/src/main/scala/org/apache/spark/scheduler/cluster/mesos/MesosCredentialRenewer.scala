@@ -83,8 +83,8 @@ class MesosCredentialRenewer(
           } catch {
             case e: Exception =>
               // Log the error and try to write new tokens back in an hour
-              logWarning("Couldn't broadcast tokens, trying agin in 20 seconds", e)
-              credentialRenewerThread.schedule(this, 20, TimeUnit.SECONDS)
+              logWarning("Couldn't broadcast tokens, trying again in an hour", e)
+              credentialRenewerThread.schedule(this, 1, TimeUnit.HOURS)
               return
           }
           scheduleRenewal(this)

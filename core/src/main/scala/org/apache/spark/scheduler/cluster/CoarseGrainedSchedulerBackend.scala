@@ -161,9 +161,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(tokens) =>
-        logDebug("Asking each executor to update HDFS delegation tokens")
-        for ((x, executorData) <- executorDataMap) {
-          executorData.executorEndpoint.send(UpdateDelegationTokens(tokens))
+        executorDataMap.values.foreach {
+          ed => ed.executorEndpoint.send(UpdateDelegationTokens(tokens))
         }
     }
 
