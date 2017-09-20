@@ -785,7 +785,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
 
     def checkParquetCompressionCodec(isPartitioned: Boolean, tableCodec: String,
-      sessionCodec: String, f: (Long, Long) => Boolean = _ == _):Unit = {
+      sessionCodec: String, f: (Long, Long) => Boolean = _ == _): Unit = {
       val tableOrg = TableDefine(s"tbl_parquet$tableCodec", isPartitioned, "parquet",
         Some(CompressionConf("parquet.compression", tableCodec)))
       val tableOrgSize = tableOrg.getTableSize
@@ -804,7 +804,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
 
     def checkOrcCompressionCodec(isPartitioned: Boolean, tableCodec: String,
-      sessionCodec: String, f: (Long, Long) => Boolean = _ == _):Unit = {
+      sessionCodec: String, f: (Long, Long) => Boolean = _ == _): Unit = {
       val tableOrg = TableDefine(s"tbl_orc$tableCodec", isPartitioned, "orc",
         Some(CompressionConf("orc.compress", tableCodec)))
       val tableOrgSize = tableOrg.getTableSize
