@@ -27,10 +27,6 @@ import org.apache.spark.sql.types._
 class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
 
   test("fails analysis if parameters are invalid") {
-    def assertEqual[T](left: T, right: T): Unit = {
-      assert(left == right)
-    }
-
     val wrongColumnTypes = Seq(BinaryType, BooleanType, StringType, ArrayType(IntegerType),
       MapType(IntegerType, IntegerType), StructType(Seq(StructField("s", IntegerType))))
     wrongColumnTypes.foreach { dataType =>
@@ -57,15 +53,13 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     wrongEndpoints = new ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Seq(AttributeReference("b", DoubleType)())))
-    assertEqual(
-      wrongEndpoints.checkInputDataTypes(),
+    assert(wrongEndpoints.checkInputDataTypes() ==
       TypeCheckFailure("The intervals provided must be constant literals"))
 
     wrongEndpoints = new ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
-    assertEqual(
-      wrongEndpoints.checkInputDataTypes(),
+    assert(wrongEndpoints.checkInputDataTypes() ==
       TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals"))
   }
 
@@ -152,10 +146,9 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
   test("basic operations: update, merge, eval...") {
     val endpoints = Array[Double](0, 0.33, 0.6, 0.6, 0.6, 1.0)
     val data: Seq[Double] = Seq(0, 0.6, 0.3, 1, 0.6, 0.5, 0.6, 0.33)
-    val expectedNdvs = Array[Long](3, 2, 1, 1, 1)
 
     Seq(0.01, 0.05, 0.1).foreach { relativeSD =>
-      val (aggFunc, input, buffer) = createEstimator(endpoints, relativeSD)
+      val (aggFunc, input, buffer) = createEstimator(endpoints, relativeSD, DoubleType)
 
       data.grouped(4).foreach { group =>
         val (partialAggFunc, partialInput, partialBuffer) =
@@ -174,7 +167,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         rsd = relativeSD)
 
       // A value out of the whole range will not change the buffer
-      input.setInt(0, 2)
+      input.setDouble(0, 2.0)
       aggFunc.update(buffer, input)
       checkNDVs(
         ndvs = aggFunc.hllppResults(buffer),
@@ -184,7 +177,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       // after eval(), set the others to 1
       checkNDVs(
         ndvs = aggFunc.eval(buffer).asInstanceOf[ArrayData].toLongArray(),
-        expectedNdvs = expectedNdvs,
+        expectedNdvs = Array(3, 2, 1, 1, 1),
         rsd = relativeSD)
     }
   }
