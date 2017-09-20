@@ -747,19 +747,34 @@ class JDBCSuite extends SparkFunSuite
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
     assert(agg.isCascadingTruncateTable() === Some(true))
+  }
 
-    val agg2 = new AggregatedDialect(List(new JdbcDialect {
-      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+  test("Aggregated dialects: isCascadingTruncateTable") {
+    def genDialect(cascadingTruncateTable: Option[Boolean]): JdbcDialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = true
       override def getCatalystType(
-          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
-        if (sqlType % 2 == 0) {
-          Some(LongType)
-        } else {
-          None
-        }
-      override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
-    }, testH2Dialect))
-    assert(agg2.isCascadingTruncateTable() === None)
+        sqlType: Int,
+        typeName: String,
+        size: Int,
+        md: MetadataBuilder): Option[DataType] = None
+      override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
+    }
+
+    val dialectCombination = Seq(
+      List(genDialect(Some(true)), genDialect(Some(false)), genDialect(None)),
+      List(genDialect(Some(true)), genDialect(Some(true)), genDialect(None)),
+      List(genDialect(Some(false)), genDialect(Some(false)), genDialect(None)),
+      List(genDialect(Some(true)), genDialect(Some(true))),
+      List(genDialect(Some(false)), genDialect(Some(false))),
+      List(genDialect(None), genDialect(None))
+    )
+
+    val expectedCascading = Seq(Some(true), Some(true), None, Some(true), Some(false), None)
+
+    dialectCombination.zip(expectedCascading).foreach { case (dialects, cascading) =>
+      val agg = new AggregatedDialect(dialects)
+      assert(agg.isCascadingTruncateTable() === cascading)
+    }
   }
 
   test("DB2Dialect type mapping") {
