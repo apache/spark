@@ -125,8 +125,11 @@ private[spark] class CoarseGrainedExecutorBackend(
           executor.stop()
         }
       }.start()
+
+    // This message is only sent by Mesos Drivers, and is not expected from other
+    // SchedulerBackends at this time
     case UpdateDelegationTokens(tokens) =>
-      CoarseGrainedExecutorBackend.addDelegationTokens(tokens, env.conf)
+      SparkHadoopUtil.get.addDelegationTokens(tokens, env.conf)
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -177,16 +180,6 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend extends Logging {
-
-  private def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
-    logInfo(s"Found delegation tokens of ${tokens.length} bytes")
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    hadoopConf.set("hadoop.security.authentication", "Token")
-    UserGroupInformation.setConfiguration(hadoopConf)
-    val creds = SparkHadoopUtil.get.deserialize(tokens)
-    // decode tokens and add them to the credentials
-    UserGroupInformation.getCurrentUser.addCredentials(SparkHadoopUtil.get.deserialize(tokens))
-  }
 
   private def run(
       driverUrl: String,

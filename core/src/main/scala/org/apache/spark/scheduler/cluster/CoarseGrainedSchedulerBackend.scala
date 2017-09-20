@@ -165,7 +165,6 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         for ((x, executorData) <- executorDataMap) {
           executorData.executorEndpoint.send(UpdateDelegationTokens(tokens))
         }
-
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {

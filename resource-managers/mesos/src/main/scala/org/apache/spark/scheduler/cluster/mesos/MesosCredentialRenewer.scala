@@ -63,7 +63,8 @@ class MesosCredentialRenewer(
 
   def scheduleTokenRenewal(): Unit = {
     def scheduleRenewal(runnable: Runnable): Unit = {
-      val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
+      // val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
+      val remainingTime = 5000
       if (remainingTime <= 0) {
         logInfo("Credentials have expired, creating new ones now.")
         runnable.run()
@@ -136,15 +137,15 @@ class MesosCredentialRenewer(
 }
 
 object MesosCredentialRenewer extends Logging {
-  def getTokenRenewalInterval(bytes: Array[Byte], conf: SparkConf): Long = {
+  def getTokenRenewalTime(bytes: Array[Byte], conf: SparkConf): Long = {
     val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     val creds = SparkHadoopUtil.get.deserialize(bytes)
-    val intervals = creds.getAllTokens.asScala.flatMap { t =>
+    val renewalTimes = creds.getAllTokens.asScala.flatMap { t =>
       Try {
         t.renew(hadoopConf)
       }.toOption
     }
-    if (intervals.isEmpty) Long.MaxValue else intervals.min
+    if (renewalTimes.isEmpty) Long.MaxValue else renewalTimes.min
   }
 }
 

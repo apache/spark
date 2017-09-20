@@ -54,6 +54,10 @@ trait Logging {
     if (log.isInfoEnabled) log.info(msg)
   }
 
+  protected def uglyF(msg: => String) {
+    if (log.isInfoEnabled) log.info("UGLY: " + msg)
+  }
+
   protected def logDebug(msg: => String) {
     if (log.isDebugEnabled) log.debug(msg)
   }

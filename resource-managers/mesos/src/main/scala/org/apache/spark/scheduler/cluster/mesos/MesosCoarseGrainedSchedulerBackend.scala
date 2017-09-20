@@ -198,16 +198,19 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       sc.conf.getOption("spark.mesos.driver.frameworkId").map(_ + suffix)
     )
 
-    if (principal != null) {
+    // check that the credentials are defined, even though it's likely that auth would have failed
+    // adready if you've made it this far
+    if (principal != null && hadoopDelegationCreds.isDefined) {
       logDebug(s"Principal found ($principal) starting token renewer")
       val credentialRenewerThread = new Thread {
         setName("MesosCredentialRenewer")
         override def run(): Unit = {
+          val dummy: Option[Array[Byte]] = None
           val credentialRenewer =
             new MesosCredentialRenewer(
               conf,
               hadoopDelegationTokenManager.get,
-              MesosCredentialRenewer.getTokenRenewalInterval(hadoopDelegationCreds.get, conf),
+              MesosCredentialRenewer.getTokenRenewalTime(hadoopDelegationCreds.get, conf),
               driverEndpoint)
           credentialRenewer.scheduleTokenRenewal()
         }
