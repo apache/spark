@@ -463,6 +463,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
     val optimizeDocConcentration = this.optimizeDocConcentration
+    // We calculate logphat in the same pass as other statistics, but we only need
+    // it if we are optimizing docConcentration
     val logphatPartOptionBase = () => if (optimizeDocConcentration) Some(BDV.zeros[Double](k))
                                       else None
 
@@ -522,15 +524,18 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    * Uses Newton-Rhapson method.
    * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
+   * @param logphat Expectation of estimated log-posterior distribution of
+   *                topics in a document averaged over the batch.
+   * @param batchSize Size of the batch.
    */
-  private def updateAlpha(logphat: BDV[Double], N : Double): Unit = {
+  private def updateAlpha(logphat: BDV[Double], batchSize : Double): Unit = {
     val weight = rho()
     val alpha = this.alpha.asBreeze.toDenseVector
 
-    val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat)
+    val gradf = batchSize * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
-    val c = N * trigamma(sum(alpha))
-    val q = -N * trigamma(alpha)
+    val c = batchSize * trigamma(sum(alpha))
+    val q = -batchSize * trigamma(alpha)
     val b = sum(gradf / q) / (1D / c + sum(1D / q))
 
     val dalpha = -(gradf - b) / q
