@@ -212,12 +212,18 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       CheckLastBatch(),
       AddData(input2, 1),
       CheckLastBatch((1, 10, 2, 3)),
+      StopStream,
+      StartStream(),
       AddData(input1, 25),
       CheckLastBatch(),
+      StopStream,
+      StartStream(),
       AddData(input2, 25),
       CheckLastBatch((25, 30, 50, 75)),
       AddData(input1, 1),
       CheckLastBatch((1, 10, 2, 3)),      // State for 1 still around as there is not watermark
+      StopStream,
+      StartStream(),
       AddData(input1, 5),
       CheckLastBatch(),
       AddData(input2, 5),
@@ -250,6 +256,8 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       AddData(input2, 1),
       CheckLastBatch((1, 10, 2, 3)),
       assertNumStateRows(total = 2, updated = 1),
+      StopStream,
+      StartStream(),
 
       AddData(input1, 25),
       CheckLastBatch(), // since there is only 1 watermark operator, the watermark should be 15
@@ -258,6 +266,8 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       AddData(input2, 25),
       CheckLastBatch((25, 30, 50, 75)), // watermark = 15 should remove 2 rows having window=[0,10]
       assertNumStateRows(total = 2, updated = 1),
+      StopStream,
+      StartStream(),
 
       AddData(input2, 1),
       CheckLastBatch(),       // Should not join as < 15 removed
