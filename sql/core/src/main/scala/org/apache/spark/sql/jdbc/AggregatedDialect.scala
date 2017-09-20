@@ -43,6 +43,17 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
   }
 
   override def isCascadingTruncateTable(): Option[Boolean] = {
-    dialects.flatMap(_.isCascadingTruncateTable()).reduceOption(_ || _)
+    // If any dialect claims cascading truncate, this dialect is also cascading truncate.
+    // Otherwise, if any dialect has unknown cascading truncate, this dialect is also unknown.
+    val cascading = dialects.flatMap(_.isCascadingTruncateTable()).reduceOption(_ || _)
+    if (cascading.get) {
+      cascading
+    } else {
+      if (dialects.exists(_.isCascadingTruncateTable().isEmpty)) {
+        None
+      } else {
+        Some(false)
+      }
+    }
   }
 }

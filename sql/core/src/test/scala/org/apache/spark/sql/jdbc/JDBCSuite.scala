@@ -747,6 +747,19 @@ class JDBCSuite extends SparkFunSuite
     assert(agg.getCatalystType(0, "", 1, null) === Some(LongType))
     assert(agg.getCatalystType(1, "", 1, null) === Some(StringType))
     assert(agg.isCascadingTruncateTable() === Some(true))
+
+    val agg2 = new AggregatedDialect(List(new JdbcDialect {
+      override def canHandle(url: String) : Boolean = url.startsWith("jdbc:h2:")
+      override def getCatalystType(
+          sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] =
+        if (sqlType % 2 == 0) {
+          Some(LongType)
+        } else {
+          None
+        }
+      override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
+    }, testH2Dialect))
+    assert(agg2.isCascadingTruncateTable() === None)
   }
 
   test("DB2Dialect type mapping") {
