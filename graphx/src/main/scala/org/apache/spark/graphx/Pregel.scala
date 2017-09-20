@@ -170,7 +170,6 @@ object Pregel extends Logging {
       i += 1
     }
     messageCheckpointer.unpersistDataSet()
-    graphCheckpointer.unpersistDataSet()
     graphCheckpointer.deleteAllCheckpoints()
     messageCheckpointer.deleteAllCheckpoints()
     g
