@@ -2106,9 +2106,11 @@ class Dataset[T] private[sql](
    * the same names.
    */
   private[spark] def withColumns(colNames: Seq[String], cols: Seq[Column]): DataFrame = {
-    assert(colNames.size == cols.size,
+    require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
+    require(colNames.distinct.size == colNames.size,
+      s"It is disallowed to use duplicate column names: $colNames")
 
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
