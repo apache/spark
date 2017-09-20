@@ -169,12 +169,12 @@ case class PruneHiveTablePartitions(
           session.sessionState.conf.sessionLocalTimeZone)
         val sizeInBytes = try {
           prunedPartitions.map { part =>
-            val totalSize = part.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
             val rawDataSize = part.parameters.get(StatsSetupConst.RAW_DATA_SIZE).map(_.toLong)
-            if (totalSize.isDefined && totalSize.get > 0L) {
-              totalSize.get
-            } else if (rawDataSize.isDefined && rawDataSize.get > 0) {
+            val totalSize = part.parameters.get(StatsSetupConst.TOTAL_SIZE).map(_.toLong)
+            if (rawDataSize.isDefined && rawDataSize.get > 0) {
               rawDataSize.get
+            } else if (totalSize.isDefined && totalSize.get > 0L) {
+              totalSize.get
             } else {
               CommandUtils.calculateLocationSize(
                 session.sessionState, relation.tableMeta.identifier, part.storage.locationUri)
