@@ -32,11 +32,12 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * {@link InputStream} implementation which asynchronously reads ahead from the underlying input
- * stream when specified amount of data has been read from the current buffer. It does it by maintaining
- * two buffer - active buffer and read ahead buffer. Active buffer contains data which should be returned
- * when a read() call is issued. The read ahead buffer is used to asynchronously read from the underlying
- * input stream and once the current active buffer is exhausted, we flip the two buffers so that we can
- * start reading from the read ahead buffer without being blocked in disk I/O.
+ * stream when specified amount of data has been read from the current buffer. It does it by
+ * maintaining two buffers - active buffer and read ahead buffer. Active buffer contains data
+ * which should be returned when a read() call is issued. The read ahead buffer is used to
+ * asynchronously read from the underlying input stream and once the current active buffer is
+ * exhausted, we flip the two buffers so that we can start reading from the read ahead buffer
+ * without being blocked in disk I/O.
  */
 public class ReadAheadInputStream extends InputStream {
 
@@ -83,7 +84,8 @@ public class ReadAheadInputStream extends InputStream {
 
   private final InputStream underlyingInputStream;
 
-  private final ExecutorService executorService = ThreadUtils.newDaemonSingleThreadExecutor("read-ahead");
+  private final ExecutorService executorService =
+      ThreadUtils.newDaemonSingleThreadExecutor("read-ahead");
 
   private final Condition asyncReadComplete = stateChangeLock.newCondition();
 
@@ -98,13 +100,14 @@ public class ReadAheadInputStream extends InputStream {
    * @param readAheadThresholdInBytes If the active buffer has less data than the read-ahead
    *                                  threshold, an async read is triggered.
    */
-  public ReadAheadInputStream(InputStream inputStream, int bufferSizeInBytes, int readAheadThresholdInBytes) {
+  public ReadAheadInputStream(
+      InputStream inputStream, int bufferSizeInBytes, int readAheadThresholdInBytes) {
     Preconditions.checkArgument(bufferSizeInBytes > 0,
         "bufferSizeInBytes should be greater than 0, but the value is " + bufferSizeInBytes);
     Preconditions.checkArgument(readAheadThresholdInBytes > 0 &&
             readAheadThresholdInBytes < bufferSizeInBytes,
-        "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes, but the" +
-            "value is " + readAheadThresholdInBytes);
+        "readAheadThresholdInBytes should be greater than 0 and less than bufferSizeInBytes, " +
+            "but the value is " + readAheadThresholdInBytes);
     activeBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     readAheadBuffer = ByteBuffer.allocate(bufferSizeInBytes);
     this.readAheadThresholdInBytes = readAheadThresholdInBytes;

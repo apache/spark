@@ -23,8 +23,6 @@ import org.apache.spark.annotation.Experimental;
 import org.apache.spark.annotation.InterfaceStability;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow;
-import org.apache.spark.sql.sources.v2.reader.DataSourceV2Reader;
-import org.apache.spark.sql.sources.v2.reader.ReadTask;
 
 /**
  * A mix-in interface for {@link DataSourceV2Reader}. Data source readers can implement this
@@ -39,7 +37,8 @@ public interface SupportsScanUnsafeRow extends DataSourceV2Reader {
 
   @Override
   default List<ReadTask<Row>> createReadTasks() {
-    throw new IllegalStateException("createReadTasks should not be called with SupportsScanUnsafeRow.");
+    throw new IllegalStateException(
+        "createReadTasks should not be called with SupportsScanUnsafeRow.");
   }
 
   /**
