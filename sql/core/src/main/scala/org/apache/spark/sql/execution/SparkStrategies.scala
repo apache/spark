@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Strategy
+import org.apache.spark.sql.{execution, AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -265,6 +264,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
           new StreamingSymmetricHashJoinExec(
             leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+
+        case Join(left, right, _, _) if left.isStreaming && right.isStreaming =>
+          throw new AnalysisException(
+            "Stream stream joins without equality predicate is not supported", plan = Some(plan))
 
         case _ => Nil
       }

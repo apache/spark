@@ -24,7 +24,7 @@ import scala.util.Random
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.execution.LogicalRDD
@@ -307,7 +307,22 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
     )
   }
 
-  test("extract watermark from time condition") {
+  testQuietly("stream stream inner join without equality predicate") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF.select('value as "leftKey", ('value * 2) as "leftValue")
+    val df2 = input2.toDF.select('value as "rightKey", ('value * 3) as "rightValue")
+    val joined = df1.join(df2, expr("leftKey < rightKey"))
+    val e = intercept[Exception] {
+      val q = joined.writeStream.format("memory").queryName("test").start()
+      input1.addData(1)
+      q.awaitTermination(10000)
+    }
+    assert(e.toString.contains("Stream stream joins without equality predicate is not supported"))
+  }
+
+  testQuietly("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(
       AttributeReference("leftTime", TimestampType)(),
       AttributeReference("leftOther", IntegerType)())
