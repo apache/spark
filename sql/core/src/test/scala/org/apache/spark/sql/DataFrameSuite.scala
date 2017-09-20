@@ -652,10 +652,17 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
 
     val err = intercept[IllegalArgumentException] {
+      testData.toDF().withColumns(Seq("newCol1"),
+        Seq(col("key") + 1, col("key") + 2))
+    }
+    assert(
+      err.getMessage.contains("The size of column names: 1 isn't equal to the size of columns: 2"))
+
+    val err2 = intercept[IllegalArgumentException] {
       testData.toDF().withColumns(Seq("newCol1", "newCol1"),
         Seq(col("key") + 1, col("key") + 2))
     }
-    assert(err.getMessage.contains("It is disallowed to use duplicate column names"))
+    assert(err2.getMessage.contains("It is disallowed to use duplicate column names"))
   }
 
   test("replace column using withColumn") {
