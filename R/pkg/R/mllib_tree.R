@@ -132,10 +132,12 @@ print.summary.decisionTree <- function(x) {
 #' Gradient Boosted Tree model, \code{predict} to make predictions on new data, and
 #' \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' For more details, see
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-
-#' tree-regression}{GBT Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-
-#' tree-classifier}{GBT Classification}
+# nolint start
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
+#' GBT Regression} and
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
+#' GBT Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -353,10 +355,12 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #' For more details, see
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-
-#' regression}{Random Forest Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-
-#' classifier}{Random Forest Classification}
+# nolint start
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
+#' Random Forest Regression} and
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
+#' Random Forest Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
@@ -569,10 +573,12 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' model, \code{predict} to make predictions on new data, and \code{write.ml}/\code{read.ml} to
 #' save/load fitted models.
 #' For more details, see
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-
-#' regression}{Decision Tree Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-
-#' classifier}{Decision Tree Classification}
+# nolint start
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
+#' Decision Tree Regression} and
+#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
+#' Decision Tree Classification}
+# nolint end
 #'
 #' @param data a SparkDataFrame for training.
 #' @param formula a symbolic description of the model to be fitted. Currently only a few formula
