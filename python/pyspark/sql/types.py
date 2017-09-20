@@ -410,6 +410,24 @@ class StructField(DataType):
         self.dataType = dataType
         self.nullable = nullable
         self.metadata = metadata or {}
+        self.needConversion = dataType.needConversion
+        self.toInternal = dataType.toInternal
+        self.fromInternal = dataType.fromInternal
+
+    def __getstate__(self):
+        """Return state values to be pickled."""
+        return (self.name, self.dataType, self.nullable, self.metadata)
+
+    def __setstate__(self, state):
+        """Restore state from the unpickled state values."""
+        name, dataType, nullable, metadata = state
+        self.name = name
+        self.dataType = dataType
+        self.nullable = nullable
+        self.metadata = metadata
+        self.needConversion = dataType.needConversion
+        self.toInternal = dataType.toInternal
+        self.fromInternal = dataType.fromInternal
 
     def simpleString(self):
         return '%s:%s' % (self.name, self.dataType.simpleString())
@@ -430,15 +448,6 @@ class StructField(DataType):
                            _parse_datatype_json_value(json["type"]),
                            json["nullable"],
                            json["metadata"])
-
-    def needConversion(self):
-        return self.dataType.needConversion()
-
-    def toInternal(self, obj):
-        return self.dataType.toInternal(obj)
-
-    def fromInternal(self, obj):
-        return self.dataType.fromInternal(obj)
 
     def typeName(self):
         raise TypeError(
