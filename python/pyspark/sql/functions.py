@@ -1150,8 +1150,9 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-    that corresponds to the same time of day in the given timezone.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+    that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+    '2017-07-14 03:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
@@ -1164,8 +1165,9 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-    another timestamp that corresponds to the same time of day in UTC.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+    zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+    '2017-07-14 01:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
