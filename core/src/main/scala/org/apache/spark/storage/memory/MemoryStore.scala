@@ -337,12 +337,18 @@ private[spark] class MemoryStore(
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         // We ran out of space while unrolling the values for this block
-        logUnrollFailureMessage(blockId, vector.estimateSize())
+        val (unrolledIterator, size) = if (vector != null) {
+          (vector.iterator, vector.estimateSize())
+        } else {
+          (arrayValues.toIterator, preciseSize)
+        }
+
+        logUnrollFailureMessage(blockId, size)
         Left(new PartiallyUnrolledIterator(
           this,
           MemoryMode.ON_HEAP,
           unrollMemoryUsedByThisBlock,
-          unrolled = vector.iterator,
+          unrolled = unrolledIterator,
           rest = values))
     }
   }
@@ -400,8 +406,9 @@ private[spark] class MemoryStore(
     }
 
     def estimateSize(precise: Boolean): Long = {
-      // We don't need care about the value of precise, because the cost of obtaining precise
-      // values is very low.
+      if (precise) {
+        serializationStream.flush()
+      }
       bbos.size
     }
 
@@ -416,7 +423,7 @@ private[spark] class MemoryStore(
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         // We ran out of space while unrolling the values for this block
-        logUnrollFailureMessage(blockId, bbos.size)
+        logUnrollFailureMessage(blockId, unrollMemoryUsedByThisBlock)
         Left(new PartiallySerializedBlock(
           this,
           serializerManager,
