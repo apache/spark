@@ -829,6 +829,7 @@ class StreamExecution(
     if (streamDeathCause != null) {
       throw streamDeathCause
     }
+    if (!isActive) return
     awaitBatchLock.lock()
     try {
       noNewData = false
