@@ -40,14 +40,7 @@ import org.apache.spark.sql.types._
 
 
 class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleton {
-  private def dropMetadata(schema: StructType): StructType = {
-    val newFields = schema.fields.map { f =>
-      StructField(f.name, f.dataType, f.nullable, Metadata.empty)
-    }
-    StructType(newFields)
-  }
-
-  test("Hive serde tables should fallback to HDFS for size estimation") {
+   test("Hive serde tables should fallback to HDFS for size estimation") {
     withSQLConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS.key -> "true") {
       withTable("csv_table") {
         withTempDir { tempDir =>
@@ -138,9 +131,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
       // Verify that the schema stored in catalog is a dummy one used for
       // data source tables. The actual schema is stored in table properties.
-      val rawSchema = dropMetadata(hiveClient.getTable("default", table).schema)
-      val expectedRawSchema = new StructType()
-        .add("col", "array<string>")
+      val rawSchema = hiveClient.getTable("default", table).schema
+      val metadata = new MetadataBuilder().putString("comment", "from deserializer").build()
+      val expectedRawSchema = new StructType().add("col", "array<string>", true, metadata)
       assert(rawSchema == expectedRawSchema)
 
       val actualSchema = spark.sharedState.externalCatalog.getTable("default", table).schema
@@ -161,14 +154,13 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   }
 
   test("Analyze hive serde tables when schema is not same as schema in table properties") {
-
     val table = "hive_serde"
     withTable(table) {
       sql(s"CREATE TABLE $table (C1 INT, C2 STRING, C3 DOUBLE)")
 
       // Verify that the table schema stored in hive catalog is
       // different than the schema stored in table properties.
-      val rawSchema = dropMetadata(hiveClient.getTable("default", table).schema)
+      val rawSchema = hiveClient.getTable("default", table).schema
       val expectedRawSchema = new StructType()
         .add("c1", "int")
         .add("c2", "string")
