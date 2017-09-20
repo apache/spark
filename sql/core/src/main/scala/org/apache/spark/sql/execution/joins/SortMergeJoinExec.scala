@@ -101,10 +101,18 @@ case class SortMergeJoinExec(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
   }
 
+  /**
+   * The utility method to get output ordering for left or right side of the join.
+   *
+   * Returns the required ordering for left or right child if childOutputOrdering does not
+   * satisfy the required ordering; otherwise, in which case the child will not be re-sorted,
+   * returns the required ordering for this child with extra "sameOrderExpressions" from the
+   * child's outputOrdering.
+   */
   private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
     : Seq[SortOrder] = {
     val requiredOrdering = requiredOrders(keys)
-    if (SparkPlan.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
+    if (SortOrder.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
       keys.zip(childOutputOrdering).map { case (key, childOrder) =>
         SortOrder(key, Ascending, childOrder.sameOrderExpressions + childOrder.child - key)
       }

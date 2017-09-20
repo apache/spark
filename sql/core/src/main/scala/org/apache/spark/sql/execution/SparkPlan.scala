@@ -396,26 +396,6 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
 object SparkPlan {
   private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
-
-  /**
-   * Returns if the actual ordering satisfies the required ordering.
-   *
-   * Ordering A satisfies ordering B if and only if B is an equivalent of A or of A's prefix.
-   */
-  def orderingSatisfies(actual: Seq[SortOrder], required: Seq[SortOrder]): Boolean = {
-    if (required.nonEmpty) {
-      if (required.length > actual.length) {
-        false
-      } else {
-        required.zip(actual).forall {
-          case (requiredOrder, actualOrder) =>
-            actualOrder.satisfies(requiredOrder)
-        }
-      }
-    } else {
-      true
-    }
-  }
 }
 
 trait LeafExecNode extends SparkPlan {
