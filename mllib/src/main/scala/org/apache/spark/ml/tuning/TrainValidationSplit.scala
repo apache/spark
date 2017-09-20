@@ -212,7 +212,8 @@ object TrainValidationSplit extends MLReadable[TrainValidationSplit] {
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(tvs, metadata, skipParams = List("estimatorParamMaps"))
+      DefaultParamsReader.getAndSetParams(tvs, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
       tvs
     }
   }
@@ -302,7 +303,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       model.set(model.estimator, estimator)
         .set(model.evaluator, evaluator)
         .set(model.estimatorParamMaps, estimatorParamMaps)
-      DefaultParamsReader.getAndSetParams(model, metadata, skipParams = List("estimatorParamMaps"))
+      DefaultParamsReader.getAndSetParams(model, metadata,
+        skipParams = Option(List("estimatorParamMaps")))
       model
     }
   }
