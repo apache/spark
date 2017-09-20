@@ -825,23 +825,23 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     withTempView("table_source") {
       (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
 
-      checkParquetCompressionCodec(true, "uncompressed", "uncompressed")
-      checkParquetCompressionCodec(true, "gzip", "gzip")
-      checkParquetCompressionCodec(true, "gzip", "uncompressed", _ < _)
+      checkParquetCompressionCodec(true, "UNCOMPRESSED", "UNCOMPRESSED")
+      checkParquetCompressionCodec(true, "GZIP", "GZIP")
+      checkParquetCompressionCodec(true, "GZIP", "UNCOMPRESSED", _ < _)
 
       withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "false") {
-        checkParquetCompressionCodec(false, "uncompressed", "uncompressed")
-        checkParquetCompressionCodec(false, "gzip", "gzip")
-        checkParquetCompressionCodec(false, "gzip", "uncompressed", _ < _)
+        checkParquetCompressionCodec(false, "UNCOMPRESSED", "UNCOMPRESSED")
+        checkParquetCompressionCodec(false, "GZIP", "GZIP")
+        checkParquetCompressionCodec(false, "GZIP", "UNCOMPRESSED", _ < _)
       }
 
-      checkOrcCompressionCodec(true, "none", "none")
-      checkOrcCompressionCodec(true, "zlib", "zlib")
-      checkOrcCompressionCodec(true, "zlib", "none", _ < _)
+      checkOrcCompressionCodec(true, "NONE", "NONE")
+      checkOrcCompressionCodec(true, "ZLIB", "ZLIB")
+      checkOrcCompressionCodec(true, "ZLIB", "NONE", _ < _)
 
-      checkOrcCompressionCodec(false, "none", "none")
-      checkOrcCompressionCodec(false, "zlib", "zlib")
-      checkOrcCompressionCodec(false, "zlib", "none", _ < _)
+      checkOrcCompressionCodec(false, "NONE", "NONE")
+      checkOrcCompressionCodec(false, "ZLIB", "ZLIB")
+      checkOrcCompressionCodec(false, "ZLIB", "NONE", _ < _)
     }
   }
 }
