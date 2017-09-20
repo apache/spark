@@ -411,8 +411,8 @@ private[spark] class MemoryStore(
       entry
     }
 
-    putIterator(blockId, values, classTag, MemoryMode.OFF_HEAP,
-      storeValue, estimateSize, createMemoryEntry) match {
+    putIterator(blockId, values, classTag, memoryMode, storeValue,
+      estimateSize, createMemoryEntry) match {
       case Right(storedSize) => Right(storedSize)
       case Left(unrollMemoryUsedByThisBlock) =>
         // We ran out of space while unrolling the values for this block
