@@ -162,13 +162,14 @@ private[spark] object SparkUI {
   def createLiveUI(
       sc: SparkContext,
       conf: SparkConf,
-      listenerBus: SparkListenerBus,
       jobProgressListener: JobProgressListener,
       securityManager: SecurityManager,
       appName: String,
       startTime: Long): SparkUI = {
-    create(Some(sc), conf, listenerBus, securityManager, appName,
-      jobProgressListener = Some(jobProgressListener), startTime = startTime)
+    create(Some(sc), conf,
+      sc.listenerBus.addToStatusQueue,
+      securityManager, appName, jobProgressListener = Some(jobProgressListener),
+      startTime = startTime)
   }
 
   def createHistoryUI(
@@ -179,8 +180,7 @@ private[spark] object SparkUI {
       basePath: String,
       lastUpdateTime: Option[Long],
       startTime: Long): SparkUI = {
-    val sparkUI = create(
-      None, conf, listenerBus, securityManager, appName, basePath,
+    val sparkUI = create(None, conf, listenerBus.addListener, securityManager, appName, basePath,
       lastUpdateTime = lastUpdateTime, startTime = startTime)
 
     val listenerFactories = ServiceLoader.load(classOf[SparkHistoryListenerFactory],
@@ -202,7 +202,7 @@ private[spark] object SparkUI {
   private def create(
       sc: Option[SparkContext],
       conf: SparkConf,
-      listenerBus: SparkListenerBus,
+      addListenerFn: SparkListenerInterface => Unit,
       securityManager: SecurityManager,
       appName: String,
       basePath: String = "",
@@ -212,7 +212,7 @@ private[spark] object SparkUI {
 
     val _jobProgressListener: JobProgressListener = jobProgressListener.getOrElse {
       val listener = new JobProgressListener(conf)
-      listenerBus.addListener(listener)
+      addListenerFn(listener)
       listener
     }
 
@@ -222,11 +222,11 @@ private[spark] object SparkUI {
     val storageListener = new StorageListener(storageStatusListener)
     val operationGraphListener = new RDDOperationGraphListener(conf)
 
-    listenerBus.addListener(environmentListener)
-    listenerBus.addListener(storageStatusListener)
-    listenerBus.addListener(executorsListener)
-    listenerBus.addListener(storageListener)
-    listenerBus.addListener(operationGraphListener)
+    addListenerFn(environmentListener)
+    addListenerFn(storageStatusListener)
+    addListenerFn(executorsListener)
+    addListenerFn(storageListener)
+    addListenerFn(operationGraphListener)
 
     new SparkUI(sc, conf, securityManager, environmentListener, storageStatusListener,
       executorsListener, _jobProgressListener, storageListener, operationGraphListener,
