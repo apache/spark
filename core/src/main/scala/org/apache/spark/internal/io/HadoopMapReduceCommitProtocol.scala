@@ -130,17 +130,21 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
       .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
-    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
-    for ((src, dst) <- filesToMove) {
-      fs.rename(new Path(src), new Path(dst))
+    if (addedAbsPathFiles != null && addedAbsPathFiles.nonEmpty) {
+      val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+      for ((src, dst) <- filesToMove) {
+        fs.rename(new Path(src), new Path(dst))
+      }
+      fs.delete(absPathStagingDir, true)
     }
-    fs.delete(absPathStagingDir, true)
   }
 
   override def abortJob(jobContext: JobContext): Unit = {
     committer.abortJob(jobContext, JobStatus.State.FAILED)
-    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
-    fs.delete(absPathStagingDir, true)
+    if (addedAbsPathFiles != null && addedAbsPathFiles.nonEmpty) {
+      val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+      fs.delete(absPathStagingDir, true)
+    }
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {

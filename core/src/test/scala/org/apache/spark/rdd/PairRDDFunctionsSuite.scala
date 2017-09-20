@@ -24,7 +24,7 @@ import scala.util.Random
 
 import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
@@ -568,8 +568,8 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(FakeWriterWithCallback.exception.getMessage contains "failed to write")
   }
 
-  test("saveAsNewAPIHadoopDataset should use current working directory " +
-    "for files to be committed to an absolute output location when empty output path specified") {
+  test("saveAsNewAPIHadoopDataset should respect empty output directory when " +
+    "there are no files to be committed to an absolute output location") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
 
     val job = NewJob.getInstance(new Configuration(sc.hadoopConfiguration))
@@ -578,20 +578,13 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     job.setOutputFormatClass(classOf[NewFakeFormat])
     val jobConfiguration = job.getConfiguration
 
-    val fs = FileSystem.get(jobConfiguration)
-    fs.setWorkingDirectory(new Path(getClass.getResource(".").toExternalForm))
-    try {
-      // just test that the job does not fail with
-      // java.lang.IllegalArgumentException: Can not create a Path from a null string
-      pairs.saveAsNewAPIHadoopDataset(jobConfiguration)
-    } finally {
-      // close to prevent filesystem caching across different tests
-      fs.close()
-    }
+    // just test that the job does not fail with
+    // java.lang.IllegalArgumentException: Can not create a Path from a null string
+    pairs.saveAsNewAPIHadoopDataset(jobConfiguration)
   }
 
-  test("saveAsHadoopDataset should use current working directory " +
-    "for files to be committed to an absolute output location when empty output path specified") {
+  test("saveAsHadoopDataset should respect empty output directory when " +
+    "there are no files to be committed to an absolute output location") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
 
     val conf = new JobConf()
@@ -600,15 +593,8 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     conf.setOutputFormat(classOf[FakeOutputFormat])
     conf.setOutputCommitter(classOf[FakeOutputCommitter])
 
-    val fs = FileSystem.get(conf)
-    fs.setWorkingDirectory(new Path(getClass.getResource(".").toExternalForm))
-    try {
-      FakeOutputCommitter.ran = false
-      pairs.saveAsHadoopDataset(conf)
-    } finally {
-      // close to prevent filesystem caching across different tests
-      fs.close()
-    }
+    FakeOutputCommitter.ran = false
+    pairs.saveAsHadoopDataset(conf)
 
     assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
