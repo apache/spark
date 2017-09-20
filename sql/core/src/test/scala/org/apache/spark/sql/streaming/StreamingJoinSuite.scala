@@ -330,6 +330,88 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
     )
   }
 
+  test("stream stream inner join with time range - with watermark - two side conditions") {
+    import org.apache.spark.sql.functions._
+
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
+
+    val df1 = leftInput.toDF.toDF("leftKey", "time")
+      .select('leftKey, 'time.cast("timestamp") as "leftTime", ('leftKey * 2) as "leftValue")
+      .withWatermark("leftTime", "20 seconds")
+
+    val df2 = rightInput.toDF.toDF("rightKey", "time")
+      .select('rightKey, 'time.cast("timestamp") as "rightTime", ('rightKey * 3) as "rightValue")
+      .withWatermark("rightTime", "30 seconds")
+
+    val condition = expr(
+      "leftKey = rightKey AND " +
+        "leftTime BETWEEN rightTime - interval 10 seconds AND rightTime + interval 5 seconds")
+
+    // This translates to leftTime <= rightTime + 5 seconds AND leftTime >= rightTime - 10 seconds
+    // So given leftTime, rightTime has to be BETWEEN leftTime - 5 seconds AND leftTime + 10 seconds
+    //
+    //  =============== * ======================== * ============================== * ==> leftTime
+    //                  |                          |                                |
+    //     |<---- 5s -->|<------ 10s ------>|      |<------ 10s ------>|<---- 5s -->|
+    //     |                                |                          |
+    //  == * ============================== * =========>============== * ===============> rightTime
+    //
+    // E.g.
+    //      if rightTime = 60, then it matches only leftTime = [50, 65]
+    //      if leftTime = 20, then it match only with rightTime = [15, 30]
+    //
+    // State value predicates
+    //   left side:
+    //     values allowed:  leftTime >= rightTime - 10s   ==>   leftTime > eventTimeWatermark - 10
+    //     drop state where leftTime < eventTime - 10
+    //   right side:
+    //     values allowed:  rightTime >= leftTime - 5s   ==>   rightTime > eventTimeWatermark - 5
+    //     drop state where rightTime < eventTime - 5
+
+    val joined =
+      df1.join(df2, condition).select('leftKey, 'leftTime.cast("int"), 'rightTime.cast("int"))
+
+    testStream(joined)(
+      // If leftTime = 20, then it match only with rightTime = [15, 30]
+      AddData(leftInput, (1, 20)),
+      CheckAnswer(),
+      AddData(rightInput, (1, 14), (1, 15), (1, 25), (1, 26), (1, 30), (1, 31)),
+      CheckLastBatch((1, 20, 15), (1, 20, 25), (1, 20, 26), (1, 20, 30)),
+      assertNumStateRows(total = 7, updated = 6),
+
+      // If rightTime = 60, then it matches only leftTime = [50, 65]
+      AddData(rightInput, (1, 60)),
+      CheckLastBatch(),                // matches with nothing on the left
+      AddData(leftInput, (1, 49), (1, 50), (1, 65), (1, 66)),
+      CheckLastBatch((1, 50, 60), (1, 65, 60)),
+      assertNumStateRows(total = 12, updated = 4),
+
+      // Event time watermark = min(left: 66 - delay 20 = 46, right: 60 - delay 30 = 30) = 30
+      // Left state value watermark = 30 - 10 = slightly less than 20 (since condition has <=)
+      //    Should drop < 20 from left, i.e., none
+      // Right state value watermark = 30 - 5 = slightly less than 25 (since condition has <=)
+      //    Should drop < 25 from the right, i.e., 14 and 15
+      AddData(leftInput, (1, 30), (1, 31)),     // 30 should not be processed or added to stat
+      CheckLastBatch((1, 31, 26), (1, 31, 30), (1, 31, 31)),
+      assertNumStateRows(total = 11, updated = 1),  // 12 - 2 removed + 1 added
+
+      // Advance the watermark
+      AddData(rightInput, (1, 80)),
+      CheckLastBatch(),
+      assertNumStateRows(total = 12, updated = 1),
+
+      // Event time watermark = min(left: 66 - delay 20 = 46, right: 80 - delay 30 = 50) = 46
+      // Left state value watermark = 46 - 10 = slightly less than 36 (since condition has <=)
+      //    Should drop < 36 from left, i.e., 20, 31 (30 was not added)
+      // Right state value watermark = 46 - 5 = slightly less than 41 (since condition has <=)
+      //    Should drop < 41 from the right, i.e., 25, 26, 30, 31
+      AddData(rightInput, (1, 50)),
+      CheckLastBatch((1, 49, 50), (1, 50, 50)),
+      assertNumStateRows(total = 7, updated = 1)  // 12 - 6 removed + 1 added
+    )
+  }
+
   test("extract watermark from time condition") {
     val attributesToFindConstraintFor = Seq(
       AttributeReference("leftTime", TimestampType)(),

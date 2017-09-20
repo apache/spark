@@ -267,9 +267,9 @@ case class StreamingSymmetricHashJoinExec(
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
-    private val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
+    private[this] val keyGenerator = UnsafeProjection.create(joinKeys, inputAttributes)
 
-    private val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
+    private[this] val stateKeyWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateKeyWatermarkPredicate(expr)) =>
         // inputSchema can be empty as expr should only have BoundReferences and does not require
         // the schema to generated predicate. See [[StreamingSymmetricHashJoinHelper]].
@@ -278,14 +278,14 @@ case class StreamingSymmetricHashJoinExec(
         newPredicate(Literal(false), Seq.empty).eval _ // false = do not remove if no predicate
     }
 
-    private val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
+    private[this] val stateValueWatermarkPredicateFunc = stateWatermarkPredicate match {
       case Some(JoinStateValueWatermarkPredicate(expr)) =>
         newPredicate(expr, inputAttributes).eval _
       case _ =>
         newPredicate(Literal(false), Seq.empty).eval _  // false = do not remove if no predicate
     }
 
-    var numUpdatedStateRows = 0
+    private[this] var updatedStateRowsCount = 0
 
     /**
      * Generate joined rows by consuming input from this side, and matching it with the buffered
@@ -318,7 +318,7 @@ case class StreamingSymmetricHashJoinExec(
           !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
         if (shouldAddToState) {
           joinStateManager.append(key, thisRow)
-          numUpdatedStateRows += 1
+          updatedStateRowsCount += 1
         }
         outputIter
       }
@@ -340,5 +340,7 @@ case class StreamingSymmetricHashJoinExec(
       joinStateManager.commit()
       joinStateManager.metrics
     }
+
+    def numUpdatedStateRows: Long = updatedStateRowsCount
   }
 }

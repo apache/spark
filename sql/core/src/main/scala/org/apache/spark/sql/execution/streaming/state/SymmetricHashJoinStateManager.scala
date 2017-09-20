@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
 import org.apache.spark.util.NextIterator
 
 /**

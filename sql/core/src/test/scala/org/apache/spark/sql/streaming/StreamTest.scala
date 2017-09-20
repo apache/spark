@@ -577,8 +577,6 @@ trait StreamTest extends QueryTest with SharedSQLContext with TimeLimits with Be
         failTest("Stream Thread Died", streamThreadDeathCause)
       case e: org.scalatest.exceptions.TestFailedDueToTimeoutException =>
         failTest("Timed out waiting for stream", e)
-      case e: Throwable =>
-        failTest("Test failed", e)
     } finally {
       if (currentStream != null && currentStream.microBatchThread.isAlive) {
         currentStream.stop()
