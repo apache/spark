@@ -203,9 +203,9 @@ case class StreamingSymmetricHashJoinExec(
     //    stored right input, and also stores all the left input
     //
     //  - `rightJoiner.joinWith(leftJoiner)` generates all rows from matching new right input with
-    //    stored right input, and also stores all the right input. It also generates all rows from
+    //    stored left input, and also stores all the right input. It also generates all rows from
     //    matching new left input with new right input, since the new left input has become stored
-    //    by that point. This tiny asymmetry is necessary to avoid doubling.
+    //    by that point. This tiny asymmetry is necessary to avoid duplication.
     val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
       (inputRow: UnsafeRow, matchedRow: UnsafeRow) =>
         joinedRow.withLeft(inputRow).withRight(matchedRow)

@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{Partition, SparkContext, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{RDD, ZippedPartitionsRDD2}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BindReferences, Expression, LessThanOrEqual, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.Predicate
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Literal, SpecificInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.execution.streaming.{StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
-import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{LongType, StructField, StructType}
 import org.apache.spark.util.NextIterator
 
 /**
@@ -173,7 +169,7 @@ class SymmetricHashJoinStateManager(
 
   /** Abort any changes to the state stores if needed */
   def abortIfNeeded(): Unit = {
-    keyWithIndexToValue.abortIfNeeded()
+    keyToNumValues.abortIfNeeded()
     keyWithIndexToValue.abortIfNeeded()
   }
 
@@ -301,7 +297,7 @@ class SymmetricHashJoinStateManager(
   /** A wrapper around a [[StateStore]] that stores [(key, index) -> value]. */
   private class KeyWithIndexToValueStore extends StateStoreHandler(KeyWithIndexToValuesType) {
     private val keyWithIndexExprs = keyAttributes :+ Literal(1L)
-    private val keyWithIndexSchema = StructType(keySchema.fields).add("index", LongType)
+    private val keyWithIndexSchema = keySchema.add("index", LongType)
     private val indexOrdinalInKeyWithIndexRow = keyAttributes.size
 
     // Projection to generate (key + index) row from key row

@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{Partition, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ZippedPartitionsRDD2}
-import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, AttributeSet, BoundReference, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, NamedExpression, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
+import org.apache.spark.sql.catalyst.expressions.{Add, Attribute, AttributeReference, AttributeSet, BoundReference, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, NamedExpression, PreciseTimestampConversion, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.execution.streaming.WatermarkSupport.watermarkExpression
 import org.apache.spark.sql.execution.streaming.state.{StateStoreCoordinatorRef, StateStoreProvider, StateStoreProviderId}
@@ -61,7 +61,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
     right: Option[JoinStateWatermarkPredicate] = None) {
     override def toString(): String = {
       s"state cleanup [ left ${left.map(_.toString).getOrElse("= null")}, " +
-        s"right ${right.map(_.toString).getOrElse("")} ]"
+        s"right ${right.map(_.toString).getOrElse("= null")} ]"
     }
   }
 
@@ -112,7 +112,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
 
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = getStateValueWatermark(
-          attributesToFindStateWatemarkFor = AttributeSet(oneSideInputAttributes),
+          attributesToFindStateWatermarkFor = AttributeSet(oneSideInputAttributes),
           attributesWithEventWatermark = AttributeSet(otherSideInputAttributes),
           condition,
           eventTimeWatermark)
@@ -142,7 +142,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
    * This function is supposed to make best-effort attempt to get the state watermark. If there is
    * any error, it will return None.
    *
-   * @param attributesToFindStateWatemarkFor attributes of the side whose state watermark
+   * @param attributesToFindStateWatermarkFor attributes of the side whose state watermark
    *                                         is to be calculated
    * @param attributesWithEventWatermark  attributes of the other side which has a watermark column
    * @param joinCondition                 join condition
@@ -150,28 +150,21 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
    * @return state value watermark in milliseconds, is possible.
    */
   def getStateValueWatermark(
-      attributesToFindStateWatemarkFor: AttributeSet,
+      attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       joinCondition: Option[Expression],
       eventWatermark: Option[Long]): Option[Long] = {
+
     // If condition or event time watermark is not provided, then cannot calculate state watermark
     if (joinCondition.isEmpty || eventWatermark.isEmpty) return None
 
     // If there is not watermark attribute, then cannot define state watermark
     if (!attributesWithEventWatermark.exists(_.metadata.contains(delayKey))) return None
-    val attributesInCondition =
-      AttributeSet(joinCondition.get.collect { case a: AttributeReference => a })
-    if (
-      attributesInCondition.filter { attributesToFindStateWatemarkFor.contains(_)}.size > 1 ||
-      attributesInCondition.filter { attributesWithEventWatermark.contains(_)}.size > 1) {
-      // If more than attributes present in condition from one side, then it cannot be solved
-      return None
-    }
 
     def getStateWatermarkSafely(l: Expression, r: Expression): Option[Long] = {
       try {
         getStateWatermarkFromLessThenPredicate(
-          l, r, attributesToFindStateWatemarkFor, attributesWithEventWatermark, eventWatermark)
+          l, r, attributesToFindStateWatermarkFor, attributesWithEventWatermark, eventWatermark)
       } catch {
         case NonFatal(e) =>
           logWarning(s"Error trying to extract state constraint from condition $joinCondition", e)
@@ -201,7 +194,8 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
   }
 
   /**
-   * Extract constraint from conditions. For example: if we want to find the constraint for
+   * Extract the state value watermark (milliseconds) from the condition
+   * `LessThan(leftExpr, rightExpr)` where . For example: if we want to find the constraint for
    * leftTime using the watermark on the rightTime. Example:
    *
    * Input:                 rightTime-with-watermark + c1 < leftTime + c2
@@ -215,6 +209,16 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
       attributesToFindStateWatermarkFor: AttributeSet,
       attributesWithEventWatermark: AttributeSet,
       eventWatermark: Option[Long]): Option[Long] = {
+
+    val attributesInCondition = AttributeSet(
+      leftExpr.collect { case a: AttributeReference => a } ++
+      rightExpr.collect { case a: AttributeReference => a }
+    )
+    if (attributesInCondition.filter { attributesToFindStateWatermarkFor.contains(_) }.size > 1 ||
+        attributesInCondition.filter { attributesWithEventWatermark.contains(_) }.size > 1) {
+      // If more than attributes present in condition from one side, then it cannot be solved
+      return None
+    }
 
     def containsAttributeToFindStateConstraintFor(e: Expression): Boolean = {
       e.collectLeaves().collectFirst {
@@ -231,6 +235,8 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
     //    rightTime-with-watermark, c1, -leftTime, -c2
     val terms = ExpressionSet(collectTerms(allOnLeftExpr))
     logDebug("Terms extracted from join condition:\n\t" + terms.mkString("\n\t"))
+
+
 
     // Find the term that has leftTime (i.e. the one present in attributesToFindConstraintFor
     val constraintTerms = terms.filter(containsAttributeToFindStateConstraintFor)
@@ -336,16 +342,18 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
                 invalid = true
                 logWarning(
                   s"Failed to extract state value watermark from condition $exprToCollectFrom " +
-                    s"as imprecise intervals like months and years cannot be used for precise" +
-                    s"watermark calculation")
+                    s"as imprecise intervals like months and years cannot be used for" +
+                    s"watermark calculation. Use interval in terms of day instead.")
                 Literal(0.0)
               } else {
                 Literal(calendarInterval.microseconds.toDouble)
               }
             case DoubleType =>
               Multiply(lit, Literal(1000000.0))
-            case _: NumericType | _: TimestampType =>
+            case _: NumericType =>
               Multiply(Cast(lit, DoubleType), Literal(1000000.0))
+            case _: TimestampType =>
+              Multiply(PreciseTimestampConversion(lit, TimestampType, LongType), Literal(1000000.0))
           }
           Seq(negateIfNeeded(castedLit, negate))
         case a @ _ =>

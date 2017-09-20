@@ -116,13 +116,13 @@ class IncrementalExecution(
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
 
-      case j @ StreamingSymmetricHashJoinExec(lKeys, rKeys, _, cond, _, _, _, left, right) =>
+      case j: StreamingSymmetricHashJoinExec =>
         j.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              left.output, right.output, lKeys, rKeys, cond,
+              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition,
               Some(offsetSeqMetadata.batchWatermarkMs))
         )
     }
