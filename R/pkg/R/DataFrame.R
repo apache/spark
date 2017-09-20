@@ -1014,8 +1014,11 @@ setMethod("sample",
             }
 
             if (!missing(seed)) {
-              if (is.null(seed) || is.na(seed)) {
-                stop(paste("seed must not be NULL or NA; however, got", class(seed)))
+              if (is.null(seed)) {
+                stop("seed must not be NULL or NA; however, got NULL")
+              }
+              if (is.na(seed)) {
+                stop("seed must not be NULL or NA; however, got NA")
               }
 
               # TODO : Figure out how to send integer as java.lang.Long to JVM so

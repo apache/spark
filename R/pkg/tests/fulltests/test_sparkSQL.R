@@ -1126,7 +1126,7 @@ test_that("sample on a DataFrame", {
 
   expect_error(sample(df, fraction = "a"), "fraction must be numeric")
   expect_error(sample(df, "a", fraction = 0.1), "however, got character")
-  expect_error(sample(df, fraction = 1, seed = NA), "seed must not be NULL or NA")
+  expect_error(sample(df, fraction = 1, seed = NA), "seed must not be NULL or NA; however, got NA")
   expect_error(sample(df, fraction = -1.0),
                "illegal argument - requirement failed: Sampling fraction \\(-1.0\\)")
 
