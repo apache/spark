@@ -358,7 +358,7 @@ private[spark] object EventLoggingListener extends Logging {
       }
       codec.map(_.compressedInputStream(in)).getOrElse(in)
     } catch {
-      case e: Exception =>
+      case e: Throwable =>
         in.close()
         throw e
     }
