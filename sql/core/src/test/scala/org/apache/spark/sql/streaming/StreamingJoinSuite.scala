@@ -261,9 +261,7 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
 
       AddData(input2, 1),
       CheckLastBatch(),       // Should not join as < 15 removed
-      // 1 row added to state because it was not filtered by watermark as no watermark on input2,
-      // but it was immediately removed from state
-      assertNumStateRows(total = 2, updated = 1),
+      assertNumStateRows(total = 2, updated = 0),  // row not add as 1 < state key watermark = 15
 
       AddData(input1, 5),
       CheckLastBatch(),       // Should not join or add to state as < 15 got filtered by watermark
@@ -274,14 +272,14 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
   test("stream stream inner join with time range - with watermark - one side condition") {
     import org.apache.spark.sql.functions._
 
-    val input1 = MemoryStream[(Int, Int)]
-    val input2 = MemoryStream[(Int, Int)]
+    val leftInput = MemoryStream[(Int, Int)]
+    val rightInput = MemoryStream[(Int, Int)]
 
-    val df1 = input1.toDF.toDF("leftKey", "time")
+    val df1 = leftInput.toDF.toDF("leftKey", "time")
       .select('leftKey, 'time.cast("timestamp") as "leftTime", ('leftKey * 2) as "leftValue")
       .withWatermark("leftTime", "10 seconds")
 
-    val df2 = input2.toDF.toDF("rightKey", "time")
+    val df2 = rightInput.toDF.toDF("rightKey", "time")
       .select('rightKey, 'time.cast("timestamp") as "rightTime", ('rightKey * 3) as "rightValue")
       .withWatermark("rightTime", "10 seconds")
 
@@ -290,31 +288,45 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
         .select('leftKey, 'leftTime.cast("int"), 'rightTime.cast("int"))
 
     testStream(joined)(
-      AddData(input1, (1, 5)),
+      AddData(leftInput, (1, 5)),
       CheckAnswer(),
-      AddData(input2, (1, 11)),
+      AddData(rightInput, (1, 11)),
       CheckLastBatch((1, 5, 11)),
-      AddData(input2, (1, 10)),
-      CheckLastBatch(),           // left time 5s is not less than right time 10s - 5s
+      AddData(rightInput, (1, 10)),
+      CheckLastBatch(), // no match as neither 5, nor 10 from leftTime is less than rightTime 10 - 5
+      assertNumStateRows(total = 3, updated = 1),
 
       // Increase event time watermark to 20s by adding data with time = 30s on both inputs
-      AddData(input1, (1, 3), (1, 30)),
-      AddData(input2, (0, 30)),
+      AddData(leftInput, (1, 3), (1, 30)),
       CheckLastBatch((1, 3, 10), (1, 3, 11)),
-      // watermark:    max event time - 10s   ==>   30s - 10s = 20s
-      // state constraint:    20s < leftTime < rightTime - 5s   ==>   rightTime > 25s
-
-      // clear state rightTime < 25s
-      AddData(input2),
+      assertNumStateRows(total = 5, updated = 2),
+      AddData(rightInput, (0, 30)),
       CheckLastBatch(),
+      assertNumStateRows(total = 6, updated = 1),
 
-      // input with time <= 20s ignored due to watermark
-      AddData(input2, (1, 20), (1, 21), (1, 28)),
+      // event time watermark:    max event time - 10   ==>   30 - 10 = 20
+      // right side state constraint:    20 < leftTime < rightTime - 5   ==>   rightTime > 25
+
+      // Run another batch with event time = 25 to clear right state where rightTime <= 25
+      AddData(rightInput, (0, 30)),
+      CheckLastBatch(),
+      assertNumStateRows(total = 5, updated = 1),  // removed (1, 11) and (1, 10), added (0, 30)
+
+      // New data to right input should match with left side (1, 3) and (1, 5), as left state should
+      // not be cleared. But rows rightTime <= 20 should be filtered due to event time watermark and
+      // state rows with rightTime <= 25 should be removed from state.
+      // (1, 20) ==> filtered by event time watermark = 20
+      // (1, 21) ==> passed filter, matched with left (1, 3) and (1, 5), not added to state
+      //             as state watermark = 25
+      // (1, 28) ==> passed filter, matched with left (1, 3) and (1, 5), added to state
+      AddData(rightInput, (1, 20), (1, 21), (1, 28)),
       CheckLastBatch((1, 3, 21), (1, 5, 21), (1, 3, 28), (1, 5, 28)),
+      assertNumStateRows(total = 6, updated = 1),
 
-      // input with time <= 20s ignored due to watermark
-      AddData(input1, (1, 20), (1, 21)),
-      CheckLastBatch((1, 21, 28))
+      // New data to left input with leftTime <= 20 should be filtered due to event time watermark
+      AddData(leftInput, (1, 20), (1, 21)),
+      CheckLastBatch((1, 21, 28)),
+      assertNumStateRows(total = 7, updated = 1)
     )
   }
 

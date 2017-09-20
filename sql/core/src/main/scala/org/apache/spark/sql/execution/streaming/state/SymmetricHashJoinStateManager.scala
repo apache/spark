@@ -63,7 +63,7 @@ import org.apache.spark.util.NextIterator
  */
 class SymmetricHashJoinStateManager(
     val joinSide: JoinSide,
-    val inputValueAttributes: Seq[Attribute],
+    inputValueAttributes: Seq[Attribute],
     joinKeys: Seq[Expression],
     stateInfo: Option[StatefulOperatorStateInfo],
     storeConf: StateStoreConf,
@@ -113,12 +113,10 @@ class SymmetricHashJoinStateManager(
    */
   def removeByValueCondition(condition: UnsafeRow => Boolean): Unit = {
     val allKeyToNumValues = keyToNumValues.iterator
-
     var numValues: Long = 0L
     var index: Long = 0L
     var valueRemoved = false
     var valueForIndex: UnsafeRow = null
-
 
     while (allKeyToNumValues.hasNext) {
       val keyToNumValue = allKeyToNumValues.next

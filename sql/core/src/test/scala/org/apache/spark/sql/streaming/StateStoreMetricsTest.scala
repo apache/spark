@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 trait StateStoreMetricsTest extends StreamTest {
 
   def assertNumStateRows(total: Seq[Long], updated: Seq[Long]): AssertOnQuery =
-    AssertOnQuery { q =>
+    AssertOnQuery(s"Check total state rows = $total, updated state rows = $updated") { q =>
       val progressWithData = q.recentProgress.filter(_.numInputRows > 0).lastOption.get
       assert(
         progressWithData.stateOperators.map(_.numRowsTotal) === total,

@@ -32,7 +32,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 
 
 /**
- * Helper object for [[StreamingSymmetricHashJoinExec]].
+ * Helper object for [[StreamingSymmetricHashJoinExec]]. See that object for more details.
  */
 object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
 
@@ -40,18 +40,28 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
   case object LeftSide extends JoinSide { override def toString(): String = "left" }
   case object RightSide extends JoinSide { override def toString(): String = "right" }
 
-  sealed trait JoinStateWatermarkPredicate { def expr: Expression }
+  sealed trait JoinStateWatermarkPredicate {
+    def expr: Expression
+    def desc: String
+    override def toString: String = s"$desc: $expr"
+  }
   /** Predicate for watermark on state keys */
-  case class JoinStateKeyWatermarkPredicate(expr: Expression) extends JoinStateWatermarkPredicate
+  case class JoinStateKeyWatermarkPredicate(expr: Expression)
+    extends JoinStateWatermarkPredicate {
+    def desc: String = "key predicate"
+  }
   /** Predicate for watermark on state values */
-  case class JoinStateValueWatermarkPredicate(expr: Expression) extends JoinStateWatermarkPredicate
+  case class JoinStateValueWatermarkPredicate(expr: Expression)
+    extends JoinStateWatermarkPredicate {
+    def desc: String = "value predicate"
+  }
 
   case class JoinStateWatermarkPredicates(
     left: Option[JoinStateWatermarkPredicate] = None,
     right: Option[JoinStateWatermarkPredicate] = None) {
     override def toString(): String = {
-      s"state predicates [ left = ${left.map(_.expr).getOrElse("")}, " +
-        s"right = ${right.map(_.expr).getOrElse("")} ]"
+      s"state cleanup [ left ${left.map(_.toString).getOrElse("= null")}, " +
+        s"right ${right.map(_.toString).getOrElse("")} ]"
     }
   }
 
@@ -98,7 +108,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).dataType,
           oneSideJoinKeys(joinKeyOrdinalForWatermark.get).nullable)
         val expr = watermarkExpression(Some(keyExprWithWatermark), eventTimeWatermark)
-        expr.map(JoinStateKeyWatermarkPredicate)
+        expr.map(JoinStateKeyWatermarkPredicate.apply _)
 
       } else if (isWatermarkDefinedOnInput) { // case 2 in the StreamingSymmetricHashJoinExec docs
         val stateValueWatermark = getStateValueWatermark(
@@ -108,7 +118,7 @@ object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
           eventTimeWatermark)
         val inputAttributeWithWatermark = oneSideInputAttributes.find(_.metadata.contains(delayKey))
         val expr = watermarkExpression(inputAttributeWithWatermark, stateValueWatermark)
-        expr.map(JoinStateValueWatermarkPredicate)
+        expr.map(JoinStateValueWatermarkPredicate.apply _)
 
       } else {
         None
