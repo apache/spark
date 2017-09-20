@@ -25,7 +25,7 @@ import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.expressions.CurrentBatchTimestamp
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.execution.{CacheWatcher, QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -56,19 +56,6 @@ class IncrementalExecution(
       FlatMapGroupsWithStateStrategy ::
       StreamingRelationStrategy ::
       StreamingDeduplicationStrategy :: Nil
-  }
-
-  /**
-   * See [SPARK-18339]
-   * Walk the optimized logical plan and replace CurrentBatchTimestamp
-   * with the desired literal
-   */
-  override lazy val optimizedPlan: LogicalPlan = {
-    sparkSession.sessionState.optimizer.execute(withCachedData) transformAllExpressions {
-      case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
-        logInfo(s"Current batch timestamp = $timestamp")
-        ts.toLiteral
-    }
   }
 
   /**
@@ -121,4 +108,25 @@ class IncrementalExecution(
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
+
+  override val cacheWatcher: CacheWatcher = new StreamingCacheWatcher(this)
+}
+
+class StreamingCacheWatcher(override val queryExecution: QueryExecution)
+    extends CacheWatcher(queryExecution) with Logging {
+  /**
+   * See [SPARK-18339]
+   * Walk the optimized logical plan and replace CurrentBatchTimestamp
+   * with the desired literal
+   */
+  override protected def updateAndGetOptimizedPlan(): LogicalPlan = {
+    val plan = queryExecution.sparkSession.sessionState.optimizer.execute(withCachedData)
+    val transformed = plan.transformAllExpressions {
+      case ts @ CurrentBatchTimestamp(timestamp, _, _) =>
+        logInfo(s"Current batch timestamp = $timestamp")
+        ts.toLiteral
+    }
+    _optimizedPlan = Some(transformed)
+    transformed
+  }
 }

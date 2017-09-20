@@ -96,4 +96,35 @@ class DatasetCacheSuite extends QueryTest with SharedSQLContext {
     agged.unpersist()
     assert(agged.storageLevel == StorageLevel.NONE, "The Dataset agged should not be cached.")
   }
+
+  test("Correct query plans after persist/unpersist") {
+    val ds = Seq(1).toDS()
+    assertCached(ds, 0)
+    ds.persist()
+    ds.count()
+    assertCached(ds, 1)
+    ds.unpersist()
+    assertCached(ds, 0)
+  }
+
+  test("Dataset's query plans should be correctly cached/uncached after persis/unpersist") {
+    withTable("t") {
+      Seq("1", "2").toDF().write.saveAsTable("t")
+      val ds1 = spark.table("t")
+      val ds2 = spark.table("t")
+
+      // Let's materialize ds1's query plan. ds1 should use uncached plan.
+      assertCached(ds1, 0)
+
+      ds2.persist()
+
+      // ds1 should use cached plan now.
+      assertCached(ds1, 1)
+
+      ds2.unpersist()
+
+      // ds1 should use uncached plan now.
+      assertCached(ds1, 0)
+    }
+  }
 }

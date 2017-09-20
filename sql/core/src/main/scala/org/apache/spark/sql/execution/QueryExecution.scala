@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
 class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // TODO: Move the planner an optimizer into here from SessionState.
-  protected def planner = sparkSession.sessionState.planner
+  def planner: SparkPlanner = sparkSession.sessionState.planner
 
   def assertAnalyzed(): Unit = {
     // Analyzer is invoked outside the try block to avoid calling it again from within the
@@ -70,33 +70,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     sparkSession.sessionState.analyzer.execute(logical)
   }
 
-  lazy val withCachedData: LogicalPlan = {
-    assertAnalyzed()
-    assertSupported()
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed)
-  }
+  val cacheWatcher: CacheWatcher = new CacheWatcher(this)
 
-  lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
+  def withCachedData: LogicalPlan = cacheWatcher.synchronized { cacheWatcher.withCachedData }
 
-  lazy val sparkPlan: SparkPlan = {
-    SparkSession.setActiveSession(sparkSession)
-    // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
-    //       but we will implement to choose the best plan.
-    planner.plan(ReturnAnswer(optimizedPlan)).next()
-  }
+  def optimizedPlan: LogicalPlan = cacheWatcher.synchronized { cacheWatcher.optimizedPlan }
+
+  def sparkPlan: SparkPlan = cacheWatcher.synchronized { cacheWatcher.sparkPlan }
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
+  def executedPlan: SparkPlan = cacheWatcher.synchronized { cacheWatcher.executedPlan }
 
   /** Internal version of the RDD. Avoids copies and has no schema */
-  lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
+  def toRdd: RDD[InternalRow] = cacheWatcher.synchronized { cacheWatcher.toRdd }
 
   /**
    * Prepares a planned [[SparkPlan]] for execution by inserting shuffle operations and internal
    * row format conversions as needed.
    */
-  protected def prepareForExecution(plan: SparkPlan): SparkPlan = {
+  def prepareForExecution(plan: SparkPlan): SparkPlan = {
     preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
   }
 
@@ -256,5 +249,107 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     def codegenToSeq(): Seq[(String, String)] = {
       org.apache.spark.sql.execution.debug.codegenStringSeq(executedPlan)
     }
+  }
+}
+
+/**
+ * Used by `QueryExecution` to prepare various query plans while keeping updated with cache changes.
+ * This keeps the copies of query plans. Once there're cache changes that invalidate the kept query
+ * plans, e.g. a fragement of query plan is cached/uncached, this class resets the copies of query
+ * plans.
+ */
+class CacheWatcher(val queryExecution: QueryExecution) {
+  protected var _withCachedData: Option[LogicalPlan] = None
+  protected var _optimizedPlan: Option[LogicalPlan] = None
+  protected var _sparkPlan: Option[SparkPlan] = None
+  protected var _executedPlan: Option[SparkPlan] = None
+  protected var _rdd: Option[RDD[InternalRow]] = None
+
+  private def reset(): Unit = {
+    _withCachedData = None
+    _optimizedPlan = None
+    _sparkPlan = None
+    _executedPlan = None
+    _rdd = None
+  }
+
+  // Check if the query plan needs to be changed due to changes in cache status.
+  protected def updateWithCachePlans(): Unit = if (_withCachedData.isEmpty) {
+    queryExecution.assertAnalyzed()
+    queryExecution.assertSupported()
+    val cachedPlan =
+      queryExecution.sparkSession.sharedState.cacheManager.useCachedData(queryExecution.analyzed)
+    _withCachedData = Some(cachedPlan)
+  } else {
+    _withCachedData.foreach { cachedPlan =>
+      val newPlan =
+        queryExecution.sparkSession.sharedState.cacheManager.useCachedData(queryExecution.analyzed)
+      if (newPlan.canonicalized != cachedPlan.canonicalized) {
+        // Cache status changed for the query plan.
+        reset()
+        _withCachedData = Some(newPlan)
+      }
+    }
+  }
+
+  def withCachedData: LogicalPlan = {
+    updateWithCachePlans()
+    _withCachedData.get
+  }
+
+  protected def updateAndGetOptimizedPlan(): LogicalPlan = {
+    val plan = queryExecution.sparkSession.sessionState.optimizer.execute(withCachedData)
+    _optimizedPlan = Some(plan)
+    plan
+  }
+
+  def optimizedPlan: LogicalPlan = if (_optimizedPlan.isEmpty) {
+    updateAndGetOptimizedPlan()
+  } else {
+    updateWithCachePlans()
+    _optimizedPlan.getOrElse(updateAndGetOptimizedPlan())
+  }
+
+  protected def updateAndGetSparkPlan(): SparkPlan = {
+    SparkSession.setActiveSession(queryExecution.sparkSession)
+    // TODO: We use next(), i.e. take the first plan returned by the planner, here for now,
+    //       but we will implement to choose the best plan.
+    val plan =
+      queryExecution.planner.plan(ReturnAnswer(optimizedPlan)).next()
+    _sparkPlan = Some(plan)
+    plan
+  }
+
+  def sparkPlan: SparkPlan = if (_sparkPlan.isEmpty) {
+    updateAndGetSparkPlan()
+  } else {
+    updateWithCachePlans()
+    _sparkPlan.getOrElse(updateAndGetSparkPlan())
+  }
+
+  protected def updateAndGetExecutedPlan(): SparkPlan = {
+    val plan = queryExecution.prepareForExecution(sparkPlan)
+    _executedPlan = Some(plan)
+    plan
+  }
+
+  def executedPlan: SparkPlan = if (_executedPlan.isEmpty) {
+    updateAndGetExecutedPlan()
+  } else {
+    updateWithCachePlans()
+    _executedPlan.getOrElse(updateAndGetExecutedPlan())
+  }
+
+  protected def updateAndGetRDD(): RDD[InternalRow] = {
+    val rdd = executedPlan.execute()
+    _rdd = Some(rdd)
+    rdd
+  }
+
+  def toRdd: RDD[InternalRow] = if (_rdd.isEmpty) {
+    updateAndGetRDD()
+  } else {
+    updateWithCachePlans()
+    _rdd.getOrElse(updateAndGetRDD())
   }
 }
