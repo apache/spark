@@ -229,7 +229,7 @@ class ArrowPandasSerializer(ArrowSerializer):
         if not isinstance(series, (list, tuple)) or \
                 (len(series) == 2 and isinstance(series[1], pa.DataType)):
             series = [series]
-        series = [(s, None) if not isinstance(s, (list, tuple)) else s for s in series]
+        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
         arrs = [pa.Array.from_pandas(s[0], type=s[1], mask=s[0].isnull()) for s in series]
         batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
         return super(ArrowPandasSerializer, self).dumps(batch)
