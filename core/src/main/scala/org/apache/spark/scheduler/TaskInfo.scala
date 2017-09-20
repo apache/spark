@@ -66,12 +66,22 @@ class TaskInfo(
    */
   var finishTime: Long = 0
 
+  /**
+   * Set this tag when this task killed by other attempt. This kind of task should not resubmit
+   * while executor lost.
+   */
+  var killedAttempt = false
+
   var failed = false
 
   var killed = false
 
   private[spark] def markGettingResult(time: Long) {
     gettingResultTime = time
+  }
+
+  private[spark] def markKilledAttempt {
+    killedAttempt = true
   }
 
   private[spark] def markFinished(state: TaskState, time: Long) {
@@ -92,6 +102,8 @@ class TaskInfo(
   def successful: Boolean = finished && !failed && !killed
 
   def running: Boolean = !finished
+
+  def needResubmit: Boolean = !killedAttempt
 
   def status: String = {
     if (running) {

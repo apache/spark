@@ -724,6 +724,7 @@ private[spark] class TaskSetManager(
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      attemptInfo.markKilledAttempt
       sched.backend.killTask(
         attemptInfo.taskId,
         attemptInfo.executorId,
@@ -910,7 +911,7 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index)) {
+        if (successful(index) && info.needResubmit) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
