@@ -116,6 +116,13 @@ if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
 fi
 
+# Drop the v from the start of the version string in publish-release mode for nexus.
+if [[ "$@" == *"publish-release"* ]]; then
+  # shellcheck disable=SC2001
+  VERSION_WITH_RC=$(echo "$RELEASE_TAG" | sed -e "s/v//")
+  SPARK_VERSION=$VERSION_WITH_RC
+fi
+
 DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 
 function LFTP {
