@@ -126,6 +126,8 @@ private[spark] class CompactBuffer[T: ClassTag] extends Seq[T] with Serializable
 
   /** Increase our size to newSize and grow the backing array if needed. */
   private def growToSize(newSize: Int): Unit = {
+    // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
+    // smaller. Be conservative and lower the cap a little.
     val arrayMax = Int.MaxValue - 8
     if (newSize < 0 || newSize - 2 > arrayMax) {
       throw new UnsupportedOperationException(s"Can't grow buffer past $arrayMax elements")

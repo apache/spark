@@ -96,5 +96,7 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 }
 
 private object PartitionedPairBuffer {
+  // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
+  // smaller. Be conservative and lower the cap a little.
   val MAXIMUM_CAPACITY: Int = (Int.MaxValue - 8) / 2
 }
