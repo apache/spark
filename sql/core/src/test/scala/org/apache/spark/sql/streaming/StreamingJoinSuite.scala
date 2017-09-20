@@ -413,9 +413,10 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       Some(6000))  // second condition wins
 
     // Test invalid comparisons
-    assert(watermarkFrom("cast(leftTime AS LONG) > leftOther") === None)
-    assert(watermarkFrom("leftOther > rightOther") === None)
-    assert(watermarkFrom("cast(rightTime AS DOUBLE) < rightOther") === None)
+    assert(watermarkFrom("cast(leftTime AS LONG) > leftOther") === None)      // non-time attributes
+    assert(watermarkFrom("leftOther > rightOther") === None)                  // non-time attributes
+    assert(watermarkFrom("cast(rightTime AS DOUBLE) < rightOther") === None)  // non-time attributes
+    assert(watermarkFrom("leftTime > rightTime + interval 1 month") === None) // month not allowed
 
     // Test static comparisons
     assert(watermarkFrom("cast(leftTime AS LONG) > 10") === Some(10000))

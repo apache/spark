@@ -38,12 +38,12 @@ import org.apache.spark.util.NextIterator
  * - Append: Append a new value to the given key
  * - Remove Data by predicate: Drop any state using a predicate condition on keys or values
  *
- * @param joinSide          Defines the join side
- * @param inputValueAttributes   Attributes of the input row which will be stored as value
- * @param joinKeys          Expressions to find the join key that will be used to key the value rows
- * @param stateInfo           Information about how to retrieve the correct version of state
- * @param storeConf           Configuration for the state store.
- * @param hadoopConf          Hadoop configuration for reading state data from storage
+ * @param joinSide              Defines the join side
+ * @param inputValueAttributes  Attributes of the input row which will be stored as value
+ * @param joinKeys              Expressions to generate rows that will be used to key the value rows
+ * @param stateInfo             Information about how to retrieve the correct version of state
+ * @param storeConf             Configuration for the state store.
+ * @param hadoopConf            Hadoop configuration for reading state data from storage
  *
  * Internally, the key -> multiple values is stored in two [[StateStore]]s.
  * - Store 1 ([[KeyToNumValuesStore]]) maintains mapping between key -> number of values
