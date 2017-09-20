@@ -119,7 +119,7 @@ object TypeCoercion {
       plan: LogicalPlan,
       l: DataType,
       r: DataType): Option[DataType] =
-    if (!plan.conf.autoTypeCastingCompatibility) {
+    if (!plan.conf.isHiveTypeCoercionMode) {
       (l, r) match {
         // We should cast all relative timestamp/date/string comparison into string comparisons
         // This behaves as a user would expect because timestamp strings sort lexicographically.

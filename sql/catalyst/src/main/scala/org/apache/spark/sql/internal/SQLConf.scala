@@ -925,11 +925,13 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
-  val AUTO_TYPE_CASTING_COMPATIBILITY =
-    buildConf("spark.sql.autoTypeCastingCompatibility")
+  val typeCoercionMode =
+    buildConf("spark.sql.typeCoercion.mode")
       .doc("Whether compatible with Hive.")
-      .booleanConf
-      .createWithDefault(false)
+      .stringConf
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValues(Set("default", "hive"))
+      .createWithDefault("default")
 
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
@@ -1209,8 +1211,7 @@ class SQLConf extends Serializable with Logging {
 
   def arrowMaxRecordsPerBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_BATCH)
 
-  def autoTypeCastingCompatibility: Boolean =
-    getConf(SQLConf.AUTO_TYPE_CASTING_COMPATIBILITY)
+  def isHiveTypeCoercionMode: Boolean = getConf(SQLConf.typeCoercionMode).equals("hive")
 
   /** ********************** SQLConf functionality methods ************ */
 

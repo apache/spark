@@ -968,13 +968,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
     </p>
   </td>
 </tr>
-<tr>
-  <td><code>spark.sql.autoTypeCastingCompatibility</code></td>
-  <td>false</td>
-  <td>
-      Whether compatible with Hive.
-  </td>
-</tr>
 </table>
 
 ## JSON Datasets
@@ -1465,6 +1458,13 @@ that these options will be deprecated in future release as more optimizations ar
     <td>200</td>
     <td>
       Configures the number of partitions to use when shuffling data for joins or aggregations.
+    </td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.typeCoercion.mode</code></td>
+    <td><code>default</code></td>
+    <td>
+        Whether compatible with Hive. Available options are <code>default</code> and <code>hive</code>.
     </td>
   </tr>
 </table>

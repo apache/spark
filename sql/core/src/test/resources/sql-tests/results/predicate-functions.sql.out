@@ -13,7 +13,7 @@ true
 -- !query 1
 select 1 = '1'
 -- !query 1 schema
-struct<(CAST(1 AS DOUBLE) = CAST(1 AS DOUBLE)):boolean>
+struct<(1 = CAST(1 AS INT)):boolean>
 -- !query 1 output
 true
 
@@ -21,7 +21,7 @@ true
 -- !query 2
 select 1.0 = '1'
 -- !query 2 schema
-struct<(CAST(1.0 AS DOUBLE) = CAST(1 AS DOUBLE)):boolean>
+struct<(1.0 = CAST(1 AS DECIMAL(2,1))):boolean>
 -- !query 2 output
 true
 
@@ -29,7 +29,7 @@ true
 -- !query 3
 select 1 > '1'
 -- !query 3 schema
-struct<(CAST(1 AS DOUBLE) > CAST(1 AS DOUBLE)):boolean>
+struct<(1 > CAST(1 AS INT)):boolean>
 -- !query 3 output
 false
 
@@ -37,7 +37,7 @@ false
 -- !query 4
 select 2 > '1.0'
 -- !query 4 schema
-struct<(CAST(2 AS DOUBLE) > CAST(1.0 AS DOUBLE)):boolean>
+struct<(2 > CAST(1.0 AS INT)):boolean>
 -- !query 4 output
 true
 
@@ -45,7 +45,7 @@ true
 -- !query 5
 select 2 > '2.0'
 -- !query 5 schema
-struct<(CAST(2 AS DOUBLE) > CAST(2.0 AS DOUBLE)):boolean>
+struct<(2 > CAST(2.0 AS INT)):boolean>
 -- !query 5 output
 false
 
@@ -53,7 +53,7 @@ false
 -- !query 6
 select 2 > '2.2'
 -- !query 6 schema
-struct<(CAST(2 AS DOUBLE) > CAST(2.2 AS DOUBLE)):boolean>
+struct<(2 > CAST(2.2 AS INT)):boolean>
 -- !query 6 output
 false
 
@@ -69,7 +69,7 @@ false
 -- !query 8
 select to_date('2009-07-30 04:17:52') > '2009-07-30 04:17:52'
 -- !query 8 schema
-struct<(to_date('2009-07-30 04:17:52') > CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) > 2009-07-30 04:17:52):boolean>
 -- !query 8 output
 false
 
@@ -77,7 +77,7 @@ false
 -- !query 9
 select 1 >= '1'
 -- !query 9 schema
-struct<(CAST(1 AS DOUBLE) >= CAST(1 AS DOUBLE)):boolean>
+struct<(1 >= CAST(1 AS INT)):boolean>
 -- !query 9 output
 true
 
@@ -85,7 +85,7 @@ true
 -- !query 10
 select 2 >= '1.0'
 -- !query 10 schema
-struct<(CAST(2 AS DOUBLE) >= CAST(1.0 AS DOUBLE)):boolean>
+struct<(2 >= CAST(1.0 AS INT)):boolean>
 -- !query 10 output
 true
 
@@ -93,7 +93,7 @@ true
 -- !query 11
 select 2 >= '2.0'
 -- !query 11 schema
-struct<(CAST(2 AS DOUBLE) >= CAST(2.0 AS DOUBLE)):boolean>
+struct<(2 >= CAST(2.0 AS INT)):boolean>
 -- !query 11 output
 true
 
@@ -101,7 +101,7 @@ true
 -- !query 12
 select 2.0 >= '2.2'
 -- !query 12 schema
-struct<(CAST(2.0 AS DOUBLE) >= CAST(2.2 AS DOUBLE)):boolean>
+struct<(2.0 >= CAST(2.2 AS DECIMAL(2,1))):boolean>
 -- !query 12 output
 false
 
@@ -117,15 +117,15 @@ true
 -- !query 14
 select to_date('2009-07-30 04:17:52') >= '2009-07-30 04:17:52'
 -- !query 14 schema
-struct<(to_date('2009-07-30 04:17:52') >= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) >= 2009-07-30 04:17:52):boolean>
 -- !query 14 output
-true
+false
 
 
 -- !query 15
 select 1 < '1'
 -- !query 15 schema
-struct<(CAST(1 AS DOUBLE) < CAST(1 AS DOUBLE)):boolean>
+struct<(1 < CAST(1 AS INT)):boolean>
 -- !query 15 output
 false
 
@@ -133,7 +133,7 @@ false
 -- !query 16
 select 2 < '1.0'
 -- !query 16 schema
-struct<(CAST(2 AS DOUBLE) < CAST(1.0 AS DOUBLE)):boolean>
+struct<(2 < CAST(1.0 AS INT)):boolean>
 -- !query 16 output
 false
 
@@ -141,7 +141,7 @@ false
 -- !query 17
 select 2 < '2.0'
 -- !query 17 schema
-struct<(CAST(2 AS DOUBLE) < CAST(2.0 AS DOUBLE)):boolean>
+struct<(2 < CAST(2.0 AS INT)):boolean>
 -- !query 17 output
 false
 
@@ -149,7 +149,7 @@ false
 -- !query 18
 select 2.0 < '2.2'
 -- !query 18 schema
-struct<(CAST(2.0 AS DOUBLE) < CAST(2.2 AS DOUBLE)):boolean>
+struct<(2.0 < CAST(2.2 AS DECIMAL(2,1))):boolean>
 -- !query 18 output
 true
 
@@ -165,15 +165,15 @@ false
 -- !query 20
 select to_date('2009-07-30 04:17:52') < '2009-07-30 04:17:52'
 -- !query 20 schema
-struct<(to_date('2009-07-30 04:17:52') < CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) < 2009-07-30 04:17:52):boolean>
 -- !query 20 output
-false
+true
 
 
 -- !query 21
 select 1 <= '1'
 -- !query 21 schema
-struct<(CAST(1 AS DOUBLE) <= CAST(1 AS DOUBLE)):boolean>
+struct<(1 <= CAST(1 AS INT)):boolean>
 -- !query 21 output
 true
 
@@ -181,7 +181,7 @@ true
 -- !query 22
 select 2 <= '1.0'
 -- !query 22 schema
-struct<(CAST(2 AS DOUBLE) <= CAST(1.0 AS DOUBLE)):boolean>
+struct<(2 <= CAST(1.0 AS INT)):boolean>
 -- !query 22 output
 false
 
@@ -189,7 +189,7 @@ false
 -- !query 23
 select 2 <= '2.0'
 -- !query 23 schema
-struct<(CAST(2 AS DOUBLE) <= CAST(2.0 AS DOUBLE)):boolean>
+struct<(2 <= CAST(2.0 AS INT)):boolean>
 -- !query 23 output
 true
 
@@ -197,7 +197,7 @@ true
 -- !query 24
 select 2.0 <= '2.2'
 -- !query 24 schema
-struct<(CAST(2.0 AS DOUBLE) <= CAST(2.2 AS DOUBLE)):boolean>
+struct<(2.0 <= CAST(2.2 AS DECIMAL(2,1))):boolean>
 -- !query 24 output
 true
 
@@ -213,6 +213,6 @@ true
 -- !query 26
 select to_date('2009-07-30 04:17:52') <= '2009-07-30 04:17:52'
 -- !query 26 schema
-struct<(to_date('2009-07-30 04:17:52') <= CAST(2009-07-30 04:17:52 AS DATE)):boolean>
+struct<(CAST(to_date('2009-07-30 04:17:52') AS STRING) <= 2009-07-30 04:17:52):boolean>
 -- !query 26 output
 true
