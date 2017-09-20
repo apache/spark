@@ -866,7 +866,7 @@ Apart from these, the following properties are also available, and may be useful
     e.g.
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
-    <code>org.apache.spark.io.SnappyCompressionCodec</code>.
+    <code>org.apache.spark.io.SnappyCompressionCodec</code>,
     and <code>org.apache.spark.io.ZstdCompressionCodec</code>.
   </td>
 </tr>
@@ -890,7 +890,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.io.compression.zstd.level</code></td>
   <td>1</td>
   <td>
-    Compression leve for Zstd compression codec. Increasing the compression level will result in better
+    Compression level for Zstd compression codec. Increasing the compression level will result in better
     compression at the expense of more CPU and memory.
   </td>
 </tr>
