@@ -63,8 +63,7 @@ class MesosCredentialRenewer(
 
   def scheduleTokenRenewal(): Unit = {
     def scheduleRenewal(runnable: Runnable): Unit = {
-      // val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
-      val remainingTime = 5000
+      val remainingTime = timeOfNextRenewal - System.currentTimeMillis()
       if (remainingTime <= 0) {
         logInfo("Credentials have expired, creating new ones now.")
         runnable.run()

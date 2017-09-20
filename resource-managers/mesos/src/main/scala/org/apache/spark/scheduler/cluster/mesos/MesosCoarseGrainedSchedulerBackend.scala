@@ -205,7 +205,6 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       val credentialRenewerThread = new Thread {
         setName("MesosCredentialRenewer")
         override def run(): Unit = {
-          val dummy: Option[Array[Byte]] = None
           val credentialRenewer =
             new MesosCredentialRenewer(
               conf,
