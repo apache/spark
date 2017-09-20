@@ -21,18 +21,15 @@ import java.util.UUID
 
 import scala.util.Random
 
-import org.apache.hadoop.conf.Configuration
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, BoundReference, Expression, GenericInternalRow, LessThanOrEqual, Literal, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.{GeneratePredicate}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, Filter}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinHelper}
-import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
-import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreConf, StateStoreProviderId, SymmetricHashJoinStateManager}
+import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -50,117 +47,6 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
   }
 
   import testImplicits._
-
-  test("SymmetricHashJoinStateManager - all operations") {
-    val watermarkMetadata = new MetadataBuilder().putLong(EventTimeWatermark.delayKey, 10).build()
-    val inputValueSchema = new StructType()
-      .add(StructField("time", IntegerType, metadata = watermarkMetadata))
-      .add(StructField("value", BooleanType))
-    val inputValueAttribs = inputValueSchema.toAttributes
-    val inputValueAttribWithWatermark = inputValueAttribs(0)
-    val joinKeyExprs = Seq[Expression](Literal(false), inputValueAttribWithWatermark, Literal(10.0))
-
-    val inputValueGen = UnsafeProjection.create(inputValueAttribs.map(_.dataType).toArray)
-    val joinKeyGen = UnsafeProjection.create(joinKeyExprs.map(_.dataType).toArray)
-
-    def toInputValue(i: Int): UnsafeRow = {
-      inputValueGen.apply(new GenericInternalRow(Array[Any](i, false)))
-    }
-
-    def toJoinKeyRow(i: Int): UnsafeRow = {
-      joinKeyGen.apply(new GenericInternalRow(Array[Any](false, i, 10.0)))
-    }
-
-    def toKeyInt(joinKeyRow: UnsafeRow): Int = joinKeyRow.getInt(1)
-
-    def toValueInt(inputValueRow: UnsafeRow): Int = inputValueRow.getInt(0)
-
-    withJoinStateManager(inputValueAttribs, joinKeyExprs) { manager =>
-      def append(key: Int, value: Int): Unit = {
-        manager.append(toJoinKeyRow(key), toInputValue(value))
-      }
-
-      def get(key: Int): Seq[Int] = manager.get(toJoinKeyRow(key)).map(toValueInt).toSeq.sorted
-
-      /** Remove keys (and corresponding values) where `time <= threshold` */
-      def removeByKey(threshold: Long): Unit = {
-        val expr =
-          LessThanOrEqual(
-            BoundReference(
-              1, inputValueAttribWithWatermark.dataType, inputValueAttribWithWatermark.nullable),
-            Literal(threshold))
-        manager.removeByKeyCondition(GeneratePredicate.generate(expr).eval _)
-      }
-
-      /** Remove values where `time <= threshold` */
-      def removeByValue(watermark: Long): Unit = {
-        val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
-        manager.removeByValueCondition(
-          GeneratePredicate.generate(expr, inputValueAttribs).eval _)
-      }
-
-      def numRows: Long = {
-        manager.metrics.numKeys
-      }
-
-      assert(get(20) === Seq.empty)     // initially empty
-      append(20, 2)
-      assert(get(20) === Seq(2))        // should first value correctly
-      assert(numRows === 1)
-
-      append(20, 3)
-      assert(get(20) === Seq(2, 3))     // should append new values
-      append(20, 3)
-      assert(get(20) === Seq(2, 3, 3))  // should append another copy if same value added again
-      assert(numRows === 3)
-
-      assert(get(30) === Seq.empty)
-      append(30, 1)
-      assert(get(30) === Seq(1))
-      assert(get(20) === Seq(2, 3, 3))  // add another key-value should not affect existing ones
-      assert(numRows === 4)
-
-      removeByKey(25)
-      assert(get(20) === Seq.empty)
-      assert(get(30) === Seq(1))        // should remove 20, not 30
-      assert(numRows === 1)
-
-      removeByKey(30)
-      assert(get(30) === Seq.empty)     // should remove 30
-      assert(numRows === 0)
-
-      def appendAndTest(key: Int, values: Int*): Unit = {
-        values.foreach { value => append(key, value)}
-        require(get(key) === values)
-      }
-
-      appendAndTest(40, 100, 200, 300)
-      appendAndTest(50, 125)
-      appendAndTest(60, 275)              // prepare for testing removeByValue
-      assert(numRows === 5)
-
-      removeByValue(125)
-      assert(get(40) === Seq(200, 300))
-      assert(get(50) === Seq.empty)
-      assert(get(60) === Seq(275))        // should remove only some values, not all
-      assert(numRows === 3)
-
-      append(40, 50)
-      assert(get(40) === Seq(50, 200, 300))
-      assert(numRows === 4)
-
-      removeByValue(200)
-      assert(get(40) === Seq(300))
-      assert(get(60) === Seq(275))        // should remove only some values, not all
-      assert(numRows === 2)
-
-      removeByValue(300)
-      assert(get(40) === Seq.empty)
-      assert(get(60) === Seq.empty)       // should remove all values now
-      assert(numRows === 0)
-    }
-  }
-
   test("stream stream inner join on non-time column") {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
@@ -189,7 +75,6 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       CheckLastBatch((100, 200, 300))
     )
   }
-
 
   test("stream stream inner join on windows - without watermark") {
     val input1 = MemoryStream[Int]
@@ -221,7 +106,7 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       AddData(input2, 25),
       CheckLastBatch((25, 30, 50, 75)),
       AddData(input1, 1),
-      CheckLastBatch((1, 10, 2, 3)),      // State for 1 still around as there is not watermark
+      CheckLastBatch((1, 10, 2, 3)),      // State for 1 still around as there is no watermark
       StopStream,
       StartStream(),
       AddData(input1, 5),
@@ -568,19 +453,5 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
         assert(rdd.preferredLocations(rdd.partitions(partIndex)).toSet === expectedLocations)
       }
     }
-  }
-
-  def withJoinStateManager(
-      inputValueAttribs: Seq[Attribute],
-      joinKeyExprs: Seq[Expression])(f: SymmetricHashJoinStateManager => Unit): Unit = {
-
-    withTempDir { file =>
-      val storeConf = new StateStoreConf()
-      val stateInfo = StatefulOperatorStateInfo(file.getAbsolutePath, UUID.randomUUID, 0, 0)
-      val manager = new SymmetricHashJoinStateManager(
-        LeftSide, inputValueAttribs, joinKeyExprs, Some(stateInfo), storeConf, new Configuration)
-      try { f(manager) } finally { manager.abortIfNeeded() }
-    }
-    StateStore.stop()
   }
 }

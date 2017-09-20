@@ -109,19 +109,15 @@ class SymmetricHashJoinStateManager(
    */
   def removeByValueCondition(condition: UnsafeRow => Boolean): Unit = {
     val allKeyToNumValues = keyToNumValues.iterator
-    var numValues: Long = 0L
-    var index: Long = 0L
-    var valueRemoved = false
-    var valueForIndex: UnsafeRow = null
 
     while (allKeyToNumValues.hasNext) {
       val keyToNumValue = allKeyToNumValues.next
       val key = keyToNumValue.key
 
-      numValues = keyToNumValue.numValue
-      index = 0L
-      valueRemoved = false
-      valueForIndex = null
+      var numValues: Long = keyToNumValue.numValue
+      var index: Long = 0L
+      var valueRemoved: Boolean = false
+      var valueForIndex: UnsafeRow = null
 
       while (index < numValues) {
         if (valueForIndex == null) {
