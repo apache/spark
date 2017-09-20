@@ -146,7 +146,6 @@ class SparkHadoopUtil extends Logging {
     val hadoopConf = newConfiguration(sparkConf)
     hadoopConf.set("hadoop.security.authentication", "Token")
     UserGroupInformation.setConfiguration(hadoopConf)
-    // decode tokens and add them to the credentials
     addCurrentUserCredentials(deserialize(tokens))
   }
 
