@@ -26,7 +26,9 @@ import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistr
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapred._
-import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext, OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
+import org.apache.hadoop.mapreduce.{Job => NewJob, JobContext => NewJobContext,
+  OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
+  RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
 
 import org.apache.spark._
