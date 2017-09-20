@@ -96,7 +96,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
     compressionConf: String, default: String): String = {
     val props = fileSinkConf.tableInfo.getProperties
     val priorities = List("compression", compressionConf)
-    priorities.find(props.getProperty(_ , null) != null)
+    priorities.find(props.getProperty(_, null) != null)
       .map(props.getProperty).getOrElse(default).toUpperCase(Locale.ROOT)
   }
 }
