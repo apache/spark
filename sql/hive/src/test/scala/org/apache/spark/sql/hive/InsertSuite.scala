@@ -729,94 +729,119 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     }
   }
 
-  test("[SPARK-21786] The 'spark.sql.parquet.compression.codec' " +
-    "configuration doesn't take effect on tables with partition field(s)") {
-    val tableWithPartition = "table_with_partition"
-    val tableNoPartition = "table_no_partition"
+  test("[SPARK-21786] Check 'spark.sql.parquet.compression.codec' " +
+    "and 'spark.sql.parquet.compression.codec' taking effect on hive table writing") {
+    case class CompressionConf(name: String, codeC: String)
 
-    def insertOverwriteTable(tableName: String, paramName: String, codec: String,
-      isPartitioned: Boolean): Unit = {
-      withSQLConf(paramName -> codec) {
+    case class TableDefine(tableName: String, isPartitioned: Boolean, format: String,
+      compressionConf: Option[CompressionConf]) {
+      def createTable(rootDir: File): Unit = {
+        val compression = compressionConf.map(cf => s"'${cf.name}'='${cf.codeC}'")
         sql(
           s"""
-              |INSERT OVERWRITE TABLE $tableName
-              |${if (isPartitioned) "partition (p=10000)" else "" }
-              |SELECT * from table_source
-           """.stripMargin)
+          |CREATE TABLE $tableName(a int)
+          |${ if (isPartitioned) "PARTITIONED BY (p int)" else "" }
+          |STORED AS $format
+          |LOCATION '${rootDir.toURI.toString.stripSuffix("/")}/$tableName'
+          |${ if (compressionConf.nonEmpty) s"TBLPROPERTIES(${compression.get})" else "" }
+        """.stripMargin)
       }
-    }
 
-    def getDirFiles(file: File): List[File] = {
-      if (!file.exists()) Nil
-      else if (file.isFile) List(file)
-      else {
-        file.listFiles().filterNot(_.getName.startsWith(".hive-staging"))
-          .groupBy(_.isFile).flatMap {
-          case (isFile, files) if isFile => files.toList
-          case (_, dirs) => dirs.flatMap(getDirFiles)
-        }.toList
+      def insertOverwriteTable(): Unit = {
+        sql(
+          s"""
+          |INSERT OVERWRITE TABLE $tableName
+          |${ if (isPartitioned) "partition (p=10000)" else "" }
+          |SELECT * from table_source
+        """.stripMargin)
       }
-    }
 
-    def getTableSize(tmpDir: File, tableName: String, paramName: String, codec: String,
-      isPartitioned: Boolean = false): Long = {
-      insertOverwriteTable(tableName, paramName, codec, isPartitioned)
-      val path = s"${tmpDir.getPath.stripSuffix("/")}/$tableName"
-      val dir = new File(path)
-      val files = getDirFiles(dir).filter(_.getName.startsWith("part-"))
-      files.map(_.length()).sum
-    }
-
-    def checkCompressionCodec(format: String)(f: File => Unit): Unit = {
-      withTempDir { tmpDir =>
-        withTempView("table_source") {
-          (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
-
-          withTable(tableWithPartition, tableNoPartition) {
-            sql(
-              s"""
-               |CREATE TABLE $tableNoPartition(a int)
-               |STORED AS $format
-               |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/$tableNoPartition'
-            """.stripMargin)
-            sql(
-              s"""
-               |CREATE TABLE $tableWithPartition(a int)
-               |PARTITIONED BY (p int)
-               |STORED AS $format
-               |LOCATION '${tmpDir.toURI.toString.stripSuffix("/")}/$tableWithPartition'
-            """.stripMargin)
-
-            f(tmpDir)
-          }
+      def getDirFiles(file: File): List[File] = {
+        if (!file.exists()) Nil
+        else if (file.isFile) List(file)
+        else {
+          file.listFiles().filterNot(_.getName.startsWith(".hive-staging"))
+            .groupBy(_.isFile).flatMap {
+            case (isFile, files) if isFile => files.toList
+            case (_, dirs) => dirs.flatMap(getDirFiles)
+          }.toList
         }
       }
+
+      def getTableSize: Long = {
+        var totalSize = 0L
+        withTempDir { tmpDir =>
+          withTable(tableName) {
+            createTable(tmpDir)
+            insertOverwriteTable()
+            val path = s"${tmpDir.getPath.stripSuffix("/")}/$tableName"
+            val dir = new File(path)
+            val files = getDirFiles(dir).filter(_.getName.startsWith("part-"))
+            totalSize = files.map(_.length()).sum
+          }
+        }
+        totalSize
+      }
     }
 
-    val parquetCompression = "spark.sql.parquet.compression.codec"
-    checkCompressionCodec("PARQUET") { tmpDir =>
-      // In fact, partitioned and unpartitioned table meta information is slightly different,
-      // and partitioned tables are slightly larger, but the differences are not very large.
-      // Think less than 1024Byte
-      val maxDiff = 1024
-      assert(getTableSize(tmpDir, tableWithPartition, parquetCompression, "uncompressed", true)
-        - getTableSize(tmpDir, tableNoPartition, parquetCompression, "uncompressed") < maxDiff)
-      assert(getTableSize(tmpDir, tableWithPartition, parquetCompression, "gzip", true)
-        - getTableSize(tmpDir, tableNoPartition, parquetCompression, "gzip") < maxDiff)
-      assert(getTableSize(tmpDir, tableWithPartition, parquetCompression, "uncompressed", true)
-        - getTableSize(tmpDir, tableWithPartition, parquetCompression, "gzip", true) > maxDiff)
+    def checkParquetCompressionCodec(isPartitioned: Boolean, tableCodec: String,
+      sessionCodec: String, f: (Long, Long) => Boolean = _ == _) = {
+      val tableOrg = TableDefine(s"tbl_parquet$tableCodec", isPartitioned, "parquet",
+        Some(CompressionConf("parquet.compression", tableCodec)))
+      val tableOrgSize = tableOrg.getTableSize
+
+      withSQLConf("spark.sql.parquet.compression.codec" -> sessionCodec) {
+        // priority check, when table-level compression conf was set, expecting
+        // table-level compression conf is not affected by the session conf, and table-level
+        // compression conf takes precedence even the two conf of codec is different
+        val tableOrgSessionConfSize = tableOrg.getTableSize
+        assert(tableOrgSize == tableOrgSessionConfSize)
+
+        // check session conf of compression codec taking effect
+        val table = TableDefine(s"tbl_parquet", isPartitioned, "parquet", None)
+        assert(f(tableOrg.getTableSize, table.getTableSize))
+      }
     }
 
-    val orcCompression = "spark.sql.orc.compression.codec"
-    checkCompressionCodec("ORC") { tmpDir =>
-      assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "none", true)
-        == getTableSize(tmpDir, tableNoPartition, orcCompression, "none"))
-      assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "uncompressed", true)
-        == getTableSize(tmpDir, tableNoPartition, orcCompression, "none"))
-      assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "zlib", true)
-        == getTableSize(tmpDir, tableNoPartition, orcCompression, "zlib"))
-      assert(getTableSize(tmpDir, tableWithPartition, orcCompression, "none", true)
-        > getTableSize(tmpDir, tableWithPartition, orcCompression, "zlib", true))
+    def checkOrcCompressionCodec(isPartitioned: Boolean, tableCodec: String,
+      sessionCodec: String, f: (Long, Long) => Boolean = _ == _) = {
+      val tableOrg = TableDefine(s"tbl_orc$tableCodec", isPartitioned, "orc",
+        Some(CompressionConf("orc.compress", tableCodec)))
+      val tableOrgSize = tableOrg.getTableSize
+
+      withSQLConf("spark.sql.orc.compression.codec" -> sessionCodec) {
+        // priority check, when table-level compression conf was set, expecting
+        // table-level compression conf is not affected by the session conf, and table-level
+        // compression conf takes precedence even the two conf of codec is different
+        val tableOrgSessionConfSize = tableOrg.getTableSize
+        assert(tableOrgSize == tableOrgSessionConfSize)
+
+        // check session conf of compression codec taking effect
+        val table = TableDefine(s"tbl_orc", isPartitioned, "orc", None)
+        assert(f(tableOrg.getTableSize, table.getTableSize))
+      }
+    }
+
+    withTempView("table_source") {
+      (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
+
+      checkParquetCompressionCodec(true, "uncompressed", "uncompressed")
+      checkParquetCompressionCodec(true, "gzip", "gzip")
+      checkParquetCompressionCodec(true, "gzip", "uncompressed", _ < _)
+
+      withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "false") {
+        checkParquetCompressionCodec(false, "uncompressed", "uncompressed")
+        checkParquetCompressionCodec(false, "gzip", "gzip")
+        checkParquetCompressionCodec(false, "gzip", "uncompressed", _ < _)
+      }
+
+      checkOrcCompressionCodec(true, "none", "none")
+      checkOrcCompressionCodec(true, "zlib", "zlib")
+      checkOrcCompressionCodec(true, "zlib", "none", _ < _)
+
+      checkOrcCompressionCodec(false, "none", "none")
+      checkOrcCompressionCodec(false, "zlib", "zlib")
+      checkOrcCompressionCodec(false, "zlib", "none", _ < _)
     }
   }
 }

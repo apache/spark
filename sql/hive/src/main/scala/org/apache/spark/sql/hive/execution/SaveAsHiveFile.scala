@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util.Locale
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.internal.io.FileCommitProtocol
@@ -52,6 +54,26 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         .get("mapreduce.output.fileoutputformat.compress.type"))
     }
 
+    fileSinkConf.tableInfo.getOutputFileFormatClassName match {
+      case formatName if formatName.endsWith("ParquetOutputFormat") =>
+        val compressionConf = "parquet.compression"
+        val compressionCodec = getCompressionByPriority(fileSinkConf, compressionConf,
+          sparkSession.sessionState.conf.parquetCompressionCodec) match {
+          case "NONE" => "UNCOMPRESSED"
+          case _@x => x
+        }
+        hadoopConf.set(compressionConf, compressionCodec)
+      case formatName if formatName.endsWith("OrcOutputFormat") =>
+        val compressionConf = "orc.compress"
+        val compressionCodec = getCompressionByPriority(fileSinkConf, compressionConf,
+          sparkSession.sessionState.conf.orcCompressionCodec) match {
+          case "UNCOMPRESSED" => "NONE"
+          case _@x => x
+        }
+        hadoopConf.set(compressionConf, compressionCodec)
+      case _ =>
+    }
+
     val committer = FileCommitProtocol.instantiate(
       sparkSession.sessionState.conf.fileCommitProtocolClass,
       jobId = java.util.UUID.randomUUID().toString,
@@ -68,6 +90,14 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
       bucketSpec = None,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
+  }
+
+  private def getCompressionByPriority(fileSinkConf: FileSinkDesc,
+    compressionConf: String, default: String): String = {
+    val props = fileSinkConf.tableInfo.getProperties
+    val priorities = List("compression", compressionConf)
+    priorities.find(props.getProperty(_ , null) != null)
+      .map(props.getProperty).getOrElse(default).toUpperCase(Locale.ROOT)
   }
 }
 
