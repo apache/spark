@@ -95,6 +95,23 @@ if [ -z "$SPARK_VERSION" ]; then
     | grep -v INFO | grep -v WARNING | grep -v Download)
 fi
 
+# Verify we have the right java version set
+java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+
+if [[ ! $SPARK_VERSION < "v2.2" ]]; then
+  if [[ $java_version < "1.8." ]]; then
+    echo "Java version $java_version is less than required 1.8 for 2.2+"
+    echo "Please set JAVA_HOME correctly."
+    exit 1
+  fi
+else
+  if [[ $java_version > "1.7." ]]; then
+    echo "Java version $java_version is higher than required 1.7 for pre-2.2"
+    echo "Please set JAVA_HOME correctly."
+    exit 1
+  fi
+fi
+
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
 fi
