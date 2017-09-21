@@ -20,8 +20,13 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.types.StructType
 
-trait ColumnarFileFormat {
+/**
+ * An optional mix-in for columnar [[FileFormat]]s. This trait provides some helpful metadata when
+ * debugging a physical query plan.
+ */
+private[sql] trait ColumnarFileFormat {
   _: FileFormat =>
 
+  /** Returns the number of columns in this file format required to satisfy the given schema. */
   def columnCountForSchema(sparkSession: SparkSession, readSchema: StructType): Int
 }
