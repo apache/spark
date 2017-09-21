@@ -325,7 +325,7 @@ setMethod("write.ml", signature(object = "GaussianMixtureModel", path = "charact
 #'                Note that the response variable of formula is empty in spark.kmeans.
 #' @param k number of centers.
 #' @param maxIter maximum iteration number.
-#' @param initMode the initialization algorithm choosen to fit the model.
+#' @param initMode the initialization algorithm chosen to fit the model.
 #' @param seed the random seed for cluster initialization.
 #' @param initSteps the number of steps for the k-means|| initialization mode.
 #'                  This is an advanced setting, the default of 2 is almost always enough. Must be > 0.
