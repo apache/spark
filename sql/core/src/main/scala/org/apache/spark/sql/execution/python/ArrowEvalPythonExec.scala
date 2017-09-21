@@ -43,7 +43,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       iter, schema, conf.arrowMaxRecordsPerBatch, context).map(_.asPythonSerializable)
 
     // Output iterator for results from Python.
-    val outputIterator = new PythonRunner(
+    val outputIterator = new PythonUDFRunner(
         funcs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets)
       .compute(inputIterator, context.partitionId(), context)
 

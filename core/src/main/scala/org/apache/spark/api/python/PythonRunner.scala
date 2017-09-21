@@ -37,27 +37,16 @@ private[spark] object PythonEvalType {
   val SQL_PANDAS_UDF = 2
 }
 
-private[spark] object PythonRunner {
-  def apply(func: PythonFunction, bufferSize: Int, reuse_worker: Boolean): PythonRunner = {
-    new PythonRunner(
-      Seq(ChainedPythonFunctions(Seq(func))),
-      bufferSize,
-      reuse_worker,
-      PythonEvalType.NON_UDF,
-      Array(Array(0)))
-  }
-}
-
 /**
  * A helper class to run Python mapPartition/UDFs in Spark.
  *
  * funcs is a list of independent Python functions, each one of them is a list of chained Python
  * functions (from bottom to top).
  */
-private[spark] class PythonRunner(
+private[spark] abstract class PythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
-    reuse_worker: Boolean,
+    reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]])
   extends Logging {
@@ -65,12 +54,12 @@ private[spark] class PythonRunner(
   require(funcs.length == argOffsets.length, "argOffsets should have the same length as funcs")
 
   // All the Python functions should have the same exec, version and envvars.
-  private val envVars = funcs.head.funcs.head.envVars
-  private val pythonExec = funcs.head.funcs.head.pythonExec
-  private val pythonVer = funcs.head.funcs.head.pythonVer
+  protected val envVars = funcs.head.funcs.head.envVars
+  protected val pythonExec = funcs.head.funcs.head.pythonExec
+  protected val pythonVer = funcs.head.funcs.head.pythonVer
 
   // TODO: support accumulator in multiple UDF
-  private val accumulator = funcs.head.funcs.head.accumulator
+  protected val accumulator = funcs.head.funcs.head.accumulator
 
   def compute(
       inputIterator: Iterator[_],
@@ -80,7 +69,7 @@ private[spark] class PythonRunner(
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
     envVars.put("SPARK_LOCAL_DIRS", localdir) // it's also used in monitor thread
-    if (reuse_worker) {
+    if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
@@ -88,11 +77,11 @@ private[spark] class PythonRunner(
     @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
-    val writerThread = new WriterThread(env, worker, inputIterator, partitionIndex, context)
+    val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
 
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
-      if (!reuse_worker || !released) {
+      if (!reuseWorker || !released) {
         try {
           worker.close()
         } catch {
@@ -162,7 +151,7 @@ private[spark] class PythonRunner(
               }
               // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-                if (reuse_worker) {
+                if (reuseWorker) {
                   env.releasePythonWorker(pythonExec, envVars.asScala.toMap, worker)
                   released = true
                 }
@@ -196,11 +185,18 @@ private[spark] class PythonRunner(
     new InterruptibleIterator(context, stdoutIterator)
   }
 
+  def newWriterThread(
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[_],
+      partitionIndex: Int,
+      context: TaskContext): WriterThread
+
   /**
    * The thread responsible for writing the data from the PythonRDD's parent iterator to the
    * Python process.
    */
-  class WriterThread(
+  abstract class WriterThread(
       env: SparkEnv,
       worker: Socket,
       inputIterator: Iterator[_],
@@ -223,6 +219,9 @@ private[spark] class PythonRunner(
       assert(context.isCompleted)
       this.interrupt()
     }
+
+    def writeCommand(dataOut: DataOutputStream): Unit
+    def writeIteratorToStream(dataOut: DataOutputStream): Unit
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
@@ -266,29 +265,11 @@ private[spark] class PythonRunner(
           }
         }
         dataOut.flush()
-        // Serialized command:
+
         dataOut.writeInt(evalType)
-        if (evalType != PythonEvalType.NON_UDF) {
-          dataOut.writeInt(funcs.length)
-          funcs.zip(argOffsets).foreach { case (chained, offsets) =>
-            dataOut.writeInt(offsets.length)
-            offsets.foreach { offset =>
-              dataOut.writeInt(offset)
-            }
-            dataOut.writeInt(chained.funcs.length)
-            chained.funcs.foreach { f =>
-              dataOut.writeInt(f.command.length)
-              dataOut.write(f.command)
-            }
-          }
-        } else {
-          val command = funcs.head.funcs.head.command
-          dataOut.writeInt(command.length)
-          dataOut.write(command)
-        }
-        // Data values
-        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
-        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+        writeCommand(dataOut)
+        writeIteratorToStream(dataOut)
+
         dataOut.writeInt(SpecialLengths.END_OF_STREAM)
         dataOut.flush()
       } catch {
@@ -333,6 +314,44 @@ private[spark] class PythonRunner(
           case e: Exception =>
             logError("Exception when trying to kill worker", e)
         }
+      }
+    }
+  }
+}
+
+private[spark] object PythonCommandRunner {
+
+  def apply(func: PythonFunction, bufferSize: Int, reuseWorker: Boolean): PythonCommandRunner = {
+    new PythonCommandRunner(Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuseWorker)
+  }
+}
+
+/**
+ * A helper class to run Python mapPartition in Spark.
+ */
+private[spark] class PythonCommandRunner(
+    funcs: Seq[ChainedPythonFunctions],
+    bufferSize: Int,
+    reuseWorker: Boolean)
+  extends PythonRunner(funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0))) {
+
+  override def newWriterThread(
+      env: SparkEnv,
+      worker: Socket,
+      inputIterator: Iterator[_],
+      partitionIndex: Int,
+      context: TaskContext): WriterThread = {
+    new WriterThread(env, worker, inputIterator, partitionIndex, context) {
+
+      override def writeCommand(dataOut: DataOutputStream): Unit = {
+        val command = funcs.head.funcs.head.command
+        dataOut.writeInt(command.length)
+        dataOut.write(command)
+      }
+
+      override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+        PythonRDD.writeIteratorToStream(inputIterator, dataOut)
+        dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
       }
     }
   }

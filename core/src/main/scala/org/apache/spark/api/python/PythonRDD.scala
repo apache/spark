@@ -48,7 +48,7 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
+  val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
@@ -59,7 +59,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func, bufferSize, reuse_worker)
+    val runner = PythonCommandRunner(func, bufferSize, reuseWorker)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 }
