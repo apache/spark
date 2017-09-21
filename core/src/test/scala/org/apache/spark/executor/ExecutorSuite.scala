@@ -33,7 +33,7 @@ import org.apache.spark.memory.MemoryManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.{FakeTask, Task}
-import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.serializer.{JavaSerializer, SerializerManager}
 
 class ExecutorSuite extends SparkFunSuite {
 
@@ -47,6 +47,7 @@ class ExecutorSuite extends SparkFunSuite {
     val mockMemoryManager = mock(classOf[MemoryManager])
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.serializer).thenReturn(serializer)
+    when(mockEnv.serializerManager).thenReturn(mock(classOf[SerializerManager]))
     when(mockEnv.rpcEnv).thenReturn(mockRpcEnv)
     when(mockEnv.metricsSystem).thenReturn(mockMetricsSystem)
     when(mockEnv.memoryManager).thenReturn(mockMemoryManager)

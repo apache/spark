@@ -42,6 +42,10 @@ private[spark] class SerializerManager(
 
   private[this] val kryoSerializer = new KryoSerializer(conf)
 
+  def setDefaultClassLoader(classLoader: ClassLoader): Unit = {
+    kryoSerializer.setDefaultClassLoader(classLoader)
+  }
+
   private[this] val stringClassTag: ClassTag[String] = implicitly[ClassTag[String]]
   private[this] val primitiveAndPrimitiveArrayClassTags: Set[ClassTag[_]] = {
     val primitiveClassTags = Set[ClassTag[_]](
