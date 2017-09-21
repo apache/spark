@@ -1731,7 +1731,7 @@ class DataFrame(object):
         return DataFrame(jdf, self.sql_ctx)
 
     @since(1.3)
-    def toPandas(self, strict=True):
+    def toPandas(self):
         """
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
@@ -1762,7 +1762,7 @@ class DataFrame(object):
         else:
             dtype = {}
             for field in self.schema:
-                pandas_type = _to_corrected_pandas_type(field, strict)
+                pandas_type = _to_corrected_pandas_type(field.dataType)
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
 
@@ -1810,20 +1810,17 @@ def _to_scala_map(sc, jm):
     return sc._jvm.PythonUtils.toScalaMap(jm)
 
 
-def _to_corrected_pandas_type(field, strict=True):
+def _to_corrected_pandas_type(dt):
     """
     When converting Spark SQL records to Pandas DataFrame, the inferred data type may be wrong.
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
     """
     import numpy as np
-    dt = field.dataType
     if type(dt) == ByteType:
         return np.int8
     elif type(dt) == ShortType:
         return np.int16
     elif type(dt) == IntegerType:
-        if not strict and field.nullable:
-            return np.float32
         return np.int32
     elif type(dt) == FloatType:
         return np.float32
