@@ -1761,12 +1761,37 @@ class DataFrame(object):
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
             dtype = {}
+            columns_with_null_int = {}
+            def null_handler(rows, columns_with_null_int):
+                for row in rows:
+                    row = row.asDict()
+                    for column in columns_with_null_int:
+                        val = row[column]
+                        dt = dtype[column]
+                        if val is not None:
+                            if abs(val) > 16777216: # Max value before np.float32 loses precision.
+                                val = np.float64(val)
+                                if np.float64 != dt:
+                                    dt = np.float64
+                                    dtype[column] = np.float64
+                            else:
+                                val = np.float32(val)
+                                if dt not in (np.float32, np.float64):
+                                    dt = np.float32
+                                    dtype[column] = np.float32
+                            row[column] = val
+                    row = Row(**row)
+                    yield row
+            row_handler = lambda x,y: x
             for field in self.schema:
                 pandas_type = _to_corrected_pandas_type(field.dataType)
+                if pandas_type in (np.int8, np.int16, np.int32) and field.nullable:
+                    columns_with_null_int.add(field.name)
+                    row_handler = null_handler
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
 
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+            pdf = pd.DataFrame.from_records(row_handler(self.collect(), columns_with_null_int), columns=self.columns)
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)
@@ -1816,13 +1841,14 @@ def _to_corrected_pandas_type(dt):
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
     """
     import numpy as np
-    if type(dt) == ByteType:
+    dt = type(dt)
+    if dt == ByteType:
         return np.int8
-    elif type(dt) == ShortType:
+    elif dt == ShortType:
         return np.int16
-    elif type(dt) == IntegerType:
+    elif dt == IntegerType:
         return np.int32
-    elif type(dt) == FloatType:
+    elif dt == FloatType:
         return np.float32
     else:
         return None
