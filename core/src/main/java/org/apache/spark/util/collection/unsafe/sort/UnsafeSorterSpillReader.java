@@ -76,9 +76,8 @@ public final class UnsafeSorterSpillReader extends UnsafeSorterIterator implemen
         SparkEnv.get() == null ? 0.5 :
              SparkEnv.get().conf().getDouble("spark.unsafe.sorter.spill.read.ahead.fraction", 0.5);
 
-    final boolean readAheadEnabled =
-            SparkEnv.get() == null ? false :
-                    SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", true);
+    final boolean readAheadEnabled = SparkEnv.get() != null &&
+        SparkEnv.get().conf().getBoolean("spark.unsafe.sorter.spill.read.ahead.enabled", true);
 
     final InputStream bs =
         new NioBufferedFileInputStream(file, (int) bufferSizeBytes);

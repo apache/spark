@@ -777,7 +777,8 @@ public class UTF8StringSuite {
     assertEquals(fromString("cc"), fromString("ccbaaaa").trimRight(fromString("ba")));
     assertEquals(fromString(""), fromString("aabbbbaaa").trimRight(fromString("ab")));
     assertEquals(fromString("  he"), fromString("  hello ").trimRight(fromString(" ol")));
-    assertEquals(fromString("oohell"), fromString("oohellooo../*&").trimRight(fromString("./,&%*o")));
+    assertEquals(fromString("oohell"),
+        fromString("oohellooo../*&").trimRight(fromString("./,&%*o")));
 
     assertEquals(EMPTY_UTF8, fromString("  ").trimRight(fromString(" ")));
 
