@@ -18,6 +18,9 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.Closeable;
+import java.util.Collections;
+
+import com.codahale.metrics.MetricSet;
 
 /** Provides an interface for reading shuffle files, either from an Executor or external service. */
 public abstract class ShuffleClient implements Closeable {
@@ -52,4 +55,13 @@ public abstract class ShuffleClient implements Closeable {
       String[] blockIds,
       BlockFetchingListener listener,
       TempShuffleFileManager tempShuffleFileManager);
+
+  /**
+   * Get the shuffle MetricsSet from ShuffleClient, this will be used in MetricsSystem to
+   * get the Shuffle related metrics.
+   */
+  public MetricSet shuffleMetrics() {
+    // Return an empty MetricSet by default.
+    return () -> Collections.emptyMap();
+  }
 }
