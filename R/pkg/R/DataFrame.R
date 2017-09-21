@@ -2614,8 +2614,8 @@ setMethod("merge",
             }
 
             # sets alias for making colnames unique in dataframes 'x' and 'y'
-            colsX <- generateAliasesForIntersectedCols(x, by, suffixes[1]) # nolint
-            colsY <- generateAliasesForIntersectedCols(y, by, suffixes[2]) # nolint
+            colsX <- genAliasesForIntersectedCols(x, by, suffixes[1])
+            colsY <- genAliasesForIntersectedCols(y, by, suffixes[2])
 
             # selects columns with their aliases from dataframes
             # in case same column names are present in both data frames
@@ -2664,8 +2664,9 @@ setMethod("merge",
 #' @param suffix a suffix for the column name
 #' @return list of columns
 #'
-#' @note generateAliasesForIntersectedCols since 1.6.0
-generateAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) { # nolint
+#' @note genAliasesForIntersectedCols since 1.6.0
+#' @noRd
+genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
   allColNames <- names(x)
   # sets alias for making colnames unique in dataframe 'x'
   cols <- lapply(allColNames, function(colName) {
