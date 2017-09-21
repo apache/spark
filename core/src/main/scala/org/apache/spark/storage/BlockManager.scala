@@ -29,10 +29,13 @@ import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
 
+import com.codahale.metrics.{MetricRegistry, MetricSet}
+
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
+import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.netty.SparkTransportConf
@@ -246,6 +249,16 @@ private[spark] class BlockManager(
     }
 
     logInfo(s"Initialized BlockManager: $blockManagerId")
+  }
+
+  def shuffleMetricsSource: Source = {
+    import BlockManager._
+
+    if (externalShuffleServiceEnabled) {
+      new ShuffleMetricsSource("ExternalShuffle", shuffleClient.shuffleMetrics())
+    } else {
+      new ShuffleMetricsSource("NettyBlockTransfer", shuffleClient.shuffleMetrics())
+    }
   }
 
   private def registerWithExternalShuffleServer() {
@@ -1530,5 +1543,13 @@ private[spark] object BlockManager {
       blockManagers(blockIds(i)) = blockLocations(i).map(_.host)
     }
     blockManagers.toMap
+  }
+
+  private class ShuffleMetricsSource(
+      override val sourceName: String,
+      metricSet: MetricSet) extends Source {
+
+    override val metricRegistry = new MetricRegistry
+    metricRegistry.registerAll(metricSet)
   }
 }
