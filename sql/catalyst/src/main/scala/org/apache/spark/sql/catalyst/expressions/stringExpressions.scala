@@ -533,17 +533,17 @@ object StringTrim {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing trimStr characters from `str`
-    _FUNC_(LEADING trimStr FROM str) - Remove the leading trimStr characters from `str`
-    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing trimStr characters from `str`
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`
+    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`
+    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`
   """,
   arguments = """
     Arguments:
       * str - a string expression
       * trimStr - the trim string characters to trim, the default value is a single space
-      * BOTH, FROM - these are keywords to specify for trim string characters from both ends of the string
-      * LEADING, FROM - these are keywords to specify for trim string characters from left end of the string
-      * TRAILING, FROM - these are keywords to specify for trim string characters from right end of the string
+      * BOTH, FROM - these are keywords to specify trimming string characters from both ends of the string
+      * LEADING, FROM - these are keywords to specify trimming string characters from the left end of the string
+      * TRAILING, FROM - these are keywords to specify trimming string characters from the right end of the string
   """,
   examples = """
     Examples:
