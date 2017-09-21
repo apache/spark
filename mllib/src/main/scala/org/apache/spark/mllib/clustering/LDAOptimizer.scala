@@ -528,7 +528,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    * @param logphat Expectation of estimated log-posterior distribution of
    *                topics in a document averaged over the batch.
-   * @param nonEmptyDocsN Size of the batch.
+   * @param nonEmptyDocsN number of non-empty documents
    */
   private def updateAlpha(logphat: BDV[Double], nonEmptyDocsN : Double): Unit = {
     val weight = rho()
