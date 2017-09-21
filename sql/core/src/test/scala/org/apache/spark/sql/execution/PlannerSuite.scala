@@ -631,11 +631,17 @@ class PlannerSuite extends SharedSQLContext {
 
   // This is a regression test for SPARK-22084
   test("the same aggregate expressions can only occur once") {
-    val query = testData.groupBy('value).agg(count('key), count('key)).queryExecution.analyzed
     val planner = spark.sessionState.planner
     import planner._
-    val aggregations = Aggregation(query).collect { case agg: HashAggregateExec => agg }
+
+    var query = testData.groupBy('value).agg(count('key), count('key)).queryExecution.analyzed
+    var aggregations = Aggregation(query).collect { case agg: HashAggregateExec => agg }
     assert(aggregations.forall(agg => agg.aggregateExpressions.size == 1))
+
+    query = testData.groupBy('value).agg(count('key), countDistinct('key))
+      .queryExecution.analyzed
+    aggregations = Aggregation(query).collect { case agg: HashAggregateExec => agg }
+    assert(aggregations.forall(agg => agg.aggregateExpressions.size == 2))
   }
 }
 
