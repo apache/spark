@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, CreateArray, Literal, SpecificInternalRow}
-import org.apache.spark.sql.catalyst.util.ArrayData
+import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.types._
 
 class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
@@ -54,20 +56,26 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Seq(AttributeReference("b", DoubleType)())))
     assert(wrongEndpoints.checkInputDataTypes() ==
-      TypeCheckFailure("The intervals provided must be constant literals"))
+      TypeCheckFailure("The endpoints provided must be constant literals"))
 
     wrongEndpoints = new ApproxCountDistinctForIntervals(
       AttributeReference("a", DoubleType)(),
       endpointsExpression = CreateArray(Array(10L).map(Literal(_))))
     assert(wrongEndpoints.checkInputDataTypes() ==
       TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals"))
+
+    wrongEndpoints = new ApproxCountDistinctForIntervals(
+      AttributeReference("a", DoubleType)(),
+      endpointsExpression = CreateArray(Array("foobar").map(Literal(_))))
+    assert(wrongEndpoints.checkInputDataTypes() ==
+        TypeCheckFailure("Endpoints require (numeric or timestamp or date) type"))
   }
 
   /** Create an ApproxCountDistinctForIntervals instance and an input and output buffer. */
-  private def createEstimator(
-      endpoints: Array[Double],
-      rsd: Double = 0.05,
-      dt: DataType = IntegerType): (ApproxCountDistinctForIntervals, InternalRow, InternalRow) = {
+  private def createEstimator[T](
+      endpoints: Array[T],
+      dt: DataType,
+      rsd: Double = 0.05): (ApproxCountDistinctForIntervals, InternalRow, InternalRow) = {
     val input = new SpecificInternalRow(Seq(dt))
     val aggFunc = ApproxCountDistinctForIntervals(
       BoundReference(0, dt, nullable = true), CreateArray(endpoints.map(Literal(_))), rsd)
@@ -82,7 +90,8 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
   }
 
   test("merging ApproxCountDistinctForIntervals instances") {
-    val (aggFunc, input, buffer1a) = createEstimator(Array[Double](0, 10, 2000, 345678, 1000000))
+    val (aggFunc, input, buffer1a) =
+      createEstimator(Array[Int](0, 10, 2000, 345678, 1000000), IntegerType)
     val buffer1b = createBuffer(aggFunc)
     val buffer2 = createBuffer(aggFunc)
 
@@ -148,11 +157,11 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     val data: Seq[Double] = Seq(0, 0.6, 0.3, 1, 0.6, 0.5, 0.6, 0.33)
 
     Seq(0.01, 0.05, 0.1).foreach { relativeSD =>
-      val (aggFunc, input, buffer) = createEstimator(endpoints, relativeSD, DoubleType)
+      val (aggFunc, input, buffer) = createEstimator(endpoints, DoubleType, relativeSD)
 
       data.grouped(4).foreach { group =>
         val (partialAggFunc, partialInput, partialBuffer) =
-          createEstimator(endpoints, relativeSD, DoubleType)
+          createEstimator(endpoints, DoubleType, relativeSD)
         group.foreach { x =>
           partialInput.setDouble(0, x)
           partialAggFunc.update(partialBuffer, partialInput)
@@ -179,6 +188,36 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
         ndvs = aggFunc.eval(buffer).asInstanceOf[ArrayData].toLongArray(),
         expectedNdvs = Array(3, 2, 1, 1, 1),
         rsd = relativeSD)
+    }
+  }
+
+  test("test for different input types: numeric/date/timestamp") {
+    val intEndpoints = Array[Int](0, 33, 60, 60, 60, 100)
+    val intRecords: Seq[Int] = Seq(0, 60, 30, 100, 60, 50, 60, 33)
+    val inputs = Seq(
+      (intRecords, intEndpoints, IntegerType),
+      (intRecords.map(DateTimeUtils.toJavaDate),
+          intEndpoints.map(DateTimeUtils.toJavaDate), DateType),
+      (intRecords.map(DateTimeUtils.toJavaTimestamp(_)),
+          intEndpoints.map(DateTimeUtils.toJavaTimestamp(_)), TimestampType)
+    )
+
+    inputs.foreach { case (records, endpoints, dataType) =>
+      val (aggFunc, input, buffer) = createEstimator(endpoints, dataType)
+      records.foreach { r =>
+        // convert to internal type value
+        val value = r match {
+          case d: Date => DateTimeUtils.fromJavaDate(d)
+          case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+          case _ => r
+        }
+        input.update(0, value)
+        aggFunc.update(buffer, input)
+      }
+      checkNDVs(
+        ndvs = aggFunc.eval(buffer).asInstanceOf[ArrayData].toLongArray(),
+        expectedNdvs = Array(3, 2, 1, 1, 1),
+        rsd = aggFunc.relativeSD)
     }
   }
 

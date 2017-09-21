@@ -34,7 +34,8 @@ import org.apache.spark.sql.types._
  * [endpoint_1, endpoint_2], (endpoint_2, endpoint_3], ... (endpoint_N-1, endpoint_N].
  * To count ndv's in these intervals, apply the HyperLogLogPlusPlus algorithm in each of them.
  * @param child to estimate the ndv's of.
- * @param endpointsExpression to construct the intervals, should be sorted into ascending order.
+ * @param endpointsExpression An array expression to construct the intervals. It must be foldable,
+ *                            and its elements should be sorted into ascending order.
  * @param relativeSD The maximum estimation error allowed in the HyperLogLogPlusPlus algorithm.
  */
 case class ApproxCountDistinctForIntervals(
@@ -70,11 +71,8 @@ case class ApproxCountDistinctForIntervals(
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
   lazy val endpoints: Array[Double] =
     (endpointsExpression.dataType, endpointsExpression.eval()) match {
-      case (ArrayType(baseType: NumericType, _), arrayData: ArrayData) =>
-        val numericArray = arrayData.toObjectArray(baseType)
-        numericArray.map { x =>
-          baseType.numeric.toDouble(x.asInstanceOf[baseType.InternalType])
-        }
+      case (ArrayType(elementType, _), arrayData: ArrayData) =>
+        arrayData.toObjectArray(elementType).map(_.toString.toDouble)
     }
 
   override def checkInputDataTypes(): TypeCheckResult = {
@@ -82,11 +80,18 @@ case class ApproxCountDistinctForIntervals(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else if (!endpointsExpression.foldable) {
-      TypeCheckFailure("The intervals provided must be constant literals")
-    } else if (endpoints.length < 2) {
-      TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
+      TypeCheckFailure("The endpoints provided must be constant literals")
     } else {
-      TypeCheckSuccess
+      endpointsExpression.dataType match {
+        case ArrayType(_: NumericType | DateType | TimestampType, _) =>
+          if (endpoints.length < 2) {
+            TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
+          } else {
+            TypeCheckSuccess
+          }
+        case _ =>
+          TypeCheckFailure("Endpoints require (numeric or timestamp or date) type")
+      }
     }
   }
 
