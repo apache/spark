@@ -3300,6 +3300,24 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
                     'Can not mix vectorized and non-vectorized UDFs'):
                 df.select(row_by_row_udf(col('id')), pd_udf(col('id'))).collect()
 
+    def test_vectorized_udf_chained(self):
+        from pyspark.sql.functions import pandas_udf, col
+        df = self.spark.range(10).toDF('x')
+        f = pandas_udf(lambda x: x + 1, LongType())
+        g = pandas_udf(lambda x: x - 1, LongType())
+        res = df.select(g(f(col('x'))))
+        self.assertEquals(df.collect(), res.collect())
+
+    def test_vectorized_udf_wrong_return_type(self):
+        from pyspark.sql.functions import pandas_udf, col
+        df = self.spark.range(10).toDF('x')
+        f = pandas_udf(lambda x: x * 1.0, StringType())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(
+                    Exception,
+                    'Invalid.*type.*string'):
+                df.select(f(col('x'))).collect()
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

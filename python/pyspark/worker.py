@@ -60,9 +60,12 @@ def read_command(serializer, file):
     return command
 
 
-def chain(f, g):
-    """chain two function together """
-    return lambda *a: g(f(*a))
+def chain(f, g, eval_type):
+    """chain two functions together """
+    if eval_type == PythonEvalType.SQL_PANDAS_UDF:
+        return lambda *a, **kwargs: g(f(*a, **kwargs), **kwargs)
+    else:
+        return lambda *a: g(f(*a))
 
 
 def wrap_udf(f, return_type):
@@ -96,7 +99,7 @@ def read_single_udf(pickleSer, infile, eval_type):
         if row_func is None:
             row_func = f
         else:
-            row_func = chain(row_func, f)
+            row_func = chain(row_func, f, eval_type)
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_PANDAS_UDF:
         # A pandas_udf will take kwargs as the last argument
