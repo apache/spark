@@ -407,4 +407,79 @@ class MemoryStoreSuite
     })
     assert(memoryStore.getSize(blockId) === 10000)
   }
+
+  test("SPARK-22083: Release all locks in evictBlocksToFreeSpace") {
+    // Setup a memory store with many blocks cached, and then one request which leads to multiple
+    // blocks getting evicted.  We'll make the eviction throw an exception, and make sure that
+    // all locks are released.
+    val ct = implicitly[ClassTag[Array[Byte]]]
+    def testWithFailureOnNthDrop(failAfterDroppingNBlocks: Int): Unit = {
+      val memManager = new StaticMemoryManager(conf, Long.MaxValue, 100, numCores = 1)
+      val blockInfoManager = new BlockInfoManager
+      var droppedSoFar = 0
+      val blockEvictionHandler = new BlockEvictionHandler {
+        var memoryStore: MemoryStore = _
+
+        override private[storage] def dropFromMemory[T: ClassTag](
+            blockId: BlockId,
+            data: () => Either[Array[T], ChunkedByteBuffer]): StorageLevel = {
+          if (droppedSoFar < failAfterDroppingNBlocks) {
+            droppedSoFar += 1
+            memoryStore.remove(blockId)
+            StorageLevel.NONE
+          } else {
+            throw new RuntimeException(s"Mock error dropping block $droppedSoFar")
+          }
+        }
+      }
+      val memoryStore =
+        new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler)
+      blockEvictionHandler.memoryStore = memoryStore
+      memManager.setMemoryStore(memoryStore)
+
+      // Put in some small blocks to fill up the memory store
+      val initialBlocks = (1 to 10).map { id =>
+        val blockId = BlockId(s"rdd_1_$id")
+        val blockInfo = new BlockInfo(StorageLevel.MEMORY_ONLY, ct, tellMaster = false)
+        val initialWriteLock = blockInfoManager.lockNewBlockForWriting(blockId, blockInfo)
+        assert(initialWriteLock)
+        val success = memoryStore.putBytes(blockId, 10, MemoryMode.ON_HEAP, () => {
+          new ChunkedByteBuffer(ByteBuffer.allocate(10))
+        })
+        assert(success)
+        blockInfoManager.unlock(blockId, None)
+      }
+      assert(blockInfoManager.size === 10)
+
+
+      // Add one big block, which will require evicting everything in the memorystore.  However our
+      // mock BlockEvictionHandler will throw an exception -- make sure all locks are cleared.
+      logWarning("trying to store large block")
+      val largeBlockId = BlockId(s"rdd_2_1")
+      val largeBlockInfo = new BlockInfo(StorageLevel.MEMORY_ONLY, ct, tellMaster = false)
+      val initialWriteLock = blockInfoManager.lockNewBlockForWriting(largeBlockId, largeBlockInfo)
+      assert(initialWriteLock)
+      val exc = intercept[RuntimeException] {
+        memoryStore.putBytes(largeBlockId, 100, MemoryMode.ON_HEAP, () => {
+          new ChunkedByteBuffer(ByteBuffer.allocate(100))
+        })
+      }
+      assert(exc.getMessage().startsWith("Mock error dropping block"))
+      // BlockManager.doPut takes care of releasing the lock for the newly written block -- not
+      // testing that here, so do it manually
+      blockInfoManager.removeBlock(largeBlockId)
+
+      assert(blockInfoManager.size === (10 - failAfterDroppingNBlocks))
+
+      val blocksStillInMemory = blockInfoManager.entries.filter { case (id, info) =>
+        assert(info.writerTask === BlockInfo.NO_WRITER, id)
+        assert(info.readerCount === 0, id)
+        memoryStore.contains(id)
+      }
+      assert(blocksStillInMemory.size === (10 - failAfterDroppingNBlocks))
+    }
+
+    testWithFailureOnNthDrop(0)
+    testWithFailureOnNthDrop(3)
+  }
 }
