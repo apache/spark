@@ -609,8 +609,7 @@ private[spark] class ExecutorAllocationManager(
     // Should be 0 when no stages are active.
     private var numRunningTasks: Int = _
     private val jobGroupToMaxConTasks = new mutable.HashMap[String, Int]
-    private val jobIdToJobGroup = new mutable.HashMap[Int, String]
-    private val stageIdToJobId = new mutable.HashMap[Int, Int]
+    private val stageIdToJobGroupId = new mutable.HashMap[Int, String]
     private val stageIdToCompleteTaskCount = new mutable.HashMap[Int, Int]
     private val stageIdToCompleteSpeculativeTaskCount = new mutable.HashMap[Int, Int]
 
@@ -626,8 +625,6 @@ private[spark] class ExecutorAllocationManager(
     private val stageIdToExecutorPlacementHints = new mutable.HashMap[Int, (Int, Map[String, Int])]
 
     override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
-      jobStart.stageInfos.foreach(stageInfo => stageIdToJobId(stageInfo.stageId) = jobStart.jobId)
-
       var jobGroupId = if (jobStart.properties != null) {
         jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID)
       } else {
@@ -650,19 +647,9 @@ private[spark] class ExecutorAllocationManager(
         jobGroupId = DEFAULT_JOB_GROUP
       }
 
-      jobIdToJobGroup(jobStart.jobId) = jobGroupId
+      jobStart.stageInfos.foreach(stageInfo => stageIdToJobGroupId(stageInfo.stageId) = jobGroupId)
       if (!jobGroupToMaxConTasks.contains(jobGroupId)) {
         jobGroupToMaxConTasks(jobGroupId) = maxConTasks
-      }
-    }
-
-    override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
-      val jobGroupId = jobIdToJobGroup(jobEnd.jobId)
-
-      jobIdToJobGroup -= jobEnd.jobId
-      // Remove jobGroup mapping if this is the only remaining job in the group.
-      if (!jobIdToJobGroup.values.exists(_ == jobGroupId)) {
-        jobGroupToMaxConTasks -= jobGroupId
       }
     }
 
@@ -704,7 +691,14 @@ private[spark] class ExecutorAllocationManager(
         stageIdToTaskIndices -= stageId
         stageIdToSpeculativeTaskIndices -= stageId
         stageIdToExecutorPlacementHints -= stageId
-        stageIdToJobId -= stageId
+
+        val jobGroupId = stageIdToJobGroupId(stageId)
+        stageIdToJobGroupId -= stageId
+        // Remove jobGroup mapping if this is the only remaining stage in the group.
+        if (!stageIdToJobGroupId.values.exists(_ == jobGroupId)) {
+          jobGroupToMaxConTasks -= jobGroupId
+        }
+
         // Update the executor placement hints
         updateExecutorPlacementHints()
 
@@ -841,22 +835,18 @@ private[spark] class ExecutorAllocationManager(
       // we need at that time to serve the outstanding tasks. This is capped by the minimum no. of
       // outstanding tasks and the max concurrent limit specified for the job group if any.
 
-      def getIncompleteTasksForStage(stageId: Int, numTasks: Int): Int = {
-        totalPendingTasks(stageId) + totalRunningTasks(stageId)
-      }
-
-      def sumIncompleteTasksForStages: (Int, (Int, Int)) => Int = (totalTasks, stageToNumTasks) => {
-        val activeTasks = getIncompleteTasksForStage(stageToNumTasks._1, stageToNumTasks._2)
+      def sumIncompleteTasksForStages: (Int, Int) => Int = (totalTasks, stageId) => {
+        val activeTasks = totalPendingTasks(stageId) + totalRunningTasks(stageId)
         sumOrMax(totalTasks, activeTasks)
       }
       // Get the total running & pending tasks for all stages in a job group.
-      def getIncompleteTasksForJobGroup(stagesItr: mutable.HashMap[Int, Int]): Int = {
+      def getIncompleteTasksForJobGroup(stagesItr: Set[Int]): Int = {
         stagesItr.foldLeft(0)(sumIncompleteTasksForStages)
       }
 
-      def sumIncompleteTasksForJobGroup: (Int, (String, mutable.HashMap[Int, Int])) => Int = {
+      def sumIncompleteTasksForJobGroup: (Int, (String, mutable.HashMap[Int, String])) => Int = {
         (maxConTasks, x) => {
-          val totalIncompleteTasksForJobGroup = getIncompleteTasksForJobGroup(x._2)
+          val totalIncompleteTasksForJobGroup = getIncompleteTasksForJobGroup(x._2.keySet.toSet)
           val maxTasks = Math.min(jobGroupToMaxConTasks(x._1), totalIncompleteTasksForJobGroup)
           sumOrMax(maxConTasks, maxTasks)
         }
@@ -866,7 +856,7 @@ private[spark] class ExecutorAllocationManager(
 
       def doesSumOverflow(a: Int, b: Int): Boolean = b > (Int.MaxValue - a)
 
-      val stagesByJobGroup = stageIdToNumTasks.groupBy(x => jobIdToJobGroup(stageIdToJobId(x._1)))
+      val stagesByJobGroup = stageIdToJobGroupId.groupBy(_._2)
       stagesByJobGroup.foldLeft(0)(sumIncompleteTasksForJobGroup)
     }
 

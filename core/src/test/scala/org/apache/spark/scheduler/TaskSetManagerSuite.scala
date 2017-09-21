@@ -1303,49 +1303,6 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(taskDescs.size === 1) // tsm accepts one as it can run one more task
   }
 
-  test("do not limit max concurrent running tasks in a job group by default") {
-    val conf = new SparkConf().
-      set(config.BLACKLIST_ENABLED, true)
-
-    sc = new SparkContext("local", "test", conf)
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
-
-    val tasks = Array.tabulate[Task[_]](10) { i =>
-      new FakeTask(0, i, Nil)
-    }
-    val tsm = new TaskSetManager(sched, new TaskSet(tasks, 0, 0, 0, null), 2)
-
-    // make 5 offers to our taskset
-    var taskDescs = Seq(
-      "exec1" -> "host1",
-      "exec2" -> "host2"
-    ).flatMap { case (exec, host) =>
-      // offer each executor twice (simulating 3 cores per executor)
-      (0 until 3).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
-    }
-    // tsm accepts all offers as it has tasks to run & there is no constraint for maxConcurrentTasks
-    assert(taskDescs.size === 6)
-
-    taskDescs = Seq(
-      "exec1" -> "host1",
-      "exec2" -> "host2"
-    ).flatMap { case (exec, host) =>
-      (0 until 1).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
-    }
-    assert(taskDescs.size === 2) // tsm accepts more offers as it has tasks to run
-
-    val directTaskResult = createTaskResult(0)
-    tsm.handleSuccessfulTask(taskDescs(0).taskId, directTaskResult)
-
-    taskDescs = Seq(
-      "exec1" -> "host1",
-      "exec2" -> "host2"
-    ).flatMap { case (exec, host) =>
-      (0 until 2).flatMap{ _ => tsm.resourceOffer(exec, host, TaskLocality.ANY)}
-    }
-    assert(taskDescs.size === 2) // tsm accepts 2 offers as it had only 2 tasks to run.
-  }
-
   private def createTaskResult(
       id: Int,
       accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
