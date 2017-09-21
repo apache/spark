@@ -33,12 +33,13 @@ class PythonUDFRunner(
     reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]])
-  extends PythonRunner(funcs, bufferSize, reuseWorker, evalType, argOffsets) {
+  extends PythonRunner[Array[Byte], Array[Byte]](
+    funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 
   protected override def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[_],
+      inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {

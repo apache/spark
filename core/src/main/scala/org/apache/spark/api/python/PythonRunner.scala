@@ -44,7 +44,7 @@ private[spark] object PythonEvalType {
  * funcs is a list of independent Python functions, each one of them is a list of chained Python
  * functions (from bottom to top).
  */
-private[spark] abstract class PythonRunner(
+private[spark] abstract class PythonRunner[IN, OUT](
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuseWorker: Boolean,
@@ -63,9 +63,9 @@ private[spark] abstract class PythonRunner(
   protected val accumulator = funcs.head.funcs.head.accumulator
 
   def compute(
-      inputIterator: Iterator[_],
+      inputIterator: Iterator[IN],
       partitionIndex: Int,
-      context: TaskContext): Iterator[Array[Byte]] = {
+      context: TaskContext): Iterator[OUT] = {
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(f => f.getPath()).mkString(",")
@@ -106,7 +106,7 @@ private[spark] abstract class PythonRunner(
   protected def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[_],
+      inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): WriterThread
 
@@ -117,7 +117,7 @@ private[spark] abstract class PythonRunner(
       env: SparkEnv,
       worker: Socket,
       released: AtomicBoolean,
-      context: TaskContext): Iterator[Array[Byte]]
+      context: TaskContext): Iterator[OUT]
 
   /**
    * The thread responsible for writing the data from the PythonRDD's parent iterator to the
@@ -126,7 +126,7 @@ private[spark] abstract class PythonRunner(
   abstract class WriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[_],
+      inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext)
     extends Thread(s"stdout writer for $pythonExec") {
@@ -225,9 +225,9 @@ private[spark] abstract class PythonRunner(
       worker: Socket,
       released: AtomicBoolean,
       context: TaskContext)
-    extends Iterator[Array[Byte]] {
+    extends Iterator[OUT] {
 
-    private var nextObj: Array[Byte] = _
+    private var nextObj: OUT = _
     private var eos = false
 
     override def hasNext: Boolean = nextObj != null || {
@@ -239,17 +239,17 @@ private[spark] abstract class PythonRunner(
       }
     }
 
-    override def next(): Array[Byte] = {
+    override def next(): OUT = {
       if (hasNext) {
         val obj = nextObj
-        nextObj = null
+        nextObj = null.asInstanceOf[OUT]
         obj
       } else {
         Iterator.empty.next()
       }
     }
 
-    protected def read(): Array[Byte]
+    protected def read(): OUT
 
     protected def handleTimingData(): Unit = {
       // Timing data from worker
@@ -297,14 +297,14 @@ private[spark] abstract class PythonRunner(
       eos = true
     }
 
-    protected val handleException: PartialFunction[Throwable, Array[Byte]] = {
+    protected val handleException: PartialFunction[Throwable, OUT] = {
       case e: Exception if context.isInterrupted =>
         logDebug("Exception thrown after task interruption", e)
         throw new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
 
       case e: Exception if env.isStopped =>
         logDebug("Exception thrown after context is stopped", e)
-        null  // exit silently
+        null.asInstanceOf[OUT]  // exit silently
 
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
@@ -359,12 +359,13 @@ private[spark] class PythonCommandRunner(
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuseWorker: Boolean)
-  extends PythonRunner(funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0))) {
+  extends PythonRunner[Array[Byte], Array[Byte]](
+    funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0))) {
 
   protected override def newWriterThread(
       env: SparkEnv,
       worker: Socket,
-      inputIterator: Iterator[_],
+      inputIterator: Iterator[Array[Byte]],
       partitionIndex: Int,
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
