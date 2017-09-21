@@ -70,12 +70,12 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
         // this isn't just a "ctas" sql statement b/c that doesn't let us specify the table tz
         spark.sql(
           s"""CREATE TABLE $dest (
-              |  display string,
-              |  ts timestamp
-              |)
-              |STORED AS parquet
-              |$tblProperties
-              |""".stripMargin)
+             |  display string,
+             |  ts timestamp
+             |)
+             |STORED AS parquet
+             |$tblProperties
+             |""".stripMargin)
         spark.sql(s"insert into $dest select * from $source")
         true
       } else {
@@ -83,5 +83,27 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
       }
 
     }
+  }
+
+  test("SPARK-12297: copy table timezone in CREATE TABLE LIKE") {
+    val key = TimestampTableTimeZone.TIMEZONE_PROPERTY
+    withTable("orig_hive", "copy_hive", "orig_ds", "copy_ds") {
+      spark.sql(
+        s"""CREATE TABLE orig_hive (
+           |  display string,
+           |  ts timestamp
+           |)
+           |STORED AS parquet
+           |TBLPROPERTIES ("$key"="UTC")
+           |""".
+          stripMargin)
+      spark.sql("CREATE TABLE copy_hive LIKE orig_hive")
+      checkHasTz(spark, "copy_hive", Some("UTC"))
+
+      createRawData(spark).write.option(key, "America/New_York").saveAsTable("orig_ds")
+      spark.sql("CREATE TABLE copy_ds LIKE orig_ds")
+      checkHasTz(spark, "copy_ds", Some("America/New_York"))
+    }
+
   }
 }

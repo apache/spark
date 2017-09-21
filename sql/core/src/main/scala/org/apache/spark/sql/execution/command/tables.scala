@@ -76,6 +76,8 @@ case class CreateTableLikeCommand(
     // If the location is specified, we create an external table internally.
     // Otherwise create a managed table.
     val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
+    val properties =
+      sourceTableDesc.properties.filterKeys(_ == TimestampTableTimeZone.TIMEZONE_PROPERTY)
 
     val newTableDesc =
       CatalogTable(
@@ -86,7 +88,8 @@ case class CreateTableLikeCommand(
         schema = sourceTableDesc.schema,
         provider = newProvider,
         partitionColumnNames = sourceTableDesc.partitionColumnNames,
-        bucketSpec = sourceTableDesc.bucketSpec)
+        bucketSpec = sourceTableDesc.bucketSpec,
+        properties = properties)
 
     catalog.createTable(newTableDesc, ifNotExists)
     Seq.empty[Row]

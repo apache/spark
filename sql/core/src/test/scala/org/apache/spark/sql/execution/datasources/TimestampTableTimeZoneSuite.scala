@@ -69,14 +69,14 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
     }
   }
 
-  private def createRawData(spark: SparkSession): Dataset[(String, Timestamp)] = {
+  protected def createRawData(spark: SparkSession): Dataset[(String, Timestamp)] = {
     import spark.implicits._
     val df = desiredTimestampStrings.toDF("display")
     // this will get the millis corresponding to the display time given the current session tz
     df.withColumn("ts", expr("cast(display as timestamp)")).as[(String, Timestamp)]
   }
 
-  private def checkHasTz(spark: SparkSession, table: String, tz: Option[String]): Unit = {
+  protected def checkHasTz(spark: SparkSession, table: String, tz: Option[String]): Unit = {
     val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
     assert(tableMetadata.properties.get(TimestampTableTimeZone.TIMEZONE_PROPERTY) === tz,
       s"for table $table")
@@ -337,8 +337,8 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
       withView("view_with_tz") {
         val exc1 = intercept[AnalysisException]{
           spark.sql(s"""CREATE VIEW view_with_tz
-                        | TBLPROPERTIES ("$key"="UTC")
-                        | AS SELECT * FROM ok_table
+                       |TBLPROPERTIES ("$key"="UTC")
+                       |AS SELECT * FROM ok_table
            """.stripMargin)
         }
         assert(exc1.getMessage.contains("Timezone cannot be set for view"))
