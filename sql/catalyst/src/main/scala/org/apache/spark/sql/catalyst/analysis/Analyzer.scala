@@ -268,7 +268,7 @@ class Analyzer(
      *  We need to get all of its subsets for the rule described above, the subset is
      *  represented as sequence of expressions.
      */
-    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.inits.toSeq
+    def rollupExprs(exprs: Seq[Expression]): Seq[Seq[Expression]] = exprs.inits.toIndexedSeq
 
     /*
      *  GROUP BY a, b, c WITH CUBE
