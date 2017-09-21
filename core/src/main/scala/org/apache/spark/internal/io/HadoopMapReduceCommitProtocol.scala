@@ -57,6 +57,11 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    */
   private def absPathStagingDir: Path = new Path(path, "_temporary-" + jobId)
 
+  /**
+   * Checks whether there are files to be committed to an absolute output location.
+   */
+  private def hasAbsPathFiles: Boolean = addedAbsPathFiles != null && addedAbsPathFiles.nonEmpty
+
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.newInstance()
     // If OutputFormat is Configurable, we should set conf to it.
@@ -130,7 +135,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
       .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
-    if (addedAbsPathFiles != null && addedAbsPathFiles.nonEmpty) {
+    if (hasAbsPathFiles) {
       val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
       for ((src, dst) <- filesToMove) {
         fs.rename(new Path(src), new Path(dst))
@@ -141,7 +146,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
   override def abortJob(jobContext: JobContext): Unit = {
     committer.abortJob(jobContext, JobStatus.State.FAILED)
-    if (addedAbsPathFiles != null && addedAbsPathFiles.nonEmpty) {
+    if (hasAbsPathFiles) {
       val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
       fs.delete(absPathStagingDir, true)
     }
