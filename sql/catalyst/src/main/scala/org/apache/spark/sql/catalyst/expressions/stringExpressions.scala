@@ -484,7 +484,7 @@ case class StringTranslate(srcExpr: Expression, matchingExpr: Expression, replac
       > SELECT _FUNC_('ab','abc,b,ab,c,def');
        3
   """)
-// scalastyle:on
+// scalastyle:on line.size.limit
 case class FindInSet(left: Expression, right: Expression) extends BinaryExpression
     with ImplicitCastInputTypes {
 
@@ -519,16 +519,18 @@ object StringTrim {
 }
 
 /**
- * A function that takes a character string, removes the leading and trailing characters matching with any character
- * in the trim string, returns the new string.
- * If BOTH and trimStr keywords are not specified, it defaults to remove space character from both ends. The trim
- * function will have one argument, which contains the source string.
- * If BOTH and trimStr keywords are specified, it trims the characters from both ends, and the trim function will have
- * two arguments, the first argument contains trimStr, the second argument contains the source string.
- * trimStr: A character string to be trimmed from the source string, if it has multiple characters, the function
- * searches for each character in the source string, removes the characters from the source string until it
- * encounters the first non-match character.
- * BOTH: removes any character from both ends of the source string that matches characters in the trim string.
+ * A function that takes a character string, removes the leading and trailing characters matching
+ * with any character in the trim string, returns the new string.
+ * If BOTH and trimStr keywords are not specified, it defaults to remove space character from both
+ * ends. The trim function will have one argument, which contains the source string.
+ * If BOTH and trimStr keywords are specified, it trims the characters from both ends, and the trim
+ * function will have two arguments, the first argument contains trimStr, the second argument
+ * contains the source string.
+ * trimStr: A character string to be trimmed from the source string, if it has multiple characters,
+ * the function searches for each character in the source string, removes the characters from the
+ * source string until it encounters the first non-match character.
+ * BOTH: removes any character from both ends of the source string that matches characters in the
+ * trim string.
  */
 @ExpressionDescription(
   usage = """
@@ -612,19 +614,22 @@ case class StringTrim(
 }
 
 object StringTrimLeft {
-  def apply(str: Expression, trimStr: Expression) : StringTrimLeft = StringTrimLeft(str, Some(trimStr))
-  def apply(str: Expression) : StringTrimLeft = StringTrimLeft(str, None)
+  def apply(str: Expression, trimStr: Expression): StringTrimLeft =
+    StringTrimLeft(str, Some(trimStr))
+  def apply(str: Expression): StringTrimLeft = StringTrimLeft(str, None)
 }
 
 /**
  * A function that trims the characters from left end for a given string.
- * If LEADING and trimStr keywords are not specified, it defaults to remove space character from the left end. The ltrim
- * function will have one argument, which contains the source string.
- * If LEADING and trimStr keywords are not specified, it trims the characters from left end. The ltrim function will
- * have two arguments, the first argument contains trimStr, the second argument contains the source string.
- * trimStr: the function removes any character from the left end of the source string which matches with the characters
- * from trimStr, it stops at the first non-match character.
- * LEADING: removes any character from the left end of the source string that matches characters in the trim string.
+ * If LEADING and trimStr keywords are not specified, it defaults to remove space character from
+ * the left end. The ltrim function will have one argument, which contains the source string.
+ * If LEADING and trimStr keywords are not specified, it trims the characters from left end. The
+ * ltrim function will have two arguments, the first argument contains trimStr, the second argument
+ * contains the source string.
+ * trimStr: the function removes any character from the left end of the source string which matches
+ * with the characters from trimStr, it stops at the first non-match character.
+ * LEADING: removes any character from the left end of the source string that matches characters in
+ * the trim string.
  */
 @ExpressionDescription(
   usage = """
@@ -709,20 +714,24 @@ case class StringTrimLeft(
 }
 
 object StringTrimRight {
-  def apply(str: Expression, trimStr: Expression) : StringTrimRight = StringTrimRight(str, Some(trimStr))
+  def apply(str: Expression, trimStr: Expression): StringTrimRight =
+    StringTrimRight(str, Some(trimStr))
   def apply(str: Expression) : StringTrimRight = StringTrimRight(str, None)
 }
 
 /**
  * A function that trims the characters from right end for a given string.
- * If TRAILING and trimStr keywords are not specified, it defaults to remove space character from the right end. The
- * rtrim function will have one argument, which contains the source string.
- * If TRAILING and trimStr keywords are specified, it trims the characters from right end. The rtrim function will
- * have two arguments, the first argument contains trimStr, the second argument contains the source string.
- * trimStr: the function removes any character from the right end of source string which matches with the characters
- * from trimStr, it stops at the first non-match character.
- * TRAILING: removes any character from the right end of the source string that matches characters in the trim string.
+ * If TRAILING and trimStr keywords are not specified, it defaults to remove space character
+ * from the right end. The rtrim function will have one argument, which contains the source string.
+ * If TRAILING and trimStr keywords are specified, it trims the characters from right end. The
+ * rtrim function will have two arguments, the first argument contains trimStr, the second argument
+ * contains the source string.
+ * trimStr: the function removes any character from the right end of source string which matches
+ * with the characters from trimStr, it stops at the first non-match character.
+ * TRAILING: removes any character from the right end of the source string that matches characters
+ * in the trim string.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
@@ -741,6 +750,7 @@ object StringTrimRight {
       > SELECT _FUNC_('LQSa', 'SSparkSQLS');
        SSpark
   """)
+// scalastyle:on line.size.limit
 case class StringTrimRight(
     srcStr: Expression,
     trimStr: Option[Expression] = None)
@@ -812,6 +822,7 @@ case class StringTrimRight(
  *
  * NOTE: that this is not zero based, but 1-based index. The first character in str has index 1.
  */
+// scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(str, substr) - Returns the (1-based) index of the first occurrence of `substr` in `str`.",
   examples = """
@@ -819,6 +830,7 @@ case class StringTrimRight(
       > SELECT _FUNC_('SparkSQL', 'SQL');
        6
   """)
+// scalastyle:on line.size.limit
 case class StringInstr(str: Expression, substr: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
