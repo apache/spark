@@ -67,7 +67,8 @@ class TaskInfo(
   var finishTime: Long = 0
 
   /**
-   * Set this tag when this task killed by other attempt. This kind of task should not resubmit
+   * Set this var when the current task killed by other attempt tasks, this happened while we
+   * set the `spark.speculation` to true. The task killed by others should not resubmit
    * while executor lost.
    */
   var killedAttempt = false
