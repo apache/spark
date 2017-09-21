@@ -36,6 +36,8 @@ import org.apache.spark.sql.types._
  * @param child to estimate the ndv's of.
  * @param endpointsExpression An array expression to construct the intervals. It must be foldable,
  *                            and its elements should be sorted into ascending order.
+ *                            Duplicate endpoints are allowed, e.g. (1, 5, 5, 10), and ndv for
+ *                            interval (5, 5] would be 1.
  * @param relativeSD The maximum estimation error allowed in the HyperLogLogPlusPlus algorithm.
  */
 case class ApproxCountDistinctForIntervals(
