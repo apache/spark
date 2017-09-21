@@ -20,6 +20,7 @@ package org.apache.spark.sql.streaming
 import java.util.UUID
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -32,39 +33,47 @@ import org.apache.spark.sql.test.SharedSQLContext
 class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLContext {
 
   import testImplicits._
-  super.beforeAll()
 
-  private val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char")
+  private var baseDf: DataFrame = null
 
-  testEnsureStatefulOpPartitioning(
-    "ClusteredDistribution generates Exchange with HashPartitioning",
-    baseDf.queryExecution.sparkPlan,
-    requiredDistribution = keys => ClusteredDistribution(keys),
-    expectedPartitioning =
-      keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
-    expectShuffle = true)
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char")
+  }
 
-  testEnsureStatefulOpPartitioning(
-    "ClusteredDistribution with coalesce(1) generates Exchange with HashPartitioning",
-    baseDf.coalesce(1).queryExecution.sparkPlan,
-    requiredDistribution = keys => ClusteredDistribution(keys),
-    expectedPartitioning =
-      keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
-    expectShuffle = true)
+  test("ClusteredDistribution generates Exchange with HashPartitioning") {
+    testEnsureStatefulOpPartitioning(
+      baseDf.queryExecution.sparkPlan,
+      requiredDistribution = keys => ClusteredDistribution(keys),
+      expectedPartitioning =
+        keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
+      expectShuffle = true)
+  }
 
-  testEnsureStatefulOpPartitioning(
-    "AllTuples generates Exchange with SinglePartition",
-    baseDf.queryExecution.sparkPlan,
-    requiredDistribution = _ => AllTuples,
-    expectedPartitioning = _ => SinglePartition,
-    expectShuffle = true)
+  test("ClusteredDistribution with coalesce(1) generates Exchange with HashPartitioning") {
+    testEnsureStatefulOpPartitioning(
+      baseDf.coalesce(1).queryExecution.sparkPlan,
+      requiredDistribution = keys => ClusteredDistribution(keys),
+      expectedPartitioning =
+        keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
+      expectShuffle = true)
+  }
 
-  testEnsureStatefulOpPartitioning(
-    "AllTuples with coalesce(1) doesn't need Exchange",
-    baseDf.coalesce(1).queryExecution.sparkPlan,
-    requiredDistribution = _ => AllTuples,
-    expectedPartitioning = _ => SinglePartition,
-    expectShuffle = false)
+  test("AllTuples generates Exchange with SinglePartition") {
+    testEnsureStatefulOpPartitioning(
+      baseDf.queryExecution.sparkPlan,
+      requiredDistribution = _ => AllTuples,
+      expectedPartitioning = _ => SinglePartition,
+      expectShuffle = true)
+  }
+
+  test("AllTuples with coalesce(1) doesn't need Exchange") {
+    testEnsureStatefulOpPartitioning(
+      baseDf.coalesce(1).queryExecution.sparkPlan,
+      requiredDistribution = _ => AllTuples,
+      expectedPartitioning = _ => SinglePartition,
+      expectShuffle = false)
+  }
 
   /**
    * For `StatefulOperator` with the given `requiredChildDistribution`, and child SparkPlan
@@ -72,26 +81,23 @@ class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLCont
    * ensure the expected partitioning.
    */
   private def testEnsureStatefulOpPartitioning(
-      testName: String,
       inputPlan: SparkPlan,
       requiredDistribution: Seq[Attribute] => Distribution,
       expectedPartitioning: Seq[Attribute] => Partitioning,
       expectShuffle: Boolean): Unit = {
-    test(testName) {
-      val operator = TestStatefulOperator(inputPlan, requiredDistribution(inputPlan.output.take(1)))
-      val executed = executePlan(operator, OutputMode.Complete())
-      if (expectShuffle) {
-        val exchange = executed.children.find(_.isInstanceOf[Exchange])
-        if (exchange.isEmpty) {
-          fail(s"Was expecting an exchange but didn't get one in:\n$executed")
-        }
-        assert(exchange.get ===
-          ShuffleExchange(expectedPartitioning(inputPlan.output.take(1)), inputPlan),
-          s"Exchange didn't have expected properties:\n${exchange.get}")
-      } else {
-        assert(!executed.children.exists(_.isInstanceOf[Exchange]),
-          s"Unexpected exchange found in:\n$executed")
+    val operator = TestStatefulOperator(inputPlan, requiredDistribution(inputPlan.output.take(1)))
+    val executed = executePlan(operator, OutputMode.Complete())
+    if (expectShuffle) {
+      val exchange = executed.children.find(_.isInstanceOf[Exchange])
+      if (exchange.isEmpty) {
+        fail(s"Was expecting an exchange but didn't get one in:\n$executed")
       }
+      assert(exchange.get ===
+        ShuffleExchange(expectedPartitioning(inputPlan.output.take(1)), inputPlan),
+        s"Exchange didn't have expected properties:\n${exchange.get}")
+    } else {
+      assert(!executed.children.exists(_.isInstanceOf[Exchange]),
+        s"Unexpected exchange found in:\n$executed")
     }
   }
 
