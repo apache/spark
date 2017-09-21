@@ -2390,7 +2390,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
         if (window.windowDuration == window.slideDuration) {
           val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
-            exprId = windowAttr.exprId)
+            exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
             case t: TimeWindow => windowAttr

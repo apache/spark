@@ -222,15 +222,16 @@ object UnsupportedOperationChecker {
           joinType match {
 
             case _: InnerLike =>
-              if (left.isStreaming && right.isStreaming) {
-                throwError("Inner join between two streaming DataFrames/Datasets is not supported")
+              if (left.isStreaming && right.isStreaming &&
+                outputMode != InternalOutputModes.Append) {
+                throwError("Inner join between two streaming DataFrames/Datasets is not supported" +
+                  s" in ${outputMode} output mode, only in Append output mode")
               }
 
             case FullOuter =>
               if (left.isStreaming || right.isStreaming) {
                 throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
               }
-
 
             case LeftOuter | LeftSemi | LeftAnti =>
               if (right.isStreaming) {
