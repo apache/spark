@@ -89,8 +89,20 @@ private[spark] class ExecutorAllocationManager(
   import ExecutorAllocationManager._
 
   // Lower and upper bounds on the number of executors.
+  private val totalCores = conf.getInt("spark.cores.max", -1)
+  private var maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
+  if (totalCores > -1) {
+    val coresPerExecutor = conf.getInt("spark.executor.cores", 1)
+    if (coresPerExecutor > 0) {
+      val maybeMaxNumExecutors = totalCores / coresPerExecutor
+      if (maybeMaxNumExecutors < maxNumExecutors) {
+        logWarning(s"${DYN_ALLOCATION_MAX_EXECUTORS.key} is invalid, ignoring its setting, " +
+          "please increase `spark.cores.max`, or do not set `spark.cores.max`.")
+        maxNumExecutors = maybeMaxNumExecutors
+      }
+    }
+  }
   private val minNumExecutors = conf.get(DYN_ALLOCATION_MIN_EXECUTORS)
-  private val maxNumExecutors = conf.get(DYN_ALLOCATION_MAX_EXECUTORS)
   private val initialNumExecutors = Utils.getDynamicAllocationInitialExecutors(conf)
 
   // How long there must be backlogged tasks for before an addition is triggered (seconds)
