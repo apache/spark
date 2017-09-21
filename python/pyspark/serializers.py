@@ -230,7 +230,16 @@ class ArrowPandasSerializer(ArrowSerializer):
                 (len(series) == 2 and isinstance(series[1], pa.DataType)):
             series = [series]
         series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
-        arrs = [pa.Array.from_pandas(s[0], type=s[1], mask=s[0].isnull()) for s in series]
+
+        # If a nullable integer series has been promoted to floating point with NaNs, need to cast
+        # NOTE: this is not necessary with Arrow >= 0.7
+        def cast_series(s, t):
+            if t is None or s.dtype == t.to_pandas_dtype():
+                return s
+            else:
+                return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
+
+        arrs = [pa.Array.from_pandas(cast_series(s, t), mask=s.isnull(), type=t) for s, t in series]
         batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
         return super(ArrowPandasSerializer, self).dumps(batch)
 
