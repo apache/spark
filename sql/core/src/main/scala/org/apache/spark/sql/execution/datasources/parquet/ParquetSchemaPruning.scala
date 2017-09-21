@@ -122,9 +122,9 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
    */
   private def getFields(expr: Expression): Seq[(StructField, Option[Attribute])] =
     expr match {
-      case SelectedField(field) => (field, None) :: Nil
       case att: Attribute =>
         (StructField(att.name, att.dataType, att.nullable), Some(att)) :: Nil
+      case SelectedField(field) => (field, None) :: Nil
       case _ =>
         expr.children.flatMap(getFields)
     }

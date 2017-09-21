@@ -94,17 +94,7 @@ object SelectedField {
           fieldOpt.map(field => StructField(name,
             wrapStructType(dataType, field),
             nullable, metadata)).getOrElse(field)
-        selectField(child, Some(childField)).map {
-          case field @ StructField(name,
-              StructType(Array(StructField(name2,
-                elementType,
-                nullable2, metadata2))), nullable, metadata) =>
-            StructField(name,
-              StructType(Array(StructField(name2,
-                ArrayType(elementType, containsNull),
-                nullable2, metadata2))), nullable, metadata)
-          case field => field
-        }
+        selectField(child, Some(childField))
       // Handles case "expr0.field[key]", where "expr0" is of struct type and "expr0.field" is of
       // map type.
       case GetMapValue(x @ GetStructFieldObject(child, field @ StructField(name,
@@ -119,9 +109,9 @@ object SelectedField {
         selectField(child, fieldOpt)
       // Handles case "expr0.field", where expr0 is of struct type.
       case GetStructFieldObject(child,
-        field @ StructField(name, _, nullable, metadata)) =>
+        field @ StructField(name, dataType, nullable, metadata)) =>
         val childField = fieldOpt.map(field => StructField(name,
-          StructType(Array(field)),
+          wrapStructType(dataType, field),
           nullable, metadata)).getOrElse(field)
         selectField(child, Some(childField))
       case _ =>
