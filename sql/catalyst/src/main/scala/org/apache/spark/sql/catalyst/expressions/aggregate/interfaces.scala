@@ -184,6 +184,10 @@ abstract class AggregateFunction extends Expression {
   def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
+   * Indicates if this function supports pushing down to data sources.
+   */
+  def supportsPushDown: Boolean = false
+  /**
    * Result of the aggregate function when the input is empty. This is currently only used for the
    * proper rewriting of distinct aggregate functions.
    */

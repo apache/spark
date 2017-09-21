@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution.aggregate.AggPushDownUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.exchange.ShuffleExchange
@@ -264,6 +265,15 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalAggregation(
           groupingExpressions, aggregateExpressions, resultExpressions, child) =>
+
+        // if we could push down aggregation into data sources
+        if (conf.aggPushDown) {
+          AggPushDownUtils.plan(
+            groupingExpressions, aggregateExpressions, resultExpressions, child) match {
+            case Some(sparkPlans) => return sparkPlans
+            case None =>
+          }
+        }
 
         val (functionsWithDistinct, functionsWithoutDistinct) =
           aggregateExpressions.partition(_.isDistinct)

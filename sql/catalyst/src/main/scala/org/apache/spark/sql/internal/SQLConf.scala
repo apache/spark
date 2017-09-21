@@ -714,6 +714,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val AGGREGATION_PUSHDOWN_ENABLED = buildConf("spark.sql.aggregation.pushdown")
+    .doc("Enables pushing down aggregate functions into data sources when set to true.")
+    .booleanConf
+    .createWithDefault(false)
+
   val FILE_SINK_LOG_DELETION = buildConf("spark.sql.streaming.fileSink.log.deletion")
     .internal()
     .doc("Whether to delete the expired log files in file stream sink.")
@@ -1139,6 +1144,8 @@ class SQLConf extends Serializable with Logging {
   def enableTwoLevelAggMap: Boolean = getConf(ENABLE_TWOLEVEL_AGG_MAP)
 
   def useObjectHashAggregation: Boolean = getConf(USE_OBJECT_HASH_AGG)
+
+  def aggPushDown: Boolean = getConf(AGGREGATION_PUSHDOWN_ENABLED)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 

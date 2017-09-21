@@ -27,6 +27,8 @@ import org.apache.spark.sql.types._
   usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
 case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
+  override def supportsPushDown: Boolean = true
+
   override def prettyName: String = "avg"
 
   override def children: Seq[Expression] = child :: Nil
@@ -47,7 +49,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case _ => DoubleType
   }
 
-  private lazy val sumDataType = child.dataType match {
+  lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
     case _ => DoubleType
   }
