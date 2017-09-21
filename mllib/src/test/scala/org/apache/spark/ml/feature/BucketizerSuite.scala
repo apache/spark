@@ -207,7 +207,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer1.isBucketizeMultipleInputCols())
+    assert(bucketizer1.isBucketizeMultipleColumns())
 
     bucketizer1.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
       .collect().foreach {
@@ -228,7 +228,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result"))
       .setSplitsArray(Array(splits(0)))
 
-    assert(bucketizer2.isBucketizeMultipleInputCols())
+    assert(bucketizer2.isBucketizeMultipleColumns())
 
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
@@ -263,7 +263,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer.isBucketizeMultipleInputCols())
+    assert(bucketizer.isBucketizeMultipleColumns())
 
     bucketizer.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
       .collect().foreach {
@@ -295,7 +295,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(splits)
 
-    assert(bucketizer.isBucketizeMultipleInputCols())
+    assert(bucketizer.isBucketizeMultipleColumns())
 
     bucketizer.setHandleInvalid("keep")
     bucketizer.transform(dataFrame).select("result1", "expected1", "result2", "expected2")
@@ -340,7 +340,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setInputCols(Array("myInputCol"))
       .setOutputCols(Array("myOutputCol"))
       .setSplitsArray(Array(Array(0.1, 0.8, 0.9)))
-    assert(t.isBucketizeMultipleInputCols())
+    assert(t.isBucketizeMultipleColumns())
     testDefaultReadWrite(t)
   }
 
@@ -353,7 +353,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       .setOutputCols(Array("result1", "result2"))
       .setSplitsArray(Array(Array(-0.5, 0.0, 0.5), Array(-0.5, 0.0, 0.5)))
 
-    assert(bucket.isBucketizeMultipleInputCols())
+    assert(bucket.isBucketizeMultipleColumns())
 
     val pl = new Pipeline()
       .setStages(Array(bucket))
@@ -366,6 +366,17 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
           assert(r2 === e2,
             s"The feature value is not correct after bucketing. Expected $e2 but found $r2")
       }
+  }
+
+  test("Both inputCol and inputCols are set") {
+    val bucket = new Bucketizer()
+      .setInputCol("feature1")
+      .setOutputCol("result")
+      .setSplits(Array(-0.5, 0.0, 0.5))
+      .setInputCols(Array("feature1", "feature2"))
+
+    // When both are set, we ignore `inputCols` and just map the column specified by `inputCol`.
+    assert(bucket.isBucketizeMultipleColumns() == false)
   }
 }
 

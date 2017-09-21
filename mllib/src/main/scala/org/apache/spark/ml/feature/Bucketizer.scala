@@ -33,7 +33,9 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets. Since 2.3.0,
- * `Bucketizer` can also map multiple columns at once.
+ * `Bucketizer` can also map multiple columns at once. Whether it goes to map a column or multiple
+ * columns, it depends on which parameter of `inputCol` and `inputCols` is set. When both are set,
+ * a log warning will be printed and by default it chooses `inputCol`.
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
@@ -142,12 +144,20 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
   /**
-   * Determines whether this `Bucketizer` is going to map multiple columns. Only if all necessary
-   * params for bucketizing multiple columns are set, we go for the path to map multiple columns.
-   * By default `Bucketizer` just maps a column of continuous features.
+   * Determines whether this `Bucketizer` is going to map multiple columns. If and only if
+   * `inputCols` is set, it will map multiple columns. Otherwise, it just maps a column specified
+   * by `inputCol`. A warning will be printed if both are set.
    */
-  private[ml] def isBucketizeMultipleInputCols(): Boolean = {
-    isSet(inputCols) && isSet(splitsArray) && isSet(outputCols)
+  private[ml] def isBucketizeMultipleColumns(): Boolean = {
+    if (isSet(inputCols) && isSet(inputCol)) {
+      logWarning("Both `inputCol` and `inputCols` are set, we ignore `inputCols` and this " +
+        "`Bucketizer` only map one column specified by `inputCol`")
+      false
+    } else if (isSet(inputCols)) {
+      true
+    } else {
+      false
+    }
   }
 
   @Since("2.0.0")
@@ -163,7 +173,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       }
     }
 
-    val seqOfSplits = if (isBucketizeMultipleInputCols()) {
+    val seqOfSplits = if (isBucketizeMultipleColumns()) {
       $(splitsArray).toSeq
     } else {
       Seq($(splits))
@@ -175,7 +185,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       }.withName(s"bucketizer_$idx")
     }
 
-    val (inputColumns, outputColumns) = if (isBucketizeMultipleInputCols()) {
+    val (inputColumns, outputColumns) = if (isBucketizeMultipleColumns()) {
       ($(inputCols).toSeq, $(outputCols).toSeq)
     } else {
       (Seq($(inputCol)), Seq($(outputCol)))
@@ -198,7 +208,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    if (isBucketizeMultipleInputCols()) {
+    if (isBucketizeMultipleColumns()) {
       var transformedSchema = schema
       $(inputCols).zip($(outputCols)).zipWithIndex.map { case ((inputCol, outputCol), idx) =>
         SchemaUtils.checkNumericType(transformedSchema, inputCol)
