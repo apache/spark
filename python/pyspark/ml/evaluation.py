@@ -340,10 +340,10 @@ class ClusteringEvaluator(JavaEvaluator, HasPredictionCol, HasFeaturesCol,
     columns: prediction and features.
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> scoreAndLabels = map(lambda x: (Vectors.dense(x[0]), x[1]),
+    >>> featureAndPredictions = map(lambda x: (Vectors.dense(x[0]), x[1]),
     ...     [([0.0, 0.5], 0.0), ([0.5, 0.0], 0.0), ([10.0, 11.0], 1.0),
     ...     ([10.5, 11.5], 1.0), ([1.0, 1.0], 0.0), ([8.0, 6.0], 1.0)])
-    >>> dataset = spark.createDataFrame(scoreAndLabels, ["features", "prediction"])
+    >>> dataset = spark.createDataFrame(featureAndPredictions, ["features", "prediction"])
     ...
     >>> evaluator = ClusteringEvaluator(predictionCol="prediction")
     >>> evaluator.evaluate(dataset)
