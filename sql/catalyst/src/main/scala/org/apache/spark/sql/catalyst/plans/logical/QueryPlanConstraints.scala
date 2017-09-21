@@ -81,8 +81,9 @@ trait ConstraintHelper {
 
   /**
    * Infers a set of `isNotNull` constraints from null intolerant expressions as well as
-   * non-nullable attributes. For e.g., if an expression is of the form (`a > 5`), this
-   * returns a constraint of the form `isNotNull(a)`
+   * non-nullable attributes and complex type extractors. For example, if an expression is of the
+   * form (`a > 5`), this returns a constraint of the form `isNotNull(a)`. For an expression of the
+   * form (`a.b > 5`), this returns the more precise constraint `isNotNull(a.b)`.
    */
   def constructIsNotNullConstraints(
       constraints: Set[Expression],
@@ -99,8 +100,8 @@ trait ConstraintHelper {
   }
 
   /**
-   * Infer the Attribute-specific IsNotNull constraints from the null intolerant child expressions
-   * of constraints.
+   * Infer the Attribute and ExtractValue-specific IsNotNull constraints from the null intolerant
+   * child expressions of constraints.
    */
   private def inferIsNotNullConstraints(constraint: Expression): Seq[Expression] =
     constraint match {
@@ -114,8 +115,8 @@ trait ConstraintHelper {
     }
 
   /**
-   * Recursively explores the expressions which are null intolerant and returns all attributes
-   * in these expressions.
+   * Recursively explores the expressions which are null intolerant and returns all attributes and
+   * complex type extractors in these expressions.
    */
   private def scanNullIntolerantField(expr: Expression): Seq[Expression] = expr match {
     case ev: ExtractValue => Seq(ev)
