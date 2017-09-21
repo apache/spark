@@ -842,8 +842,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
               outputOrderingPhysical, rightKeys.map(SortOrder(_, Ascending))))
           // outputOrdering should be consistent between physical plan and executed plan
           assert(outputOrderingPhysical == outputOrderingExecuted,
-            s"Physical operator $join1 did not have the same output ordering as " +
-            s"corresponding executed operator $join2")
+            s"Operator $join1 did not have the same output ordering in the physical plan as in " +
+            s"the executed plan.")
       }
     }
 

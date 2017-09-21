@@ -105,9 +105,9 @@ case class SortMergeJoinExec(
    * The utility method to get output ordering for left or right side of the join.
    *
    * Returns the required ordering for left or right child if childOutputOrdering does not
-   * satisfy the required ordering; otherwise, in which case the child will not be re-sorted,
-   * returns the required ordering for this child with extra "sameOrderExpressions" from the
-   * child's outputOrdering.
+   * satisfy the required ordering; otherwise, which means the child does not need to be sorted
+   * again, returns the required ordering for this child with extra "sameOrderExpressions" from
+   * the child's outputOrdering.
    */
   private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
     : Seq[SortOrder] = {
