@@ -122,7 +122,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   protected UTF8String(byte[] bytes, long offset, int numBytes) {
-    this(ByteArrayMemoryBlock.fromArray(bytes), offset, numBytes);
+    this(new ByteArrayMemoryBlock(bytes, offset, numBytes), offset, numBytes);
   }
 
   protected UTF8String(MemoryBlock base, long offset, int numBytes) {
