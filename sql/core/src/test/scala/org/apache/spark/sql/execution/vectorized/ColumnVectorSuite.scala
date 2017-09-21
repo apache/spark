@@ -198,4 +198,22 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(array.get(1, schema).asInstanceOf[ColumnarBatch.Row].get(0, IntegerType) === 456)
     assert(array.get(1, schema).asInstanceOf[ColumnarBatch.Row].get(1, DoubleType) === 5.67)
   }
+
+  test("[SPARK-22092] off-heap column vector reallocation corrupts array data") {
+    val arrayType = ArrayType(IntegerType, true)
+    testVector = new OffHeapColumnVector(8, arrayType)
+
+    val data = testVector.arrayData()
+    (0 until 8).foreach(i => data.putInt(i, i))
+    (0 until 8).foreach(i => testVector.putArray(i, i, 1))
+
+    // Increase vector's capacity and reallocate the data to new bigger buffers.
+    testVector.reserve(16)
+
+    // Check that none of the values got lost/overwritten.
+    val array = new ColumnVector.Array(testVector)
+    (0 until 8).foreach { i =>
+      assert(array.get(i, arrayType).asInstanceOf[ArrayData].toIntArray() === Array(i))
+    }
+  }
 }

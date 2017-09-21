@@ -517,6 +517,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   protected void reserveInternal(int newCapacity) {
     int oldCapacity = (this.data == 0L) ? 0 : capacity;
     if (this.resultArray != null) {
+      oldCapacity = (this.lengthData == 0L) ? 0 : capacity;
       this.lengthData =
           Platform.reallocateMemory(lengthData, oldCapacity * 4, newCapacity * 4);
       this.offsetData =
