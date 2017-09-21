@@ -1761,7 +1761,7 @@ class DataFrame(object):
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
             dtype = {}
-            columns_with_null_int = {}
+            columns_with_null_int = set()
             def null_handler(rows, columns_with_null_int):
                 for row in rows:
                     row = row.asDict()
@@ -1771,9 +1771,8 @@ class DataFrame(object):
                         if val is not None:
                             if abs(val) > 16777216: # Max value before np.float32 loses precision.
                                 val = np.float64(val)
-                                if np.float64 != dt:
-                                    dt = np.float64
-                                    dtype[column] = np.float64
+                                dt = np.float64
+                                dtype[column] = np.float64
                             else:
                                 val = np.float32(val)
                                 if dt not in (np.float32, np.float64):
