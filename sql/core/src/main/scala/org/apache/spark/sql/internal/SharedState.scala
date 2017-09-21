@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
@@ -148,7 +149,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
     if (SparkSession.sqlListener.get() == null) {
       val listener = new SQLListener(sc.conf)
       if (SparkSession.sqlListener.compareAndSet(null, listener)) {
-        sc.addSparkListener(listener)
+        sc.listenerBus.addToStatusQueue(listener)
         sc.ui.foreach(new SQLTab(listener, _))
       }
     }

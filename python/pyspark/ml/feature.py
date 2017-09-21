@@ -2751,6 +2751,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     |   c|[-0.3794820010662...|
     +----+--------------------+
     ...
+    >>> model.findSynonymsArray("a", 2)
+    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
@@ -2926,6 +2928,19 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
         if not isinstance(word, basestring):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
+
+    @since("2.3.0")
+    def findSynonymsArray(self, word, num):
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns an array with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        tuples = self._java_obj.findSynonymsArray(word, num)
+        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
 
 
 @inherit_doc

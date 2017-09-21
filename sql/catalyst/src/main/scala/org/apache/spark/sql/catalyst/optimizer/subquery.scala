@@ -49,12 +49,12 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def dedupJoin(joinPlan: Join): Join = joinPlan match {
+  private def dedupJoin(joinPlan: LogicalPlan): LogicalPlan = joinPlan match {
     // SPARK-21835: It is possibly that the two sides of the join have conflicting attributes,
     // the produced join then becomes unresolved and break structural integrity. We should
     // de-duplicate conflicting attributes. We don't use transformation here because we only
     // care about the most top join converted from correlated predicate subquery.
-    case j @ Join(left, right, joinType @ (LeftSemi | LeftAnti), joinCond) =>
+    case j @ Join(left, right, joinType @ (LeftSemi | LeftAnti | ExistenceJoin(_)), joinCond) =>
       val duplicates = right.outputSet.intersect(left.outputSet)
       if (duplicates.nonEmpty) {
         val aliasMap = AttributeMap(duplicates.map { dup =>
@@ -145,13 +145,16 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       e transformUp {
         case Exists(sub, conditions, _) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
-          newPlan = Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
+          // Deduplicate conflicting attributes if any.
+          newPlan = dedupJoin(
+            Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And)))
           exists
         case In(value, Seq(ListQuery(sub, conditions, _, _))) =>
           val exists = AttributeReference("exists", BooleanType, nullable = false)()
           val inConditions = getValueExpression(value).zip(sub.output).map(EqualTo.tupled)
           val newConditions = (inConditions ++ conditions).reduceLeftOption(And)
-          newPlan = Join(newPlan, sub, ExistenceJoin(exists), newConditions)
+          // Deduplicate conflicting attributes if any.
+          newPlan = dedupJoin(Join(newPlan, sub, ExistenceJoin(exists), newConditions))
           exists
       }
     }

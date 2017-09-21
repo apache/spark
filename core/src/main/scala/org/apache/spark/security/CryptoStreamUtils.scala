@@ -16,7 +16,7 @@
  */
 package org.apache.spark.security
 
-import java.io.{EOFException, InputStream, OutputStream}
+import java.io.{InputStream, OutputStream}
 import java.nio.ByteBuffer
 import java.nio.channels.{ReadableByteChannel, WritableByteChannel}
 import java.util.Properties
