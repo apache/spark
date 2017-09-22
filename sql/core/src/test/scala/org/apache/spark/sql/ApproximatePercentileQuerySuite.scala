@@ -17,8 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.DEFAULT_PERCENTILE_ACCURACY
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.PercentileDigest
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.test.SharedSQLContext
 
 /**
@@ -67,6 +70,30 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("percentile_approx, different column types") {
+    withTempView(table) {
+      val intSeq = 1 to 1000
+      val data: Seq[(java.math.BigDecimal, Date, Timestamp)] = intSeq.map { i =>
+        (new java.math.BigDecimal(i), DateTimeUtils.toJavaDate(i), DateTimeUtils.toJavaTimestamp(i))
+      }
+      data.toDF("cdecimal", "cdate", "ctimestamp").createOrReplaceTempView(table)
+      checkAnswer(
+        spark.sql(
+          s"""SELECT
+             |  percentile_approx(cdecimal, array(0.25, 0.5, 0.75D)),
+             |  percentile_approx(cdate, array(0.25, 0.5, 0.75D)),
+             |  percentile_approx(ctimestamp, array(0.25, 0.5, 0.75D))
+             |FROM $table
+           """.stripMargin),
+        Row(
+          Seq("250.000000000000000000", "500.000000000000000000", "750.000000000000000000")
+              .map(i => new java.math.BigDecimal(i)),
+          Seq(250, 500, 750).map(DateTimeUtils.toJavaDate),
+          Seq(250, 500, 750).map(i => DateTimeUtils.toJavaTimestamp(i.toLong)))
+      )
+    }
+  }
+
   test("percentile_approx, multiple records with the minimum value in a partition") {
     withTempView(table) {
       spark.sparkContext.makeRDD(Seq(1, 1, 2, 1, 1, 3, 1, 1, 4, 1, 1, 5), 4).toDF("col")
@@ -88,7 +115,7 @@ class ApproximatePercentileQuerySuite extends QueryTest with SharedSQLContext {
       val accuracies = Array(1, 10, 100, 1000, 10000)
       val errors = accuracies.map { accuracy =>
         val df = spark.sql(s"SELECT percentile_approx(col, 0.25, $accuracy) FROM $table")
-        val approximatePercentile = df.collect().head.getDouble(0)
+        val approximatePercentile = df.collect().head.getInt(0)
         val error = Math.abs(approximatePercentile - expectedPercentile)
         error
       }

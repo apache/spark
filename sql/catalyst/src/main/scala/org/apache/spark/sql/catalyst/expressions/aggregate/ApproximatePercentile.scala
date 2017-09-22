@@ -85,7 +85,8 @@ case class ApproximatePercentile(
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(DoubleType, TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
+    Seq(TypeCollection(NumericType, DateType, TimestampType),
+      TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
   }
 
   // Mark as lazy so that percentageExpression is not evaluated during tree transformation.
@@ -123,7 +124,13 @@ case class ApproximatePercentile(
     val value = child.eval(inputRow)
     // Ignore empty rows, for example: percentile_approx(null)
     if (value != null) {
-      buffer.add(value.asInstanceOf[Double])
+      // Convert the value to a double value
+      val doubleValue = child.dataType match {
+        case DateType => value.asInstanceOf[Int].toDouble
+        case TimestampType => value.asInstanceOf[Long].toDouble
+        case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
+      }
+      buffer.add(doubleValue)
     }
     buffer
   }
@@ -134,7 +141,18 @@ case class ApproximatePercentile(
   }
 
   override def eval(buffer: PercentileDigest): Any = {
-    val result = buffer.getPercentiles(percentages)
+    val doubleResult = buffer.getPercentiles(percentages)
+    val result = child.dataType match {
+      case DateType => doubleResult.map(_.toInt)
+      case TimestampType => doubleResult.map(_.toLong)
+      case ByteType => doubleResult.map(_.toByte)
+      case ShortType => doubleResult.map(_.toShort)
+      case IntegerType => doubleResult.map(_.toInt)
+      case LongType => doubleResult.map(_.toLong)
+      case FloatType => doubleResult.map(_.toFloat)
+      case DoubleType => doubleResult
+      case _: DecimalType => doubleResult.map(Decimal(_))
+    }
     if (result.length == 0) {
       null
     } else if (returnPercentileArray) {
@@ -156,7 +174,7 @@ case class ApproximatePercentile(
   override def nullable: Boolean = true
 
   override def dataType: DataType = {
-    if (returnPercentileArray) ArrayType(DoubleType, false) else DoubleType
+    if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
 
   override def prettyName: String = "percentile_approx"
