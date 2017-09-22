@@ -741,7 +741,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.overwrite</code></td>
-  <td>true</td>
+  <td>false</td>
   <td>
     Whether to overwrite any existing files.
   </td>
@@ -750,7 +750,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.eventLog.buffer.kb</code></td>
   <td>100</td>
   <td>
-    Buffer size to use when writing to output streams.
+    Buffer size to use when writing to output streams.Buffer size in KB.
   </td>
 </tr>
 <tr>
