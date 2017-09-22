@@ -351,7 +351,7 @@ private[spark] object EventLoggingListener extends Logging {
     // Since we sanitize the app ID to not include periods, it is safe to split on it
     val logName = log.getName.stripSuffix(IN_PROGRESS)
     val codecName: Option[String] = logName.split("\\.").tail.lastOption
-    
+
     try {
       val codec = codecName.map { c =>
         codecMap.getOrElseUpdate(c, CompressionCodec.createCodec(new SparkConf, c))
