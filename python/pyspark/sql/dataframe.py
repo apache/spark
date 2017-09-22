@@ -1760,6 +1760,7 @@ class DataFrame(object):
                       "if using spark.sql.execution.arrow.enable=true"
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
+            import numpy as np
             dtype = {}
             nullable_int_columns = set()
 
