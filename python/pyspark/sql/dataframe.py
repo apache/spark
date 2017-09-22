@@ -1761,31 +1761,33 @@ class DataFrame(object):
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
             dtype = {}
-            columns_with_null_int = set()
+            nullable_int_columns = set()
 
-            def null_handler(rows, columns_with_null_int):
+            def null_handler(rows, nullable_int_columns):
+                requires_double_precision = set()
                 for row in rows:
                     row = row.asDict()
-                    for column in columns_with_null_int:
+                    for column in nullable_int_columns:
                         val = row[column]
                         dt = dtype[column]
-                        if val is not None:
+                        if val is None and dt not in (np.float32, np.float64):
+                            dt = np.float64 if column in requires_double_precision else np.float32
+                            dtype[column] = dt
+                        elif val is not None:
                             if abs(val) > 16777216:  # Max value before np.float32 loses precision.
-                                val = np.float64(val)
-                                dt = np.float64
-                                dtype[column] = np.float64
-                            else:
-                                val = np.float32(val)
-                            row[column] = val
+                                requires_double_precision.add(column)
                     row = Row(**row)
                     yield row
+                for column in nullable_int_columns:
+                    dt = dtype[column]
+                    if np.float32 == dt and column in requires_double_precision:
+                        dtype[column] = np.float64
             row_handler = lambda x, y: x
             for field in self.schema:
                 pandas_type = _to_corrected_pandas_type(field.dataType)
                 if pandas_type in (np.int8, np.int16, np.int32) and field.nullable:
-                    columns_with_null_int.add(field.name)
+                    nullable_int_columns.add(field.name)
                     row_handler = null_handler
-                    pandas_type = np.float32
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
             collected_rows = row_handler(self.collect(), columns_with_null_int)
