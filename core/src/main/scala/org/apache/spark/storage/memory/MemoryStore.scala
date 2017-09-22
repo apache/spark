@@ -544,11 +544,12 @@ private[spark] class MemoryStore(
       }
 
       if (freedMemory >= space) {
-        val successfulBlocks = ArrayBuffer[BlockId]()
+        var lastSuccessfulBlock = -1
         try {
           logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
             s"(${Utils.bytesToString(freedMemory)} bytes)")
-          for (blockId <- selectedBlocks) {
+          (0 until selectedBlocks.size).foreach { idx =>
+            val blockId = selectedBlocks(idx)
             val entry = entries.synchronized {
               entries.get(blockId)
             }
@@ -559,7 +560,7 @@ private[spark] class MemoryStore(
               dropBlock(blockId, entry)
               afterDropAction(blockId)
             }
-            successfulBlocks += blockId
+            lastSuccessfulBlock = idx
           }
           logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
             s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
@@ -567,15 +568,11 @@ private[spark] class MemoryStore(
         } finally {
           // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
           // with InterruptedException
-          if (successfulBlocks.size != selectedBlocks.size) {
-            val blocksToClean = selectedBlocks -- successfulBlocks
-            blocksToClean.foreach { id =>
-              // some of the blocks may have already been unlocked, or completely removed
-              blockInfoManager.get(id).foreach { info =>
-                if (info.readerCount > 0 || info.writerTask != BlockInfo.NO_WRITER) {
-                  blockInfoManager.unlock(id)
-                }
-              }
+          if (lastSuccessfulBlock != selectedBlocks.size - 1) {
+            // the blocks we didn't process successfully are still locked, so we have to unlock them
+            (lastSuccessfulBlock + 1 until selectedBlocks.size).foreach { idx =>
+              val blockId = selectedBlocks(idx)
+              blockInfoManager.unlock(blockId)
             }
           }
         }
