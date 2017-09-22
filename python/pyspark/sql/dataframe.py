@@ -1891,13 +1891,40 @@ class DataFrame(object):
                       "if using spark.sql.execution.arrow.enable=true"
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
+            import numpy as np
             dtype = {}
+            nullable_int_columns = set()
+
+            def null_handler(rows, nullable_int_columns):
+                from pyspark.sql import Row
+                requires_double_precision = set()
+                for row in rows:
+                    row = row.asDict()
+                    for column in nullable_int_columns:
+                        val = row[column]
+                        dt = dtype[column]
+                        if val is None and dt not in (np.float32, np.float64):
+                            dt = np.float64 if column in requires_double_precision else np.float32
+                            dtype[column] = dt
+                        elif val is not None:
+                            if abs(val) > 16777216:  # Max value before np.float32 loses precision.
+                                requires_double_precision.add(column)
+                    row = Row(**row)
+                    yield row
+                for column in nullable_int_columns:
+                    dt = dtype[column]
+                    if np.float32 == dt and column in requires_double_precision:
+                        dtype[column] = np.float64
+            row_handler = lambda x, y: x
             for field in self.schema:
                 pandas_type = _to_corrected_pandas_type(field.dataType)
+                if pandas_type in (np.int8, np.int16, np.int32) and field.nullable:
+                    nullable_int_columns.add(field.name)
+                    row_handler = null_handler
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
-
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+            collected_rows = row_handler(self.collect(), nullable_int_columns)
+            pdf = pd.DataFrame.from_records(collected_rows, columns=self.columns)
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)
@@ -1947,13 +1974,14 @@ def _to_corrected_pandas_type(dt):
     This method gets the corrected data type for Pandas if that type may be inferred uncorrectly.
     """
     import numpy as np
-    if type(dt) == ByteType:
+    dt = type(dt)
+    if dt == ByteType:
         return np.int8
-    elif type(dt) == ShortType:
+    elif dt == ShortType:
         return np.int16
-    elif type(dt) == IntegerType:
+    elif dt == IntegerType:
         return np.int32
-    elif type(dt) == FloatType:
+    elif dt == FloatType:
         return np.float32
     else:
         return None
