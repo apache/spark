@@ -31,6 +31,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * SQL column, and a nested Parquet column corresponds to a [[StructField]].
  */
 private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
+  private val schemaConverter = new ParquetSchemaConverter()
+
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
@@ -46,15 +48,17 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
           val prunedSchema = requestedFields
             .map { case (field, _) => StructType(Array(field)) }
             .reduceLeft(_ merge _)
-          val dataSchemaFieldNames = dataSchema.fieldNames
+          val dataSchemaFieldNames = dataSchema.fieldNames.toSet
           val prunedDataSchema =
             StructType(prunedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
-          val parquetDataFields = dataSchema.fields.toSet
-          val prunedDataFields = prunedDataSchema.fields.toSet
 
-          // If the original Parquet relation data fields are different from the
-          // pruned data fields, continue. Otherwise, return [[op]]
-          if (parquetDataFields != prunedDataFields) {
+          // If the original Parquet relation data fields are different from the pruned data fields,
+          // continue. Otherwise, return [[op]]. We effect this comparison by counting the number of
+          // paths in each schema's Parquet message type. It's a rather heavy-handed way to do this,
+          // but it's easy and I can't think of an easy way to compare two struct types ignoring
+          // the order of their fields, recursively.
+          if (schemaConverter.convert(dataSchema).getPaths.size !=
+            schemaConverter.convert(prunedDataSchema).getPaths.size) {
             val prunedParquetRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
 
@@ -91,7 +95,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
               }
 
             val nonDataPartitionColumnNames =
-              partitionSchema.filterNot(parquetDataFields.contains).map(_.name)
+              partitionSchema.map(_.name).filterNot(dataSchemaFieldNames.contains).toSet
 
             // Construct the new projections of our [[Project]] by
             // rewriting the original projections
