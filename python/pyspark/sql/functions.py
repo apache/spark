@@ -25,6 +25,20 @@ import functools
 if sys.version < "3":
     from itertools import imap as map
 
+_have_pandas = False
+try:
+    import pandas
+    _have_pandas = True
+except:
+    pass
+
+_have_arrow = False
+try:
+    import pyarrow
+    _have_arrow = True
+except:
+    pass
+
 from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
@@ -2044,7 +2058,7 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, vectorized=False):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
@@ -2058,6 +2072,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+        self._vectorized = vectorized
 
     @property
     def returnType(self):
@@ -2089,7 +2104,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt, self._vectorized)
         return judf
 
     def __call__(self, *cols):
@@ -2123,6 +2138,53 @@ class UserDefinedFunction(object):
         return wrapper
 
 
+def _udf(f, returnType, vectorized):
+    udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
+    return udf_obj._wrapped()
+
+
+if _have_pandas and _have_arrow:
+
+    @since(2.3)
+    def pandas_udf(f=None, returnType=StringType()):
+        """
+        Creates a :class:`Column` expression representing a vectorized user defined function (UDF).
+
+        .. note:: The vectorized user-defined functions must be deterministic. Due to optimization,
+            duplicate invocations may be eliminated or the function may even be invoked more times
+            than it is present in the query.
+
+        :param f: python function if used as a standalone function
+        :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+        >>> from pyspark.sql.types import LongType
+        >>> add = pandas_udf(lambda x, y: x + y, LongType())
+        >>> @pandas_udf(returnType=LongType())
+        ... def mul(x, y):
+        ...     return x * y
+        ...
+        >>> import pandas as pd
+        >>> ones = pandas_udf(lambda size: pd.Series(1).repeat(size), LongType())
+
+        >>> df = spark.createDataFrame([(1, 2), (3, 4)], ("a", "b"))
+        >>> df.select(add("a", "b").alias("add(a, b)"), mul("a", "b"), ones().alias("ones")).show()
+        +---------+---------+----+
+        |add(a, b)|mul(a, b)|ones|
+        +---------+---------+----+
+        |        3|        2|   1|
+        |        7|       12|   1|
+        +---------+---------+----+
+        """
+        # decorator @pandas_udf, @pandas_udf() or @pandas_udf(dataType())
+        if f is None or isinstance(f, (str, DataType)):
+            # If DataType has been passed as a positional argument
+            # for decorator use it as a returnType
+            return_type = f or returnType
+            return functools.partial(_udf, returnType=return_type, vectorized=True)
+        else:
+            return _udf(f=f, returnType=returnType, vectorized=True)
+
+
 @since(1.3)
 def udf(f=None, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
@@ -2154,18 +2216,14 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType)
-        return udf_obj._wrapped()
-
     # decorator @udf, @udf() or @udf(dataType())
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type)
+        return functools.partial(_udf, returnType=return_type, vectorized=False)
     else:
-        return _udf(f=f, returnType=returnType)
+        return _udf(f=f, returnType=returnType, vectorized=False)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']

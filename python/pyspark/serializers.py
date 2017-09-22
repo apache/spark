@@ -577,6 +577,39 @@ class UTF8Deserializer(Serializer):
         return "UTF8Deserializer(%s)" % self.use_unicode
 
 
+class VectorizedSerializer(Serializer):
+
+    """
+    (De)serializes a vectorized(Apache Arrow) stream.
+    """
+
+    def load_stream(self, stream):
+        import pyarrow as pa
+        reader = pa.open_stream(stream)
+        for batch in reader:
+            vectors = [batch[col].to_pandas() for col in xrange(batch.num_columns)]
+            yield [batch.num_rows] + vectors
+
+    def dump_stream(self, iterator, stream):
+        import pandas as pd
+        import pyarrow as pa
+        # the schema is set at worker.py#read_vectorized_udfs
+        writer = pa.RecordBatchStreamWriter(stream, self.schema)
+        names = self.schema.names
+        types = [f.type for f in self.schema]
+        # todo: verify the type of the arrays returned by UDF.
+        try:
+            for arrays in iterator:
+                vectors = [pa.Array.from_pandas(array.astype(t.to_pandas_dtype(), copy=False),
+                                                mask=pd.isnull(array), type=t)
+                           for array, t in zip(arrays, types)]
+                batch = pa.RecordBatch.from_arrays(vectors, names)
+                writer.write_batch(batch)
+        finally:
+            # todo: does arrow close the socket?
+            writer.close()
+
+
 def read_long(stream):
     length = stream.read(8)
     if not length:

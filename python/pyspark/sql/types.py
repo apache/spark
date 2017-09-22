@@ -1597,6 +1597,35 @@ register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 
 
+def toArrowType(dt):
+    import pyarrow as pa
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    return arrow_type
+
+
+def toArrowSchema(types):
+    import pyarrow as pa
+    fields = [pa.field("c_" + str(i), toArrowType(types[i])) for i in range(len(types))]
+    return pa.schema(fields)
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext
