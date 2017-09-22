@@ -39,7 +39,7 @@ public class HiveHasher {
     return (int) ((input >>> 32) ^ input);
   }
 
-  public static int hashUnsafeBytesMB(MemoryBlock base, long offset, int lengthInBytes) {
+  public static int hashUnsafeBlock(MemoryBlock base, long offset, int lengthInBytes) {
     return hashUnsafeBytes(base.getBaseObject(), offset, lengthInBytes);
   }
 

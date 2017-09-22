@@ -60,7 +60,7 @@ public final class Murmur3_x86_32 {
     return fmix(h1, lengthInBytes);
   }
 
-  public static int hashUnsafeBytesMB(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+  public static int hashUnsafeBlock(MemoryBlock base, long offset, int lengthInBytes, int seed) {
     return hashUnsafeBytes(base.getBaseObject(), offset, lengthInBytes, seed);
   }
 

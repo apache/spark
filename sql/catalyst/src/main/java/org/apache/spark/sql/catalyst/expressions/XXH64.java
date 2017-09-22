@@ -86,7 +86,7 @@ public final class XXH64 {
     return hashUnsafeBytes(base, offset, length, seed);
   }
 
-  public static long hashUnsafeBytesMB(MemoryBlock base, long offset, int length, long seed) {
+  public static long hashUnsafeBlock(MemoryBlock base, long offset, int length, long seed) {
     return hashUnsafeBytes(base.getBaseObject(), offset, length, seed);
   }
 
