@@ -216,4 +216,12 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       assert(array.get(i, arrayType).asInstanceOf[ArrayData].toIntArray() === Array(i))
     }
   }
+
+  test("[SPARK-22092] off-heap column vector reallocation corrupts struct nullability") {
+    val structType = new StructType().add("int", IntegerType).add("double", DoubleType)
+    testVector = new OffHeapColumnVector(8, structType)
+    (0 until 8).foreach(i => if (i % 2 == 0) testVector.putNull(i) else testVector.putNotNull(i))
+    testVector.reserve(16)
+    (0 until 8).foreach(i => assert(testVector.isNullAt(i) == (i % 2 == 0)))
+  }
 }
