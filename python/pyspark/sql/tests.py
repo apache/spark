@@ -3256,11 +3256,9 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
 
     def test_vectorized_udf_zero_parameter(self):
         from pyspark.sql.functions import pandas_udf
-        import pandas as pd
-        df = self.spark.range(10)
-        f0 = pandas_udf(lambda **kwargs: pd.Series(1).repeat(kwargs['length']), LongType())
-        res = df.select(f0())
-        self.assertEquals(df.select(lit(1)).collect(), res.collect())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, '0-parameter pandas_udfs.*not.*supported'):
+                pandas_udf(lambda: 1, LongType())
 
     def test_vectorized_udf_datatype_string(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -3308,12 +3306,12 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         from pyspark.sql.functions import pandas_udf, col
         import pandas as pd
         df = self.spark.range(10)
-        raise_exception = pandas_udf(lambda: pd.Series(1), LongType())
+        raise_exception = pandas_udf(lambda i: pd.Series(1), LongType())
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
                     'Result vector from pandas_udf was not the required length'):
-                df.select(raise_exception()).collect()
+                df.select(raise_exception(col('id'))).collect()
 
     def test_vectorized_udf_mix_udf(self):
         from pyspark.sql.functions import pandas_udf, udf, col

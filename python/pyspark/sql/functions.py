@@ -2186,11 +2186,9 @@ def pandas_udf(f=None, returnType=StringType()):
     # TODO: doctest
     """
     import inspect
-    # If function "f" does not define the optional kwargs, then wrap with a kwargs placeholder
-    if inspect.getargspec(f).keywords is None:
-        return _create_udf(lambda *a, **kwargs: f(*a), returnType=returnType, vectorized=True)
-    else:
-        return _create_udf(f, returnType=returnType, vectorized=True)
+    if not inspect.getargspec(f).args:
+        raise NotImplementedError("0-parameter pandas_udfs are not currently supported")
+    return _create_udf(f, returnType=returnType, vectorized=True)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
