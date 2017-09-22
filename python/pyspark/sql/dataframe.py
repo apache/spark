@@ -1775,9 +1775,6 @@ class DataFrame(object):
                                 dtype[column] = np.float64
                             else:
                                 val = np.float32(val)
-                                if dt not in (np.float32, np.float64):
-                                    dt = np.float32
-                                    dtype[column] = np.float32
                             row[column] = val
                     row = Row(**row)
                     yield row
