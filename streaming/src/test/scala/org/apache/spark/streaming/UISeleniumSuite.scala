@@ -121,11 +121,11 @@ class UISeleniumSuite
         h4Text.exists(_.matches("Completed Batches \\(last \\d+ out of \\d+\\)")) should be (true)
 
         findAll(cssSelector("""#active-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Output Ops: Succeeded/Total", "Status")
         }
         findAll(cssSelector("""#completed-batches-table th""")).map(_.text).toSeq should be {
-          List("Batch Time", "Input Size", "Scheduling Delay (?)", "Processing Time (?)",
+          List("Batch Time", "Records", "Scheduling Delay (?)", "Processing Time (?)",
             "Total Delay (?)", "Output Ops: Succeeded/Total")
         }
 

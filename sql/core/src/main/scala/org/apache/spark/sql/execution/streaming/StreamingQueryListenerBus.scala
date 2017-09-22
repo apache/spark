@@ -40,7 +40,7 @@ class StreamingQueryListenerBus(sparkListenerBus: LiveListenerBus)
 
   import StreamingQueryListener._
 
-  sparkListenerBus.addListener(this)
+  sparkListenerBus.addToSharedQueue(this)
 
   /**
    * RunIds of active queries whose events are supposed to be forwarded by this ListenerBus

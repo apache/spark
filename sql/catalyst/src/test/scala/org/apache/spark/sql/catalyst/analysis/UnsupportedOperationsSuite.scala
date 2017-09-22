@@ -383,11 +383,27 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append
   )
 
-  // Inner joins: Stream-stream not supported
+  // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
-    "inner join",
+    "single inner join in append mode",
     _.join(_, joinType = Inner),
-    streamStreamSupported = false)
+    outputMode = Append,
+    streamStreamSupported = true)
+
+  testBinaryOperationInStreamingPlan(
+    "multiple inner joins in append mode",
+    (x: LogicalPlan, y: LogicalPlan) => {
+      x.join(y, joinType = Inner).join(streamRelation, joinType = Inner)
+    },
+    outputMode = Append,
+    streamStreamSupported = true)
+
+  testBinaryOperationInStreamingPlan(
+    "inner join in update mode",
+    _.join(_, joinType = Inner),
+    outputMode = Update,
+    streamStreamSupported = false,
+    expectedMsg = "inner join")
 
   // Full outer joins: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
