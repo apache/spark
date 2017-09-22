@@ -855,7 +855,7 @@ class CrossValidatorTests(SparkSessionTestCase):
         cvSerialModel = cv.fit(dataset)
         cv.setParallelism(2)
         cvParallelModel = cv.fit(dataset)
-        self.assertEqual(sorted(cvSerialModel.avgMetrics), sorted(cvParallelModel.avgMetrics))
+        self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
 
     def test_save_load_nested_estimator(self):
         temp_path = tempfile.mkdtemp()
@@ -1023,8 +1023,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         tvsSerialModel = tvs.fit(dataset)
         tvs.setParallelism(2)
         tvsParallelModel = tvs.fit(dataset)
-        self.assertEqual(sorted(tvsSerialModel.validationMetrics),
-                         sorted(tvsParallelModel.validationMetrics))
+        self.assertEqual(tvsSerialModel.validationMetrics, tvsParallelModel.validationMetrics)
 
     def test_save_load_nested_estimator(self):
         # This tests saving and loading the trained model only.

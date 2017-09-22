@@ -16,14 +16,13 @@
 #
 import itertools
 import numpy as np
-
 from multiprocessing.pool import ThreadPool
 
 from pyspark import since, keyword_only
 from pyspark.ml import Estimator, Model
 from pyspark.ml.common import _py2java
 from pyspark.ml.param import Params, Param, TypeConverters
-from pyspark.ml.param.shared import HasSeed, HasParallelism
+from pyspark.ml.param.shared import HasParallelism, HasSeed
 from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.sql.functions import rand
@@ -258,10 +257,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         df = dataset.select("*", rand(seed).alias(randCol))
         metrics = [0.0] * numModels
 
-        parallelism = self.getParallelism()
-        if parallelism < 1:
-            raise ValueError("parallelism should >= 1.")
-        pool = ThreadPool(processes=min(parallelism, numModels))
+        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
 
         for i in range(nFolds):
             validateLB = i * h
@@ -277,8 +273,8 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
                 return metric
 
             currentFoldMetrics = pool.map(singleTrain, epm)
-            for k in range(numModels):
-                metrics[k] += (currentFoldMetrics[k] / nFolds)
+            for j in range(numModels):
+                metrics[j] += (currentFoldMetrics[j] / nFolds)
             validation.unpersist()
             train.unpersist()
 
@@ -530,10 +526,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
             metric = eva.evaluate(model.transform(validation, paramMap))
             return metric
 
-        parallelism = self.getParallelism()
-        if parallelism < 1:
-            raise ValueError("parallelism should >= 1.")
-        pool = ThreadPool(processes=min(parallelism, numModels))
+        pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         metrics = pool.map(singleTrain, epm)
         train.unpersist()
         validation.unpersist()
