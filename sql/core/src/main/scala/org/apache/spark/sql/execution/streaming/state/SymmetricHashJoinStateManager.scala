@@ -89,61 +89,124 @@ class SymmetricHashJoinStateManager(
   /**
    * Remove using a predicate on keys. See class docs for more context and implement details.
    */
-  def removeByKeyCondition(condition: UnsafeRow => Boolean): Unit = {
-    val allKeyToNumValues = keyToNumValues.iterator
+  def removeByKeyCondition(condition: UnsafeRow => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
+    new NextIterator[(UnsafeRow, UnsafeRow)] {
 
-    while (allKeyToNumValues.hasNext) {
-      val keyToNumValue = allKeyToNumValues.next
-      if (condition(keyToNumValue.key)) {
-        keyToNumValues.remove(keyToNumValue.key)
-        keyWithIndexToValue.removeAllValues(keyToNumValue.key, keyToNumValue.numValue)
+      private val allKeyToNumValues = keyToNumValues.iterator
+
+      private var currentKeyToNumValue: Option[KeyAndNumValues] = None
+      private var currentValues: Option[Iterator[(UnsafeRow, Long)]] = None
+
+      private def currentKey = currentKeyToNumValue.get.key
+
+      private def getAndRemoveValue() = {
+        val (current, index) = currentValues.get.next()
+        keyWithIndexToValue.remove(currentKey, index)
+        (currentKey, current)
       }
+
+      override def getNext(): (UnsafeRow, UnsafeRow) = {
+        if (currentValues.nonEmpty && currentValues.get.hasNext) {
+          return getAndRemoveValue()
+        } else {
+          while (allKeyToNumValues.hasNext) {
+            currentKeyToNumValue = Some(allKeyToNumValues.next())
+            if (condition(currentKey)) {
+              currentValues = Some(keyWithIndexToValue.getAllWithIndex(
+                currentKey, currentKeyToNumValue.get.numValue))
+              keyToNumValues.remove(currentKey)
+
+              if (currentValues.nonEmpty && currentValues.get.hasNext) {
+                return getAndRemoveValue()
+              }
+            }
+          }
+        }
+
+        finished = true
+        null
+      }
+
+      override def close: Unit = {}
     }
   }
 
   /**
    * Remove using a predicate on values. See class docs for more context and implementation details.
    */
-  def removeByValueCondition(condition: UnsafeRow => Boolean): Unit = {
-    val allKeyToNumValues = keyToNumValues.iterator
+  def removeByValueCondition(condition: UnsafeRow => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
+    new NextIterator[(UnsafeRow, UnsafeRow)] {
 
-    while (allKeyToNumValues.hasNext) {
-      val keyToNumValue = allKeyToNumValues.next
-      val key = keyToNumValue.key
+      private val allKeyToNumValues = keyToNumValues.iterator
 
-      var numValues: Long = keyToNumValue.numValue
+      private var currentKeyToNumValue: Option[KeyAndNumValues] = None
+
+      private def currentKey = currentKeyToNumValue.get.key
+
+      var numValues: Long = 0L
       var index: Long = 0L
       var valueRemoved: Boolean = false
       var valueForIndex: UnsafeRow = null
 
-      while (index < numValues) {
-        if (valueForIndex == null) {
-          valueForIndex = keyWithIndexToValue.get(key, index)
+      private def cleanupCurrentKey(): Unit = {
+        if (valueRemoved) {
+          if (numValues >= 1) {
+            keyToNumValues.put(currentKey, numValues)
+          } else {
+            keyToNumValues.remove(currentKey)
+          }
         }
-        if (condition(valueForIndex)) {
+
+        numValues = 0
+        index = 0
+        valueRemoved = false
+        valueForIndex = null
+      }
+
+      override def getNext(): (UnsafeRow, UnsafeRow) = {
+        // TODO: there has to be a better way to express this but I don't know what it is
+        while (valueForIndex == null && (index < numValues || allKeyToNumValues.hasNext)) {
+          if (index < numValues) {
+            val current = keyWithIndexToValue.get(currentKey, index)
+            if (condition(current)) {
+              valueForIndex = current
+            } else {
+              index += 1
+            }
+          } else {
+            cleanupCurrentKey()
+
+            currentKeyToNumValue = Some(allKeyToNumValues.next())
+            numValues = currentKeyToNumValue.get.numValue
+          }
+        }
+
+        // If there's still no value, clean up and finish. There aren't any more available.
+        if (valueForIndex == null) {
+          cleanupCurrentKey()
+          finished = true
+          return null
+        } else {
+          val returnValue = valueForIndex
+          // The backing store is arraylike - we as the caller are responsible for filling back in
+          // any hole.
           if (numValues > 1) {
-            val valueAtMaxIndex = keyWithIndexToValue.get(key, numValues - 1)
-            keyWithIndexToValue.put(key, index, valueAtMaxIndex)
-            keyWithIndexToValue.remove(key, numValues - 1)
+            val valueAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
+            keyWithIndexToValue.put(currentKey, index, valueAtMaxIndex)
+            keyWithIndexToValue.remove(currentKey, numValues - 1)
             valueForIndex = valueAtMaxIndex
           } else {
-            keyWithIndexToValue.remove(key, 0)
+            keyWithIndexToValue.remove(currentKey, 0)
             valueForIndex = null
           }
           numValues -= 1
           valueRemoved = true
-        } else {
-          valueForIndex = null
-          index += 1
+
+          return (currentKey, returnValue)
         }
       }
-      if (valueRemoved) {
-        if (numValues >= 1) {
-          keyToNumValues.put(key, numValues)
-        } else {
-          keyToNumValues.remove(key)
-        }
-      }
+
+      override def close: Unit = {}
     }
   }
 
@@ -322,6 +385,27 @@ class SymmetricHashJoinStateManager(
             val value = stateStore.get(keyWithIndex)
             index += 1
             value
+          }
+        }
+
+        override protected def close(): Unit = {}
+      }
+    }
+
+    /** Get all the values for key and all indices, in a (value, index) tuple. */
+    def getAllWithIndex(key: UnsafeRow, numValues: Long): Iterator[(UnsafeRow, Long)] = {
+      var index = 0
+      new NextIterator[(UnsafeRow, Long)] {
+        override protected def getNext(): (UnsafeRow, Long) = {
+          if (index >= numValues) {
+            finished = true
+            null
+          } else {
+            val keyWithIndex = keyWithIndexRow(key, index)
+            val value = stateStore.get(keyWithIndex)
+            index += 1
+            // return original index
+            (value, index - 1)
           }
         }
 

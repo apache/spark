@@ -233,16 +233,31 @@ object UnsupportedOperationChecker {
                 throwError("Full outer joins with streaming DataFrames/Datasets are not supported")
               }
 
-            case LeftOuter | LeftSemi | LeftAnti =>
+            case LeftSemi | LeftAnti =>
               if (right.isStreaming) {
-                throwError("Left outer/semi/anti joins with a streaming DataFrame/Dataset " +
-                    "on the right is not supported")
+                throwError("Left semi/anti joins with a streaming DataFrame/Dataset " +
+                    "on the right are not supported")
               }
 
-            case RightOuter =>
-              if (left.isStreaming) {
-                throwError("Right outer join with a streaming DataFrame/Dataset on the left is " +
-                    "not supported")
+            // We support left and right outer streaming joins only in the stream+stream case.
+            case LeftOuter | RightOuter =>
+              if (joinType == LeftOuter && !left.isStreaming && right.isStreaming) {
+                throwError("Left outer join with a streaming DataFrame/Dataset " +
+                  "on the right and non-streaming on the left is not supported")
+              }
+              if (joinType == RightOuter && left.isStreaming && !right.isStreaming) {
+                throwError("Right outer join with a streaming DataFrame/Dataset on the left and " +
+                    "non-streaming on the right not supported")
+              }
+
+              if (left.isStreaming && right.isStreaming) {
+                val hasWatermark = subPlan.collectFirst {
+                  case _: EventTimeWatermark => true
+                }.isDefined
+
+                if (!hasWatermark) {
+                  throwError("Streaming outer join must have a watermark defined")
+                }
               }
 
             case NaturalJoin(_) | UsingJoin(_, _) =>
