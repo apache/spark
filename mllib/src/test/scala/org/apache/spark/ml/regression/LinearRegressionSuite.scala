@@ -161,7 +161,7 @@ class LinearRegressionSuite
     assert(lir.getFitIntercept)
     assert(lir.getStandardization)
     assert(lir.getSolver === "auto")
-    assert(lir.getLoss === "leastSquares")
+    assert(lir.getLoss === "squaredError")
     assert(lir.getEpsilon === 1.35)
     val model = lir.fit(datasetWithDenseFeature)
 
@@ -869,7 +869,7 @@ class LinearRegressionSuite
       (1.0, 0.21, true, true)
     )
 
-    // For leastSquares loss
+    // For squaredError loss
     for (solver <- Seq("auto", "l-bfgs", "normal");
          (elasticNetParam, regParam, fitIntercept, standardization) <- testParams) {
       val estimator = new LinearRegression()
@@ -1211,7 +1211,7 @@ class LinearRegressionSuite
     assert(model2.intercept === interceptPy2)
   }
 
-  test("huber loss model match leastSquares loss for large m") {
+  test("huber loss model match squared error for large m") {
     val trainer1 = new LinearRegression().setLoss("huber").setEpsilon(1E5)
     val model1 = trainer1.fit(datasetWithOutlier)
     val trainer2 = new LinearRegression()

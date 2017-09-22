@@ -25,8 +25,8 @@ import org.apache.spark.ml.linalg.Vector
  * as used in robust regression for samples in sparse or dense vector in an online fashion.
  *
  * The huber loss function based on:
- * Art B. Owen (2006), A robust hybrid of lasso and ridge regression.
- * (http://statweb.stanford.edu/~owen/reports/hhu.pdf)
+ * <a href="http://statweb.stanford.edu/~owen/reports/hhu.pdf">Art B. Owen (2006),
+ * A robust hybrid of lasso and ridge regression</a>.
  *
  * Two HuberAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.
@@ -55,7 +55,10 @@ import org.apache.spark.ml.linalg.Vector
  *   $$
  * </blockquote>
  *
- * It is advised to set the parameter $\epsilon$ to 1.35 to achieve 95% statistical efficiency.
+ * It is advised to set the parameter $\epsilon$ to 1.35 to achieve 95% statistical efficiency
+ * for normally distributed data. Please refer to chapter 2 of
+ * <a href="http://statweb.stanford.edu/~owen/reports/hhu.pdf">
+ * A robust hybrid of lasso and ridge regression</a> for more detail.
  *
  * @param fitIntercept Whether to fit an intercept term.
  * @param epsilon The shape parameter to control the amount of robustness.
@@ -112,11 +115,11 @@ private[ml] class HuberAggregator(
         features.foreachActive { (index, value) =>
           if (featuresStd(index) != 0.0 && value != 0.0) {
             gradientSumArray(index) +=
-              -1.0 * weight * linearLoss / sigma * (value / featuresStd(index))
+              -1.0 * weight * (linearLoss / sigma) * (value / featuresStd(index))
           }
         }
         if (fitIntercept) {
-          gradientSumArray(dim - 2) += -1.0 * weight * linearLoss / sigma
+          gradientSumArray(dim - 2) += -1.0 * weight * (linearLoss / sigma)
         }
         gradientSumArray(dim - 1) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {

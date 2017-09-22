@@ -131,9 +131,9 @@ class HuberAggregatorSuite extends SparkFunSuite with MLlibTestSparkContext {
       if (math.abs(linearLoss) <= sigma * epsilon) {
         features.toArray.indices.foreach { i =>
           gradientCoef(i) +=
-            -1.0 * weight * linearLoss / sigma * (features(i) / featuresStd(i))
+            -1.0 * weight * (linearLoss / sigma) * (features(i) / featuresStd(i))
         }
-        gradientCoef(2) += -1.0 * weight * linearLoss / sigma
+        gradientCoef(2) += -1.0 * weight * (linearLoss / sigma)
         gradientCoef(3) += 0.5 * weight * (1.0 - math.pow(linearLoss / sigma, 2.0))
       } else {
         val sign = if (linearLoss >= 0) -1.0 else 1.0

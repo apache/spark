@@ -72,14 +72,14 @@ private[regression] trait LinearRegressionParams extends PredictorParams
 
   /**
    * The loss function to be optimized.
-   * Supported options: "leastSquares" and "huber".
-   * Default: "leastSquares"
+   * Supported options: "squaredError" and "huber".
+   * Default: "squaredError"
    *
    * @group param
    */
   @Since("2.3.0")
   final override val loss: Param[String] = new Param[String](this, "loss", "The loss function to" +
-    s" be optimized. Supported options: ${supportedLosses.mkString(", ")}. (Default leastSquares)",
+    s" be optimized. Supported options: ${supportedLosses.mkString(", ")}. (Default squaredError)",
     ParamValidators.inArray[String](supportedLosses))
 
   /**
@@ -89,12 +89,14 @@ private[regression] trait LinearRegressionParams extends PredictorParams
    * Default is 1.35 to get as much robustness as possible while retaining
    * 95% statistical efficiency for normally distributed data.
    * Only valid when "loss" is "huber".
+   *
+   * @group expertParam
    */
   @Since("2.3.0")
   final val epsilon = new DoubleParam(this, "epsilon", "The shape parameter to control the " +
     "amount of robustness. Must be > 1.0.", ParamValidators.gt(1.0))
 
-  /** @group getParam */
+  /** @group getExpertParam */
   @Since("2.3.0")
   def getEpsilon: Double = $(epsilon)
 
@@ -118,7 +120,7 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  *
  * The learning objective is to minimize the specified loss function, with regularization.
  * This supports two loss functions:
- *  - leastSquares (a.k.a squared loss)
+ *  - squaredError (a.k.a squared loss)
  *  - huber
  *
  * This supports multiple types of regularization:
@@ -253,19 +255,19 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
   /**
    * Sets the value of param [[loss]].
-   * Default is "leastSquares".
+   * Default is "squaredError".
    *
    * @group setParam
    */
   @Since("2.3.0")
   def setLoss(value: String): this.type = set(loss, value)
-  setDefault(loss -> LeastSquares)
+  setDefault(loss -> SquaredError)
 
   /**
    * Sets the value of param [[epsilon]].
    * Default is 1.35.
    *
-   * @group setParam
+   * @group setExpertParam
    */
   @Since("2.3.0")
   def setEpsilon(value: Double): this.type = set(epsilon, value)
@@ -284,10 +286,10 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val instr = Instrumentation.create(this, dataset)
     instr.logParams(labelCol, featuresCol, weightCol, predictionCol, solver, tol, elasticNetParam,
-      fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss)
+      fitIntercept, maxIter, regParam, standardization, aggregationDepth, loss, epsilon)
     instr.logNumFeatures(numFeatures)
 
-    if ($(loss) == LeastSquares && (($(solver) == Auto &&
+    if ($(loss) == SquaredError && (($(solver) == Auto &&
       numFeatures <= WeightedLeastSquares.MAX_NUM_FEATURES) || $(solver) == Normal)) {
       // For low dimensional data, WeightedLeastSquares is more efficient since the
       // training algorithm only requires one pass through the data. (SPARK-10668)
@@ -394,7 +396,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     // Since we implicitly do the feature scaling when we compute the cost function
     // to improve the convergence, the effective regParam will be changed.
     val effectiveRegParam = $(loss) match {
-      case LeastSquares => $(regParam) / yStd
+      case SquaredError => $(regParam) / yStd
       case Huber => $(regParam)
     }
     val effectiveL1RegParam = $(elasticNetParam) * effectiveRegParam
@@ -410,7 +412,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val costFun = $(loss) match {
-      case LeastSquares =>
+      case SquaredError =>
         val getAggregatorFunc = new LeastSquaresAggregator(yStd, yMean, $(fitIntercept),
           bcFeaturesStd, bcFeaturesMean)(_)
         new RDDLossFunction(instances, getAggregatorFunc, regularization, $(aggregationDepth))
@@ -420,7 +422,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val optimizer = $(loss) match {
-      case LeastSquares =>
+      case SquaredError =>
         if ($(elasticNetParam) == 0.0 || effectiveRegParam == 0.0) {
           new BreezeLBFGS[BDV[Double]]($(maxIter), 10, $(tol))
         } else {
@@ -449,7 +451,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     }
 
     val initialValues = $(loss) match {
-      case LeastSquares =>
+      case SquaredError =>
         Vectors.zeros(numFeatures)
       case Huber =>
         val dim = if ($(fitIntercept)) numFeatures + 2 else numFeatures + 1
@@ -492,14 +494,14 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
          the original space.
        */
       val rawCoefficients: Array[Double] = $(loss) match {
-        case LeastSquares => parameters
+        case SquaredError => parameters
         case Huber => parameters.slice(0, numFeatures)
       }
 
       var i = 0
       val len = rawCoefficients.length
       val multiplier = $(loss) match {
-        case LeastSquares => yStd
+        case SquaredError => yStd
         case Huber => 1.0
       }
       while (i < len) {
@@ -509,9 +511,9 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
       val interceptValue: Double = if ($(fitIntercept)) {
         $(loss) match {
-          case LeastSquares =>
+          case SquaredError =>
             /*
-            The intercept of leastSquares loss in R's GLMNET is computed using closed form
+            The intercept of squared error in R's GLMNET is computed using closed form
             after the coefficients are converged. See the following discussion for detail.
             http://stats.stackexchange.com/questions/13617/how-is-the-intercept-computed-in-glmnet
             */
@@ -575,14 +577,14 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
   /** Set of solvers that LinearRegression supports. */
   private[regression] val supportedSolvers = Array(Auto, Normal, LBFGS)
 
-  /** String name for "leastSquares". */
-  private[regression] val LeastSquares = "leastSquares"
+  /** String name for "squaredError". */
+  private[regression] val SquaredError = "squaredError"
 
   /** String name for "huber". */
   private[regression] val Huber = "huber"
 
   /** Set of loss function names that LinearRegression supports. */
-  private[regression] val supportedLosses = Array(LeastSquares, Huber)
+  private[regression] val supportedLosses = Array(SquaredError, Huber)
 }
 
 /**
