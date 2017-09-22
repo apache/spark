@@ -350,7 +350,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     if (s.numBytes + pos > numBytes || pos < 0) {
       return false;
     }
-    return ByteArrayMethods.arrayEquals(base, offset + pos, s.base, s.offset, s.numBytes);
+    return ByteArrayMethods.arrayEqualsBlock(base, offset + pos, s.base, s.offset, s.numBytes);
   }
 
   public boolean startsWith(final UTF8String prefix) {
@@ -477,7 +477,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     for (int i = 0; i < numBytes; i++) {
       if (getByte(i) == (byte) ',') {
         if (i - (lastComma + 1) == match.numBytes &&
-          ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+          ByteArrayMethods.arrayEqualsBlock(base, offset + (lastComma + 1), match.base, match.offset,
             match.numBytes)) {
           return n;
         }
@@ -486,7 +486,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       }
     }
     if (numBytes - (lastComma + 1) == match.numBytes &&
-      ByteArrayMethods.arrayEquals(base, offset + (lastComma + 1), match.base, match.offset,
+      ByteArrayMethods.arrayEqualsBlock(base, offset + (lastComma + 1), match.base, match.offset,
         match.numBytes)) {
       return n;
     }
@@ -701,7 +701,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (i + v.numBytes > numBytes) {
         return -1;
       }
-      if (ByteArrayMethods.arrayEquals(base, offset + i, v.base, v.offset, v.numBytes)) {
+      if (ByteArrayMethods.arrayEqualsBlock(base, offset + i, v.base, v.offset, v.numBytes)) {
         return c;
       }
       i += numBytesForFirstByte(getByte(i));
@@ -717,7 +717,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private int find(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start <= numBytes - str.numBytes) {
-      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+      if (ByteArrayMethods.arrayEqualsBlock(base, offset + start, str.base, str.offset, str.numBytes)) {
         return start;
       }
       start += 1;
@@ -731,7 +731,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   private int rfind(UTF8String str, int start) {
     assert (str.numBytes > 0);
     while (start >= 0) {
-      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+      if (ByteArrayMethods.arrayEqualsBlock(base, offset + start, str.base, str.offset, str.numBytes)) {
         return start;
       }
       start -= 1;
@@ -1240,7 +1240,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       if (numBytes != o.numBytes) {
         return false;
       }
-      return ByteArrayMethods.arrayEquals(base, offset, o.base, o.offset, numBytes);
+      return ByteArrayMethods.arrayEqualsBlock(base, offset, o.base, o.offset, numBytes);
     } else {
       return false;
     }
@@ -1296,7 +1296,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
               num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
           cost = 1;
         } else {
-          cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
+          cost = (ByteArrayMethods.arrayEqualsBlock(t.base, t.offset + j_bytes, s.base,
               s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
         }
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
@@ -1312,7 +1312,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBytesMB(base, offset, numBytes, 42);
+    return Murmur3_x86_32.hashUnsafeBlock(base, offset, numBytes, 42);
   }
 
   /**
