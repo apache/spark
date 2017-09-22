@@ -2826,33 +2826,69 @@ object WritableConverter {
   // them automatically. However, we still keep the old functions in SparkContext for backward
   // compatibility and forward to the following functions directly.
 
-  implicit val intWritableConverter: () => WritableConverter[Int] =
+  // The following implicit declarations have been added on top of the very similar ones
+  // below in order to enable compatibility with Scala 2.12. Scala 2.12 deprecates eta
+  // expansion of zero-arg methods and thus won't match a no-arg method where it expects
+  // an implicit that is a function of no args.
+
+  implicit val intWritableConverterFn: () => WritableConverter[Int] =
     () => simpleWritableConverter[Int, IntWritable](_.get)
 
-  implicit val longWritableConverter: () => WritableConverter[Long] =
+  implicit val longWritableConverterFn: () => WritableConverter[Long] =
     () => simpleWritableConverter[Long, LongWritable](_.get)
 
-  implicit val doubleWritableConverter: () => WritableConverter[Double] =
+  implicit val doubleWritableConverterFn: () => WritableConverter[Double] =
     () => simpleWritableConverter[Double, DoubleWritable](_.get)
 
-  implicit val floatWritableConverter: () => WritableConverter[Float] =
+  implicit val floatWritableConverterFn: () => WritableConverter[Float] =
     () => simpleWritableConverter[Float, FloatWritable](_.get)
 
-  implicit val booleanWritableConverter: () => WritableConverter[Boolean] =
+  implicit val booleanWritableConverterFn: () => WritableConverter[Boolean] =
     () => simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  implicit val bytesWritableConverter: () => WritableConverter[Array[Byte]] = {
+  implicit val bytesWritableConverterFn: () => WritableConverter[Array[Byte]] = {
     () => simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
       // getBytes method returns array which is longer then data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
     }
   }
 
-  implicit val stringWritableConverter: () => WritableConverter[String] =
+  implicit val stringWritableConverterFn: () => WritableConverter[String] =
     () => simpleWritableConverter[String, Text](_.toString)
 
-  implicit def writableWritableConverter[T <: Writable : ClassTag]: () => WritableConverter[T] =
+  implicit def writableWritableConverterFn[T <: Writable : ClassTag]: () => WritableConverter[T] =
     () => new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
+
+  // These implicits remain included for backwards-compatibility. They fulfill the
+  // same role as those above.
+
+  implicit def intWritableConverter(): WritableConverter[Int] =
+    simpleWritableConverter[Int, IntWritable](_.get)
+
+  implicit def longWritableConverter(): WritableConverter[Long] =
+    simpleWritableConverter[Long, LongWritable](_.get)
+
+  implicit def doubleWritableConverter(): WritableConverter[Double] =
+    simpleWritableConverter[Double, DoubleWritable](_.get)
+
+  implicit def floatWritableConverter(): WritableConverter[Float] =
+    simpleWritableConverter[Float, FloatWritable](_.get)
+
+  implicit def booleanWritableConverter(): WritableConverter[Boolean] =
+    simpleWritableConverter[Boolean, BooleanWritable](_.get)
+
+  implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
+    simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
+      // getBytes method returns array which is longer then data to be returned
+      Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
+    }
+  }
+
+  implicit def stringWritableConverter(): WritableConverter[String] =
+    simpleWritableConverter[String, Text](_.toString)
+
+  implicit def writableWritableConverter[T <: Writable](): WritableConverter[T] =
+    new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
 }
 
 /**
