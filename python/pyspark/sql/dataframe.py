@@ -1787,6 +1787,7 @@ class DataFrame(object):
                 if pandas_type in (np.int8, np.int16, np.int32) and field.nullable:
                     columns_with_null_int.add(field.name)
                     row_handler = null_handler
+                    pandas_type = np.float32
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
 
