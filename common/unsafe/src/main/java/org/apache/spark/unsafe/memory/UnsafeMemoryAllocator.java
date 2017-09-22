@@ -30,18 +30,6 @@ import sun.nio.ch.DirectBuffer;
  */
 public class UnsafeMemoryAllocator implements MemoryAllocator {
 
-  private static Method bufAddrMethod;
-  static {
-    try {
-      Class cb = UnsafeMemoryAllocator.class.getClassLoader().loadClass("java.nio.DirectByteBuffer");
-      bufAddrMethod = cb.getMethod("address");
-      bufAddrMethod.setAccessible(true);
-    }
-    catch(Exception ex) {
-      throw new RuntimeException(ex.getMessage(), ex);
-    }
-  }
-
   @Override
   public OffHeapMemoryBlock allocate(long size) throws OutOfMemoryError {
     Object buffer = ByteBuffer.allocateDirect((int)size);
