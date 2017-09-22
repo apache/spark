@@ -1597,6 +1597,33 @@ register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 
 
+def toArrowType(dt):
+    """ Convert Spark data type to pyarrow type
+    """
+    import pyarrow as pa
+    if type(dt) == BooleanType:
+        arrow_type = pa.bool_()
+    elif type(dt) == ByteType:
+        arrow_type = pa.int8()
+    elif type(dt) == ShortType:
+        arrow_type = pa.int16()
+    elif type(dt) == IntegerType:
+        arrow_type = pa.int32()
+    elif type(dt) == LongType:
+        arrow_type = pa.int64()
+    elif type(dt) == FloatType:
+        arrow_type = pa.float32()
+    elif type(dt) == DoubleType:
+        arrow_type = pa.float64()
+    elif type(dt) == DecimalType:
+        arrow_type = pa.decimal(dt.precision, dt.scale)
+    elif type(dt) == StringType:
+        arrow_type = pa.string()
+    else:
+        raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+    return arrow_type
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext

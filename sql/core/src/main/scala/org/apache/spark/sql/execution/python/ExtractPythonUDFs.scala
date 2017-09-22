@@ -138,7 +138,16 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
+
+          val evaluation = validUdfs.partition(_.vectorized) match {
+            case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
+              ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+            case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
+              BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
+            case _ =>
+              throw new IllegalArgumentException("Can not mix vectorized and non-vectorized UDFs")
+          }
+
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {

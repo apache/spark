@@ -2044,7 +2044,7 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, vectorized=False):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
@@ -2058,6 +2058,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+        self._vectorized = vectorized
 
     @property
     def returnType(self):
@@ -2089,7 +2090,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt, self._vectorized)
         return judf
 
     def __call__(self, *cols):
@@ -2123,6 +2124,22 @@ class UserDefinedFunction(object):
         return wrapper
 
 
+def _create_udf(f, returnType, vectorized):
+
+    def _udf(f, returnType=StringType(), vectorized=vectorized):
+        udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
+        return udf_obj._wrapped()
+
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type, vectorized=vectorized)
+    else:
+        return _udf(f=f, returnType=returnType, vectorized=vectorized)
+
+
 @since(1.3)
 def udf(f=None, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
@@ -2154,18 +2171,26 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType)
-        return udf_obj._wrapped()
+    return _create_udf(f, returnType=returnType, vectorized=False)
 
-    # decorator @udf, @udf() or @udf(dataType())
-    if f is None or isinstance(f, (str, DataType)):
-        # If DataType has been passed as a positional argument
-        # for decorator use it as a returnType
-        return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type)
+
+@since(2.3)
+def pandas_udf(f=None, returnType=StringType()):
+    """
+    Creates a :class:`Column` expression representing a user defined function (UDF) that accepts
+    `Pandas.Series` as input arguments and outputs a `Pandas.Series` of the same length.
+
+    :param f: python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+    # TODO: doctest
+    """
+    import inspect
+    # If function "f" does not define the optional kwargs, then wrap with a kwargs placeholder
+    if inspect.getargspec(f).keywords is None:
+        return _create_udf(lambda *a, **kwargs: f(*a), returnType=returnType, vectorized=True)
     else:
-        return _udf(f=f, returnType=returnType)
+        return _create_udf(f, returnType=returnType, vectorized=True)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
