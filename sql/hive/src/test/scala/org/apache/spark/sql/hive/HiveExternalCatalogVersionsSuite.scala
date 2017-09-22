@@ -38,12 +38,15 @@ import org.apache.spark.util.Utils
 class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private val wareHousePath = Utils.createTempDir(namePrefix = "warehouse")
   private val tmpDataDir = Utils.createTempDir(namePrefix = "test-data")
-  private val sparkTestingDir = "/tmp/spark-test"
+  // For local test, you can set `sparkTestingDir` to a static value like `/tmp/test-spark`, to
+  // avoid downloading Spark of different versions in each run.
+  private val sparkTestingDir = Utils.createTempDir(namePrefix = "test-spark")
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
 
   override def afterAll(): Unit = {
     Utils.deleteRecursively(wareHousePath)
     Utils.deleteRecursively(tmpDataDir)
+    Utils.deleteRecursively(sparkTestingDir)
     super.afterAll()
   }
 
@@ -52,7 +55,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
     val url = s"https://d3kbcqa49mib13.cloudfront.net/spark-$version-bin-hadoop2.7.tgz"
 
-    Seq("wget", url, "-q", "-P", sparkTestingDir).!
+    Seq("wget", url, "-q", "-P", sparkTestingDir.getCanonicalPath).!
 
     val downloaded = new File(sparkTestingDir, s"spark-$version-bin-hadoop2.7.tgz").getCanonicalPath
     val targetDir = new File(sparkTestingDir, s"spark-$version").getCanonicalPath

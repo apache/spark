@@ -28,6 +28,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Order}
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
@@ -132,14 +133,24 @@ private[hive] class HiveClientImpl(
       // in hive jars, which will turn off isolation, if SessionSate.detachSession is
       // called to remove the current state after that, hive client created later will initialize
       // its own state by newState()
-      Option(SessionState.get).getOrElse(newState())
+      val ret = SessionState.get
+      if (ret != null) {
+        // hive.metastore.warehouse.dir is determined in SharedState after the CliSessionState
+        // instance constructed, we need to follow that change here.
+        Option(hadoopConf.get(ConfVars.METASTOREWAREHOUSE.varname)).foreach { dir =>
+          ret.getConf.setVar(ConfVars.METASTOREWAREHOUSE, dir)
+        }
+        ret
+      } else {
+        newState()
+      }
     }
   }
 
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
-      s"(version ${version.fullVersion}) is ${conf.get("hive.metastore.warehouse.dir")}")
+      s"(version ${version.fullVersion}) is ${conf.getVar(ConfVars.METASTOREWAREHOUSE)}")
 
   private def newState(): SessionState = {
     val hiveConf = new HiveConf(classOf[SessionState])

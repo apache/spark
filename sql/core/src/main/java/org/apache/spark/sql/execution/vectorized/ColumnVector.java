@@ -100,72 +100,16 @@ public abstract class ColumnVector implements AutoCloseable {
     public Object[] array() {
       DataType dt = data.dataType();
       Object[] list = new Object[length];
-
-      if (dt instanceof BooleanType) {
+      try {
         for (int i = 0; i < length; i++) {
           if (!data.isNullAt(offset + i)) {
-            list[i] = data.getBoolean(offset + i);
+            list[i] = get(i, dt);
           }
         }
-      } else if (dt instanceof ByteType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = data.getByte(offset + i);
-          }
-        }
-      } else if (dt instanceof ShortType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = data.getShort(offset + i);
-          }
-        }
-      } else if (dt instanceof IntegerType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = data.getInt(offset + i);
-          }
-        }
-      } else if (dt instanceof FloatType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = data.getFloat(offset + i);
-          }
-        }
-      } else if (dt instanceof DoubleType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = data.getDouble(offset + i);
-          }
-        }
-      } else if (dt instanceof LongType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = data.getLong(offset + i);
-          }
-        }
-      } else if (dt instanceof DecimalType) {
-        DecimalType decType = (DecimalType)dt;
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = getDecimal(i, decType.precision(), decType.scale());
-          }
-        }
-      } else if (dt instanceof StringType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = getUTF8String(i).toString();
-          }
-        }
-      } else if (dt instanceof CalendarIntervalType) {
-        for (int i = 0; i < length; i++) {
-          if (!data.isNullAt(offset + i)) {
-            list[i] = getInterval(i);
-          }
-        }
-      } else {
-        throw new UnsupportedOperationException("Type " + dt);
+        return list;
+      } catch(Exception e) {
+        throw new RuntimeException("Could not get the array", e);
       }
-      return list;
     }
 
     @Override
@@ -237,7 +181,42 @@ public abstract class ColumnVector implements AutoCloseable {
 
     @Override
     public Object get(int ordinal, DataType dataType) {
-      throw new UnsupportedOperationException();
+      if (dataType instanceof BooleanType) {
+        return getBoolean(ordinal);
+      } else if (dataType instanceof ByteType) {
+        return getByte(ordinal);
+      } else if (dataType instanceof ShortType) {
+        return getShort(ordinal);
+      } else if (dataType instanceof IntegerType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof LongType) {
+        return getLong(ordinal);
+      } else if (dataType instanceof FloatType) {
+        return getFloat(ordinal);
+      } else if (dataType instanceof DoubleType) {
+        return getDouble(ordinal);
+      } else if (dataType instanceof StringType) {
+        return getUTF8String(ordinal);
+      } else if (dataType instanceof BinaryType) {
+        return getBinary(ordinal);
+      } else if (dataType instanceof DecimalType) {
+        DecimalType t = (DecimalType) dataType;
+        return getDecimal(ordinal, t.precision(), t.scale());
+      } else if (dataType instanceof DateType) {
+        return getInt(ordinal);
+      } else if (dataType instanceof TimestampType) {
+        return getLong(ordinal);
+      } else if (dataType instanceof ArrayType) {
+        return getArray(ordinal);
+      } else if (dataType instanceof StructType) {
+        return getStruct(ordinal, ((StructType)dataType).fields().length);
+      } else if (dataType instanceof MapType) {
+        return getMap(ordinal);
+      } else if (dataType instanceof CalendarIntervalType) {
+        return getInterval(ordinal);
+      } else {
+        throw new UnsupportedOperationException("Datatype not supported " + dataType);
+      }
     }
 
     @Override

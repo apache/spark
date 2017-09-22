@@ -96,6 +96,29 @@ object SortOrder {
      sameOrderExpressions: Set[Expression] = Set.empty): SortOrder = {
     new SortOrder(child, direction, direction.defaultNullOrdering, sameOrderExpressions)
   }
+
+  /**
+   * Returns if a sequence of SortOrder satisfies another sequence of SortOrder.
+   *
+   * SortOrder sequence A satisfies SortOrder sequence B if and only if B is an equivalent of A
+   * or of A's prefix. Here are examples of ordering A satisfying ordering B:
+   * <ul>
+   *   <li>ordering A is [x, y] and ordering B is [x]</li>
+   *   <li>ordering A is [x(sameOrderExpressions=x1)] and ordering B is [x1]</li>
+   *   <li>ordering A is [x(sameOrderExpressions=x1), y] and ordering B is [x1]</li>
+   * </ul>
+   */
+  def orderingSatisfies(ordering1: Seq[SortOrder], ordering2: Seq[SortOrder]): Boolean = {
+    if (ordering2.isEmpty) {
+      true
+    } else if (ordering2.length > ordering1.length) {
+      false
+    } else {
+      ordering2.zip(ordering1).forall {
+        case (o2, o1) => o1.satisfies(o2)
+      }
+    }
+  }
 }
 
 /**
