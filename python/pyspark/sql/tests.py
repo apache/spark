@@ -2564,6 +2564,18 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
 
+    @unittest.skipIf(not _have_pandas, "Pandas not installed")
+    def test_to_pandas_avoid_astype(self):
+        import numpy as np
+        schema = StructType().add("a", IntegerType()).add("b", StringType())\
+                             .add("c", IntegerType())
+        data = [(1, "foo", 16777220), (None, "bar", None)]
+        df = self.spark.createDataFrame(data, schema)
+        types = df.toPandas().dtypes
+        self.assertEquals(types[0], np.float64)  # doesn't convert to np.int32 due to NaN value.
+        self.assertEquals(types[1], np.object)
+        self.assertEquals(types[2], np.float64)
+
     def test_create_dataframe_from_array_of_long(self):
         import array
         data = [Row(longarray=array.array('l', [-9223372036854775808, 0, 9223372036854775807]))]
