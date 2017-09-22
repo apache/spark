@@ -1791,7 +1791,7 @@ class DataFrame(object):
                     row_handler = null_handler
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
-            collected_rows = row_handler(self.collect(), columns_with_null_int)
+            collected_rows = row_handler(self.collect(), nullable_int_columns)
             pdf = pd.DataFrame.from_records(collected_rows, columns=self.columns)
 
             for f, t in dtype.items():
