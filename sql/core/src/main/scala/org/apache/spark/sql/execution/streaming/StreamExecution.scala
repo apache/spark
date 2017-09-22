@@ -777,7 +777,7 @@ class StreamExecution(
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
-        if (noNewData) {
+        if (noNewData || !isActive) {
           return
         }
       }

@@ -613,6 +613,18 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
+  test("processAllAvailable should not block forever when a query is stopped") {
+    val input = MemoryStream[Int]
+    input.addData(1)
+    val query = input.toDF().writeStream
+      .trigger(Trigger.Once())
+      .format("console")
+      .start()
+    failAfter(streamingTimeout) {
+      query.processAllAvailable()
+    }
+  }
+
   /** Create a streaming DF that only execute one batch in which it returns the given static DF */
   private def createSingleTriggerStreamingDF(triggerDF: DataFrame): DataFrame = {
     require(!triggerDF.isStreaming)
