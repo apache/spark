@@ -3342,6 +3342,22 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
                     'Invalid.*type.*string'):
                 df.select(f(col('x'))).collect()
 
+    def test_vectorized_udf_decorator(self):
+        from pyspark.sql.functions import pandas_udf, col
+        df = self.spark.range(10)
+
+        @pandas_udf(returnType=LongType())
+        def identity(x):
+            return x
+        res = df.select(identity(col('id')))
+        self.assertEquals(df.collect(), res.collect())
+
+    def test_vectorized_udf_empty_partition(self):
+        from pyspark.sql.functions import pandas_udf, col
+        df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
+        f = pandas_udf(lambda x: x, LongType())
+        res = df.select(f(col('id')))
+        self.assertEquals(df.collect(), res.collect())
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

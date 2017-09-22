@@ -2183,12 +2183,29 @@ def pandas_udf(f=None, returnType=StringType()):
     :param f: python function if used as a standalone function
     :param returnType: a :class:`pyspark.sql.types.DataType` object
 
-    # TODO: doctest
+    >>> from pyspark.sql.types import IntegerType, StringType
+    >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
+    >>> @pandas_udf(returnType=StringType())
+    ... def to_upper(s):
+    ...     return s.str.upper()
+    ...
+    >>> @pandas_udf(returnType="integer")
+    ... def add_one(x):
+    ...     return x + 1
+    ...
+    >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+    >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")).show()
+    +----------+--------------+------------+
+    |slen(name)|to_upper(name)|add_one(age)|
+    +----------+--------------+------------+
+    |         8|      JOHN DOE|          22|
+    +----------+--------------+------------+
     """
+    wrapped_udf = _create_udf(f, returnType=returnType, vectorized=True)
     import inspect
-    if not inspect.getargspec(f).args:
+    if not inspect.getargspec(wrapped_udf.func).args:
         raise NotImplementedError("0-parameter pandas_udfs are not currently supported")
-    return _create_udf(f, returnType=returnType, vectorized=True)
+    return wrapped_udf
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
