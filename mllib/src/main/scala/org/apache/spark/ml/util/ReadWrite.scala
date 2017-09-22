@@ -399,11 +399,14 @@ private[ml] object DefaultParamsReader {
    * This works if all Params (except params included by `skipParams` list) implement
    * [[org.apache.spark.ml.param.Param.jsonDecode()]].
    *
-   * The params included in `skipParams` won't be set. This is useful if some params don't
-   * implement [[org.apache.spark.ml.param.Param.jsonDecode()]] and need special handling.
+   * @param skipParams The params included in `skipParams` won't be set. This is useful if some
+   *                   params don't implement [[org.apache.spark.ml.param.Param.jsonDecode()]]
+   *                   and need special handling.
    * TODO: Move to [[Metadata]] method
    */
-  def getAndSetParams(instance: Params, metadata: Metadata,
+  def getAndSetParams(
+      instance: Params,
+      metadata: Metadata,
       skipParams: Option[List[String]] = None): Unit = {
     implicit val format = DefaultFormats
     metadata.params match {
