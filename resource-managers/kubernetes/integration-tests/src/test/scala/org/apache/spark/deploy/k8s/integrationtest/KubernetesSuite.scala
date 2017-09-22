@@ -64,7 +64,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
     sparkConf = kubernetesTestComponents.newSparkConf()
       .set(INIT_CONTAINER_DOCKER_IMAGE, s"spark-init:latest")
       .set(DRIVER_DOCKER_IMAGE, s"spark-driver:latest")
-      .set(KUBERNETES_DRIVER_LABELS, s"spark-app-locator=$APP_LOCATOR_LABEL")
+      .set(s"${KUBERNETES_DRIVER_LABEL_PREFIX}spark-app-locator", APP_LOCATOR_LABEL)
     kubernetesTestComponents.createNamespace()
   }
 

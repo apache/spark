@@ -67,10 +67,9 @@ private[spark] class BaseDriverConfigurationStep(
         .build()
     }
     val driverCustomAnnotations = ConfigurationUtils
-        .combinePrefixedKeyValuePairsWithDeprecatedConf(
+        .parsePrefixedKeyValuePairs(
             submissionSparkConf,
             KUBERNETES_DRIVER_ANNOTATION_PREFIX,
-            KUBERNETES_DRIVER_ANNOTATIONS,
             "annotation")
     require(!driverCustomAnnotations.contains(SPARK_APP_NAME_ANNOTATION),
         s"Annotation with key $SPARK_APP_NAME_ANNOTATION is not allowed as it is reserved for" +

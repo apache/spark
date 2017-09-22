@@ -46,7 +46,6 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test ("error thrown if local jars provided without resource staging server") {
     val sparkConf = new SparkConf(true)
-      .set(KUBERNETES_DRIVER_LABELS, s"$DEPRECATED_CUSTOM_LABEL_KEY=$DEPRECATED_CUSTOM_LABEL_VALUE")
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
 
     assert(sparkConf.get(RESOURCE_STAGING_SERVER_URI).isEmpty)
@@ -72,7 +71,6 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test ("error not thrown with non-local jars and resource staging server provided") {
     val sparkConf = new SparkConf(true)
-      .set(KUBERNETES_DRIVER_LABELS, s"$DEPRECATED_CUSTOM_LABEL_KEY=$DEPRECATED_CUSTOM_LABEL_VALUE")
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
       .set(RESOURCE_STAGING_SERVER_URI, STAGING_SERVER_URI)
 
@@ -97,7 +95,6 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test ("error not thrown with non-local jars and no resource staging server provided") {
     val sparkConf = new SparkConf(true)
-      .set(KUBERNETES_DRIVER_LABELS, s"$DEPRECATED_CUSTOM_LABEL_KEY=$DEPRECATED_CUSTOM_LABEL_VALUE")
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
 
     val orchestrator = new InitContainerConfigurationStepsOrchestrator(
@@ -120,7 +117,6 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test ("including step to contact resource staging server") {
     val sparkConf = new SparkConf(true)
-      .set(KUBERNETES_DRIVER_LABELS, s"$DEPRECATED_CUSTOM_LABEL_KEY=$DEPRECATED_CUSTOM_LABEL_VALUE")
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
       .set(RESOURCE_STAGING_SERVER_URI, STAGING_SERVER_URI)
 
@@ -145,7 +141,6 @@ class InitContainerConfigurationStepsOrchestratorSuite extends SparkFunSuite {
 
   test ("not including steps because no contact to resource staging server") {
     val sparkConf = new SparkConf(true)
-      .set(KUBERNETES_DRIVER_LABELS, s"$DEPRECATED_CUSTOM_LABEL_KEY=$DEPRECATED_CUSTOM_LABEL_VALUE")
       .set(s"$KUBERNETES_DRIVER_LABEL_PREFIX$CUSTOM_LABEL_KEY", CUSTOM_LABEL_VALUE)
 
     val orchestrator = new InitContainerConfigurationStepsOrchestrator(

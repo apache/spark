@@ -19,7 +19,6 @@ package org.apache.spark.scheduler.cluster.k8s
 import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
-import org.apache.commons.io.FilenameUtils
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerResourceStagingServerSecretPlugin, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
@@ -56,10 +55,9 @@ private[spark] class ExecutorPodFactoryImpl(
       org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
   private val executorJarsDownloadDir = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
 
-  private val executorLabels = ConfigurationUtils.combinePrefixedKeyValuePairsWithDeprecatedConf(
+  private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_EXECUTOR_LABEL_PREFIX,
-      KUBERNETES_EXECUTOR_LABELS,
       "executor label")
   require(
       !executorLabels.contains(SPARK_APP_ID_LABEL),
@@ -70,10 +68,9 @@ private[spark] class ExecutorPodFactoryImpl(
         s" Spark.")
 
   private val executorAnnotations =
-      ConfigurationUtils.combinePrefixedKeyValuePairsWithDeprecatedConf(
+      ConfigurationUtils.parsePrefixedKeyValuePairs(
           sparkConf,
           KUBERNETES_EXECUTOR_ANNOTATION_PREFIX,
-          KUBERNETES_EXECUTOR_ANNOTATIONS,
           "executor annotation")
   private val nodeSelector =
       ConfigurationUtils.parsePrefixedKeyValuePairs(

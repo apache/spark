@@ -115,42 +115,11 @@ package object config extends Logging {
 
   private[spark] val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
   private[spark] val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
+
   private[spark] val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   private[spark] val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
 
-  private[spark] val KUBERNETES_DRIVER_LABELS =
-    ConfigBuilder("spark.kubernetes.driver.labels")
-      .doc("Custom labels that will be added to the driver pod. This should be a comma-separated" +
-        " list of label key-value pairs, where each label is in the format key=value. Note that" +
-        " Spark also adds its own labels to the driver pod for bookkeeping purposes.")
-      .stringConf
-      .createOptional
-
   private[spark] val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
-
-  private[spark] val KUBERNETES_DRIVER_ANNOTATIONS =
-    ConfigBuilder("spark.kubernetes.driver.annotations")
-      .doc("Custom annotations that will be added to the driver pod. This should be a" +
-        " comma-separated list of annotation key-value pairs, where each annotation is in the" +
-        " format key=value.")
-      .stringConf
-      .createOptional
-
-  private[spark] val KUBERNETES_EXECUTOR_LABELS =
-    ConfigBuilder("spark.kubernetes.executor.labels")
-      .doc("Custom labels that will be added to the executor pods. This should be a" +
-        " comma-separated list of label key-value pairs, where each label is in the format" +
-        " key=value.")
-      .stringConf
-      .createOptional
-
-  private[spark] val KUBERNETES_EXECUTOR_ANNOTATIONS =
-    ConfigBuilder("spark.kubernetes.executor.annotations")
-      .doc("Custom annotations that will be added to the executor pods. This should be a" +
-        " comma-separated list of annotation key-value pairs, where each annotation is in the" +
-        " format key=value.")
-      .stringConf
-      .createOptional
 
   private[spark] val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
   private[spark] val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
