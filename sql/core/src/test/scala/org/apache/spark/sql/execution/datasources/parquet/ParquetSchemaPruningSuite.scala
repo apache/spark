@@ -39,10 +39,10 @@ class ParquetSchemaPruningSuite
   case class BriefContact(name: Name, address: String)
 
   val briefContacts =
-    BriefContact(Name("sdfaf", "123"), "xyz") ::
-    BriefContact(Name("asdfaf", "xyz"), "abc") :: Nil
+    BriefContact(Name("Janet", "Jones"), "567 Maple Drive") ::
+    BriefContact(Name("Jim", "Jones"), "6242 Ash Street") :: Nil
 
-  testStandardAndLegacyModes("partial schema intersection") {
+  testStandardAndLegacyModes("partial schema intersection - select missing subfield") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
@@ -54,8 +54,49 @@ class ParquetSchemaPruningSuite
       val query = sql("select name.middle, address from contacts where p=2")
       checkScanSchemata(query, "struct<name:struct<middle:string>,address:string>")
       checkAnswer(query,
-        Row(null, "xyz") ::
-        Row(null, "abc") :: Nil)
+        Row(null, "567 Maple Drive") ::
+        Row(null, "6242 Ash Street") :: Nil)
+    }
+  }
+
+  testStandardAndLegacyModes("partial schema intersection - filter on subfield") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      makeParquetFile(contacts, new File(path + "/contacts/p=1"))
+      makeParquetFile(briefContacts, new File(path + "/contacts/p=2"))
+
+      spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
+
+      val query =
+        sql("select name.middle, name.first, pets, address from contacts where " +
+          "name.first = 'Janet' and p=2")
+      checkScanSchemata(query,
+        "struct<name:struct<middle:string,first:string>,pets:int,address:string>")
+      checkAnswer(query,
+        Row(null, "Janet", null, "567 Maple Drive") :: Nil)
+    }
+  }
+
+  testStandardAndLegacyModes("no unnecessary schema pruning") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      makeParquetFile(contacts, new File(path + "/contacts/p=1"))
+      makeParquetFile(briefContacts, new File(path + "/contacts/p=2"))
+
+      spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
+
+      val query =
+        sql("select name.last, name.middle, name.first, pets, address from contacts where p=2")
+      // We've selected every field in the schema. Therefore, no schema pruning should be performed.
+      // We check this by asserting that the scanned schema of the query is identical to the schema
+      // of the contacts relation, even though the fields are selected in different orders.
+      checkScanSchemata(query,
+        "struct<name:struct<first:string,middle:string,last:string>,address:string,pets:int>")
+      checkAnswer(query,
+        Row("Jones", null, "Janet", null, "567 Maple Drive") ::
+        Row("Jones", null, "Jim", null, "6242 Ash Street") :: Nil)
     }
   }
 
