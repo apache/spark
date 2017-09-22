@@ -22,45 +22,20 @@ import org.apache.spark.unsafe.Platform;
 /**
  * A consecutive block of memory, starting at a {@link MemoryLocation} with a fixed size.
  */
-public class ByteArrayMemoryBlock extends MemoryBlock {
-
-  private final long length;
-
-  /**
-   * Optional page number; used when this MemoryBlock represents a page allocated by a
-   * TaskMemoryManager. This field can be updated using setPageNumber method so that
-   * this can be modified by the TaskMemoryManage, which lives in a different package.
-   */
-  private int pageNumber = NO_PAGE_NUMBER;
+public final class ByteArrayMemoryBlock extends MemoryBlock {
 
   public ByteArrayMemoryBlock(byte[] obj, long offset, long length) {
-    super(obj, offset);
-    this.length = length;
+    super(obj, offset, length);
   }
 
-  /**
-   * Returns the size of the memory block.
-   */
-  public long size() {
-    return length;
-  }
-
+  @Override
   public void fill(byte value) {
     Platform.setMemory(obj, offset, length, value);
   }
 
+  @Override
   public MemoryBlock allocate(long offset, long size) {
     return new ByteArrayMemoryBlock((byte[]) obj, offset, size);
-  }
-
-  @Override
-  public void setPageNumber(int pageNum) {
-    this.pageNumber = pageNum;
-  }
-
-  @Override
-  public int getPageNumber() {
-    return this.pageNumber;
   }
 
   public byte[] getByteArray() { return (byte[])this.obj; }

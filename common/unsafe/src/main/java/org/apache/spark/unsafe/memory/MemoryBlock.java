@@ -49,13 +49,23 @@ public abstract class MemoryBlock {
 
   protected long offset;
 
-  public MemoryBlock(@Nullable Object obj, long offset) {
+  protected final long length;
+
+  /**
+   * Optional page number; used when this MemoryBlock represents a page allocated by a
+   * TaskMemoryManager. This field can be updated using setPageNumber method so that
+   * this can be modified by the TaskMemoryManage, which lives in a different package.
+   */
+  private int pageNumber = NO_PAGE_NUMBER;
+
+  public MemoryBlock(@Nullable Object obj, long offset, long length) {
     this.obj = obj;
     this.offset = offset;
+    this.length = length;
   }
 
   public MemoryBlock() {
-    this(null, 0);
+    this(null, 0, 0);
   }
 
   public final Object getBaseObject() {
@@ -66,7 +76,7 @@ public abstract class MemoryBlock {
     return offset;
   }
 
-  public final void resetObjAndOffset() {
+  public void resetObjAndOffset() {
     this.obj = null;
     this.offset = 0;
   }
@@ -74,11 +84,17 @@ public abstract class MemoryBlock {
   /**
    * Returns the size of the memory block.
    */
-  public abstract long size();
+  public final long size() {
+    return this.length;
+  }
 
-  public abstract void setPageNumber(int pageNum);
+  public final void setPageNumber(int pageNum) {
+    this.pageNumber = pageNum;
+  }
 
-  public abstract int getPageNumber();
+  public final int getPageNumber() {
+    return this.pageNumber;
+  }
 
   /**
    * Fills the memory block with the specified byte value.

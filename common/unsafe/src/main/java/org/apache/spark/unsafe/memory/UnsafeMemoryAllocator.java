@@ -57,7 +57,7 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
 
     // As an additional layer of defense against use-after-free bugs, we mutate the
     // MemoryBlock to reset its pointer.
-    ((OffHeapMemoryBlock)memory).setBaseOffset(0);
+    memory.resetObjAndOffset();
     // Mark the page as freed (so we can detect double-frees).
     memory.setPageNumber(MemoryBlock.FREED_IN_ALLOCATOR_PAGE_NUMBER);
 

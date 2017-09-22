@@ -20,33 +20,22 @@ package org.apache.spark.unsafe.memory;
 import org.apache.spark.unsafe.Platform;
 
 public class OffHeapMemoryBlock extends MemoryBlock {
+
   private Object directBuffer;
   private long address;
-  private final long length;
-
-  /**
-   * Optional page number; used when this MemoryBlock represents a page allocated by a
-   * TaskMemoryManager. This field can be updated using setPageNumber method so that
-   * this can be modified by the TaskMemoryManage, which lives in a different package.
-   */
-  private int pageNumber = -1;
 
   static public final OffHeapMemoryBlock NULL = new OffHeapMemoryBlock(null, 0, 0);
 
   public OffHeapMemoryBlock(Object directBuffer, long address, long size) {
-    super(null, address);
+    super(null, address, size);
     this.address = address;
-    this.length = size;
     this.directBuffer = directBuffer;
   }
 
-  public void setBaseOffset(long address) {
-    this.address = address;
-  }
-
   @Override
-  public long size() {
-    return this.length;
+  public void resetObjAndOffset() {
+    this.directBuffer = null;
+    this.address = 0;
   }
 
   @Override
@@ -57,15 +46,5 @@ public class OffHeapMemoryBlock extends MemoryBlock {
   @Override
   public MemoryBlock allocate(long offset, long size) {
     return new OffHeapMemoryBlock(directBuffer, address + offset, size);
-  }
-
-  @Override
-  public void setPageNumber(int pageNum) {
-    this.pageNumber = pageNum;
-  }
-
-  @Override
-  public int getPageNumber() {
-    return this.pageNumber;
   }
 }
