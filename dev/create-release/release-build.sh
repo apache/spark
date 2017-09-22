@@ -31,8 +31,8 @@ Top level targets are
 All other inputs are environment variables
 
 GIT_REF - Release tag or commit to build from
-SPARK_VERSION - Release identifier used when publishing
-SPARK_PACKAGE_VERSION - Release identifier in top level package directory
+SPARK_VERSION - Version of Spark being built (e.g. 2.1.2)
+SPARK_PACKAGE_VERSION - Release identifier in top level package directory (e.g. 2.1.2-rc1)
 REMOTE_PARENT_DIR - Parent in which to create doc or release builds.
 REMOTE_PARENT_MAX_LENGTH - If set, parent directory will be cleaned to only
  have this number of subdirectories (by deleting old ones). WARNING: This deletes data.
@@ -94,6 +94,33 @@ if [ -z "$SPARK_VERSION" ]; then
   SPARK_VERSION=$($MVN help:evaluate -Dexpression=project.version \
     | grep -v INFO | grep -v WARNING | grep -v Download)
 fi
+
+# Verify we have the right java version set
+if [ -z "$JAVA_HOME" ]; then
+  echo "Please set JAVA_HOME."
+  exit 1
+fi
+
+java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+
+if [[ ! $SPARK_VERSION < "2.2." ]]; then
+  if [[ $java_version < "1.8." ]]; then
+    echo "Java version $java_version is less than required 1.8 for 2.2+"
+    echo "Please set JAVA_HOME correctly."
+    exit 1
+  fi
+else
+  if [[ $java_version > "1.7." ]]; then
+    if [ -z "$JAVA_7_HOME" ]; then
+      echo "Java version $java_version is higher than required 1.7 for pre-2.2"
+      echo "Please set JAVA_HOME correctly."
+      exit 1
+    else
+      JAVA_HOME="$JAVA_7_HOME"
+    fi
+  fi
+fi
+
 
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
@@ -318,6 +345,8 @@ if [[ "$1" == "publish-snapshot" ]]; then
 fi
 
 if [[ "$1" == "publish-release" ]]; then
+  SPARK_VERSION=$SPARK_PACKAGE_VERSION
+
   cd spark
   # Publish Spark to Maven release repo
   echo "Publishing Spark checkout at '$GIT_REF' ($git_hash)"
