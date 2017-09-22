@@ -107,7 +107,6 @@
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
-    <module>dists/without-hadoop</module>
     <module>dists/hadoop-palantir</module>
   </modules>
 

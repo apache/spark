@@ -17,15 +17,13 @@ publish_artifacts() {
 }
 
 make_dist() {
-  dist_name="$1"
-  build_flags="$2"
-  shift 2
-  dist_version="${version}-${dist_name}"
-  file_name="spark-dist-${dist_version}.tgz"
-  ./dev/make-distribution.sh --name $dist_name --tgz "$@" $build_flags
-  curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/spark-dist/${dist_version}/${file_name}"
+  build_flags="$1"
+  shift 1
+  artifact_name="spark-dist_2.11-hadoop-palantir"
+  file_name="${artifact_name}-${version}.tgz"
+  ./dev/make-distribution.sh --name "hadoop-palantir" --tgz "$@" $build_flags
+  curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/${artifact_name}/${version}/${file_name}"
 }
 
 publish_artifacts
-make_dist hadoop-2.8.0-palantir.8 "${PALANTIR_FLAGS[*]}" --clean
-make_dist without-hadoop "-Phadoop-provided -Pkubernetes -Phive -Pyarn -Psparkr" --clean
+make_dist "${PALANTIR_FLAGS[*]}" --clean
