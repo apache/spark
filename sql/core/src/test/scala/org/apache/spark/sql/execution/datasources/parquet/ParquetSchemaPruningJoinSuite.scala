@@ -83,7 +83,7 @@ class ParquetSchemaPruningJoinSuite
           def join(joinType: String): DataFrame =
             sql(s"select s.l from r1 $joinType join r2 on r1.S.N = r2.s.n")
           val scanSchema1 = "struct<S:struct<N:int>>"
-          val scanSchema2 = "struct<s:struct<l:string,n:int>>"
+          val scanSchema2 = "struct<s:struct<n:int,l:string>>"
           checkScanSchemata(
             join("inner"),
             scanSchema1,
@@ -111,7 +111,7 @@ class ParquetSchemaPruningJoinSuite
         withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
           def join(joinType: String): DataFrame =
             sql(s"select S.L from r1 $joinType join r2 on r1.S.N = r2.s.n")
-          val scanSchema1 = "struct<S:struct<L:string,N:int>>"
+          val scanSchema1 = "struct<S:struct<N:int,L:string>>"
           val scanSchema2 = "struct<s:struct<n:int>>"
           checkScanSchemata(
             join("inner"),
