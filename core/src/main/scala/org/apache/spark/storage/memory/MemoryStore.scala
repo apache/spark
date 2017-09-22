@@ -407,13 +407,12 @@ private[spark] class MemoryStore(
 
     def estimateSize(precise: Boolean): Long = {
       if (precise) {
-        serializationStream.flush()
+        serializationStream.close()
       }
       bbos.size
     }
 
     def createMemoryEntry(): MemoryEntry[T] = {
-      serializationStream.close()
       val entry = SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
       entry
     }
