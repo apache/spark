@@ -1762,6 +1762,7 @@ class DataFrame(object):
         else:
             dtype = {}
             columns_with_null_int = set()
+
             def null_handler(rows, columns_with_null_int):
                 for row in rows:
                     row = row.asDict()
@@ -1769,7 +1770,7 @@ class DataFrame(object):
                         val = row[column]
                         dt = dtype[column]
                         if val is not None:
-                            if abs(val) > 16777216: # Max value before np.float32 loses precision.
+                            if abs(val) > 16777216:  # Max value before np.float32 loses precision.
                                 val = np.float64(val)
                                 dt = np.float64
                                 dtype[column] = np.float64
@@ -1778,7 +1779,7 @@ class DataFrame(object):
                             row[column] = val
                     row = Row(**row)
                     yield row
-            row_handler = lambda x,y: x
+            row_handler = lambda x, y: x
             for field in self.schema:
                 pandas_type = _to_corrected_pandas_type(field.dataType)
                 if pandas_type in (np.int8, np.int16, np.int32) and field.nullable:
@@ -1787,8 +1788,8 @@ class DataFrame(object):
                     pandas_type = np.float32
                 if pandas_type is not None:
                     dtype[field.name] = pandas_type
-
-            pdf = pd.DataFrame.from_records(row_handler(self.collect(), columns_with_null_int), columns=self.columns)
+            collected_rows = row_handler(self.collect(), columns_with_null_int)
+            pdf = pd.DataFrame.from_records(collected_rows, columns=self.columns)
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)

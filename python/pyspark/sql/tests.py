@@ -2495,10 +2495,12 @@ class SQLTests(ReusedPySparkTestCase):
     def test_to_pandas(self):
         import numpy as np
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
-                             .add("c", BooleanType()).add("d", FloatType())
+                             .add("c", BooleanType()).add("d", FloatType())\
+                             .add("e", IntegerType()).add("f", IntegerType())\
+                             .add("g", IntegerType())
         data = [
-            (1, "foo", True, 3.0), (2, "foo", True, 5.0),
-            (3, "bar", False, -1.0), (4, "bar", False, 6.0),
+            (1, "foo", True, 3.0, 1, 16777218, None), (2, "foo", True, 5.0, 2, 16777220, None),
+            (3, "bar", False, -1.0, 3, 1, None), (4, "bar", False, 6.0, None, None, None),
         ]
         df = self.spark.createDataFrame(data, schema)
         types = df.toPandas().dtypes
@@ -2506,6 +2508,9 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEquals(types[1], np.object)
         self.assertEquals(types[2], np.bool)
         self.assertEquals(types[3], np.float32)
+        self.assertEquals(types[4], np.float32)
+        self.assertEquals(types[5], np.float64)
+        self.assertEquals(types[6], np.float32)
 
     def test_create_dataframe_from_array_of_long(self):
         import array
