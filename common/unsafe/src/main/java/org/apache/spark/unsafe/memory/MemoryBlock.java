@@ -85,21 +85,23 @@ public abstract class MemoryBlock {
    * Returns the size of the memory block.
    */
   public final long size() {
-    return this.length;
+    return length;
   }
 
   public final void setPageNumber(int pageNum) {
-    this.pageNumber = pageNum;
+    pageNumber = pageNum;
   }
 
   public final int getPageNumber() {
-    return this.pageNumber;
+    return pageNumber;
   }
 
   /**
    * Fills the memory block with the specified byte value.
    */
-  public abstract void fill(byte value);
+  public final void fill(byte value) {
+    Platform.setMemory(obj, offset, length, value);
+  }
 
   /**
    * Instantiate the same type of MemoryBlock with new offset and size

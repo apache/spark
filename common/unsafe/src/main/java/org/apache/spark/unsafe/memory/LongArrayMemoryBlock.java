@@ -29,11 +29,6 @@ public final class LongArrayMemoryBlock extends MemoryBlock {
   }
 
   @Override
-  public void fill(byte value) {
-    Platform.setMemory(obj, offset, length, value);
-  }
-
-  @Override
   public MemoryBlock allocate(long offset, long size) {
     return new LongArrayMemoryBlock((long[]) obj, offset, size);
   }

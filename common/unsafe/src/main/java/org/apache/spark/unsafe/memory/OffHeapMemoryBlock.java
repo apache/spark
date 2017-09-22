@@ -39,11 +39,6 @@ public class OffHeapMemoryBlock extends MemoryBlock {
   }
 
   @Override
-  public void fill(byte value) {
-    Platform.setMemory(null, address, length, value);
-  }
-
-  @Override
   public MemoryBlock allocate(long offset, long size) {
     return new OffHeapMemoryBlock(directBuffer, address + offset, size);
   }
