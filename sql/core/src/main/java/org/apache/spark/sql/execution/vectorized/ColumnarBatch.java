@@ -462,6 +462,8 @@ public final class ColumnarBatch {
     return numRows - numRowsFiltered;
   }
 
+  public StructType schema() { return schema; }
+
   /**
    * Returns the max capacity (in number of rows) for this batch.
    */
