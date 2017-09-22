@@ -28,12 +28,12 @@ import org.apache.hadoop.fs.FsUrlStreamHandlerFactory
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.internal.Logging
-import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.StaticSQLConf._
+import org.apache.spark.sql.util.SQLUtils
 import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
@@ -45,36 +45,14 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
   val warehousePath: String = {
-    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
-    if (configFile != null) {
-      logInfo(s"loading hive config file: $configFile")
-      sparkContext.hadoopConfiguration.addResource(configFile)
-    }
-
     // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkContext.conf.remove("hive.metastore.warehouse.dir")
-    // Set the Hive metastore warehouse path to the one we use
-    val hiveWarehouseDir = sparkContext.hadoopConfiguration.get("hive.metastore.warehouse.dir")
-    if (hiveWarehouseDir != null && !sparkContext.conf.contains(WAREHOUSE_PATH.key)) {
-      // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
-      // we will respect the value of hive.metastore.warehouse.dir.
-      sparkContext.conf.set(WAREHOUSE_PATH.key, hiveWarehouseDir)
-      logInfo(s"${WAREHOUSE_PATH.key} is not set, but hive.metastore.warehouse.dir " +
-        s"is set. Setting ${WAREHOUSE_PATH.key} to the value of " +
-        s"hive.metastore.warehouse.dir ('$hiveWarehouseDir').")
-      hiveWarehouseDir
-    } else {
-      // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
-      // the value of spark.sql.warehouse.dir.
-      // When neither spark.sql.warehouse.dir nor hive.metastore.warehouse.dir is set,
-      // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
-      val sparkWarehouseDir = sparkContext.conf.get(WAREHOUSE_PATH)
-      logInfo(s"Setting hive.metastore.warehouse.dir ('$hiveWarehouseDir') to the value of " +
-        s"${WAREHOUSE_PATH.key} ('$sparkWarehouseDir').")
-      sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", sparkWarehouseDir)
-      sparkWarehouseDir
-    }
+    val path = SQLUtils.warehousePath(sparkContext.getConf)
+    sparkContext.conf.set(WAREHOUSE_PATH.key, path)
+    sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", path)
+    path
   }
+
   logInfo(s"Warehouse path is '$warehousePath'.")
 
 
