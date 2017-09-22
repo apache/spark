@@ -1765,6 +1765,7 @@ class DataFrame(object):
             nullable_int_columns = set()
 
             def null_handler(rows, nullable_int_columns):
+                from pyspark.sql import Row
                 requires_double_precision = set()
                 for row in rows:
                     row = row.asDict()
