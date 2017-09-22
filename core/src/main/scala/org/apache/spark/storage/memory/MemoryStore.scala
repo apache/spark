@@ -544,7 +544,7 @@ private[spark] class MemoryStore(
       }
 
       if (freedMemory >= space) {
-        var exceptionWasThrown: Boolean = true
+        val successfulBlocks = ArrayBuffer[BlockId]()
         try {
           logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
             s"(${Utils.bytesToString(freedMemory)} bytes)")
@@ -557,17 +557,19 @@ private[spark] class MemoryStore(
             // future safety.
             if (entry != null) {
               dropBlock(blockId, entry)
+              afterDropAction(blockId)
             }
+            successfulBlocks += blockId
           }
-          exceptionWasThrown = false
           logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
             s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
           freedMemory
         } finally {
           // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
           // with InterruptedException
-          if (exceptionWasThrown) {
-            selectedBlocks.foreach { id =>
+          if (successfulBlocks.size != selectedBlocks.size) {
+            val blocksToClean = selectedBlocks -- successfulBlocks
+            blocksToClean.foreach { id =>
               // some of the blocks may have already been unlocked, or completely removed
               blockInfoManager.get(id).foreach { info =>
                 if (info.readerCount > 0 || info.writerTask != BlockInfo.NO_WRITER) {
@@ -588,6 +590,9 @@ private[spark] class MemoryStore(
       }
     }
   }
+
+  // hook for testing, so we can simulate a race
+  protected def afterDropAction(blockId: BlockId): Unit = {}
 
   def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }

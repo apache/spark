@@ -413,9 +413,11 @@ class MemoryStoreSuite
     // blocks getting evicted.  We'll make the eviction throw an exception, and make sure that
     // all locks are released.
     val ct = implicitly[ClassTag[Array[Byte]]]
-    def testWithFailureOnNthDrop(failAfterDroppingNBlocks: Int): Unit = {
+    def testFailureOnNthDrop(failAfterDroppingNBlocks: Int, readLockAfterDrop: Boolean): Unit = {
+      val tc = TaskContext.empty()
       val memManager = new StaticMemoryManager(conf, Long.MaxValue, 100, numCores = 1)
       val blockInfoManager = new BlockInfoManager
+      blockInfoManager.registerTask(tc.taskAttemptId)
       var droppedSoFar = 0
       val blockEvictionHandler = new BlockEvictionHandler {
         var memoryStore: MemoryStore = _
@@ -426,14 +428,30 @@ class MemoryStoreSuite
           if (droppedSoFar < failAfterDroppingNBlocks) {
             droppedSoFar += 1
             memoryStore.remove(blockId)
-            StorageLevel.NONE
+            if (readLockAfterDrop) {
+              // for testing purposes, we act like another thread gets the read lock on the new
+              // block
+              StorageLevel.DISK_ONLY
+            } else {
+              StorageLevel.NONE
+            }
           } else {
             throw new RuntimeException(s"Mock error dropping block $droppedSoFar")
           }
         }
       }
-      val memoryStore =
-        new MemoryStore(conf, blockInfoManager, serializerManager, memManager, blockEvictionHandler)
+      val memoryStore = new MemoryStore(conf, blockInfoManager, serializerManager, memManager,
+          blockEvictionHandler) {
+        override def afterDropAction(blockId: BlockId): Unit = {
+          if (readLockAfterDrop) {
+            // pretend that we get a read lock on the block (now on disk) in another thread
+            TaskContext.setTaskContext(tc)
+            blockInfoManager.lockForReading(blockId)
+            TaskContext.unset()
+          }
+        }
+      }
+
       blockEvictionHandler.memoryStore = memoryStore
       memManager.setMemoryStore(memoryStore)
 
@@ -454,32 +472,54 @@ class MemoryStoreSuite
 
       // Add one big block, which will require evicting everything in the memorystore.  However our
       // mock BlockEvictionHandler will throw an exception -- make sure all locks are cleared.
-      logWarning("trying to store large block")
       val largeBlockId = BlockId(s"rdd_2_1")
       val largeBlockInfo = new BlockInfo(StorageLevel.MEMORY_ONLY, ct, tellMaster = false)
       val initialWriteLock = blockInfoManager.lockNewBlockForWriting(largeBlockId, largeBlockInfo)
       assert(initialWriteLock)
-      val exc = intercept[RuntimeException] {
+      if (failAfterDroppingNBlocks < 10) {
+        val exc = intercept[RuntimeException] {
+          memoryStore.putBytes(largeBlockId, 100, MemoryMode.ON_HEAP, () => {
+            new ChunkedByteBuffer(ByteBuffer.allocate(100))
+          })
+        }
+        assert(exc.getMessage().startsWith("Mock error dropping block"), exc)
+        // BlockManager.doPut takes care of releasing the lock for the newly written block -- not
+        // testing that here, so do it manually
+        blockInfoManager.removeBlock(largeBlockId)
+      } else {
         memoryStore.putBytes(largeBlockId, 100, MemoryMode.ON_HEAP, () => {
           new ChunkedByteBuffer(ByteBuffer.allocate(100))
         })
+        // BlockManager.doPut takes care of releasing the lock for the newly written block -- not
+        // testing that here, so do it manually
+        blockInfoManager.unlock(largeBlockId)
       }
-      assert(exc.getMessage().startsWith("Mock error dropping block"))
-      // BlockManager.doPut takes care of releasing the lock for the newly written block -- not
-      // testing that here, so do it manually
-      blockInfoManager.removeBlock(largeBlockId)
 
-      assert(blockInfoManager.size === (10 - failAfterDroppingNBlocks))
+      val largeBlockInMemory = if (failAfterDroppingNBlocks == 10) 1 else 0
+      val expBlocks = 10 +
+        (if (readLockAfterDrop) 0 else -failAfterDroppingNBlocks) +
+        largeBlockInMemory
+      assert(blockInfoManager.size === expBlocks)
 
       val blocksStillInMemory = blockInfoManager.entries.filter { case (id, info) =>
         assert(info.writerTask === BlockInfo.NO_WRITER, id)
-        assert(info.readerCount === 0, id)
-        memoryStore.contains(id)
+        // in this test, all the blocks in memory have no reader, but everything dropped to disk
+        // had another thread read the block.  We shouldn't lose the other thread's reader lock.
+        if (memoryStore.contains(id)) {
+          assert(info.readerCount === 0, id)
+          true
+        } else {
+          assert(info.readerCount === 1, id)
+          false
+        }
       }
-      assert(blocksStillInMemory.size === (10 - failAfterDroppingNBlocks))
+      assert(blocksStillInMemory.size === (10 - failAfterDroppingNBlocks + largeBlockInMemory))
     }
 
-    testWithFailureOnNthDrop(0)
-    testWithFailureOnNthDrop(3)
+    Seq(0, 3, 10).foreach { failAfterDropping =>
+      Seq(true, false).foreach { readLockAfterDropping =>
+        testFailureOnNthDrop(failAfterDropping, readLockAfterDropping)
+      }
+    }
   }
 }
