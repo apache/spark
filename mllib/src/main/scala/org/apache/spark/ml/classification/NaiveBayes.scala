@@ -159,7 +159,7 @@ class NaiveBayes @Since("1.5.0") (
     // TODO: similar to reduceByKeyLocally to save one stage.
     val aggregated = dataset.select(col($(labelCol)), w, col($(featuresCol))).rdd
       .map { row => (row.getDouble(0), (row.getDouble(1), row.getAs[Vector](2)))
-      }.aggregateByKey[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
+      }.aggregateByKeyLocally[(Double, DenseVector)]((0.0, Vectors.zeros(numFeatures).toDense))(
       seqOp = {
          case ((weightSum: Double, featureSum: DenseVector), (weight, features)) =>
            requireValues(features)
@@ -170,7 +170,7 @@ class NaiveBayes @Since("1.5.0") (
          case ((weightSum1, featureSum1), (weightSum2, featureSum2)) =>
            BLAS.axpy(1.0, featureSum2, featureSum1)
            (weightSum1 + weightSum2, featureSum1)
-      }).collect().sortBy(_._1)
+      }).toArray.sortBy(_._1)
 
     val numLabels = aggregated.length
     instr.logNumClasses(numLabels)
