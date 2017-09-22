@@ -47,7 +47,7 @@ case class ArrowStreamEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute
 
     val columnarBatchIter = new ArrowStreamPythonUDFRunner(
         funcs, conf.arrowMaxRecordsPerBatch, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_UDF, argOffsets, schema)
+        PythonEvalType.SQL_PANDAS_UDF_STREAM, argOffsets, schema)
       .compute(iter, context.partitionId(), context)
 
     new Iterator[InternalRow] {

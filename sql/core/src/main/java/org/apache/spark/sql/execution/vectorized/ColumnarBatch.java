@@ -462,6 +462,9 @@ public final class ColumnarBatch {
     return numRows - numRowsFiltered;
   }
 
+  /**
+   * Returns the schema that makes up this batch.
+   */
   public StructType schema() { return schema; }
 
   /**

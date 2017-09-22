@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Proj
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
+import org.apache.spark.sql.internal.SQLConf
 
 
 /**
@@ -90,7 +91,7 @@ object ExtractPythonUDFFromAggregate extends Rule[LogicalPlan] {
  * This has the limitation that the input to the Python UDF is not allowed include attributes from
  * multiple child operators.
  */
-object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
+case class ExtractPythonUDFs(conf: SQLConf) extends Rule[SparkPlan] with PredicateHelper {
 
   private def hasPythonUDF(e: Expression): Boolean = {
     e.find(_.isInstanceOf[PythonUDF]).isDefined
@@ -141,7 +142,11 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
 
           val evaluation = validUdfs.partition(_.vectorized) match {
             case (vectorizedUdfs, plainUdfs) if plainUdfs.isEmpty =>
-              ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+              if (conf.arrowStreamEnable) {
+                ArrowStreamEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+              } else {
+                ArrowEvalPythonExec(vectorizedUdfs, child.output ++ resultAttrs, child)
+              }
             case (vectorizedUdfs, plainUdfs) if vectorizedUdfs.isEmpty =>
               BatchEvalPythonExec(plainUdfs, child.output ++ resultAttrs, child)
             case _ =>

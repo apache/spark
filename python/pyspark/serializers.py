@@ -85,6 +85,7 @@ class PythonEvalType(object):
     NON_UDF = 0
     SQL_BATCHED_UDF = 1
     SQL_PANDAS_UDF = 2
+    SQL_PANDAS_UDF_STREAM = 3
 
 
 class Serializer(object):

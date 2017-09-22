@@ -3376,6 +3376,16 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
 
+
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
+class ArrowStreamVectorizedUDFTests(VectorizedUDFTests):
+
+    @classmethod
+    def setUpClass(cls):
+        VectorizedUDFTests.setUpClass()
+        cls.spark.conf.set("spark.sql.execution.arrow.stream.enable", "true")
+
+
 if __name__ == "__main__":
     from pyspark.sql.tests import *
     if xmlrunner:
