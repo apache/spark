@@ -37,7 +37,7 @@ import org.apache.spark.ml.linalg.Vector
  *   $$
  *   \begin{align}
  *   \min_{w, \sigma}\frac{1}{2n}{\sum_{i=1}^n\left(\sigma +
- *   H_m\left(\frac{X_{i}w - y_{i}}{\sigma}\right)\sigma\right) + \frac{1}{2}\alpha {||w||_2}^2}
+ *   H_m\left(\frac{X_{i}w - y_{i}}{\sigma}\right)\sigma\right) + \frac{1}{2}\lambda {||w||_2}^2}
  *   \end{align}
  *   $$
  * </blockquote>

@@ -119,15 +119,53 @@ private[regression] trait LinearRegressionParams extends PredictorParams
  * Linear regression.
  *
  * The learning objective is to minimize the specified loss function, with regularization.
- * This supports two loss functions:
+ * This supports two kinds of loss:
  *  - squaredError (a.k.a squared loss)
- *  - huber
+ *  - huber (a hybrid of squared error for relatively small errors and absolute error for
+ *  relatively large ones, and we estimate the scale parameter from training data)
  *
  * This supports multiple types of regularization:
  *  - none (a.k.a. ordinary least squares)
  *  - L2 (ridge regression)
  *  - L1 (Lasso)
  *  - L2 + L1 (elastic net)
+ *
+ * The squared error objective function is:
+ *
+ * <blockquote>
+ *   $$
+ *   \begin{align}
+ *   \min_{w}\frac{1}{2n}{\sum_{i=1}^n(X_{i}w - y_{i})^{2} +
+ *   \lambda\left[\frac{1-\alpha}{2}{||w||_{2}}^{2} + \alpha{||w||_{1}}\right]}
+ *   \end{align}
+ *   $$
+ * </blockquote>
+ *
+ * The huber objective function is:
+ *
+ * <blockquote>
+ *   $$
+ *   \begin{align}
+ *   \min_{w, \sigma}\frac{1}{2n}{\sum_{i=1}^n\left(\sigma +
+ *   H_m\left(\frac{X_{i}w - y_{i}}{\sigma}\right)\sigma\right) + \frac{1}{2}\lambda {||w||_2}^2}
+ *   \end{align}
+ *   $$
+ * </blockquote>
+ *
+ * where
+ *
+ * <blockquote>
+ *   $$
+ *   \begin{align}
+ *   H_m(z) = \begin{cases}
+ *            z^2, & \text {if } |z| &lt; \epsilon, \\
+ *            2\epsilon|z| - \epsilon^2, & \text{otherwise}
+ *            \end{cases}
+ *   \end{align}
+ *   $$
+ * </blockquote>
+ *
+ * Note: Fitting with huber loss only supports none and L2 regularization.
  */
 @Since("1.3.0")
 class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String)
