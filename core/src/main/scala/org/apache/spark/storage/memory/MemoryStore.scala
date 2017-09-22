@@ -387,11 +387,18 @@ private[spark] class MemoryStore(
     // the block's actual memory usage has exceeded the unroll memory by a small amount, so we
     // perform one final call to attempt to allocate additional memory if necessary.
     if (keepUnrolling) {
-      serializationStream.close()
-      reserveAdditionalMemoryIfNecessary()
+      serializationStream.flush()
+      if (bbos.size > unrollMemoryUsedByThisBlock) {
+        val amountToRequest = bbos.size - unrollMemoryUsedByThisBlock
+        keepUnrolling = reserveUnrollMemoryForThisTask(blockId, amountToRequest, memoryMode)
+        if (keepUnrolling) {
+          unrollMemoryUsedByThisBlock += amountToRequest
+        }
+      }
     }
 
     if (keepUnrolling) {
+      serializationStream.close()
       val entry = SerializedMemoryEntry[T](bbos.toChunkedByteBuffer, memoryMode, classTag)
       // Synchronize so that transfer is atomic
       memoryManager.synchronized {
