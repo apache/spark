@@ -96,6 +96,11 @@ if [ -z "$SPARK_VERSION" ]; then
 fi
 
 # Verify we have the right java version set
+if [ -z "$JAVA_HOME" ]; then
+  echo "Please set JAVA_HOME."
+  exit 1
+fi
+
 java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
 
 if [[ ! $SPARK_VERSION < "2.2." ]]; then
