@@ -1899,7 +1899,8 @@ class DataFrame(object):
                 pandas_type = _to_corrected_pandas_type(field.dataType)
                 # SPARK-21766: if an integer field is nullable and has null values, it can be
                 # inferred by pandas as float column. Once we convert the column with NaN back
-                # to integer type e.g., np.int16, we will hit exception.
+                # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+                # float type, not the corrected type from the schema in this case.
                 if pandas_type is not None and \
                     not(isinstance(field.dataType, IntegralType) and field.nullable and
                         pdf[field.name].isnull().any()):
