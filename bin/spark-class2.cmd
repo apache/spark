@@ -29,7 +29,7 @@ if "x%1"=="x" (
 )
 
 rem Find Spark jars.
-if exist "%SPARK_HOME%\RELEASE" (
+if exist "%SPARK_HOME%\jars" (
   set SPARK_JARS_DIR="%SPARK_HOME%\jars"
 ) else (
   set SPARK_JARS_DIR="%SPARK_HOME%\assembly\target\scala-%SPARK_SCALA_VERSION%\jars"
