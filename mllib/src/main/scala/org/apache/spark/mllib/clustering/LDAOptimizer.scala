@@ -468,12 +468,12 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val logphatPartOptionBase = () => if (optimizeDocConcentration) Some(BDV.zeros[Double](k))
                                       else None
 
-    val stats: RDD[(BDM[Double], Option[BDV[Double]], Int)] = batch.mapPartitions { docs =>
+    val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitions { docs =>
       val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
 
       val stat = BDM.zeros[Double](k, vocabSize)
       val logphatPartOption = logphatPartOptionBase()
-      var nonEmptyDocCount = 0
+      var nonEmptyDocCount : Long = 0L
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         nonEmptyDocCount += 1
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
@@ -484,15 +484,15 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       Iterator((stat, logphatPartOption, nonEmptyDocCount))
     }
 
-    val elementWiseSum = (u : (BDM[Double], Option[BDV[Double]], Int),
-                                 v : (BDM[Double], Option[BDV[Double]], Int)) => {
+    val elementWiseSum = (u : (BDM[Double], Option[BDV[Double]], Long),
+                                 v : (BDM[Double], Option[BDV[Double]], Long)) => {
       u._1 += v._1
       u._2.foreach(_ += v._2.get)
       (u._1, u._2, u._3 + v._3)
     }
 
-    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN : Int) = stats
-      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0))(
+    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN : Long) = stats
+      .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))(
         elementWiseSum, elementWiseSum
       )
 
