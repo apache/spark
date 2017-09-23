@@ -1037,9 +1037,9 @@ class DataFrame(object):
         |   mean|               3.5| null|
         | stddev|2.1213203435596424| null|
         |    min|                 2|Alice|
-        |    25%|               5.0| null|
-        |    50%|               5.0| null|
-        |    75%|               5.0| null|
+        |    25%|                 5| null|
+        |    50%|                 5| null|
+        |    75%|                 5| null|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
 
@@ -1049,8 +1049,8 @@ class DataFrame(object):
         +-------+---+-----+
         |  count|  2|    2|
         |    min|  2|Alice|
-        |    25%|5.0| null|
-        |    75%|5.0| null|
+        |    25%|  5| null|
+        |    75%|  5| null|
         |    max|  5|  Bob|
         +-------+---+-----+
 
