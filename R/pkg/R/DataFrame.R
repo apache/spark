@@ -986,10 +986,10 @@ setMethod("unique",
 #' @param x A SparkDataFrame
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
-#' @param seed Randomness seed value
+#' @param seed Randomness seed value. Default is a random seed.
 #'
 #' @family SparkDataFrame functions
-#' @aliases sample,SparkDataFrame,logical,numeric-method
+#' @aliases sample,SparkDataFrame-method
 #' @rdname sample
 #' @name sample
 #' @export
@@ -998,33 +998,47 @@ setMethod("unique",
 #' sparkR.session()
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
+#' collect(sample(df, fraction = 0.5))
 #' collect(sample(df, FALSE, 0.5))
-#' collect(sample(df, TRUE, 0.5))
+#' collect(sample(df, TRUE, 0.5, seed = 3))
 #'}
 #' @note sample since 1.4.0
 setMethod("sample",
-          signature(x = "SparkDataFrame", withReplacement = "logical",
-                    fraction = "numeric"),
-          function(x, withReplacement, fraction, seed) {
-            if (fraction < 0.0) stop(cat("Negative fraction value:", fraction))
+          signature(x = "SparkDataFrame"),
+          function(x, withReplacement = FALSE, fraction, seed) {
+            if (!is.numeric(fraction)) {
+              stop(paste("fraction must be numeric; however, got", class(fraction)))
+            }
+            if (!is.logical(withReplacement)) {
+              stop(paste("withReplacement must be logical; however, got", class(withReplacement)))
+            }
+
             if (!missing(seed)) {
+              if (is.null(seed)) {
+                stop("seed must not be NULL or NA; however, got NULL")
+              }
+              if (is.na(seed)) {
+                stop("seed must not be NULL or NA; however, got NA")
+              }
+
               # TODO : Figure out how to send integer as java.lang.Long to JVM so
               # we can send seed as an argument through callJMethod
-              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction, as.integer(seed))
+              sdf <- handledCallJMethod(x@sdf, "sample", as.logical(withReplacement),
+                                        as.numeric(fraction), as.integer(seed))
             } else {
-              sdf <- callJMethod(x@sdf, "sample", withReplacement, fraction)
+              sdf <- handledCallJMethod(x@sdf, "sample",
+                                        as.logical(withReplacement), as.numeric(fraction))
             }
             dataFrame(sdf)
           })
 
 #' @rdname sample
-#' @aliases sample_frac,SparkDataFrame,logical,numeric-method
+#' @aliases sample_frac,SparkDataFrame-method
 #' @name sample_frac
 #' @note sample_frac since 1.4.0
 setMethod("sample_frac",
-          signature(x = "SparkDataFrame", withReplacement = "logical",
-                    fraction = "numeric"),
-          function(x, withReplacement, fraction, seed) {
+          signature(x = "SparkDataFrame"),
+          function(x, withReplacement = FALSE, fraction, seed) {
             sample(x, withReplacement, fraction, seed)
           })
 

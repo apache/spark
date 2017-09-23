@@ -85,10 +85,23 @@ private[spark] case class PythonFunction(
  */
 private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 
+/**
+ * Enumerate the type of command that will be sent to the Python worker
+ */
+private[spark] object PythonEvalType {
+  val NON_UDF = 0
+  val SQL_BATCHED_UDF = 1
+  val SQL_PANDAS_UDF = 2
+}
+
 private[spark] object PythonRunner {
   def apply(func: PythonFunction, bufferSize: Int, reuse_worker: Boolean): PythonRunner = {
     new PythonRunner(
-      Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuse_worker, false, Array(Array(0)))
+      Seq(ChainedPythonFunctions(Seq(func))),
+      bufferSize,
+      reuse_worker,
+      PythonEvalType.NON_UDF,
+      Array(Array(0)))
   }
 }
 
@@ -102,7 +115,7 @@ private[spark] class PythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuse_worker: Boolean,
-    isUDF: Boolean,
+    evalType: Int,
     argOffsets: Array[Array[Int]])
   extends Logging {
 
@@ -317,8 +330,8 @@ private[spark] class PythonRunner(
         }
         dataOut.flush()
         // Serialized command:
-        if (isUDF) {
-          dataOut.writeInt(1)
+        dataOut.writeInt(evalType)
+        if (evalType != PythonEvalType.NON_UDF) {
           dataOut.writeInt(funcs.length)
           funcs.zip(argOffsets).foreach { case (chained, offsets) =>
             dataOut.writeInt(offsets.length)
@@ -332,7 +345,6 @@ private[spark] class PythonRunner(
             }
           }
         } else {
-          dataOut.writeInt(0)
           val command = funcs.head.funcs.head.command
           dataOut.writeInt(command.length)
           dataOut.write(command)

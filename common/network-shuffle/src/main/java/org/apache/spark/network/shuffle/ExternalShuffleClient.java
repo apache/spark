@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import com.codahale.metrics.MetricSet;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,6 +118,12 @@ public class ExternalShuffleClient extends ShuffleClient {
     }
   }
 
+  @Override
+  public MetricSet shuffleMetrics() {
+    checkInit();
+    return clientFactory.getAllMetrics();
+  }
+
   /**
    * Registers this executor with an external shuffle server. This registration is required to
    * inform the shuffle server about where and how we store our shuffle files.
@@ -140,6 +147,7 @@ public class ExternalShuffleClient extends ShuffleClient {
 
   @Override
   public void close() {
+    checkInit();
     clientFactory.close();
   }
 }

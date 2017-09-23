@@ -2226,8 +2226,9 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
-#' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
-#' returns another timestamp that corresponds to the same time of day in the given timezone.
+#' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
+#' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
+#' would yield '2017-07-14 03:40:00.0'.
 #'
 #' @rdname column_datetime_diff_functions
 #'
@@ -2286,8 +2287,9 @@ setMethod("next_day", signature(y = "Column", x = "character"),
           })
 
 #' @details
-#' \code{to_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day
-#' in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.
+#' \code{to_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
+#' time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1'
+#' would yield '2017-07-14 01:40:00.0'.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method

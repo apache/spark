@@ -1011,12 +1011,20 @@ class SparkContext(object):
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
-        self.profiler_collector.show_profiles()
+        if self.profiler_collector is not None:
+            self.profiler_collector.show_profiles()
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
         """
-        self.profiler_collector.dump_profiles(path)
+        if self.profiler_collector is not None:
+            self.profiler_collector.dump_profiles(path)
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def getConf(self):
         conf = SparkConf()

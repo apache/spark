@@ -106,5 +106,8 @@ class DummyUDF extends PythonFunction(
   broadcastVars = null,
   accumulator = null)
 
-class MyDummyPythonUDF
-  extends UserDefinedPythonFunction(name = "dummyUDF", func = new DummyUDF, dataType = BooleanType)
+class MyDummyPythonUDF extends UserDefinedPythonFunction(
+  name = "dummyUDF",
+  func = new DummyUDF,
+  dataType = BooleanType,
+  vectorized = false)
