@@ -45,16 +45,11 @@ private[sql] class SharedState(val sparkContext: SparkContext) extends Logging {
   // Load hive-site.xml into hadoopConf and determine the warehouse path we want to use, based on
   // the config from both hive and Spark SQL. Finally set the warehouse config value to sparkConf.
   val warehousePath: String = {
-    // hive.metastore.warehouse.dir only stay in hadoopConf
     sparkContext.conf.remove("hive.metastore.warehouse.dir")
-    val path = SQLUtils.warehousePath(sparkContext.getConf)
-    sparkContext.conf.set(WAREHOUSE_PATH.key, path)
-    sparkContext.hadoopConfiguration.set("hive.metastore.warehouse.dir", path)
-    path
+    SQLUtils.warehousePath(sparkContext.getConf, sparkContext.hadoopConfiguration, sparkContext)
   }
 
   logInfo(s"Warehouse path is '$warehousePath'.")
-
 
   /**
    * Class for caching query results reused in future executions.
