@@ -53,7 +53,7 @@ public class HiveHasherSuite {
 
     for (int i = 0; i < inputs.length; i++) {
       UTF8String s = UTF8String.fromString("val_" + inputs[i]);
-      int hash = HiveHasher.hashUnsafeBytes(s.getBaseObject(), s.getBaseOffset(), s.numBytes());
+      int hash = HiveHasher.hashUnsafeBlock(s.getBaseObject(), s.getBaseOffset(), s.numBytes());
       Assert.assertEquals(expected[i], ((31 * inputs[i]) + hash));
     }
   }

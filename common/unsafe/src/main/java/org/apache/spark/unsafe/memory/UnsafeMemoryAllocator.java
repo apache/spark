@@ -35,7 +35,11 @@ public class UnsafeMemoryAllocator implements MemoryAllocator {
     Object buffer = ByteBuffer.allocateDirect((int)size);
     if (buffer instanceof DirectBuffer) {
       long addr = ((DirectBuffer) buffer).address();
-      return new OffHeapMemoryBlock(buffer, addr, size);
+      OffHeapMemoryBlock memory = new OffHeapMemoryBlock(buffer, addr, size);
+      if (MemoryAllocator.MEMORY_DEBUG_FILL_ENABLED) {
+        memory.fill(MemoryAllocator.MEMORY_DEBUG_FILL_CLEAN_VALUE);
+      }
+      return memory;
     }
     throw new UnsupportedOperationException("A ByteBuffer does not have an address in off-heap");
   }

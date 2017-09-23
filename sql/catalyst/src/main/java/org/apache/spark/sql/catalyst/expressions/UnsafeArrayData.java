@@ -28,6 +28,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.memory.ByteArrayMemoryBlock;
+import org.apache.spark.unsafe.memory.LongArrayMemoryBlock;
 import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
@@ -232,7 +233,9 @@ public final class UnsafeArrayData extends ArrayData {
     final long offsetAndSize = getLong(ordinal);
     final int offset = (int) (offsetAndSize >> 32);
     final int size = (int) offsetAndSize;
-    MemoryBlock mb = new ByteArrayMemoryBlock((byte[])baseObject, baseOffset + offset, size);
+    MemoryBlock mb = (baseObject instanceof byte[]) ?
+      new ByteArrayMemoryBlock((byte[]) baseObject, baseOffset + offset, size) :
+      new LongArrayMemoryBlock((long[]) baseObject, baseOffset + offset, size);
     return UTF8String.fromAddress(mb, mb.getBaseOffset(), (int)mb.size());
   }
 
