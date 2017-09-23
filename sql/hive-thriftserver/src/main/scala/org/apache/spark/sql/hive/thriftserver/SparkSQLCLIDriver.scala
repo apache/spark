@@ -96,7 +96,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
         cliConf.set(k, v)
     }
 
-    cliConf.setVar(ConfVars.METASTOREWAREHOUSE, SQLUtils.warehousePath(sparkConf))
+    cliConf.setVar(ConfVars.METASTOREWAREHOUSE, SQLUtils.warehousePath(sparkConf, hadoopConf, null))
 
     val sessionState = new CliSessionState(cliConf)
 
