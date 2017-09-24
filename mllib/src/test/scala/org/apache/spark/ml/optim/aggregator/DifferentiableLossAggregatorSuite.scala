@@ -174,7 +174,7 @@ object DifferentiableLossAggregatorSuite {
       (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
     instances.aggregate(
-      new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer
+      (new MultivariateOnlineSummarizer, new MultivariateOnlineSummarizer)
     )(seqOp, combOp)
   }
 
@@ -191,7 +191,7 @@ object DifferentiableLossAggregatorSuite {
       (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
     instances.aggregate(
-      new MultivariateOnlineSummarizer, new MultiClassSummarizer
+      (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
     )(seqOp, combOp)
   }
 }
