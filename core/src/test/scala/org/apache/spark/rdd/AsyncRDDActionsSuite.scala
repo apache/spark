@@ -130,10 +130,10 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
         info("Should not have reached this code path (onComplete matching Failure)")
         throw new Exception("Task should succeed")
     }
-    f.onSuccess { case a: Any =>
+    f.foreach { a =>
       sem.release()
     }
-    f.onFailure { case t =>
+    f.failed.foreach { t =>
       info("Should not have reached this code path (onFailure)")
       throw new Exception("Task should succeed")
     }
@@ -164,11 +164,11 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       case scala.util.Failure(e) =>
         sem.release()
     }
-    f.onSuccess { case a: Any =>
+    f.foreach { a =>
       info("Should not have reached this code path (onSuccess)")
       throw new Exception("Task should fail")
     }
-    f.onFailure { case t =>
+    f.failed.foreach { t =>
       sem.release()
     }
     intercept[SparkException] {
