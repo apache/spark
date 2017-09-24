@@ -109,13 +109,12 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         .range(100).as("id").repartition(partitionCount)
         .withColumn("partition", $"id" % partitionCount)
 
-      val customPartitionOutputs = (0 until partitionCount)
-        .foldLeft(Map[TablePartitionSpec, String]()) { (acc, partition) =>
-        acc + (
-          Map("partition" -> partition.toString) ->
-          new File(path, partition.toString).getAbsolutePath
-        )
-      }
+      val customPartitionLocations = (0 until partitionCount)
+        .foldLeft(Map[TablePartitionSpec, String]()) { (locations, partition) =>
+          val partitionSpec = Map("partition" -> partition.toString)
+          val partitionPath = new File(path, partition.toString).getAbsolutePath
+          locations + (partitionSpec -> partitionPath)
+        }
 
       val plan = ds.queryExecution.sparkPlan
       val output = path.getAbsolutePath
@@ -125,7 +124,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         plan = plan,
         fileFormat = new CSVFileFormat(),
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
-        outputSpec = FileFormatWriter.OutputSpec(output, customPartitionOutputs),
+        outputSpec = FileFormatWriter.OutputSpec(output, customPartitionLocations),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
         partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
