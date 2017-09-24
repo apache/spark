@@ -28,31 +28,31 @@ public class MemoryBlockSuite {
   private void check(MemoryBlock memory, Object obj, long offset, int length) {
     memory.setPageNumber(1);
     memory.fill((byte)-1);
-    MemoryBlock.putBoolean(memory, offset, true);
-    MemoryBlock.putByte(memory, offset + 1, (byte)127);
-    MemoryBlock.putShort(memory, offset + 2, (short)257);
-    MemoryBlock.putInt(memory, offset + 4, 0x20000002);
-    MemoryBlock.putLong(memory, offset + 8, -1L);
-    MemoryBlock.putFloat(memory, offset + 16, 1.0F);
-    MemoryBlock.putDouble(memory, offset + 20, 2.0);
+    memory.putBoolean(offset, true);
+    memory.putByte(offset + 1, (byte)127);
+    memory.putShort(offset + 2, (short)257);
+    memory.putInt(offset + 4, 0x20000002);
+    memory.putLong(offset + 8, -1L);
+    memory.putFloat(offset + 16, 1.0F);
+    memory.putDouble(offset + 20, 2.0);
     MemoryBlock.copyMemory(memory, offset, memory, offset + 28, 4);
 
     Assert.assertEquals(obj, memory.getBaseObject());
     Assert.assertEquals(offset, memory.getBaseOffset());
     Assert.assertEquals(length, memory.size());
     Assert.assertEquals(1, memory.getPageNumber());
-    Assert.assertEquals(true, MemoryBlock.getBoolean(memory, offset));
-    Assert.assertEquals((byte)127, MemoryBlock.getByte(memory, offset + 1 ));
-    Assert.assertEquals((short)257, MemoryBlock.getShort(memory, offset + 2));
-    Assert.assertEquals(0x20000002, MemoryBlock.getInt(memory, offset + 4));
-    Assert.assertEquals(-1L, MemoryBlock.getLong(memory, offset + 8));
-    Assert.assertEquals(1.0F, MemoryBlock.getFloat(memory, offset + 16), 0);
-    Assert.assertEquals(2.0, MemoryBlock.getDouble(memory, offset + 20), 0);
-    Assert.assertEquals(true, MemoryBlock.getBoolean(memory, offset + 28));
-    Assert.assertEquals((byte)127, MemoryBlock.getByte(memory, offset + 29 ));
-    Assert.assertEquals((short)257, MemoryBlock.getShort(memory, offset + 30));
+    Assert.assertEquals(true, memory.getBoolean(offset));
+    Assert.assertEquals((byte)127, memory.getByte(offset + 1 ));
+    Assert.assertEquals((short)257, memory.getShort(offset + 2));
+    Assert.assertEquals(0x20000002, memory.getInt(offset + 4));
+    Assert.assertEquals(-1L, memory.getLong(offset + 8));
+    Assert.assertEquals(1.0F, memory.getFloat(offset + 16), 0);
+    Assert.assertEquals(2.0, memory.getDouble(offset + 20), 0);
+    Assert.assertEquals(true, memory.getBoolean(offset + 28));
+    Assert.assertEquals((byte)127, memory.getByte(offset + 29 ));
+    Assert.assertEquals((short)257, memory.getShort(offset + 30));
     for (int i = 32; i < memory.size(); i++) {
-      Assert.assertEquals((byte) -1, MemoryBlock.getByte(memory, offset + i));
+      Assert.assertEquals((byte) -1, memory.getByte(offset + i));
     }
   }
 

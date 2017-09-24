@@ -24,21 +24,89 @@ import org.apache.spark.unsafe.Platform;
  */
 public final class IntArrayMemoryBlock extends MemoryBlock {
 
+  private final int[] array;
+
   public IntArrayMemoryBlock(int[] obj, long offset, long size) {
     super(obj, offset, size);
+    this.array = obj;
   }
 
   @Override
   public MemoryBlock allocate(long offset, long size) {
-    return new IntArrayMemoryBlock((int[]) obj, offset, size);
+    return new IntArrayMemoryBlock(array, offset, size);
   }
 
-  public int[] getIntArray() { return (int[])this.obj; }
+  public int[] getIntArray() { return array; }
 
   /**
    * Creates a memory block pointing to the memory used by the int array.
    */
   public static IntArrayMemoryBlock fromArray(final int[] array) {
-    return new IntArrayMemoryBlock(array, Platform.INT_ARRAY_OFFSET, array.length*4);
+    return new IntArrayMemoryBlock(array, Platform.INT_ARRAY_OFFSET, array.length * 4);
+  }
+
+
+  public final int getInt(long offset) {
+    return Platform.getInt(array, offset);
+  }
+
+  public final void putInt(long offset, int value) {
+    Platform.putInt(array, offset, value);
+  }
+
+  public final boolean getBoolean(long offset) {
+    return Platform.getBoolean(array, offset);
+  }
+
+  public final void putBoolean(long offset, boolean value) {
+    Platform.putBoolean(array, offset, value);
+  }
+
+  public final byte getByte(long offset) {
+    return Platform.getByte(array, offset);
+  }
+
+  public final void putByte(long offset, byte value) {
+    Platform.putByte(array, offset, value);
+  }
+
+  public final short getShort(long offset) {
+    return Platform.getShort(array, offset);
+  }
+
+  public final void putShort(long offset, short value) {
+    Platform.putShort(array, offset, value);
+  }
+
+  public final long getLong(long offset) {
+    return Platform.getLong(array, offset);
+  }
+
+  public final void putLong(long offset, long value) {
+    Platform.putLong(array, offset, value);
+  }
+
+  public final float getFloat(long offset) {
+    return Platform.getFloat(array, offset);
+  }
+
+  public final void putFloat(long offset, float value) {
+    Platform.putFloat(array, offset, value);
+  }
+
+  public final double getDouble(long offset) {
+    return Platform.getDouble(array, offset);
+  }
+
+  public final void putDouble(long offset, double value) {
+    Platform.putDouble(array, offset, value);
+  }
+
+  public final Object getObjectVolatile(long offset) {
+    return Platform.getObjectVolatile(array, offset);
+  }
+
+  public final void putObjectVolatile(long offset, Object value) {
+    Platform.putObjectVolatile(array, offset, value);
   }
 }

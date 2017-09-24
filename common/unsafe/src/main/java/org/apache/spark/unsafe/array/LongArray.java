@@ -67,7 +67,7 @@ public final class LongArray {
    */
   public void zeroOut() {
     for (long off = baseOffset; off < baseOffset + length * WIDTH; off += WIDTH) {
-      MemoryBlock.putLong(memory, off, 0);
+      memory.putLong(off, 0);
     }
   }
 
@@ -77,7 +77,7 @@ public final class LongArray {
   public void set(int index, long value) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    MemoryBlock.putLong(memory, baseOffset + index * WIDTH, value);
+    memory.putLong(baseOffset + index * WIDTH, value);
   }
 
   /**
@@ -86,6 +86,6 @@ public final class LongArray {
   public long get(int index) {
     assert index >= 0 : "index (" + index + ") should >= 0";
     assert index < length : "index (" + index + ") should < length (" + length + ")";
-    return MemoryBlock.getLong(memory, baseOffset + index * WIDTH);
+    return memory.getLong(baseOffset + index * WIDTH);
   }
 }
