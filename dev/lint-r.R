@@ -24,11 +24,16 @@ if (! library(SparkR, lib.loc = LOCAL_LIB_LOC, logical.return = TRUE)) {
   stop("You should install SparkR in a local directory with `R/install-dev.sh`.")
 }
 
-# Installs lintr from Github in a local directory.
-# NOTE: The CRAN's version is too old to adapt to our rules.
-if ("lintr" %in% row.names(installed.packages())  == FALSE) {
-  devtools::install_github("jimhester/lintr@a769c0b")
-  # devtools::install_github("jimhester/lintr@5431140")
+# Installs lintr from Github in a local directory if lintr is not installed already or
+# the existing lintr is not the specified version.
+#
+# Note that, the CRAN's version is too old to adapt to our rules. Therefore, we try to
+# install lintr from the latest commit in Github, rather than a specific tag or release.
+# The current latest is jimhester/lintr@5431140 (see SPARK-22063), the dev version,
+# '1.0.1.9000'.
+if ("lintr" %in% row.names(installed.packages()) == FALSE ||
+    packageVersion("lintr") != "1.0.1.9000") {
+  devtools::install_github("jimhester/lintr@5431140")
 }
 
 library(lintr)
