@@ -22,6 +22,7 @@ import java.io.FilenameFilter
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -49,18 +50,20 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
     val output = null
 
     assertThrows[IllegalArgumentException] {
-      FileFormatWriter.write(
-        sparkSession = session,
-        plan = plan,
-        fileFormat = new CSVFileFormat(),
-        committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
-        outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
-        hadoopConf = session.sparkContext.hadoopConfiguration,
-        partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
-        bucketSpec = None,
-        statsTrackers = Seq.empty,
-        options = Map.empty
-      )
+      SQLExecution.withNewExecutionId(session, df.queryExecution) {
+        FileFormatWriter.write(
+          sparkSession = session,
+          plan = plan,
+          fileFormat = new CSVFileFormat(),
+          committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
+          outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
+          hadoopConf = session.sparkContext.hadoopConfiguration,
+          partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
+          bucketSpec = None,
+          statsTrackers = Seq.empty,
+          options = Map.empty
+        )
+      }
     }
   }
 
@@ -77,18 +80,20 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       val plan = df.queryExecution.sparkPlan
       val output = path.getAbsolutePath
 
-      FileFormatWriter.write(
-        sparkSession = session,
-        plan = plan,
-        fileFormat = new CSVFileFormat(),
-        committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
-        outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
-        hadoopConf = session.sparkContext.hadoopConfiguration,
-        partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
-        bucketSpec = None,
-        statsTrackers = Seq.empty,
-        options = Map.empty
-      )
+      SQLExecution.withNewExecutionId(session, df.queryExecution) {
+        FileFormatWriter.write(
+          sparkSession = session,
+          plan = plan,
+          fileFormat = new CSVFileFormat(),
+          committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
+          outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
+          hadoopConf = session.sparkContext.hadoopConfiguration,
+          partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
+          bucketSpec = None,
+          statsTrackers = Seq.empty,
+          options = Map.empty
+        )
+      }
 
       val partitions = listPartitions(path)
       partitions.foreach(partition => assert(partition.listFiles().nonEmpty))
@@ -119,18 +124,20 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       val plan = df.queryExecution.sparkPlan
       val output = path.getAbsolutePath
 
-      FileFormatWriter.write(
-        sparkSession = session,
-        plan = plan,
-        fileFormat = new CSVFileFormat(),
-        committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
-        outputSpec = FileFormatWriter.OutputSpec(output, customPartitionLocations),
-        hadoopConf = session.sparkContext.hadoopConfiguration,
-        partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
-        bucketSpec = None,
-        statsTrackers = Seq.empty,
-        options = Map.empty
-      )
+      SQLExecution.withNewExecutionId(session, df.queryExecution) {
+        FileFormatWriter.write(
+          sparkSession = session,
+          plan = plan,
+          fileFormat = new CSVFileFormat(),
+          committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
+          outputSpec = FileFormatWriter.OutputSpec(output, customPartitionLocations),
+          hadoopConf = session.sparkContext.hadoopConfiguration,
+          partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
+          bucketSpec = None,
+          statsTrackers = Seq.empty,
+          options = Map.empty
+        )
+      }
 
       val partitions = listPartitions(path)
       partitions.foreach(partition => assert(partition.listFiles().nonEmpty))
