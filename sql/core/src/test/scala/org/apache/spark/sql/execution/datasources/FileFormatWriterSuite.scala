@@ -56,7 +56,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
         outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
-        partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
+        partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
         statsTrackers = Seq.empty,
         options = Map.empty
@@ -84,7 +84,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
         outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
-        partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
+        partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
         statsTrackers = Seq.empty,
         options = Map.empty
@@ -127,7 +127,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
         outputSpec = FileFormatWriter.OutputSpec(output, customPartitionOutputs),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
-        partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
+        partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
         statsTrackers = Seq.empty,
         options = Map.empty
