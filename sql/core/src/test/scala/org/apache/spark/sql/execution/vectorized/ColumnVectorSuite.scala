@@ -397,3 +397,4 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 }
+
