@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.File
+import java.io.FilenameFilter
+
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -30,4 +35,118 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       assert(partFiles.length === 2)
     }
   }
+
+  test("write should fail when output path is not specified") {
+    val session = spark
+    import session.implicits._
+
+    val partitionCount = 5
+    val ds = spark
+      .range(100).as("id").repartition(partitionCount)
+      .withColumn("partition", $"id" % partitionCount)
+
+    val plan = ds.queryExecution.sparkPlan
+    val output = null
+
+    assertThrows[IllegalArgumentException] {
+      FileFormatWriter.write(
+        sparkSession = session,
+        plan = plan,
+        fileFormat = new CSVFileFormat(),
+        committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
+        outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
+        hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
+        partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
+        None,
+        Seq.empty,
+        Map.empty
+      )
+    }
+  }
+
+  test("write should succeed when output path is specified") {
+    withTempPath { path =>
+      val session = spark
+      import session.implicits._
+
+      val partitionCount = 5
+      val ds = spark
+        .range(100).as("id").repartition(partitionCount)
+        .withColumn("partition", $"id" % partitionCount)
+
+      val plan = ds.queryExecution.sparkPlan
+      val output = path.getAbsolutePath
+
+      FileFormatWriter.write(
+        sparkSession = session,
+        plan = plan,
+        fileFormat = new CSVFileFormat(),
+        committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
+        outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
+        hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
+        partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
+        None,
+        Seq.empty,
+        Map.empty
+      )
+
+      val partitions = listPartitions(path)
+      partitions.foreach(partition => assert(partition.listFiles().nonEmpty))
+
+      val actualPartitions = partitions.map(_.getName)
+      val expectedPartitions = (0 until partitionCount).map(partition => s"partition=$partition")
+      assert(actualPartitions.toSet === expectedPartitions.toSet)
+    }
+  }
+
+  test("write should succeed when custom partition locations are specified") {
+    withTempPath { path =>
+      val session = spark
+      import session.implicits._
+
+      val partitionCount = 5
+      val ds = spark
+        .range(100).as("id").repartition(partitionCount)
+        .withColumn("partition", $"id" % partitionCount)
+
+      val customPartitionOutputs = (0 until partitionCount)
+        .foldLeft(Map[TablePartitionSpec, String]()) { (acc, partition) =>
+        acc + (
+          Map("partition" -> partition.toString) ->
+          new File(path, partition.toString).getAbsolutePath
+        )
+      }
+
+      val plan = ds.queryExecution.sparkPlan
+      val output = path.getAbsolutePath
+
+      FileFormatWriter.write(
+        sparkSession = session,
+        plan = plan,
+        fileFormat = new CSVFileFormat(),
+        committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
+        outputSpec = FileFormatWriter.OutputSpec(output, customPartitionOutputs),
+        hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
+        partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
+        None,
+        Seq.empty,
+        Map.empty
+      )
+
+      val partitions = listPartitions(path)
+      partitions.foreach(partition => assert(partition.listFiles().nonEmpty))
+
+      val actualPartitions = partitions.map(_.getName)
+      val expectedPartitions = (0 until partitionCount).map(_.toString)
+      assert(actualPartitions.toSet === expectedPartitions.toSet)
+    }
+  }
+
+  private def listPartitions(path: File): Array[File] = {
+    path.listFiles(new FilenameFilter {
+      override def accept(dir: File, name: String): Boolean =
+        !(name.startsWith(".") || name.startsWith("_"))
+    })
+  }
+
 }
