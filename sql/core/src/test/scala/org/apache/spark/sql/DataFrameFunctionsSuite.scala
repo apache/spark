@@ -320,9 +320,41 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
           Seq[Seq[Int]](Seq(2, 4), Seq(2), Seq(1), null)))
     )
 
-    val df3 = Seq(("xxx", "x")).toDF("a", "b")
+    Array[Map[Integer, Integer]](null, Map[Integer, Integer]((1, 2)))
+    val df3 = Seq((Array[Map[Integer, Integer]](
+      null,
+      Map((1, 2)),
+      Map((1, 2), (0, 4)),
+      Map((1, 2), (3, 4)),
+      Map((1, 2), (3, 5)),
+      Map((1, 2), (3, null)),
+      Map((1, 2), (4, 5))),
+      "x")).toDF("a", "b")
+
+    checkAnswer(
+      df3.selectExpr("sort_array(a, true)", "sort_array(a, false)"),
+      Seq(Row(
+        Seq[Map[Integer, Integer]](
+          null,
+          Map((1, 2), (0, 4)),
+          Map((1, 2)),
+          Map((1, 2), (3, null)),
+          Map((1, 2), (3, 4)),
+          Map((1, 2), (3, 5)),
+          Map((1, 2), (4, 5))),
+        Seq[Map[Integer, Integer]](
+          Map((1, 2), (4, 5)),
+          Map((1, 2), (3, 5)),
+          Map((1, 2), (3, 4)),
+          Map((1, 2), (3, null)),
+          Map((1, 2)),
+          Map((1, 2), (0, 4)),
+          null)
+      )))
+
+    val df4 = Seq(("xxx", "x")).toDF("a", "b")
     assert(intercept[AnalysisException] {
-      df3.selectExpr("sort_array(a)").collect()
+      df4.selectExpr("sort_array(a)").collect()
     }.getMessage().contains("only supports array input"))
   }
 

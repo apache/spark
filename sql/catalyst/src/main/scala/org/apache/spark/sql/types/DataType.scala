@@ -222,7 +222,8 @@ object DataType {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
-      case (MapType(leftKeyType, leftValueType, _), MapType(rightKeyType, rightValueType, _)) =>
+      case (MapType(leftKeyType, leftValueType, _, _),
+      MapType(rightKeyType, rightValueType, _, _)) =>
         equalsIgnoreNullability(leftKeyType, rightKeyType) &&
           equalsIgnoreNullability(leftValueType, rightValueType)
       case (StructType(leftFields), StructType(rightFields)) =>
@@ -253,7 +254,7 @@ object DataType {
       case (ArrayType(fromElement, fn), ArrayType(toElement, tn)) =>
         (tn || !fn) && equalsIgnoreCompatibleNullability(fromElement, toElement)
 
-      case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+      case (MapType(fromKey, fromValue, fn, _), MapType(toKey, toValue, tn, _)) =>
         (tn || !fn) &&
           equalsIgnoreCompatibleNullability(fromKey, toKey) &&
           equalsIgnoreCompatibleNullability(fromValue, toValue)
@@ -279,7 +280,7 @@ object DataType {
       case (ArrayType(fromElement, _), ArrayType(toElement, _)) =>
         equalsIgnoreCaseAndNullability(fromElement, toElement)
 
-      case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+      case (MapType(fromKey, fromValue, _, _), MapType(toKey, toValue, _, _)) =>
         equalsIgnoreCaseAndNullability(fromKey, toKey) &&
           equalsIgnoreCaseAndNullability(fromValue, toValue)
 
@@ -307,7 +308,8 @@ object DataType {
       case (left: MapType, right: MapType) =>
         equalsStructurally(left.keyType, right.keyType) &&
           equalsStructurally(left.valueType, right.valueType) &&
-          left.valueContainsNull == right.valueContainsNull
+          left.valueContainsNull == right.valueContainsNull &&
+          left.ordered == right.ordered
 
       case (StructType(fromFields), StructType(toFields)) =>
         fromFields.length == toFields.length &&

@@ -130,7 +130,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       dataType: DataType): ExprCode = dataType match {
     case s: StructType => createCodeForStruct(ctx, input, s)
     case ArrayType(elementType, _) => createCodeForArray(ctx, input, elementType)
-    case MapType(keyType, valueType, _) => createCodeForMap(ctx, input, keyType, valueType)
+    case MapType(keyType, valueType, _, _) => createCodeForMap(ctx, input, keyType, valueType)
     case udt: UserDefinedType[_] => convertToSafe(ctx, input, udt.sqlType)
     case _ => ExprCode("", "false", input)
   }

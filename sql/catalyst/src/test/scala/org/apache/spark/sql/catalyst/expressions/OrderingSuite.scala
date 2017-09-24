@@ -29,62 +29,95 @@ import org.apache.spark.sql.types._
 
 class OrderingSuite extends SparkFunSuite with ExpressionEvalHelper {
 
-  def compareArrays(a: Seq[Any], b: Seq[Any], expected: Int): Unit = {
-    test(s"compare two arrays: a = $a, b = $b") {
-      val dataType = ArrayType(IntegerType)
-      val rowType = StructType(StructField("array", dataType, nullable = true) :: Nil)
-      val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
-      val rowA = toCatalyst(Row(a)).asInstanceOf[InternalRow]
-      val rowB = toCatalyst(Row(b)).asInstanceOf[InternalRow]
-      Seq(Ascending, Descending).foreach { direction =>
-        val sortOrder = direction match {
-          case Ascending => BoundReference(0, dataType, nullable = true).asc
-          case Descending => BoundReference(0, dataType, nullable = true).desc
-        }
-        val expectedCompareResult = direction match {
-          case Ascending => signum(expected)
-          case Descending => -1 * signum(expected)
-        }
+  def compareDatum(a: Any, b: Any, dataType: DataType, expected: Int): Unit = {
+    val rowType = StructType(StructField("data", dataType, nullable = true) :: Nil)
+    val toCatalyst = CatalystTypeConverters.createToCatalystConverter(rowType)
+    val rowA = toCatalyst(Row(a)).asInstanceOf[InternalRow]
+    val rowB = toCatalyst(Row(b)).asInstanceOf[InternalRow]
+    Seq(Ascending, Descending).foreach { direction =>
+      val sortOrder = direction match {
+        case Ascending =>
+          if (dataType.isInstanceOf[MapType]) {
+            OrderMaps(BoundReference(0, dataType, nullable = true)).asc
+          } else {
+            BoundReference(0, dataType, nullable = true).asc
+          }
+        case Descending =>
+          if (dataType.isInstanceOf[MapType]) {
+            OrderMaps(BoundReference(0, dataType, nullable = true)).desc
+          } else {
+            BoundReference(0, dataType, nullable = true).desc
+          }
+      }
+      val expectedCompareResult = direction match {
+        case Ascending => signum(expected)
+        case Descending => -1 * signum(expected)
+      }
 
-        val kryo = new KryoSerializer(new SparkConf).newInstance()
-        val intOrdering = new InterpretedOrdering(sortOrder :: Nil)
-        val genOrdering = new LazilyGeneratedOrdering(sortOrder :: Nil)
-        val kryoIntOrdering = kryo.deserialize[InterpretedOrdering](kryo.serialize(intOrdering))
-        val kryoGenOrdering = kryo.deserialize[LazilyGeneratedOrdering](kryo.serialize(genOrdering))
+      val kryo = new KryoSerializer(new SparkConf).newInstance()
+      val intOrdering = new InterpretedOrdering(sortOrder :: Nil)
+      val genOrdering = new LazilyGeneratedOrdering(sortOrder :: Nil)
+      val kryoIntOrdering = kryo.deserialize[InterpretedOrdering](kryo.serialize(intOrdering))
+      val kryoGenOrdering = kryo.deserialize[LazilyGeneratedOrdering](kryo.serialize(genOrdering))
 
-        Seq(intOrdering, genOrdering, kryoIntOrdering, kryoGenOrdering).foreach { ordering =>
-          assert(ordering.compare(rowA, rowA) === 0)
-          assert(ordering.compare(rowB, rowB) === 0)
-          assert(signum(ordering.compare(rowA, rowB)) === expectedCompareResult)
-          assert(signum(ordering.compare(rowB, rowA)) === -1 * expectedCompareResult)
-        }
+      val orderings = if (dataType.isInstanceOf[MapType]) {
+        Seq(genOrdering, kryoGenOrdering)
+      } else {
+        Seq(intOrdering, genOrdering, kryoIntOrdering, kryoGenOrdering)
+      }
+      orderings.foreach { ordering =>
+        assert(ordering.compare(rowA, rowA) === 0)
+        assert(ordering.compare(rowB, rowB) === 0)
+        assert(signum(ordering.compare(rowA, rowB)) === expectedCompareResult)
+        assert(signum(ordering.compare(rowB, rowA)) === -1 * expectedCompareResult)
       }
     }
   }
 
+  def compareArrays(a: Seq[Integer], b: Seq[Integer], expected: Int): Unit = {
+    test(s"compare two arrays: a = $a, b = $b, expected = $expected") {
+      compareDatum(a, b, ArrayType(IntegerType), expected)
+    }
+  }
+
+  def compareMaps(a: Map[Integer, Integer], b: Map[Integer, Integer], expected: Int): Unit = {
+    test(s"compare two maps: a = $a, b = $b, expected = $expected") {
+      compareDatum(a, b, MapType(IntegerType, IntegerType), expected)
+    }
+  }
+
   // Two arrays have the same size.
-  compareArrays(Seq[Any](), Seq[Any](), 0)
-  compareArrays(Seq[Any](1), Seq[Any](1), 0)
-  compareArrays(Seq[Any](1, 2), Seq[Any](1, 2), 0)
-  compareArrays(Seq[Any](1, 2, 2), Seq[Any](1, 2, 3), -1)
+  compareArrays(Seq[Integer](), Seq[Integer](), 0)
+  compareArrays(Seq[Integer](1), Seq[Integer](1), 0)
+  compareArrays(Seq[Integer](1, 2), Seq[Integer](1, 2), 0)
+  compareArrays(Seq[Integer](1, 2, 2), Seq[Integer](1, 2, 3), -1)
 
   // Two arrays have different sizes.
-  compareArrays(Seq[Any](), Seq[Any](1), -1)
-  compareArrays(Seq[Any](1, 2, 3), Seq[Any](1, 2, 3, 4), -1)
-  compareArrays(Seq[Any](1, 2, 3), Seq[Any](1, 2, 3, 2), -1)
-  compareArrays(Seq[Any](1, 2, 3), Seq[Any](1, 2, 2, 2), 1)
+  compareArrays(Seq[Integer](), Seq[Integer](1), -1)
+  compareArrays(Seq[Integer](1, 2, 3), Seq[Integer](1, 2, 3, 4), -1)
+  compareArrays(Seq[Integer](1, 2, 3), Seq[Integer](1, 2, 3, 2), -1)
+  compareArrays(Seq[Integer](1, 2, 3), Seq[Integer](1, 2, 2, 2), 1)
 
   // Arrays having nulls.
-  compareArrays(Seq[Any](1, 2, 3), Seq[Any](1, 2, 3, null), -1)
-  compareArrays(Seq[Any](), Seq[Any](null), -1)
-  compareArrays(Seq[Any](null), Seq[Any](null), 0)
-  compareArrays(Seq[Any](null, null), Seq[Any](null, null), 0)
-  compareArrays(Seq[Any](null), Seq[Any](null, null), -1)
-  compareArrays(Seq[Any](null), Seq[Any](1), -1)
-  compareArrays(Seq[Any](null), Seq[Any](null, 1), -1)
-  compareArrays(Seq[Any](null, 1), Seq[Any](1, 1), -1)
-  compareArrays(Seq[Any](1, null, 1), Seq[Any](1, null, 1), 0)
-  compareArrays(Seq[Any](1, null, 1), Seq[Any](1, null, 2), -1)
+  compareArrays(Seq[Integer](1, 2, 3), Seq[Integer](1, 2, 3, null), -1)
+  compareArrays(Seq[Integer](), Seq[Integer](null), -1)
+  compareArrays(Seq[Integer](null), Seq[Integer](null), 0)
+  compareArrays(Seq[Integer](null, null), Seq[Integer](null, null), 0)
+  compareArrays(Seq[Integer](null), Seq[Integer](null, null), -1)
+  compareArrays(Seq[Integer](null), Seq[Integer](1), -1)
+  compareArrays(Seq[Integer](null), Seq[Integer](null, 1), -1)
+  compareArrays(Seq[Integer](null, 1), Seq[Integer](1, 1), -1)
+  compareArrays(Seq[Integer](1, null, 1), Seq[Integer](1, null, 1), 0)
+  compareArrays(Seq[Integer](1, null, 1), Seq[Integer](1, null, 2), -1)
+
+
+  // Comparing maps.
+  compareMaps(null, Map((1, 2)), -1)
+  compareMaps(Map((1, 2)), Map((1, 2), (0, 4)), 1)
+  compareMaps(Map((1, 2)), Map((1, 2), (3, 4)), -1)
+  compareMaps(Map((1, 2), (3, 4)), Map((1, 2), (3, 5)), -1)
+  compareMaps(Map((1, 2), (3, 4)), Map((1, 2), (3, null)), 1)
+  compareMaps(Map((1, 2), (3, 4)), Map((1, 2), (4, 4)), -1)
 
   // Test GenerateOrdering for all common types. For each type, we construct random input rows that
   // contain two columns of that type, then for pairs of randomly-generated rows we check that

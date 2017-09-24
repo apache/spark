@@ -40,8 +40,8 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     val e = intercept[AnalysisException] {
       assertSuccess(expr)
     }
-    assert(e.getMessage.contains(
-      s"cannot resolve '${expr.sql}' due to data type mismatch:"))
+    assert(e.getMessage.contains("cannot resolve"))
+    assert(e.getMessage.contains("due to data type mismatch:"))
     assert(e.getMessage.contains(errorMessage))
   }
 
@@ -52,7 +52,7 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
 
   def assertErrorForDifferingTypes(expr: Expression): Unit = {
     assertError(expr,
-      s"differing types in '${expr.sql}'")
+      s"differing types in")
   }
 
   test("check types for unary arithmetic") {
@@ -102,24 +102,28 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(EqualTo('intField, 'booleanField))
     assertSuccess(EqualNullSafe('intField, 'booleanField))
 
+    // Array type is supported for binary comparison.
+    assertSuccess(EqualTo('arrayField, 'arrayField))
+    assertSuccess(EqualNullSafe('arrayField, 'arrayField))
+    assertSuccess(LessThan('arrayField, 'arrayField))
+    assertSuccess(LessThanOrEqual('arrayField, 'arrayField))
+    assertSuccess(GreaterThan('arrayField, 'arrayField))
+    assertSuccess(GreaterThanOrEqual('arrayField, 'arrayField))
+
+    // Map type is supported for binary comparison.
+    assertSuccess(EqualTo('mapField, 'mapField))
+    assertSuccess(EqualNullSafe('mapField, 'mapField))
+    assertSuccess(LessThan('mapField, 'mapField))
+    assertSuccess(LessThanOrEqual('mapField, 'mapField))
+    assertSuccess(GreaterThan('mapField, 'mapField))
+    assertSuccess(GreaterThanOrEqual('mapField, 'mapField))
+
     assertErrorForDifferingTypes(EqualTo('intField, 'mapField))
     assertErrorForDifferingTypes(EqualNullSafe('intField, 'mapField))
     assertErrorForDifferingTypes(LessThan('intField, 'booleanField))
     assertErrorForDifferingTypes(LessThanOrEqual('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThan('intField, 'booleanField))
     assertErrorForDifferingTypes(GreaterThanOrEqual('intField, 'booleanField))
-
-    assertError(EqualTo('mapField, 'mapField), "EqualTo does not support ordering on type MapType")
-    assertError(EqualNullSafe('mapField, 'mapField),
-      "EqualNullSafe does not support ordering on type MapType")
-    assertError(LessThan('mapField, 'mapField),
-      "LessThan does not support ordering on type MapType")
-    assertError(LessThanOrEqual('mapField, 'mapField),
-      "LessThanOrEqual does not support ordering on type MapType")
-    assertError(GreaterThan('mapField, 'mapField),
-      "GreaterThan does not support ordering on type MapType")
-    assertError(GreaterThanOrEqual('mapField, 'mapField),
-      "GreaterThanOrEqual does not support ordering on type MapType")
 
     assertError(If('intField, 'stringField, 'stringField),
       "type of predicate expression in If should be boolean")
@@ -144,9 +148,9 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     assertSuccess(Sum('stringField))
     assertSuccess(Average('stringField))
     assertSuccess(Min('arrayField))
+    assertSuccess(Min('mapField))
+    assertSuccess(Max('mapField))
 
-    assertError(Min('mapField), "min does not support ordering on type")
-    assertError(Max('mapField), "max does not support ordering on type")
     assertError(Sum('booleanField), "function sum requires numeric type")
     assertError(Average('booleanField), "function average requires numeric type")
   }
@@ -210,7 +214,6 @@ class ExpressionTypeCheckingSuite extends SparkFunSuite {
     for (operator <- Seq[(Seq[Expression] => Expression)](Greatest, Least)) {
       assertError(operator(Seq('booleanField)), "requires at least two arguments")
       assertError(operator(Seq('intField, 'stringField)), "should all have the same type")
-      assertError(operator(Seq('mapField, 'mapField)), "does not support ordering")
     }
   }
 }

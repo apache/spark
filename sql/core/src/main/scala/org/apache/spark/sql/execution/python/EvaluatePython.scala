@@ -39,7 +39,7 @@ object EvaluatePython {
     case _: StructType => true
     case _: UserDefinedType[_] => true
     case ArrayType(elementType, _) => needConversionInPython(elementType)
-    case MapType(keyType, valueType, _) =>
+    case MapType(keyType, valueType, _, _) =>
       needConversionInPython(keyType) || needConversionInPython(valueType)
     case _ => false
   }
@@ -136,7 +136,7 @@ object EvaluatePython {
     case (c, ArrayType(elementType, _)) if c.getClass.isArray =>
       new GenericArrayData(c.asInstanceOf[Array[_]].map(e => fromJava(e, elementType)))
 
-    case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _)) =>
+    case (javaMap: java.util.Map[_, _], MapType(keyType, valueType, _, _)) =>
       ArrayBasedMapData(
         javaMap,
         (key: Any) => fromJava(key, keyType),

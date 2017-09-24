@@ -567,7 +567,7 @@ case class Pmod(left: Expression, right: Expression) extends BinaryArithmetic {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        2
   """)
-case class Least(children: Seq[Expression]) extends Expression {
+case class Least(children: Seq[Expression]) extends Expression with OrderSpecified {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)
@@ -633,7 +633,7 @@ case class Least(children: Seq[Expression]) extends Expression {
       > SELECT _FUNC_(10, 9, 2, 4, 3);
        10
   """)
-case class Greatest(children: Seq[Expression]) extends Expression {
+case class Greatest(children: Seq[Expression]) extends Expression with OrderSpecified {
 
   override def nullable: Boolean = children.forall(_.nullable)
   override def foldable: Boolean = children.forall(_.foldable)

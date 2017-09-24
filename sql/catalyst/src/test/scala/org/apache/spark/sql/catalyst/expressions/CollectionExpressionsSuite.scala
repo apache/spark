@@ -62,6 +62,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
     val a2 = Literal.create(Seq("b", "a"), ArrayType(StringType))
     val a3 = Literal.create(Seq("b", null, "a"), ArrayType(StringType))
     val a4 = Literal.create(Seq(null, null), ArrayType(NullType))
+    val a5 = Literal.create(Seq(Seq(4, 5, 6), Seq(1, 2, 3)), ArrayType(ArrayType(IntegerType)))
 
     checkEvaluation(new SortArray(a0), Seq(1, 2, 3))
     checkEvaluation(new SortArray(a1), Seq[Integer]())
@@ -78,6 +79,7 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
 
     checkEvaluation(Literal.create(null, ArrayType(StringType)), null)
     checkEvaluation(new SortArray(a4), Seq(null, null))
+    checkEvaluation(new SortArray(a5), Seq(Seq(1, 2, 3), Seq(4, 5, 6)))
 
     val typeAS = ArrayType(StructType(StructField("a", IntegerType) :: Nil))
     val arrayStruct = Literal.create(Seq(create_row(2), create_row(1)), typeAS)

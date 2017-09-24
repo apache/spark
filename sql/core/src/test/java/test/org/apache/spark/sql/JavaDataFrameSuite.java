@@ -161,7 +161,7 @@ public class JavaDataFrameSuite {
       new StructField("b", new ArrayType(IntegerType$.MODULE$, true), true, Metadata.empty()),
       schema.apply("b"));
     ArrayType valueType = new ArrayType(DataTypes.IntegerType, false);
-    MapType mapType = new MapType(DataTypes.StringType, valueType, true);
+    MapType mapType = new MapType(DataTypes.StringType, valueType, true, false);
     Assert.assertEquals(
       new StructField("c", mapType, true, Metadata.empty()),
       schema.apply("c"));

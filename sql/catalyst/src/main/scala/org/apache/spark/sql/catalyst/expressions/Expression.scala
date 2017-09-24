@@ -642,3 +642,9 @@ abstract class TernaryExpression extends Expression {
  * and Hive function wrappers.
  */
 trait UserDefinedExpression
+
+/**
+ * An expression is marked as `OrderSpecified` if ordering judged from data
+ * type is used when calculate.
+ */
+trait OrderSpecified

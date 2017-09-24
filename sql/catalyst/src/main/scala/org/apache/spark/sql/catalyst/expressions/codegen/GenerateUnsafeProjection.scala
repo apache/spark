@@ -38,7 +38,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     case _: CalendarIntervalType => true
     case t: StructType => t.toSeq.forall(field => canSupport(field.dataType))
     case t: ArrayType if canSupport(t.elementType) => true
-    case MapType(kt, vt, _) if canSupport(kt) && canSupport(vt) => true
+    case MapType(kt, vt, _, _) if canSupport(kt) && canSupport(vt) => true
     case udt: UserDefinedType[_] => canSupport(udt.sqlType)
     case _ => false
   }
@@ -133,7 +133,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
               $rowWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
             """
 
-          case m @ MapType(kt, vt, _) =>
+          case m @ MapType(kt, vt, _, _) =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
               // written later.
@@ -216,7 +216,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
           $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
-      case m @ MapType(kt, vt, _) =>
+      case m @ MapType(kt, vt, _, _) =>
         s"""
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}

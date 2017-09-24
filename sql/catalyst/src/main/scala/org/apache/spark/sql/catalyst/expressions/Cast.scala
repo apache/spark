@@ -67,7 +67,7 @@ object Cast {
       canCast(fromType, toType) &&
         resolvableNullability(fn || forceNullable(fromType, toType), tn)
 
-    case (MapType(fromKey, fromValue, fn), MapType(toKey, toValue, tn)) =>
+    case (MapType(fromKey, fromValue, fn, _), MapType(toKey, toValue, tn, false)) =>
       canCast(fromKey, toKey) &&
         (!forceNullable(fromKey, toKey)) &&
         canCast(fromValue, toValue) &&
@@ -103,7 +103,7 @@ object Cast {
     case (TimestampType, StringType) => true
     case (TimestampType, DateType) => true
     case (ArrayType(fromType, _), ArrayType(toType, _)) => needsTimeZone(fromType, toType)
-    case (MapType(fromKey, fromValue, _), MapType(toKey, toValue, _)) =>
+    case (MapType(fromKey, fromValue, _, _), MapType(toKey, toValue, _, _)) =>
       needsTimeZone(fromKey, toKey) || needsTimeZone(fromValue, toValue)
     case (StructType(fromFields), StructType(toFields)) =>
       fromFields.length == toFields.length &&

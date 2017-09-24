@@ -454,12 +454,13 @@ object StructType extends AbstractDataType {
           merge(leftElementType, rightElementType),
           leftContainsNull || rightContainsNull)
 
-      case (MapType(leftKeyType, leftValueType, leftContainsNull),
-      MapType(rightKeyType, rightValueType, rightContainsNull)) =>
+      case (MapType(leftKeyType, leftValueType, leftContainsNull, leftOrdered),
+      MapType(rightKeyType, rightValueType, rightContainsNull, rightOrdered)) =>
         MapType(
           merge(leftKeyType, rightKeyType),
           merge(leftValueType, rightValueType),
-          leftContainsNull || rightContainsNull)
+          leftContainsNull || rightContainsNull,
+          leftOrdered && rightOrdered)
 
       case (StructType(leftFields), StructType(rightFields)) =>
         val newFields = ArrayBuffer.empty[StructField]

@@ -146,7 +146,7 @@ object RowEncoder {
           ObjectType(classOf[Object]))
       }
 
-    case t @ MapType(kt, vt, valueNullable) =>
+    case t @ MapType(kt, vt, valueNullable, _) =>
       val keys =
         Invoke(
           Invoke(inputObject, "keysIterator", ObjectType(classOf[scala.collection.Iterator[_]]),
@@ -307,7 +307,7 @@ object RowEncoder {
         arrayData :: Nil,
         returnNullable = false)
 
-    case MapType(kt, vt, valueNullable) =>
+    case MapType(kt, vt, valueNullable, _) =>
       val keyArrayType = ArrayType(kt, false)
       val keyData = deserializerFor(Invoke(input, "keyArray", keyArrayType))
 

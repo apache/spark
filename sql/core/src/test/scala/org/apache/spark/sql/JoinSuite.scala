@@ -208,6 +208,33 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("inner join ON, key of map type") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val data1 = spark.sparkContext.parallelize(
+        Map(1 -> "a", 2 -> "b") ::
+        Map(3 -> "c", 4 -> "d") ::
+        Map(5 -> "e", 6 -> "d") ::
+        Map(7 -> "e") ::
+        Map(8 -> "f") ::
+        Map(9 -> "g") ::
+        Nil).toDF("X").as("A")
+      val data2 = spark.sparkContext.parallelize(
+        Map(1 -> "a", 2 -> "b") ::
+        Map(4 -> "d", 3 -> "c") ::
+        Map(5 -> "e") ::
+        Map(7 -> "ee") ::
+        Map(88 -> "f") ::
+        Map(9 -> null) ::
+        Nil).toDF("Y").as("B")
+      checkAnswer(
+        data1.join(data2, $"A.X" === $"B.Y"),
+        Seq(
+          Row(Map(1 -> "a", 2 -> "b"), Map(1 -> "a", 2 -> "b")),
+          Row(Map(3 -> "c", 4 -> "d"), Map(4 -> "d", 3 -> "c"))
+        ))
+    }
+  }
+
   test("big inner join, 4 matches per row") {
     val bigData = testData.union(testData).union(testData).union(testData)
     val bigDataX = bigData.as("x")

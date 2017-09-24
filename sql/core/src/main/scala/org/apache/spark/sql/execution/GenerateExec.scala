@@ -199,7 +199,7 @@ case class GenerateExec(
       case ArrayType(dataType, nullable) =>
         ("", "", Seq(codeGenAccessor(ctx, data.value, "col", index, dataType, nullable, checks)))
 
-      case MapType(keyType, valueType, valueContainsNull) =>
+      case MapType(keyType, valueType, valueContainsNull, _) =>
         // Materialize the key and the value arrays before we enter the loop.
         val keyArray = ctx.freshName("keyArray")
         val valueArray = ctx.freshName("valueArray")

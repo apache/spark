@@ -107,7 +107,7 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
   def toWritableInspector(dataType: DataType): ObjectInspector = dataType match {
     case ArrayType(tpe, _) =>
       ObjectInspectorFactory.getStandardListObjectInspector(toWritableInspector(tpe))
-    case MapType(keyType, valueType, _) =>
+    case MapType(keyType, valueType, _, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
         toWritableInspector(keyType), toWritableInspector(valueType))
     case StringType => PrimitiveObjectInspectorFactory.writableStringObjectInspector

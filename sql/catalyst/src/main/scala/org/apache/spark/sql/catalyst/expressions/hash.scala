@@ -413,7 +413,7 @@ abstract class HashExpression[E] extends Expression {
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
-    case MapType(kt, vt, valueContainsNull) =>
+    case MapType(kt, vt, valueContainsNull, _) =>
       genHashForMap(ctx, input, result, kt, vt, valueContainsNull)
     case StructType(fields) => genHashForStruct(ctx, input, result, fields)
     case udt: UserDefinedType[_] => computeHashWithTailRec(input, udt.sqlType, result, ctx)
@@ -484,7 +484,7 @@ abstract class InterpretedHashFunction {
           case udt: UserDefinedType[_] =>
             val mapType = udt.sqlType.asInstanceOf[MapType]
             mapType.keyType -> mapType.valueType
-          case MapType(kt, vt, _) => kt -> vt
+          case MapType(kt, vt, _, _) => kt -> vt
         }
         val keys = map.keyArray()
         val values = map.valueArray()
@@ -859,7 +859,7 @@ object HiveHashFunction extends InterpretedHashFunction {
           case udt: UserDefinedType[_] =>
             val mapType = udt.sqlType.asInstanceOf[MapType]
             mapType.keyType -> mapType.valueType
-          case MapType(_kt, _vt, _) => _kt -> _vt
+          case MapType(_kt, _vt, _, _) => _kt -> _vt
         }
         val keys = map.keyArray()
         val values = map.valueArray()

@@ -21,7 +21,7 @@ import java.util.Comparator
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.types._
 
 /**
@@ -129,7 +129,7 @@ case class MapValues(child: Expression)
   """)
 // scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
-  extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
+  extends BinaryExpression with ExpectsInputTypes with CodegenFallback with OrderSpecified {
 
   def this(e: Expression) = this(e, Literal(true))
 
@@ -139,7 +139,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
-    case ArrayType(dt, _) if RowOrdering.isOrderable(dt) =>
+    case ArrayType(dt, _) if TypeUtils.isOrderable(dt) =>
       ascendingOrder match {
         case Literal(_: Boolean, BooleanType) =>
           TypeCheckResult.TypeCheckSuccess
@@ -159,6 +159,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(m: MapType, _) => m.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
@@ -182,6 +183,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
     val ordering = base.dataType match {
       case _ @ ArrayType(n: AtomicType, _) => n.ordering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(a: ArrayType, _) => a.interpretedOrdering.asInstanceOf[Ordering[Any]]
+      case _ @ ArrayType(m: MapType, _) => m.interpretedOrdering.asInstanceOf[Ordering[Any]]
       case _ @ ArrayType(s: StructType, _) => s.interpretedOrdering.asInstanceOf[Ordering[Any]]
     }
 
@@ -286,4 +288,144 @@ case class ArrayContains(left: Expression, right: Expression)
   }
 
   override def prettyName: String = "array_contains"
+}
+
+/**
+ * This expression orders all maps in an expression's result. This expression enables the use of
+ * maps in comparisons and equality operations.
+ */
+case class OrderMaps(child: Expression) extends UnaryExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(ArrayType, MapType, StructType))
+
+  /** Create a data type in which all maps are ordered. */
+  private[this] def createDataType(dataType: DataType): DataType = dataType match {
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = createDataType(field.dataType))
+      })
+    case ArrayType(elementType, containsNull) =>
+      ArrayType(createDataType(elementType), containsNull)
+    case MapType(keyType, valueType, valueContainsNull, false) =>
+      MapType(
+        createDataType(keyType),
+        createDataType(valueType),
+        valueContainsNull,
+        ordered = true)
+    case _ =>
+      dataType
+  }
+
+  override lazy val dataType: DataType = createDataType(child.dataType)
+
+  private[this] val identity = (id: Any) => id
+
+  /**
+   * Create a function that transforms a Spark SQL datum to a new datum for which all MapData
+   * elements have been ordered.
+   */
+  private[this] def createTransform(dataType: DataType): Option[Any => Any] = {
+    dataType match {
+      case m @ MapType(keyType, valueType, _, false) =>
+        val keyTransform = createTransform(keyType).getOrElse(identity)
+        val valueTransform = createTransform(valueType).getOrElse(identity)
+        val ordering = Ordering.Tuple2(m.interpretedKeyOrdering, m.interpretedValueOrdering)
+        Option((data: Any) => {
+          val input = data.asInstanceOf[MapData]
+          val length = input.numElements()
+          val buffer = Array.ofDim[(Any, Any)](length)
+
+          // Move the entries into a temporary buffer.
+          var i = 0
+          val keys = input.keyArray()
+          val values = input.valueArray()
+          while (i < length) {
+            val key = keyTransform(keys.get(i, keyType))
+            val value = if (!values.isNullAt(i)) {
+              valueTransform(values.get(i, valueType))
+            } else {
+              null
+            }
+            buffer(i) = key -> value
+            i += 1
+          }
+
+          // Sort the buffer.
+          java.util.Arrays.sort(buffer, ordering)
+
+          // Recreate the map data.
+          i = 0
+          val sortedKeys = Array.ofDim[Any](length)
+          val sortedValues = Array.ofDim[Any](length)
+          while (i < length) {
+            sortedKeys(i) = buffer(i)._1
+            sortedValues(i) = buffer(i)._2
+            i += 1
+          }
+          ArrayBasedMapData(sortedKeys, sortedValues)
+        })
+      case ArrayType(dt, _) =>
+        createTransform(dt).map { transform =>
+          data: Any => {
+            val input = data.asInstanceOf[ArrayData]
+            val length = input.numElements()
+            val output = Array.ofDim[Any](length)
+            var i = 0
+            while (i < length) {
+              if (!input.isNullAt(i)) {
+                output(i) = transform(input.get(i, dt))
+              }
+              i += 1
+            }
+            new GenericArrayData(output)
+          }
+        }
+      case StructType(fields) =>
+        val transformOpts = fields.map { field =>
+          createTransform(field.dataType)
+        }
+        // Only transform a struct if a meaningful transformation has been defined.
+        if (transformOpts.exists(_.isDefined)) {
+          val transforms = transformOpts.zip(fields).map { case (opt, field) =>
+            val dataType = field.dataType
+            val transform = opt.getOrElse(identity)
+            (input: InternalRow, i: Int) => {
+              transform(input.get(i, dataType))
+            }
+          }
+          val length = fields.length
+          val tf = (data: Any) => {
+            val input = data.asInstanceOf[InternalRow]
+            val output = Array.ofDim[Any](length)
+            var i = 0
+            while (i < length) {
+              if (!input.isNullAt(i)) {
+                output(i) = transforms(i)(input, i)
+              }
+              i += 1
+            }
+            new GenericInternalRow(output)
+          }
+          Some(tf)
+        } else {
+          None
+        }
+      case _ => None
+    }
+  }
+
+  @transient private[this] lazy val transform = {
+    createTransform(child.dataType).getOrElse(identity)
+  }
+
+  override protected def nullSafeEval(input: Any): Any = transform(input)
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    // TODO we should code generate this.
+    val tf = ctx.addReferenceObj("transform", transform, classOf[Any => Any].getCanonicalName)
+    nullSafeCodeGen(ctx, ev, eval => {
+      s"${ev.value} = (${ctx.boxedType(dataType)})$tf.apply($eval);"
+    })
+  }
 }

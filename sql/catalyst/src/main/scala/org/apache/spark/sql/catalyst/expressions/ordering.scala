@@ -18,22 +18,32 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 
 /**
  * An interpreted row ordering comparator.
  */
-class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow] {
+class InterpretedOrdering(orders: Seq[SortOrder]) extends Ordering[InternalRow] {
 
   def this(ordering: Seq[SortOrder], inputSchema: Seq[Attribute]) =
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
+  @transient private[this] lazy val orderings = orders.toIndexedSeq.map { order =>
+    val ordering = TypeUtils.getInterpretedOrdering(order.dataType)
+    if (order.direction == Ascending) {
+        ordering
+    } else {
+      ordering.reverse
+    }
+  }
+
   def compare(a: InternalRow, b: InternalRow): Int = {
     var i = 0
-    val size = ordering.size
+    val size = orders.size
     while (i < size) {
-      val order = ordering(i)
+      val order = orders(i)
       val left = order.child.eval(a)
       val right = order.child.eval(b)
 
@@ -44,29 +54,14 @@ class InterpretedOrdering(ordering: Seq[SortOrder]) extends Ordering[InternalRow
       } else if (right == null) {
         return if (order.nullOrdering == NullsFirst) 1 else -1
       } else {
-        val comparison = order.dataType match {
-          case dt: AtomicType if order.direction == Ascending =>
-            dt.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case dt: AtomicType if order.direction == Descending =>
-            dt.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-          case a: ArrayType if order.direction == Ascending =>
-            a.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case a: ArrayType if order.direction == Descending =>
-            a.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-          case s: StructType if order.direction == Ascending =>
-            s.interpretedOrdering.asInstanceOf[Ordering[Any]].compare(left, right)
-          case s: StructType if order.direction == Descending =>
-            s.interpretedOrdering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
-          case other =>
-            throw new IllegalArgumentException(s"Type $other does not support ordered operations")
-        }
+        val comparison = orderings(i).compare(left, right)
         if (comparison != 0) {
           return comparison
         }
       }
       i += 1
     }
-    return 0
+    0
   }
 }
 
@@ -80,24 +75,4 @@ object InterpretedOrdering {
       case (dt, index) => SortOrder(BoundReference(index, dt, nullable = true), Ascending)
     })
   }
-}
-
-object RowOrdering {
-
-  /**
-   * Returns true iff the data type can be ordered (i.e. can be sorted).
-   */
-  def isOrderable(dataType: DataType): Boolean = dataType match {
-    case NullType => true
-    case dt: AtomicType => true
-    case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
-    case array: ArrayType => isOrderable(array.elementType)
-    case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
-    case _ => false
-  }
-
-  /**
-   * Returns true iff outputs from the expressions can be ordered.
-   */
-  def isOrderable(exprs: Seq[Expression]): Boolean = exprs.forall(e => isOrderable(e.dataType))
 }

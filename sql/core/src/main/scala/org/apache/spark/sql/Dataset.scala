@@ -47,6 +47,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.execution.command._
@@ -1955,7 +1956,7 @@ class Dataset[T] private[sql](
     // ordering deterministic. Note that MapTypes cannot be sorted and are explicitly pruned out
     // from the sort order.
     val sortOrder = logicalPlan.output
-      .filter(attr => RowOrdering.isOrderable(attr.dataType))
+      .filter(attr => TypeUtils.isOrderable(attr.dataType))
       .map(SortOrder(_, Ascending))
     val plan = if (sortOrder.nonEmpty) {
       Sort(sortOrder, global = false, logicalPlan)

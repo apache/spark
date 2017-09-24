@@ -152,7 +152,7 @@ case class Not(child: Expression)
        true
   """)
 // scalastyle:on line.size.limit
-case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+case class In(value: Expression, list: Seq[Expression]) extends Predicate with OrderSpecified {
 
   require(list != null, "list should not be null")
 
@@ -270,7 +270,10 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
  * Optimized version of In clause, when all filter values of In clause are
  * static.
  */
-case class InSet(child: Expression, hset: Set[Any]) extends UnaryExpression with Predicate {
+case class InSet(child: Expression, hset: Set[Any])
+    extends UnaryExpression
+    with Predicate
+    with OrderSpecified {
 
   require(hset != null, "hset could not be null")
 
@@ -541,7 +544,7 @@ case class Or(left: Expression, right: Expression) extends BinaryOperator with P
 }
 
 
-abstract class BinaryComparison extends BinaryOperator with Predicate {
+abstract class BinaryComparison extends BinaryOperator with Predicate with OrderSpecified {
 
   // Note that we need to give a superset of allowable input types since orderable types are not
   // finitely enumerable. The allowable types are checked below by checkInputDataTypes.

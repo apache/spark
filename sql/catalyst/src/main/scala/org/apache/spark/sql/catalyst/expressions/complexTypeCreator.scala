@@ -205,7 +205,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val mapClass = classOf[ArrayBasedMapData].getName
-    val MapType(keyDt, valueDt, _) = dataType
+    val MapType(keyDt, valueDt, _, _) = dataType
     val evalKeys = keys.map(e => e.genCode(ctx))
     val evalValues = values.map(e => e.genCode(ctx))
     val (preprocessKeyData, assignKeys, postprocessKeyData, keyArrayData) =

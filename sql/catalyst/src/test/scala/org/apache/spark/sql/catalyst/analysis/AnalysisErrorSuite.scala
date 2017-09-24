@@ -27,8 +27,9 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 @BeanInfo
 private[sql] case class GroupableData(@BeanProperty data: Int)
@@ -51,26 +52,23 @@ private[sql] class GroupableUDT extends UserDefinedType[GroupableData] {
 }
 
 @BeanInfo
-private[sql] case class UngroupableData(@BeanProperty data: Map[Int, Int])
+private[sql] case class UngroupableData(@BeanProperty data: CalendarInterval)
 
 private[sql] class UngroupableUDT extends UserDefinedType[UngroupableData] {
 
-  override def sqlType: DataType = MapType(IntegerType, IntegerType)
+  override def sqlType: DataType = CalendarIntervalType
 
-  override def serialize(ungroupableData: UngroupableData): MapData = {
-    val keyArray = new GenericArrayData(ungroupableData.data.keys.toSeq)
-    val valueArray = new GenericArrayData(ungroupableData.data.values.toSeq)
-    new ArrayBasedMapData(keyArray, valueArray)
+  override def serialize(ungroupableData: UngroupableData): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = ungroupableData.data.months
+    output(1) = ungroupableData.data.microseconds
+    new GenericArrayData(output)
   }
 
   override def deserialize(datum: Any): UngroupableData = {
     datum match {
-      case data: MapData =>
-        val keyArray = data.keyArray().array
-        val valueArray = data.valueArray().array
-        assert(keyArray.length == valueArray.length)
-        val mapData = keyArray.zip(valueArray).toMap.asInstanceOf[Map[Int, Int]]
-        UngroupableData(mapData)
+      case data: ArrayData =>
+        UngroupableData(new CalendarInterval(data.getInt(0), data.getLong(1)))
     }
   }
 
@@ -219,11 +217,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     "bad casts",
     testRelation.select(Literal(1).cast(BinaryType).as('badCast)),
   "cannot cast" :: Literal(1).dataType.simpleString :: BinaryType.simpleString :: Nil)
-
-  errorTest(
-    "sorting by unsupported column types",
-    mapRelation.orderBy('map.asc),
-    "sort" :: "type" :: "map<int,int>" :: Nil)
 
   errorTest(
     "sorting by attributes are not from grouping expressions",
@@ -462,6 +455,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType),
+      MapType(IntegerType, StringType),
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", StringType, nullable = true),
@@ -474,10 +468,10 @@ class AnalysisErrorSuite extends AnalysisTest {
     }
 
     val unsupportedDataTypes = Seq(
-      MapType(StringType, LongType),
+      CalendarIntervalType,
       new StructType()
         .add("f1", FloatType, nullable = true)
-        .add("f2", MapType(StringType, LongType), nullable = true),
+        .add("f2", CalendarIntervalType, nullable = true),
       new UngroupableUDT())
     unsupportedDataTypes.foreach { dataType =>
       checkDataType(dataType, shouldSuccess = false)
@@ -499,7 +493,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         "another aggregate function." :: Nil)
   }
 
-  test("Join can work on binary types but can't work on map types") {
+  test("Join can work on binary types and map types") {
     val left = LocalRelation('a.binary, 'b.map(StringType, StringType))
     val right = LocalRelation('c.binary, 'd.map(StringType, StringType))
 
@@ -514,7 +508,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some('b === 'd))
-    assertAnalysisError(plan2, "EqualTo does not support ordering on type MapType" :: Nil)
+    assertAnalysisSuccess(plan2)
   }
 
   test("PredicateSubQuery is used outside of a filter") {

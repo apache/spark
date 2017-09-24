@@ -666,4 +666,48 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       assert(exchangePlans.length == 1)
     }
   }
+
+  test("Do grouping on field of map type.") {
+    withTempView("aggV") {
+      val data = Seq[(Map[Integer, Integer], Integer, Integer)](
+        (Map((3, 4)), 10, -10),
+        (Map((1, 2)), -1, null),
+        (Map((3, 4)), 1, 1),
+        (Map((5, 6)), null, 1),
+        (Map((1, null)), 100, -10),
+        (Map((7, 8)), null, null),
+        (Map((7, 8)), null, 1),
+        (Map((9, 99), (10, 100)), 10, -10),
+        (Map((10, 100), (9, 99)), 10, -10)).toDF("key", "value1", "value2")
+        .createTempView("aggV")
+
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT DISTINCT key
+            |FROM aggV
+          """.stripMargin),
+        Row(Map(3 -> 4)) ::
+          Row(Map(1 -> 2)) ::
+          Row(Map(5 -> 6)) ::
+          Row(Map(1 -> null)) ::
+          Row(Map(7 -> 8)) ::
+          Row(Map(9 -> 99, 10 -> 100)) :: Nil)
+
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT value1, key
+            |FROM aggV
+            |GROUP BY value1, key
+          """.stripMargin),
+        Row(10, Map(3 -> 4)) ::
+          Row(-1, Map(1 -> 2)) ::
+          Row(1, Map(3 -> 4)) ::
+          Row(null, Map(5 -> 6)) ::
+          Row(100, Map(1 -> null)) ::
+          Row(null, Map(7 -> 8)) ::
+          Row(10, Map((9, 99), (10, 100))) :: Nil)
+    }
+  }
 }

@@ -44,7 +44,7 @@ object HiveStringType {
   def replaceCharType(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
       ArrayType(replaceCharType(et), nullable)
-    case MapType(kt, vt, nullable) =>
+    case MapType(kt, vt, nullable, _) =>
       MapType(replaceCharType(kt), replaceCharType(vt), nullable)
     case StructType(fields) =>
       StructType(fields.map { field =>

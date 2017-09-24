@@ -765,7 +765,7 @@ private[hive] trait HiveInspectors {
   def toInspector(dataType: DataType): ObjectInspector = dataType match {
     case ArrayType(tpe, _) =>
       ObjectInspectorFactory.getStandardListObjectInspector(toInspector(tpe))
-    case MapType(keyType, valueType, _) =>
+    case MapType(keyType, valueType, _, _) =>
       ObjectInspectorFactory.getStandardMapObjectInspector(
         toInspector(keyType), toInspector(valueType))
     case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
@@ -832,7 +832,7 @@ private[hive] trait HiveInspectors {
           list.add(wrap(e, listObjectInspector, dt)))
         ObjectInspectorFactory.getStandardConstantListObjectInspector(listObjectInspector, list)
       }
-    case Literal(value, MapType(keyType, valueType, _)) =>
+    case Literal(value, MapType(keyType, valueType, _, _)) =>
       val keyOI = toInspector(keyType)
       val valueOI = toInspector(valueType)
       if (value == null) {
@@ -1032,7 +1032,7 @@ private[hive] trait HiveInspectors {
         getStructTypeInfo(
           java.util.Arrays.asList(fields.map(_.name) : _*),
           java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) : _*))
-      case MapType(keyType, valueType, _) =>
+      case MapType(keyType, valueType, _, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo
       case BooleanType => booleanTypeInfo

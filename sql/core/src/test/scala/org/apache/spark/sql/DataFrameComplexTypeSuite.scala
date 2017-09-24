@@ -64,6 +64,123 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     val ds100_5 = Seq(S100_5()).toDS()
     ds100_5.rdd.count
   }
+
+  test("Order by fieled of map type.") {
+    withTempView("v") {
+      Seq[Map[Integer, Integer]](
+        null,
+        Map((1, 2)),
+        Map((1, 2), (0, 4)),
+        Map((1, 2), (3, 4)),
+        Map((1, 2), (3, 5)),
+        Map(((1, 2)), (3, null)),
+        Map((1, 2), (4, 5))).toDF("a").createTempView("v")
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a
+            |FROM v
+            |ORDER BY a
+          """.stripMargin),
+        Row(null) ::
+          Row(Map(1 -> 2, 0 -> 4)) ::
+          Row(Map(1 -> 2)) ::
+          Row(Map(1 -> 2, 3 -> null)) ::
+          Row(Map(1 -> 2, 3 -> 4)) ::
+          Row(Map(1 -> 2, 3 -> 5)) ::
+          Row(Map(1 -> 2, 4 -> 5)) :: Nil)
+    }
+  }
+
+  test("Binary comparison on fields of map type") {
+    withTempView("vx", "vy") {
+      val smallValues = Seq[Map[Integer, Integer]](
+        Map((1, 2), (0, 4)),
+        Map((1, 2)),
+        Map((1, 2), (3, null)),
+        Map((1, 2), (3, 4)),
+        Map((1, 2), (3, 5)))
+      val bigValues = Seq[Map[Integer, Integer]](
+        Map((1, 2)),
+        Map((1, 2), (3, null)),
+        Map((1, 2), (3, 4)),
+        Map((1, 2), (3, 5)),
+        Map((1, 2), (4, 5)))
+      val equalValues0 = Seq[Map[Integer, Integer]](
+        Map((1, 2)),
+        Map((1, 2), (3, 4)),
+        Map((1, 2), (3, 4)),
+        Map((1, 2), (3, null)))
+      val equalValues1 = Seq[Map[Integer, Integer]](
+        Map((1, 2)),
+        Map((1, 2), (3, 4)),
+        Map((3, 4), (1, 2)),
+        Map((1, 2), (3, null)))
+
+      assert(smallValues.length === bigValues.length)
+      smallValues.zip(bigValues).toDF("a", "b").createTempView("vx")
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a < b, b < a, a > b, b > a
+            |FROM vx
+          """.stripMargin),
+        Array.fill(smallValues.length)(Row(true, false, false, true)))
+      equalValues0.zip(equalValues1).toDF("a", "b").createTempView("vy")
+      assert(equalValues0.length === equalValues1.length)
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a = b, a != b
+            |FROM vy
+          """.stripMargin),
+        Array.fill(equalValues0.length)(Row(true, false)))
+    }
+  }
+
+  test("Run set operations with map type.") {
+    withTempView("vx, vy") {
+      Seq[Map[Integer, Integer]](
+        Map((1, 2)),
+        Map((1, 2), (3, 4)),
+        Map((1, 2), (33, 44)),
+        Map((1, 2), (3, null)),
+        Map((5, 6), (7, 8))).toDF("a").createTempView("vx")
+      Seq[Map[Integer, Integer]](
+        Map((1, 2)),
+        Map((1, 2), (3, 4)),
+        Map((33, 44), (1, 2)),
+        Map((1, 2), (3, null))).toDF("a").createTempView("vy")
+
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a
+            |FROM vx
+            |INTERSECT
+            |SELECT a
+            |FROM vy
+          """.stripMargin
+        ),
+        Row(Map(1 -> 2)) ::
+        Row(Map(1 -> 2, 3 -> 4)) ::
+        Row(Map(1 -> 2, 33 -> 44)) ::
+        Row(Map(1 -> 2, 3 -> null)) :: Nil
+      )
+      checkAnswer(
+        spark.sql(
+          """
+            |SELECT a
+            |FROM vx
+            |EXCEPT
+            |SELECT a
+            |FROM vy
+          """.stripMargin
+        ),
+        Row(Map(5 -> 6, 7 -> 8)) :: Nil
+      )
+    }
+  }
 }
 
 class S100(
@@ -97,5 +214,3 @@ extends DefinedByConstructorParams
 case class S100_5(
   s1: S100 = new S100(), s2: S100 = new S100(), s3: S100 = new S100(),
   s4: S100 = new S100(), s5: S100 = new S100())
-
-

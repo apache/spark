@@ -150,6 +150,7 @@ class Analyzer(
       ResolveAggregateFunctions ::
       TimeWindowing ::
       ResolveInlineTables(conf) ::
+      SortMaps::
       ResolveTimeZone(conf) ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
@@ -2476,6 +2477,60 @@ object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
           kv
       }
       CreateNamedStruct(children.toList)
+  }
+}
+
+/**
+ * MapType expressions are not comparable.
+ */
+object SortMaps extends Rule[LogicalPlan] {
+  private def containsUnorderedMap(e: Expression): Boolean =
+    e.resolved && MapType.containsUnorderedMap(e.dataType)
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressions {
+    case expr: Expression with OrderSpecified =>
+      expr.mapChildren {
+        case child if containsUnorderedMap(child) => OrderMaps(child)
+        case child => child
+      }
+  } transform {
+    case a: Aggregate if a.resolved && a.groupingExpressions.exists(containsUnorderedMap) =>
+      // Modify the top level grouping expressions
+      val replacements = a.groupingExpressions.collect {
+        case a: Attribute if containsUnorderedMap(a) =>
+          a -> Alias(OrderMaps(a), a.name)()
+        case e if containsUnorderedMap(e) =>
+          e -> OrderMaps(e)
+      }
+      a.transformExpressionsUp {
+        case e =>
+          replacements
+          .find(_._1.semanticEquals(e))
+          .map(_._2)
+          .getOrElse(e)
+      }
+    case distinct: Distinct =>
+      wrapOrderMaps(distinct)
+
+    case setOperation: SetOperation =>
+      wrapOrderMaps(setOperation)
+  }
+
+  private[this] def wrapOrderMaps(logicalPlan: LogicalPlan) = {
+    logicalPlan.mapChildren(child => {
+      if (child.resolved && child.output.exists(containsUnorderedMap)) {
+        val projectList = child.output.map { a =>
+          if (containsUnorderedMap(a)) {
+            Alias(OrderMaps(a), a.name)()
+          } else {
+            a
+          }
+        }
+        Project(projectList, child)
+      } else {
+        child
+      }
+    })
   }
 }
 

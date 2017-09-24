@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -202,7 +203,7 @@ trait CheckAnalysis extends PredicateHelper {
               }
 
               // Check if the data type of expr is orderable.
-              if (!RowOrdering.isOrderable(expr.dataType)) {
+              if (!TypeUtils.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
                     s"because its data type ${expr.dataType.simpleString} is not an orderable " +
@@ -223,7 +224,7 @@ trait CheckAnalysis extends PredicateHelper {
 
           case Sort(orders, _, _) =>
             orders.foreach { order =>
-              if (!RowOrdering.isOrderable(order.dataType)) {
+              if (!TypeUtils.isOrderable(order.dataType)) {
                 failAnalysis(
                   s"sorting is not supported for columns of type ${order.dataType.simpleString}")
               }
@@ -321,14 +322,6 @@ trait CheckAnalysis extends PredicateHelper {
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
                """.stripMargin)
-
-          // TODO: although map type is not orderable, technically map type should be able to be
-          // used in equality comparison, remove this type check once we support it.
-          case o if mapColumnInSetOperation(o).isDefined =>
-            val mapCol = mapColumnInSetOperation(o).get
-            failAnalysis("Cannot have map type columns in DataFrame which calls " +
-              s"set operations(intersect, except, etc.), but the type of column ${mapCol.name} " +
-              "is " + mapCol.dataType.simpleString)
 
           case o if o.expressions.exists(!_.deterministic) &&
             !o.isInstanceOf[Project] && !o.isInstanceOf[Filter] &&
