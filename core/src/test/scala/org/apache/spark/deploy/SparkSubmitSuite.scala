@@ -29,9 +29,9 @@ import scala.io.Source
 import com.google.common.io.ByteStreams
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path, RawLocalFileSystem}
+import org.apache.hadoop.fs.{FileStatus, FSDataInputStream, Path}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -97,7 +97,7 @@ class SparkSubmitSuite
   with Matchers
   with BeforeAndAfterEach
   with ResetSystemProperties
-  with Timeouts
+  with TimeLimits
   with TestPrematureExit {
 
   override def beforeEach() {
@@ -793,30 +793,37 @@ class SparkSubmitSuite
   }
 
   test("downloadFile - invalid url") {
+    val sparkConf = new SparkConf(false)
     intercept[IOException] {
-      SparkSubmit.downloadFile(
-        "abc:/my/file", Utils.createTempDir(), mutable.Map.empty, new Configuration())
+      DependencyUtils.downloadFile(
+        "abc:/my/file", Utils.createTempDir(), sparkConf, new Configuration(),
+        new SecurityManager(sparkConf))
     }
   }
 
   test("downloadFile - file doesn't exist") {
+    val sparkConf = new SparkConf(false)
     val hadoopConf = new Configuration()
     val tmpDir = Utils.createTempDir()
     updateConfWithFakeS3Fs(hadoopConf)
     intercept[FileNotFoundException] {
-      SparkSubmit.downloadFile("s3a:/no/such/file", tmpDir, mutable.Map.empty, hadoopConf)
+      DependencyUtils.downloadFile("s3a:/no/such/file", tmpDir, sparkConf, hadoopConf,
+        new SecurityManager(sparkConf))
     }
   }
 
   test("downloadFile does not download local file") {
+    val sparkConf = new SparkConf(false)
+    val secMgr = new SecurityManager(sparkConf)
     // empty path is considered as local file.
     val tmpDir = Files.createTempDirectory("tmp").toFile
-    assert(SparkSubmit.downloadFile("", tmpDir, mutable.Map.empty, new Configuration()) === "")
-    assert(SparkSubmit.downloadFile("/local/file", tmpDir, mutable.Map.empty,
-      new Configuration()) === "/local/file")
+    assert(DependencyUtils.downloadFile("", tmpDir, sparkConf, new Configuration(), secMgr) === "")
+    assert(DependencyUtils.downloadFile("/local/file", tmpDir, sparkConf, new Configuration(),
+      secMgr) === "/local/file")
   }
 
   test("download one file to local") {
+    val sparkConf = new SparkConf(false)
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
@@ -824,14 +831,15 @@ class SparkSubmitSuite
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
-    val sourcePath = s"s3a://${jarFile.getAbsolutePath}"
-    val outputPath =
-      SparkSubmit.downloadFile(sourcePath, tmpDir, mutable.Map.empty, hadoopConf)
+    val sourcePath = s"s3a://${jarFile.toURI.getPath}"
+    val outputPath = DependencyUtils.downloadFile(sourcePath, tmpDir, sparkConf, hadoopConf,
+      new SecurityManager(sparkConf))
     checkDownloadedFile(sourcePath, outputPath)
     deleteTempOutputFile(outputPath)
   }
 
   test("download list of files to local") {
+    val sparkConf = new SparkConf(false)
     val jarFile = File.createTempFile("test", ".jar")
     jarFile.deleteOnExit()
     val content = "hello, world"
@@ -839,9 +847,11 @@ class SparkSubmitSuite
     val hadoopConf = new Configuration()
     val tmpDir = Files.createTempDirectory("tmp").toFile
     updateConfWithFakeS3Fs(hadoopConf)
-    val sourcePaths = Seq("/local/file", s"s3a://${jarFile.getAbsolutePath}")
-    val outputPaths = SparkSubmit.downloadFileList(
-      sourcePaths.mkString(","), tmpDir, mutable.Map.empty, hadoopConf).split(",")
+    val sourcePaths = Seq("/local/file", s"s3a://${jarFile.toURI.getPath}")
+    val outputPaths = DependencyUtils
+      .downloadFileList(sourcePaths.mkString(","), tmpDir, sparkConf, hadoopConf,
+        new SecurityManager(sparkConf))
+      .split(",")
 
     assert(outputPaths.length === sourcePaths.length)
     sourcePaths.zip(outputPaths).foreach { case (sourcePath, outputPath) =>
@@ -885,6 +895,71 @@ class SparkSubmitSuite
 
     // local py files should not be a URI format.
     sysProps("spark.submit.pyFiles") should (startWith("/"))
+  }
+
+  test("download remote resource if it is not supported by yarn service") {
+    testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = false)
+  }
+
+  test("avoid downloading remote resource if it is supported by yarn service") {
+    testRemoteResources(isHttpSchemeBlacklisted = false, supportMockHttpFs = true)
+  }
+
+  test("force download from blacklisted schemes") {
+    testRemoteResources(isHttpSchemeBlacklisted = true, supportMockHttpFs = true)
+  }
+
+  private def testRemoteResources(isHttpSchemeBlacklisted: Boolean,
+      supportMockHttpFs: Boolean): Unit = {
+    val hadoopConf = new Configuration()
+    updateConfWithFakeS3Fs(hadoopConf)
+    if (supportMockHttpFs) {
+      hadoopConf.set("fs.http.impl", classOf[TestFileSystem].getCanonicalName)
+      hadoopConf.set("fs.http.impl.disable.cache", "true")
+    }
+
+    val tmpDir = Utils.createTempDir()
+    val mainResource = File.createTempFile("tmpPy", ".py", tmpDir)
+    val tmpS3Jar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
+    val tmpS3JarPath = s"s3a://${new File(tmpS3Jar.toURI).getAbsolutePath}"
+    val tmpHttpJar = TestUtils.createJarWithFiles(Map("test.resource" -> "USER"), tmpDir)
+    val tmpHttpJarPath = s"http://${new File(tmpHttpJar.toURI).getAbsolutePath}"
+
+    val args = Seq(
+      "--class", UserClasspathFirstTest.getClass.getName.stripPrefix("$"),
+      "--name", "testApp",
+      "--master", "yarn",
+      "--deploy-mode", "client",
+      "--jars", s"$tmpS3JarPath,$tmpHttpJarPath",
+      s"s3a://$mainResource"
+    ) ++ (
+      if (isHttpSchemeBlacklisted) {
+        Seq("--conf", "spark.yarn.dist.forceDownloadSchemes=http,https")
+      } else {
+        Nil
+      }
+    )
+
+    val appArgs = new SparkSubmitArguments(args)
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs, Some(hadoopConf))._3
+
+    val jars = sysProps("spark.yarn.dist.jars").split(",").toSet
+
+    // The URI of remote S3 resource should still be remote.
+    assert(jars.contains(tmpS3JarPath))
+
+    if (supportMockHttpFs) {
+      // If Http FS is supported by yarn service, the URI of remote http resource should
+      // still be remote.
+      assert(jars.contains(tmpHttpJarPath))
+    } else {
+      // If Http FS is not supported by yarn service, or http scheme is configured to be force
+      // downloading, the URI of remote http resource should be changed to a local one.
+      val jarName = new File(tmpHttpJar.toURI).getName
+      val localHttpJar = jars.filter(_.contains(jarName))
+      localHttpJar.size should be(1)
+      localHttpJar.head should startWith("file:")
+    }
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
@@ -996,17 +1071,31 @@ object UserClasspathFirstTest {
 }
 
 class TestFileSystem extends org.apache.hadoop.fs.LocalFileSystem {
-  override def copyToLocalFile(src: Path, dst: Path): Unit = {
+  private def local(path: Path): Path = {
     // Ignore the scheme for testing.
-    super.copyToLocalFile(new Path(src.toUri.getPath), dst)
+    new Path(path.toUri.getPath)
   }
+
+  private def toRemote(status: FileStatus): FileStatus = {
+    val path = s"s3a://${status.getPath.toUri.getPath}"
+    status.setPath(new Path(path))
+    status
+  }
+
+  override def isFile(path: Path): Boolean = super.isFile(local(path))
 
   override def globStatus(pathPattern: Path): Array[FileStatus] = {
     val newPath = new Path(pathPattern.toUri.getPath)
-    super.globStatus(newPath).map { status =>
-      val path = s"s3a://${status.getPath.toUri.getPath}"
-      status.setPath(new Path(path))
-      status
-    }
+    super.globStatus(newPath).map(toRemote)
   }
+
+  override def listStatus(path: Path): Array[FileStatus] = {
+    super.listStatus(local(path)).map(toRemote)
+  }
+
+  override def copyToLocalFile(src: Path, dst: Path): Unit = {
+    super.copyToLocalFile(local(src), dst)
+  }
+
+  override def open(path: Path): FSDataInputStream = super.open(local(path))
 }

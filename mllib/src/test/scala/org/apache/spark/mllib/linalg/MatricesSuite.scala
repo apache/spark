@@ -23,7 +23,7 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
-import org.scalatest.mock.MockitoSugar._
+import org.scalatest.mockito.MockitoSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{linalg => newlinalg}

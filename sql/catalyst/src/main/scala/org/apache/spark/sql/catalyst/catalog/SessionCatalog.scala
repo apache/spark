@@ -377,6 +377,8 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(tableIdentifier)
     externalCatalog.alterTableStats(db, table, newStats)
+    // Invalidate the table relation cache
+    refreshTable(identifier)
   }
 
   /**

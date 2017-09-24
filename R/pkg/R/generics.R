@@ -645,7 +645,7 @@ setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 #' @rdname sample
 #' @export
 setGeneric("sample",
-           function(x, withReplacement, fraction, seed) {
+           function(x, withReplacement = FALSE, fraction, seed) {
              standardGeneric("sample")
            })
 
@@ -656,7 +656,7 @@ setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 #' @rdname sample
 #' @export
 setGeneric("sample_frac",
-           function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
+           function(x, withReplacement = FALSE, fraction, seed) { standardGeneric("sample_frac") })
 
 #' @rdname sampleBy
 #' @export
@@ -768,6 +768,10 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 #' @rdname union
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
+#' @rdname unionByName
+#' @export
+setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 #' @export

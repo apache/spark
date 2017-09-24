@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.shims.Utils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.{AbstractService, Service, ServiceException}
@@ -47,6 +48,7 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
     setSuperField(this, "sessionManager", sparkSqlSessionManager)
     addService(sparkSqlSessionManager)
     var sparkServiceUGI: UserGroupInformation = null
+    var httpUGI: UserGroupInformation = null
 
     if (UserGroupInformation.isSecurityEnabled) {
       try {
@@ -56,6 +58,20 @@ private[hive] class SparkSQLCLIService(hiveServer: HiveServer2, sqlContext: SQLC
       } catch {
         case e @ (_: IOException | _: LoginException) =>
           throw new ServiceException("Unable to login to kerberos with given principal/keytab", e)
+      }
+
+      // Try creating spnego UGI if it is configured.
+      val principal = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_PRINCIPAL).trim
+      val keyTabFile = hiveConf.getVar(ConfVars.HIVE_SERVER2_SPNEGO_KEYTAB).trim
+      if (principal.nonEmpty && keyTabFile.nonEmpty) {
+        try {
+          httpUGI = HiveAuthFactory.loginFromSpnegoKeytabAndReturnUGI(hiveConf)
+          setSuperField(this, "httpUGI", httpUGI)
+        } catch {
+          case e: IOException =>
+            throw new ServiceException("Unable to login to spnego with given principal " +
+              s"$principal and keytab $keyTabFile: $e", e)
+        }
       }
     }
 

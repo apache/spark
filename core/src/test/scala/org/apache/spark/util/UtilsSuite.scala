@@ -939,6 +939,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
         val file = File.createTempFile("temp-file-name", ".tmp")
+        file.deleteOnExit()
         val cmd =
           s"""
              |#!/bin/bash

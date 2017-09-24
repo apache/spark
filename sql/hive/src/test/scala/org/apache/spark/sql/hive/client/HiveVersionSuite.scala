@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.client
 
 import org.apache.hadoop.conf.Configuration
+import org.scalactic.source.Position
 import org.scalatest.Tag
 
 import org.apache.spark.SparkFunSuite
@@ -35,12 +36,13 @@ private[client] abstract class HiveVersionSuite(version: String) extends SparkFu
       hadoopConf.set("hive.metastore.schema.verification", "false")
     }
     HiveClientBuilder
-      .buildClient(version, hadoopConf, HiveUtils.hiveClientConfigurations(hadoopConf))
+      .buildClient(version, hadoopConf, HiveUtils.formatTimeVarsForHiveClient(hadoopConf))
   }
 
   override def suiteName: String = s"${super.suiteName}($version)"
 
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Unit): Unit = {
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+      (implicit pos: Position): Unit = {
     super.test(s"$version: $testName", testTags: _*)(testFun)
   }
 }
