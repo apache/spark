@@ -57,9 +57,9 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
         partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
-        None,
-        Seq.empty,
-        Map.empty
+        bucketSpec = None,
+        statsTrackers = Seq.empty,
+        options = Map.empty
       )
     }
   }
@@ -85,9 +85,9 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
         partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
-        None,
-        Seq.empty,
-        Map.empty
+        bucketSpec = None,
+        statsTrackers = Seq.empty,
+        options = Map.empty
       )
 
       val partitions = listPartitions(path)
@@ -128,9 +128,9 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         outputSpec = FileFormatWriter.OutputSpec(output, customPartitionOutputs),
         hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
         partitionColumns = Seq(plan.outputSet.find(_.name == "partition").get),
-        None,
-        Seq.empty,
-        Map.empty
+        bucketSpec = None,
+        statsTrackers = Seq.empty,
+        options = Map.empty
       )
 
       val partitions = listPartitions(path)
