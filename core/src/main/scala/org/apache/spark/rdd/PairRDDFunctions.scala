@@ -220,8 +220,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       m1
     } : OpenHashMap[K, U]
 
-    self.treeAggregate()
-
     self.mapPartitions(reducePartition).reduce(mergeMaps).toIterator
   }
 
