@@ -86,7 +86,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     sqlContext.experimental.extraPreOptimizations = Seq(DummyPreOptimizationRule)
 
     val firstBatch = sqlContext.sessionState.optimizer.batches.head
-    val lastBatch = sqlContext.sessionState.optimizer.batches.last // .flatMap(_.rules)
+    val lastBatch = sqlContext.sessionState.optimizer.batches.last
 
     assert(firstBatch.rules == Seq(DummyPreOptimizationRule))
     assert(lastBatch.rules == Seq(DummyPostOptimizationRule))
