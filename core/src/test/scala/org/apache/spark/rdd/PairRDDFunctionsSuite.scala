@@ -52,7 +52,7 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   test("aggregateByKeyLocally") {
     val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
 
-    val sets = pairs.aggregateByKeyLocally(new HashSet[Int]())(_ += _, _ ++= _)
+    val sets = pairs.aggregateByKeyLocally(new HashSet[Int]())(_ += _, _ ++= _).toArray
     assert(sets.size === 3)
     val valuesFor1 = sets.find(_._1 == 1).get._2
     assert(valuesFor1.toList.sorted === List(1))

@@ -40,7 +40,7 @@ import org.apache.spark.internal.io._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{CompactBuffer, OpenHashMap}
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
@@ -186,7 +186,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * "combiner" in MapReduce.
    */
   def aggregateByKeyLocally[U: ClassTag](zeroValue: U)
-      (seqOp: (U, V) => U, combOp: (U, U) => U): Map[K, U] = self.withScope {
+      (seqOp: (U, V) => U, combOp: (U, U) => U): Iterator[(K, U)] = self.withScope {
     if (keyClass.isArray) {
       throw new SparkException("aggregateByKeyLocally() does not support array keys")
     }
@@ -203,24 +203,26 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val cleanedCombop = self.context.clean(combOp)
 
     val reducePartition = (iter: Iterator[(K, V)]) => {
-      val map = new JHashMap[K, U]
+      val map = new OpenHashMap[K, U]
       iter.foreach { pair =>
-        val old = map.get(pair._1)
-        map.put(pair._1,
+        val old = map(pair._1)
+        map.update(pair._1,
           if (old == null) cleanedSeqOp(createZero(), pair._2) else cleanedSeqOp(old, pair._2))
       }
       Iterator(map)
-    } : Iterator[JHashMap[K, U]]
+    } : Iterator[OpenHashMap[K, U]]
 
-    val mergeMaps = (m1: JHashMap[K, U], m2: JHashMap[K, U]) => {
-      m2.asScala.foreach { pair =>
-        val old = m1.get(pair._1)
-        m1.put(pair._1, if (old == null) pair._2 else cleanedCombop(old, pair._2))
+    val mergeMaps = (m1: OpenHashMap[K, U], m2: OpenHashMap[K, U]) => {
+      m2.foreach { pair =>
+        val old = m1(pair._1)
+        m1.update(pair._1, if (old == null) pair._2 else cleanedCombop(old, pair._2))
       }
       m1
-    } : JHashMap[K, U]
+    } : OpenHashMap[K, U]
 
-    self.mapPartitions(reducePartition).reduce(mergeMaps).asScala
+    self.treeAggregate()
+
+    self.mapPartitions(reducePartition).reduce(mergeMaps).toIterator
   }
 
   /**
