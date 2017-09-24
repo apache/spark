@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.datasources
 import java.io.File
 import java.io.FilenameFilter
 
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
-import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
