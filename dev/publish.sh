@@ -26,5 +26,5 @@ make_dist() {
   curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/spark/${version}/org/apache/spark/${artifact_name}/${version}/${artifact_name}"
 }
 
-publish_artifacts
-make_dist "${PALANTIR_FLAGS[*]}" --clean
+publish_artifacts | tee -a "$CIRCLE_ARTIFACTS/publish.log"
+make_dist "${PALANTIR_FLAGS[*]}" --clean | tee -a "$CIRCLE_ARTIFACTS/publish.log"
