@@ -760,21 +760,18 @@ class JDBCSuite extends SparkFunSuite
       override def isCascadingTruncateTable(): Option[Boolean] = cascadingTruncateTable
     }
 
-    val dialectCombination = Seq(
-      List(genDialect(Some(true)), genDialect(Some(false)), genDialect(None)),
-      List(genDialect(Some(true)), genDialect(Some(true)), genDialect(None)),
-      List(genDialect(Some(false)), genDialect(Some(false)), genDialect(None)),
-      List(genDialect(Some(true)), genDialect(Some(true))),
-      List(genDialect(Some(false)), genDialect(Some(false))),
-      List(genDialect(None), genDialect(None))
-    )
-
-    val expectedCascading = Seq(Some(true), Some(true), None, Some(true), Some(false), None)
-
-    dialectCombination.zip(expectedCascading).foreach { case (dialects, cascading) =>
+    def testDialects(cascadings: List[Option[Boolean]], expected: Option[Boolean]): Unit = {
+      val dialects = cascadings.map(genDialect(_))
       val agg = new AggregatedDialect(dialects)
-      assert(agg.isCascadingTruncateTable() === cascading)
+      assert(agg.isCascadingTruncateTable() === expected)
     }
+
+    testDialects(List(Some(true), Some(false), None), Some(true))
+    testDialects(List(Some(true), Some(true), None), Some(true))
+    testDialects(List(Some(false), Some(false), None), None)
+    testDialects(List(Some(true), Some(true)), Some(true))
+    testDialects(List(Some(false), Some(false)), Some(false))
+    testDialects(List(None, None), None)
   }
 
   test("DB2Dialect type mapping") {
