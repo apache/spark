@@ -2663,8 +2663,6 @@ setMethod("merge",
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
 #' @param suffix a suffix for the column name
 #' @return list of columns
-#'
-#' @note genAliasesForIntersectedCols since 1.6.0
 #' @noRd
 genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
   allColNames <- names(x)
