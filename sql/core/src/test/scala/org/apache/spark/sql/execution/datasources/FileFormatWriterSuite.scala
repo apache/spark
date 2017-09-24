@@ -41,11 +41,11 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
     import session.implicits._
 
     val partitionCount = 5
-    val ds = spark
+    val df = session
       .range(100).as("id").repartition(partitionCount)
       .withColumn("partition", $"id" % partitionCount)
 
-    val plan = ds.queryExecution.sparkPlan
+    val plan = df.queryExecution.sparkPlan
     val output = null
 
     assertThrows[IllegalArgumentException] {
@@ -55,7 +55,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         fileFormat = new CSVFileFormat(),
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
         outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
-        hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
+        hadoopConf = session.sparkContext.hadoopConfiguration,
         partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
         statsTrackers = Seq.empty,
@@ -70,11 +70,11 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       import session.implicits._
 
       val partitionCount = 5
-      val ds = spark
+      val df = spark
         .range(100).as("id").repartition(partitionCount)
         .withColumn("partition", $"id" % partitionCount)
 
-      val plan = ds.queryExecution.sparkPlan
+      val plan = df.queryExecution.sparkPlan
       val output = path.getAbsolutePath
 
       FileFormatWriter.write(
@@ -83,7 +83,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         fileFormat = new CSVFileFormat(),
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
         outputSpec = FileFormatWriter.OutputSpec(output, Map.empty),
-        hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
+        hadoopConf = session.sparkContext.hadoopConfiguration,
         partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
         statsTrackers = Seq.empty,
@@ -105,7 +105,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       import session.implicits._
 
       val partitionCount = 5
-      val ds = spark
+      val df = session
         .range(100).as("id").repartition(partitionCount)
         .withColumn("partition", $"id" % partitionCount)
 
@@ -116,7 +116,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
           locations + (partitionSpec -> partitionPath)
         }
 
-      val plan = ds.queryExecution.sparkPlan
+      val plan = df.queryExecution.sparkPlan
       val output = path.getAbsolutePath
 
       FileFormatWriter.write(
@@ -125,7 +125,7 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
         fileFormat = new CSVFileFormat(),
         committer = new SQLHadoopMapReduceCommitProtocol("job-1", output),
         outputSpec = FileFormatWriter.OutputSpec(output, customPartitionLocations),
-        hadoopConf = ds.sparkSession.sparkContext.hadoopConfiguration,
+        hadoopConf = session.sparkContext.hadoopConfiguration,
         partitionColumns = plan.outputSet.find(_.name == "partition").toSeq,
         bucketSpec = None,
         statsTrackers = Seq.empty,
