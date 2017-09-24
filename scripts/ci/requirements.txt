@@ -28,7 +28,7 @@ cryptography
 datadog
 dill
 distributed
-docker
+docker-py
 filechunkio
 flake8
 flask
