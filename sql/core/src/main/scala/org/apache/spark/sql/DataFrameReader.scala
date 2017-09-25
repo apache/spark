@@ -455,6 +455,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     csv(Seq(path): _*)
   }
 
+  def csv(csvRDD: RDD[String]): DataFrame = {
+    csv(sparkSession.createDataset(csvRDD)(Encoders.STRING))
+  }
+
   /**
    * Loads an `Dataset[String]` storing CSV rows and returns the result as a `DataFrame`.
    *

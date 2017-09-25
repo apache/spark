@@ -146,6 +146,22 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(carsWithoutHeader, withHeader = false, checkTypes = false)
   }
 
+  test("simple csv test with string RDD") {
+    val csvRDD = spark.sparkContext.textFile(carsFile)
+    val cars = spark.read
+        .option("header", "true")
+        .option("inferSchema", "true")
+        .csv(csvRDD)
+
+    verifyCars(cars, withHeader = true, checkTypes = true)
+
+    val carsWithoutHeader = spark.read
+        .option("header", "false")
+        .csv(csvRDD)
+
+    verifyCars(carsWithoutHeader, withHeader = false, checkTypes = false)
+  }
+
   test("test inferring booleans") {
     val result = spark.read
       .format("csv")
