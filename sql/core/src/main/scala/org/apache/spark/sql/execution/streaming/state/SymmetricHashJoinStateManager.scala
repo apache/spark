@@ -167,23 +167,34 @@ class SymmetricHashJoinStateManager(
         valueForIndex = null
       }
 
-      override def getNext(): UnsafeRowPair = {
-        // TODO: there has to be a better way to express this but I don't know what it is
-        while (valueForIndex == null && (index < numValues || allKeyToNumValues.hasNext)) {
+      private def findNextValueForIndex(): Unit = {
+        while (valueForIndex == null) {
           if (index < numValues) {
+            // First search the values for the current key.
             val current = keyWithIndexToValue.get(currentKey, index)
             if (condition(current)) {
               valueForIndex = current
             } else {
               index += 1
             }
-          } else {
+          } else if (allKeyToNumValues.hasNext) {
+            // If we can't find a value for the current key, cleanup and loop to check the next.
+            // This will also happen the first time the iterator is called.
             cleanupCurrentKey()
 
             currentKeyToNumValue = allKeyToNumValues.next()
             numValues = currentKeyToNumValue.numValue
+          } else {
+            // Bail out - there are no more values to be found.
+            return ()
           }
         }
+      }
+
+      override def getNext(): UnsafeRowPair = {
+        // TODO: there has to be a better way to express this but I don't know what it is
+
+        findNextValueForIndex()
 
         // If there's still no value, clean up and finish. There aren't any more available.
         if (valueForIndex == null) {
@@ -198,7 +209,8 @@ class SymmetricHashJoinStateManager(
             val valueAtMaxIndex = keyWithIndexToValue.get(currentKey, numValues - 1)
             keyWithIndexToValue.put(currentKey, index, valueAtMaxIndex)
             keyWithIndexToValue.remove(currentKey, numValues - 1)
-            valueForIndex = valueAtMaxIndex
+
+            valueForIndex = if (condition(valueAtMaxIndex)) valueAtMaxIndex else null
           } else {
             keyWithIndexToValue.remove(currentKey, 0)
             valueForIndex = null
