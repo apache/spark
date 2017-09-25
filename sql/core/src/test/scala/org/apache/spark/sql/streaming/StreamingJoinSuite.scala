@@ -116,26 +116,6 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
     )
   }
 
-  private def setupJoin(joinType: String = "inner") = {
-    val input1 = MemoryStream[Int]
-    val input2 = MemoryStream[Int]
-
-    val df1 = input1.toDF
-      .select('value as "key", 'value.cast("timestamp") as "timestamp", ('value * 2) as "leftValue")
-      .withWatermark("timestamp", "10 seconds")
-      .select('key, window('timestamp, "10 second"), 'leftValue)
-
-    val df2 = input2.toDF
-      .select('value as "key", 'value.cast("timestamp") as "timestamp",
-        ('value * 3) as "rightValue")
-      .select('key, window('timestamp, "10 second"), 'rightValue)
-
-    val joined = df1.join(df2, Seq("key", "window"), joinType)
-      .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
-
-    (input1, input2, joined)
-  }
-
   test("stream stream inner join on windows - with watermark") {
     val input1 = MemoryStream[Int]
     val input2 = MemoryStream[Int]
@@ -182,48 +162,6 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
       CheckLastBatch(),       // Should not join or add to state as < 15 got filtered by watermark
       assertNumStateRows(total = 2, updated = 0)
     )
-  }
-
-  test("leftouter2") {
-    import org.apache.spark.sql.functions._
-
-    val leftInput = MemoryStream[(Int, Int)]
-    val rightInput = MemoryStream[(Int, Int)]
-
-    val df1 = leftInput.toDF.toDF("leftKey", "time")
-      .select('leftKey, 'time.cast("timestamp") as "leftTime", ('leftKey * 2) as "leftValue")
-      .withWatermark("leftTime", "10 seconds")
-
-    val df2 = rightInput.toDF.toDF("rightKey", "time")
-      .select('rightKey, 'time.cast("timestamp") as "rightTime", ('rightKey * 3) as "rightValue")
-      .withWatermark("rightTime", "10 seconds")
-
-    val joined =
-      df1.join(
-          df2,
-          expr("leftKey = rightKey AND " +
-          "leftTime BETWEEN rightTime - interval 5 seconds AND rightTime + interval 5 seconds"),
-          "left_outer")
-        .select('leftKey, 'leftTime.cast("int"), 'rightTime.cast("int"))
-
-    testStream(joined)(
-      AddData(leftInput, (1, 5), (3, 5)),
-      CheckAnswer(),
-      AddData(rightInput, (1, 10)),
-      CheckLastBatch((1, 5, 10)),
-      AddData(rightInput, (1, 11)),
-      CheckLastBatch(), // no match as left time is too low
-      assertNumStateRows(total = 4, updated = 1),
-
-      // Increase event time watermark to 20s by adding data with time = 30s on both inputs
-      AddData(leftInput, (1, 7), (1, 30)),
-      CheckLastBatch((1, 7, 10), (1, 7, 11)),
-      assertNumStateRows(total = 6, updated = 2),
-      AddData(rightInput, (0, 30)),
-      CheckLastBatch(),
-      assertNumStateRows(total = 7, updated = 1),
-      AddData(rightInput, (0, 30)),
-      CheckLastBatch(Row(3, 5, null)))
   }
 
   test("stream stream inner join with time range - with watermark - one side condition") {
