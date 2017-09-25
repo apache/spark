@@ -241,13 +241,6 @@ class SymmetricHashJoinStateManager(
     }
   }
 
-  def iterator(): Iterator[UnsafeRowPair] = {
-    val pair = new UnsafeRowPair()
-    keyWithIndexToValue.iterator.map { x =>
-      pair.withRows(x.key, x.value)
-    }
-  }
-
   /** Commit all the changes to all the state stores */
   def commit(): Unit = {
     keyToNumValues.commit()
