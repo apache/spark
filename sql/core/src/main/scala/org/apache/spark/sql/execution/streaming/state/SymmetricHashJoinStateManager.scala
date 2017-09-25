@@ -94,31 +94,31 @@ class SymmetricHashJoinStateManager(
 
       private val allKeyToNumValues = keyToNumValues.iterator
 
-      private var currentKeyToNumValue: Option[KeyAndNumValues] = None
-      private var currentValues: Option[Iterator[KeyWithIndexAndValue]] = None
+      private var currentKeyToNumValue: KeyAndNumValues = null
+      private var currentValues: Iterator[KeyWithIndexAndValue] = null
 
-      private def currentKey = currentKeyToNumValue.get.key
+      private def currentKey = currentKeyToNumValue.key
 
       private val reusedPair = new UnsafeRowPair()
 
       private def getAndRemoveValue() = {
-        val keyWithIndexAndValue = currentValues.get.next()
+        val keyWithIndexAndValue = currentValues.next()
         keyWithIndexToValue.remove(currentKey, keyWithIndexAndValue.valueIndex)
         reusedPair.withRows(currentKey, keyWithIndexAndValue.value)
       }
 
       override def getNext(): UnsafeRowPair = {
-        if (currentValues.nonEmpty && currentValues.get.hasNext) {
+        if (currentValues != null && currentValues.hasNext) {
           return getAndRemoveValue()
         } else {
           while (allKeyToNumValues.hasNext) {
-            currentKeyToNumValue = Some(allKeyToNumValues.next())
+            currentKeyToNumValue = allKeyToNumValues.next()
             if (condition(currentKey)) {
-              currentValues = Some(keyWithIndexToValue.getAllWithIndex(
-                currentKey, currentKeyToNumValue.get.numValue))
+              currentValues = keyWithIndexToValue.getAllWithIndex(
+                currentKey, currentKeyToNumValue.numValue)
               keyToNumValues.remove(currentKey)
 
-              if (currentValues.nonEmpty && currentValues.get.hasNext) {
+              if (currentValues.hasNext) {
                 return getAndRemoveValue()
               }
             }
@@ -398,7 +398,10 @@ class SymmetricHashJoinStateManager(
 
 
 
-    /** Get all the values for key and all indices, in a (value, index) tuple. */
+    /**
+     * Get all the values for key and all indices, in a (value, index) tuple.
+     * Should not return null.
+     */
     def getAllWithIndex(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
       // todo: should we be reusing this in the caller or is it fine to copy for each key
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
