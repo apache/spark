@@ -78,6 +78,8 @@ def wrap_pandas_udf(f, return_type):
 
     def verify_result_length(*a):
         result = f(*a)
+        if not hasattr(result, "__len__"):
+            raise TypeError("Return type of pandas_udf should be a Pandas.Series")
         if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                "expected %d, got %d" % (len(a[0]), len(result)))

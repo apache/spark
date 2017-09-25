@@ -3256,9 +3256,20 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
 
     def test_vectorized_udf_zero_parameter(self):
         from pyspark.sql.functions import pandas_udf
+        error_str = '0-parameter pandas_udfs.*not.*supported'
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, '0-parameter pandas_udfs.*not.*supported'):
+            with self.assertRaisesRegexp(NotImplementedError, error_str):
                 pandas_udf(lambda: 1, LongType())
+
+            with self.assertRaisesRegexp(NotImplementedError, error_str):
+                @pandas_udf
+                def zero_no_type():
+                    return 1
+
+            with self.assertRaisesRegexp(NotImplementedError, error_str):
+                @pandas_udf(LongType())
+                def zero_with_type():
+                    return 1
 
     def test_vectorized_udf_datatype_string(self):
         from pyspark.sql.functions import pandas_udf, col
@@ -3306,7 +3317,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         from pyspark.sql.functions import pandas_udf, col
         import pandas as pd
         df = self.spark.range(10)
-        raise_exception = pandas_udf(lambda i: pd.Series(1), LongType())
+        raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(
                     Exception,
@@ -3326,21 +3337,27 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
 
     def test_vectorized_udf_chained(self):
         from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10).toDF('x')
+        df = self.spark.range(10)
         f = pandas_udf(lambda x: x + 1, LongType())
         g = pandas_udf(lambda x: x - 1, LongType())
-        res = df.select(g(f(col('x'))))
+        res = df.select(g(f(col('id'))))
         self.assertEquals(df.collect(), res.collect())
 
     def test_vectorized_udf_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf, col
-        df = self.spark.range(10).toDF('x')
+        df = self.spark.range(10)
         f = pandas_udf(lambda x: x * 1.0, StringType())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
-                    Exception,
-                    'Invalid.*type.*string'):
-                df.select(f(col('x'))).collect()
+            with self.assertRaisesRegexp(Exception, 'Invalid.*type.*string'):
+                df.select(f(col('id'))).collect()
+
+    def test_vectorized_udf_return_scalar(self):
+        from pyspark.sql.functions import pandas_udf, col
+        df = self.spark.range(10)
+        f = pandas_udf(lambda x: 1.0, DoubleType())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'Return.*type.*pandas_udf.*Series'):
+                df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_decorator(self):
         from pyspark.sql.functions import pandas_udf, col
