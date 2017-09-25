@@ -3250,6 +3250,7 @@ setMethod("attach",
           function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
             newEnv <- assignNewEnv(what)
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
+            on.exit(detach(newEnv, pos = pos, name = name))
           })
 
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
