@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution.benchmark
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias, With}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.util.Benchmark
 
@@ -66,25 +68,25 @@ object TPCDSQueryBenchmark extends Logging {
         classLoader = Thread.currentThread().getContextClassLoader)
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
-      // logical plan and adding up the sizes of all tables that appear in the plan. Note that this
-      // currently doesn't take WITH subqueries into account which might lead to fairly inaccurate
-      // per-row processing time for those cases.
-      val queryRelations = scala.collection.mutable.HashSet[String]()
-      spark.sql(queryString).queryExecution.logical.map {
-        case UnresolvedRelation(t: TableIdentifier) =>
-          queryRelations.add(t.table)
-        case lp: LogicalPlan =>
-          lp.expressions.foreach { _ foreach {
-            case subquery: SubqueryExpression =>
-              subquery.plan.foreach {
-                case UnresolvedRelation(t: TableIdentifier) =>
-                  queryRelations.add(t.table)
-                case _ =>
-              }
-            case _ =>
-          }
+      // logical plan and adding up the sizes of all tables that appear in the plan.
+      val planToCheck = mutable.Stack[LogicalPlan](spark.sql(queryString).queryExecution.logical)
+      val queryRelations = mutable.HashSet[String]()
+      while (planToCheck.nonEmpty) {
+        planToCheck.pop() match {
+          case UnresolvedRelation(t: TableIdentifier) =>
+            queryRelations.add(t.table)
+          case With(_, cteRelations) =>
+            cteRelations.foreach { case (_, SubqueryAlias(_, child)) =>
+              planToCheck.push(child)
+            }
+          case lp =>
+            lp.expressions.foreach { _ foreach {
+              case subquery: SubqueryExpression =>
+                planToCheck.push(subquery.plan)
+              case _ =>
+            }}
+            planToCheck.pushAll(lp.children)
         }
-        case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
       val benchmark = new Benchmark(s"TPCDS Snappy", numRows, 5)
