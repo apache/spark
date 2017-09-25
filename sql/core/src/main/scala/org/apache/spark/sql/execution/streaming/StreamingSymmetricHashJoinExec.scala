@@ -263,24 +263,28 @@ case class StreamingSymmetricHashJoinExec(
       row
     }
 
-    // Iterator which must be consumed after output completion before committing.
-    val cleanupIter = joinType match {
-      case Inner =>
-        leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
-      case LeftOuter => rightSideJoiner.removeOldState()
-      case RightOuter => leftSideJoiner.removeOldState()
-      case _ =>
-        throwBadJoinTypeException()
-        Iterator()
-    }
-
     // Function to remove old state after all the input has been consumed and output generated
     def onOutputCompletion = {
       allUpdatesTimeMs += math.max(NANOSECONDS.toMillis(System.nanoTime - updateStartTimeNs), 0)
 
       // TODO: how to get this for removals as part of outer join?
       allRemovalsTimeMs += timeTakenMs {
-        cleanupIter.foreach(_ => ())
+        // Iterator which must be consumed after output completion before committing.
+        // For outer joins, we've removed old state from the appropriate side inline while we
+        // produced the null rows. So we need to finish cleaning the other side. For inner joins
+        // we just clean up all the old state here.
+        val cleanupIter = joinType match {
+          case Inner =>
+            leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
+          case LeftOuter => rightSideJoiner.removeOldState()
+          case RightOuter => leftSideJoiner.removeOldState()
+          case _ =>
+            throwBadJoinTypeException()
+            Iterator()
+        }
+        while (cleanupIter.hasNext) {
+          cleanupIter.next()
+        }
       }
 
       // Commit all state changes and update state store metrics
