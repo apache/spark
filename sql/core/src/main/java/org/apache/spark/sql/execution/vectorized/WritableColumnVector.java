@@ -559,7 +559,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
-  protected int MAX_CAPACITY = Integer.MAX_VALUE;
+  protected int MAX_CAPACITY = Integer.MAX_VALUE - 8;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.

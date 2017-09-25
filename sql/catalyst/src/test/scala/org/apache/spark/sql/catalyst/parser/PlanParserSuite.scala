@@ -651,4 +651,22 @@ class PlanParserSuite extends AnalysisTest {
       )
     )
   }
+
+  test("TRIM function") {
+    intercept("select ltrim(both 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+    intercept("select rtrim(trailing 'S' from 'SS abc S'", "missing ')' at '<EOF>'")
+
+    assertEqual(
+      "SELECT TRIM(BOTH '@$%&( )abc' FROM '@ $ % & ()abc ' )",
+        OneRowRelation().select('TRIM.function("@$%&( )abc", "@ $ % & ()abc "))
+    )
+    assertEqual(
+      "SELECT TRIM(LEADING 'c []' FROM '[ ccccbcc ')",
+        OneRowRelation().select('ltrim.function("c []", "[ ccccbcc "))
+    )
+    assertEqual(
+      "SELECT TRIM(TRAILING 'c&^,.' FROM 'bc...,,,&&&ccc')",
+      OneRowRelation().select('rtrim.function("c&^,.", "bc...,,,&&&ccc"))
+    )
+  }
 }

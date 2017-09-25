@@ -297,6 +297,8 @@ class StreamExecution(
       val sparkSessionToRunBatches = sparkSession.cloneSession()
       // Adaptive execution can change num shuffle partitions, disallow
       sparkSessionToRunBatches.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "false")
+      // Disable cost-based join optimization as we do not want stateful operations to be rearranged
+      sparkSessionToRunBatches.conf.set(SQLConf.CBO_ENABLED.key, "false")
       offsetSeqMetadata = OffsetSeqMetadata(
         batchWatermarkMs = 0, batchTimestampMs = 0, sparkSessionToRunBatches.conf)
 
@@ -829,6 +831,7 @@ class StreamExecution(
     if (streamDeathCause != null) {
       throw streamDeathCause
     }
+    if (!isActive) return
     awaitBatchLock.lock()
     try {
       noNewData = false
@@ -837,7 +840,7 @@ class StreamExecution(
         if (streamDeathCause != null) {
           throw streamDeathCause
         }
-        if (noNewData) {
+        if (noNewData || !isActive) {
           return
         }
       }

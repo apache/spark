@@ -88,13 +88,19 @@ private[ui] abstract class ExecutionTable(
     val duration = executionUIData.completionTime.getOrElse(currentTime) - submissionTime
 
     val runningJobs = executionUIData.runningJobs.map { jobId =>
-      <a href={jobURL(jobId)}>{jobId.toString}</a><br/>
+      <a href={jobURL(jobId)}>
+        [{jobId.toString}]
+      </a>
     }
     val succeededJobs = executionUIData.succeededJobs.sorted.map { jobId =>
-      <a href={jobURL(jobId)}>{jobId.toString}</a><br/>
+      <a href={jobURL(jobId)}>
+        [{jobId.toString}]
+      </a>
     }
     val failedJobs = executionUIData.failedJobs.sorted.map { jobId =>
-      <a href={jobURL(jobId)}>{jobId.toString}</a><br/>
+      <a href={jobURL(jobId)}>
+        [{jobId.toString}]
+      </a>
     }
     <tr>
       <td>

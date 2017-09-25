@@ -1116,6 +1116,20 @@ test_that("sample on a DataFrame", {
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 
+  # Different arguments
+  df <- createDataFrame(as.list(seq(10)))
+  expect_equal(count(sample(df, fraction = 0.5, seed = 3)), 4)
+  expect_equal(count(sample(df, withReplacement = TRUE, fraction = 0.5, seed = 3)), 2)
+  expect_equal(count(sample(df, fraction = 1.0)), 10)
+  expect_equal(count(sample(df, fraction = 1L)), 10)
+  expect_equal(count(sample(df, FALSE, fraction = 1.0)), 10)
+
+  expect_error(sample(df, fraction = "a"), "fraction must be numeric")
+  expect_error(sample(df, "a", fraction = 0.1), "however, got character")
+  expect_error(sample(df, fraction = 1, seed = NA), "seed must not be NULL or NA; however, got NA")
+  expect_error(sample(df, fraction = -1.0),
+               "illegal argument - requirement failed: Sampling fraction \\(-1.0\\)")
+
   # nolint start
   # Test base::sample is working
   #expect_equal(length(sample(1:12)), 12)
@@ -2524,14 +2538,14 @@ test_that("describe() and summary() on a DataFrame", {
 
   stats2 <- summary(df)
   expect_equal(collect(stats2)[5, "summary"], "25%")
-  expect_equal(collect(stats2)[5, "age"], "30.0")
+  expect_equal(collect(stats2)[5, "age"], "30")
 
   stats3 <- summary(df, "min", "max", "55.1%")
 
   expect_equal(collect(stats3)[1, "summary"], "min")
   expect_equal(collect(stats3)[2, "summary"], "max")
   expect_equal(collect(stats3)[3, "summary"], "55.1%")
-  expect_equal(collect(stats3)[3, "age"], "30.0")
+  expect_equal(collect(stats3)[3, "age"], "30")
 
   # SPARK-16425: SparkR summary() fails on column of type logical
   df <- withColumn(df, "boolean", df$age == 30)
