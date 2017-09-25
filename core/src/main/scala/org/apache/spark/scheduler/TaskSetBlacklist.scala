@@ -97,8 +97,8 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
       host: String,
       exec: String,
       index: Int,
-      latestFailureReason: Option[String] = None): Unit = {
-    taskSetLatestFailureReason = latestFailureReason
+      failureReason: Option[String] = None): Unit = {
+    taskSetLatestFailureReason = failureReason
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
     execFailures.updateWithFailure(index, clock.getTimeMillis())
 
