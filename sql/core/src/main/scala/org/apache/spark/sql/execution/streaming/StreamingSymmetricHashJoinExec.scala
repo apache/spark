@@ -146,13 +146,14 @@ case class StreamingSymmetricHashJoinExec(
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), left, right)
   }
 
-  private lazy val badJoinTypeException =
-    new IllegalArgumentException(
+  private def throwBadJoinTypeException(): Unit = {
+    throw new IllegalArgumentException(
       s"${getClass.getSimpleName} should not take $joinType as the JoinType")
+  }
 
   require(
     joinType == Inner || joinType == LeftOuter || joinType == RightOuter,
-    badJoinTypeException.getMessage)
+    s"${getClass.getSimpleName} should not take $joinType as the JoinType")
   require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType))
 
   private val storeConf = new StateStoreConf(sqlContext.conf)
@@ -167,7 +168,9 @@ case class StreamingSymmetricHashJoinExec(
     case _: InnerLike => left.output ++ right.output
     case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
     case RightOuter => left.output.map(_.withNullability(true)) ++ right.output
-    case _ => throw badJoinTypeException
+    case _ =>
+      throwBadJoinTypeException()
+      Seq()
   }
 
   override def outputPartitioning: Partitioning = joinType match {
@@ -250,7 +253,9 @@ case class StreamingSymmetricHashJoinExec(
             .removeOldState()
             .filterNot { case (key, value) => leftSideJoiner.containsKey(key) }
             .map { case (key, value) => joinedRow.withLeft(nullLeft).withRight(value) }
-      case _ => throw badJoinTypeException
+      case _ =>
+        throwBadJoinTypeException()
+        Iterator()
     }
 
     val outputIterWithMetrics = outputIter.map { row =>
@@ -264,7 +269,9 @@ case class StreamingSymmetricHashJoinExec(
         leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
       case LeftOuter => rightSideJoiner.removeOldState()
       case RightOuter => leftSideJoiner.removeOldState()
-      case _ => throw badJoinTypeException
+      case _ =>
+        throwBadJoinTypeException()
+        Iterator()
     }
 
     // Function to remove old state after all the input has been consumed and output generated
@@ -382,6 +389,7 @@ case class StreamingSymmetricHashJoinExec(
       stateWatermarkPredicate match {
         case Some(JoinStateKeyWatermarkPredicate(expr)) =>
           joinStateManager.removeByKeyCondition(stateKeyWatermarkPredicateFunc)
+            .map(pair => (pair.key, pair.value))
         case Some(JoinStateValueWatermarkPredicate(expr)) =>
           joinStateManager.removeByValueCondition(stateValueWatermarkPredicateFunc)
         case _ => Iterator()

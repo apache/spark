@@ -89,23 +89,25 @@ class SymmetricHashJoinStateManager(
   /**
    * Remove using a predicate on keys. See class docs for more context and implement details.
    */
-  def removeByKeyCondition(condition: UnsafeRow => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
-    new NextIterator[(UnsafeRow, UnsafeRow)] {
+  def removeByKeyCondition(condition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
+    new NextIterator[UnsafeRowPair] {
 
       private val allKeyToNumValues = keyToNumValues.iterator
 
       private var currentKeyToNumValue: Option[KeyAndNumValues] = None
-      private var currentValues: Option[Iterator[(UnsafeRow, Long)]] = None
+      private var currentValues: Option[Iterator[KeyWithIndexAndValue]] = None
 
       private def currentKey = currentKeyToNumValue.get.key
 
+      private val reusedPair = new UnsafeRowPair()
+
       private def getAndRemoveValue() = {
-        val (current, index) = currentValues.get.next()
-        keyWithIndexToValue.remove(currentKey, index)
-        (currentKey, current)
+        val keyWithIndexAndValue = currentValues.get.next()
+        keyWithIndexToValue.remove(currentKey, keyWithIndexAndValue.valueIndex)
+        reusedPair.withRows(currentKey, keyWithIndexAndValue.value)
       }
 
-      override def getNext(): (UnsafeRow, UnsafeRow) = {
+      override def getNext(): UnsafeRowPair = {
         if (currentValues.nonEmpty && currentValues.get.hasNext) {
           return getAndRemoveValue()
         } else {
@@ -392,11 +394,15 @@ class SymmetricHashJoinStateManager(
       }
     }
 
+
+
     /** Get all the values for key and all indices, in a (value, index) tuple. */
-    def getAllWithIndex(key: UnsafeRow, numValues: Long): Iterator[(UnsafeRow, Long)] = {
+    def getAllWithIndex(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
+      // todo: should we be reusing this in the caller or is it fine to copy for each key
+      val keyWithIndexAndValue = new KeyWithIndexAndValue()
       var index = 0
-      new NextIterator[(UnsafeRow, Long)] {
-        override protected def getNext(): (UnsafeRow, Long) = {
+      new NextIterator[KeyWithIndexAndValue] {
+        override protected def getNext(): KeyWithIndexAndValue = {
           if (index >= numValues) {
             finished = true
             null
@@ -405,7 +411,7 @@ class SymmetricHashJoinStateManager(
             val value = stateStore.get(keyWithIndex)
             index += 1
             // return original index
-            (value, index - 1)
+            keyWithIndexAndValue.withNew(key, index - 1, value)
           }
         }
 
