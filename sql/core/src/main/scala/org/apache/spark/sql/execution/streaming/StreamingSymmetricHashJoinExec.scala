@@ -244,15 +244,15 @@ case class StreamingSymmetricHashJoinExec(
         filteredInnerOutputIter ++
           leftSideJoiner
             .removeOldState()
-            .filterNot { case (key, value) => rightSideJoiner.containsKey(key) }
-            .map { case (key, value) => joinedRow.withLeft(value).withRight(nullRight) }
+            .filterNot(pair => rightSideJoiner.containsKey(pair.key))
+            .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
       case RightOuter =>
         val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
         filteredInnerOutputIter ++
           rightSideJoiner
             .removeOldState()
-            .filterNot { case (key, value) => leftSideJoiner.containsKey(key) }
-            .map { case (key, value) => joinedRow.withLeft(nullLeft).withRight(value) }
+            .filterNot(pair => leftSideJoiner.containsKey(pair.key))
+            .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
       case _ =>
         throwBadJoinTypeException()
         Iterator()
@@ -389,11 +389,10 @@ case class StreamingSymmetricHashJoinExec(
      * We do this unsafe thing to avoid requiring either two passes or full materialization when
      * processing the rows for outer join.
      */
-    def removeOldState(): Iterator[(UnsafeRow, UnsafeRow)] = {
+    def removeOldState(): Iterator[UnsafeRowPair] = {
       stateWatermarkPredicate match {
         case Some(JoinStateKeyWatermarkPredicate(expr)) =>
           joinStateManager.removeByKeyCondition(stateKeyWatermarkPredicateFunc)
-            .map(pair => (pair.key, pair.value))
         case Some(JoinStateValueWatermarkPredicate(expr)) =>
           joinStateManager.removeByValueCondition(stateValueWatermarkPredicateFunc)
         case _ => Iterator()

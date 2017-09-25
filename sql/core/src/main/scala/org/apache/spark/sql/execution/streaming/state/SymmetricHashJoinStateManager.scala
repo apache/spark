@@ -136,14 +136,16 @@ class SymmetricHashJoinStateManager(
   /**
    * Remove using a predicate on values. See class docs for more context and implementation details.
    */
-  def removeByValueCondition(condition: UnsafeRow => Boolean): Iterator[(UnsafeRow, UnsafeRow)] = {
-    new NextIterator[(UnsafeRow, UnsafeRow)] {
+  def removeByValueCondition(condition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
+    new NextIterator[UnsafeRowPair] {
 
       private val allKeyToNumValues = keyToNumValues.iterator
 
       private var currentKeyToNumValue: Option[KeyAndNumValues] = None
 
       private def currentKey = currentKeyToNumValue.get.key
+
+      private val reusedPair = new UnsafeRowPair()
 
       var numValues: Long = 0L
       var index: Long = 0L
@@ -165,7 +167,7 @@ class SymmetricHashJoinStateManager(
         valueForIndex = null
       }
 
-      override def getNext(): (UnsafeRow, UnsafeRow) = {
+      override def getNext(): UnsafeRowPair = {
         // TODO: there has to be a better way to express this but I don't know what it is
         while (valueForIndex == null && (index < numValues || allKeyToNumValues.hasNext)) {
           if (index < numValues) {
@@ -204,7 +206,7 @@ class SymmetricHashJoinStateManager(
           numValues -= 1
           valueRemoved = true
 
-          return (currentKey, returnValue)
+          return reusedPair.withRows(currentKey, returnValue)
         }
       }
 
