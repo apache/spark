@@ -289,6 +289,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   private var kappa: Double = 0.51
   private var miniBatchFraction: Double = 0.05
   private var optimizeDocConcentration: Boolean = false
+  private var epsilon: Double = 1e-3
 
   // internal data structure
   private var docs: RDD[(Long, Vector)] = null
@@ -310,6 +311,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   @Since("1.4.0")
   def getTau0: Double = this.tau0
 
+  @Since("2.3.0")
+  def getEpsilon: Double = this.epsilon
+
   /**
    * A (positive) learning parameter that downweights early iterations. Larger values make early
    * iterations count less.
@@ -319,6 +323,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   def setTau0(tau0: Double): this.type = {
     require(tau0 > 0, s"LDA tau0 must be positive, but was set to $tau0")
     this.tau0 = tau0
+    this
+  }
+
+  @Since("2.3.0")
+  def setEpsilon(epsilon: Double): this.type = {
+    require(epsilon> 0, s"LDA epsilon must be positive, but was set to $epsilon")
+    this.epsilon = epsilon
     this
   }
 
@@ -470,7 +481,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
       var gammaPart = List[BDV[Double]]()
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
-          termCounts, expElogbetaBc.value, alpha, gammaShape, k)
+          termCounts, expElogbetaBc.value, alpha, gammaShape, k, epsilon)
         stat(::, ids) := stat(::, ids).toDenseMatrix + sstats
         gammaPart = gammad :: gammaPart
       }
@@ -573,7 +584,8 @@ private[clustering] object OnlineLDAOptimizer {
       expElogbeta: BDM[Double],
       alpha: breeze.linalg.Vector[Double],
       gammaShape: Double,
-      k: Int): (BDV[Double], BDM[Double], List[Int]) = {
+      k: Int,
+      epsilon: Double = 1e-3): (BDV[Double], BDM[Double], List[Int]) = {
     val (ids: List[Int], cts: Array[Double]) = termCounts match {
       case v: DenseVector => ((0 until v.size).toList, v.values)
       case v: SparseVector => (v.indices.toList, v.values)
@@ -589,7 +601,7 @@ private[clustering] object OnlineLDAOptimizer {
     val ctsVector = new BDV[Double](cts)                                         // ids
 
     // Iterate between gamma and phi until convergence
-    while (meanGammaChange > 1e-3) {
+    while (meanGammaChange > epsilon) {
       val lastgamma = gammad.copy
       //        K                  K * ids               ids
       gammad := (expElogthetad *:* (expElogbetad.t * (ctsVector /:/ phiNorm))) +:+ alpha
