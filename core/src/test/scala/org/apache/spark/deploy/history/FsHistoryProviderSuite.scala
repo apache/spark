@@ -77,9 +77,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new File(logPath)
   }
 
-  test("Parse application logs") {
+  Seq(true, false).foreach { inMemory =>
+    test(s"Parse application logs (inMemory = $inMemory)") {
+      testAppLogParsing(inMemory)
+    }
+  }
+
+  private def testAppLogParsing(inMemory: Boolean) {
     val clock = new ManualClock(12345678)
-    val provider = newProvider(createTestConf(), clock)
+    val provider = newProvider(createTestConf(inMemory = inMemory), clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -665,10 +671,15 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     new FileOutputStream(file).close()
   }
 
-  private def createTestConf(): SparkConf = {
-    new SparkConf()
+  private def createTestConf(inMemory: Boolean = false): SparkConf = {
+    val conf = new SparkConf()
       .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
-      .set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
+
+    if (!inMemory) {
+      conf.set(LOCAL_STORE_DIR, Utils.createTempDir().getAbsolutePath())
+    }
+
+    conf
   }
 
   private class SafeModeTestProvider(conf: SparkConf, clock: Clock)
