@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{FlatMapGroupsWithState, _}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{IntegerType, LongType, MetadataBuilder}
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /** A dummy command for testing unsupported operations. */
 case class DummyCommand() extends Command
@@ -45,6 +46,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   val attributeWithWatermark = attribute.withMetadata(watermarkMetadata)
   val batchRelation = LocalRelation(attribute)
   val streamRelation = new TestStreamingRelation(attribute)
+  val watermarkStream = EventTimeWatermark(
+    attributeWithWatermark,
+    new CalendarInterval(0, 0),
+    streamRelation)
 
   /*
     =======================================================================================
@@ -417,9 +422,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   testBinaryOperationInStreamingPlan(
     "left outer join",
     _.join(_, joinType = LeftOuter),
-    streamStreamSupported = false,
     batchStreamSupported = false,
-    expectedMsg = "left outer/semi/anti joins")
+    expectedMsg = "Left outer join")
 
   // Left semi joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
@@ -427,7 +431,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.join(_, joinType = LeftSemi),
     streamStreamSupported = false,
     batchStreamSupported = false,
-    expectedMsg = "left outer/semi/anti joins")
+    expectedMsg = "left semi/anti joins")
 
   // Left anti joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
@@ -435,13 +439,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.join(_, joinType = LeftAnti),
     streamStreamSupported = false,
     batchStreamSupported = false,
-    expectedMsg = "left outer/semi/anti joins")
+    expectedMsg = "left semi/anti joins")
 
   // Right outer joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
     "right outer join",
     _.join(_, joinType = RightOuter),
-    streamStreamSupported = false,
     streamBatchSupported = false)
 
   // Cogroup: only batch-batch is allowed
@@ -571,12 +574,12 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     if (streamStreamSupported) {
       assertSupportedInStreamingPlan(
         s"$operationName with stream-stream relations",
-        planGenerator(streamRelation, streamRelation),
+        planGenerator(watermarkStream, watermarkStream),
         outputMode)
     } else {
       assertNotSupportedInStreamingPlan(
         s"$operationName with stream-stream relations",
-        planGenerator(streamRelation, streamRelation),
+        planGenerator(watermarkStream, watermarkStream),
         outputMode,
         expectedMsgs)
     }
