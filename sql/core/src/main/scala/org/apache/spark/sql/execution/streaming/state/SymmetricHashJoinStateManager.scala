@@ -76,7 +76,7 @@ class SymmetricHashJoinStateManager(
   /** Get all the values of a key */
   def get(key: UnsafeRow): Iterator[UnsafeRow] = {
     val numValues = keyToNumValues.get(key)
-    keyWithIndexToValue.getAll(key, numValues)
+    keyWithIndexToValue.getAll(key, numValues).map(_.value)
   }
 
   /** Append a new value to the key */
@@ -120,7 +120,7 @@ class SymmetricHashJoinStateManager(
           while (allKeyToNumValues.hasNext) {
             currentKeyToNumValue = allKeyToNumValues.next()
             if (condition(currentKey)) {
-              currentValues = keyWithIndexToValue.getAllWithIndex(
+              currentValues = keyWithIndexToValue.getAll(
                 currentKey, currentKeyToNumValue.numValue)
               keyToNumValues.remove(currentKey)
 
@@ -403,34 +403,11 @@ class SymmetricHashJoinStateManager(
       stateStore.get(keyWithIndexRow(key, valueIndex))
     }
 
-    /** Get all the values for key and all indices. */
-    def getAll(key: UnsafeRow, numValues: Long): Iterator[UnsafeRow] = {
-      var index = 0
-      new NextIterator[UnsafeRow] {
-        override protected def getNext(): UnsafeRow = {
-          if (index >= numValues) {
-            finished = true
-            null
-          } else {
-            val keyWithIndex = keyWithIndexRow(key, index)
-            val value = stateStore.get(keyWithIndex)
-            index += 1
-            value
-          }
-        }
-
-        override protected def close(): Unit = {}
-      }
-    }
-
-
-
     /**
-     * Get all the values for key and all indices, in a (value, index) tuple.
+     * Get all values and indices for the provided key.
      * Should not return null.
      */
-    def getAllWithIndex(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
-      // todo: should we be reusing this in the caller or is it fine to copy for each key
+    def getAll(key: UnsafeRow, numValues: Long): Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
       var index = 0
       new NextIterator[KeyWithIndexAndValue] {
