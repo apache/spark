@@ -472,6 +472,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
     val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
     val alpha = this.alpha.asBreeze
+    val epsilon = this.epsilon
     val gammaShape = this.gammaShape
 
     val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
