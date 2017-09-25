@@ -147,7 +147,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("simple csv test with string RDD") {
-    val csvRDD = spark.sparkContext.textFile(carsFile)
+    val csvRDD = spark.sparkContext.textFile(testFile(carsFile))
     val cars = spark.read
         .option("header", "true")
         .option("inferSchema", "true")
