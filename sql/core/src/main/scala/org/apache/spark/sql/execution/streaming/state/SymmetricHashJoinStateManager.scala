@@ -141,9 +141,9 @@ class SymmetricHashJoinStateManager(
 
       private val allKeyToNumValues = keyToNumValues.iterator
 
-      private var currentKeyToNumValue: Option[KeyAndNumValues] = None
+      private var currentKeyToNumValue: KeyAndNumValues = null
 
-      private def currentKey = currentKeyToNumValue.get.key
+      private def currentKey = currentKeyToNumValue.key
 
       private val reusedPair = new UnsafeRowPair()
 
@@ -180,8 +180,8 @@ class SymmetricHashJoinStateManager(
           } else {
             cleanupCurrentKey()
 
-            currentKeyToNumValue = Some(allKeyToNumValues.next())
-            numValues = currentKeyToNumValue.get.numValue
+            currentKeyToNumValue = allKeyToNumValues.next()
+            numValues = currentKeyToNumValue.numValue
           }
         }
 
