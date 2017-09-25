@@ -336,6 +336,7 @@ class DataFrameReader(OptionUtils):
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
         :param path: string, or list of strings, for input path(s).
+                     or RDD of Strings storing CSV objects.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
         :param sep: sets the single character as a separator for each field and value.
@@ -408,6 +409,10 @@ class DataFrameReader(OptionUtils):
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
+        >>> rdd = sc.textFile('python/test_support/sql/ages.csv')
+        >>> df2 = spark.read.csv(rdd)
+        >>> df2.dtypes
+        [('_c0', 'string'), ('_c1', 'string')]
         """
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
@@ -420,7 +425,22 @@ class DataFrameReader(OptionUtils):
             columnNameOfCorruptRecord=columnNameOfCorruptRecord, multiLine=multiLine)
         if isinstance(path, basestring):
             path = [path]
-        return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        if type(path) == list:
+            return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
+        elif isinstance(path, RDD):
+            def func(iterator):
+                for x in iterator:
+                    if not isinstance(x, basestring):
+                        x = unicode(x)
+                    if isinstance(x, unicode):
+                        x = x.encode("utf-8")
+                    yield x
+            keyed = path.mapPartitions(func)
+            keyed._bypass_serializer = True
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
+            return self._df(self._jreader.csv(jrdd))
+        else:
+            raise TypeError("path can be only string, list or RDD")
 
     @since(1.5)
     def orc(self, path):
