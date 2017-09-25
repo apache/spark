@@ -242,7 +242,7 @@ class ArrowPandasSerializer(ArrowSerializer):
 
     def loads(self, obj):
         """
-        Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series
+        Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series.
         """
         table = super(ArrowPandasSerializer, self).loads(obj)
         return [c.to_pandas() for c in table.itercolumns()]
