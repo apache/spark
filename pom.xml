@@ -2926,7 +2926,7 @@
     <profile>
       <id>hadoop-palantir</id>
       <properties>
-        <hadoop.version>2.8.0-palantir.8</hadoop.version>
+        <hadoop.version>2.8.2-palantir.2</hadoop.version>
         <curator.version>2.7.1</curator.version>
       </properties>
       <dependencyManagement>
