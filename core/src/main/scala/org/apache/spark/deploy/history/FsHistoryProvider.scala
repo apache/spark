@@ -508,7 +508,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       val maxTime = clock.getTimeMillis() - conf.get(MAX_LOG_AGE_S) * 1000
 
-      // Iterate descending over all applications whose oldest attempt happended before maxTime.
+      // Iterate descending over all applications whose oldest attempt happened before maxTime.
       iterator = Some(listing.view(classOf[ApplicationInfoWrapper])
         .index("oldestAttempt")
         .reverse()
@@ -516,14 +516,14 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         .closeableIterator())
 
       iterator.get.asScala.foreach { app =>
+        // Applications may have multiple attempts, some of which may not need to be deleted yet.
         val (remaining, toDelete) = app.attempts.partition { attempt =>
           attempt.info.lastUpdated.getTime() >= maxTime
         }
+
         if (remaining.nonEmpty) {
           val newApp = new ApplicationInfoWrapper(app.info, remaining)
           listing.write(newApp)
-        } else {
-          listing.delete(app.getClass(), app.id)
         }
 
         toDelete.foreach { attempt =>
@@ -542,6 +542,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             case t: IOException =>
               logError(s"IOException in cleaning ${attempt.logPath}", t)
           }
+        }
+
+        if (remaining.isEmpty) {
+          listing.delete(app.getClass(), app.id)
         }
       }
     } catch {
@@ -639,7 +643,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       val logPath = fs.makeQualified(new Path(logDir, attempt.logPath))
       recordedFileSize(logPath) > prevFileSize
     } catch {
-      case _: NoSuchElementException => false
+      case _: NoSuchElementException =>
+        logDebug(s"Application Attempt $appId/$attemptId not found")
+        false
     }
   }
 
@@ -759,11 +765,6 @@ private[history] class ApplicationInfoWrapper(
 
   def toAppHistoryInfo(): ApplicationHistoryInfo = {
     ApplicationHistoryInfo(info.id, info.name, attempts.map(_.toAppAttemptInfo()))
-  }
-
-  def toApiInfo(): v1.ApplicationInfo = {
-    new v1.ApplicationInfo(info.id, info.name, info.coresGranted, info.maxCores,
-      info.coresPerExecutor, info.memoryPerExecutorMB, attempts.map(_.info))
   }
 
 }
