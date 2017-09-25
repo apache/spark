@@ -465,6 +465,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * it determines the columns as string types and it reads only the first line to determine the
    * names and the number of fields.
    *
+   * @param csvRDD input RDD with one CSV row per record
    * @since 2.2.0
    */
   @deprecated("Use csv(Dataset[String]) instead.", "2.2.0")
@@ -480,6 +481,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * it determines the columns as string types and it reads only the first line to determine the
    * names and the number of fields.
    *
+   * @param csvRDD input RDD with one CSV row per record
    * @since 2.2.0
    */
   @deprecated("Use csv(Dataset[String]) instead.", "2.2.0")
