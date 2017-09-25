@@ -1116,6 +1116,20 @@ test_that("sample on a DataFrame", {
   sampled3 <- sample_frac(df, FALSE, 0.1, 0) # set seed for predictable result
   expect_true(count(sampled3) < 3)
 
+  # Different arguments
+  df <- createDataFrame(as.list(seq(10)))
+  expect_equal(count(sample(df, fraction = 0.5, seed = 3)), 4)
+  expect_equal(count(sample(df, withReplacement = TRUE, fraction = 0.5, seed = 3)), 2)
+  expect_equal(count(sample(df, fraction = 1.0)), 10)
+  expect_equal(count(sample(df, fraction = 1L)), 10)
+  expect_equal(count(sample(df, FALSE, fraction = 1.0)), 10)
+
+  expect_error(sample(df, fraction = "a"), "fraction must be numeric")
+  expect_error(sample(df, "a", fraction = 0.1), "however, got character")
+  expect_error(sample(df, fraction = 1, seed = NA), "seed must not be NULL or NA; however, got NA")
+  expect_error(sample(df, fraction = -1.0),
+               "illegal argument - requirement failed: Sampling fraction \\(-1.0\\)")
+
   # nolint start
   # Test base::sample is working
   #expect_equal(length(sample(1:12)), 12)
