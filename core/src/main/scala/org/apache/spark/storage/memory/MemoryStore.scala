@@ -31,7 +31,7 @@ import org.apache.spark.{SparkConf, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, MemoryMode}
 import org.apache.spark.serializer.{SerializationStream, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockInfoManager, StorageLevel, StreamBlockId}
+import org.apache.spark.storage._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.{SizeEstimator, Utils}
 import org.apache.spark.util.collection.SizeTrackingVector
@@ -526,20 +526,38 @@ private[spark] class MemoryStore(
       }
 
       if (freedMemory >= space) {
-        logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
-          s"(${Utils.bytesToString(freedMemory)} bytes)")
-        for (blockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(blockId) }
-          // This should never be null as only one task should be dropping
-          // blocks and removing entries. However the check is still here for
-          // future safety.
-          if (entry != null) {
-            dropBlock(blockId, entry)
+        var lastSuccessfulBlock = -1
+        try {
+          logInfo(s"${selectedBlocks.size} blocks selected for dropping " +
+            s"(${Utils.bytesToString(freedMemory)} bytes)")
+          (0 until selectedBlocks.size).foreach { idx =>
+            val blockId = selectedBlocks(idx)
+            val entry = entries.synchronized {
+              entries.get(blockId)
+            }
+            // This should never be null as only one task should be dropping
+            // blocks and removing entries. However the check is still here for
+            // future safety.
+            if (entry != null) {
+              dropBlock(blockId, entry)
+              afterDropAction(blockId)
+            }
+            lastSuccessfulBlock = idx
+          }
+          logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
+            s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
+          freedMemory
+        } finally {
+          // like BlockManager.doPut, we use a finally rather than a catch to avoid having to deal
+          // with InterruptedException
+          if (lastSuccessfulBlock != selectedBlocks.size - 1) {
+            // the blocks we didn't process successfully are still locked, so we have to unlock them
+            (lastSuccessfulBlock + 1 until selectedBlocks.size).foreach { idx =>
+              val blockId = selectedBlocks(idx)
+              blockInfoManager.unlock(blockId)
+            }
           }
         }
-        logInfo(s"After dropping ${selectedBlocks.size} blocks, " +
-          s"free memory is ${Utils.bytesToString(maxMemory - blocksMemoryUsed)}")
-        freedMemory
       } else {
         blockId.foreach { id =>
           logInfo(s"Will not store $id")
@@ -551,6 +569,9 @@ private[spark] class MemoryStore(
       }
     }
   }
+
+  // hook for testing, so we can simulate a race
+  protected def afterDropAction(blockId: BlockId): Unit = {}
 
   def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }
