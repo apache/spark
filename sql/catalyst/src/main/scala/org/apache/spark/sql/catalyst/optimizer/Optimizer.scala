@@ -1298,20 +1298,18 @@ object SplitAggregateWithExpand extends Rule[LogicalPlan] {
    * Split [[Expand]] operator to a number of [[Expand]] operators
    */
   private def splitExpand(expand: Expand): Seq[Expand] = {
-    val len = expand.projections.length
-    val allProjections = expand.projections
-    Seq.tabulate(len)(
-      i => Expand(Seq(allProjections(i)), expand.output, expand.child)
-    )
+    val expands: Seq[Expand] = expand.projections.map { projection =>
+      Expand(Seq(projection), expand.output, expand.child)
+    }
+    expands
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a @ Aggregate(_, _, e @ Expand(projections, _, _)) =>
       if (SQLConf.get.groupingWithUnion && projections.length > 1) {
-        val expands = splitExpand(e)
-        val aggregates: Seq[Aggregate] = Seq.tabulate(expands.length)(
-          i => Aggregate(a.groupingExpressions, a.aggregateExpressions, expands(i))
-        )
+        val aggregates: Seq[Aggregate] = splitExpands(e).map { expand =>
+          Aggregate(a.groupingExpressions, a.aggregateExpressions, expand)
+        }
         Union(aggregates)
       } else {
         a
