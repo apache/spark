@@ -2109,8 +2109,10 @@ class Dataset[T] private[sql](
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
-    require(colNames.distinct.size == colNames.size,
-      s"It is disallowed to use duplicate column names: $colNames")
+    SchemaUtils.checkColumnNameDuplication(
+      colNames,
+      "in given column names",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
