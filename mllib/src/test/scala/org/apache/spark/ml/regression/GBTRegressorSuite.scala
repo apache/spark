@@ -19,15 +19,16 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, GradientBoostedTrees => OldGBT}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.util.Utils
 
 /**
@@ -96,6 +97,17 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     // Checks based on SPARK-8736 (to ensure it is not doing classification)
     assert(predictions.max() > 2)
     assert(predictions.min() < -1)
+  }
+
+  test("prediction on single instance") {
+    val gbt = new GBTRegressor()
+      .setMaxDepth(2)
+      .setMaxIter(2)
+    val model = gbt.fit(trainData.toDF())
+    model.transform(validationData.toDF).select("features", "prediction").collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== model.predict(features) relTol 1E-5)
+    }
   }
 
   test("Checkpointing") {

@@ -564,6 +564,21 @@ class LogisticRegressionSuite
       Vector, LogisticRegressionModel](model, smallBinaryDataset)
   }
 
+  test("prediction on single instance") {
+    val blor = new LogisticRegression().setFamily("binomial")
+    val blorModel = blor.fit(smallBinaryDataset)
+    blorModel.transform(smallBinaryDataset).select("features", "prediction").collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== blorModel.predict(features) relTol 1E-5)
+    }
+    val mlor = new LogisticRegression().setFamily("multinomial")
+    val mlorModel = mlor.fit(smallMultinomialDataset)
+    mlorModel.transform(smallMultinomialDataset).select("features", "prediction").collect()
+      .foreach { case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== mlorModel.predict(features) relTol 1E-5)
+    }
+  }
+
   test("coefficients and intercept methods") {
     val mlr = new LogisticRegression().setMaxIter(1).setFamily("multinomial")
     val mlrModel = mlr.fit(smallMultinomialDataset)

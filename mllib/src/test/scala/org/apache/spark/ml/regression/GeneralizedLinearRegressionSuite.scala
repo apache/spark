@@ -212,6 +212,17 @@ class GeneralizedLinearRegressionSuite
     assert(model.getLink === "identity")
   }
 
+  test("prediction on single instance") {
+    val glr = new GeneralizedLinearRegression
+    val model = glr.setFamily("gaussian").setLink("identity")
+      .fit(datasetGaussianIdentity)
+
+    model.transform(datasetGaussianIdentity).select("features", "prediction").collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== model.predict(features) relTol 1E-5)
+    }
+  }
+
   test("generalized linear regression: gaussian family against glm") {
     /*
        R code:

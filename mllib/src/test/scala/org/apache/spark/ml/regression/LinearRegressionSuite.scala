@@ -602,6 +602,16 @@ class LinearRegressionSuite
     }
   }
 
+  test("prediction on single instance") {
+    val trainer = new LinearRegression
+    val model = trainer.fit(datasetWithDenseFeature)
+
+    model.transform(datasetWithDenseFeature).select("features", "prediction").collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== model.predict(features) relTol 1E-5)
+    }
+  }
+
   test("linear regression model with constant label") {
     /*
        R code:

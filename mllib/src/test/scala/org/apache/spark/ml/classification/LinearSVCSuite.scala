@@ -202,6 +202,15 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       dataset.as[LabeledPoint], estimator, modelEquals, 42L)
   }
 
+  test("prediction on single instance") {
+    val trainer = new LinearSVC()
+    val model = trainer.fit(smallBinaryDataset)
+    model.transform(smallBinaryDataset).select("features", "prediction").collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== model.predict(features) relTol 1E-5)
+    }
+  }
+
   test("linearSVC comparison with R e1071 and scikit-learn") {
     val trainer1 = new LinearSVC()
       .setRegParam(0.00002) // set regParam = 2.0 / datasize / c

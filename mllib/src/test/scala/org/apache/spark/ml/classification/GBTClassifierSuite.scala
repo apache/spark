@@ -224,6 +224,18 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
       Vector, GBTClassificationModel](gbtModel, validationDataset)
   }
 
+  test("prediction on single instance") {
+
+    val gbt = new GBTClassifier().setSeed(123)
+    val trainingDataset = trainData.toDF("label", "features")
+    val gbtModel = gbt.fit(trainingDataset)
+
+    gbtModel.transform(trainingDataset).select("features", "prediction").collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== gbtModel.predict(features) relTol 1E-5)
+    }
+  }
+
   test("GBT parameter stepSize should be in interval (0, 1]") {
     withClue("GBT parameter stepSize should be in interval (0, 1]") {
       intercept[IllegalArgumentException] {

@@ -24,6 +24,7 @@ import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.tree.{CategoricalSplit, InternalNode, LeafNode}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{DecisionTree => OldDecisionTree, DecisionTreeSuite => OldDecisionTreeSuite}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -265,6 +266,24 @@ class DecisionTreeClassifierSuite
 
     ProbabilisticClassifierSuite.testPredictMethods[
       Vector, DecisionTreeClassificationModel](newTree, newData)
+  }
+
+  test("prediction on single instance") {
+    val rdd = continuousDataPointsForMulticlassRDD
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("Gini")
+      .setMaxDepth(4)
+      .setMaxBins(100)
+    val categoricalFeatures = Map(0 -> 3)
+    val numClasses = 3
+
+    val newData: DataFrame = TreeTests.setMetadata(rdd, categoricalFeatures, numClasses)
+    val newTree = dt.fit(newData)
+
+    newTree.transform(newData).select(dt.getFeaturesCol, dt.getPredictionCol).collect().foreach {
+      case Row(features: Vector, prediction: Double) =>
+        assert(prediction ~== newTree.predict(features) relTol 1E-5)
+    }
   }
 
   test("training with 1-category categorical feature") {
