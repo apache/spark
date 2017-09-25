@@ -455,8 +455,34 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     csv(Seq(path): _*)
   }
 
+  /**
+   * Loads a `JavaRDD[String]` storing storing CSV rows and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
+   * it determines the columns as string types and it reads only the first line to determine the
+   * names and the number of fields.
+   *
+   * @since 2.2.0
+   */
+  @deprecated("Use csv(Dataset[String]) instead.", "2.2.0")
   def csv(csvRDD: JavaRDD[String]): DataFrame = csv(csvRDD.rdd)
 
+  /**
+   * Loads a `RDD[String]` storing storing CSV rows and returns the result as a `DataFrame`.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is enabled,
+   * this function goes through the input once to determine the input schema.
+   *
+   * If the schema is not specified using `schema` function and `inferSchema` option is disabled,
+   * it determines the columns as string types and it reads only the first line to determine the
+   * names and the number of fields.
+   *
+   * @since 2.2.0
+   */
+  @deprecated("Use csv(Dataset[String]) instead.", "2.2.0")
   def csv(csvRDD: RDD[String]): DataFrame = {
     csv(sparkSession.createDataset(csvRDD)(Encoders.STRING))
   }
