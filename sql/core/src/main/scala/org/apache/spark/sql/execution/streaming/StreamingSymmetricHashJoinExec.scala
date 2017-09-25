@@ -234,7 +234,14 @@ case class StreamingSymmetricHashJoinExec(
     // Filter the joined rows based on the given condition.
     val outputFilterFunction = newPredicate(condition.getOrElse(Literal(true)), output).eval _
 
-    val filteredInnerOutputIter = (leftOutputIter ++ rightOutputIter).filter(outputFilterFunction)
+    // We need to save the time that the inner join output iterator completes, since outer join
+    // output counts as both update and removal time.
+    var innerOutputCompletionTimeNs: Long = 0
+    def onInnerOutputCompletion = {
+      innerOutputCompletionTimeNs = System.nanoTime
+    }
+    val filteredInnerOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
+      (leftOutputIter ++ rightOutputIter).filter(outputFilterFunction), onInnerOutputCompletion)
 
     val outputIter: Iterator[InternalRow] = joinType match {
       case Inner =>
@@ -276,9 +283,16 @@ case class StreamingSymmetricHashJoinExec(
 
     // Function to remove old state after all the input has been consumed and output generated
     def onOutputCompletion = {
+      // All processing time counts as update time.
       allUpdatesTimeMs += math.max(NANOSECONDS.toMillis(System.nanoTime - updateStartTimeNs), 0)
 
-      // TODO: how to get this for removals as part of outer join?
+      // Processing time between inner output completion and here comes from the outer portion of a
+      // join, and thus counts as removal time as we remove old state from one side while iterating.
+      if (innerOutputCompletionTimeNs != 0) {
+        allRemovalsTimeMs +=
+          math.max(NANOSECONDS.toMillis(System.nanoTime - innerOutputCompletionTimeNs), 0)
+      }
+
       allRemovalsTimeMs += timeTakenMs {
         // Iterator which must be consumed after output completion before committing.
         // For outer joins, we've removed old state from the appropriate side inline while we

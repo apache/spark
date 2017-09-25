@@ -269,7 +269,8 @@ object UnsupportedOperationChecker {
                 }
 
                 if (!watermarkInJoinKeys && !oppositeSideHasWatermark) {
-                  throwError("Streaming outer join must have a watermark in the join keys")
+                  throwError("Streaming outer join must have a watermark in the join keys or on " +
+                    "the nullable side")
                 }
               }
 
