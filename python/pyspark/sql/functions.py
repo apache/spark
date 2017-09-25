@@ -2198,7 +2198,8 @@ def pandas_udf(f=None, returnType=StringType()):
     ...     return x + 1
     ...
     >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
-    >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")).show()
+    >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
+    ...     .show() # doctest: +SKIP
     +----------+--------------+------------+
     |slen(name)|to_upper(name)|add_one(age)|
     +----------+--------------+------------+
