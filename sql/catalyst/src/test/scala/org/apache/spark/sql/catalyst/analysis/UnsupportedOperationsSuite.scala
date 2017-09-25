@@ -421,7 +421,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Left outer joins: *-stream not allowed
   testBinaryOperationInStreamingPlan(
     "left outer join",
-    _.join(_, joinType = LeftOuter),
+    _.join(_, joinType = LeftOuter,
+      condition = Some(attributeWithWatermark === attributeWithWatermark)),
     batchStreamSupported = false,
     expectedMsg = "Left outer join")
 
@@ -444,7 +445,8 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Right outer joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
     "right outer join",
-    _.join(_, joinType = RightOuter),
+    _.join(_, joinType = RightOuter,
+      condition = Some(attributeWithWatermark === attributeWithWatermark)),
     streamBatchSupported = false)
 
   // Cogroup: only batch-batch is allowed

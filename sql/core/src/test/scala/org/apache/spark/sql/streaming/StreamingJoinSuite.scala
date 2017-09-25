@@ -565,7 +565,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       testStream(joined)()
     }
 
-    assert(thrown.getMessage.contains("Streaming outer join must have a watermark defined"))
+    assert(thrown.getMessage.contains(
+      "Streaming outer join must have a watermark in the join keys"))
   }
 
   test("right outer join with no watermark") {
@@ -576,7 +577,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       testStream(joined)()
     }
 
-    assert(thrown.getMessage.contains("Streaming outer join must have a watermark defined"))
+    assert(thrown.getMessage.contains(
+      "Streaming outer join must have a watermark in the join keys"))
   }
 
   test("windowed left outer join") {

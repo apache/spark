@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -251,12 +252,24 @@ object UnsupportedOperationChecker {
               }
 
               if (left.isStreaming && right.isStreaming) {
-                val hasWatermark = subPlan.collectFirst {
-                  case _: EventTimeWatermark => true
-                }.isDefined
+                val watermarkInJoinKeys = subPlan match {
+                  case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
+                    val keySet = AttributeSet(leftKeys ++ rightKeys)
+                    subPlan.inputSet.exists(
+                      a => keySet.contains(a) && a.metadata.contains(EventTimeWatermark.delayKey))
+                  case _ => false
+                }
 
-                if (!hasWatermark) {
-                  throwError("Streaming outer join must have a watermark defined")
+                val oppositeSideHasWatermark = joinType match {
+                  case LeftOuter =>
+                    right.output.find(_.metadata.contains(EventTimeWatermark.delayKey)).isDefined
+                  case RightOuter =>
+                    left.output.find(_.metadata.contains(EventTimeWatermark.delayKey)).isDefined
+                  case _ => false
+                }
+
+                if (!watermarkInJoinKeys && !oppositeSideHasWatermark) {
+                  throwError("Streaming outer join must have a watermark in the join keys")
                 }
               }
 
