@@ -240,19 +240,30 @@ case class StreamingSymmetricHashJoinExec(
       case Inner =>
         filteredInnerOutputIter
       case LeftOuter =>
+        // We generate the outer join input by:
+        // * Getting an iterator over the rows that have aged out on the left side. These rows are
+        //   candidates for being null joined. Note that to avoid doing two passes, this iterator
+        //   removes the rows from the state manager as they're processed.
+        // * Checking whether the current row matches a key in the right side state. If it doesn't,
+        //   we know we can join with null, since there was never (including this batch) a match
+        //   within the watermark period. If it does, there must have been a match at some point, so
+        //   we know we can't join with null.
         val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
-        filteredInnerOutputIter ++
-          leftSideJoiner
-            .removeOldState()
-            .filterNot(pair => rightSideJoiner.containsKey(pair.key))
-            .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+        val removedRowIter = leftSideJoiner.removeOldState()
+        val outerOutputIter = removedRowIter
+          .filterNot(pair => rightSideJoiner.containsKey(pair.key))
+          .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
+
+        filteredInnerOutputIter ++ outerOutputIter
       case RightOuter =>
+        // See comments for left outer case.
         val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
-        filteredInnerOutputIter ++
-          rightSideJoiner
-            .removeOldState()
-            .filterNot(pair => leftSideJoiner.containsKey(pair.key))
-            .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+        val removedRowIter = rightSideJoiner.removeOldState()
+        val outerOutputIter = removedRowIter
+          .filterNot(pair => leftSideJoiner.containsKey(pair.key))
+          .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
+
+        filteredInnerOutputIter ++ outerOutputIter
       case _ =>
         throwBadJoinTypeException()
         Iterator()
