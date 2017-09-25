@@ -1307,7 +1307,7 @@ object SplitAggregateWithExpand extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case a @ Aggregate(_, _, e @ Expand(projections, _, _)) =>
       if (SQLConf.get.groupingWithUnion && projections.length > 1) {
-        val aggregates: Seq[Aggregate] = splitExpands(e).map { expand =>
+        val aggregates: Seq[Aggregate] = splitExpand(e).map { expand =>
           Aggregate(a.groupingExpressions, a.aggregateExpressions, expand)
         }
         Union(aggregates)
