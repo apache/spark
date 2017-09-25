@@ -85,6 +85,8 @@ case class ApproximatePercentile(
   private lazy val accuracy: Int = accuracyExpression.eval().asInstanceOf[Int]
 
   override def inputTypes: Seq[AbstractDataType] = {
+    // Support NumericType, DateType and TimestampType since their internal types are all numeric,
+    // and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType),
       TypeCollection(DoubleType, ArrayType(DoubleType)), IntegerType)
   }
@@ -129,6 +131,8 @@ case class ApproximatePercentile(
         case DateType => value.asInstanceOf[Int].toDouble
         case TimestampType => value.asInstanceOf[Long].toDouble
         case n: NumericType => n.numeric.toDouble(value.asInstanceOf[n.InternalType])
+        case other: DataType =>
+          throw new UnsupportedOperationException(s"Unexpected data type $other")
       }
       buffer.add(doubleValue)
     }
@@ -152,6 +156,8 @@ case class ApproximatePercentile(
       case FloatType => doubleResult.map(_.toFloat)
       case DoubleType => doubleResult
       case _: DecimalType => doubleResult.map(Decimal(_))
+      case other: DataType =>
+        throw new UnsupportedOperationException(s"Unexpected data type $other")
     }
     if (result.length == 0) {
       null
@@ -173,6 +179,7 @@ case class ApproximatePercentile(
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
+  // The result type is the same as the input type.
   override def dataType: DataType = {
     if (returnPercentileArray) ArrayType(child.dataType, false) else child.dataType
   }
