@@ -392,12 +392,11 @@ case class StreamingSymmetricHashJoinExec(
     /**
      * Builds an iterator over old state key-value pairs, removing them lazily as they're produced.
      *
-     * This iterator is dangerous! It must be consumed fully before any other operations are made
-     * against this joiner's join state manager, and in particular commits must not happen while
-     * this iterator is ongoing. The intermediate states of the iterator leave the state manager in
-     * an invalid configuration.
+     * @note This iterator must be consumed fully before any other operations are made
+     * against this joiner's join state manager. For efficiency reasons, the intermediate states of
+     * the iterator leave the state manager in an invalid configuration.
      *
-     * We do this unsafe thing to avoid requiring either two passes or full materialization when
+     * We do this to avoid requiring either two passes or full materialization when
      * processing the rows for outer join.
      */
     def removeOldState(): Iterator[UnsafeRowPair] = {
