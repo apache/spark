@@ -663,6 +663,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getSingleAndReleaseLock("a2").isDefined, "a2 was in store")
     assert(store.getSingleAndReleaseLock("a3").isDefined, "a3 was in store")
     assert(store.getSingleAndReleaseLock("a1").isDefined, "a1 was in store")
+    store.removeBlock("a1")
+    store.removeBlock("a2")
+    store.removeBlock("a3")
   }
 
   encryptionTest("disk and memory storage") { _conf =>
