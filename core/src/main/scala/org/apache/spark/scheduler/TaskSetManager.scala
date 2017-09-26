@@ -671,8 +671,9 @@ private[spark] class TaskSetManager(
           if (blacklistedEverywhere) {
             val partition = tasks(indexInTaskSet).partitionId
             abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
-              s"cannot run anywhere due to node and executor blacklist." +
-              s" Most recent failure:\n${taskSetBlacklist.taskSetLatestFailureReason}\n\n" +
+              s"cannot run anywhere due to node and executor blacklist.\n" +
+              s" Most recent failure:\n" +
+              s" ${taskSetBlacklist.getLatestFailureReason}\n\n" +
               s" Blacklisting behavior can be configured via spark.blacklist.*.\n\n")
           }
         }

@@ -661,9 +661,9 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
     assert(failedTaskSet)
     val idx = failedTask.index
     assert(failedTaskSetReason === s"Aborting TaskSet 0.0 because task $idx (partition $idx) " +
-      s"cannot run anywhere due to node and executor blacklist." +
+      s"cannot run anywhere due to node and executor blacklist.\n" +
       s" Most recent failure:\n" +
-      s"${tsm.taskSetBlacklistHelperOpt.get.taskSetLatestFailureReason}\n\n" +
+      s" ${tsm.taskSetBlacklistHelperOpt.get.getLatestFailureReason}\n\n" +
       s" Blacklisting behavior can be configured via spark.blacklist.*.\n\n")
   }
 
