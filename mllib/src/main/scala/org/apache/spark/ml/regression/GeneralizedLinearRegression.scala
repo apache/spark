@@ -374,6 +374,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
 
   override def fit(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
+    transformSchema(dataset.schema, logging = true)
+
     val cols = collection.mutable.ArrayBuffer[Column]()
     cols.append(col($(featuresCol)))
 
