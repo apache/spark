@@ -290,10 +290,14 @@ case class StreamingSymmetricHashJoinExec(
       }
 
       allRemovalsTimeMs += timeTakenMs {
-        // Iterator which must be consumed after output completion before committing.
-        // For outer joins, we've removed old state from the appropriate side inline while we
-        // produced the null rows. So we need to finish cleaning the other side. For inner joins
-        // we just clean up all the old state here.
+        // Remove any remaining state rows which aren't needed because they're below the watermark.
+        //
+        // For inner joins, we have to remove unnecessary state rows from both sides if possible.
+        // For outer joins, we have already removed unnecessary state rows from the outer side
+        // (e.g., left side for left outer join) while generating the outer "null" outputs. Now, we
+        // have to remove unnecessary state rows from the other side (e.g., right side for the left
+        // outer join) if possible. In all cases, nothing needs to be outputted, hence the removal
+        // needs to be done greedily by immediately consuming the returned iterator.
         val cleanupIter = joinType match {
           case Inner =>
             leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
@@ -402,7 +406,7 @@ case class StreamingSymmetricHashJoinExec(
      *
      * @note This iterator must be consumed fully before any other operations are made
      * against this joiner's join state manager. For efficiency reasons, the intermediate states of
-     * the iterator leave the state manager in an invalid configuration.
+     * the iterator leave the state manager in an undefined state.
      *
      * We do this to avoid requiring either two passes or full materialization when
      * processing the rows for outer join.
@@ -413,7 +417,7 @@ case class StreamingSymmetricHashJoinExec(
           joinStateManager.removeByKeyCondition(stateKeyWatermarkPredicateFunc)
         case Some(JoinStateValueWatermarkPredicate(expr)) =>
           joinStateManager.removeByValueCondition(stateValueWatermarkPredicateFunc)
-        case _ => Iterator()
+        case _ => Iterator.empty
       }
     }
 

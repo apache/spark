@@ -95,7 +95,7 @@ class SymmetricHashJoinStateManager(
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
    */
-  def removeByKeyCondition(condition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
+  def removeByKeyCondition(removalCondition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
     new NextIterator[UnsafeRowPair] {
 
       private val allKeyToNumValues = keyToNumValues.iterator
@@ -114,25 +114,29 @@ class SymmetricHashJoinStateManager(
       }
 
       override def getNext(): UnsafeRowPair = {
+        // If there are more values for the current key, remove and return the next one.
         if (currentValues != null && currentValues.hasNext) {
           return getAndRemoveValue()
-        } else {
-          while (allKeyToNumValues.hasNext) {
-            currentKeyToNumValue = allKeyToNumValues.next()
-            if (condition(currentKey)) {
-              currentValues = keyWithIndexToValue.getAll(
-                currentKey, currentKeyToNumValue.numValue)
-              keyToNumValues.remove(currentKey)
+        }
 
-              if (currentValues.hasNext) {
-                return getAndRemoveValue()
-              }
+        // If there weren't any values left, try and find the next key that satisfies the removal
+        // condition and has values.
+        while (allKeyToNumValues.hasNext) {
+          currentKeyToNumValue = allKeyToNumValues.next()
+          if (removalCondition(currentKey)) {
+            currentValues = keyWithIndexToValue.getAll(
+              currentKey, currentKeyToNumValue.numValue)
+            keyToNumValues.remove(currentKey)
+
+            if (currentValues.hasNext) {
+              return getAndRemoveValue()
             }
           }
         }
 
+        // We only reach here if there were no satisfying keys left, which means we're done.
         finished = true
-        null
+        return null
       }
 
       override def close: Unit = {}
@@ -149,7 +153,7 @@ class SymmetricHashJoinStateManager(
    * This implies the iterator must be consumed fully without any other operations on this manager
    * or the underlying store being interleaved.
    */
-  def removeByValueCondition(condition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
+  def removeByValueCondition(removalCondition: UnsafeRow => Boolean): Iterator[UnsafeRowPair] = {
     new NextIterator[UnsafeRowPair] {
 
       // Reuse this object to avoid creation+GC overhead.
@@ -164,7 +168,7 @@ class SymmetricHashJoinStateManager(
 
       // Push the data for the current key to the numValues store, and reset the tracking variables
       // to their empty state.
-      private def storeCurrentKey(): Unit = {
+      private def updateNumValueForCurrentKey(): Unit = {
         if (valueRemoved) {
           if (numValues >= 1) {
             keyToNumValues.put(currentKey, numValues)
@@ -182,21 +186,23 @@ class SymmetricHashJoinStateManager(
       // Find the next value satisfying the condition, updating `currentKey` and `numValues` if
       // needed. Returns null when no value can be found.
       private def findNextValueForIndex(): UnsafeRow = {
-        while (index < numValues || allKeyToNumValues.hasNext) {
-          // Note that index < numValues can only be true if we have a currentKey, since numValues
-          // is only initialized to 0 or the current key's numValues.
-          if (index < numValues) {
+        // Loop across all values for the current key, and then all other keys, until we find a
+        // value satisfying the removal condition.
+        val hasMoreValuesForCurrentKey = currentKey != null && index < numValues
+        val hasMoreKeys = allKeyToNumValues.hasNext
+        while (hasMoreValuesForCurrentKey || hasMoreKeys) {
+          if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
-            val current = keyWithIndexToValue.get(currentKey, index)
-            if (condition(current)) {
-              return current
+            val currentValue = keyWithIndexToValue.get(currentKey, index)
+            if (removalCondition(currentValue)) {
+              return currentValue
             } else {
               index += 1
             }
-          } else if (allKeyToNumValues.hasNext) {
+          } else if (hasMoreKeys) {
             // If we can't find a value for the current key, cleanup and start looking at the next.
             // This will also happen the first time the iterator is called.
-            storeCurrentKey()
+            updateNumValueForCurrentKey()
 
             val currentKeyToNumValue = allKeyToNumValues.next()
             currentKey = currentKeyToNumValue.key
@@ -411,9 +417,9 @@ class SymmetricHashJoinStateManager(
           } else {
             val keyWithIndex = keyWithIndexRow(key, index)
             val value = stateStore.get(keyWithIndex)
+            keyWithIndexAndValue.withNew(key, index, value)
             index += 1
-            // return original index
-            keyWithIndexAndValue.withNew(key, index - 1, value)
+            keyWithIndexAndValue
           }
         }
 
