@@ -59,7 +59,6 @@ public class SaslRpcHandler extends RpcHandler {
 
   private SparkSaslServer saslServer;
   private boolean isComplete;
-  private boolean isAuthenticated;
 
   public SaslRpcHandler(
       TransportConf conf,
@@ -72,7 +71,6 @@ public class SaslRpcHandler extends RpcHandler {
     this.secretKeyHolder = secretKeyHolder;
     this.saslServer = null;
     this.isComplete = false;
-    this.isAuthenticated = false;
   }
 
   @Override
