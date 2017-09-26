@@ -438,7 +438,7 @@ class DataFrameReader(OptionUtils):
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
-            # [SPARK-22112]
+            # see SPARK-22112
             # There aren't any jvm api for creating a dataframe from rdd storing csv.
             # We can do it through creating a jvm dataset firstly and using the jvm api
             # for creating a dataframe from dataset storing csv.
