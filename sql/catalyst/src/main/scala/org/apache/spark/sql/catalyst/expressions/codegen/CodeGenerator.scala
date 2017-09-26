@@ -332,7 +332,7 @@ class CodegenContext {
   }
 
   /**
-   * Emits any source code added with addExtraCode
+   * Emits extra inner classes added with addExtraCode
    */
   def emitExtraCode(): String = {
     extraClasses.mkString("\n")
