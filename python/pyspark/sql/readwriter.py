@@ -438,9 +438,13 @@ class DataFrameReader(OptionUtils):
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True
             jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
+            # [SPARK-22112]
+            # There aren't any jvm api for creating a dataframe from rdd storing csv.
+            # We can do it through creating a jvm dataset firstly and using the jvm api
+            # for creating a dataframe from dataset storing csv.
             jdataset = self._spark._ssql_ctx.createDataset(
                 jrdd.rdd(),
-                self._spark._sc._jvm.Encoders.STRING())
+                self._spark._jvm.Encoders.STRING())
             return self._df(self._jreader.csv(jdataset))
         else:
             raise TypeError("path can be only string, list or RDD")
