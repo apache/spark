@@ -28,17 +28,18 @@ import org.apache.spark.sql.internal.SQLConf
 class AggregateEstimationSuite extends StatsEstimationTestBase with PlanTest {
 
   /** Columns for testing */
+  // TODO: histogram should be revised later.
   private val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
     attr("key11") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key12") -> ColumnStat(distinctCount = 4, min = Some(10), max = Some(40), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key21") -> ColumnStat(distinctCount = 2, min = Some(1), max = Some(2), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key22") -> ColumnStat(distinctCount = 2, min = Some(10), max = Some(20), nullCount = 0,
-      avgLen = 4, maxLen = 4),
+      avgLen = 4, maxLen = 4, histogram = None),
     attr("key31") -> ColumnStat(distinctCount = 0, min = None, max = None, nullCount = 0,
-      avgLen = 4, maxLen = 4)
+      avgLen = 4, maxLen = 4, histogram = None)
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)

@@ -88,6 +88,7 @@ case class Statistics(
  * @param nullCount number of nulls
  * @param avgLen average length of the values. For fixed-length types, this should be a constant.
  * @param maxLen maximum length of the values. For fixed-length types, this should be a constant.
+ * @param histogram the equal height histogram created for a given column
  */
 case class ColumnStat(
     distinctCount: BigInt,
@@ -95,7 +96,8 @@ case class ColumnStat(
     max: Option[Any],
     nullCount: BigInt,
     avgLen: Long,
-    maxLen: Long) {
+    maxLen: Long,
+    histogram: Option[Histogram]) {
 
   // We currently don't store min/max for binary/string type. This can change in the future and
   // then we need to remove this require.
@@ -121,6 +123,7 @@ case class ColumnStat(
     map.put(ColumnStat.KEY_MAX_LEN, maxLen.toString)
     min.foreach { v => map.put(ColumnStat.KEY_MIN_VALUE, toExternalString(v, colName, dataType)) }
     max.foreach { v => map.put(ColumnStat.KEY_MAX_VALUE, toExternalString(v, colName, dataType)) }
+    map.put(ColumnStat.KEY_HISTOGRAM, histogram.toString)
     map.toMap
   }
 
@@ -155,6 +158,7 @@ object ColumnStat extends Logging {
   private val KEY_NULL_COUNT = "nullCount"
   private val KEY_AVG_LEN = "avgLen"
   private val KEY_MAX_LEN = "maxLen"
+  private val KEY_HISTOGRAM = "histogram"
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
   def supportsType(dataType: DataType): Boolean = dataType match {
@@ -183,7 +187,8 @@ object ColumnStat extends Logging {
           .map(fromExternalString(_, field.name, field.dataType)).flatMap(Option.apply),
         nullCount = BigInt(map(KEY_NULL_COUNT).toLong),
         avgLen = map.getOrElse(KEY_AVG_LEN, field.dataType.defaultSize.toString).toLong,
-        maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong
+        maxLen = map.getOrElse(KEY_MAX_LEN, field.dataType.defaultSize.toString).toLong,
+        histogram = None /* TODO: need to deserialize a histogram here */
       ))
     } catch {
       case NonFatal(e) =>
@@ -266,6 +271,8 @@ object ColumnStat extends Logging {
 
   /** Convert a struct for column stats (defined in statExprs) into [[ColumnStat]]. */
   def rowToColumnStat(row: InternalRow, attr: Attribute): ColumnStat = {
+    val histogramByteArray = row.getBinary(6)
+    // TODO: need to convert to it to histogram
     ColumnStat(
       distinctCount = BigInt(row.getLong(0)),
       // for string/binary min/max, get should return null
@@ -273,8 +280,21 @@ object ColumnStat extends Logging {
       max = Option(row.get(2, attr.dataType)),
       nullCount = BigInt(row.getLong(3)),
       avgLen = row.getLong(4),
-      maxLen = row.getLong(5)
+      maxLen = row.getLong(5),
+      histogram = None // TODO: need to put the serialized histogram here
     )
   }
 
 }
+
+trait Histogram
+
+case class NumericEquiHeightHgm(
+    bins: Array[NumericEquiHeightBin],
+    binFrequency: BigDecimal) extends Histogram
+case class StringEquiHeightHgm(
+    bins: Array[StringEquiHeightBin],
+    binFrequency: BigDecimal) extends Histogram
+
+case class NumericEquiHeightBin(lowerBound: Double, upperBound: Double, binNdv: Long)
+case class StringEquiHeightBin(upperBound: String, binNdv: Long)

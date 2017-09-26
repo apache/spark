@@ -29,9 +29,9 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
 
   test("project with alias") {
     val (ar1, colStat1) = (attr("key1"), ColumnStat(distinctCount = 2, min = Some(1),
-      max = Some(2), nullCount = 0, avgLen = 4, maxLen = 4))
+      max = Some(2), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None))
     val (ar2, colStat2) = (attr("key2"), ColumnStat(distinctCount = 1, min = Some(10),
-      max = Some(10), nullCount = 0, avgLen = 4, maxLen = 4))
+      max = Some(10), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None))
 
     val child = StatsTestPlan(
       outputList = Seq(ar1, ar2),
@@ -50,7 +50,7 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
 
   test("project on empty table") {
     val (ar1, colStat1) = (attr("key1"), ColumnStat(distinctCount = 0, min = None, max = None,
-      nullCount = 0, avgLen = 4, maxLen = 4))
+      nullCount = 0, avgLen = 4, maxLen = 4, histogram = None))
     val child = StatsTestPlan(
       outputList = Seq(ar1),
       rowCount = 0,
@@ -72,29 +72,34 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
 
     val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
       AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 2,
-        min = Some(false), max = Some(true), nullCount = 0, avgLen = 1, maxLen = 1),
+        min = Some(false), max = Some(true), nullCount = 0, avgLen = 1, maxLen = 1,
+        histogram = None),
       AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1.toByte), max = Some(2.toByte), nullCount = 0, avgLen = 1, maxLen = 1),
+        min = Some(1.toByte), max = Some(2.toByte), nullCount = 0, avgLen = 1, maxLen = 1,
+        histogram = None),
       AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1.toShort), max = Some(3.toShort), nullCount = 0, avgLen = 2, maxLen = 2),
+        min = Some(1.toShort), max = Some(3.toShort), nullCount = 0, avgLen = 2, maxLen = 2,
+        histogram = None),
       AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1), max = Some(4), nullCount = 0, avgLen = 4, maxLen = 4),
+        min = Some(1), max = Some(4), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
       AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1L), max = Some(5L), nullCount = 0, avgLen = 8, maxLen = 8),
+        min = Some(1L), max = Some(5L), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None),
       AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1.0), max = Some(6.0), nullCount = 0, avgLen = 8, maxLen = 8),
+        min = Some(1.0), max = Some(6.0), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None),
       AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1.0f), max = Some(7.0f), nullCount = 0, avgLen = 4, maxLen = 4),
+        min = Some(1.0f), max = Some(7.0f), nullCount = 0, avgLen = 4, maxLen = 4,
+        histogram = None),
       AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 2,
-        min = Some(dec1), max = Some(dec2), nullCount = 0, avgLen = 16, maxLen = 16),
+        min = Some(dec1), max = Some(dec2), nullCount = 0, avgLen = 16, maxLen = 16,
+        histogram = None),
       AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 2,
-        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3, histogram = None),
       AttributeReference("cbinary", BinaryType)() -> ColumnStat(distinctCount = 2,
-        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3),
+        min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3, histogram = None),
       AttributeReference("cdate", DateType)() -> ColumnStat(distinctCount = 2,
-        min = Some(d1), max = Some(d2), nullCount = 0, avgLen = 4, maxLen = 4),
+        min = Some(d1), max = Some(d2), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
       AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = 2,
-        min = Some(t1), max = Some(t2), nullCount = 0, avgLen = 8, maxLen = 8)
+        min = Some(t1), max = Some(t2), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None)
     ))
     val columnSizes: Map[Attribute, Long] = columnInfo.map(kv => (kv._1, getColSize(kv._1, kv._2)))
     val child = StatsTestPlan(

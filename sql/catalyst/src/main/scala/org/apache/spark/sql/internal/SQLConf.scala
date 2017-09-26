@@ -813,6 +813,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HISTOGRAM_NUMBER_OF_BINS =
+    buildConf("spark.sql.cbo.histogram.number.bins")
+      .doc("The total number of bins in a single histogram.")
+      .intConf
+      .checkValue(number => number > 0,
+        "The number of bins in a histogram must be a positive integer.")
+      .createWithDefault(254)
+
   val JOIN_REORDER_ENABLED =
     buildConf("spark.sql.cbo.joinReorder.enabled")
       .doc("Enables join reorder in CBO.")
@@ -1174,6 +1182,8 @@ class SQLConf extends Serializable with Logging {
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
+
+  def histogramNumberOfBins: Int = getConf(SQLConf.HISTOGRAM_NUMBER_OF_BINS)
 
   def autoUpdateSize: Boolean = getConf(SQLConf.AUTO_UPDATE_SIZE)
 
