@@ -335,7 +335,7 @@ class DataFrameReader(OptionUtils):
         ``inferSchema`` is enabled. To avoid going through the entire data once, disable
         ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
-        :param path: string, or list of strings, for input path(s).
+        :param path: string, or list of strings, for input path(s),
                      or RDD of Strings storing CSV rows.
         :param schema: an optional :class:`pyspark.sql.types.StructType` for the input schema
                        or a DDL-formatted string (For example ``col0 INT, col1 DOUBLE``).
