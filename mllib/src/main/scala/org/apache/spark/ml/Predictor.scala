@@ -102,35 +102,6 @@ abstract class Predictor[
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
 
-    val dataframe = preprocess(dataset)
-
-    val model = copyValues(train(dataframe).setParent(this))
-
-    postprocess(dataframe)
-
-    model
-  }
-
-  override def copy(extra: ParamMap): Learner
-
-  /**
-   * Train a model using the given dataset and parameters.
-   * Developers can implement this instead of `fit()` to avoid dealing with schema validation
-   * and copying parameters into the model.
-   *
-   * @param dataset  Training dataset
-   * @return  Fitted model
-   */
-  protected def train(dataset: Dataset[_]): M
-
-  /**
-   * Pre-process the input dataset to an intermediate dataframe.
-   * Developers can override this for specific purpose.
-   *
-   * @param dataset  Original training dataset
-   * @return  Intermediate training dataframe
-   */
-  protected def preprocess(dataset: Dataset[_]): DataFrame = {
     val cols = ArrayBuffer[Column]()
     cols.append(col($(featuresCol)))
 
@@ -161,24 +132,26 @@ abstract class Predictor[
       case _ =>
     }
 
-    selected
+    val model = copyValues(train(selected).setParent(this))
+
+    if (selected.storageLevel != StorageLevel.NONE) {
+      selected.unpersist(blocking = false)
+    }
+
+    model
   }
 
+  override def copy(extra: ParamMap): Learner
+
   /**
-   * Post-process the intermediate dataframe.
-   * Developers can override this for specific purpose.
+   * Train a model using the given dataset and parameters.
+   * Developers can implement this instead of `fit()` to avoid dealing with schema validation
+   * and copying parameters into the model.
    *
-   * @param dataset  Intermediate training dataframe
+   * @param dataset  Training dataset
+   * @return  Fitted model
    */
-  protected def postprocess(dataset: DataFrame): Unit = {
-    this match {
-      case _: HasHandlePersistence =>
-        if (dataset.storageLevel != StorageLevel.NONE) {
-          dataset.unpersist(blocking = false)
-        }
-      case _ =>
-    }
-  }
+  protected def train(dataset: Dataset[_]): M
 
   /**
    * Returns the SQL DataType corresponding to the FeaturesType type parameter.

@@ -373,7 +373,7 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
   @Since("2.0.0")
   def setLinkPredictionCol(value: String): this.type = set(linkPredictionCol, value)
 
-  override protected def preprocess(dataset: Dataset[_]): DataFrame = {
+  override def fit(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
     val cols = collection.mutable.ArrayBuffer[Column]()
     cols.append(col($(featuresCol)))
 
@@ -393,7 +393,8 @@ class GeneralizedLinearRegression @Since("2.0.0") (@Since("2.0.0") override val 
       cols.append(col($(offsetCol)).cast(DoubleType).as($(offsetCol), offsetMeta))
     }
 
-    dataset.select(cols: _*)
+    val selected = dataset.select(cols: _*)
+    train(selected)
   }
 
   override protected def train(dataset: Dataset[_]): GeneralizedLinearRegressionModel = {
