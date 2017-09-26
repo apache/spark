@@ -188,8 +188,8 @@ class SymmetricHashJoinStateManager(
       private def findNextValueForIndex(): UnsafeRow = {
         // Loop across all values for the current key, and then all other keys, until we find a
         // value satisfying the removal condition.
-        val hasMoreValuesForCurrentKey = currentKey != null && index < numValues
-        val hasMoreKeys = allKeyToNumValues.hasNext
+        def hasMoreValuesForCurrentKey = currentKey != null && index < numValues
+        def hasMoreKeys = allKeyToNumValues.hasNext
         while (hasMoreValuesForCurrentKey || hasMoreKeys) {
           if (hasMoreValuesForCurrentKey) {
             // First search the values for the current key.
