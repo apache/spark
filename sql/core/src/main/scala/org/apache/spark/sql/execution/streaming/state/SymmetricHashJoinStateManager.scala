@@ -222,7 +222,7 @@ class SymmetricHashJoinStateManager(
 
         // If there's no value, clean up and finish. There aren't any more available.
         if (currentValue == null) {
-          storeCurrentKey()
+          updateNumValueForCurrentKey()
           finished = true
           return null
         }
