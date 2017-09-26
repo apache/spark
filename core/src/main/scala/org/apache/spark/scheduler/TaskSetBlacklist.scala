@@ -61,7 +61,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
   private val blacklistedExecs = new HashSet[String]()
   private val blacklistedNodes = new HashSet[String]()
 
-  var taskSetLatestFailureReason: Option[String] = None
+  var taskSetLatestFailureReason: String = null
 
   /**
    * Return true if this executor is blacklisted for the given task.  This does *not*
@@ -97,7 +97,7 @@ private[scheduler] class TaskSetBlacklist(val conf: SparkConf, val stageId: Int,
       host: String,
       exec: String,
       index: Int,
-      failureReason: Option[String] = None): Unit = {
+      failureReason: String): Unit = {
     taskSetLatestFailureReason = failureReason
     val execFailures = execToFailures.getOrElseUpdate(exec, new ExecutorFailuresInTaskSet(host))
     execFailures.updateWithFailure(index, clock.getTimeMillis())
