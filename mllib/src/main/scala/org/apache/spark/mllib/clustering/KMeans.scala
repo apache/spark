@@ -40,7 +40,7 @@ import org.apache.spark.util.random.XORShiftRandom
  * to it should be cached by the user.
  */
 @Since("0.8.0")
-class KMeans @Since("2.3.0") private (
+class KMeans private (
     private var k: Int,
     private var maxIterations: Int,
     private var initializationMode: String,
