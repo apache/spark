@@ -498,7 +498,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   public UTF8String trim() {
     int s = 0;
-    int e = this.numBytes - 1;
     // skip all of the space (0x20) in the left side
     while (s < this.numBytes && getByte(s) == 0x20) s++;
     if (s == this.numBytes) {
@@ -506,7 +505,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
     // skip all of the space (0x20) in the right side
-    while (e >= 0 && getByte(e) == 0x20) e--;
+    int e = this.numBytes - 1;
+    while (e > s && getByte(e) == 0x20) e--;
     return copyUTF8String(s, e);
   }
 
