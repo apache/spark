@@ -18,10 +18,13 @@
 package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
+import java.util.{HashMap => JHashMap, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
+
+import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
@@ -81,6 +84,19 @@ private[spark] class NettyBlockTransferService(
     }
 
     Utils.startServiceOnPort(_port, startService, conf, getClass.getName)._1
+  }
+
+  override def shuffleMetrics(): MetricSet = {
+    require(server != null && clientFactory != null, "NettyBlockTransferServer is not initialized")
+
+    new MetricSet {
+      val allMetrics = new JHashMap[String, Metric]()
+      override def getMetrics: JMap[String, Metric] = {
+        allMetrics.putAll(clientFactory.getAllMetrics.getMetrics)
+        allMetrics.putAll(server.getAllMetrics.getMetrics)
+        allMetrics
+      }
+    }
   }
 
   override def fetchBlocks(

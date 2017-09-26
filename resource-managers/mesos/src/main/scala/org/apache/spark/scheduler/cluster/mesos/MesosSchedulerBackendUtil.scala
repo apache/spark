@@ -21,6 +21,7 @@ import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Vo
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 
 import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.deploy.mesos.config.{NETWORK_LABELS, NETWORK_NAME}
 import org.apache.spark.internal.Logging
 
 /**
@@ -121,7 +122,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def containerInfo(conf: SparkConf): ContainerInfo = {
+  def containerInfo(conf: SparkConf): ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -148,8 +149,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
         .getOrElse(List.empty)
 
       if (containerType == ContainerInfo.Type.DOCKER) {
-        containerInfo
-          .setDocker(dockerInfo(image, forcePullImage, portMaps, params))
+        containerInfo.setDocker(dockerInfo(image, forcePullImage, portMaps, params))
       } else {
         containerInfo.setMesos(mesosInfo(image, forcePullImage))
       }
@@ -161,12 +161,16 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       volumes.foreach(_.foreach(containerInfo.addVolumes(_)))
     }
 
-    conf.getOption("spark.mesos.network.name").map { name =>
-      val info = NetworkInfo.newBuilder().setName(name).build()
+    conf.get(NETWORK_NAME).map { name =>
+      val networkLabels = MesosProtoUtils.mesosLabels(conf.get(NETWORK_LABELS).getOrElse(""))
+      val info = NetworkInfo.newBuilder()
+        .setName(name)
+        .setLabels(networkLabels)
+        .build()
       containerInfo.addNetworkInfos(info)
     }
 
-    containerInfo.build()
+    containerInfo
   }
 
   private def dockerInfo(

@@ -234,24 +234,11 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
     // Now that we've performed any necessary shuffles, add sorts to guarantee output orderings:
     children = children.zip(requiredChildOrderings).map { case (child, requiredOrdering) =>
-      if (requiredOrdering.nonEmpty) {
-        // If child.outputOrdering is [a, b] and requiredOrdering is [a], we do not need to sort.
-        val orderingMatched = if (requiredOrdering.length > child.outputOrdering.length) {
-          false
-        } else {
-          requiredOrdering.zip(child.outputOrdering).forall {
-            case (requiredOrder, childOutputOrder) =>
-              childOutputOrder.satisfies(requiredOrder)
-          }
-        }
-
-        if (!orderingMatched) {
-          SortExec(requiredOrdering, global = false, child = child)
-        } else {
-          child
-        }
-      } else {
+      // If child.outputOrdering already satisfies the requiredOrdering, we do not need to sort.
+      if (SortOrder.orderingSatisfies(child.outputOrdering, requiredOrdering)) {
         child
+      } else {
+        SortExec(requiredOrdering, global = false, child = child)
       }
     }
 

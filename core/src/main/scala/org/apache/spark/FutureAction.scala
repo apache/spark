@@ -89,6 +89,14 @@ trait FutureAction[T] extends Future[T] {
    */
   override def value: Option[Try[T]]
 
+  // These two methods must be implemented in Scala 2.12, but won't be used by Spark
+
+  def transform[S](f: (Try[T]) => Try[S])(implicit executor: ExecutionContext): Future[S] =
+    throw new UnsupportedOperationException()
+
+  def transformWith[S](f: (Try[T]) => Future[S])(implicit executor: ExecutionContext): Future[S] =
+    throw new UnsupportedOperationException()
+
   /**
    * Blocks and returns the result of this job.
    */

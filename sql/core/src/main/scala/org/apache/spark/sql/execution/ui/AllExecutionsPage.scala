@@ -88,13 +88,19 @@ private[ui] abstract class ExecutionTable(
     val duration = executionUIData.completionTime.getOrElse(currentTime) - submissionTime
 
     val runningJobs = executionUIData.runningJobs.map { jobId =>
-      <a href={jobURL(jobId)}>{jobId.toString}</a><br/>
+      <a href={jobURL(jobId)}>
+        [{jobId.toString}]
+      </a>
     }
     val succeededJobs = executionUIData.succeededJobs.sorted.map { jobId =>
-      <a href={jobURL(jobId)}>{jobId.toString}</a><br/>
+      <a href={jobURL(jobId)}>
+        [{jobId.toString}]
+      </a>
     }
     val failedJobs = executionUIData.failedJobs.sorted.map { jobId =>
-      <a href={jobURL(jobId)}>{jobId.toString}</a><br/>
+      <a href={jobURL(jobId)}>
+        [{jobId.toString}]
+      </a>
     }
     <tr>
       <td>
@@ -177,7 +183,7 @@ private[ui] class RunningExecutionTable(
     showFailedJobs = true) {
 
   override protected def header: Seq[String] =
-    baseHeader ++ Seq("Running Jobs", "Succeeded Jobs", "Failed Jobs")
+    baseHeader ++ Seq("Running Job IDs", "Succeeded Job IDs", "Failed Job IDs")
 }
 
 private[ui] class CompletedExecutionTable(
@@ -195,7 +201,7 @@ private[ui] class CompletedExecutionTable(
     showSucceededJobs = true,
     showFailedJobs = false) {
 
-  override protected def header: Seq[String] = baseHeader ++ Seq("Jobs")
+  override protected def header: Seq[String] = baseHeader ++ Seq("Job IDs")
 }
 
 private[ui] class FailedExecutionTable(
@@ -214,5 +220,5 @@ private[ui] class FailedExecutionTable(
     showFailedJobs = true) {
 
   override protected def header: Seq[String] =
-    baseHeader ++ Seq("Succeeded Jobs", "Failed Jobs")
+    baseHeader ++ Seq("Succeeded Job IDs", "Failed Job IDs")
 }
