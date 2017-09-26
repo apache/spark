@@ -71,7 +71,7 @@ class TaskInfo(
    * set the `spark.speculation` to true. The task killed by others should not resubmit
    * while executor lost.
    */
-  var killedByAttempt = false
+  var killedByOtherAttempt = false
 
   var failed = false
 
@@ -81,8 +81,8 @@ class TaskInfo(
     gettingResultTime = time
   }
 
-  private[spark] def markKilledAttempt {
-    killedByAttempt = true
+  private[spark] def markKilledAttempt: Unit = {
+    killedByOtherAttempt = true
   }
 
   private[spark] def markFinished(state: TaskState, time: Long) {

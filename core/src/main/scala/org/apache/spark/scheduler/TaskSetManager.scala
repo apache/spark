@@ -911,7 +911,7 @@ private[spark] class TaskSetManager(
         && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (successful(index) && !info.killedByAttempt) {
+        if (successful(index) && !info.killedByOtherAttempt) {
           successful(index) = false
           copiesRunning(index) -= 1
           tasksSuccessful -= 1
