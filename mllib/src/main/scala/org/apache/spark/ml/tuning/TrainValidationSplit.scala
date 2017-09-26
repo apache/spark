@@ -123,29 +123,16 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     // Fit models in a Future for training in parallel
     logDebug(s"Train split with multiple sets of parameters.")
-    val modelFutures = epm.map { paramMap =>
-      Future[Model[_]] {
-        val model = est.fit(trainingDataset, paramMap)
-        model.asInstanceOf[Model[_]]
-      } (executionContext)
-    }
 
-    // Unpersist training data only when all models have trained
-    Future.sequence[Model[_], Iterable](modelFutures)(implicitly, executionContext)
-      .onComplete { _ => trainingDataset.unpersist() } (executionContext)
-
-    // Evaluate models in a Future that will calulate a metric and allow model to be cleaned up
-    val metricFutures = modelFutures.zip(epm).map { case (modelFuture, paramMap) =>
-      modelFuture.map { model =>
+    val metrics = new Array[Double](epm.length)
+    est.fit(trainingDataset, epm, true, executionContext,
+      (model: Model[_], paramMap: ParamMap, paramMapIndex: Int) => {
         // TODO: duplicate evaluator to take extra params from input
         val metric = eval.evaluate(model.transform(validationDataset, paramMap))
         logDebug(s"Got metric $metric for model trained with $paramMap.")
-        metric
-      } (executionContext)
-    }
-
-    // Wait for all metrics to be calculated
-    val metrics = metricFutures.map(ThreadUtils.awaitResult(_, Duration.Inf))
+        metrics(paramMapIndex) = metric
+      }
+    )
 
     // Unpersist validation set once all metrics have been produced
     validationDataset.unpersist()
