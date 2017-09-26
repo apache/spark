@@ -205,11 +205,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       val credentialRenewerThread = new Thread {
         setName("MesosCredentialRenewer")
         override def run(): Unit = {
+          val rt = MesosCredentialRenewer.getTokenRenewalTime(hadoopDelegationCreds.get, conf)
           val credentialRenewer =
             new MesosCredentialRenewer(
               conf,
               hadoopDelegationTokenManager.get,
-              MesosCredentialRenewer.getTokenRenewalTime(hadoopDelegationCreds.get, conf),
+              MesosCredentialRenewer.getNextRenewalTime(rt),
               driverEndpoint)
           credentialRenewer.scheduleTokenRenewal()
         }

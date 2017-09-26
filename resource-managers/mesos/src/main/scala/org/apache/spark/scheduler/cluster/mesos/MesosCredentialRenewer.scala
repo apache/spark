@@ -118,8 +118,7 @@ class MesosCredentialRenewer(
         "related configurations in the target services.")
       currTime
     } else {
-      val rt = 0.75 * (nextRenewalTime - currTime)
-      (currTime + rt).toLong
+      MesosCredentialRenewer.getNextRenewalTime(nextRenewalTime)
     }
     logInfo(s"Time of next renewal is $timeOfNextRenewal")
 
@@ -145,6 +144,11 @@ object MesosCredentialRenewer extends Logging {
       }.toOption
     }
     if (renewalTimes.isEmpty) Long.MaxValue else renewalTimes.min
+  }
+
+  def getNextRenewalTime(t: Long): Long = {
+    val ct = System.currentTimeMillis()
+    (ct + (0.75 * (t - ct))).toLong
   }
 }
 
