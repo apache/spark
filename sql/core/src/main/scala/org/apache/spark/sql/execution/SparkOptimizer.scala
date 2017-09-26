@@ -28,12 +28,18 @@ class SparkOptimizer(
     experimentalMethods: ExperimentalMethods)
   extends Optimizer(catalog) {
 
-  override def batches: Seq[Batch] = (preOptimizationBatches ++ super.batches :+
+  val experimentalPreOptimizations: Batch = Batch(
+    "User Provided Pre Optimizers", fixedPoint, experimentalMethods.extraPreOptimizations: _*)
+
+  val experimentalPostOptimizations: Batch = Batch(
+    "User Provided Post Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+
+  override def batches: Seq[Batch] =
+    ((experimentalPreOptimizations +: preOptimizationBatches) ++ super.batches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("Extract Python UDF from Aggregate", Once, ExtractPythonUDFFromAggregate) :+
     Batch("Prune File Source Table Partitions", Once, PruneFileSourcePartitions)) ++
-    postHocOptimizationBatches :+
-    Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+    postHocOptimizationBatches :+ experimentalPostOptimizations
 
   /**
    * Optimization batches that are executed before the regular optimization batches (also before

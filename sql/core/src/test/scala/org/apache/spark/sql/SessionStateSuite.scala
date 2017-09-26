@@ -96,7 +96,8 @@ class SessionStateSuite extends SparkFunSuite
   }
 
   test("fork new session and inherit experimental methods") {
-    val originalExtraOptimizations = activeSession.experimental.extraOptimizations
+    val originalExtraPostOptimizations = activeSession.experimental.extraOptimizations
+    val originalExtraPreOptimizations = activeSession.experimental.extraPreOptimizations
     val originalExtraStrategies = activeSession.experimental.extraStrategies
     try {
       object DummyRule1 extends Rule[LogicalPlan] {
@@ -105,23 +106,35 @@ class SessionStateSuite extends SparkFunSuite
       object DummyRule2 extends Rule[LogicalPlan] {
         def apply(p: LogicalPlan): LogicalPlan = p
       }
-      val optimizations = List(DummyRule1, DummyRule2)
-      activeSession.experimental.extraOptimizations = optimizations
+      object DummyRule3 extends Rule[LogicalPlan] {
+        def apply(p: LogicalPlan): LogicalPlan = p
+      }
+      val preOptimizations = List(DummyRule3)
+      val postOptimizations = List(DummyRule1, DummyRule2)
+      activeSession.experimental.extraPreOptimizations = preOptimizations
+      activeSession.experimental.extraOptimizations = postOptimizations
       val forkedSession = activeSession.cloneSession()
 
       // inheritance
       assert(forkedSession ne activeSession)
       assert(forkedSession.experimental ne activeSession.experimental)
+      assert(forkedSession.experimental.extraPreOptimizations.toSet ==
+        activeSession.experimental.extraPreOptimizations.toSet)
       assert(forkedSession.experimental.extraOptimizations.toSet ==
         activeSession.experimental.extraOptimizations.toSet)
 
       // independence
+      forkedSession.experimental.extraPreOptimizations = List(DummyRule1)
       forkedSession.experimental.extraOptimizations = List(DummyRule2)
-      assert(activeSession.experimental.extraOptimizations == optimizations)
+      assert(activeSession.experimental.extraPreOptimizations == preOptimizations)
+      assert(activeSession.experimental.extraOptimizations == postOptimizations)
+      activeSession.experimental.extraPreOptimizations = List(DummyRule3)
       activeSession.experimental.extraOptimizations = List(DummyRule1)
+      assert(forkedSession.experimental.extraPreOptimizations == List(DummyRule1))
       assert(forkedSession.experimental.extraOptimizations == List(DummyRule2))
     } finally {
-      activeSession.experimental.extraOptimizations = originalExtraOptimizations
+      activeSession.experimental.extraPreOptimizations = originalExtraPreOptimizations
+      activeSession.experimental.extraOptimizations = originalExtraPostOptimizations
       activeSession.experimental.extraStrategies = originalExtraStrategies
     }
   }
