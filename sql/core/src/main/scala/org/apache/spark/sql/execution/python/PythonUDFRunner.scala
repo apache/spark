@@ -33,7 +33,7 @@ class PythonUDFRunner(
     reuseWorker: Boolean,
     evalType: Int,
     argOffsets: Array[Array[Int]])
-  extends PythonRunner[Array[Byte], Array[Byte]](
+  extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 
   protected override def newWriterThread(

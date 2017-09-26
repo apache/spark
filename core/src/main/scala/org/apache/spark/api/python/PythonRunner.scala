@@ -45,7 +45,7 @@ private[spark] object PythonEvalType {
  * funcs is a list of independent Python functions, each one of them is a list of chained Python
  * functions (from bottom to top).
  */
-private[spark] abstract class PythonRunner[IN, OUT](
+private[spark] abstract class BasePythonRunner[IN, OUT](
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuseWorker: Boolean,
@@ -346,21 +346,21 @@ private[spark] abstract class PythonRunner[IN, OUT](
   }
 }
 
-private[spark] object PythonCommandRunner {
+private[spark] object PythonRunner {
 
-  def apply(func: PythonFunction, bufferSize: Int, reuseWorker: Boolean): PythonCommandRunner = {
-    new PythonCommandRunner(Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuseWorker)
+  def apply(func: PythonFunction, bufferSize: Int, reuseWorker: Boolean): PythonRunner = {
+    new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))), bufferSize, reuseWorker)
   }
 }
 
 /**
  * A helper class to run Python mapPartition in Spark.
  */
-private[spark] class PythonCommandRunner(
+private[spark] class PythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     bufferSize: Int,
     reuseWorker: Boolean)
-  extends PythonRunner[Array[Byte], Array[Byte]](
+  extends BasePythonRunner[Array[Byte], Array[Byte]](
     funcs, bufferSize, reuseWorker, PythonEvalType.NON_UDF, Array(Array(0))) {
 
   protected override def newWriterThread(

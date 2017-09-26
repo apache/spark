@@ -45,7 +45,7 @@ class ArrowStreamPythonUDFRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     schema: StructType)
-  extends PythonRunner[InternalRow, ColumnarBatch](
+  extends BasePythonRunner[InternalRow, ColumnarBatch](
     funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 
   protected override def newWriterThread(
