@@ -490,7 +490,7 @@ object SQLConf {
 
   val GROUPING_EXPAND_PROJECTIONS = buildConf("spark.sql.grouping.projectionsPerExpand")
     .doc("The number of projections in each Expand operator when the grouping analytics is " +
-      "implemented using a union with aggregates for each group."
+      "implemented using a union with aggregates for each group.")
     .intConf
     .checkValue(projections => projections >= 1, "The number of projections for each Expand " +
       "operator must be positive.")
