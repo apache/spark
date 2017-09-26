@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -255,8 +255,10 @@ object UnsupportedOperationChecker {
                 val watermarkInJoinKeys = subPlan match {
                   case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
                     val keySet = AttributeSet(leftKeys ++ rightKeys)
-                    subPlan.inputSet.exists(
-                      a => keySet.contains(a) && a.metadata.contains(EventTimeWatermark.delayKey))
+                    (leftKeys ++ rightKeys).exists {
+                      case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
+                      case _ => false
+                    }
                   case _ => false
                 }
 
