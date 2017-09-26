@@ -2535,6 +2535,14 @@ object functions {
   def current_date(): Column = withExpr { CurrentDate() }
 
   /**
+   * Returns the current date in the given timezone as a date column.
+   *
+   * @group datetime_funcs
+   * @since 2.3.0
+   */
+  def current_date(timeZone: String): Column = withExpr { CurrentDate(Option(timeZone)) }
+
+  /**
    * Returns the current timestamp as a timestamp column.
    *
    * @group datetime_funcs
