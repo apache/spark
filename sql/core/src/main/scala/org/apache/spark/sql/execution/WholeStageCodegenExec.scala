@@ -175,95 +175,25 @@ trait CodegenSupport extends SparkPlan {
   }
 
   /**
-   * To prevent concatenated function growing too long to be optimized by JIT. Instead of inlining,
-   * we may put the consume logic of parent operator into a function and set this flag to `true`.
-   * The parent operator can know if its consume logic is inlined or in separated function.
-   */
-  private var doConsumeInFunc: Boolean = false
-
-  /**
-   * Returning true means we have at least one consume logic from child operator or this operator is
-   * separated in a function. If this is `true`, this operator shouldn't use `continue` statement to
-   * continue on next row, because its generated codes aren't enclosed in main while-loop.
-   *
-   * For example, we have generated codes for a query plan like:
-   *   Op1Exec
-   *     Op2Exec
-   *       Op3Exec
-   *
-   * If we put the consume code of Op2Exec into a separated function, the generated codes are like:
-   *   while (...) {
-   *     ... // logic of Op3Exec.
-   *     Op2Exec_doConsume(...);
-   *   }
-   *   private boolean Op2Exec_doConsume(...) {
-   *     ... // logic of Op2Exec to consume rows.
-   *   }
-   * For now, `doConsumeInChainOfFunc` of Op2Exec will be `true`.
-   *
-   * Notice for some operators like `HashAggregateExec`, it doesn't chain previous consume functions
-   * but begins with its produce framework. We should override `doConsumeInChainOfFunc` to return
-   * `false`.
-   */
-  protected def doConsumeInChainOfFunc: Boolean = {
-    val codegenChildren = children.map(_.asInstanceOf[CodegenSupport])
-    doConsumeInFunc || codegenChildren.exists(_.doConsumeInChainOfFunc)
-  }
-
-  /**
-   * The actual java statement this operator should use if there is a need to continue on next row
-   * in its `doConsume` codes.
-   *
-   *   while (...) {
-   *     ...       // logic of Op3Exec.
-   *     Op2Exec_doConsume(...);
-   *   }
-   *   private boolean Op2Exec_doConsume(...) {
-   *     ...       // logic of Op2Exec to consume rows.
-   *     continue; // Wrong. We can't use continue with the while-loop.
-   *   }
-   * In above code, we can't use `continue` in `Op2Exec_doConsume`.
-   *
-   * Instead, we do something like:
-   *   while (...) {
-   *     ...          // logic of Op3Exec.
-   *     boolean continueForLoop = Op2Exec_doConsume(...);
-   *     if (continueForLoop) continue;
-   *   }
-   *   private boolean Op2Exec_doConsume(...) {
-   *     ...          // logic of Op2Exec to consume rows.
-   *     return true; // When we need to do continue, we return true.
-   *   }
-   */
-  protected def continueStatementInDoConsume: String = if (doConsumeInChainOfFunc) {
-    "return true;";
-  } else {
-    "continue;"
-  }
-
-  /**
    * To prevent concatenated function growing too long to be optimized by JIT. We can separate the
    * parent's `doConsume` codes of a `CodegenSupport` operator into a function to call.
    */
-  protected def constructDoConsumeFunction(
+  private def constructDoConsumeFunction(
       ctx: CodegenContext,
       inputVars: Seq[ExprCode]): String = {
     val (callingParams, arguList, inputVarsInFunc) =
       constructConsumeParameters(ctx, output, inputVars)
-    parent.doConsumeInFunc = true
     val rowVar = ExprCode("", "false", "unsafeRow")
     val doConsume = ctx.freshName("doConsume")
     val doConsumeFuncName = ctx.addNewFunction(doConsume,
       s"""
-         | private boolean $doConsume($arguList) throws java.io.IOException {
+         | private void $doConsume($arguList) throws java.io.IOException {
          |   ${parent.doConsume(ctx, inputVarsInFunc, rowVar)}
-         |   return false;
          | }
        """.stripMargin)
 
     s"""
-       | boolean continueForLoop = $doConsumeFuncName($callingParams);
-       | if (continueForLoop) $continueStatementInDoConsume
+       | $doConsumeFuncName($callingParams);
      """.stripMargin
   }
 
@@ -271,7 +201,7 @@ trait CodegenSupport extends SparkPlan {
    * Returns source code for calling consume function and the argument list of the consume function
    * and also the `ExprCode` for the argument list.
    */
-  protected def constructConsumeParameters(
+  private def constructConsumeParameters(
       ctx: CodegenContext,
       attributes: Seq[Attribute],
       variables: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
@@ -280,7 +210,7 @@ trait CodegenSupport extends SparkPlan {
       val arguName = ctx.freshName(s"expr_$i")
       val arguIsNull = ctx.freshName(s"exprIsNull_$i")
       (callingParam,
-        ctx.javaType(attributes(i).dataType) + " " + arguName + ", boolean " + arguIsNull,
+        s"${ctx.javaType(attributes(i).dataType)} $arguName, boolean $arguIsNull",
         ExprCode("", arguIsNull, arguName))
     }.unzip3
     (params._1.mkString(", "),
@@ -386,8 +316,6 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.execute() :: Nil
   }
-
-  override protected def doConsumeInChainOfFunc: Boolean = false
 
   override def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
