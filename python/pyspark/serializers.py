@@ -216,9 +216,6 @@ class ArrowPandasSerializer(ArrowSerializer):
     Serializes Pandas.Series as Arrow data.
     """
 
-    def __init__(self):
-        super(ArrowPandasSerializer, self).__init__()
-
     def dumps(self, series):
         """
         Make an ArrowRecordBatch from a Pandas Series and serialize. Input is a single series or
@@ -245,16 +242,10 @@ class ArrowPandasSerializer(ArrowSerializer):
 
     def loads(self, obj):
         """
-        Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series
-        followed by a dictionary containing length of the loaded batches.
+        Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series.
         """
-        import pyarrow as pa
-        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
-        batches = [reader.get_batch(i) for i in xrange(reader.num_record_batches)]
-        # NOTE: a 0-parameter pandas_udf will produce an empty batch that can have num_rows set
-        num_rows = sum((batch.num_rows for batch in batches))
-        table = pa.Table.from_batches(batches)
-        return [c.to_pandas() for c in table.itercolumns()] + [{"length": num_rows}]
+        table = super(ArrowPandasSerializer, self).loads(obj)
+        return [c.to_pandas() for c in table.itercolumns()]
 
     def __repr__(self):
         return "ArrowPandasSerializer"

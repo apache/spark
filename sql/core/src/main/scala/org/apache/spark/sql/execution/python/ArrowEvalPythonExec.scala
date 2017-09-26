@@ -51,10 +51,12 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       outputIterator.map(new ArrowPayload(_)), context)
 
     // Verify that the output schema is correct
-    val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
-      .map { case (attr, i) => attr.withName(s"_$i") })
-    assert(schemaOut.equals(outputRowIterator.schema),
-      s"Invalid schema from pandas_udf: expected $schemaOut, got ${outputRowIterator.schema}")
+    if (outputRowIterator.hasNext) {
+      val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
+        .map { case (attr, i) => attr.withName(s"_$i") })
+      assert(schemaOut.equals(outputRowIterator.schema),
+        s"Invalid schema from pandas_udf: expected $schemaOut, got ${outputRowIterator.schema}")
+    }
 
     outputRowIterator
   }
