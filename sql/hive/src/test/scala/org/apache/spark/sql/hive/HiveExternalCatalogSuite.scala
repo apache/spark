@@ -119,7 +119,10 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
       "hdfs://foo-1.xyz.com/some/path" -> "hdfs://foo-1.xyz.com/some/path",
       "hdfs://foo-2.xyz.com:1234/some/path" -> "hdfs://ns1/some/path",
       "hdfs://blah-1.bar.com:8020/another/path" -> "hdfs://ns2/another/path",
-      "hdfs://another.cluster.com:8020/my/path" -> "hdfs://another.cluster.com:8020/my/path"
+      "hdfs://another.cluster.com:8020/my/path" -> "hdfs://another.cluster.com:8020/my/path",
+      "file:/some/local/path/spark-warehouse" ->
+        "file:/some/local/path/spark-warehouse",
+      "/bare/path" -> "/bare/path"
     ).foreach { case (orig, exp) =>
       val convertedName = HiveExternalCatalog.convertNamenodeToNameservice(
           namenodeToNameservice,

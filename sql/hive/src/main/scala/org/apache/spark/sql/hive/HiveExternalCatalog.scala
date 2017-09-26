@@ -1404,14 +1404,18 @@ object HiveExternalCatalog extends Logging {
     // With HDFS HA, the user really *should* update their DB locations to list the
     // nameservice, not one specific namenode, since that won't work if that namenode happens
     // to be in standby.   But, users mess this up, so we can try to fix this for them.
-    val prefix = new URI(uri.getScheme(), uri.getAuthority(), null, null, null).toString()
-    namenodeToNameservice.get(prefix).map { nameservicePrefix =>
-      val s = uri.toString()
-      val fixedPath = new Path(s"${nameservicePrefix}${s.substring(prefix.length())}").toUri()
-      logWarning(s"Database $db has location $s, but this references only one namenode in " +
-        s"an HA setup.  Converting to reference nameservice $fixedPath")
-      fixedPath
-    }.getOrElse(uri)
+    if (uri.getScheme() == "hdfs") {
+      val prefix = new URI(uri.getScheme(), uri.getAuthority(), null, null, null).toString()
+      namenodeToNameservice.get(prefix).map { nameservicePrefix =>
+        val s = uri.toString()
+        val fixedPath = new Path(s"${nameservicePrefix}${s.substring(prefix.length())}").toUri()
+        logWarning(s"Database $db has location $s, but this references only one namenode in " +
+          s"an HA setup.  Converting to reference nameservice $fixedPath")
+        fixedPath
+      }.getOrElse(uri)
+    } else {
+      uri
+    }
   }
 
 }
