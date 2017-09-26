@@ -55,16 +55,6 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     Utils.deleteRecursively(testDir)
   }
 
-  private def newProvider(
-      conf: SparkConf,
-      clock: Clock = null): FsHistoryProvider = {
-    if (clock == null) {
-      new FsHistoryProvider(conf)
-    } else {
-      new FsHistoryProvider(conf, clock)
-    }
-  }
-
   /** Create a fake log file using the new log format used in Spark 1.3+ */
   private def newLogFile(
       appId: String,
@@ -85,7 +75,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   private def testAppLogParsing(inMemory: Boolean) {
     val clock = new ManualClock(12345678)
-    val provider = newProvider(createTestConf(inMemory = inMemory), clock)
+    val provider = new FsHistoryProvider(createTestConf(inMemory = inMemory), clock)
 
     // Write a new-style application log.
     val newAppComplete = newLogFile("new1", None, inProgress = false)
@@ -180,7 +170,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("history file is renamed from inprogress to completed") {
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -200,7 +190,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("Parse logs that application is not started") {
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -212,7 +202,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-5582: empty log directory") {
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
 
     val logFile1 = newLogFile("app1", None, inProgress = true)
     writeFile(logFile1, true, None,
@@ -228,7 +218,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("apps with multiple attempts with order") {
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
 
     val attempt1 = newLogFile("app1", Some("attempt1"), inProgress = true)
     writeFile(attempt1, true, None,
@@ -289,7 +279,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   test("log cleaner") {
     val maxAge = TimeUnit.SECONDS.toMillis(10)
     val clock = new ManualClock(maxAge / 2)
-    val provider = newProvider(
+    val provider = new FsHistoryProvider(
       createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("app1", Some("attempt1"), inProgress = false)
@@ -335,7 +325,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     val secondFileModifiedTime = TimeUnit.SECONDS.toMillis(20)
     val maxAge = TimeUnit.SECONDS.toMillis(40)
     val clock = new ManualClock(0)
-    val provider = newProvider(
+    val provider = new FsHistoryProvider(
       createTestConf().set("spark.history.fs.cleaner.maxAge", s"${maxAge}ms"), clock)
 
     val log1 = newLogFile("inProgressApp1", None, inProgress = true)
@@ -379,7 +369,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("Event log copy") {
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
     val logs = (1 to 2).map { i =>
       val log = newLogFile("downloadApp1", Some(s"attempt$i"), inProgress = false)
       writeFile(log, true, None,
@@ -414,7 +404,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("SPARK-8372: new logs with no app ID are ignored") {
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
 
     // Write a new log file without an app id, to make sure it's ignored.
     val logFile1 = newLogFile("app1", None, inProgress = true)
@@ -428,7 +418,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
   }
 
   test("provider correctly checks whether fs is in safe mode") {
-    val provider = spy(newProvider(createTestConf()))
+    val provider = spy(new FsHistoryProvider(createTestConf()))
     val dfs = mock(classOf[DistributedFileSystem])
     // Asserts that safe mode is false because we can't really control the return value of the mock,
     // since the API is different between hadoop 1 and 2.
@@ -500,7 +490,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       SparkListenerApplicationEnd(5L)
     )
 
-    val provider = newProvider(createTestConf())
+    val provider = new FsHistoryProvider(createTestConf())
     updateAndCheck(provider) { list =>
       list.size should be (1)
       list(0).name should be ("real-app")
@@ -517,7 +507,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
       var provider: FsHistoryProvider = null
       try {
-        provider = newProvider(conf)
+        provider = new FsHistoryProvider(conf)
         val log = newLogFile("app1", Some("attempt1"), inProgress = false)
         writeFile(log, true, None,
           SparkListenerApplicationStart("app1", Some("app1"), System.currentTimeMillis(),
@@ -605,7 +595,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
 
   test("mismatched version discards old listing") {
     val conf = createTestConf()
-    val oldProvider = newProvider(conf)
+    val oldProvider = new FsHistoryProvider(conf)
 
     val logFile1 = newLogFile("app1", None, inProgress = false)
     writeFile(logFile1, true, None,
@@ -626,7 +616,7 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     oldProvider.listing.setMetadata(meta)
     oldProvider.stop()
 
-    val mistatchedVersionProvider = newProvider(conf)
+    val mistatchedVersionProvider = new FsHistoryProvider(conf)
     assert(mistatchedVersionProvider.listing.count(classOf[ApplicationInfoWrapper]) === 0)
   }
 

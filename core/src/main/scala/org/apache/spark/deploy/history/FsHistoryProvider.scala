@@ -284,7 +284,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       val appInfo = load(appId)
       appInfo.attempts
-        .find { attempt => attempt.info.attemptId == attemptId }
+        .find(_.info.attemptId == attemptId)
         .map { attempt =>
           val replayBus = new ReplayListenerBus()
           val ui = {
@@ -299,6 +299,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
 
           val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+          assert(appListener.appId.isDefined)
           ui.appSparkVersion = appListener.appSparkVersion.getOrElse("")
           ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
           // make sure to set admin acls before view acls so they are properly picked up
@@ -313,6 +314,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           LoadedAppUI(ui, () => updateProbe(appId, attemptId, attempt.fileSize))
         }
     } catch {
+      case _: FileNotFoundException => None
       case _: NoSuchElementException => None
     }
   }
@@ -357,9 +359,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     try {
       val newLastScanTime = getNewLastScanTime()
       logDebug(s"Scanning $logDir with lastScanTime==$lastScanTime")
-      val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
       // scan for modified applications, replay and merge them
-      val logInfos = statusList
+      val logInfos = Option(fs.listStatus(new Path(logDir))).map(_.toSeq).getOrElse(Nil)
         .filter { entry =>
           !entry.isDirectory() &&
             // FsHistoryProvider generates a hidden file which can't be read.  Accidentally
@@ -675,7 +676,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val attempt = app.attempts.head
 
     val oldApp = try {
-      listing.read(classOf[ApplicationInfoWrapper], app.id)
+      load(app.id)
     } catch {
       case _: NoSuchElementException =>
         app
