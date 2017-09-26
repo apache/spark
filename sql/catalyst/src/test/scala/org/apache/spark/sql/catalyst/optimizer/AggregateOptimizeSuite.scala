@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL, GROUPING_WITH_UNION}
+import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL, GROUPING_EXPAND_PROJECTIONS, GROUPING_WITH_UNION}
 import org.apache.spark.sql.types.IntegerType
 
 class AggregateOptimizeSuite extends PlanTest {
