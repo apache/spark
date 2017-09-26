@@ -24,6 +24,8 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 
 import org.apache.hadoop.fs.Path
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
@@ -162,11 +164,14 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .option("opt1", "1")
         .options(Map("opt2" -> "2"))
         .options(map)
+        .option("opt4", "4")
+        .unsetOption("opt4")
         .load()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(!LastOptions.parameters.contains("opt4"))
 
     LastOptions.clear()
 
@@ -176,12 +181,37 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .options(Map("opt2" -> "2"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
+      .option("opt4", "4")
+      .unsetOption("opt4")
       .start()
       .stop()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
     assert(LastOptions.parameters("opt3") == "3")
+    assert(!LastOptions.parameters.contains("opt4"))
+  }
+
+  test("options - array") {
+    val expected = compact(render(Seq("1", "0.1", "TRUE", "e")))
+
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("opt1", Seq("1", "0.1", "TRUE", "e"))
+      .load()
+
+    assert(LastOptions.parameters("opt1") == expected)
+
+    LastOptions.clear()
+
+    df.writeStream
+      .format("org.apache.spark.sql.streaming.test")
+      .option("opt1", Seq("1", "0.1", "TRUE", "e"))
+      .option("checkpointLocation", newMetadataDir)
+      .start()
+      .stop()
+
+    assert(LastOptions.parameters("opt1") == expected)
   }
 
   test("partitioning") {

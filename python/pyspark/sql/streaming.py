@@ -349,7 +349,12 @@ class DataStreamReader(OptionUtils):
 
         >>> s = spark.readStream.option("x", 1)
         """
-        self._jreader = self._jreader.option(key, to_str(value))
+        if isinstance(value, (list, tuple)):
+            gateway = self._spark._sc._gateway
+            jvalues = utils.toJArray(gateway, gateway.jvm.java.lang.String, value)
+            self._jreader = self._jreader.option(key, jvalues)
+        else:
+            self._jreader = self._jreader.option(key, to_str(value))
         return self
 
     @since(2.0)
@@ -366,7 +371,16 @@ class DataStreamReader(OptionUtils):
         >>> s = spark.readStream.options(x="1", y=2)
         """
         for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+            self.option(k, options[k])
+        return self
+
+    @since(2.3)
+    def unsetOption(self, key):
+        """Un-sets the option given to the key for the underlying data source.
+
+        .. note:: Evolving.
+        """
+        self._jreader = self._jreader.unsetOption(key)
         return self
 
     @since(2.0)
@@ -579,7 +593,8 @@ class DataStreamReader(OptionUtils):
                                          uses the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
-                          applies to all supported types including the string type.
+                          applies to all supported types including the string type. A list or tuple
+                          of strings to represent null values can be set for this option.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -710,7 +725,12 @@ class DataStreamWriter(object):
 
         .. note:: Evolving.
         """
-        self._jwrite = self._jwrite.option(key, to_str(value))
+        if isinstance(value, (list, tuple)):
+            gateway = self._spark._sc._gateway
+            jvalues = utils.toJArray(gateway, gateway.jvm.java.lang.String, value)
+            self._jwrite = self._jwrite.option(key, jvalues)
+        else:
+            self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
     @since(2.0)
@@ -725,7 +745,16 @@ class DataStreamWriter(object):
        .. note:: Evolving.
         """
         for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+            self.option(k, options[k])
+        return self
+
+    @since(2.3)
+    def unsetOption(self, key):
+        """Un-sets the option given to the key for the underlying data source.
+
+        .. note:: Evolving.
+        """
+        self._jwrite = self._jwrite.unsetOption(key)
         return self
 
     @since(2.0)

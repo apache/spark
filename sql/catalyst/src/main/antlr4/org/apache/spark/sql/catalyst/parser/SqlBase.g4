@@ -299,10 +299,19 @@ tablePropertyKey
     ;
 
 tablePropertyValue
+    : propertyValue
+    | propertyArrayValue
+    ;
+
+propertyValue
     : INTEGER_VALUE
     | DECIMAL_VALUE
     | booleanValue
     | STRING
+    ;
+
+propertyArrayValue
+    : '[' propertyValue (',' propertyValue)* ']'
     ;
 
 constantList

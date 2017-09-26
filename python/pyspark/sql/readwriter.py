@@ -121,7 +121,12 @@ class DataFrameReader(OptionUtils):
                 in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
-        self._jreader = self._jreader.option(key, to_str(value))
+        if isinstance(value, (list, tuple)):
+            gateway = self._spark._sc._gateway
+            jvalues = utils.toJArray(gateway, gateway.jvm.java.lang.String, value)
+            self._jreader = self._jreader.option(key, jvalues)
+        else:
+            self._jreader = self._jreader.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -134,7 +139,14 @@ class DataFrameReader(OptionUtils):
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:
-            self._jreader = self._jreader.option(k, to_str(options[k]))
+            self.option(k, options[k])
+        return self
+
+    @since(2.3)
+    def unsetOption(self, key):
+        """Un-sets the option given to the key for the underlying data source.
+        """
+        self._jreader = self._jreader.unsetOption(key)
         return self
 
     @since(1.4)
@@ -322,6 +334,7 @@ class DataFrameReader(OptionUtils):
             paths = [paths]
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(paths)))
 
+    @ignore_unicode_prefix
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
             comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
@@ -362,7 +375,8 @@ class DataFrameReader(OptionUtils):
                                          uses the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
                           the default value, empty string. Since 2.0.1, this ``nullValue`` param
-                          applies to all supported types including the string type.
+                          applies to all supported types including the string type. A list or tuple
+                          of strings to represent null values can be set for this option.
         :param nanValue: sets the string representation of a non-number value. If None is set, it
                          uses the default value, ``NaN``.
         :param positiveInf: sets the string representation of a positive infinity value. If None
@@ -408,6 +422,10 @@ class DataFrameReader(OptionUtils):
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
         [('_c0', 'string'), ('_c1', 'string')]
+
+        >>> df = spark.read.csv('python/test_support/sql/ages.csv', nullValue=['Tom', 'Joe'])
+        >>> df.collect()
+        [Row(_c0=None, _c1=u'20'), Row(_c0=None, _c1=u'30'), Row(_c0=u'Hyukjin', _c1=u'25')]
         """
         self._set_opts(
             schema=schema, sep=sep, encoding=encoding, quote=quote, escape=escape, comment=comment,
@@ -544,7 +562,12 @@ class DataFrameWriter(OptionUtils):
                 timestamps in the JSON/CSV datasources or partition values.
                 If it isn't set, it uses the default value, session local timezone.
         """
-        self._jwrite = self._jwrite.option(key, to_str(value))
+        if isinstance(value, (list, tuple)):
+            gateway = self._spark._sc._gateway
+            jvalues = utils.toJArray(gateway, gateway.jvm.java.lang.String, value)
+            self._jwrite = self._jwrite.option(key, jvalues)
+        else:
+            self._jwrite = self._jwrite.option(key, to_str(value))
         return self
 
     @since(1.4)
@@ -557,7 +580,14 @@ class DataFrameWriter(OptionUtils):
                 If it isn't set, it uses the default value, session local timezone.
         """
         for k in options:
-            self._jwrite = self._jwrite.option(k, to_str(options[k]))
+            self.option(k, options[k])
+        return self
+
+    @since(2.3)
+    def unsetOption(self, key):
+        """Un-sets the option given to the key for the underlying data source.
+        """
+        self._jwrite = self._jwrite.unsetOption(key)
         return self
 
     @since(1.4)

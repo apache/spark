@@ -170,7 +170,7 @@ class UnivocityParser(
        name: String,
        nullable: Boolean,
        options: CSVOptions)(converter: ValueConverter): Any = {
-    if (datum == options.nullValue || datum == null) {
+    if (options.nullValue.contains(datum) || datum == null) {
       if (!nullable) {
         throw new RuntimeException(s"null value found but field $name is not nullable.")
       }

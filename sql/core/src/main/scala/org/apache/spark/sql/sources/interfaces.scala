@@ -71,7 +71,8 @@ trait RelationProvider {
    * Returns a new base relation with the given parameters.
    *
    * @note The parameters' keywords are case insensitive and this insensitivity is enforced
-   * by the Map that is passed to the function.
+   * by the Map that is passed to the function. Also, the value of the Map can be a JSON
+   * array string if users set an array via option APIs.
    */
   def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
 }
@@ -102,7 +103,8 @@ trait SchemaRelationProvider {
    * Returns a new base relation with the given parameters and user defined schema.
    *
    * @note The parameters' keywords are case insensitive and this insensitivity is enforced
-   * by the Map that is passed to the function.
+   * by the Map that is passed to the function. Also, the value of the Map can be a JSON
+   * array string if users set an array via option APIs.
    */
   def createRelation(
       sqlContext: SQLContext,
@@ -122,7 +124,12 @@ trait StreamSourceProvider {
 
   /**
    * Returns the name and schema of the source that can be used to continually read data.
+   *
    * @since 2.0.0
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function. Also, the value of the Map can be a JSON
+   * array string if users set an array via option APIs.
    */
   def sourceSchema(
       sqlContext: SQLContext,
@@ -131,7 +138,13 @@ trait StreamSourceProvider {
       parameters: Map[String, String]): (String, StructType)
 
   /**
+   * Returns a source that can be used to continually read data.
+   *
    * @since 2.0.0
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function. Also, the value of the Map can be a JSON
+   * array string if users set an array via option APIs.
    */
   def createSource(
       sqlContext: SQLContext,
@@ -150,6 +163,13 @@ trait StreamSourceProvider {
 @Experimental
 @InterfaceStability.Unstable
 trait StreamSinkProvider {
+  /**
+   * Returns a sink that can be used to continually write data.
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function. Also, the value of the Map can be a JSON
+   * array string if users set an array via option APIs.
+   */
   def createSink(
       sqlContext: SQLContext,
       parameters: Map[String, String],
@@ -172,6 +192,10 @@ trait CreatableRelationProvider {
    * @return Relation with a known schema
    *
    * @since 1.3.0
+   *
+   * @note The parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function. Also, the value of the Map can be a JSON
+   * array string if users set an array via option APIs.
    */
   def createRelation(
       sqlContext: SQLContext,

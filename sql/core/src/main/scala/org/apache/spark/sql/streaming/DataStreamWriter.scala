@@ -21,6 +21,9 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -179,6 +182,23 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    */
   def option(key: String, value: Double): DataStreamWriter[T] = option(key, value.toString)
 
+
+  /**
+   * (Scala-specific) Adds an output option for the underlying data source.
+   *
+   * @since 2.3.0
+   */
+  def option(key: String, value: Seq[String]): DataStreamWriter[T] = {
+    option(key, compact(render(value)))
+  }
+
+  /**
+   * Adds an output option for the underlying data source.
+   *
+   * @since 2.3.0
+   */
+  def option(key: String, value: Array[String]): DataStreamWriter[T] = option(key, value.toSeq)
+
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
@@ -208,6 +228,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
    */
   def options(options: java.util.Map[String, String]): DataStreamWriter[T] = {
     this.options(options.asScala)
+    this
+  }
+
+  /**
+   * Un-sets an option option for the underlying data source.
+   *
+   * @since 2.3.0
+   */
+  def unsetOption(key: String): DataStreamWriter[T] = {
+    this.extraOptions.remove(key)
     this
   }
 

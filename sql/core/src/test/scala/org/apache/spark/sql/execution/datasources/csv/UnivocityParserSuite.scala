@@ -20,6 +20,11 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.math.BigDecimal
 import java.util.Locale
 
+import scala.util.Random
+
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
@@ -76,6 +81,16 @@ class UnivocityParserSuite extends SparkFunSuite {
         converter.apply(null)
       }.getMessage
       assert(message.contains("null value found but field _1 is not nullable."))
+    }
+
+    // nullable field with multiple nullValue option.
+    val nullValues = Seq("abc", "", "123", "null")
+    val nullValuesStr = compact(render(nullValues))
+    types.foreach { t =>
+      val options = new CSVOptions(Map("nullValue" -> nullValuesStr), "GMT")
+      val converter =
+        parser.makeConverter("_1", t, nullable = true, options = options)
+      assertNull(converter.apply(nullValues(Random.nextInt(nullValues.length))))
     }
 
     // If nullValue is different with empty string, then, empty string should not be casted into
