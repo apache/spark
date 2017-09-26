@@ -488,6 +488,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val GROUPING_EXPAND_PROJECTIONS = buildConf("spark.sql.grouping.projectionsPerExpand")
+    .doc("The number of projections in each Expand operator when the grouping analytics is " +
+      "implemented using a union with aggregates for each group."
+    .intConf
+    .checkValue(projections => projections >= 1, "The number of projections for each Expand " +
+      "operator must be positive.")
+    .createWithDefault(1)
+
   // The output committer class used by data sources. The specified class needs to be a
   // subclass of org.apache.hadoop.mapreduce.OutputCommitter.
   val OUTPUT_COMMITTER_CLASS = buildConf("spark.sql.sources.outputCommitterClass")
@@ -1165,6 +1173,8 @@ class SQLConf extends Serializable with Logging {
   def groupByAliases: Boolean = getConf(GROUP_BY_ALIASES)
 
   def groupingWithUnion: Boolean = getConf(GROUPING_WITH_UNION)
+
+  def groupingExpandProjections: Int = getConf(GROUPING_EXPAND_PROJECTIONS)
 
   def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 

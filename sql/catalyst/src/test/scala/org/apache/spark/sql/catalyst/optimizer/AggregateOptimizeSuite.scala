@@ -86,9 +86,9 @@ class AggregateOptimizeSuite extends PlanTest {
 
       val query = GroupingSets(Seq(Seq(), Seq(a), Seq(a, b)), Seq(a, b), testRelation,
         Seq(a, b, count(c).as("count(c)")))
-      val optimized = SplitAggregateWithExpand(analyzer.execute(query))
 
-      val correctAnswer = Union(
+      val optimized1 = SplitAggregateWithExpand(analyzer.execute(query))
+      val correctAnswer1 = Union(
         Seq(
           Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
             Expand(Seq(Seq(a, b, c, nulInt, nulInt, 3)),
@@ -110,8 +110,28 @@ class AggregateOptimizeSuite extends PlanTest {
           )
         )
       )
+      comparePlans(optimized1, correctAnswer1, false)
 
-      comparePlans(optimized, correctAnswer, false)
+      withSQLConf(GROUPING_EXPAND_PROJECTIONS.key -> "2") {
+        val optimized2 = SplitAggregateWithExpand(analyzer.execute(query))
+        val correctAnswer2 = Union(
+          Seq(
+            Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+              Expand(Seq(Seq(a, b, c, nulInt, nulInt, 3), Seq(a, b, c, a, nulInt, 1)),
+                Seq(a, b, c, a, b, gid),
+                Project(Seq(a, b, c, a.as("a"), b.as("b")), testRelation)
+              )
+            ),
+            Aggregate(Seq(a, b, gid), Seq(a, b, count(c).as("count(c)")),
+              Expand(Seq(Seq(a, b, c, a, b, 0)),
+                Seq(a, b, c, a, b, gid),
+                Project(Seq(a, b, c, a.as("a"), b.as("b")), testRelation)
+              )
+            )
+          )
+        )
+        comparePlans(optimized2, correctAnswer2, false)
+      }
     }
   }
 }
