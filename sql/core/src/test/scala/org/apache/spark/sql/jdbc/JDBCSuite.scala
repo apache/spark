@@ -1126,9 +1126,19 @@ class JDBCSuite extends SparkFunSuite
          |OPTIONS (url '$urlWithUserAndPass',
          |dbtable '(SELECT NVL(@MYTESTVAR1, -1), NVL(@MYTESTVAR2, -1))',
          |sessionInitStatement 'SET @MYTESTVAR1 21519; SET @MYTESTVAR2 1234')
-       """.stripMargin)
+      """.stripMargin)
 
-      val df3 = sql("SELECT * FROM test_sessionInitStatement")
-      assert(df3.collect() === Array(Row(21519, 1234)))
-    }
+    val df3 = sql("SELECT * FROM test_sessionInitStatement")
+    assert(df3.collect() === Array(Row(21519, 1234)))
+  }
+
+  test("Hive dialect registration") {
+    assert(JdbcDialects.get("jdbc:hive2://127.0.0.1/db") == HiveDialect)
+  }
+
+  test("Hive dialect quoted identifier") {
+    val dialect = JdbcDialects.get("jdbc:hive2://127.0.0.1/db")
+    val quotedIdentifier = dialect.quoteIdentifier("a_column")
+    assert(quotedIdentifier == "`a_column`")
+  }
 }
