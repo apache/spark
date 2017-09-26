@@ -243,7 +243,7 @@ class CodegenContext {
     mutable.Map(outerClassName -> mutable.Map.empty[String, String])
 
   // Verbatim extra code to be added to the OuterClass.
-  private val extraCode: mutable.ListBuffer[String] = mutable.ListBuffer[String]()
+  private val extraClasses: mutable.ListBuffer[String] = mutable.ListBuffer[String]()
 
   // Returns the size of the most recently added class.
   private def currClassSize(): Int = classSize(classes.head._1)
@@ -332,19 +332,18 @@ class CodegenContext {
   }
 
   /**
-   * Emits any source code added with addExtraCode
+   * Emits extra inner classes added with addExtraCode
    */
   def emitExtraCode(): String = {
-    extraCode.mkString("\n")
+    extraClasses.mkString("\n")
   }
 
   /**
    * Add extra source code to the outermost generated class.
-   * @param code verbatim source code to be added.
+   * @param code verbatim source code of the inner class to be added.
    */
-  def addExtraCode(code: String): Unit = {
-    extraCode.append(code)
-    classSize(outerClassName) += code.length
+  def addInnerClass(code: String): Unit = {
+    extraClasses.append(code)
   }
 
   final val JAVA_BOOLEAN = "boolean"
