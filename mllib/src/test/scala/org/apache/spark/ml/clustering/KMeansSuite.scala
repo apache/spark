@@ -23,7 +23,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.clustering.{DistanceSuite, KMeans => MLlibKMeans}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 
@@ -50,7 +50,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitMode === MLlibKMeans.K_MEANS_PARALLEL)
     assert(kmeans.getInitSteps === 2)
     assert(kmeans.getTol === 1e-4)
-    assert(kmeans.getDistanceMeasure === DistanceSuite.EUCLIDEAN)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.EUCLIDEAN)
     val model = kmeans.setMaxIter(1).fit(dataset)
 
     MLTestingUtils.checkCopyAndUids(kmeans, model)
@@ -69,7 +69,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setInitSteps(3)
       .setSeed(123)
       .setTol(1e-3)
-      .setDistanceMeasure(DistanceSuite.COSINE)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
 
     assert(kmeans.getK === 9)
     assert(kmeans.getFeaturesCol === "test_feature")
@@ -79,7 +79,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
     assert(kmeans.getInitSteps === 3)
     assert(kmeans.getSeed === 123)
     assert(kmeans.getTol === 1e-3)
-    assert(kmeans.getDistanceMeasure === DistanceSuite.COSINE)
+    assert(kmeans.getDistanceMeasure === DistanceMeasure.COSINE)
   }
 
   test("parameters validation") {
@@ -165,7 +165,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultR
       .setSeed(1)
       .setInitMode(MLlibKMeans.RANDOM)
       .setTol(1e-6)
-      .setDistanceMeasure(DistanceSuite.COSINE)
+      .setDistanceMeasure(DistanceMeasure.COSINE)
       .fit(df)
 
     val predictionDf = model.transform(df)
@@ -220,6 +220,6 @@ object KMeansSuite {
     "k" -> 3,
     "maxIter" -> 2,
     "tol" -> 0.01,
-    "distanceMeasure" -> DistanceSuite.EUCLIDEAN
+    "distanceMeasure" -> DistanceMeasure.EUCLIDEAN
   )
 }

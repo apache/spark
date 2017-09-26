@@ -26,7 +26,7 @@ import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.clustering.{DistanceSuite, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
+import org.apache.spark.mllib.clustering.{DistanceMeasure, KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
@@ -270,7 +270,7 @@ class KMeans @Since("1.5.0") (
     initMode -> MLlibKMeans.K_MEANS_PARALLEL,
     initSteps -> 2,
     tol -> 1e-4,
-    distanceMeasure -> DistanceSuite.EUCLIDEAN)
+    distanceMeasure -> DistanceMeasure.EUCLIDEAN)
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeans = defaultCopy(extra)

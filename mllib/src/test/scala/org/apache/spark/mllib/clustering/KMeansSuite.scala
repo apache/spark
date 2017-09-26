@@ -89,7 +89,7 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInitializationSteps(10)
       .setSeed(seed)
 
-    val distanceSuite = new EuclideanDistanceSuite
+    val distanceSuite = new EuclideanDistanceMeasure
     val initialCenters = km.initKMeansParallel(normedData, distanceSuite).map(_.vector)
     assert(initialCenters.length === initialCenters.distinct.length)
     assert(initialCenters.length <= numDistinctPoints)

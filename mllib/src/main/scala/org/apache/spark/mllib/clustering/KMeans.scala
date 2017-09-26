@@ -53,7 +53,7 @@ class KMeans @Since("2.3.0") private (
   private def this(k: Int, maxIterations: Int, initializationMode: String, initializationSteps: Int,
       epsilon: Double, seed: Long) =
     this(k, maxIterations, initializationMode, initializationSteps,
-      epsilon, seed, DistanceSuite.EUCLIDEAN)
+      epsilon, seed, DistanceMeasure.EUCLIDEAN)
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20,
@@ -62,7 +62,7 @@ class KMeans @Since("2.3.0") private (
    */
   @Since("0.8.0")
   def this() = this(2, 20, KMeans.K_MEANS_PARALLEL, 2, 1e-4, Utils.random.nextLong(),
-    DistanceSuite.EUCLIDEAN)
+    DistanceMeasure.EUCLIDEAN)
 
   /**
    * Number of clusters to create (k).
@@ -271,7 +271,7 @@ class KMeans @Since("2.3.0") private (
 
     val initStartTime = System.nanoTime()
 
-    val distanceSuite = DistanceSuite.decodeFromString(this.distanceMeasure)
+    val distanceSuite = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
@@ -373,7 +373,7 @@ class KMeans @Since("2.3.0") private (
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
   private[clustering] def initKMeansParallel(data: RDD[VectorWithNorm],
-      distanceSuite: DistanceSuite): Array[VectorWithNorm] = {
+      distanceSuite: DistanceMeasure): Array[VectorWithNorm] = {
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
 
@@ -583,8 +583,8 @@ object KMeans {
   }
   private[spark] def validateDistanceMeasure(distanceMeasure: String): Boolean = {
     distanceMeasure match {
-      case DistanceSuite.EUCLIDEAN => true
-      case DistanceSuite.COSINE => true
+      case DistanceMeasure.EUCLIDEAN => true
+      case DistanceMeasure.COSINE => true
       case _ => false
     }
   }
@@ -607,7 +607,7 @@ class VectorWithNorm(val vector: Vector, val norm: Double) extends Serializable 
 }
 
 
-private[spark] abstract class DistanceSuite extends Serializable {
+private[spark] abstract class DistanceMeasure extends Serializable {
 
   /**
    * Returns the index of the closest center to the given point, as well as the squared distance.
@@ -635,23 +635,23 @@ private[spark] abstract class DistanceSuite extends Serializable {
 }
 
 @Since("2.3.0")
-object DistanceSuite {
+object DistanceMeasure {
 
   @Since("2.3.0")
   val EUCLIDEAN = "euclidean"
   @Since("2.3.0")
   val COSINE = "cosine"
 
-  private[spark] def decodeFromString(distanceMeasure: String): DistanceSuite =
+  private[spark] def decodeFromString(distanceMeasure: String): DistanceMeasure =
     distanceMeasure match {
-      case EUCLIDEAN => new EuclideanDistanceSuite
-      case COSINE => new CosineDistanceSuite
+      case EUCLIDEAN => new EuclideanDistanceMeasure
+      case COSINE => new CosineDistanceMeasure
       case _ => throw new IllegalArgumentException(s"distanceMeasure must be one of: " +
         s"$EUCLIDEAN, $COSINE. $distanceMeasure provided.")
     }
 }
 
-private[spark] class EuclideanDistanceSuite extends DistanceSuite {
+private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
   /**
    * Returns the index of the closest center to the given point, as well as the squared distance.
    */
@@ -667,7 +667,7 @@ private[spark] class EuclideanDistanceSuite extends DistanceSuite {
       var lowerBoundOfSqDist = center.norm - point.norm
       lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
       if (lowerBoundOfSqDist < bestDistance) {
-        val distance: Double = EuclideanDistanceSuite.fastSquaredDistance(center, point)
+        val distance: Double = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
         if (distance < bestDistance) {
           bestDistance = distance
           bestIndex = i
@@ -685,14 +685,14 @@ private[spark] class EuclideanDistanceSuite extends DistanceSuite {
       oldCenter: VectorWithNorm,
       newCenter: VectorWithNorm,
       epsilon: Double): Boolean = {
-    EuclideanDistanceSuite.fastSquaredDistance(newCenter, oldCenter) <= epsilon * epsilon
+    EuclideanDistanceMeasure.fastSquaredDistance(newCenter, oldCenter) <= epsilon * epsilon
   }
 
 
 }
 
 
-private[spark] object EuclideanDistanceSuite {
+private[spark] object EuclideanDistanceMeasure {
   /**
    * Returns the squared Euclidean distance between two vectors computed by
    * [[org.apache.spark.mllib.util.MLUtils#fastSquaredDistance]].
@@ -704,7 +704,7 @@ private[spark] object EuclideanDistanceSuite {
   }
 }
 
-private[spark] class CosineDistanceSuite extends DistanceSuite {
+private[spark] class CosineDistanceMeasure extends DistanceMeasure {
   /**
    * Returns the index of the closest center to the given point, as well as the squared distance.
    */

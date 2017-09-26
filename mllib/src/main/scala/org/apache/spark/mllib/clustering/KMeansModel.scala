@@ -40,14 +40,14 @@ class KMeansModel @Since("2.3.0") (@Since("1.0.0") val clusterCenters: Array[Vec
   @Since("2.3.0") val distanceMeasure: String)
   extends Saveable with Serializable with PMMLExportable {
 
-  private val distanceSuite: DistanceSuite = DistanceSuite.decodeFromString(distanceMeasure)
+  private val distanceSuite: DistanceMeasure = DistanceMeasure.decodeFromString(distanceMeasure)
 
   private val clusterCentersWithNorm =
     if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
 
   @Since("1.1.0")
   def this(clusterCenters: Array[Vector]) =
-    this(clusterCenters: Array[Vector], DistanceSuite.EUCLIDEAN)
+    this(clusterCenters: Array[Vector], DistanceMeasure.EUCLIDEAN)
 
   /**
    * A Java-friendly constructor that takes an Iterable of Vectors.
