@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.net.URI
+
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkConf
@@ -87,6 +89,43 @@ class HiveExternalCatalogSuite extends ExternalCatalogSuite {
 
       val restoredTable = externalCatalog.getTable("db1", "tbl")
       assert(restoredTable.schema == newSchema)
+    }
+  }
+
+  test("SPARK-22121: auto-correct table location for namenode HA") {
+    // set up a configuration with two nameservices (eg. two clusters, both with HA)
+    val conf = new Configuration()
+    conf.set("dfs.nameservices", "ns1,ns2")
+    conf.set("dfs.ha.namenodes.ns1", "namenode1,namenode5")
+    conf.set("dfs.namenode.rpc-address.ns1.namenode1", "foo-1.xyz.com:8020")
+    conf.set("dfs.namenode.rpc-address.ns1.namenode5", "foo-2.xyz.com:1234")
+    conf.set("dfs.ha.namenodes.ns2", "namenode17,namenode25")
+    conf.set("dfs.namenode.rpc-address.ns2.namenode17", "blah-1.bar.com:8020")
+    conf.set("dfs.namenode.rpc-address.ns2.namenode25", "blah-2.bar.com:8020")
+    val namenodeToNameservice = HiveExternalCatalog.buildNamenodeToNameserviceMapping(conf)
+    assert(namenodeToNameservice === Map(
+      "hdfs://foo-1.xyz.com:8020" -> "hdfs://ns1",
+      "hdfs://foo-2.xyz.com:1234" -> "hdfs://ns1",
+      "hdfs://blah-1.bar.com:8020" -> "hdfs://ns2",
+      "hdfs://blah-2.bar.com:8020" -> "hdfs://ns2"
+    ))
+
+    // go through a handful of paths, making sure the right substitions (or no substitution) is
+    // applied.  If no port is given, we don't try to guess the port for making the substitution.
+    Seq(
+      "hdfs://foo-1.xyz.com:8020/" -> "hdfs://ns1/",
+      "hdfs://foo-1.xyz.com:8020/some/path" -> "hdfs://ns1/some/path",
+      "hdfs://foo-1.xyz.com:8021/some/path" -> "hdfs://foo-1.xyz.com:8021/some/path",
+      "hdfs://foo-1.xyz.com/some/path" -> "hdfs://foo-1.xyz.com/some/path",
+      "hdfs://foo-2.xyz.com:1234/some/path" -> "hdfs://ns1/some/path",
+      "hdfs://blah-1.bar.com:8020/another/path" -> "hdfs://ns2/another/path",
+      "hdfs://another.cluster.com:8020/my/path" -> "hdfs://another.cluster.com:8020/my/path"
+    ).foreach { case (orig, exp) =>
+      val convertedName = HiveExternalCatalog.convertNamenodeToNameservice(
+          namenodeToNameservice,
+          new URI(orig),
+          "my_db")
+      assert( convertedName === new URI(exp))
     }
   }
 }

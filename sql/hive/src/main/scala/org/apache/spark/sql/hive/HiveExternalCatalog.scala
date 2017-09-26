@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
+import java.net.URI
 import java.util
 import java.util.Locale
 
@@ -257,6 +258,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  private lazy val namenodeToNameservice: Map[String, String] = {
+    val tmp = HiveExternalCatalog.buildNamenodeToNameserviceMapping(hadoopConf)
+    logDebug(s"namenode to nameservice mapping: $tmp")
+    tmp
+  }
+
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
     // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
     val provider = table.provider.get
@@ -438,7 +445,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   private def defaultTablePath(tableIdent: TableIdentifier): String = {
-    val dbLocation = getDatabase(tableIdent.database.get).locationUri
+    val dbName = tableIdent.database.get
+    val dbLocation = convertNamenodeToNameservice(
+      namenodeToNameservice, getDatabase(dbName).locationUri, dbName)
     new Path(new Path(dbLocation), tableIdent.table).toString
   }
 
@@ -1269,7 +1278,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
 
 }
 
-object HiveExternalCatalog {
+object HiveExternalCatalog extends Logging {
   val SPARK_SQL_PREFIX = "spark.sql."
 
   val DATASOURCE_PREFIX = SPARK_SQL_PREFIX + "sources."
@@ -1375,6 +1384,34 @@ object HiveExternalCatalog {
   private[spark] def isDatasourceTable(table: CatalogTable): Boolean = {
     val provider = table.provider.orElse(table.properties.get(DATASOURCE_PROVIDER))
     provider.isDefined && provider != Some(DDLUtils.HIVE_PROVIDER)
+  }
+
+  private[hive] def buildNamenodeToNameserviceMapping(
+      hadoopConf: Configuration): Map[String, String] = {
+    (for {
+      nameservice <- hadoopConf.getTrimmedStrings("dfs.nameservices")
+      namenodeId <- hadoopConf.getTrimmedStrings(s"dfs.ha.namenodes.$nameservice")
+      namenode <- Option(hadoopConf.get(s"dfs.namenode.rpc-address.$nameservice.$namenodeId")).toSeq
+    } yield {
+      s"hdfs://$namenode" -> s"hdfs://$nameservice"
+    }).toMap
+  }
+
+  private[hive] def convertNamenodeToNameservice(
+      namenodeToNameservice: Map[String, String],
+      uri: URI,
+      db: String): URI = {
+    // With HDFS HA, the user really *should* update their DB locations to list the
+    // nameservice, not one specific namenode, since that won't work if that namenode happens
+    // to be in standby.   But, users mess this up, so we can try to fix this for them.
+    val prefix = new URI(uri.getScheme(), uri.getAuthority(), null, null, null).toString()
+    namenodeToNameservice.get(prefix).map { nameservicePrefix =>
+      val s = uri.toString()
+      val fixedPath = new Path(s"${nameservicePrefix}${s.substring(prefix.length())}").toUri()
+      logWarning(s"Database $db has location $s, but this references only one namenode in " +
+        s"an HA setup.  Converting to reference nameservice $fixedPath")
+      fixedPath
+    }.getOrElse(uri)
   }
 
 }
