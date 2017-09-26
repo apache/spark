@@ -177,6 +177,16 @@ package object config {
       .intConf
       .createWithDefault(128)
 
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_OPEN_HOLD =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.openHold")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val LISTENER_BUS_EVENT_QUEUE_IDLE_CAPACITY =
+    ConfigBuilder("spark.scheduler.listenerbus.eventqueue.idleCapacity")
+      .doubleConf
+      .createWithDefault(0.6)
+
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .stringConf

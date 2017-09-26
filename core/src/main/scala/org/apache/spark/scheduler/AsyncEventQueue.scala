@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 
+import scala.util.control.Breaks._
+
 import com.codahale.metrics.{Gauge, Timer}
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -42,8 +44,13 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
 
   // Cap the capacity of the queue so we get an explicit error (rather than an OOM exception) if
   // it's perpetually being added to more quickly than it's being drained.
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](
-    conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY))
+  private val EVENT_QUEUE_CAPACITY = conf.get(LISTENER_BUS_EVENT_QUEUE_CAPACITY)
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
+
+  // control the strategy when event queue is full
+  private val openHoldMode = conf.get(LISTENER_BUS_EVENT_QUEUE_OPEN_HOLD)
+  private lazy val idleCapacity = conf.get(LISTENER_BUS_EVENT_QUEUE_IDLE_CAPACITY)
+  private val isFull = new AtomicBoolean(false)
 
   // Keep the event count separately, so that waitUntilEmpty() can be implemented properly;
   // this allows that method to return only when the events in the queue have been fully
@@ -89,6 +96,13 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
           super.postToAll(next)
         } finally {
           ctx.stop()
+          isFull.synchronized {
+            if (openHoldMode && isFull.get &&
+            (eventQueue.remainingCapacity() / EVENT_QUEUE_CAPACITY).toLong >= idleCapacity) {
+              isFull.notifyAll()
+              isFull.compareAndSet(true, false)
+            }
+          }
         }
         eventCount.decrementAndGet()
         next = eventQueue.take()
@@ -139,34 +153,49 @@ private class AsyncEventQueue(val name: String, conf: SparkConf, metrics: LiveLi
     }
 
     eventCount.incrementAndGet()
-    if (eventQueue.offer(event)) {
-      return
-    }
 
-    eventCount.decrementAndGet()
-    droppedEvents.inc()
-    droppedEventsCounter.incrementAndGet()
-    if (logDroppedEvent.compareAndSet(false, true)) {
-      // Only log the following message once to avoid duplicated annoying logs.
-      logError(s"Dropping event from queue $name. " +
-        "This likely means one of the listeners is too slow and cannot keep up with " +
-        "the rate at which tasks are being started by the scheduler.")
-    }
-    logTrace(s"Dropping event $event")
+    breakable {
+      while (true) {
+        isFull.synchronized {
+          if (eventQueue.offer(event)) {
+            return
+          }
 
-    val droppedCount = droppedEventsCounter.get
-    if (droppedCount > 0) {
-      // Don't log too frequently
-      if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
-        // There may be multiple threads trying to decrease droppedEventsCounter.
-        // Use "compareAndSet" to make sure only one thread can win.
-        // And if another thread is increasing droppedEventsCounter, "compareAndSet" will fail and
-        // then that thread will update it.
-        if (droppedEventsCounter.compareAndSet(droppedCount, 0)) {
-          val prevLastReportTimestamp = lastReportTimestamp
-          lastReportTimestamp = System.currentTimeMillis()
-          val previous = new java.util.Date(prevLastReportTimestamp)
-          logWarning(s"Dropped $droppedEvents events from $name since $previous.")
+          if (openHoldMode) {
+            // while hold mode opened, the post thead wait here until queue idle capacity reached
+            logWarning(s"Hold the event $event because no remaining room in event queue.")
+            isFull.compareAndSet(false, true)
+            isFull.wait()
+          } else {
+            eventCount.decrementAndGet()
+            droppedEvents.inc()
+            droppedEventsCounter.incrementAndGet()
+            if (logDroppedEvent.compareAndSet(false, true)) {
+              // Only log the following message once to avoid duplicated annoying logs.
+              logError(s"Dropping event from queue $name. " +
+                "This likely means one of the listeners is too slow and cannot keep up with " +
+                "the rate at which tasks are being started by the scheduler.")
+            }
+            logTrace(s"Dropping event $event")
+
+            val droppedCount = droppedEventsCounter.get
+            if (droppedCount > 0) {
+              // Don't log too frequently
+              if (System.currentTimeMillis() - lastReportTimestamp >= 60 * 1000) {
+                // There may be multiple threads trying to decrease droppedEventsCounter.
+                // Use "compareAndSet" to make sure only one thread can win.
+                // And if another thread is increasing droppedEventsCounter, "compareAndSet" will
+                // fail and then that thread will update it.
+                if (droppedEventsCounter.compareAndSet(droppedCount, 0)) {
+                  val prevLastReportTimestamp = lastReportTimestamp
+                  lastReportTimestamp = System.currentTimeMillis()
+                  val previous = new java.util.Date(prevLastReportTimestamp)
+                  logWarning(s"Dropped $droppedEvents events from $name since $previous.")
+                }
+              }
+            }
+            break
+          }
         }
       }
     }
