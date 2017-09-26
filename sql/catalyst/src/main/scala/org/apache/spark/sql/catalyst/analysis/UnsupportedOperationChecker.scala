@@ -262,17 +262,26 @@ object UnsupportedOperationChecker {
                   case _ => false
                 }
 
-                val oppositeSideHasWatermark = joinType match {
-                  case LeftOuter =>
-                    right.output.find(_.metadata.contains(EventTimeWatermark.delayKey)).isDefined
-                  case RightOuter =>
-                    left.output.find(_.metadata.contains(EventTimeWatermark.delayKey)).isDefined
-                  case _ => false
+                // Check if the nullable side has a watermark, and there's a range condition which
+                // implies a state value watermark on the first side.
+                val hasValidWatermarkRange = subPlan match {
+                  case ExtractEquiJoinKeys(LeftOuter, _, _, condition, _, _) =>
+                    // We provide a dummy watermark value 0 - we just want to check if the
+                    // watermark predicate can be constructed.
+                    right.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)) &&
+                      StreamingJoinHelper.getStateValueWatermark(
+                        left.outputSet, right.outputSet, condition, Some(0)).isDefined
+                  case ExtractEquiJoinKeys(RightOuter, _, _, condition, _, _) =>
+                    left.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)) &&
+                      StreamingJoinHelper.getStateValueWatermark(
+                        right.outputSet, left.outputSet, condition, Some(0)).isDefined
+                  case _ =>
+                    false
                 }
 
-                if (!watermarkInJoinKeys && !oppositeSideHasWatermark) {
-                  throwError("Streaming outer join must have a watermark in the join keys or on " +
-                    "the nullable side")
+                if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
+                  throwError("Streaming outer join must have a watermark in the join keys, or a " +
+                    "watermark on the nullable side and an appropriate range condition")
                 }
               }
 
