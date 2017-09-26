@@ -146,7 +146,7 @@ case class StreamingSymmetricHashJoinExec(
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), left, right)
   }
 
-  private def throwBadJoinTypeException(): Unit = {
+  private def throwBadJoinTypeException(): Nothing = {
     throw new IllegalArgumentException(
       s"${getClass.getSimpleName} should not take $joinType as the JoinType")
   }
@@ -168,9 +168,7 @@ case class StreamingSymmetricHashJoinExec(
     case _: InnerLike => left.output ++ right.output
     case LeftOuter => left.output ++ right.output.map(_.withNullability(true))
     case RightOuter => left.output.map(_.withNullability(true)) ++ right.output
-    case _ =>
-      throwBadJoinTypeException()
-      Seq()
+    case _ => throwBadJoinTypeException()
   }
 
   override def outputPartitioning: Partitioning = joinType match {
@@ -271,9 +269,7 @@ case class StreamingSymmetricHashJoinExec(
           .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
         filteredInnerOutputIter ++ outerOutputIter
-      case _ =>
-        throwBadJoinTypeException()
-        Iterator()
+      case _ => throwBadJoinTypeException()
     }
 
     val outputIterWithMetrics = outputIter.map { row =>
@@ -303,9 +299,7 @@ case class StreamingSymmetricHashJoinExec(
             leftSideJoiner.removeOldState() ++ rightSideJoiner.removeOldState()
           case LeftOuter => rightSideJoiner.removeOldState()
           case RightOuter => leftSideJoiner.removeOldState()
-          case _ =>
-            throwBadJoinTypeException()
-            Iterator()
+          case _ => throwBadJoinTypeException()
         }
         while (cleanupIter.hasNext) {
           cleanupIter.next()
