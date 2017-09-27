@@ -113,8 +113,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
       SimplifyCreateArrayOps,
       SimplifyCreateMapOps) ++
       extendedOperatorOptimizationRules: _*) ::
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts(conf)) ::
     Batch("Join Reorder", Once,
       CostBasedJoinReorder(conf)) ::
     Batch("Decimal Optimizations", fixedPoint,
@@ -125,6 +123,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: SQLConf)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
+    Batch("Check Cartesian Products", Once,
+      CheckCartesianProducts(conf)) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen(conf)) ::
     Batch("RewriteSubquery", Once,
