@@ -157,6 +157,7 @@ class ArrowPythonRunner(
               batch.setNumRows(root.getRowCount)
               batch
             } else {
+              // Reach end of stream. Call `read()` again to read control data.
               read()
             }
           } else {
