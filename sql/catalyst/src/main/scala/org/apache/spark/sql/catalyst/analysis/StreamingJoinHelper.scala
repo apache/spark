@@ -120,7 +120,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
 
     def containsAttributeToFindStateConstraintFor(e: Expression): Boolean = {
       e.collectLeaves().collectFirst {
-        case a @ AttributeReference(_, TimestampType, _, _)
+        case a @ AttributeReference(_, _, _, _)
           if attributesToFindStateWatermarkFor.contains(a) => a
       }.nonEmpty
     }
@@ -167,7 +167,7 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     logDebug(s"Constraint term from join condition:\t$constraintTerm")
     val exprWithWatermarkSubstituted = (terms - constraintTerm).map { term =>
       term.transform {
-        case a @ AttributeReference(_, TimestampType, _, metadata)
+        case a @ AttributeReference(_, _, _, metadata)
           if attributesWithEventWatermark.contains(a) && metadata.contains(delayKey) =>
           Multiply(Literal(eventWatermark.get.toDouble), Literal(1000.0))
       }

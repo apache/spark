@@ -567,7 +567,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     }
 
     assert(thrown.getMessage.contains(
-      "Streaming outer join must have a watermark in the join keys"))
+      "Stream-stream outer join between two streaming DataFrame/Datasets is not supported " +
+        "without a watermark"))
   }
 
   test("right outer join with no watermark") {
@@ -579,7 +580,8 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     }
 
     assert(thrown.getMessage.contains(
-      "Streaming outer join must have a watermark in the join keys"))
+      "Stream-stream outer join between two streaming DataFrame/Datasets is not supported " +
+        "without a watermark"))
   }
 
   test("windowed left outer join") {

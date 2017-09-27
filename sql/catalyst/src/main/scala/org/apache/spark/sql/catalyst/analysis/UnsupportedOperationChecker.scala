@@ -218,7 +218,7 @@ object UnsupportedOperationChecker {
           throwError("dropDuplicates is not supported after aggregation on a " +
             "streaming DataFrame/Dataset")
 
-        case Join(left, right, joinType, _) =>
+        case Join(left, right, joinType, condition) =>
 
           joinType match {
 
@@ -264,24 +264,23 @@ object UnsupportedOperationChecker {
 
                 // Check if the nullable side has a watermark, and there's a range condition which
                 // implies a state value watermark on the first side.
-                val hasValidWatermarkRange = subPlan match {
-                  case ExtractEquiJoinKeys(LeftOuter, _, _, condition, _, _) =>
+                val hasValidWatermarkRange = joinType match {
+                  case LeftOuter =>
                     // We provide a dummy watermark value 0 - we just want to check if the
                     // watermark predicate can be constructed.
-                    right.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)) &&
-                      StreamingJoinHelper.getStateValueWatermark(
-                        left.outputSet, right.outputSet, condition, Some(0)).isDefined
-                  case ExtractEquiJoinKeys(RightOuter, _, _, condition, _, _) =>
-                    left.output.exists(_.metadata.contains(EventTimeWatermark.delayKey)) &&
-                      StreamingJoinHelper.getStateValueWatermark(
-                        right.outputSet, left.outputSet, condition, Some(0)).isDefined
+                    StreamingJoinHelper.getStateValueWatermark(
+                      left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
+                  case RightOuter =>
+                    StreamingJoinHelper.getStateValueWatermark(
+                      right.outputSet, left.outputSet, condition, Some(1000000)).isDefined
                   case _ =>
                     false
                 }
 
                 if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
-                  throwError("Streaming outer join must have a watermark in the join keys, or a " +
-                    "watermark on the nullable side and an appropriate range condition")
+                  throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
+                    "is not supported without a watermark in the join keys, or a watermark on " +
+                    "the nullable side and an appropriate range condition")
                 }
               }
 
