@@ -156,9 +156,14 @@ final class ShuffleBlockFetcherIterator(
   // The currentResult is set to null to prevent releasing the buffer again on cleanup()
   private[storage] def releaseCurrentResultBuffer(): Unit = {
     // Release the current buffer if necessary
-    if (currentResult != null) {
-      currentResult.buf.release()
-    }
+    currentResult match {
+       case SuccessFetchResult(_, _, size, buf, _) =>
+         buf.release()
+         bytesInFlight -= size
+         // Send fetch requests up to maxBytesInFlight
+         fetchUpToMaxBytes()
+       case _ =>
+     }
     currentResult = null
   }
 
@@ -397,7 +402,6 @@ final class ShuffleBlockFetcherIterator(
             }
             shuffleMetrics.incRemoteBlocksFetched(1)
           }
-          bytesInFlight -= size
           if (isNetworkReqDone) {
             reqsInFlight -= 1
             logDebug("Number of requests in flight " + reqsInFlight)
@@ -439,6 +443,8 @@ final class ShuffleBlockFetcherIterator(
                   fetchRequests += FetchRequest(address, Array((blockId, size)))
                   result = null
                 }
+                bytesInFlight -= size
+                fetchUpToMaxBytes()
             } finally {
               // TODO: release the buf here to free memory earlier
               originalInput.close()
@@ -449,9 +455,6 @@ final class ShuffleBlockFetcherIterator(
         case FailureFetchResult(blockId, address, e) =>
           throwFetchFailedException(blockId, address, e)
       }
-
-      // Send fetch requests up to maxBytesInFlight
-      fetchUpToMaxBytes()
     }
 
     currentResult = result.asInstanceOf[SuccessFetchResult]
