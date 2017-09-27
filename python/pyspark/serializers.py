@@ -86,7 +86,6 @@ class PythonEvalType(object):
     NON_UDF = 0
     SQL_BATCHED_UDF = 1
     SQL_PANDAS_UDF = 2
-    SQL_PANDAS_UDF_STREAM = 3
 
 
 class Serializer(object):
@@ -235,7 +234,7 @@ def _create_batch(series):
 
 class ArrowPandasSerializer(ArrowSerializer):
     """
-    Serializes Pandas.Series as Arrow data.
+    Serializes Pandas.Series as Arrow data with Arrow file format.
     """
 
     def dumps(self, series):
@@ -259,7 +258,7 @@ class ArrowPandasSerializer(ArrowSerializer):
 
 class ArrowStreamPandasSerializer(Serializer):
     """
-    (De)serializes a vectorized(Apache Arrow) stream.
+    Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
     def load_stream(self, stream):

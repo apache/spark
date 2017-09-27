@@ -37,7 +37,7 @@ import org.apache.spark.util.Utils
 /**
  * Similar to `PythonUDFRunner`, but exchange data with Python worker via Arrow stream.
  */
-class ArrowStreamPythonUDFRunner(
+class ArrowPythonRunner(
     funcs: Seq[ChainedPythonFunctions],
     batchSize: Int,
     bufferSize: Int,
