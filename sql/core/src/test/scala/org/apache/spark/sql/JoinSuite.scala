@@ -200,28 +200,12 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
-  test("inner join, propagate empty relation before checking Cartesian products") {
-    val x = testData2.as("x")
-    val y = testData2.where($"a" === 2 && !($"a" === 2)).as("y")
-    checkAnswer(
-      x.join(y).where($"x.a" === $"y.a"),
-      Nil)
-  }
-
-  test("left outer join, propagate empty relation before checking Cartesian products") {
-    val x = testData2.where($"a" === 2 && !($"a" === 2)).as("x")
-    val y = testData2.as("y")
-    checkAnswer(
-      x.join(y, Seq.empty, "left_outer"),
-      Nil)
-  }
-
-  test("right outer join, propagate empty relation before checking Cartesian products") {
-    val x = testData2.as("x")
-    val y = testData2.where($"a" === 2 && !($"a" === 2)).as("y")
-    checkAnswer(
-      x.join(y, Seq.empty, "right_outer"),
-      Nil)
+  test("SPARK-22141: Propagate empty relation before checking Cartesian products") {
+    Seq("inner", "left", "right", "left_outer", "right_outer", "full_outer").foreach { joinType =>
+      val x = testData2.where($"a" === 2 && !($"a" === 2)).as("x")
+      val y = testData2.where($"a" === 1 && !($"a" === 1)).as("y")
+      checkAnswer(x.join(y, Seq.empty, joinType), Nil)
+    }
   }
 
   test("big inner join, 4 matches per row") {
