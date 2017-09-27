@@ -124,8 +124,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       SimplifyCreateMapOps,
       CombineConcats) ++
       extendedOperatorOptimizationRules: _*) ::
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) ::
     Batch("Join Reorder", Once,
       CostBasedJoinReorder) ::
     Batch("Decimal Optimizations", fixedPoint,
@@ -136,6 +134,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
+    Batch("Check Cartesian Products", Once,
+      CheckCartesianProducts) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
