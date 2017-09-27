@@ -265,6 +265,9 @@ private[deploy] class Master(
         val app = createApplication(description, driver)
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
+        if(app.state == ApplicationState.WAITING) {
+          logWarning("App need to wait Launch executor, there is no resources, can not execute")
+        }
         persistenceEngine.addApplication(app)
         driver.send(RegisteredApplication(app.id, self))
         schedule()
