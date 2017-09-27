@@ -59,6 +59,24 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void close() {
+    if (childColumns != null) {
+      for (int i = 0; i < childColumns.length; i++) {
+        childColumns[i].close();
+        childColumns[i] = null;
+      }
+      childColumns = null;
+    }
+    if (dictionaryIds != null) {
+      dictionaryIds.close();
+      dictionaryIds = null;
+    }
+    dictionary = null;
+    resultStruct = null;
+    resultArray = null;
+  }
+
   public void reserve(int requiredCapacity) {
     if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
