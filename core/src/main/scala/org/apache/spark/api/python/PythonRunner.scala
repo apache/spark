@@ -147,7 +147,14 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       this.interrupt()
     }
 
+    /**
+     * Writes a command section to the stream connected to the Python worker.
+     */
     def writeCommand(dataOut: DataOutputStream): Unit
+
+    /**
+     * Writes input data to the stream connected to the Python worker.
+     */
     def writeIteratorToStream(dataOut: DataOutputStream): Unit
 
     override def run(): Unit = Utils.logUncaughtExceptions {
@@ -249,6 +256,11 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       }
     }
 
+    /**
+     * Reads next object from the stream.
+     * When the stream reaches end of data, needs to process the following sections,
+     * and then returns null.
+     */
     protected def read(): OUT
 
     protected def handleTimingData(): Unit = {
