@@ -19,11 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.scalatest.BeforeAndAfter
-
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
@@ -784,7 +784,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       codecs.head
     }
 
-    def checkCompressionCodecForTable(format:String, isPartitioned: Boolean,
+    def checkCompressionCodecForTable(format: String, isPartitioned: Boolean,
       compressionConf: Option[TableCompressionConf])(assertion: String => Boolean): Unit = {
       val table = TableDefine(s"tbl_$format${isPartitioned}",
         isPartitioned, format, compressionConf)
@@ -850,8 +850,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
 
       // For tables with table-level compression property, when
       // 'spark.sql.hive.convertMetastoreParquet' was set to 'true', partitioned parquet tables
-      // will always take the table-level compression configuration first, but non-partitioned tables
-      // will take the session-level compression configuration.
+      // will always take the table-level compression configuration first, but non-partitioned
+      // tables will take the session-level compression configuration.
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
         convertMetastore = true, compressionCodecs, tableCompressionConf) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
@@ -866,8 +866,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           sessionCompressionCodec == realCompressionCodec
       }
 
-      // For tables without table-level compression property, session-level compression configuration
-      // will take effect.
+      // For tables without table-level compression property, session-level compression
+      // configuration will take effect.
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
         convertMetastore = true, compressionCodecs, List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
