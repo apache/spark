@@ -31,7 +31,7 @@ from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, PythonEvalType, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowPandasSerializer
+    BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import toArrowType
 from pyspark import shuffle
 
@@ -123,7 +123,7 @@ def read_udfs(pickleSer, infile, eval_type):
     func = lambda _, it: map(mapper, it)
 
     if eval_type == PythonEvalType.SQL_PANDAS_UDF:
-        ser = ArrowPandasSerializer()
+        ser = ArrowStreamPandasSerializer()
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 
