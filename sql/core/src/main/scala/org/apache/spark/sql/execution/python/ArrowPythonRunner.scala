@@ -57,18 +57,7 @@ class ArrowPythonRunner(
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
       override def writeCommand(dataOut: DataOutputStream): Unit = {
-        dataOut.writeInt(funcs.length)
-        funcs.zip(argOffsets).foreach { case (chained, offsets) =>
-          dataOut.writeInt(offsets.length)
-          offsets.foreach { offset =>
-            dataOut.writeInt(offset)
-          }
-          dataOut.writeInt(chained.funcs.length)
-          chained.funcs.foreach { f =>
-            dataOut.writeInt(f.command.length)
-            dataOut.write(f.command)
-          }
-        }
+        PythonUDFRunner.writeUDF(dataOut, funcs, argOffsets)
       }
 
       override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
