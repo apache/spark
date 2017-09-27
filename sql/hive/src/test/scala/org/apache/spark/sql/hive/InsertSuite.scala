@@ -21,12 +21,16 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
+import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
+import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -35,7 +39,7 @@ case class TestData(key: Int, value: String)
 case class ThreeCloumntable(key: Int, value: String, key1: String)
 
 class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
-    with SQLTestUtils {
+    with ParquetTest {
   import spark.implicits._
 
   override lazy val testData = spark.sparkContext.parallelize(
@@ -730,20 +734,25 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   test("[SPARK-21786] Check 'spark.sql.parquet.compression.codec' " +
-    "and 'spark.sql.parquet.compression.codec' taking effect on hive table writing") {
-    case class CompressionConf(name: String, codeC: String)
+    "and 'spark.sql.orc.compression.codec' taking effect on hive table writing") {
+
+    val hadoopConf = spark.sessionState.newHadoopConf()
+
+    val partitionStr = "p=10000"
+
+    case class TableCompressionConf(name: String, codeC: String)
 
     case class TableDefine(tableName: String, isPartitioned: Boolean, format: String,
-      compressionConf: Option[CompressionConf]) {
+      compressionConf: Option[TableCompressionConf]) {
       def createTable(rootDir: File): Unit = {
         val compression = compressionConf.map(cf => s"'${cf.name}'='${cf.codeC}'")
         sql(
           s"""
           |CREATE TABLE $tableName(a int)
-          |${ if (isPartitioned) "PARTITIONED BY (p int)" else "" }
+          |${if (isPartitioned) "PARTITIONED BY (p int)" else ""}
           |STORED AS $format
           |LOCATION '${rootDir.toURI.toString.stripSuffix("/")}/$tableName'
-          |${ if (compressionConf.nonEmpty) s"TBLPROPERTIES(${compression.get})" else "" }
+          |${if (compressionConf.nonEmpty) s"TBLPROPERTIES(${compression.get})" else ""}
         """.stripMargin)
       }
 
@@ -751,97 +760,159 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         sql(
           s"""
           |INSERT OVERWRITE TABLE $tableName
-          |${ if (isPartitioned) "partition (p=10000)" else "" }
+          |${if (isPartitioned) s"partition ($partitionStr)" else ""}
           |SELECT * from table_source
         """.stripMargin)
       }
+    }
 
-      def getDirFiles(file: File): List[File] = {
-        if (!file.exists()) Nil
-        else if (file.isFile) List(file)
-        else {
-          file.listFiles().filterNot(_.getName.startsWith(".hive-staging"))
-            .groupBy(_.isFile).flatMap {
-            case (isFile, files) if isFile => files.toList
-            case (_, dirs) => dirs.flatMap(getDirFiles)
-          }.toList
-        }
+    def getTableCompressionCodec(path: String, format: String): String = {
+      val codecs = format match {
+        case "parquet" => for {
+          footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConf)
+          block <- footer.getParquetMetadata.getBlocks.asScala
+          column <- block.getColumns.asScala
+        } yield column.getCodec.name()
+        case "orc" => new File(path).listFiles()
+          .filter(file => file.isFile && !file.getName.endsWith(".crc")).map {
+          orcFile =>
+            OrcFileOperator.getFileReader(orcFile.toPath.toString).get.getCompression.toString
+        }.toSeq
       }
 
-      def getTableSize: Long = {
-        var totalSize = 0L
-        withTempDir { tmpDir =>
-          withTable(tableName) {
-            createTable(tmpDir)
-            insertOverwriteTable()
-            val path = s"${tmpDir.getPath.stripSuffix("/")}/$tableName"
-            val dir = new File(path)
-            val files = getDirFiles(dir).filter(_.getName.startsWith("part-"))
-            totalSize = files.map(_.length()).sum
+      assert(codecs.distinct.length == 1)
+      codecs.head
+    }
+
+    def checkCompressionCodecForTable(format:String, isPartitioned: Boolean,
+      compressionConf: Option[TableCompressionConf])(assertion: String => Boolean): Unit = {
+      val table = TableDefine(s"tbl_$format${isPartitioned}",
+        isPartitioned, format, compressionConf)
+      withTempDir { tmpDir =>
+        withTable(table.tableName) {
+          table.createTable(tmpDir)
+          table.insertOverwriteTable()
+          val partition = if (table.isPartitioned) partitionStr else ""
+          val path = s"${tmpDir.getPath.stripSuffix("/")}/${table.tableName}/$partition"
+          assertion(getTableCompressionCodec(path, table.format))
+        }
+      }
+    }
+
+    def getConvertMetastoreConfName(format: String): String = format match {
+      case "parquet" => "spark.sql.hive.convertMetastoreParquet"
+      case "orc" => "spark.sql.hive.convertMetastoreOrc"
+    }
+
+    def getSparkCompressionConfName(format: String): String = format match {
+      case "parquet" => "spark.sql.parquet.compression.codec"
+      case "orc" => "spark.sql.orc.compression.codec"
+    }
+
+    def checkTableCompressionCodecForCodecs(format: String, isPartitioned: Boolean,
+      convertMetastore: Boolean, compressionCodecs: List[String],
+      tableCompressionConf: List[TableCompressionConf])
+      (assertion: (Option[TableCompressionConf], String, String) => Boolean): Unit = {
+      withSQLConf(getConvertMetastoreConfName(format) -> convertMetastore.toString) {
+        tableCompressionConf.foreach { tableCompression =>
+          compressionCodecs.foreach { sessionCompressionCodec =>
+            withSQLConf(getSparkCompressionConfName(format) -> sessionCompressionCodec) {
+              val compression = if (tableCompression == null) None else Some(tableCompression)
+              checkCompressionCodecForTable(format, isPartitioned, compression) {
+                case realCompressionCodec => assertion(compression,
+                  sessionCompressionCodec, realCompressionCodec)
+              }
+            }
           }
         }
-        totalSize
       }
     }
 
-    def checkParquetCompressionCodec(isPartitioned: Boolean, tableCodec: String,
-      sessionCodec: String, f: (Long, Long) => Boolean = _ == _): Unit = {
-      val tableOrg = TableDefine(s"tbl_parquet$tableCodec", isPartitioned, "parquet",
-        Some(CompressionConf("parquet.compression", tableCodec)))
-      val tableOrgSize = tableOrg.getTableSize
-
-      withSQLConf("spark.sql.parquet.compression.codec" -> sessionCodec) {
-        // priority check, when table-level compression conf was set, expecting
-        // table-level compression conf is not affected by the session conf, and table-level
-        // compression conf takes precedence even the two conf of codec is different
-        val tableOrgSessionConfSize = tableOrg.getTableSize
-        assert(tableOrgSize == tableOrgSessionConfSize)
-
-        // check session conf of compression codec taking effect
-        val table = TableDefine(s"tbl_parquet", isPartitioned, "parquet", None)
-        assert(f(tableOrg.getTableSize, table.getTableSize))
+    def checkTableCompressionCodec(format: String, compressionCodecs: List[String],
+      tableCompressionConf: List[TableCompressionConf]): Unit = {
+      // For tables with table-level compression property, when
+      // 'spark.sql.hive.convertMetastoreParquet' was set to 'false', partitioned parquet tables
+      // and non-partitioned parquet tables will always take the table-level compression
+      // configuration first and ignore session compression configuration.
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
+        convertMetastore = false, compressionCodecs, tableCompressionConf) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // table-level take effect
+          tableCompressionCodec.get.codeC == realCompressionCodec
       }
-    }
 
-    def checkOrcCompressionCodec(isPartitioned: Boolean, tableCodec: String,
-      sessionCodec: String, f: (Long, Long) => Boolean = _ == _): Unit = {
-      val tableOrg = TableDefine(s"tbl_orc$tableCodec", isPartitioned, "orc",
-        Some(CompressionConf("orc.compress", tableCodec)))
-      val tableOrgSize = tableOrg.getTableSize
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
+        convertMetastore = false, compressionCodecs, tableCompressionConf) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // table-level take effect
+          tableCompressionCodec.get.codeC == realCompressionCodec
+      }
 
-      withSQLConf("spark.sql.orc.compression.codec" -> sessionCodec) {
-        // priority check, when table-level compression conf was set, expecting
-        // table-level compression conf is not affected by the session conf, and table-level
-        // compression conf takes precedence even the two conf of codec is different
-        val tableOrgSessionConfSize = tableOrg.getTableSize
-        assert(tableOrgSize == tableOrgSessionConfSize)
+      // For tables with table-level compression property, when
+      // 'spark.sql.hive.convertMetastoreParquet' was set to 'true', partitioned parquet tables
+      // will always take the table-level compression configuration first, but non-partitioned tables
+      // will take the session-level compression configuration.
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
+        convertMetastore = true, compressionCodecs, tableCompressionConf) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // table-level take effect
+          tableCompressionCodec.get.codeC == realCompressionCodec
+      }
 
-        // check session conf of compression codec taking effect
-        val table = TableDefine(s"tbl_orc", isPartitioned, "orc", None)
-        assert(f(tableOrg.getTableSize, table.getTableSize))
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
+        convertMetastore = true, compressionCodecs, tableCompressionConf) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // session-level take effect
+          sessionCompressionCodec == realCompressionCodec
+      }
+
+      // For tables without table-level compression property, session-level compression configuration
+      // will take effect.
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
+        convertMetastore = true, compressionCodecs, List(null)) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // session-level take effect
+          sessionCompressionCodec == realCompressionCodec
+      }
+
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
+        convertMetastore = true, compressionCodecs, List(null)) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // session-level take effect
+          sessionCompressionCodec == realCompressionCodec
+      }
+
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
+        convertMetastore = false, compressionCodecs, List(null)) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // session-level take effect
+          sessionCompressionCodec == realCompressionCodec
+      }
+
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
+        convertMetastore = false, compressionCodecs, List(null)) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // session-level take effect
+          sessionCompressionCodec == realCompressionCodec
       }
     }
 
     withTempView("table_source") {
       (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
-
-      checkParquetCompressionCodec(true, "UNCOMPRESSED", "UNCOMPRESSED")
-      checkParquetCompressionCodec(true, "GZIP", "GZIP")
-      checkParquetCompressionCodec(true, "GZIP", "UNCOMPRESSED", _ < _)
-
-      withSQLConf("spark.sql.hive.convertMetastoreParquet" -> "false") {
-        checkParquetCompressionCodec(false, "UNCOMPRESSED", "UNCOMPRESSED")
-        checkParquetCompressionCodec(false, "GZIP", "GZIP")
-        checkParquetCompressionCodec(false, "GZIP", "UNCOMPRESSED", _ < _)
+      val parquetCompressionCodec = List("UNCOMPRESSED", "SNAPPY", "GZIP")
+      val tableCompressionConf = parquetCompressionCodec.map { tableCodec =>
+        TableCompressionConf("parquet.compression", tableCodec)
       }
+      checkTableCompressionCodec("parquet", parquetCompressionCodec, tableCompressionConf)
+    }
 
-      checkOrcCompressionCodec(true, "NONE", "NONE")
-      checkOrcCompressionCodec(true, "ZLIB", "ZLIB")
-      checkOrcCompressionCodec(true, "ZLIB", "NONE", _ < _)
-
-      checkOrcCompressionCodec(false, "NONE", "NONE")
-      checkOrcCompressionCodec(false, "ZLIB", "ZLIB")
-      checkOrcCompressionCodec(false, "ZLIB", "NONE", _ < _)
+    withTempView("table_source") {
+      (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
+      val orcCompressionCodec = List("NONE", "SNAPPY", "ZLIB")
+      val tableCompressionConf = orcCompressionCodec.map { tableCodec =>
+        TableCompressionConf("parquet.compression", tableCodec)
+      }
+      checkTableCompressionCodec("orc", orcCompressionCodec, tableCompressionConf)
     }
   }
 }
