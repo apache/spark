@@ -274,16 +274,4 @@ class OrcSourceSuite extends OrcSuite {
       )).get.toString
     }
   }
-
-  test("SPARK-22146: read ORC files containing special characters") {
-    val dir = Utils.createTempDir().getCanonicalFile
-    import spark.implicits._
-    try {
-      val nameWithSpecialChars = s"$dir/a%3Abad name.orc"
-      spark.createDataset(Seq("a", "b")).write.format("orc").save(nameWithSpecialChars)
-      spark.read.format("orc").load(nameWithSpecialChars)
-    } finally {
-      Utils.deleteRecursively(dir)
-    }
-  }
 }
