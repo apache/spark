@@ -232,36 +232,15 @@ def _create_batch(series):
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 
 
-class ArrowPandasSerializer(ArrowSerializer):
-    """
-    Serializes Pandas.Series as Arrow data with Arrow file format.
-    """
-
-    def dumps(self, series):
-        """
-        Make an ArrowRecordBatch from a Pandas Series and serialize. Input is a single series or
-        a list of series accompanied by an optional pyarrow type to coerce the data to.
-        """
-        batch = _create_batch(series)
-        return super(ArrowPandasSerializer, self).dumps(batch)
-
-    def loads(self, obj):
-        """
-        Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series.
-        """
-        table = super(ArrowPandasSerializer, self).loads(obj)
-        return [c.to_pandas() for c in table.itercolumns()]
-
-    def __repr__(self):
-        return "ArrowPandasSerializer"
-
-
 class ArrowStreamPandasSerializer(Serializer):
     """
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
     def load_stream(self, stream):
+        """
+        Deserialize  ArrowRecordBatchs to an Arrow table and return as a list of pandas.Series.
+        """
         import pyarrow as pa
         reader = pa.open_stream(stream)
         for batch in reader:
@@ -269,6 +248,10 @@ class ArrowStreamPandasSerializer(Serializer):
             yield [c.to_pandas() for c in table.itercolumns()]
 
     def dump_stream(self, iterator, stream):
+        """
+        Make ArrowRecordBatches from Pandas Serieses and serialize. Input is a single series or
+        a list of series accompanied by an optional pyarrow type to coerce the data to.
+        """
         import pyarrow as pa
         writer = None
         try:
