@@ -172,7 +172,7 @@ class ArrowStreamPythonUDFRunner(
             }
           } else {
             stream.readInt() match {
-              case 0 =>
+              case SpecialLengths.START_ARROW_STREAM =>
                 reader = new ArrowStreamReader(stream, allocator)
                 root = reader.getVectorSchemaRoot()
                 schema = ArrowUtils.fromArrowSchema(root.getSchema())

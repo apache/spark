@@ -426,4 +426,5 @@ private[spark] object SpecialLengths {
   val TIMING_DATA = -3
   val END_OF_STREAM = -4
   val NULL = -5
+  val START_ARROW_STREAM = -6
 }

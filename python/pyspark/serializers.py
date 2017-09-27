@@ -79,6 +79,7 @@ class SpecialLengths(object):
     TIMING_DATA = -3
     END_OF_STREAM = -4
     NULL = -5
+    START_ARROW_STREAM = -6
 
 
 class PythonEvalType(object):
@@ -275,7 +276,7 @@ class ArrowStreamPandasSerializer(Serializer):
             for series in iterator:
                 batch = _create_batch(series)
                 if writer is None:
-                    write_int(0, stream)
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
                 writer.write_batch(batch)
         finally:
