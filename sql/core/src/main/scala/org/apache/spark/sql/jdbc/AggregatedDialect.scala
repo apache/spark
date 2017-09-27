@@ -41,4 +41,14 @@ private class AggregatedDialect(dialects: List[JdbcDialect]) extends JdbcDialect
   override def getJDBCType(dt: DataType): Option[JdbcType] = {
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }
+
+  override def isCascadingTruncateTable(): Option[Boolean] = {
+    // If any dialect claims cascading truncate, this dialect is also cascading truncate.
+    // Otherwise, if any dialect has unknown cascading truncate, this dialect is also unknown.
+    dialects.flatMap(_.isCascadingTruncateTable()).reduceOption(_ || _) match {
+      case Some(true) => Some(true)
+      case _ if dialects.exists(_.isCascadingTruncateTable().isEmpty) => None
+      case _ => Some(false)
+    }
+  }
 }

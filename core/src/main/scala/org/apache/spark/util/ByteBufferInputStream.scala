@@ -20,8 +20,6 @@ package org.apache.spark.util
 import java.io.InputStream
 import java.nio.ByteBuffer
 
-import org.apache.spark.storage.StorageUtils
-
 /**
  * Reads data from a ByteBuffer.
  */

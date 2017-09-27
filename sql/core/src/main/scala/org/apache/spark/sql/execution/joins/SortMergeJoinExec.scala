@@ -102,13 +102,22 @@ case class SortMergeJoinExec(
   }
 
   /**
-   * For SMJ, child's output must have been sorted on key or expressions with the same order as
-   * key, so we can get ordering for key from child's output ordering.
+   * The utility method to get output ordering for left or right side of the join.
+   *
+   * Returns the required ordering for left or right child if childOutputOrdering does not
+   * satisfy the required ordering; otherwise, which means the child does not need to be sorted
+   * again, returns the required ordering for this child with extra "sameOrderExpressions" from
+   * the child's outputOrdering.
    */
   private def getKeyOrdering(keys: Seq[Expression], childOutputOrdering: Seq[SortOrder])
     : Seq[SortOrder] = {
-    keys.zip(childOutputOrdering).map { case (key, childOrder) =>
-      SortOrder(key, Ascending, childOrder.sameOrderExpressions + childOrder.child - key)
+    val requiredOrdering = requiredOrders(keys)
+    if (SortOrder.orderingSatisfies(childOutputOrdering, requiredOrdering)) {
+      keys.zip(childOutputOrdering).map { case (key, childOrder) =>
+        SortOrder(key, Ascending, childOrder.sameOrderExpressions + childOrder.child - key)
+      }
+    } else {
+      requiredOrdering
     }
   }
 

@@ -460,7 +460,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("resolveURI") {
     def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
-      assume(before.split(",").length === 1)
+      assert(before.split(",").length === 1)
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
       assert(resolve(before) === after)
       assert(resolve(after) === after)
@@ -488,7 +488,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
-      assume(before.split(",").length > 1)
       def resolve(uri: String): String = Utils.resolveURIs(uri)
       assert(resolve(before) === after)
       assert(resolve(after) === after)
@@ -939,6 +938,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
         val file = File.createTempFile("temp-file-name", ".tmp")
+        file.deleteOnExit()
         val cmd =
           s"""
              |#!/bin/bash

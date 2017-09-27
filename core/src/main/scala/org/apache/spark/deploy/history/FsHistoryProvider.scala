@@ -218,11 +218,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     if (!conf.contains("spark.testing")) {
       // A task that periodically checks for event log updates on disk.
       logDebug(s"Scheduling update thread every $UPDATE_INTERVAL_S seconds")
-      pool.scheduleWithFixedDelay(getRunner(checkForLogs), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
+      pool.scheduleWithFixedDelay(
+        getRunner(() => checkForLogs()), 0, UPDATE_INTERVAL_S, TimeUnit.SECONDS)
 
       if (conf.getBoolean("spark.history.fs.cleaner.enabled", false)) {
         // A task that periodically cleans event logs on disk.
-        pool.scheduleWithFixedDelay(getRunner(cleanLogs), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
+        pool.scheduleWithFixedDelay(
+          getRunner(() => cleanLogs()), 0, CLEAN_INTERVAL_S, TimeUnit.SECONDS)
       }
     } else {
       logDebug("Background update thread disabled for testing")
@@ -249,7 +251,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
             val appSecManager = new SecurityManager(conf)
             SparkUI.createHistoryUI(conf, replayBus, appSecManager, appInfo.name,
               HistoryServer.getAttemptURI(appId, attempt.attemptId),
-              attempt.startTime)
+              Some(attempt.lastUpdated), attempt.startTime)
             // Do not call ui.bind() to avoid creating a new server for each application
           }
 
@@ -268,7 +270,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
               appListener.adminAclsGroups.getOrElse("")
             ui.getSecurityManager.setAdminAclsGroups(adminAclsGroups)
             ui.getSecurityManager.setViewAclsGroups(appListener.viewAclsGroups.getOrElse(""))
-            Some(LoadedAppUI(ui, updateProbe(appId, attemptId, attempt.fileSize)))
+            Some(LoadedAppUI(ui, () => updateProbe(appId, attemptId, attempt.fileSize)))
           } else {
             None
           }

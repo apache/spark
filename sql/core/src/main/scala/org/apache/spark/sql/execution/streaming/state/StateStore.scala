@@ -30,6 +30,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -119,6 +120,15 @@ case class StateStoreMetrics(
     numKeys: Long,
     memoryUsedBytes: Long,
     customMetrics: Map[StateStoreCustomMetric, Long])
+
+object StateStoreMetrics {
+  def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
+    StateStoreMetrics(
+      allMetrics.map(_.numKeys).sum,
+      allMetrics.map(_.memoryUsedBytes).sum,
+      allMetrics.flatMap(_.customMetrics).toMap)
+  }
+}
 
 /**
  * Name and description of custom implementation-specific metrics that a
@@ -226,6 +236,17 @@ object StateStoreProvider {
  * instance is not reused across query restarts.
  */
 case class StateStoreProviderId(storeId: StateStoreId, queryRunId: UUID)
+
+object StateStoreProviderId {
+  private[sql] def apply(
+      stateInfo: StatefulOperatorStateInfo,
+      partitionIndex: Int,
+      storeName: String): StateStoreProviderId = {
+    val storeId = StateStoreId(
+      stateInfo.checkpointLocation, stateInfo.operatorId, partitionIndex, storeName)
+    StateStoreProviderId(storeId, stateInfo.queryRunId)
+  }
+}
 
 /**
  * Unique identifier for a bunch of keyed state data.
