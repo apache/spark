@@ -346,7 +346,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
 
       for {
         stageId <- 0 to 1
-        attemptId <- 0 to 1
+        attemptId <- 1 to 0
       } {
         val exp = if (attemptId == 0 && stageId == 1) StageStatus.FAILED else StageStatus.COMPLETE
         val stageJson = getJson(sc.ui.get, s"stages/$stageId/$attemptId")

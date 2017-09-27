@@ -66,12 +66,12 @@ function StageEndPoint(appId) {
     ind = words.indexOf("history");
     if (ind > 0) {
         var appId = words[ind + 1];
-        var attemptId = words[ind + 4].split("&attempt=").pop();
-        var stageIdLen = words[ind + 4].indexOf('&');
-        var stageId = words[ind + 4].substr(4, stageIdLen - 4);
+        var attemptId = words[ind + 5].split("&attempt=").pop();
+        var stageIdLen = words[ind + 5].indexOf('&');
+        var stageId = words[ind + 5].substr(4, stageIdLen - 4);
         var newBaseURI = words.slice(0, ind).join('/');
         if (isNaN(attemptId) || attemptId == "0") {
-            return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
+            return newBaseURI + "/api/v1/applications/" + appId + "/" + "1" + "/stages/" + stageId;
         } else {
             return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/stages/" + stageId;
         }
@@ -110,12 +110,14 @@ $(document).ready(function () {
         " Show Additional Metrics" +
         "</a></div>" +
         "<div class='container-fluid' id='toggle-metrics' hidden>" +
-        "<div><input type='checkbox' class='toggle-vis' data-column='0'> Select All</div>" +
-        "<div><input type='checkbox' class='toggle-vis' data-column='10'> Scheduler Delay</div>" +
-        "<div><input type='checkbox' class='toggle-vis' data-column='11'> Task Deserialization Time</div>" +
-        "<div><input type='checkbox' class='toggle-vis' data-column='12'> Result Serialization Time</div>" +
-        "<div><input type='checkbox' class='toggle-vis' data-column='13'> Getting Result Time</div>" +
-        "<div><input type='checkbox' class='toggle-vis' data-column='14'> Peak Execution Memory</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-0' data-column='0'> Select All</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-10' data-column='10'> Scheduler Delay</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-11' data-column='11'> Task Deserialization Time</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-12' data-column='12'> Shuffle Read Blocked Time</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-13' data-column='13'> Shuffle Remote Reads</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-14' data-column='14'> Result Serialization Time</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-15' data-column='15'> Getting Result Time</div>" +
+        "<div><input type='checkbox' class='toggle-vis' id='box-16' data-column='16'> Peak Execution Memory</div>" +
         "</div>");
 
     tasksSummary = $("#active-tasks");
@@ -374,6 +376,16 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
+                                return type === 'display' ? formatDuration(row.taskMetrics.shuffleReadMetrics.fetchWaitTime) : row.taskMetrics.shuffleReadMetrics.fetchWaitTime;
+                            }
+                        },
+                        {
+                            data : function (row, type) {
+                                return type === 'display' ? formatBytes(row.taskMetrics.shuffleReadMetrics.remoteBytesRead, type) : row.taskMetrics.shuffleReadMetrics.remoteBytesRead;
+                            }
+                        },
+                        {
+                            data : function (row, type) {
                                 return type === 'display' ? formatDuration(row.taskMetrics.resultSerializationTime) : row.taskMetrics.resultSerializationTime;
                             }
                         },
@@ -384,7 +396,7 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                return type === 'display' ? formatDuration(row.taskMetrics.peakExecutionMemory) : row.taskMetrics.peakExecutionMemory;
+                                return type === 'display' ? formatBytes(row.taskMetrics.peakExecutionMemory, type) : row.taskMetrics.peakExecutionMemory;
                             }
                         },
                         {
@@ -406,18 +418,33 @@ $(document).ready(function () {
                         { "visible": false, "targets": 11 },
                         { "visible": false, "targets": 12 },
                         { "visible": false, "targets": 13 },
-                        { "visible": false, "targets": 14 }
+                        { "visible": false, "targets": 14 },
+                        { "visible": false, "targets": 15 },
+                        { "visible": false, "targets": 16 }
                     ],
                     "order": [[0, "asc"]]
                 };
                 var taskTableSelector = $(taskTable).DataTable(task_conf);
+
+                var optionalColumns = [10, 11, 12, 13, 14, 15, 16];
+                var allChecked = true;
+                for(k = 0; k < optionalColumns.length; k++) {
+                    if (taskTableSelector.column(optionalColumns[k]).visible()) {
+                        document.getElementById("box-"+optionalColumns[k]).checked = true;
+                    } else {
+                        allChecked = false;
+                    }
+                }
+                if (allChecked) {
+                    document.getElementById("box-0").checked = true;
+                }
 
                 // hide or show columns dynamically event
                 $('input.toggle-vis').on('click', function(e){
                     // Get the column
                     var para = $(this).attr('data-column');
                     if(para == "0"){
-                        var column = taskTableSelector.column([10, 11, 12, 13, 14]);
+                        var column = taskTableSelector.column([10, 11, 12, 13, 14, 15, 16]);
                         if($(this).is(":checked")){
                             $(".toggle-vis").prop('checked', true);
                             column.visible(true);
