@@ -98,8 +98,11 @@ private[spark] abstract class PeriodicCheckpointer[T](
       checkpointQueue.enqueue(newData)
       // Remove checkpoints before the latest one.
       var canDelete = true
-      while (checkpointQueue.size > 1 && canDelete) {
-        // Delete the oldest checkpoint only if the next checkpoint exists.
+      // Do not remove previous checkpoint and its data until materializing newData.
+      // Early removal may lead to FileNotFoundExceptions in case of newData
+      // depends on materialized checkpointQueue.head
+      while (checkpointQueue.size > 2 && canDelete) {
+        // Delete the oldest checkpoint only if the next checkpoint exists and materialized.
         if (isCheckpointed(checkpointQueue.head)) {
           removeCheckpointFile()
         } else {
