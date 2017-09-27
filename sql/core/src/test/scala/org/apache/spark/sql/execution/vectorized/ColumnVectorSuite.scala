@@ -37,7 +37,6 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       dt: DataType)(
       block: WritableColumnVector => Unit): Unit = {
     test(name) {
-      val c1 = new OnHeapColumnVector(size, dt)
       withVector(new OnHeapColumnVector(size, dt))(block)
       withVector(new OffHeapColumnVector(size, dt))(block)
     }

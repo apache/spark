@@ -62,7 +62,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  testVector("Null Apis", 1024, IntegerType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Null APIs", 1024, IntegerType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val reference = mutable.ArrayBuffer.empty[Boolean]
       var idx = 0
@@ -129,7 +129,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Byte Apis", 1024, ByteType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Byte APIs", 1024, ByteType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val reference = mutable.ArrayBuffer.empty[Byte]
 
@@ -182,7 +182,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Short Apis", 1024, ShortType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Short APIs", 1024, ShortType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -257,7 +257,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Int Apis", 1024, IntegerType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Int APIs", 1024, IntegerType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -338,7 +338,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Long Apis", 1024, LongType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Long APIs", 1024, LongType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -422,7 +422,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Float Apis", 1024, FloatType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Float APIs", 1024, FloatType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -509,7 +509,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Double Apis", 1024, DoubleType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Double APIs", 1024, DoubleType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -596,7 +596,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("String Apis", 6, StringType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("String APIs", 6, StringType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
     (column, memMode) =>
       val reference = mutable.ArrayBuffer.empty[String]
 
@@ -708,8 +708,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   }
 
   test("toArray for primitive types") {
-    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode => {
-    // (MemoryMode.ON_HEAP :: Nil).foreach { memMode => {
+    (MemoryMode.ON_HEAP :: MemoryMode.OFF_HEAP :: Nil).foreach { memMode =>
       val len = 4
 
       val columnBool = allocate(len, new ArrayType(BooleanType, false), memMode)
@@ -760,7 +759,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       columnDouble.putArray(0, 0, len)
       assert(columnDouble.getArray(0).toDoubleArray === doubleArray)
       columnDouble.close()
-    }}
+    }
   }
 
   testVector(
@@ -830,7 +829,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   testVector(
     "Nest Struct in Array",
     10,
-    new ArrayType(new StructType().add("int", IntegerType).add("long", LongType), true),
+    new ArrayType(structType, true),
     MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) { (column, _) =>
       val data = column.arrayData()
       val c0 = data.getChildColumn(0)
