@@ -664,9 +664,10 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext with B
       |Aborting $taskSet because task $idx (partition $idx)
       |cannot run anywhere due to node and executor blacklist.
       |Most recent failure:
-      |${tsm.taskSetBlacklistHelperOpt.get.getLatestFailureReason}\n
-      |Blacklisting behavior can be configured via spark.blacklist.*.\n""".stripMargin)
-
+      |${tsm.taskSetBlacklistHelperOpt.get.getLatestFailureReason}
+      |
+      |Blacklisting behavior can be configured via spark.blacklist.*.
+      |""".stripMargin)
   }
 
   test("don't abort if there is an executor available, though it hasn't had scheduled tasks yet") {

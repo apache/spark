@@ -674,8 +674,10 @@ private[spark] class TaskSetManager(
               |Aborting $taskSet because task $indexInTaskSet (partition $partition)
               |cannot run anywhere due to node and executor blacklist.
               |Most recent failure:
-              |${taskSetBlacklist.getLatestFailureReason}\n
-              |Blacklisting behavior can be configured via spark.blacklist.*.\n""".stripMargin)
+              |${taskSetBlacklist.getLatestFailureReason}
+              |
+              |Blacklisting behavior can be configured via spark.blacklist.*.
+              |""".stripMargin)
           }
         }
       }
