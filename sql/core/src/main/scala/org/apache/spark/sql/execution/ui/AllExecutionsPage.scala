@@ -74,7 +74,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
           }
           {
             if (listener.getCompletedExecutions.nonEmpty) {
-              <li id="completed-summary">
+              <li>
                 <a href="#completed-execution-table"><strong>Completed Queries:</strong></a>
                 {listener.getCompletedExecutions.size}
               </li>
