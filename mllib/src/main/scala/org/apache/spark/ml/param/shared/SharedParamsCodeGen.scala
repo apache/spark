@@ -83,7 +83,8 @@ private[shared] object SharedParamsCodeGen {
       ParamDesc[String]("solver", "the solver algorithm for optimization", finalFields = false),
       ParamDesc[Int]("aggregationDepth", "suggested depth for treeAggregate (>= 2)", Some("2"),
         isValid = "ParamValidators.gtEq(2)", isExpertParam = true),
-      ParamDesc[Boolean]("collectSubModels", "whether to collect sub models when tuning fitting",
+      ParamDesc[Boolean]("collectSubModels", "whether to collect a list of sub-models trained " +
+        "during tuning",
         Some("false"), isExpertParam = true)
     )
 

@@ -204,21 +204,21 @@ class TrainValidationSplitSuite
 
     val tvsModel = tvs.fit(dataset)
 
-    assert(tvsModel.subModels != null && tvsModel.subModels.length == lrParamMaps.length)
+    assert(tvsModel.subModels.isDefined && tvsModel.subModels.get.length == lrParamMaps.length)
 
     val savingPathWithoutSubModels = new File(subPath, "tvsModel2").getPath
     tvsModel.save(savingPathWithoutSubModels)
     val tvsModel2 = TrainValidationSplitModel.load(savingPathWithoutSubModels)
-    assert(tvsModel2.subModels === null)
+    assert(tvsModel2.subModels.isEmpty)
 
     val savingPathWithSubModels = new File(subPath, "tvsModel3").getPath
     tvsModel.save(savingPathWithSubModels, persistSubModels = true)
     val tvsModel3 = TrainValidationSplitModel.load(savingPathWithSubModels)
-    assert(tvsModel3.subModels != null && tvsModel3.subModels.length == lrParamMaps.length)
+    assert(tvsModel3.subModels.isDefined && tvsModel3.subModels.get.length == lrParamMaps.length)
 
     for (i <- 0 until lrParamMaps.length) {
-      assert(tvsModel.subModels(i).asInstanceOf[LogisticRegressionModel].uid ===
-        tvsModel3.subModels(i).asInstanceOf[LogisticRegressionModel].uid)
+      assert(tvsModel.subModels.get(i).asInstanceOf[LogisticRegressionModel].uid ===
+        tvsModel3.subModels.get(i).asInstanceOf[LogisticRegressionModel].uid)
     }
   }
 

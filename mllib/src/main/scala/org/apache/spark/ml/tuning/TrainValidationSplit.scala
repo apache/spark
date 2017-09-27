@@ -128,9 +128,9 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Array[Model[_]] = if (collectSubModelsParam) {
-      Array.fill[Model[_]](epm.length)(null)
-    } else null
+    var subModels: Option[Array[Model[_]]] = if (collectSubModelsParam) {
+      Some(Array.fill[Model[_]](epm.length)(null))
+    } else None
 
     // Fit models in a Future for training in parallel
     logDebug(s"Train split with multiple sets of parameters.")
@@ -139,7 +139,7 @@ class TrainValidationSplit @Since("1.5.0") (@Since("1.5.0") override val uid: St
         val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
 
         if (collectSubModelsParam) {
-          subModels(paramIndex) = model
+          subModels.get(paramIndex) = model
         }
         model
       } (executionContext)
@@ -246,7 +246,7 @@ class TrainValidationSplitModel private[ml] (
     @Since("1.5.0") override val uid: String,
     @Since("1.5.0") val bestModel: Model[_],
     @Since("1.5.0") val validationMetrics: Array[Double],
-    @Since("2.3.0") val subModels: Array[Model[_]])
+    @Since("2.3.0") val subModels: Option[Array[Model[_]]])
   extends Model[TrainValidationSplitModel] with TrainValidationSplitParams with MLWritable {
 
   /** A Python-friendly auxiliary constructor. */
@@ -293,16 +293,15 @@ class TrainValidationSplitModel private[ml] (
 @Since("2.0.0")
 object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
 
-  private[TrainValidationSplitModel] def copySubModels(subModels: Array[Model[_]]) = {
-    var copiedSubModels: Array[Model[_]] = null
-    if (subModels != null) {
+  private[TrainValidationSplitModel] def copySubModels(subModels: Option[Array[Model[_]]]) = {
+    subModels.map { subModels =>
       val numParamMaps = subModels.length
-      copiedSubModels = Array.fill[Model[_]](numParamMaps)(null)
+      val copiedSubModels = Array.fill[Model[_]](numParamMaps)(null)
       for (i <- 0 until numParamMaps) {
           copiedSubModels(i) = subModels(i).copy(ParamMap.empty).asInstanceOf[Model[_]]
       }
+      copiedSubModels
     }
-    copiedSubModels
   }
 
   @Since("2.0.0")
@@ -335,11 +334,11 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (shouldPersistSubModels) {
-        require(instance.subModels != null, "Cannot get sub models to persist.")
+        require(instance.subModels.isDefined, "Cannot get sub models to persist.")
         val subModelsPath = new Path(path, "subModels")
         for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
           val modelPath = new Path(subModelsPath, paramIndex.toString).toString
-          instance.subModels(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+          instance.subModels.get(paramIndex).asInstanceOf[MLWritable].save(modelPath)
         }
       }
     }
@@ -360,7 +359,7 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
       val validationMetrics = (metadata.metadata \ "validationMetrics").extract[Seq[Double]].toArray
       val shouldPersistSubModels = (metadata.metadata \ "shouldPersistSubModels").extract[Boolean]
 
-      val subModels: Array[Model[_]] = if (shouldPersistSubModels) {
+      val subModels: Option[Array[Model[_]]] = if (shouldPersistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.fill[Model[_]](estimatorParamMaps.length)(null)
         for (paramIndex <- 0 until estimatorParamMaps.length) {
@@ -368,8 +367,8 @@ object TrainValidationSplitModel extends MLReadable[TrainValidationSplitModel] {
           _subModels(paramIndex) =
             DefaultParamsReader.loadParamsInstance(modelPath, sc)
         }
-        _subModels
-      } else null
+        Some(_subModels)
+      } else None
 
       val model = new TrainValidationSplitModel(metadata.uid, bestModel, validationMetrics,
         subModels)

@@ -409,10 +409,10 @@ private[ml] trait HasAggregationDepth extends Params {
 private[ml] trait HasCollectSubModels extends Params {
 
   /**
-   * Param for whether to collect sub models when tuning fitting.
+   * Param for whether to collect a list of sub-models trained during tuning.
    * @group expertParam
    */
-  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect sub models when tuning fitting")
+  final val collectSubModels: BooleanParam = new BooleanParam(this, "collectSubModels", "whether to collect a list of sub-models trained during tuning")
 
   setDefault(collectSubModels, false)
 

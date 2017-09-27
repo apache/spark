@@ -125,9 +125,9 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
 
     val collectSubModelsParam = $(collectSubModels)
 
-    var subModels: Array[Array[Model[_]]] = if (collectSubModelsParam) {
-      Array.fill($(numFolds))(Array.fill[Model[_]](epm.length)(null))
-    } else null
+    var subModels: Option[Array[Array[Model[_]]]] = if (collectSubModelsParam) {
+      Some(Array.fill($(numFolds))(Array.fill[Model[_]](epm.length)(null)))
+    } else None
 
     // Compute metrics for each model over each split
     val splits = MLUtils.kFold(dataset.toDF.rdd, $(numFolds), $(seed))
@@ -142,7 +142,7 @@ class CrossValidator @Since("1.2.0") (@Since("1.4.0") override val uid: String)
           val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
 
           if (collectSubModelsParam) {
-            subModels(splitIndex)(paramIndex) = model
+            subModels.get(splitIndex)(paramIndex) = model
           }
           model
         } (executionContext)
@@ -253,7 +253,7 @@ class CrossValidatorModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("1.2.0") val bestModel: Model[_],
     @Since("1.5.0") val avgMetrics: Array[Double],
-    @Since("2.3.0") val subModels: Array[Array[Model[_]]])
+    @Since("2.3.0") val subModels: Option[Array[Array[Model[_]]]])
   extends Model[CrossValidatorModel] with CrossValidatorParams with MLWritable {
 
   /** A Python-friendly auxiliary constructor. */
@@ -300,19 +300,18 @@ class CrossValidatorModel private[ml] (
 @Since("1.6.0")
 object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
 
-  private[CrossValidatorModel] def copySubModels(subModels: Array[Array[Model[_]]]) = {
-    var copiedSubModels: Array[Array[Model[_]]] = null
-    if (subModels != null) {
+  private[CrossValidatorModel] def copySubModels(subModels: Option[Array[Array[Model[_]]]]) = {
+    subModels.map { subModels =>
       val numFolds = subModels.length
       val numParamMaps = subModels(0).length
-      copiedSubModels = Array.fill(numFolds)(Array.fill[Model[_]](numParamMaps)(null))
+      val copiedSubModels = Array.fill(numFolds)(Array.fill[Model[_]](numParamMaps)(null))
       for (i <- 0 until numFolds) {
         for (j <- 0 until numParamMaps) {
           copiedSubModels(i)(j) = subModels(i)(j).copy(ParamMap.empty).asInstanceOf[Model[_]]
         }
       }
+      copiedSubModels
     }
-    copiedSubModels
   }
 
   @Since("1.6.0")
@@ -345,13 +344,13 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val bestModelPath = new Path(path, "bestModel").toString
       instance.bestModel.asInstanceOf[MLWritable].save(bestModelPath)
       if (shouldPersistSubModels) {
-        require(instance.subModels != null, "Cannot get sub models to persist.")
+        require(instance.subModels.isDefined, "Cannot get sub models to persist.")
         val subModelsPath = new Path(path, "subModels")
         for (splitIndex <- 0 until instance.getNumFolds) {
           val splitPath = new Path(subModelsPath, splitIndex.toString)
           for (paramIndex <- 0 until instance.getEstimatorParamMaps.length) {
             val modelPath = new Path(splitPath, paramIndex.toString).toString
-            instance.subModels(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
+            instance.subModels.get(splitIndex)(paramIndex).asInstanceOf[MLWritable].save(modelPath)
           }
         }
       }
@@ -374,7 +373,7 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
       val shouldPersistSubModels = (metadata.metadata \ "shouldPersistSubModels").extract[Boolean]
 
-      val subModels: Array[Array[Model[_]]] = if (shouldPersistSubModels) {
+      val subModels: Option[Array[Array[Model[_]]]] = if (shouldPersistSubModels) {
         val subModelsPath = new Path(path, "subModels")
         val _subModels = Array.fill(numFolds)(Array.fill[Model[_]](
           estimatorParamMaps.length)(null))
@@ -386,8 +385,8 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
               DefaultParamsReader.loadParamsInstance(modelPath, sc)
           }
         }
-        _subModels
-      } else null
+        Some(_subModels)
+      } else None
 
       val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics, subModels)
       model.set(model.estimator, estimator)
