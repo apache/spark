@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.python
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.TaskContext
-import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType, PythonRunner}
+import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.arrow.{ArrowConverters, ArrowPayload}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -39,25 +40,36 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       iter: Iterator[InternalRow],
       schema: StructType,
       context: TaskContext): Iterator[InternalRow] = {
-    val inputIterator = ArrowConverters.toPayloadIterator(
-      iter, schema, conf.arrowMaxRecordsPerBatch, context).map(_.asPythonSerializable)
 
-    // Output iterator for results from Python.
-    val outputIterator = new PythonRunner(
-        funcs, bufferSize, reuseWorker, PythonEvalType.SQL_PANDAS_UDF, argOffsets)
-      .compute(inputIterator, context.partitionId(), context)
+    val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
+      .map { case (attr, i) => attr.withName(s"_$i") })
 
-    val outputRowIterator = ArrowConverters.fromPayloadIterator(
-      outputIterator.map(new ArrowPayload(_)), context)
+    val columnarBatchIter = new ArrowPythonRunner(
+        funcs, conf.arrowMaxRecordsPerBatch, bufferSize, reuseWorker,
+        PythonEvalType.SQL_PANDAS_UDF, argOffsets, schema)
+      .compute(iter, context.partitionId(), context)
 
-    // Verify that the output schema is correct
-    if (outputRowIterator.hasNext) {
-      val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
-        .map { case (attr, i) => attr.withName(s"_$i") })
-      assert(schemaOut.equals(outputRowIterator.schema),
-        s"Invalid schema from pandas_udf: expected $schemaOut, got ${outputRowIterator.schema}")
+    new Iterator[InternalRow] {
+
+      var currentIter = if (columnarBatchIter.hasNext) {
+        val batch = columnarBatchIter.next()
+        assert(schemaOut.equals(batch.schema),
+          s"Invalid schema from pandas_udf: expected $schemaOut, got ${batch.schema}")
+        batch.rowIterator.asScala
+      } else {
+        Iterator.empty
+      }
+
+      override def hasNext: Boolean = currentIter.hasNext || {
+        if (columnarBatchIter.hasNext) {
+          currentIter = columnarBatchIter.next().rowIterator.asScala
+          hasNext
+        } else {
+          false
+        }
+      }
+
+      override def next(): InternalRow = currentIter.next()
     }
-
-    outputRowIterator
   }
 }
