@@ -49,11 +49,10 @@ class ColumnarBatchSuite extends SparkFunSuite {
   private def testVector(
       name: String,
       size: Int,
-      dt: DataType,
-      modes: MemoryMode*)(
+      dt: DataType)(
       block: (WritableColumnVector, MemoryMode) => Unit): Unit = {
     test(name) {
-      modes.foreach { mode =>
+      Seq(MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP).foreach { mode =>
         val vector = allocate(size, dt, mode)
         try block(vector, mode) finally {
           vector.close()
@@ -62,7 +61,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     }
   }
 
-  testVector("Null APIs", 1024, IntegerType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Null APIs", 1024, IntegerType) {
     (column, memMode) =>
       val reference = mutable.ArrayBuffer.empty[Boolean]
       var idx = 0
@@ -129,7 +128,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Byte APIs", 1024, ByteType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Byte APIs", 1024, ByteType) {
     (column, memMode) =>
       val reference = mutable.ArrayBuffer.empty[Byte]
 
@@ -182,7 +181,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Short APIs", 1024, ShortType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Short APIs", 1024, ShortType) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -257,7 +256,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Int APIs", 1024, IntegerType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Int APIs", 1024, IntegerType) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -338,7 +337,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Long APIs", 1024, LongType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Long APIs", 1024, LongType) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -422,7 +421,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Float APIs", 1024, FloatType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Float APIs", 1024, FloatType) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -509,7 +508,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("Double APIs", 1024, DoubleType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Double APIs", 1024, DoubleType) {
     (column, memMode) =>
       val seed = System.currentTimeMillis()
       val random = new Random(seed)
@@ -596,7 +595,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
   }
 
-  testVector("String APIs", 6, StringType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("String APIs", 6, StringType) {
     (column, memMode) =>
       val reference = mutable.ArrayBuffer.empty[String]
 
@@ -653,8 +652,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(column.arrayData().elementsAppended == 0)
   }
 
-  private val arrayType = new ArrayType(IntegerType, true)
-  testVector("Int Array", 10, arrayType, MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) {
+  testVector("Int Array", 10, new ArrayType(IntegerType, true)) {
     (column, _) =>
 
       // Fill the underlying data with all the arrays back to back.
@@ -765,9 +763,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   testVector(
     "Struct Column",
     10,
-    new StructType().add("int", IntegerType).add("double", DoubleType),
-    MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) { (column, _) =>
-
+    new StructType().add("int", IntegerType).add("double", DoubleType)) { (column, _) =>
       val c1 = column.getChildColumn(0)
       val c2 = column.getChildColumn(1)
       assert(c1.dataType() == IntegerType)
@@ -792,11 +788,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(s2.getDouble(1) == 5.67)
   }
 
-  testVector(
-    "Nest Array in Array",
-    10,
-    new ArrayType(new ArrayType(IntegerType, true), true),
-    MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) { (column, _) =>
+  testVector("Nest Array in Array", 10, new ArrayType(new ArrayType(IntegerType, true), true)) {
+    (column, _) =>
       val childColumn = column.arrayData()
       val data = column.arrayData().arrayData()
       (0 until 6).foreach {
@@ -829,8 +822,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   testVector(
     "Nest Struct in Array",
     10,
-    new ArrayType(structType, true),
-    MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) { (column, _) =>
+    new ArrayType(structType, true)) { (column, _) =>
       val data = column.arrayData()
       val c0 = data.getChildColumn(0)
       val c1 = data.getChildColumn(1)
@@ -859,8 +851,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
     10,
     new StructType()
       .add("int", IntegerType)
-      .add("array", new ArrayType(IntegerType, true)),
-    MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) { (column, _) =>
+      .add("array", new ArrayType(IntegerType, true))) { (column, _) =>
       val c0 = column.getChildColumn(0)
       val c1 = column.getChildColumn(1)
       c0.putInt(0, 0)
@@ -889,10 +880,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
   testVector(
     "Nest Struct in Struct",
     10,
-    new StructType()
-      .add("int", IntegerType)
-      .add("struct", subSchema),
-    MemoryMode.ON_HEAP, MemoryMode.OFF_HEAP) { (column, _) =>
+    new StructType().add("int", IntegerType).add("struct", subSchema)) { (column, _) =>
       val c0 = column.getChildColumn(0)
       val c1 = column.getChildColumn(1)
       c0.putInt(0, 0)
