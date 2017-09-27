@@ -44,11 +44,11 @@ class PythonUDFRunner(
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
-      override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDF(dataOut, funcs, argOffsets)
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
-      override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
       }
@@ -93,7 +93,7 @@ class PythonUDFRunner(
 
 object PythonUDFRunner {
 
-  def writeUDF(
+  def writeUDFs(
       dataOut: DataOutputStream,
       funcs: Seq[ChainedPythonFunctions],
       argOffsets: Array[Array[Int]]): Unit = {

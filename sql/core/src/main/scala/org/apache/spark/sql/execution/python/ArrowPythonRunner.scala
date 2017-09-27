@@ -56,11 +56,11 @@ class ArrowPythonRunner(
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
-      override def writeCommand(dataOut: DataOutputStream): Unit = {
-        PythonUDFRunner.writeUDF(dataOut, funcs, argOffsets)
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
+        PythonUDFRunner.writeUDFs(dataOut, funcs, argOffsets)
       }
 
-      override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         val arrowSchema = ArrowUtils.toArrowSchema(schema)
         val allocator = ArrowUtils.rootAllocator.newChildAllocator(
           s"stdout writer for $pythonExec", 0, Long.MaxValue)
@@ -123,8 +123,8 @@ class ArrowPythonRunner(
       private var closed = false
 
       context.addTaskCompletionListener { _ =>
-        // todo: we need something like `read.end()`, which release all the resources, but leave
-        // the input stream open. `reader.close` will close the socket and we can't reuse worker.
+        // todo: we need something like `reader.end()`, which release all the resources, but leave
+        // the input stream open. `reader.close()` will close the socket and we can't reuse worker.
         // So here we simply not close the reader, which is problematic.
         if (!closed) {
           if (root != null) {
@@ -132,15 +132,6 @@ class ArrowPythonRunner(
           }
           allocator.close()
         }
-      }
-
-      override def hasNext: Boolean = super.hasNext || {
-        if (root != null) {
-          root.close()
-        }
-        allocator.close()
-        closed = true
-        false
       }
 
       private var batchLoaded = true
@@ -157,6 +148,9 @@ class ArrowPythonRunner(
               batch.setNumRows(root.getRowCount)
               batch
             } else {
+              root.close()
+              allocator.close()
+              closed = true
               // Reach end of stream. Call `read()` again to read control data.
               read()
             }

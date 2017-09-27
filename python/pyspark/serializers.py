@@ -237,16 +237,6 @@ class ArrowStreamPandasSerializer(Serializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
-    def load_stream(self, stream):
-        """
-        Deserialize  ArrowRecordBatchs to an Arrow table and return as a list of pandas.Series.
-        """
-        import pyarrow as pa
-        reader = pa.open_stream(stream)
-        for batch in reader:
-            table = pa.Table.from_batches([batch])
-            yield [c.to_pandas() for c in table.itercolumns()]
-
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Serieses and serialize. Input is a single series or
@@ -264,6 +254,16 @@ class ArrowStreamPandasSerializer(Serializer):
         finally:
             if writer is not None:
                 writer.close()
+
+    def load_stream(self, stream):
+        """
+        Deserialize ArrowRecordBatchs to an Arrow table and return as a list of pandas.Series.
+        """
+        import pyarrow as pa
+        reader = pa.open_stream(stream)
+        for batch in reader:
+            table = pa.Table.from_batches([batch])
+            yield [c.to_pandas() for c in table.itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"

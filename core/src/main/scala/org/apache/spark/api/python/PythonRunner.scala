@@ -80,7 +80,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = newWriterThread(env, worker, inputIterator, partitionIndex, context)
 
-    context.addTaskCompletionListener { context =>
+    context.addTaskCompletionListener { _ =>
       writerThread.shutdownOnTaskCompletion()
       if (!reuseWorker || !released.get) {
         try {
@@ -150,12 +150,12 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     /**
      * Writes a command section to the stream connected to the Python worker.
      */
-    def writeCommand(dataOut: DataOutputStream): Unit
+    protected def writeCommand(dataOut: DataOutputStream): Unit
 
     /**
      * Writes input data to the stream connected to the Python worker.
      */
-    def writeIteratorToStream(dataOut: DataOutputStream): Unit
+    protected def writeIteratorToStream(dataOut: DataOutputStream): Unit
 
     override def run(): Unit = Utils.logUncaughtExceptions {
       try {
@@ -382,13 +382,13 @@ private[spark] class PythonRunner(
       context: TaskContext): WriterThread = {
     new WriterThread(env, worker, inputIterator, partitionIndex, context) {
 
-      override def writeCommand(dataOut: DataOutputStream): Unit = {
+      protected override def writeCommand(dataOut: DataOutputStream): Unit = {
         val command = funcs.head.funcs.head.command
         dataOut.writeInt(command.length)
         dataOut.write(command)
       }
 
-      override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
+      protected override def writeIteratorToStream(dataOut: DataOutputStream): Unit = {
         PythonRDD.writeIteratorToStream(inputIterator, dataOut)
         dataOut.writeInt(SpecialLengths.END_OF_DATA_SECTION)
       }
