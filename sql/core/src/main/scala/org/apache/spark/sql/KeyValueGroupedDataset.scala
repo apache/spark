@@ -18,16 +18,17 @@
 package org.apache.spark.sql
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
@@ -52,6 +53,14 @@ class KeyValueGroupedDataset[K, V] private[sql](
 
   private def logicalPlan = queryExecution.analyzed
   private def sparkSession = queryExecution.sparkSession
+
+  /**
+   * Returns the schema of this Dataset.
+   *
+   * @group basic
+   * @since 2.3.0
+   */
+  def schema: StructType = queryExecution.analyzed.schema
 
   /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
@@ -563,5 +572,31 @@ class KeyValueGroupedDataset[K, V] private[sql](
       f: CoGroupFunction[K, V, U, R],
       encoder: Encoder[R]): Dataset[R] = {
     cogroup(other)((key, left, right) => f.call(key, left.asJava, right.asJava).asScala)(encoder)
+  }
+
+  override def toString: String = {
+    try {
+      val builder = new StringBuilder
+      val kFields = kExprEnc.schema.map {
+        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      }
+      val vFields = vExprEnc.schema.map {
+        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      }
+      builder.append("[key: [")
+      builder.append(kFields.take(2).mkString(", "))
+      if (kFields.length > 2) {
+        builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+      }
+      builder.append("], value: [")
+      builder.append(vFields.take(2).mkString(", "))
+      if (vFields.length > 2) {
+        builder.append(" ... " + (vFields.length - 2) + " more field(s)")
+      }
+      builder.append("]]").toString()
+    } catch {
+      case NonFatal(e) =>
+        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+    }
   }
 }
