@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.utils
+package org.apache.spark.util
 
 import org.apache.hadoop.fs.Path
 
@@ -23,7 +23,6 @@ import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 
 class PeriodicRDDCheckpointerSuite extends SparkFunSuite with SharedSparkContext {
@@ -75,6 +74,31 @@ class PeriodicRDDCheckpointerSuite extends SparkFunSuite with SharedSparkContext
     checkpointer.deleteAllCheckpoints()
     rddsToCheck.foreach { rdd =>
       confirmCheckpointRemoved(rdd.rdd)
+    }
+
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("Checkpointing of dependent RDD should not fail when materializing it") {
+    val tempDir = Utils.createTempDir()
+    val checkpointInterval = 2
+    sc.setCheckpointDir(tempDir.toURI.toString)
+
+    val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, sc)
+
+    val rdd1 = createRDD(sc)
+    checkpointer.update(rdd1)
+    checkpointer.update(rdd1)
+    rdd1.count()
+
+    val rdd2 = rdd1.filter(_ => true)
+    checkpointer.update(rdd2)
+    checkpointer.update(rdd2)
+    rdd2.count()
+
+    checkpointer.deleteAllCheckpoints()
+    Seq(rdd1, rdd2).foreach { rdd =>
+      confirmCheckpointRemoved(rdd)
     }
 
     Utils.deleteRecursively(tempDir)
