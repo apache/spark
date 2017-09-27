@@ -85,6 +85,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void close() {
+    super.close();
     Platform.freeMemory(nulls);
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
