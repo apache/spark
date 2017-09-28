@@ -191,7 +191,7 @@ class FramedSerializer(Serializer):
 
 class ArrowSerializer(FramedSerializer):
     """
-    Serializes an Arrow stream.
+    Serializes bytes as Arrow data with the Arrow file format.
     """
 
     def dumps(self, batch):
@@ -239,7 +239,7 @@ class ArrowStreamPandasSerializer(Serializer):
 
     def dump_stream(self, iterator, stream):
         """
-        Make ArrowRecordBatches from Pandas Serieses and serialize. Input is a single series or
+        Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
         a list of series accompanied by an optional pyarrow type to coerce the data to.
         """
         import pyarrow as pa
@@ -257,7 +257,7 @@ class ArrowStreamPandasSerializer(Serializer):
 
     def load_stream(self, stream):
         """
-        Deserialize ArrowRecordBatchs to an Arrow table and return as a list of pandas.Series.
+        Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
         import pyarrow as pa
         reader = pa.open_stream(stream)
