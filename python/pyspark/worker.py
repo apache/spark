@@ -32,7 +32,7 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, PythonEvalType, UTF8Deserializer, PickleSerializer, \
     BatchedSerializer, ArrowStreamPandasSerializer
-from pyspark.sql.types import toArrowType
+from pyspark.sql.types import to_arrow_type
 from pyspark import shuffle
 from pyspark.sql.types import StructType, IntegerType, LongType, FloatType, DoubleType
 
@@ -76,7 +76,7 @@ def wrap_udf(f, return_type):
 
 def wrap_pandas_udf(f, return_type):
     if isinstance(return_type, StructType):
-        arrow_return_types = list(toArrowType(field.dataType) for field in return_type)
+        arrow_return_types = list(to_arrow_type(field.dataType) for field in return_type)
 
         def fn(*a):
             import pandas as pd
@@ -89,7 +89,7 @@ def wrap_pandas_udf(f, return_type):
         return fn
 
     else:
-        arrow_return_type = toArrowType(return_type)
+        arrow_return_type = to_arrow_type(return_type)
 
         def verify_result_length(*a):
             result = f(*a)

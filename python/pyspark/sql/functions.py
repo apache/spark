@@ -28,7 +28,7 @@ if sys.version < "3":
 from pyspark import since, SparkContext
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
-from pyspark.sql.types import StringType, DataType, _parse_datatype_string
+from pyspark.sql.types import StringType, DataType, _parse_datatype_string, from_pandas_dtypes
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 
@@ -2207,6 +2207,10 @@ def pandas_udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
+    import pandas as pd
+    if isinstance(returnType, pd.Series):
+        returnType = from_pandas_dtypes(returnType)
+
     return _create_udf(f, returnType=returnType, vectorized=True)
 
 
