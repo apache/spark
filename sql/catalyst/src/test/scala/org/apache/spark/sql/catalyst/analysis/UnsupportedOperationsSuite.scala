@@ -519,7 +519,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Unsupported expressions in streaming plan
   assertNotSupportedInStreamingPlan(
     "MonotonicallyIncreasingID",
-    streamRelation.select($"a", MonotonicallyIncreasingID()),
+    streamRelation.select(MonotonicallyIncreasingID()),
     outputMode = Append,
     expectedMsgs = Seq("monotonically_increasing_id"))
 
