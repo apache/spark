@@ -1312,7 +1312,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   @Override
   public int hashCode() {
-    return Murmur3_x86_32.hashUnsafeBlock(base, offset, numBytes, 42);
+    return Murmur3_x86_32.hashUnsafeBytesBlock(base, offset, numBytes, 42);
   }
 
   /**
