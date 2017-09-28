@@ -35,7 +35,7 @@ import org.apache.spark.util.MutablePair
 /**
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-case class ShuffleExchange(
+case class ShuffleExchangeExec(
     var newPartitioning: Partitioning,
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
@@ -84,7 +84,7 @@ case class ShuffleExchange(
    */
   private[exchange] def prepareShuffleDependency()
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    ShuffleExchange.prepareShuffleDependency(
+    ShuffleExchangeExec.prepareShuffleDependency(
       child.execute(), child.output, newPartitioning, serializer)
   }
 
@@ -129,9 +129,9 @@ case class ShuffleExchange(
   }
 }
 
-object ShuffleExchange {
-  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchange = {
-    ShuffleExchange(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
+object ShuffleExchangeExec {
+  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
+    ShuffleExchangeExec(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
   }
 
   /**
