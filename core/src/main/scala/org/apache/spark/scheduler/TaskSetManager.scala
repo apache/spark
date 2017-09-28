@@ -670,9 +670,14 @@ private[spark] class TaskSetManager(
           }
           if (blacklistedEverywhere) {
             val partition = tasks(indexInTaskSet).partitionId
-            abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
-              s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior " +
-              s"can be configured via spark.blacklist.*.")
+            abort(s"""
+              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+              |cannot run anywhere due to node and executor blacklist.
+              |Most recent failure:
+              |${taskSetBlacklist.getLatestFailureReason}
+              |
+              |Blacklisting behavior can be configured via spark.blacklist.*.
+              |""".stripMargin)
           }
         }
       }
@@ -837,9 +842,9 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
-      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
-        info.host, info.executorId, index))
       assert (null != failureReason)
+      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
+        info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
         logError("Task %d in stage %s failed %d times; aborting job".format(
