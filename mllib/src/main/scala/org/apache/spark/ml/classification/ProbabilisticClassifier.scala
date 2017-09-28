@@ -230,12 +230,15 @@ private[ml] object ProbabilisticClassificationModel {
    * Normalize a vector of raw predictions to be a multinomial probability vector, in place.
    *
    * The input raw predictions should be nonnegative.
-   * The output vector sums to 1, when the input vector is all-0, exception will be thrown.
+   * The output vector sums to 1.
    *
    * NOTE: This is NOT applicable to all models, only ones which effectively use class
    *       instance counts for raw predictions.
    */
+  @throws[IllegalArgumentException]("If the input vector is all-0 or including negative values")
   def normalizeToProbabilitiesInPlace(v: DenseVector): Unit = {
+    v.values.foreach(value => require(value >= 0,
+      "The input raw predictions should be nonnegative."))
     val sum = v.values.sum
     require(sum > 0, "All-0 vector is not allowed normalizing.")
     var i = 0

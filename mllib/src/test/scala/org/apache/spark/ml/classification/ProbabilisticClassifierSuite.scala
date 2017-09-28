@@ -91,6 +91,12 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
     intercept[IllegalArgumentException] {
       ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec2)
     }
+
+    // negative input test
+    val vec3 = Vectors.dense(1.0, -1.0, 2.0).toDense
+    intercept[IllegalArgumentException] {
+      ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(vec3)
+    }
   }
 }
 
