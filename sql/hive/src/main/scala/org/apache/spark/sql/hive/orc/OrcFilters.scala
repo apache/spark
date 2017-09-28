@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.hive.ql.io.sarg.{SearchArgument, SearchArgumentFactory}
-import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
+import org.apache.orc.storage.ql.io.sarg.{PredicateLeaf, SearchArgument, SearchArgumentFactory}
+import org.apache.orc.storage.ql.io.sarg.SearchArgument.Builder
+import org.apache.orc.storage.serde2.io.HiveDecimalWritable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.sources._
@@ -73,6 +74,30 @@ private[orc] object OrcFilters extends Logging {
     } yield builder.build()
   }
 
+  private def getPredicateLeafType(dataType: DataType) = dataType match {
+    case BooleanType => PredicateLeaf.Type.BOOLEAN
+    case ByteType | ShortType | IntegerType | LongType => PredicateLeaf.Type.LONG
+    case FloatType | DoubleType => PredicateLeaf.Type.FLOAT
+    case StringType => PredicateLeaf.Type.STRING
+    case DateType => PredicateLeaf.Type.DATE
+    case TimestampType => PredicateLeaf.Type.TIMESTAMP
+    case _: DecimalType => PredicateLeaf.Type.DECIMAL
+    case _ => throw new UnsupportedOperationException(s"DataType: $dataType")
+  }
+
+  private def castLiteralValue(value: Any, dataType: DataType): Any = dataType match {
+    case ByteType | ShortType | IntegerType | LongType =>
+      value.asInstanceOf[Number].longValue
+    case FloatType | DoubleType =>
+      value.asInstanceOf[Number].doubleValue()
+    case _: DecimalType =>
+      val decimal = value.asInstanceOf[java.math.BigDecimal]
+      val decimalWritable = new HiveDecimalWritable(decimal.longValue)
+      decimalWritable.mutateEnforcePrecisionScale(decimal.precision, decimal.scale)
+      decimalWritable
+    case _ => value
+  }
+
   private def buildSearchArgument(
       dataTypeMap: Map[String, DataType],
       expression: Filter,
@@ -87,6 +112,9 @@ private[orc] object OrcFilters extends Logging {
       case TimestampType | _: DecimalType => true
       case _ => false
     }
+
+    def getType(attribute: String): PredicateLeaf.Type =
+      getPredicateLeafType(dataTypeMap(attribute))
 
     expression match {
       case And(left, right) =>
@@ -123,31 +151,39 @@ private[orc] object OrcFilters extends Logging {
       // wrapped by a "parent" predicate (`And`, `Or`, or `Not`).
 
       case EqualTo(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().equals(attribute, value).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        Some(builder.startAnd().equals(attribute, getType(attribute), castedValue).end())
 
       case EqualNullSafe(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().nullSafeEquals(attribute, value).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        Some(builder.startAnd().nullSafeEquals(attribute, getType(attribute), castedValue).end())
 
       case LessThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThan(attribute, value).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        Some(builder.startAnd().lessThan(attribute, getType(attribute), castedValue).end())
 
       case LessThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().lessThanEquals(attribute, value).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        Some(builder.startAnd().lessThanEquals(attribute, getType(attribute), castedValue).end())
 
       case GreaterThan(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThanEquals(attribute, value).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        Some(builder.startNot().lessThanEquals(attribute, getType(attribute), castedValue).end())
 
       case GreaterThanOrEqual(attribute, value) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().lessThan(attribute, value).end())
+        val castedValue = castLiteralValue(value, dataTypeMap(attribute))
+        Some(builder.startNot().lessThan(attribute, getType(attribute), castedValue).end())
 
       case IsNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().isNull(attribute).end())
+        Some(builder.startAnd().isNull(attribute, getType(attribute)).end())
 
       case IsNotNull(attribute) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startNot().isNull(attribute).end())
+        Some(builder.startNot().isNull(attribute, getType(attribute)).end())
 
       case In(attribute, values) if isSearchableType(dataTypeMap(attribute)) =>
-        Some(builder.startAnd().in(attribute, values.map(_.asInstanceOf[AnyRef]): _*).end())
+        val castedValues = values.map(v => castLiteralValue(v, dataTypeMap(attribute)))
+        Some(builder.startAnd().in(attribute, getType(attribute),
+          castedValues.map(_.asInstanceOf[AnyRef]): _*).end())
 
       case _ => None
     }

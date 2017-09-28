@@ -25,6 +25,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -221,7 +222,7 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   }
 }
 
-class OrcSourceSuite extends OrcSuite {
+class OrcSourceSuite extends OrcSuite with SQLTestUtils {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -249,9 +250,7 @@ class OrcSourceSuite extends OrcSuite {
         StructField("a", IntegerType, nullable = true),
         StructField("b", StringType, nullable = true)))
     assertResult(
-      """leaf-0 = (LESS_THAN a 10)
-        |expr = leaf-0
-      """.stripMargin.trim
+      "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
     ) {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
@@ -261,9 +260,7 @@ class OrcSourceSuite extends OrcSuite {
 
     // The `LessThan` should be converted while the whole inner `And` shouldn't
     assertResult(
-      """leaf-0 = (LESS_THAN a 10)
-        |expr = leaf-0
-      """.stripMargin.trim
+      "leaf-0 = (LESS_THAN a 10), expr = leaf-0"
     ) {
       OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
@@ -272,6 +269,15 @@ class OrcSourceSuite extends OrcSuite {
           StringContains("b", "prefix")
         ))
       )).get.toString
+    }
+  }
+
+  test("SPARK-21791 ORC should support column names with dot") {
+    import spark.implicits._
+    withTempDir { dir =>
+      val path = new File(dir, "orc").getCanonicalPath
+      Seq(Some(1), None).toDF("col.dots").write.orc(path)
+      assert(spark.read.orc(path).collect().length == 2)
     }
   }
 }

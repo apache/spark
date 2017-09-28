@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
+import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
+import org.apache.orc.{OrcConf, OrcFile}
+import org.apache.orc.mapred.OrcStruct
+import org.apache.orc.mapreduce.OrcInputFormat
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -57,6 +64,13 @@ case class Contact(name: String, phone: String)
 case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
+
+  private def getFileReader(path: String, extensions: String) = {
+    val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(extensions))
+    assert(maybeOrcFile.isDefined)
+    val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+    OrcFile.createReader(orcFilePath, OrcFile.readerOptions(new Configuration()))
+  }
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
@@ -183,7 +197,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         .option("orc.compress", "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+        getFileReader(file.getAbsolutePath, ".zlib.orc").getCompressionKind
       assert("ZLIB" === expectedCompressionKind.name())
     }
 
@@ -194,7 +208,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         .option("orc.compress", "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+        getFileReader(file.getAbsolutePath, ".zlib.orc").getCompressionKind
       assert("ZLIB" === expectedCompressionKind.name())
     }
   }
@@ -206,7 +220,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         .option("compression", "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+        getFileReader(file.getAbsolutePath, ".zlib.orc").getCompressionKind
       assert("ZLIB" === expectedCompressionKind.name())
     }
 
@@ -215,7 +229,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         .option("compression", "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+        getFileReader(file.getAbsolutePath, ".snappy.orc").getCompressionKind
       assert("SNAPPY" === expectedCompressionKind.name())
     }
 
@@ -224,19 +238,18 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         .option("compression", "NONE")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+        getFileReader(file.getAbsolutePath, ".orc").getCompressionKind
       assert("NONE" === expectedCompressionKind.name())
     }
   }
 
-  // Following codec is not supported in Hive 1.2.1, ignore it now
-  ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
+  test("LZO compression options for writing to an ORC file") {
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "LZO")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
-        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+        getFileReader(file.getAbsolutePath, ".lzo.orc").getCompressionKind
       assert("LZO" === expectedCompressionKind.name())
     }
   }
@@ -592,18 +605,22 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("Empty schema does not read data from ORC file") {
+  // Please see ORC-233. We will turn on this later.
+  ignore("Empty schema does not read data from ORC file") {
     val data = Seq((1, 1), (2, 2))
     withOrcFile(data) { path =>
-      val requestedSchema = StructType(Nil)
       val conf = new Configuration()
-      val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
-      val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
-      assert(maybeOrcReader.isDefined)
-      val orcRecordReader = new SparkOrcNewRecordReader(
-        maybeOrcReader.get, conf, 0, maybeOrcReader.get.getContentLength)
+      val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc"))
+      assert(maybeOrcFile.isDefined)
+      val orcFilePath = new Path(maybeOrcFile.get.getAbsolutePath)
+      val reader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
+      val fileSplit = new FileSplit(orcFilePath, 0, reader.getContentLength, Array.empty)
+      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
 
+      conf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, "")
+      val taskAttemptContext = new TaskAttemptContextImpl(conf, attemptId)
+      val orcRecordReader =
+        new OrcInputFormat[OrcStruct].createRecordReader(fileSplit, taskAttemptContext)
       val recordsIterator = new RecordReaderIterator[OrcStruct](orcRecordReader)
       try {
         assert(recordsIterator.next().toString == "{null, null}")
