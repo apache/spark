@@ -81,7 +81,7 @@ class TaskInfo(
     gettingResultTime = time
   }
 
-  private[spark] def markKilledAttempt: Unit = {
+  private[spark] def markKilledByOtherAttempt(): Unit = {
     killedByOtherAttempt = true
   }
 

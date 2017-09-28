@@ -724,7 +724,7 @@ private[spark] class TaskSetManager(
       logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
         s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
         s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
-      attemptInfo.markKilledAttempt
+      attemptInfo.markKilledByOtherAttempt
       sched.backend.killTask(
         attemptInfo.taskId,
         attemptInfo.executorId,
