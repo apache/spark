@@ -24,9 +24,9 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, _}
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
-import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode }
+import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -519,3 +519,18 @@ case class CoGroup(
     outputObjAttr: Attribute,
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer
+
+case class FlatMapGroupsInPandas(
+    groupingExprs: Seq[Expression],
+    functionExpr: Expression,
+    override val output: Seq[Attribute],
+    child: LogicalPlan) extends UnaryNode {
+  /**
+   * This is needed because output attributes is considered `reference` when
+   * passed through the constructor.
+   *
+   * Without this, catalyst will complain that output attributes are missing
+   * from the input.
+   */
+  override val producedAttributes = AttributeSet(output)
+}

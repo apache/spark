@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution
-import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
+import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 
 
 /**
@@ -111,7 +111,8 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case plan: SparkPlan => extract(plan)
+    case plan: ProjectExec => extract(plan)
+    case plan: FilterExec => extract(plan)
   }
 
   /**

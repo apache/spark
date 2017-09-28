@@ -37,6 +37,9 @@ object AttributeSet {
   /** Constructs a new [[AttributeSet]] that contains a single [[Attribute]]. */
   def apply(a: Attribute): AttributeSet = new AttributeSet(Set(new AttributeEquals(a)))
 
+  def apply(as: Attribute*): AttributeSet =
+    new AttributeSet(Set(as.map(new AttributeEquals(_)): _*))
+
   /** Constructs a new [[AttributeSet]] given a sequence of [[Expression Expressions]]. */
   def apply(baseSet: Iterable[Expression]): AttributeSet = {
     new AttributeSet(

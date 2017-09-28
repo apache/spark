@@ -3106,10 +3106,11 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
     def test_unsupported_datatype(self):
-        schema = StructType([StructField("dt", DateType(), True)])
-        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
-        with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: df.toPandas())
+        schema = StructType([StructField("dt", TimestampType(), True)])
+        df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1),)], schema=schema)
+
+        #with QuietTest(self.sc):
+        #    self.assertRaises(Exception, lambda: df.toPandas())
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -3146,6 +3147,180 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertEqual(len(pdf.columns), 1)
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
+
+    def test_groupby_apply(self):
+        from pyspark.sql.functions import col, udf, pandas_udf, sum
+        from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType
+        df1 = self.spark.createDataFrame(self.data, schema=self.schema)
+        import pandas as pd
+
+        expected = (df1.withColumn('4_long_t', df1['2_int_t'] * df1['3_long_t'])
+                    .select('1_str_t', '2_int_t', '3_long_t', '4_long_t')
+                    .toPandas())
+
+        result_schema = StructType([
+            StructField('1_str_t', StringType()),
+            StructField('2_int_t', IntegerType()),
+            StructField('3_long_t', LongType()),
+            StructField('4_long_t', LongType())
+        ])
+
+        @pandas_udf(result_schema)
+        def foo(pdf):
+            pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t'] * 1.0
+            return pdf
+
+        result = (df1.groupby('1_str_t')
+                     .apply(foo(df1[['1_str_t', '2_int_t', '3_long_t']]))
+                     .sort('1_str_t')
+                     .toPandas())
+
+        def foo2(pdf):
+            pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t']
+            return pdf[['1_str_t', '2_int_t', '3_long_t', '4_long_t']]
+
+        foo2_udf = pandas_udf(foo2, result_schema)
+        result2 = (df1.groupby('1_str_t')
+                      .apply(foo2_udf)
+                      .sort('1_str_t')
+                      .toPandas())
+
+        @pandas_udf(add=('4_long_t', LongType()))
+        def foo3(pdf):
+            pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t']
+            return pdf
+        result3 = (df1.groupby('1_str_t')
+                      .apply(foo3)
+                      .sort('1_str_t')
+                      .select('1_str_t', '2_int_t', '3_long_t', '4_long_t')
+                      .toPandas())
+
+        #@pandas_udf(add=[('4_long_t', LongType())])
+        #def foo4(pdf):
+        #    pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t'] * 1.0
+        #    return pdf
+        #result4 = (df1.groupby('1_str_t')
+        #           .apply(foo4(df1[['1_str_t', '2_int_t', '3_long_t']]))
+        #           .sort('1_str_t')
+        #           .toPandas())
+
+        @pandas_udf([('1_str_t', StringType()),
+                     ('2_int_t', IntegerType()),
+                     ('3_long_t', LongType()),
+                     ('4_long_t', LongType())])
+        def foo5(pdf):
+            pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t']
+            return pdf
+        result5 = (df1.select('1_str_t', '2_int_t', '3_long_t')
+                      .groupby('1_str_t')
+                      .apply(foo5)
+                      .sort('1_str_t')
+                      .toPandas())
+
+        def foo6(pdf):
+            pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t']
+            return pdf
+
+        foo6_udf = pandas_udf(
+            foo6,
+            [('1_str_t', StringType()),
+             ('2_int_t', IntegerType()),
+             ('3_long_t', LongType()),
+             ('4_long_t', LongType())
+             ])
+
+        result6 = (df1.select('1_str_t', '2_int_t', '3_long_t')
+                   .groupby('1_str_t')
+                   .apply(foo6_udf)
+                   .sort('1_str_t')
+                   .toPandas())
+
+        def foo7(pdf):
+            pdf['4_long_t'] = pdf['2_int_t'] * pdf['3_long_t']
+            return pdf
+
+        foo7_udf = pandas_udf(foo7, expected.dtypes)
+
+        result7 =  (df1.select('1_str_t', '2_int_t', '3_long_t')
+                    .groupby('1_str_t')
+                    .apply(foo7_udf)
+                    .sort('1_str_t')
+                    .toPandas())
+
+        self.assertFramesEqual(result, expected)
+        self.assertFramesEqual(result2, expected)
+        self.assertFramesEqual(result3, expected)
+        #self.assertFramesEqual(result4, expected)
+        self.assertFramesEqual(result5, expected)
+        self.assertFramesEqual(result6, expected)
+        self.assertFramesEqual(result7, expected)
+
+    def test_groupby_apply_timestamp(self):
+        from pyspark.sql.functions import col, udf, pandas_udf
+        from pyspark.sql.types import TimestampType, DateType
+        import datetime
+
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        df1 = df.select('3_long_t').withColumn('time', df['3_long_t'].cast(TimestampType()))
+        pdf1 = df1.toPandas()
+
+        def foo(pdf):
+            return pdf.assign(time=pdf['time'] + datetime.timedelta(days=15))
+        foo_udf = pandas_udf(foo, foo(pdf1).dtypes)
+
+        result = df1.groupby('3_long_t').apply(foo_udf).sort('3_long_t').toPandas()
+        expected = foo(pdf1)
+
+        self.assertFramesEqual(result, expected)
+
+    def test_groupby_apply_series(self):
+        from pyspark.sql.functions import col, udf, pandas_udf
+        from pyspark.sql.types import DoubleType
+        import pandas as pd
+
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+
+        expected = pd.DataFrame({
+            '1_str_t': pd.Series(['a', 'b', 'c']),
+            'v1': pd.Series([0.0, 0.0, 0.0]),
+            'v2': pd.Series([1.0, 1.0, 1.0]),
+        })
+
+        def foo1(pdf):
+            return pd.Series([0.0, 1.0])
+
+        foo1_udf = pandas_udf(foo1, group_add=[('v1', DoubleType()), ('v2', DoubleType())])
+        result1 = df.groupby('1_str_t').apply(foo1_udf).sort('1_str_t').toPandas()
+        self.assertFramesEqual(result1, expected)
+
+    def test_groupby_apply_cache(self):
+        from pyspark.sql.functions import col, udf, pandas_udf
+        from pyspark.sql.types import DoubleType
+        import pandas as pd
+
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+
+        def foo1(pdf):
+            return pd.Series([0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0])
+
+        foo1_udf = pandas_udf(foo1, group_add=[
+            ('v1', DoubleType()),
+            ('v2', DoubleType()),
+            ('v3', DoubleType()),
+            ('v4', DoubleType()),
+            ('v5', DoubleType()),
+            ('v6', DoubleType()),
+            ('v7', DoubleType()),
+            ('v8', DoubleType()),
+            ('v9', DoubleType()),
+            ('v10', DoubleType()),
+            ('v11', DoubleType()),
+            ('v12', DoubleType()),
+            ('v13', DoubleType()),
+        ])
+        result1 = df.groupby('1_str_t').apply(foo1_udf).sort('1_str_t').cache()
+        result1.count()
+        result1.show()
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
@@ -3375,6 +3550,34 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         f = pandas_udf(lambda x: x, LongType())
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
+
+@unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
+class GroupbyApplyTests(ReusedPySparkTestCase):
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
+
+    def test_groupby_apply(self):
+        from pyspark.sql.functions import pandas_udf, array, explode, col, lit
+        df = self.spark.range(10).toDF('id').withColumn("vs", array([lit(i) for i in range(20, 30)])).withColumn("v", explode(col('vs'))).drop('vs')
+
+        def foo(df):
+            import pandas as pd
+            return pd.DataFrame({'mean': [df.v.mean()], 'std': [df.v.std()]})
+
+        foo_udf = pandas_udf(
+            foo,
+            StructType([StructField('mean', DoubleType()), StructField('std', DoubleType())]))
+
+        df2 = df.groupby('id').apply(foo_udf)
+        df2.show(1000)
+
 
 if __name__ == "__main__":
     from pyspark.sql.tests import *

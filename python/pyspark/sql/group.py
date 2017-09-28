@@ -194,6 +194,28 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self.sql_ctx)
 
+    def apply(self, udf_obj):
+        """
+        Maps each group of the current [[DataFrame]] using a pandas udf and returns the result as a :class:`DataFrame`.
+
+        """
+        from pyspark.sql.functions import pandas_udf
+
+        df = DataFrame(self._jgd.df(), self.sql_ctx)
+        func = udf_obj.func
+        returnType = udf_obj.returnType
+
+        # The python executors expects the function to take a list of pd.Series as input
+        # So we to create a wrapper function that turns that to a pd.DataFrame before passing down to the user function
+        columns = df.columns
+        def wrapped(*cols):
+            import pandas as pd
+            return func(pd.concat(cols, axis=1, keys=columns))
+
+        wrapped_udf_obj = pandas_udf(wrapped, returnType)
+        udf_column = wrapped_udf_obj(*[df[col] for col in df.columns])
+        jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
+        return DataFrame(jdf, self.sql_ctx)
 
 def _test():
     import doctest

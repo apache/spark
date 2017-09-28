@@ -34,6 +34,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import toArrowType
 from pyspark import shuffle
+from pyspark.sql.types import StructType, IntegerType, LongType, FloatType, DoubleType
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -74,17 +75,32 @@ def wrap_udf(f, return_type):
 
 
 def wrap_pandas_udf(f, return_type):
-    arrow_return_type = toArrowType(return_type)
+    if isinstance(return_type, StructType):
+        arrow_return_types = list(toArrowType(field.dataType) for field in return_type)
 
-    def verify_result_length(*a):
-        result = f(*a)
-        if not hasattr(result, "__len__"):
-            raise TypeError("Return type of pandas_udf should be a Pandas.Series")
-        if len(result) != len(a[0]):
-            raise RuntimeError("Result vector from pandas_udf was not the required length: "
-                               "expected %d, got %d" % (len(a[0]), len(result)))
-        return result
-    return lambda *a: (verify_result_length(*a), arrow_return_type)
+        def fn(*a):
+            import pandas as pd
+            out = f(*a)
+            assert isinstance(out, pd.DataFrame), 'Must return a pd.DataFrame'
+            assert len(out.columns) == len(arrow_return_types), \
+                'Columns of pd.DataFrame don\'t match return schema'
+
+            return list((out[out.columns[i]], arrow_return_types[i]) for i in range(len(arrow_return_types)))
+        return fn
+
+    else:
+        arrow_return_type = toArrowType(return_type)
+
+        def verify_result_length(*a):
+            result = f(*a)
+            if not hasattr(result, "__len__"):
+                raise TypeError("Return type of pandas_udf should be a Pandas.Series")
+            if len(result) != len(a[0]):
+                raise RuntimeError("Result vector from pandas_udf was not the required length: " \
+                                   "expected %d, got %d" % (len(a[0]), len(result)))
+            return result
+
+        return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
 def read_single_udf(pickleSer, infile, eval_type):

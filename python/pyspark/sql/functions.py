@@ -2129,7 +2129,8 @@ def _create_udf(f, returnType, vectorized):
     def _udf(f, returnType=StringType(), vectorized=vectorized):
         if vectorized:
             import inspect
-            if len(inspect.getargspec(f).args) == 0:
+            argspec = inspect.getargspec(f)
+            if len(argspec.args) == 0 and argspec.varargs is None:
                 raise NotImplementedError("0-parameter pandas_udfs are not currently supported")
         udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
         return udf_obj._wrapped()

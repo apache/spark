@@ -44,14 +44,17 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
       .map { case (attr, i) => attr.withName(s"_$i") })
 
+    val batchedIter: Iterator[Iterator[InternalRow]] =
+      iter.grouped(conf.arrowMaxRecordsPerBatch).map(_.iterator)
+
     val columnarBatchIter = new ArrowPythonRunner(
-        funcs, conf.arrowMaxRecordsPerBatch, bufferSize, reuseWorker,
+        funcs, bufferSize, reuseWorker,
         PythonEvalType.SQL_PANDAS_UDF, argOffsets, schema)
-      .compute(iter, context.partitionId(), context)
+      .compute(batchedIter, context.partitionId(), context)
 
     new Iterator[InternalRow] {
 
-      var currentIter = if (columnarBatchIter.hasNext) {
+      private var currentIter = if (columnarBatchIter.hasNext) {
         val batch = columnarBatchIter.next()
         assert(schemaOut.equals(batch.schema),
           s"Invalid schema from pandas_udf: expected $schemaOut, got ${batch.schema}")

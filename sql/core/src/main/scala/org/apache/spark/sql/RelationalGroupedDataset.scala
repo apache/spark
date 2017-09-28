@@ -27,12 +27,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, FlatMapGroupsInR, Pivot}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.NumericType
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{NumericType, StructField, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -47,8 +47,8 @@ import org.apache.spark.sql.types.StructType
  */
 @InterfaceStability.Stable
 class RelationalGroupedDataset protected[sql](
-    df: DataFrame,
-    groupingExprs: Seq[Expression],
+    val df: DataFrame,
+    val groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
@@ -434,6 +434,29 @@ class RelationalGroupedDataset protected[sql](
           groupingAttributes,
           df.logicalPlan.output,
           df.logicalPlan))
+  }
+
+  private[sql] def flatMapGroupsInPandas(
+      expr: PythonUDF
+  ): DataFrame = {
+    val output = expr.dataType match {
+      case s: StructType => s.map {
+        case StructField(name, dataType, nullable, metadata) =>
+          AttributeReference(name, dataType, nullable, metadata)()
+      }
+    }
+
+    val plan = FlatMapGroupsInPandas(
+      groupingExprs,
+      expr,
+      output,
+      df.logicalPlan
+    )
+
+    Dataset.ofRows(
+      df.sparkSession,
+      plan
+    )
   }
 }
 
