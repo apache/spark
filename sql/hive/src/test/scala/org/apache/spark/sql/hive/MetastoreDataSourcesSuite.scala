@@ -1344,7 +1344,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  Seq("orc", "parquet").foreach { format =>
+  Seq("orc", "parquet", "csv", "json", "text").foreach { format =>
     test(s"SPARK-22146: read files containing special characters using $format") {
       val nameWithSpecialChars = s"sp&cial%chars"
       withTempDir { dir =>
