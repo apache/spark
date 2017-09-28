@@ -54,26 +54,6 @@ trait BlockReplicationPolicy {
 }
 
 object BlockReplicationUtils {
-  // scalastyle:off line.size.limit
-  /**
-   * Uses sampling algorithm by Robert Floyd. Finds a random sample in O(n) while
-   * minimizing space usage. Please see <a href="http://math.stackexchange.com/questions/178690/whats-the-proof-of-correctness-for-robert-floyds-algorithm-for-selecting-a-sin">
-   * here</a>.
-   *
-   * @param n total number of indices
-   * @param m number of samples needed
-   * @param r random number generator
-   * @return list of m random unique indices
-   */
-  // scalastyle:on line.size.limit
-  private def getSampleIds(n: Int, m: Int, r: Random): List[Int] = {
-    val indices = (n - m + 1 to n).foldLeft(mutable.LinkedHashSet.empty[Int]) {case (set, i) =>
-      val t = r.nextInt(i) + 1
-      if (set.contains(t)) set + i else set + t
-    }
-    indices.map(_ - 1).toList
-  }
-
   /**
    * Get a random sample of size m from the elems
    *
@@ -85,11 +65,9 @@ object BlockReplicationUtils {
    *         randomly shuffle elems
    */
   def getRandomSample[T](elems: Seq[T], m: Int, r: Random): List[T] = {
-    if (elems.size > m) {
-      getSampleIds(elems.size, m, r).map(elems(_))
-    } else {
-      r.shuffle(elems).toList
-    }
+    // This takes linear space, but is stable wrt m. That is for a fixed
+    // seed, the m and m + 1 samples have m elements in common.
+    r.shuffle(elems).toList
   }
 }
 
