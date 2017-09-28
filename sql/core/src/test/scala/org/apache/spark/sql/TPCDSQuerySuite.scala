@@ -23,6 +23,10 @@ import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
+/**
+ * This test suite ensures all the TPC-DS queries can be successfully analyzed and optimized
+ * without hitting the max iteration threshold.
+ */
 class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
 
   /**
