@@ -3109,8 +3109,8 @@ class ArrowTests(ReusedPySparkTestCase):
         schema = StructType([StructField("dt", TimestampType(), True)])
         df = self.spark.createDataFrame([(datetime.datetime(1970, 1, 1),)], schema=schema)
 
-        #with QuietTest(self.sc):
-        #    self.assertRaises(Exception, lambda: df.toPandas())
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: df.toPandas())
 
     def test_null_conversion(self):
         df_null = self.spark.createDataFrame([tuple([None for _ in range(len(self.data[0]))])] +
@@ -3376,6 +3376,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         f = pandas_udf(lambda x: x, LongType())
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyApplyTests(ReusedPySparkTestCase):

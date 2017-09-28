@@ -1623,6 +1623,7 @@ def to_arrow_type(dt):
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
 
+
 def from_pandas_type(dt):
     """ Convert pandas data type to Spark data type
     """
@@ -1642,6 +1643,7 @@ def from_pandas_type(dt):
         return TimestampType()
     else:
         raise ValueError("Unsupported numpy type in conversion to Spark: {}".format(dt))
+
 
 def from_pandas_dtypes(dtypes):
     """ Convert pandas DataFrame dtypes to Spark schema

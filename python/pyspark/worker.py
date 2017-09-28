@@ -85,7 +85,8 @@ def wrap_pandas_udf(f, return_type):
             assert len(out.columns) == len(arrow_return_types), \
                 'Columns of pd.DataFrame don\'t match return schema'
 
-            return list((out[out.columns[i]], arrow_return_types[i]) for i in range(len(arrow_return_types)))
+            return list((out[out.columns[i]], arrow_return_types[i])
+                        for i in range(len(arrow_return_types)))
         return fn
 
     else:
@@ -96,7 +97,7 @@ def wrap_pandas_udf(f, return_type):
             if not hasattr(result, "__len__"):
                 raise TypeError("Return type of pandas_udf should be a Pandas.Series")
             if len(result) != len(a[0]):
-                raise RuntimeError("Result vector from pandas_udf was not the required length: " \
+                raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                    "expected %d, got %d" % (len(a[0]), len(result)))
             return result
 
