@@ -26,7 +26,7 @@ import org.apache.spark.SecurityManager
 import org.apache.spark.deploy.Command
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.WorkerCommandBuilder
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * Utilities for running commands with the spark classpath.
@@ -102,10 +102,14 @@ object CommandUtils extends Logging {
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
+  private var shutdownHook: AnyRef = null
   def redirectStream(in: InputStream, file: File) {
     val out = new FileOutputStream(file, true)
-    // TODO: It would be nice to add a shutdown hook here that explains why the output is
-    //       terminating. Otherwise if the worker dies the executor logs will silently stop.
+
+    shutdownHook = ShutdownHookManager.addShutdownHook { () =>
+      logInfo("Worker shutting down,executor logs silently stop.")
+    }
+    
     new Thread("redirect output to " + file) {
       override def run() {
         try {
