@@ -121,6 +121,8 @@ class RangePartitioner[K : Ordering : ClassTag, V](
 
   // We allow partitions = 0, which happens when sorting an empty RDD under the default settings.
   require(partitions >= 0, s"Number of partitions cannot be negative but found $partitions.")
+  require(samplePointsPerPartitionHint > 0,
+    s"Sample points per partition must be greater than 0 but found $samplePointsPerPartitionHint")
 
   private var ordering = implicitly[Ordering[K]]
 
