@@ -508,7 +508,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
 
   // This is a limitation test. We should remove it after the limitation is removed.
   // TODO: r00754707 will revise this test case after revising joinEstimation.scala
-  /*
   test("don't estimate IsNull or IsNotNull if the child is a non-leaf node") {
     val attrIntLargerRange = AttributeReference("c1", IntegerType)()
     val hgmIntLargerRange = NumericEquiHeightHgm(Array(NumericEquiHeightBin(1.0, 4.0, 4),
@@ -533,7 +532,6 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
         expectedRowCount = 30)
     }
   }
-  */
 
   test("cint = cint2") {
     // partial overlap case
