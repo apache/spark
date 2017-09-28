@@ -55,14 +55,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
   private def sparkSession = queryExecution.sparkSession
 
   /**
-   * Returns the schema of this Dataset.
-   *
-   * @group basic
-   * @since 2.3.0
-   */
-  def schema: StructType = queryExecution.analyzed.schema
-
-  /**
    * Returns a new [[KeyValueGroupedDataset]] where the type of the key has been mapped to the
    * specified type. The mapping of key columns to the type follows the same rules as `as` on
    * [[Dataset]].
