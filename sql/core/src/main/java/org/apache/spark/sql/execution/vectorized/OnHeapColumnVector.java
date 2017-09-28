@@ -68,6 +68,16 @@ public final class OnHeapColumnVector extends ColumnVector {
 
   @Override
   public void close() {
+    super.close();
+    nulls = null;
+    byteData = null;
+    shortData = null;
+    intData = null;
+    longData = null;
+    floatData = null;
+    doubleData = null;
+    arrayLengths = null;
+    arrayOffsets = null;
   }
 
   //

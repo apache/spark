@@ -25,19 +25,24 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
-
-  var testVector: ColumnVector = _
-
-  private def allocate(capacity: Int, dt: DataType): ColumnVector = {
-    new OnHeapColumnVector(capacity, dt)
+  private def withVector(
+      vector: ColumnVector)(
+      block: ColumnVector => Unit): Unit = {
+    try block(vector) finally vector.close()
   }
 
-  override def afterEach(): Unit = {
-    testVector.close()
+  private def testVectors(
+      name: String,
+      size: Int,
+      dt: DataType)(
+      block: ColumnVector => Unit): Unit = {
+    test(name) {
+      withVector(new OnHeapColumnVector(size, dt))(block)
+      withVector(new OffHeapColumnVector(size, dt))(block)
+    }
   }
 
-  test("boolean") {
-    testVector = allocate(10, BooleanType)
+  testVectors("boolean", 10, BooleanType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendBoolean(i % 2 == 0)
     }
@@ -49,8 +54,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("byte") {
-    testVector = allocate(10, ByteType)
+  testVectors("byte", 10, ByteType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendByte(i.toByte)
     }
@@ -62,8 +66,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("short") {
-    testVector = allocate(10, ShortType)
+  testVectors("short", 10, ShortType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendShort(i.toShort)
     }
@@ -75,8 +78,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("int") {
-    testVector = allocate(10, IntegerType)
+  testVectors("int", 10, IntegerType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendInt(i)
     }
@@ -88,8 +90,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("long") {
-    testVector = allocate(10, LongType)
+  testVectors("long", 10, LongType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendLong(i)
     }
@@ -101,8 +102,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("float") {
-    testVector = allocate(10, FloatType)
+  testVectors("float", 10, FloatType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendFloat(i.toFloat)
     }
@@ -114,8 +114,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("double") {
-    testVector = allocate(10, DoubleType)
+  testVectors("double", 10, DoubleType) { testVector =>
     (0 until 10).foreach { i =>
       testVector.appendDouble(i.toDouble)
     }
@@ -127,8 +126,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("string") {
-    testVector = allocate(10, StringType)
+  testVectors("string", 10, StringType) { testVector =>
     (0 until 10).map { i =>
       val utf8 = s"str$i".getBytes("utf8")
       testVector.appendByteArray(utf8, 0, utf8.length)
@@ -141,8 +139,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("binary") {
-    testVector = allocate(10, BinaryType)
+  testVectors("binary", 10, BinaryType) { testVector =>
     (0 until 10).map { i =>
       val utf8 = s"str$i".getBytes("utf8")
       testVector.appendByteArray(utf8, 0, utf8.length)
@@ -156,9 +153,8 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("array") {
-    val arrayType = ArrayType(IntegerType, true)
-    testVector = allocate(10, arrayType)
+  val arrayType: ArrayType = ArrayType(IntegerType, containsNull = true)
+  testVectors("array", 10, arrayType) { testVector =>
 
     val data = testVector.arrayData()
     var i = 0
@@ -181,9 +177,8 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(array.getArray(3).asInstanceOf[ArrayData].toIntArray() === Array(3, 4, 5))
   }
 
-  test("struct") {
-    val schema = new StructType().add("int", IntegerType).add("double", DoubleType)
-    testVector = allocate(10, schema)
+  val structType: StructType = new StructType().add("int", IntegerType).add("double", DoubleType)
+  testVectors("struct", 10, structType) { testVector =>
     val c1 = testVector.getChildColumn(0)
     val c2 = testVector.getChildColumn(1)
     c1.putInt(0, 123)
@@ -200,28 +195,27 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts array data") {
-    val arrayType = ArrayType(IntegerType, true)
-    testVector = new OffHeapColumnVector(8, arrayType)
+    withVector(new OffHeapColumnVector(8, arrayType)) { testVector =>
+      val data = testVector.arrayData()
+      (0 until 8).foreach(i => data.putInt(i, i))
+      (0 until 8).foreach(i => testVector.putArray(i, i, 1))
 
-    val data = testVector.arrayData()
-    (0 until 8).foreach(i => data.putInt(i, i))
-    (0 until 8).foreach(i => testVector.putArray(i, i, 1))
+      // Increase vector's capacity and reallocate the data to new bigger buffers.
+      testVector.reserve(16)
 
-    // Increase vector's capacity and reallocate the data to new bigger buffers.
-    testVector.reserve(16)
-
-    // Check that none of the values got lost/overwritten.
-    val array = new ColumnVector.Array(testVector)
-    (0 until 8).foreach { i =>
-      assert(array.getArray(i).toIntArray() === Array(i))
+      // Check that none of the values got lost/overwritten.
+      val array = new ColumnVector.Array(testVector)
+      (0 until 8).foreach { i =>
+        assert(array.getArray(i).toIntArray() === Array(i))
+      }
     }
   }
 
   test("[SPARK-22092] off-heap column vector reallocation corrupts struct nullability") {
-    val structType = new StructType().add("int", IntegerType).add("double", DoubleType)
-    testVector = new OffHeapColumnVector(8, structType)
-    (0 until 8).foreach(i => if (i % 2 == 0) testVector.putNull(i) else testVector.putNotNull(i))
-    testVector.reserve(16)
-    (0 until 8).foreach(i => assert(testVector.isNullAt(i) == (i % 2 == 0)))
+    withVector(new OffHeapColumnVector(8, structType)) { testVector =>
+      (0 until 8).foreach(i => if (i % 2 == 0) testVector.putNull(i) else testVector.putNotNull(i))
+      testVector.reserve(16)
+      (0 until 8).foreach(i => assert(testVector.isNullAt(i) == (i % 2 == 0)))
+    }
   }
 }
