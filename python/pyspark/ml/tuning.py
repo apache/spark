@@ -326,9 +326,10 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         estimator, epms, evaluator = super(CrossValidator, cls)._from_java_impl(java_stage)
         numFolds = java_stage.getNumFolds()
         seed = java_stage.getSeed()
+        parallelism = java_stage.getParallelism()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       numFolds=numFolds, seed=seed)
+                       numFolds=numFolds, seed=seed, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -347,6 +348,7 @@ class CrossValidator(Estimator, ValidatorParams, HasParallelism, MLReadable, MLW
         _java_obj.setEstimator(estimator)
         _java_obj.setSeed(self.getSeed())
         _java_obj.setNumFolds(self.getNumFolds())
+        _java_obj.setParallelism(self.getParallelism())
 
         return _java_obj
 
@@ -579,9 +581,10 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         estimator, epms, evaluator = super(TrainValidationSplit, cls)._from_java_impl(java_stage)
         trainRatio = java_stage.getTrainRatio()
         seed = java_stage.getSeed()
+        parallelism = java_stage.getParallelism()
         # Create a new instance of this stage.
         py_stage = cls(estimator=estimator, estimatorParamMaps=epms, evaluator=evaluator,
-                       trainRatio=trainRatio, seed=seed)
+                       trainRatio=trainRatio, seed=seed, parallelism=parallelism)
         py_stage._resetUid(java_stage.uid())
         return py_stage
 
@@ -600,6 +603,7 @@ class TrainValidationSplit(Estimator, ValidatorParams, HasParallelism, MLReadabl
         _java_obj.setEstimator(estimator)
         _java_obj.setTrainRatio(self.getTrainRatio())
         _java_obj.setSeed(self.getSeed())
+        _java_obj.setParallelism(self.getParallelism())
 
         return _java_obj
 
