@@ -116,6 +116,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
           assert(v._1 == Platform.getByte(null, addr + v._2))
         }
       }
+      column.close()
     }}
   }
 
@@ -317,6 +318,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
           assert(v._1 == Platform.getLong(null, addr + 8 * v._2))
         }
       }
+      column.close()
     }}
   }
 
@@ -443,6 +445,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       column.reset()
       assert(column.arrayData().elementsAppended == 0)
+      column.close()
     }}
   }
 
@@ -498,6 +501,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       column.putArray(0, 0, array.length)
       assert(ColumnVectorUtils.toPrimitiveJavaArray(column.getArray(0)).asInstanceOf[Array[Int]]
         === array)
+      column.close()
     }}
   }
 
@@ -528,6 +532,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       val s2 = column.getStruct(1)
       assert(s2.getInt(0) == 456)
       assert(s2.getDouble(1) == 5.67)
+      column.close()
     }}
   }
 
