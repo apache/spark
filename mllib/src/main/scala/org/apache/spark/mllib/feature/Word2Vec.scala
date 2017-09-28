@@ -369,7 +369,7 @@ class Word2Vec extends Serializable with Logging {
             if (wordCount - lastWordCount > 10000) {
               lwc = wordCount
               alpha = learningRate *
-                (1 - numPartitions * wordCount.toDouble + (k - 1) * trainWordsCount /
+                (1 - (numPartitions * wordCount.toDouble + (k - 1) * trainWordsCount) /
                   (numIterations * trainWordsCount + 1))
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
               logInfo("wordCount = " + wordCount + ", alpha = " + alpha)
