@@ -194,7 +194,7 @@ case class RelationConversions(
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
     } else {
-      val options = Map[String, String]()
+      val options = relation.tableMeta.storage.properties
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[OrcFileFormat], "orc")
     }
