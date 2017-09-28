@@ -784,7 +784,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       codecs.head
     }
 
-    def checkCompressionCodecForTable(format:String, isPartitioned: Boolean,
+    def checkCompressionCodecForTable(format: String, isPartitioned: Boolean,
       compressionConf: Option[TableCompressionConf])(assertion: String => Unit): Unit = {
       val table = TableDefine(s"tbl_$format${isPartitioned}",
         isPartitioned, format, compressionConf)
