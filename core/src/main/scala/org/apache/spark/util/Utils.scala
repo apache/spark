@@ -2729,7 +2729,8 @@ private[spark] object Utils extends Logging {
 
         case e: InvocationTargetException =>
           e.getCause() match {
-            case _: UnsupportedOperationException =>
+            case uoe: UnsupportedOperationException =>
+              logDebug(s"Extension $name not being initialized.", uoe)
               logInfo(s"Extension $name not being initialized.")
               None
 
