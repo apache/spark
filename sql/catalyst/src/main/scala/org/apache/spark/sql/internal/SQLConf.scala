@@ -668,7 +668,7 @@ object SQLConf {
       .createWithDefault(40)
 
   val ENABLE_TWOLEVEL_AGG_MAP =
-    buildConf("spark.sql.codegen.aggregate.map.twolevel.enable")
+    buildConf("spark.sql.codegen.aggregate.map.twolevel.enabled")
       .internal()
       .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
         "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
@@ -908,7 +908,7 @@ object SQLConf {
     .createWithDefault(false)
 
   val ARROW_EXECUTION_ENABLE =
-    buildConf("spark.sql.execution.arrow.enable")
+    buildConf("spark.sql.execution.arrow.enabled")
       .internal()
       .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
         "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
