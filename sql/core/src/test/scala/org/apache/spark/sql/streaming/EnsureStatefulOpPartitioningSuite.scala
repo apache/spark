@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{SparkPlan, SparkPlanTest, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{Exchange, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata, StatefulOperator, StatefulOperatorStateInfo}
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -93,7 +93,7 @@ class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLCont
         fail(s"Was expecting an exchange but didn't get one in:\n$executed")
       }
       assert(exchange.get ===
-        ShuffleExchange(expectedPartitioning(inputPlan.output.take(1)), inputPlan),
+        ShuffleExchangeExec(expectedPartitioning(inputPlan.output.take(1)), inputPlan),
         s"Exchange didn't have expected properties:\n${exchange.get}")
     } else {
       assert(!executed.children.exists(_.isInstanceOf[Exchange]),
