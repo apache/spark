@@ -285,8 +285,10 @@ public abstract class ColumnVector implements AutoCloseable {
   public void close() {
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
-        childColumns[i].close();
-        childColumns[i] = null;
+        if (childColumns[i] != null) {
+          childColumns[i].close();
+          childColumns[i] = null;
+        }
       }
     }
     if (dictionaryIds != null) {
