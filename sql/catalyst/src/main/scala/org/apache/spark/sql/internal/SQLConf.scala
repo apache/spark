@@ -907,6 +907,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION =
+    buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
+      .internal()
+      .doc("Number of points to sample per partition in order to determine the range boundaries" +
+          " for range partitioning, typically used in global sorting (without limit).")
+      .intConf
+      .createWithDefault(100)
+
   val ARROW_EXECUTION_ENABLE =
     buildConf("spark.sql.execution.arrow.enable")
       .internal()
@@ -1198,6 +1206,8 @@ class SQLConf extends Serializable with Logging {
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
+
+  def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 

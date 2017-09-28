@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.MutablePair
 
 /**
@@ -218,7 +219,11 @@ object ShuffleExchangeExec {
           iter.map(row => mutablePair.update(row.copy(), null))
         }
         implicit val ordering = new LazilyGeneratedOrdering(sortingExpressions, outputAttributes)
-        new RangePartitioner(numPartitions, rddForSampling, ascending = true)
+        new RangePartitioner(
+          numPartitions,
+          rddForSampling,
+          ascending = true,
+          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition =>
         new Partitioner {
           override def numPartitions: Int = 1
