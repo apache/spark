@@ -773,9 +773,9 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
           block <- footer.getParquetMetadata.getBlocks.asScala
           column <- block.getColumns.asScala
         } yield column.getCodec.name()
-        case "orc" => new File(path).listFiles()
-          .filter(file => file.isFile && !file.getName.endsWith(".crc")).map {
-          orcFile =>
+        case "orc" => new File(path).listFiles().filter{ file =>
+          file.isFile && !file.getName.endsWith(".crc") && file.getName != "_SUCCESS"
+        }.map { orcFile =>
             OrcFileOperator.getFileReader(orcFile.toPath.toString).get.getCompression.toString
         }.toSeq
       }
@@ -784,8 +784,8 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       codecs.head
     }
 
-    def checkCompressionCodecForTable(format: String, isPartitioned: Boolean,
-      compressionConf: Option[TableCompressionConf])(assertion: String => Boolean): Unit = {
+    def checkCompressionCodecForTable(format:String, isPartitioned: Boolean,
+      compressionConf: Option[TableCompressionConf])(assertion: String => Unit): Unit = {
       val table = TableDefine(s"tbl_$format${isPartitioned}",
         isPartitioned, format, compressionConf)
       withTempDir { tmpDir =>
@@ -812,7 +812,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     def checkTableCompressionCodecForCodecs(format: String, isPartitioned: Boolean,
       convertMetastore: Boolean, compressionCodecs: List[String],
       tableCompressionConf: List[TableCompressionConf])
-      (assertion: (Option[TableCompressionConf], String, String) => Boolean): Unit = {
+      (assertion: (Option[TableCompressionConf], String, String) => Unit): Unit = {
       withSQLConf(getConvertMetastoreConfName(format) -> convertMetastore.toString) {
         tableCompressionConf.foreach { tableCompression =>
           compressionCodecs.foreach { sessionCompressionCodec =>
@@ -831,69 +831,77 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
     def checkTableCompressionCodec(format: String, compressionCodecs: List[String],
       tableCompressionConf: List[TableCompressionConf]): Unit = {
       // For tables with table-level compression property, when
-      // 'spark.sql.hive.convertMetastoreParquet' was set to 'false', partitioned parquet tables
-      // and non-partitioned parquet tables will always take the table-level compression
+      // 'spark.sql.hive.convertMetastore[Parquet|Orc]' was set to 'false', partitioned tables
+      // and non-partitioned tables will always take the table-level compression
       // configuration first and ignore session compression configuration.
+      // Check for partitioned table, when convertMetastore is false
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
         convertMetastore = false, compressionCodecs, tableCompressionConf) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // table-level take effect
-          tableCompressionCodec.get.codeC == realCompressionCodec
+          // expect table-level take effect
+          assert(tableCompressionCodec.get.codeC == realCompressionCodec)
       }
 
+      // Check for non-partitioned table, when convertMetastore is false
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
         convertMetastore = false, compressionCodecs, tableCompressionConf) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // table-level take effect
-          tableCompressionCodec.get.codeC == realCompressionCodec
+          // expect table-level take effect
+          assert(tableCompressionCodec.get.codeC == realCompressionCodec)
       }
 
       // For tables with table-level compression property, when
-      // 'spark.sql.hive.convertMetastoreParquet' was set to 'true', partitioned parquet tables
+      // 'spark.sql.hive.convertMetastore[Parquet|Orc]' was set to 'true', partitioned tables
       // will always take the table-level compression configuration first, but non-partitioned
       // tables will take the session-level compression configuration.
+      // Check for partitioned table, when convertMetastore is true
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
         convertMetastore = true, compressionCodecs, tableCompressionConf) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // table-level take effect
-          tableCompressionCodec.get.codeC == realCompressionCodec
+          // expect table-level take effect
+          assert(tableCompressionCodec.get.codeC == realCompressionCodec)
       }
 
+      // Check for non-partitioned table, when convertMetastore is true
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
         convertMetastore = true, compressionCodecs, tableCompressionConf) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // session-level take effect
-          sessionCompressionCodec == realCompressionCodec
+          // expect session-level take effect
+          assert(sessionCompressionCodec == realCompressionCodec)
       }
 
       // For tables without table-level compression property, session-level compression
       // configuration will take effect.
-      checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
-        convertMetastore = true, compressionCodecs, List(null)) {
-        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // session-level take effect
-          sessionCompressionCodec == realCompressionCodec
-      }
-
-      checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
-        convertMetastore = true, compressionCodecs, List(null)) {
-        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // session-level take effect
-          sessionCompressionCodec == realCompressionCodec
-      }
-
+      // Check for partitioned table, when convertMetastore is false
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
         convertMetastore = false, compressionCodecs, List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // session-level take effect
-          sessionCompressionCodec == realCompressionCodec
+          // expect session-level take effect
+          assert(sessionCompressionCodec == realCompressionCodec)
       }
 
+      // Check for non-partitioned table, when convertMetastore is false
       checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
         convertMetastore = false, compressionCodecs, List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // session-level take effect
-          sessionCompressionCodec == realCompressionCodec
+          // expect session-level take effect
+          assert(sessionCompressionCodec == realCompressionCodec)
+      }
+
+      // Check for partitioned table, when convertMetastore is true
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = true,
+        convertMetastore = true, compressionCodecs, List(null)) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // expect session-level take effect
+          assert(sessionCompressionCodec == realCompressionCodec)
+      }
+
+      // Check for non-partitioned table, when convertMetastore is true
+      checkTableCompressionCodecForCodecs(format = format, isPartitioned = false,
+        convertMetastore = true, compressionCodecs, List(null)) {
+        case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
+          // expect session-level take effect
+          assert(sessionCompressionCodec == realCompressionCodec)
       }
     }
 
@@ -910,7 +918,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       (0 until 100000).toDF("a").createOrReplaceTempView("table_source")
       val orcCompressionCodec = List("NONE", "SNAPPY", "ZLIB")
       val tableCompressionConf = orcCompressionCodec.map { tableCodec =>
-        TableCompressionConf("parquet.compression", tableCodec)
+        TableCompressionConf("orc.compress", tableCodec)
       }
       checkTableCompressionCodec("orc", orcCompressionCodec, tableCompressionConf)
     }
