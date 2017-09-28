@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -1529,7 +1529,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           fail("Should not have back to back Aggregates")
         }
         atFirstAgg = true
-      case e: ShuffleExchange => atFirstAgg = false
+      case e: ShuffleExchangeExec => atFirstAgg = false
       case _ =>
     }
   }
@@ -1710,19 +1710,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
       assert(
-        join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+        join.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size === 1)
       assert(
         join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+        join2.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size == 1)
       assert(
         join2.queryExecution.executedPlan
           .collect { case e: BroadcastExchangeExec => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
+        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size == 4)
     }
   }
 
