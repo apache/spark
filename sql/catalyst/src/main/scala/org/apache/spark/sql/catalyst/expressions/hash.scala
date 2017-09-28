@@ -363,7 +363,8 @@ abstract class HashExpression[E] extends Expression {
     val baseObject = s"$input.getBaseObject()"
     val baseOffset = s"$input.getBaseOffset()"
     val numBytes = s"$input.numBytes()"
-    s"$result = $hasherClassName.hashUnsafeBytesBlock($baseObject, $baseOffset, $numBytes, $result);"
+    s"$result = $hasherClassName.hashUnsafeBytesBlock(" +
+      s"$baseObject, $baseOffset, $numBytes, $result);"
   }
 
   protected def genHashForMap(
