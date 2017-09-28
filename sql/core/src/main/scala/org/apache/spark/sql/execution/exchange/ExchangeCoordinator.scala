@@ -35,9 +35,9 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *
  * A coordinator is constructed with three parameters, `numExchanges`,
  * `targetPostShuffleInputSize`, and `minNumPostShufflePartitions`.
- *  - `numExchanges` is used to indicated that how many [[ShuffleExchangeExec]]s that will be registered
- *    to this coordinator. So, when we start to do any actual work, we have a way to make sure that
- *    we have got expected number of [[ShuffleExchangeExec]]s.
+ *  - `numExchanges` is used to indicated that how many [[ShuffleExchangeExec]]s that will be
+ *    registered to this coordinator. So, when we start to do any actual work, we have a way to
+ *    make sure that we have got expected number of [[ShuffleExchangeExec]]s.
  *  - `targetPostShuffleInputSize` is the targeted size of a post-shuffle partition's
  *    input data size. With this parameter, we can estimate the number of post-shuffle partitions.
  *    This parameter is configured through
@@ -61,14 +61,14 @@ import org.apache.spark.sql.execution.{ShuffledRowRDD, SparkPlan}
  *    post-shuffle partitions and pack multiple pre-shuffle partitions with continuous indices
  *    to a single post-shuffle partition whenever necessary.
  *  - Finally, this coordinator will create post-shuffle [[ShuffledRowRDD]]s for all registered
- *    [[ShuffleExchangeExec]]s. So, when a [[ShuffleExchangeExec]] calls `postShuffleRDD`, this coordinator
- *    can lookup the corresponding [[RDD]].
+ *    [[ShuffleExchangeExec]]s. So, when a [[ShuffleExchangeExec]] calls `postShuffleRDD`, this
+ *    coordinator can lookup the corresponding [[RDD]].
  *
  * The strategy used to determine the number of post-shuffle partitions is described as follows.
  * To determine the number of post-shuffle partitions, we have a target input size for a
  * post-shuffle partition. Once we have size statistics of pre-shuffle partitions from stages
- * corresponding to the registered [[ShuffleExchangeExec]]s, we will do a pass of those statistics and
- * pack pre-shuffle partitions with continuous indices to a single post-shuffle partition until
+ * corresponding to the registered [[ShuffleExchangeExec]]s, we will do a pass of those statistics
+ * and pack pre-shuffle partitions with continuous indices to a single post-shuffle partition until
  * adding another pre-shuffle partition would cause the size of a post-shuffle partition to be
  * greater than the target size.
  *
@@ -101,8 +101,8 @@ class ExchangeCoordinator(
   @volatile private[this] var estimated: Boolean = false
 
   /**
-   * Registers a [[ShuffleExchangeExec]] operator to this coordinator. This method is only allowed to
-   * be called in the `doPrepare` method of a [[ShuffleExchangeExec]] operator.
+   * Registers a [[ShuffleExchangeExec]] operator to this coordinator. This method is only allowed
+   * to be called in the `doPrepare` method of a [[ShuffleExchangeExec]] operator.
    */
   @GuardedBy("this")
   def registerExchange(exchange: ShuffleExchangeExec): Unit = synchronized {

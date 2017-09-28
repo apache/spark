@@ -27,8 +27,8 @@ import org.apache.spark.sql.internal.SQLConf
  * Ensures that the [[org.apache.spark.sql.catalyst.plans.physical.Partitioning Partitioning]]
  * of input data meets the
  * [[org.apache.spark.sql.catalyst.plans.physical.Distribution Distribution]] requirements for
- * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that the
- * input partition ordering requirements are met.
+ * each operator by inserting [[ShuffleExchangeExec]] Operators where required.  Also ensure that
+ * the input partition ordering requirements are met.
  */
 case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def defaultNumPreShufflePartitions: Int = conf.numShufflePartitions
