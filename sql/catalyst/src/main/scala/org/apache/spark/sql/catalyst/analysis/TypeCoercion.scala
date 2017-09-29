@@ -166,7 +166,7 @@ object TypeCoercion {
       })
   }
 
-  private def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
+  def findWiderCommonType(types: Seq[DataType]): Option[DataType] = {
     types.foldLeft[Option[DataType]](Some(NullType))((r, c) => r match {
       case Some(d) => findWiderTypeForTwo(d, c)
       case None => None

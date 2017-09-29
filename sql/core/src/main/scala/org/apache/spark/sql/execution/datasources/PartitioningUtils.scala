@@ -28,7 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCoercion}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Cast, Literal}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -309,13 +309,8 @@ object PartitioningUtils {
   }
 
   /**
-   * Resolves possible type conflicts between partitions by up-casting "lower" types.  The up-
-   * casting order is:
-   * {{{
-   *   NullType ->
-   *   IntegerType -> LongType ->
-   *   DoubleType -> StringType
-   * }}}
+   * Resolves possible type conflicts between partitions by up-casting "lower" types using
+   * [[TypeCoercion.findWiderCommonType]]. See [[TypeCoercion.findWiderTypeForTwo]].
    */
   def resolvePartitions(
       pathsWithPartitionValues: Seq[(Path, PartitionValues)],
@@ -373,8 +368,8 @@ object PartitioningUtils {
   }
 
   /**
-   * Converts a string to a [[Literal]] with automatic type inference.  Currently only supports
-   * [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
+   * Converts a string to a [[Literal]] with automatic type inference. Currently only supports
+   * [[NullType]], [[IntegerType]], [[LongType]], [[DoubleType]], [[DecimalType]], [[DateType]]
    * [[TimestampType]], and [[StringType]].
    */
   private[datasources] def inferPartitionColumnValue(
@@ -427,9 +422,6 @@ object PartitioningUtils {
     }
   }
 
-  private val upCastingOrder: Seq[DataType] =
-    Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
-
   def validatePartitionColumn(
       schema: StructType,
       partitionColumns: Seq[String],
@@ -468,14 +460,16 @@ object PartitioningUtils {
   }
 
   /**
-   * Given a collection of [[Literal]]s, resolves possible type conflicts by up-casting "lower"
-   * types.
+   * Given a collection of [[Literal]]s, resolves possible type conflicts by
+   * [[TypeCoercion.findWiderCommonType]]. See [[TypeCoercion.findWiderTypeForTwo]].
    */
   private def resolveTypeConflicts(literals: Seq[Literal], timeZone: TimeZone): Seq[Literal] = {
-    val desiredType = {
-      val topType = literals.map(_.dataType).maxBy(upCastingOrder.indexOf(_))
-      // Falls back to string if all values of this column are null or empty string
-      if (topType == NullType) StringType else topType
+    // Falls back to string if all values of this column are null, or the common type could
+    // not be found.
+    val desiredType = TypeCoercion.findWiderCommonType(literals.map(_.dataType)) match {
+      case Some(NullType) => StringType
+      case Some(dt: DataType) => dt
+      case _ => StringType
     }
 
     literals.map { case l @ Literal(_, dataType) =>
