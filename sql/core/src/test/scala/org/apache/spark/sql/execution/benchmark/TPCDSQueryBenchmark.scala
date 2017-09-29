@@ -66,7 +66,7 @@ object TPCDSQueryBenchmark extends Logging {
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan.
       val queryRelations = scala.collection.mutable.HashSet[String]()
-      spark.sql(queryString).queryExecution.analyzed.map {
+      spark.sql(queryString).queryExecution.analyzed.foreach {
         case SubqueryAlias(name, _: LogicalRelation) =>
           queryRelations.add(name)
         case _ =>
