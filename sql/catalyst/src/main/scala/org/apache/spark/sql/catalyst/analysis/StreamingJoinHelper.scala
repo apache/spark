@@ -134,8 +134,6 @@ object StreamingJoinHelper extends PredicateHelper with Logging {
     val terms = ExpressionSet(collectTerms(allOnLeftExpr))
     logDebug("Terms extracted from join condition:\n\t" + terms.mkString("\n\t"))
 
-
-
     // Find the term that has leftTime (i.e. the one present in attributesToFindConstraintFor
     val constraintTerms = terms.filter(containsAttributeToFindStateConstraintFor)
 
