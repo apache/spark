@@ -55,29 +55,30 @@ function createTemplateURI(appId) {
 // e.g. https://axonitered-jt1.red.ygrid.yahoo.com:50509/history/application_1502220952225_59143/stages/stage/?id=0&attempt=0
 function StageEndPoint(appId) {
     var words = document.baseURI.split('/');
+    var words2 = document.baseURI.split('?');
     var ind = words.indexOf("proxy");
     if (ind > 0) {
         var appId = words[ind + 1];
-        var stageIdLen = words[ind + 3].indexOf('&');
-        var stageId = words[ind + 3].substr(9, stageIdLen - 9);
+        var stageIdLen = words2[1].indexOf('&');
+        var stageId = words2[1].substr(3, stageIdLen - 3);
         var newBaseURI = words.slice(0, ind + 2).join('/');
         return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
     }
     ind = words.indexOf("history");
     if (ind > 0) {
         var appId = words[ind + 1];
-        var attemptId = words[ind + 5].split("&attempt=").pop();
-        var stageIdLen = words[ind + 5].indexOf('&');
-        var stageId = words[ind + 5].substr(4, stageIdLen - 4);
+        var attemptId = words[ind + 2];
+        var stageIdLen = words2[1].indexOf('&');
+        var stageId = words2[1].substr(3, stageIdLen - 3);
         var newBaseURI = words.slice(0, ind).join('/');
         if (isNaN(attemptId) || attemptId == "0") {
-            return newBaseURI + "/api/v1/applications/" + appId + "/" + "1" + "/stages/" + stageId;
+            return newBaseURI + "/api/v1/applications/" + appId + "/stages/" + stageId;
         } else {
             return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/stages/" + stageId;
         }
     }
-    var stageIdLen = words[ind + 3].indexOf('&');
-    var stageId = words[ind + 3].substr(9, stageIdLen - 9);
+    var stageIdLen = words2[1].indexOf('&');
+    var stageId = words2[1].substr(3, stageIdLen - 3);
     return location.origin + "/api/v1/applications/" + appId + "/stages/" + stageId;
 }
 
