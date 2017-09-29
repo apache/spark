@@ -22,8 +22,17 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.catalyst.util.resourceToString
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.util.Utils
 
+/**
+ * This test suite ensures all the TPC-DS queries can be successfully analyzed and optimized
+ * without hitting the max iteration threshold.
+ */
 class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
+
+  // When Utils.isTesting is true, the RuleExecutor will issue an exception when hitting
+  // the max iteration of analyzer/optimizer batches.
+  assert(Utils.isTesting, "spark.testing is not set to true")
 
   /**
    * Drop all the tables
@@ -341,8 +350,23 @@ class TPCDSQuerySuite extends QueryTest with SharedSQLContext with BeforeAndAfte
       classLoader = Thread.currentThread().getContextClassLoader)
     test(name) {
       withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
-        sql(queryString).collect()
+        // Just check the plans can be properly generated
+        sql(queryString).queryExecution.executedPlan
       }
+    }
+  }
+
+  // These queries are from https://github.com/cloudera/impala-tpcds-kit/tree/master/queries
+  val modifiedTPCDSQueries = Seq(
+    "q3", "q7", "q10", "q19", "q27", "q34", "q42", "q43", "q46", "q52", "q53", "q55", "q59",
+    "q63", "q65", "q68", "q73", "q79", "q89", "q98", "ss_max")
+
+  modifiedTPCDSQueries.foreach { name =>
+    val queryString = resourceToString(s"tpcds-modifiedQueries/$name.sql",
+      classLoader = Thread.currentThread().getContextClassLoader)
+    test(s"modified-$name") {
+      // Just check the plans can be properly generated
+      sql(queryString).queryExecution.executedPlan
     }
   }
 }
