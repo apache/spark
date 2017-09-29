@@ -189,7 +189,7 @@ case class RelationConversions(
   private def convert(relation: HiveTableRelation): LogicalRelation = {
     val serde = relation.tableMeta.storage.serde.getOrElse("").toLowerCase(Locale.ROOT)
     if (serde.contains("parquet")) {
-      val options = Map(ParquetOptions.MERGE_SCHEMA ->
+      val options = relation.tableMeta.storage.properties + (ParquetOptions.MERGE_SCHEMA ->
         conf.getConf(HiveUtils.CONVERT_METASTORE_PARQUET_WITH_SCHEMA_MERGING).toString)
       sessionCatalog.metastoreCatalog
         .convertToLogicalRelation(relation, options, classOf[ParquetFileFormat], "parquet")
