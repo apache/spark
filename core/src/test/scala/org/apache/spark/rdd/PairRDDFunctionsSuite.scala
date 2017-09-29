@@ -526,8 +526,9 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
   }
 
   test("The JobId on driver and executor should be the same during the commit") {
-    val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1).
-      map( p => (new Integer(p._1 + 1), new Integer(p._2 + 1))).filter( p => p._1 > 0)
+    // Create more than one rdd to mimic stageId not equal to rddId
+    val pairs = sc.parallelize(Array((1, 2), (2, 3)), 2).
+      map { p => (new Integer(p._1 + 1), new Integer(p._2 + 1)) }.filter { p => p._1 > 0 }
     RDDID.rddid = pairs.id
     pairs.saveAsNewAPIHadoopFile[YetAnotherFakeFormat]("ignored")
   }
@@ -875,7 +876,6 @@ class NewFakeFormatWithCallback() extends NewFakeFormat {
 class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
   def setupJob(j: NewJobContext): Unit = {
     JobID.jobid = j.getJobID().getId
-    ()
   }
 
   def needsTaskCommit(t: NewTaskAttempContext): Boolean = false
@@ -884,17 +884,16 @@ class YetAnotherFakeCommitter extends NewOutputCommitter with Assertions {
     val rddid = t.getTaskAttemptID().getJobID().getId
     assert(rddid === RDDID.rddid )
     assert(rddid === JobID.jobid)
-    ()
   }
 
-  def commitTask(t: NewTaskAttempContext): Unit = ()
+  def commitTask(t: NewTaskAttempContext): Unit = {}
 
-  def abortTask(t: NewTaskAttempContext): Unit = ()
+  def abortTask(t: NewTaskAttempContext): Unit = {}
 }
 
 class YetAnotherFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 
-  def checkOutputSpecs(j: NewJobContext): Unit = ()
+  def checkOutputSpecs(j: NewJobContext): Unit = {}
 
   def getRecordWriter(t: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     new NewFakeWriter()
