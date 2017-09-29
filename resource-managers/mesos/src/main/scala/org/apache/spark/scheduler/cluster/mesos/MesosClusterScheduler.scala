@@ -37,7 +37,6 @@ import org.apache.spark.deploy.rest.{CreateSubmissionResponse, KillSubmissionRes
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.Utils
 
-
 /**
  * Tracks the current state of a Mesos Task that runs a Spark driver.
  * @param driverDescription Submitted driver description from
