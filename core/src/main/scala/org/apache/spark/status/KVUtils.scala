@@ -38,7 +38,7 @@ private[spark] object KVUtils extends Logging {
    * A KVStoreSerializer that provides Scala types serialization too, and uses the same options as
    * the API serializer.
    */
-  class KVStoreScalaSerializer extends KVStoreSerializer {
+  private[spark] class KVStoreScalaSerializer extends KVStoreSerializer {
 
     mapper.registerModule(DefaultScalaModule)
     mapper.setSerializationInclusion(JsonInclude.Include.NON_NULL)
@@ -68,6 +68,6 @@ private[spark] object KVUtils extends Logging {
     db
   }
 
-  class MetadataMismatchException extends Exception
+  private[spark]class MetadataMismatchException extends Exception
 
 }
