@@ -26,6 +26,28 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructType
 
+private object BatchIterator {
+  class InnerIterator[T](iter: Iterator[T], batchSize: Int) extends Iterator[T] {
+    var count = 0
+    override def hasNext: Boolean = iter.hasNext && count < batchSize
+
+    override def next(): T = {
+      count += 1
+      iter.next()
+    }
+  }
+}
+
+private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
+  extends Iterator[Iterator[T]] {
+
+  override def hasNext: Boolean = iter.hasNext
+
+  override def next(): Iterator[T] = {
+    new BatchIterator.InnerIterator[T](iter, batchSize)
+  }
+}
+
 /**
  * A physical plan that evaluates a [[PythonUDF]],
  */
@@ -44,13 +66,20 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
     val schemaOut = StructType.fromAttributes(output.drop(child.output.length).zipWithIndex
       .map { case (attr, i) => attr.withName(s"_$i") })
 
-    val batchedIter: Iterator[Iterator[InternalRow]] =
-      iter.grouped(conf.arrowMaxRecordsPerBatch).map(_.iterator)
+    val batchSize = conf.arrowMaxRecordsPerBatch
+
+    val batchIter = if (batchSize > 0) {
+      new BatchIterator(iter, batchSize)
+    } else if (batchSize == 0) {
+      Iterator(iter)
+    } else {
+      throw new IllegalArgumentException(s"MaxRecordsPerBatch must be >= 0, but is $batchSize")
+    }
 
     val columnarBatchIter = new ArrowPythonRunner(
         funcs, bufferSize, reuseWorker,
         PythonEvalType.SQL_PANDAS_UDF, argOffsets, schema)
-      .compute(batchedIter, context.partitionId(), context)
+      .compute(batchIter, context.partitionId(), context)
 
     new Iterator[InternalRow] {
 

@@ -3257,17 +3257,17 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
 
     def test_vectorized_udf_zero_parameter(self):
         from pyspark.sql.functions import pandas_udf
-        error_str = '0-parameter pandas_udfs.*not.*supported'
+        error_str = '0-arg pandas_udfs.*not.*supported'
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(NotImplementedError, error_str):
+            with self.assertRaisesRegexp(ValueError, error_str):
                 pandas_udf(lambda: 1, LongType())
 
-            with self.assertRaisesRegexp(NotImplementedError, error_str):
+            with self.assertRaisesRegexp(ValueError, error_str):
                 @pandas_udf
                 def zero_no_type():
                     return 1
 
-            with self.assertRaisesRegexp(NotImplementedError, error_str):
+            with self.assertRaisesRegexp(ValueError, error_str):
                 @pandas_udf(LongType())
                 def zero_with_type():
                     return 1

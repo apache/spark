@@ -2133,7 +2133,7 @@ def _create_udf(f, returnType, vectorized):
             argspec = inspect.getargspec(f)
             if len(argspec.args) == 0 and argspec.varargs is None:
                 raise ValueError(
-                    "0-arg pandas_udf are not supported. "
+                    "0-arg pandas_udfs are not supported. "
                     "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
                 )
         udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
