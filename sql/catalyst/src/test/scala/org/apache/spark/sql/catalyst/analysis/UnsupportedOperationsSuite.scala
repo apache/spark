@@ -432,25 +432,28 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Left outer joins: stream-stream allowed with range condition yielding state value watermark
   assertSupportedInStreamingPlan(
     s"left outer join with stream-stream relations and state value watermark", {
-      val firstRelationWithWatermark = new TestStreamingRelation(attributeWithWatermark)
-      val secondAttribute = AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      firstRelationWithWatermark.join(
-        new TestStreamingRelation(secondAttribute),
+      val leftRelation = streamRelation
+      val rightTimeWithWatermark =
+        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+      val rightRelation = new TestStreamingRelation(rightTimeWithWatermark)
+      leftRelation.join(
+        rightRelation,
         joinType = LeftOuter,
-        condition = Some(secondAttribute < attributeWithWatermark + 10 &&
-          secondAttribute > attributeWithWatermark - 10))
+        condition = Some(attribute > rightTimeWithWatermark + 10))
     },
     OutputMode.Append())
 
   // Left outer joins: stream-stream not allowed with insufficient range condition
   assertNotSupportedInStreamingPlan(
     s"left outer join with stream-stream relations and state value watermark", {
-      val firstRelationWithWatermark = new TestStreamingRelation(attributeWithWatermark)
-      val secondAttribute = AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      firstRelationWithWatermark.join(
-        new TestStreamingRelation(secondAttribute),
+      val leftRelation = streamRelation
+      val rightTimeWithWatermark =
+        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+      val rightRelation = new TestStreamingRelation(rightTimeWithWatermark)
+      leftRelation.join(
+        rightRelation,
         joinType = LeftOuter,
-        condition = Some(secondAttribute > attributeWithWatermark - 10))
+        condition = Some(attribute < rightTimeWithWatermark + 10))
     },
     OutputMode.Append(),
     Seq("appropriate range condition"))
@@ -489,25 +492,28 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Right outer joins: stream-stream allowed with range condition yielding state value watermark
   assertSupportedInStreamingPlan(
     s"right outer join with stream-stream relations and state value watermark", {
-      val firstRelationWithWatermark = new TestStreamingRelation(attributeWithWatermark)
-      val secondAttribute = AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      firstRelationWithWatermark.join(
-        new TestStreamingRelation(secondAttribute),
+      val leftTimeWithWatermark =
+        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+      val leftRelation = new TestStreamingRelation(leftTimeWithWatermark)
+      val rightRelation = streamRelation
+      leftRelation.join(
+        rightRelation,
         joinType = RightOuter,
-        condition = Some(secondAttribute < attributeWithWatermark + 10 &&
-          secondAttribute > attributeWithWatermark - 10))
+        condition = Some(leftTimeWithWatermark + 10 < attribute))
     },
     OutputMode.Append())
 
   // Right outer joins: stream-stream not allowed with insufficient range condition
   assertNotSupportedInStreamingPlan(
     s"right outer join with stream-stream relations and state value watermark", {
-      val firstRelationWithWatermark = new TestStreamingRelation(attributeWithWatermark)
-      val secondAttribute = AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
-      firstRelationWithWatermark.join(
-        new TestStreamingRelation(secondAttribute),
+      val leftTimeWithWatermark =
+        AttributeReference("b", IntegerType)().withMetadata(watermarkMetadata)
+      val leftRelation = new TestStreamingRelation(leftTimeWithWatermark)
+      val rightRelation = streamRelation
+      leftRelation.join(
+        rightRelation,
         joinType = RightOuter,
-        condition = Some(secondAttribute < attributeWithWatermark + 10))
+        condition = Some(leftTimeWithWatermark + 10 > attribute))
     },
     OutputMode.Append(),
     Seq("appropriate range condition"))
