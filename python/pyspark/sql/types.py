@@ -1651,6 +1651,7 @@ def from_pandas_dtypes(dtypes):
     return StructType([StructField(dtypes.axes[0][i], from_pandas_type(dtypes[i]))
                        for i in range(len(dtypes))])
 
+
 def _test():
     import doctest
     from pyspark.context import SparkContext
