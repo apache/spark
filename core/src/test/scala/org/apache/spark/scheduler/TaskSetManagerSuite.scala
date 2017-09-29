@@ -1146,7 +1146,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Make sure that the blacklist ignored all of the task failures above, since they aren't
     // the fault of the executor where the task was running.
     verify(blacklist, never())
-      .updateBlacklistForFailedTask(anyString(), anyString(), anyInt())
+      .updateBlacklistForFailedTask(anyString(), anyString(), anyInt(), anyString())
   }
 
   test("update application blacklist for shuffle-fetch") {

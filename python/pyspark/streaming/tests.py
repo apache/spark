@@ -1516,7 +1516,10 @@ def search_kinesis_asl_assembly_jar():
         return jars[0]
 
 
-# Must be same as the variable and condition defined in KinesisTestUtils.scala
+# Must be same as the variable and condition defined in modules.py
+kafka_test_environ_var = "ENABLE_KAFKA_0_8_TESTS"
+are_kafka_tests_enabled = os.environ.get(kafka_test_environ_var) == '1'
+# Must be same as the variable and condition defined in KinesisTestUtils.scala and modules.py
 kinesis_test_environ_var = "ENABLE_KINESIS_TESTS"
 are_kinesis_tests_enabled = os.environ.get(kinesis_test_environ_var) == '1'
 
@@ -1535,8 +1538,15 @@ if __name__ == "__main__":
 
     os.environ["PYSPARK_SUBMIT_ARGS"] = "--jars %s pyspark-shell" % jars
     testcases = [BasicOperationTests, WindowFunctionTests, StreamingContextTests, CheckpointTests,
-                 KafkaStreamTests, FlumeStreamTests, FlumePollingStreamTests,
+                 FlumeStreamTests, FlumePollingStreamTests,
                  StreamingListenerTests]
+
+    if are_kafka_tests_enabled:
+        testcases.append(KafkaStreamTests)
+    else:
+        sys.stderr.write(
+            "Skipped test_kafka_stream (enable by setting environment variable %s=1"
+            % kafka_test_environ_var)
 
     if kinesis_jar_present is True:
         testcases.append(KinesisStreamTests)

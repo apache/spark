@@ -234,8 +234,9 @@ private[arrow] class StringWriter(val valueVector: NullableVarCharVector) extend
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val utf8 = input.getUTF8String(ordinal)
+    val utf8ByteBuffer = utf8.getByteBuffer
     // todo: for off-heap UTF8String, how to pass in to arrow without copy?
-    valueMutator.setSafe(count, utf8.getByteBuffer, 0, utf8.numBytes())
+    valueMutator.setSafe(count, utf8ByteBuffer, utf8ByteBuffer.position(), utf8.numBytes())
   }
 }
 

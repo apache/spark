@@ -249,7 +249,7 @@ class LevelDBTypeInfo {
      * calculated only once, avoiding redundant work when multiple child indices of the
      * same parent index exist.
      */
-    byte[] childPrefix(Object value) throws Exception {
+    byte[] childPrefix(Object value) {
       Preconditions.checkState(parent == null, "Not a parent index.");
       return buildKey(name, toParentKey(value));
     }
@@ -295,7 +295,7 @@ class LevelDBTypeInfo {
     }
 
     /** The key for the end marker for entries with the given value. */
-    byte[] end(byte[] prefix, Object value) throws Exception {
+    byte[] end(byte[] prefix, Object value) {
       checkParent(prefix);
       return (parent != null) ? buildKey(false, prefix, name, toKey(value), END_MARKER)
         : buildKey(name, toKey(value), END_MARKER);
@@ -313,7 +313,7 @@ class LevelDBTypeInfo {
       return entityKey;
     }
 
-    private void updateCount(WriteBatch batch, byte[] key, long delta) throws Exception {
+    private void updateCount(WriteBatch batch, byte[] key, long delta) {
       long updated = getCount(key) + delta;
       if (updated > 0) {
         batch.put(key, db.serializer.serialize(updated));
@@ -431,7 +431,7 @@ class LevelDBTypeInfo {
       addOrRemove(batch, entity, null, null, naturalKey, prefix);
     }
 
-    long getCount(byte[] key) throws Exception {
+    long getCount(byte[] key) {
       byte[] data = db.db().get(key);
       return data != null ? db.serializer.deserializeLong(data) : 0;
     }

@@ -247,7 +247,7 @@ private[sql] trait SQLTestUtils
   protected def withDatabase(dbNames: String*)(f: => Unit): Unit = {
     try f finally {
       dbNames.foreach { name =>
-        spark.sql(s"DROP DATABASE IF EXISTS $name")
+        spark.sql(s"DROP DATABASE IF EXISTS $name CASCADE")
       }
       spark.sql(s"USE $DEFAULT_DATABASE")
     }

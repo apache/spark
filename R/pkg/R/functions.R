@@ -176,7 +176,8 @@ NULL
 #'
 #' @param x Column to compute on. Note the difference in the following methods:
 #'          \itemize{
-#'          \item \code{to_json}: it is the column containing the struct or array of the structs.
+#'          \item \code{to_json}: it is the column containing the struct, array of the structs,
+#'              the map or array of maps.
 #'          \item \code{from_json}: it is the column containing the JSON string.
 #'          }
 #' @param ... additional argument(s). In \code{to_json} and \code{from_json}, this contains
@@ -1700,8 +1701,9 @@ setMethod("to_date",
           })
 
 #' @details
-#' \code{to_json}: Converts a column containing a \code{structType} or array of \code{structType}
-#' into a Column of JSON string. Resolving the Column can fail if an unsupported type is encountered.
+#' \code{to_json}: Converts a column containing a \code{structType}, array of \code{structType},
+#' a \code{mapType} or array of \code{mapType} into a Column of JSON string.
+#' Resolving the Column can fail if an unsupported type is encountered.
 #'
 #' @rdname column_collection_functions
 #' @aliases to_json to_json,Column-method
@@ -1715,6 +1717,14 @@ setMethod("to_date",
 #'
 #' # Converts an array of structs into a JSON array
 #' df2 <- sql("SELECT array(named_struct('name', 'Bob'), named_struct('name', 'Alice')) as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts a map into a JSON object
+#' df2 <- sql("SELECT map('name', 'Bob')) as people")
+#' df2 <- mutate(df2, people_json = to_json(df2$people))
+#'
+#' # Converts an array of maps into a JSON array
+#' df2 <- sql("SELECT array(map('name', 'Bob'), map('name', 'Alice')) as people")
 #' df2 <- mutate(df2, people_json = to_json(df2$people))}
 #' @note to_json since 2.2.0
 setMethod("to_json", signature(x = "Column"),
@@ -2216,8 +2226,9 @@ setMethod("from_json", signature(x = "Column", schema = "characterOrstructType")
           })
 
 #' @details
-#' \code{from_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day in UTC,
-#' returns another timestamp that corresponds to the same time of day in the given timezone.
+#' \code{from_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
+#' time in UTC, and renders that time as a timestamp in the given time zone. For example, 'GMT+1'
+#' would yield '2017-07-14 03:40:00.0'.
 #'
 #' @rdname column_datetime_diff_functions
 #'
@@ -2276,8 +2287,9 @@ setMethod("next_day", signature(y = "Column", x = "character"),
           })
 
 #' @details
-#' \code{to_utc_timestamp}: Given a timestamp, which corresponds to a certain time of day
-#' in the given timezone, returns another timestamp that corresponds to the same time of day in UTC.
+#' \code{to_utc_timestamp}: Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a
+#' time in the given time zone, and renders that time as a timestamp in UTC. For example, 'GMT+1'
+#' would yield '2017-07-14 01:40:00.0'.
 #'
 #' @rdname column_datetime_diff_functions
 #' @aliases to_utc_timestamp to_utc_timestamp,Column,character-method
