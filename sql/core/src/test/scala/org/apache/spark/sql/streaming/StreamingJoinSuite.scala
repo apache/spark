@@ -665,5 +665,89 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         CheckLastBatch(outerResult))
     }
   }
+
+  // When the join condition isn't true, the outer null rows must be generated, even if the join
+  // keys themselves have a match.
+  test("outer join with non-key condition violated on left") {
+    val (leftInput, simpleLeftDf) = setupStream("left", 2)
+    val (rightInput, simpleRightDf) = setupStream("right", 3)
+
+    val left = simpleLeftDf.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = simpleRightDf.select('key, window('rightTime, "10 second"), 'rightValue)
+
+    val joined = left.join(
+        right,
+        left("key") === right("key") && left("window") === right("window") &&
+            'leftValue > 20 && 'rightValue < 200,
+        "left_outer")
+      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      // leftValue <= 20 should generate outer join rows even though it matches right keys
+      AddData(leftInput, 1, 2, 3),
+      AddData(rightInput, 1, 2, 3),
+      CheckLastBatch(),
+      AddData(leftInput, 30),
+      AddData(rightInput, 31),
+      CheckLastBatch(),
+      AddData(rightInput, 32),
+      CheckLastBatch(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null))
+    )
+  }
+
+  test("outer join with non-key condition which is met") {
+    val (leftInput, simpleLeftDf) = setupStream("left", 2)
+    val (rightInput, simpleRightDf) = setupStream("right", 3)
+
+    val left = simpleLeftDf.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = simpleRightDf.select('key, window('rightTime, "10 second"), 'rightValue)
+
+    val joined = left.join(
+      right,
+      left("key") === right("key") && left("window") === right("window") &&
+        'leftValue > 20 && 'rightValue < 200,
+      "left_outer")
+      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      // both values between 20 and 200 should not generate outer join rows
+      AddData(leftInput, 40, 50),
+      AddData(rightInput, 40, 50),
+      CheckLastBatch((40, 50, 80, 120), (50, 60, 100, 150)),
+      AddData(leftInput, 70),
+      AddData(rightInput, 71),
+      CheckLastBatch(),
+      AddData(leftInput, 72),
+      AddData(rightInput, 73),
+      CheckLastBatch()
+    )
+  }
+
+  test("outer join with non-key condition violated on right") {
+    val (leftInput, simpleLeftDf) = setupStream("left", 2)
+    val (rightInput, simpleRightDf) = setupStream("right", 3)
+
+    val left = simpleLeftDf.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = simpleRightDf.select('key, window('rightTime, "10 second"), 'rightValue)
+
+    val joined = left.join(
+      right,
+      left("key") === right("key") && left("window") === right("window") && 'rightValue > 20,
+      "left_outer")
+      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      // rightValue < 20 should generate outer join rows even though it matches left keys
+      AddData(leftInput, 4, 5),
+      AddData(rightInput, 4, 5),
+      CheckLastBatch(),
+      AddData(leftInput, 100),
+      AddData(rightInput, 101),
+      CheckLastBatch(),
+      AddData(leftInput, 102),
+      AddData(rightInput, 103),
+      CheckLastBatch(Row(4, 10, 8, null), Row(5, 10, 10, null))
+    )
+  }
 }
 

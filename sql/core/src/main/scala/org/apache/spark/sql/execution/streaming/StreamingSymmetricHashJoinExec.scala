@@ -221,12 +221,14 @@ case class StreamingSymmetricHashJoinExec(
     //    matching new left input with new right input, since the new left input has become stored
     //    by that point. This tiny asymmetry is necessary to avoid duplication.
     val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
-      (inputRow: UnsafeRow, matchedRow: UnsafeRow) =>
+      (inputRow: UnsafeRow, matchedRow: UnsafeRow) => {
         joinedRow.withLeft(inputRow).withRight(matchedRow)
+      }
     }
     val rightOutputIter = rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner) {
-      (inputRow: UnsafeRow, matchedRow: UnsafeRow) =>
+      (inputRow: UnsafeRow, matchedRow: UnsafeRow) => {
         joinedRow.withLeft(matchedRow).withRight(inputRow)
+      }
     }
 
     // Filter the joined rows based on the given condition.
@@ -249,14 +251,21 @@ case class StreamingSymmetricHashJoinExec(
         // * Getting an iterator over the rows that have aged out on the left side. These rows are
         //   candidates for being null joined. Note that to avoid doing two passes, this iterator
         //   removes the rows from the state manager as they're processed.
-        // * Checking whether the current row matches a key in the right side state. If it doesn't,
+        // * Checking whether the current row matches a key in the right side state, and that key
+        //   has any value which satisfies the filter function when joined. If it doesn't,
         //   we know we can join with null, since there was never (including this batch) a match
         //   within the watermark period. If it does, there must have been a match at some point, so
         //   we know we can't join with null.
         val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
         val removedRowIter = leftSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter
-          .filterNot(pair => rightSideJoiner.containsKey(pair.key))
+          .filterNot(pair => {
+            rightSideJoiner.get(pair.key).exists(
+              rightValue => {
+                outputFilterFunction(
+                  joinedRow.withLeft(pair.value).withRight(rightValue))
+              })
+          })
           .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
 
         filteredInnerOutputIter ++ outerOutputIter
@@ -265,7 +274,13 @@ case class StreamingSymmetricHashJoinExec(
         val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
         val removedRowIter = rightSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter
-          .filterNot(pair => leftSideJoiner.containsKey(pair.key))
+          .filterNot(pair => {
+            leftSideJoiner.get(pair.key).exists(
+              leftValue => {
+                outputFilterFunction(
+                  joinedRow.withLeft(leftValue).withRight(pair.value))
+              })
+          })
           .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
         filteredInnerOutputIter ++ outerOutputIter
@@ -402,6 +417,15 @@ case class StreamingSymmetricHashJoinExec(
     }
 
     /**
+     * Get an iterator over the values stored in this joiner's state manager for the given key.
+     *
+     * Should not be interleaved with mutations.
+     */
+    def get(key: UnsafeRow): Iterator[UnsafeRow] = {
+      joinStateManager.get(key)
+    }
+
+    /**
      * Builds an iterator over old state key-value pairs, removing them lazily as they're produced.
      *
      * @note This iterator must be consumed fully before any other operations are made
@@ -419,13 +443,6 @@ case class StreamingSymmetricHashJoinExec(
           joinStateManager.removeByValueCondition(stateValueWatermarkPredicateFunc)
         case _ => Iterator.empty
       }
-    }
-
-    /**
-     * Checks if the join state manager contains the provided key.
-     */
-    def containsKey(key: UnsafeRow): Boolean = {
-      joinStateManager.get(key).hasNext
     }
 
     /** Commit changes to the buffer state and return the state store metrics */
