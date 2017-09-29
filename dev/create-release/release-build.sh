@@ -74,7 +74,7 @@ GIT_REF=${GIT_REF:-master}
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-GPG="gpg --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
@@ -116,7 +116,7 @@ else
       echo "Please set JAVA_HOME correctly."
       exit 1
     else
-      JAVA_HOME="$JAVA_7_HOME"
+      export JAVA_HOME="$JAVA_7_HOME"
     fi
   fi
 fi
@@ -131,7 +131,7 @@ DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 function LFTP {
   SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
   COMMANDS=$(cat <<EOF
-     set net:max-retries 1 &&
+     set net:max-retries 2 &&
      set sftp:connect-program $SSH &&
      connect -u $ASF_USERNAME,p sftp://home.apache.org &&
      $@
@@ -337,7 +337,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
     -DskipTests $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   rm $tmp_settings
   cd ..
@@ -345,8 +345,6 @@ if [[ "$1" == "publish-snapshot" ]]; then
 fi
 
 if [[ "$1" == "publish-release" ]]; then
-  SPARK_VERSION=$SPARK_PACKAGE_VERSION
-
   cd spark
   # Publish Spark to Maven release repo
   echo "Publishing Spark checkout at '$GIT_REF' ($git_hash)"
@@ -377,7 +375,7 @@ if [[ "$1" == "publish-release" ]]; then
     -DskipTests $PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   ./dev/change-version-to-2.10.sh
 
