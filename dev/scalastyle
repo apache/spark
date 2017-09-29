@@ -25,7 +25,6 @@ ERRORS=$(echo -e "q\n" \
         -Pmesos \
         -Pkafka-0-8 \
         -Pyarn \
-        -Pflume \
         -Phive \
         -Phive-thriftserver \
         scalastyle test:scalastyle \
