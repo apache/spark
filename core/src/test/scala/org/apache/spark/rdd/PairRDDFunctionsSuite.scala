@@ -22,8 +22,6 @@ import java.io.IOException
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
-import org.scalatest.Assertions
-
 import org.apache.commons.math3.distribution.{BinomialDistribution, PoissonDistribution}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.fs.FileSystem
@@ -32,6 +30,7 @@ import org.apache.hadoop.mapreduce.{JobContext => NewJobContext,
   OutputCommitter => NewOutputCommitter, OutputFormat => NewOutputFormat,
   RecordWriter => NewRecordWriter, TaskAttemptContext => NewTaskAttempContext}
 import org.apache.hadoop.util.Progressable
+import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.Partitioner
