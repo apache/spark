@@ -28,15 +28,11 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 
 case class FlatMapGroupsInPandasExec(
-    grouping: Seq[Expression],
+    groupingAttributes: Seq[Attribute],
     func: Expression,
-    override val output: Seq[Attribute],
-    override val child: SparkPlan
-) extends UnaryExecNode {
-
-  val groupingAttributes: Seq[Attribute] = grouping.map {
-    case ne: NamedExpression => ne.toAttribute
-  }
+    output: Seq[Attribute],
+    child: SparkPlan)
+  extends UnaryExecNode {
 
   private val pandasFunction = func.asInstanceOf[PythonUDF].func
 

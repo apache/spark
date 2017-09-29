@@ -202,6 +202,11 @@ class GroupedData(object):
         """
         from pyspark.sql.functions import pandas_udf
 
+        if not udf_obj._vectorized:
+            raise ValueError("Must pass a pandas_udf")
+        if not isinstance(udf_obj.returnType, StructType):
+            raise ValueError("Must pass a StructType as return type in pandas_udf")
+
         df = DataFrame(self._jgd.df(), self.sql_ctx)
         func = udf_obj.func
         returnType = udf_obj.returnType

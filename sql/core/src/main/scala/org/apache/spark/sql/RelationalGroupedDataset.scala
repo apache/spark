@@ -48,7 +48,7 @@ import org.apache.spark.sql.types.{NumericType, StructField, StructType}
 @InterfaceStability.Stable
 class RelationalGroupedDataset protected[sql](
     val df: DataFrame,
-    val groupingExprs: Seq[Expression],
+    groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
@@ -436,9 +436,9 @@ class RelationalGroupedDataset protected[sql](
           df.logicalPlan))
   }
 
-  private[sql] def flatMapGroupsInPandas(
-      expr: PythonUDF
-  ): DataFrame = {
+  private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
+    require(expr.vectorized, "Must pass a vectorized python udf")
+
     val output = expr.dataType match {
       case s: StructType => s.map {
         case StructField(name, dataType, nullable, metadata) =>
@@ -446,8 +446,12 @@ class RelationalGroupedDataset protected[sql](
       }
     }
 
+    val groupingAttributes: Seq[Attribute] = groupingExprs.map {
+      case ne: NamedExpression => ne.toAttribute
+    }
+
     val plan = FlatMapGroupsInPandas(
-      groupingExprs,
+      groupingAttributes,
       expr,
       output,
       df.logicalPlan
