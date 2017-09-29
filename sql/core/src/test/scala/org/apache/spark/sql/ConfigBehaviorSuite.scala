@@ -31,6 +31,8 @@ class ConfigBehaviorSuite extends QueryTest with SharedSQLContext {
     // In this test, we run a sort and compute the histogram for partition size post shuffle.
     // With a high sample count, the partition size should be more evenly distributed, and has a
     // low chi-sq test value.
+    // Also the whole code path for range partitioning as implemented should be deterministic
+    // (it uses the partition id as the seed), so this test shouldn't be flaky.
 
     val numPartitions = 4
 
