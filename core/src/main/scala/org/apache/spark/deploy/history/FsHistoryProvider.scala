@@ -712,6 +712,10 @@ private[history] object FsHistoryProvider {
 
   private val LOG_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerLogStart\""
 
+  private val JOB_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerJobStart\""
+
+  private val JOB_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerJobEnd\""
+
   /**
    * Current version of the data written to the listing database. When opening an existing
    * db, if the version does not match this value, the FsHistoryProvider will throw away
@@ -746,7 +750,7 @@ private[history] class AttemptInfoWrapper(
     val fileSize: Long) {
 
   def toAppAttemptInfo(): ApplicationAttemptInfo = {
-    ApplicationAttemptInfo(info.attemptId, info.startTime.getTime(),
+    ApplicationAttemptInfo(info.attemptId, info.status, info.startTime.getTime(),
       info.endTime.getTime(), info.lastUpdated.getTime(), info.sparkUser,
       info.completed, info.appSparkVersion)
   }

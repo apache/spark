@@ -132,6 +132,7 @@ $(document).ready(function() {
           attempt["startTime"] = formatDate(attempt["startTime"]);
           attempt["endTime"] = formatDate(attempt["endTime"]);
           attempt["lastUpdated"] = formatDate(attempt["lastUpdated"]);
+          attempt["status"] = attempt["status"];
           attempt["log"] = uiRoot + "/api/v1/applications/" + id + "/" +
             (attempt.hasOwnProperty("attemptId") ? attempt["attemptId"] + "/" : "") + "logs";
           attempt["durationMillisec"] = attempt["duration"];
@@ -167,6 +168,7 @@ $(document).ready(function() {
             {name: startedColumnName},
             {name: completedColumnName},
             {name: durationColumnName, type: "title-numeric"},
+            {name: 'status'},
             {name: 'user'},
             {name: 'lastUpdated'},
             {name: 'eventLog'},
