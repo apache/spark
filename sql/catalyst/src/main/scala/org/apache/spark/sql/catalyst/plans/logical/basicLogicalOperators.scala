@@ -668,7 +668,7 @@ case class Pivot(
  * In most cases when we want to push down limit, it is often better to only push some partition
  * local limit. Consider the following:
  *
- *   GlobalLimit(Union(A, B)
+ *   GlobalLimit(Union(A, B))
  *
  * It is better to do
  *   GlobalLimit(Union(LocalLimit(A), LocalLimit(B)))

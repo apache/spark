@@ -289,16 +289,23 @@ object RemoveRedundantProject extends Rule[LogicalPlan] {
  */
 object LimitPushDown extends Rule[LogicalPlan] {
 
+  private def stripGlobalLimitIfPresent(plan: LogicalPlan): LogicalPlan = {
+    plan match {
+      case GlobalLimit(_, child) => child
+      case _ => plan
+    }
+  }
+
   private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
     (limitExp, plan.maxRowsPerPartition) match {
       case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
         // If the child has a cap on max rows per partition and the cap is smaller than
         // the new limit, put a new LocalLimit there.
-        LocalLimit(limitExp, plan)
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
 
       case (_, None) =>
         // If the child has no cap, put the new LocalLimit.
-        LocalLimit(limitExp, plan)
+        LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
 
       case _ =>
         // Otherwise, don't put a new LocalLimit.
