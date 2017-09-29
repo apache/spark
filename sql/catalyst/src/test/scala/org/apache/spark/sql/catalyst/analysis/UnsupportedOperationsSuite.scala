@@ -423,11 +423,23 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     expectedMsg = "outer join")
 
   // Left outer joins: stream-stream allowed with join on watermark attribute
+  // Note that the attribute need not be watermarked on both sides.
   assertSupportedInStreamingPlan(
-    s"left outer join with stream-stream relations and join on watermark attribute key",
+    s"left outer join with stream-stream relations and join on attribute with left watermark",
     streamRelation.join(streamRelation, joinType = LeftOuter,
-      condition = Some(attributeWithWatermark === attributeWithWatermark)),
+      condition = Some(attributeWithWatermark === attribute)),
     OutputMode.Append())
+  assertSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and join on attribute with right watermark",
+    streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attributeWithWatermark)),
+    OutputMode.Append())
+  assertNotSupportedInStreamingPlan(
+    s"left outer join with stream-stream relations and join on non-watermarked attribute",
+    streamRelation.join(streamRelation, joinType = LeftOuter,
+      condition = Some(attribute === attribute)),
+    OutputMode.Append(),
+    Seq("watermark in the join keys"))
 
   // Left outer joins: stream-stream allowed with range condition yielding state value watermark
   assertSupportedInStreamingPlan(
