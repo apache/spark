@@ -760,7 +760,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
        taskId: Long,
        executorId: String,
        interruptThread: Boolean,
-       reason: String): Unit = {}
+       reason: String): Unit = {
+        // Check the only one killTask event in this case, which triggered by
+        // task 2.1 completed.
+        assert(taskId === 2)
+        assert(executorId === "exec3")
+        assert(interruptThread)
+        assert(reason === "another attempt succeeded")
+      }
     })
 
     // Keep track of the number of tasks that are resubmitted,
@@ -794,15 +801,20 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       task.metrics.internalAccums
     }
     // Offer resources for 4 tasks to start
-    for ((k, v) <- List(
+    for ((exec, host) <- Seq(
       "exec1" -> "host1",
       "exec1" -> "host1",
       "exec3" -> "host3",
       "exec2" -> "host2")) {
-      val taskOption = manager.resourceOffer(k, v, NO_PREF)
+      val taskOption = manager.resourceOffer(exec, host, NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
-      assert(task.executorId === k)
+      assert(task.executorId === exec)
+      // Add an extra assert to make sure task 2.0 is running on exec3
+      if (task.index == 2) {
+        assert(task.attemptNumber === 0)
+        assert(task.executorId === "exec3")
+      }
     }
     assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
     clock.advance(1)
@@ -827,11 +839,11 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(task4.taskId === 4)
     assert(task4.executorId === "exec2")
     assert(task4.attemptNumber === 1)
-    sched.backend = mock(classOf[SchedulerBackend])
     // Complete the speculative attempt for the running task
     manager.handleSuccessfulTask(4, createTaskResult(2, accumUpdatesByTask(2)))
-    // Verify that it kills other running attempt
-    verify(sched.backend).killTask(2, "exec3", true, "another attempt succeeded")
+    // With this successful task end, the sched.backend will kill other running attempt,
+    // verify the request of killTask(2, "exec3", true, "another attempt succeeded") in
+    // FakeDAGScheduler subclass
     // Host 3 Losts, there's only task 2.0 on it, which killed by task 2.1
     manager.executorLost("exec3", "host3", SlaveLost())
     // Check the resubmittedTasks

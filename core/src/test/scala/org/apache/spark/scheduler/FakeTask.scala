@@ -58,8 +58,11 @@ object FakeTask {
     new TaskSet(tasks, stageId, stageAttemptId, priority = 0, null)
   }
 
-  def createShuffleMapTaskSet(numTasks: Int, stageId: Int, stageAttemptId: Int,
-    prefLocs: Seq[TaskLocation]*): TaskSet = {
+  def createShuffleMapTaskSet(
+      numTasks: Int,
+      stageId: Int,
+      stageAttemptId: Int,
+      prefLocs: Seq[TaskLocation]*): TaskSet = {
     if (prefLocs.size != 0 && prefLocs.size != numTasks) {
       throw new IllegalArgumentException("Wrong number of task locations")
     }
