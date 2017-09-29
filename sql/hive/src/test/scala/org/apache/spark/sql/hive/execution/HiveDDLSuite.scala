@@ -1439,46 +1439,6 @@ class HiveDDLSuite
     }
   }
 
-  test("create hive serde table with new syntax - parquet") {
-    withTable("t", "t2", "t3") {
-      withTempPath { path =>
-        sql(
-          s"""
-             |CREATE TABLE t(id int) USING hive
-             |OPTIONS(fileFormat 'parquet', compression 'gzip')
-             |LOCATION '${path.toURI}'
-           """.stripMargin)
-        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
-        assert(DDLUtils.isHiveTable(table))
-        assert(table.storage.serde ==
-          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
-        assert(table.storage.properties.get("compression") == Some("gzip"))
-        assert(spark.table("t").collect().isEmpty)
-
-        sql("INSERT INTO t SELECT 1")
-        checkAnswer(spark.table("t"), Row(1))
-        val maybeParquetFile = path.listFiles().find(f => f.getName.startsWith("part"))
-        assert(maybeParquetFile.isDefined)
-
-        val footer = ParquetFileReader.readFooter(
-          sparkContext.hadoopConfiguration,
-          new Path(maybeParquetFile.get.getPath),
-          NO_FILTER)
-        assert("GZIP" === footer.getBlocks.get(0).getColumns().get(0).getCodec.toString)
-
-        sql("CREATE TABLE t2 USING HIVE AS SELECT 1 AS c1, 'a' AS c2")
-        val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
-        assert(DDLUtils.isHiveTable(table2))
-        assert(table2.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-        checkAnswer(spark.table("t2"), Row(1, "a"))
-
-        sql("CREATE TABLE t3(a int, p int) USING hive PARTITIONED BY (p)")
-        sql("INSERT INTO t3 PARTITION(p=1) SELECT 0")
-        checkAnswer(spark.table("t3"), Row(0, 1))
-      }
-    }
-  }
-
   test("create hive serde table with new syntax - orc") {
     Seq("true", "false").foreach { value =>
       withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> value) {
@@ -1518,6 +1478,46 @@ class HiveDDLSuite
             checkAnswer(spark.table("t3"), Row(0, 1))
           }
         }
+      }
+    }
+  }
+
+  test("create hive serde table with new syntax - parquet") {
+    withTable("t", "t2", "t3") {
+      withTempPath { path =>
+        sql(
+          s"""
+             |CREATE TABLE t(id int) USING hive
+             |OPTIONS(fileFormat 'parquet', compression 'gzip')
+             |LOCATION '${path.toURI}'
+           """.stripMargin)
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
+        assert(DDLUtils.isHiveTable(table))
+        assert(table.storage.serde ==
+          Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe"))
+        assert(table.storage.properties.get("compression") == Some("gzip"))
+        assert(spark.table("t").collect().isEmpty)
+
+        sql("INSERT INTO t SELECT 1")
+        checkAnswer(spark.table("t"), Row(1))
+        val maybeParquetFile = path.listFiles().find(f => f.getName.startsWith("part"))
+        assert(maybeParquetFile.isDefined)
+
+        val footer = ParquetFileReader.readFooter(
+          sparkContext.hadoopConfiguration,
+          new Path(maybeParquetFile.get.getPath),
+          NO_FILTER)
+        assert("GZIP" === footer.getBlocks.get(0).getColumns().get(0).getCodec.toString)
+
+        sql("CREATE TABLE t2 USING HIVE AS SELECT 1 AS c1, 'a' AS c2")
+        val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+        assert(DDLUtils.isHiveTable(table2))
+        assert(table2.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
+        checkAnswer(spark.table("t2"), Row(1, "a"))
+
+        sql("CREATE TABLE t3(a int, p int) USING hive PARTITIONED BY (p)")
+        sql("INSERT INTO t3 PARTITION(p=1) SELECT 0")
+        checkAnswer(spark.table("t3"), Row(0, 1))
       }
     }
   }
