@@ -240,44 +240,43 @@ object UnsupportedOperationChecker {
                     "on the right are not supported")
               }
 
-            // We support left and right outer streaming joins only in the stream+stream case.
-            case LeftOuter | RightOuter =>
-              if (joinType == LeftOuter && !left.isStreaming && right.isStreaming) {
+            // We support streaming left outer joins with static on the right always, and with
+            // stream on both sides under the appropriate conditions.
+            case LeftOuter =>
+              if (!left.isStreaming && right.isStreaming) {
                 throwError("Left outer join with a streaming DataFrame/Dataset " +
-                  "on the right and non-streaming on the left is not supported")
-              }
-              if (joinType == RightOuter && left.isStreaming && !right.isStreaming) {
-                throwError("Right outer join with a streaming DataFrame/Dataset on the left and " +
-                    "non-streaming on the right not supported")
+                  "on the right and a static DataFrame/Dataset on the left is not supported")
+              } else if (left.isStreaming && right.isStreaming) {
+                val watermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
+
+                val hasValidWatermarkRange =
+                  StreamingJoinHelper.getStateValueWatermark(
+                    left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
+
+
+                if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
+                  throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
+                    "is not supported without a watermark in the join keys, or a watermark on " +
+                    "the nullable side and an appropriate range condition")
+                }
               }
 
-              if (left.isStreaming && right.isStreaming) {
-                val watermarkInJoinKeys = subPlan match {
-                  case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
-                    val keySet = AttributeSet(leftKeys ++ rightKeys)
-                    (leftKeys ++ rightKeys).exists {
-                      case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
-                      case _ => false
-                    }
-                  case _ => false
-                }
+            // We support streaming right outer joins with static on the left always, and with
+            // stream on both sides under the appropriate conditions.
+            case RightOuter =>
+              if (left.isStreaming && !right.isStreaming) {
+                throwError("Right outer join with a streaming DataFrame/Dataset on the left and " +
+                    "a static DataFrame/DataSet on the right not supported")
+              } else if (left.isStreaming && right.isStreaming) {
+                val isWatermarkInJoinKeys = StreamingJoinHelper.isWatermarkInJoinKeys(subPlan)
 
                 // Check if the nullable side has a watermark, and there's a range condition which
                 // implies a state value watermark on the first side.
-                val hasValidWatermarkRange = joinType match {
-                  case LeftOuter =>
-                    // We provide a dummy watermark value 0 - we just want to check if the
-                    // watermark predicate can be constructed.
-                    StreamingJoinHelper.getStateValueWatermark(
-                      left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
-                  case RightOuter =>
+                val hasValidWatermarkRange =
                     StreamingJoinHelper.getStateValueWatermark(
                       right.outputSet, left.outputSet, condition, Some(1000000)).isDefined
-                  case _ =>
-                    false
-                }
 
-                if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
+                if (!isWatermarkInJoinKeys && !hasValidWatermarkRange) {
                   throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
                     "is not supported without a watermark in the join keys, or a watermark on " +
                     "the nullable side and an appropriate range condition")

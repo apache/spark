@@ -539,7 +539,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     }
 
     assert(thrown.getMessage.contains(
-      "Left outer join with a streaming DataFrame/Dataset on the right and non-streaming"))
+      "Left outer join with a streaming DataFrame/Dataset on the right and a static"))
   }
 
   test("right stream batch outer join") {
@@ -555,7 +555,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     }
 
     assert(thrown.getMessage.contains(
-      "Right outer join with a streaming DataFrame/Dataset on the left and non-streaming"))
+      "Right outer join with a streaming DataFrame/Dataset on the left and a static"))
   }
 
   test("left outer join with no watermark") {

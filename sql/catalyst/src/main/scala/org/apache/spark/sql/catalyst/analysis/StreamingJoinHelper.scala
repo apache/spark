@@ -21,6 +21,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.{Add, AttributeReference, AttributeSet, Cast, CheckOverflow, Expression, ExpressionSet, GreaterThan, GreaterThanOrEqual, LessThan, LessThanOrEqual, Literal, Multiply, PreciseTimestampConversion, PredicateHelper, Subtract, TimeAdd, TimeSub, UnaryMinus}
+import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeWatermark, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -30,6 +32,24 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * Helper object for stream joins. See [[StreamingSymmetricHashJoinExec]] in SQL for more details.
  */
 object StreamingJoinHelper extends PredicateHelper with Logging {
+
+  /**
+   * Check the provided logical plan to see if its join keys contain a watermark attribute.
+   *
+   * Will return false if the plan is not an equijoin.
+   * @param plan the logical plan to check
+   */
+  def isWatermarkInJoinKeys(plan: LogicalPlan): Boolean = {
+    plan match {
+      case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _) =>
+        (leftKeys ++ rightKeys).exists {
+          case a: AttributeReference => a.metadata.contains(EventTimeWatermark.delayKey)
+          case _ => false
+        }
+      case _ => false
+    }
+  }
+
   /**
    * Get state value watermark (see [[StreamingSymmetricHashJoinExec]] for context about it)
    * given the join condition and the event time watermark. This is how it works.

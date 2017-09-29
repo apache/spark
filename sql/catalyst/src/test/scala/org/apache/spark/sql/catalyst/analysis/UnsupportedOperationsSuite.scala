@@ -414,7 +414,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     batchStreamSupported = false,
     streamBatchSupported = false)
 
-  // Left outer joins: *-stream not allowed with default condition
+  // Left outer joins: *-stream not allowed
   testBinaryOperationInStreamingPlan(
     "left outer join",
     _.join(_, joinType = LeftOuter),
@@ -471,7 +471,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     batchStreamSupported = false,
     expectedMsg = "left semi/anti joins")
 
-  // Right outer joins: stream-* not allowed with default condition
+  // Right outer joins: stream-* not allowed
   testBinaryOperationInStreamingPlan(
     "right outer join",
     _.join(_, joinType = RightOuter),
