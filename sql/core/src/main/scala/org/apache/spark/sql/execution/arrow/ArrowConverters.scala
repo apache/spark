@@ -27,8 +27,10 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.file._
 import org.apache.arrow.vector.schema.ArrowRecordBatch
 import org.apache.arrow.vector.util.ByteArrayReadableSeekableByteChannel
-
 import org.apache.spark.TaskContext
+
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.sql.types._
@@ -172,6 +174,7 @@ private[sql] object ArrowConverters {
         reader.loadNextBatch()  // throws IOException
         val root = reader.getVectorSchemaRoot  // throws IOException
         schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
+        println(s"*** $schemaRead")
 
         val columns = root.getFieldVectors.asScala.map { vector =>
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
@@ -203,4 +206,45 @@ private[sql] object ArrowConverters {
       reader.close()
     }
   }
+
+  def toJavaRDD(payloadBytes: Array[Array[Byte]], jsc: JavaSparkContext): JavaRDD[Array[Byte]] = {
+    JavaRDD.fromRDD(jsc.sc.parallelize(payloadBytes, payloadBytes.length))
+  }
+
+  def toDataFrame(
+      arrowRDD: JavaRDD[Array[Byte]],
+      schemaString: String,
+      sqlContext: SQLContext): DataFrame = {
+    val rdd = arrowRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      ArrowConverters.fromPayloadIterator(iter.map(new ArrowPayload(_)), context)
+    }
+
+    /*
+    val schemaList = arrowRDD.rdd.mapPartitions { iter =>
+      val context = TaskContext.get()
+      if (iter.hasNext) {
+        val first = iter.next()
+        Iterator(ArrowConverters.fromPayloadIterator(Iterator(new ArrowPayload(first)), context)._2)
+      } else {
+        Iterator.empty
+      }
+    }.collect()
+
+    val schema = if (schemaList.nonEmpty) schemaList(0) else StructType(Seq.empty)
+    */
+
+    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
+
+    sqlContext.internalCreateDataFrame(rdd, schema)
+  }
+
+  /*def toDataFrame(
+      payloadBytes: Array[Array[Byte]],
+      schemaString: String,
+      sqlContext: SQLContext): DataFrame = {
+    val jsc = JavaSparkContext.fromSparkContext(sqlContext.sparkContext)
+    val rdd = toJavaRDD(payloadBytes, jsc)
+    toDataFrame(rdd, schemaString, sqlContext)
+  }*/
 }
