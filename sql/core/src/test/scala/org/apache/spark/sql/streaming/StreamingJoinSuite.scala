@@ -426,6 +426,10 @@ class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with Befo
 
     // Test static comparisons
     assert(watermarkFrom("cast(leftTime AS LONG) > 10") === Some(10000))
+
+    // Test non-positive results
+    assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 10") === Some(0))
+    assert(watermarkFrom("CAST(leftTime AS LONG) > CAST(rightTime AS LONG) - 100") === Some(-90000))
   }
 
   test("locality preferences of StateStoreAwareZippedRDD") {
