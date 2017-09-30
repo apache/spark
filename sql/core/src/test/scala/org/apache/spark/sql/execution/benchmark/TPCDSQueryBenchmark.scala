@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.benchmark
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.SubqueryAlias
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -67,8 +68,12 @@ object TPCDSQueryBenchmark extends Logging {
       // logical plan and adding up the sizes of all tables that appear in the plan.
       val queryRelations = scala.collection.mutable.HashSet[String]()
       spark.sql(queryString).queryExecution.analyzed.foreach {
-        case SubqueryAlias(name, _: LogicalRelation) =>
-          queryRelations.add(name)
+        case SubqueryAlias(alias, _: LogicalRelation) =>
+          queryRelations.add(alias)
+        case LogicalRelation(_, _, Some(catalogTable), _) =>
+          queryRelations.add(catalogTable.identifier.table)
+        case HiveTableRelation(tableMeta, _, _) =>
+          queryRelations.add(tableMeta.identifier.table)
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
