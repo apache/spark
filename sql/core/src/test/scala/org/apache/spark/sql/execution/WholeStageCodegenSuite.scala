@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Add, Literal, Stack}
+import java.util.concurrent.ExecutionException
+
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodegenContext, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
@@ -212,7 +212,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
         SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString,
         SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "8000") {
       val (_, code) = genGroupByCodeGenContext(20)
-      val errMsg = intercept[IllegalArgumentException] {
+      val errMsg = intercept[ExecutionException] {
         CodeGenerator.compile(code)
       }.getMessage
       assert(errMsg.contains("this value went over the limit `spark.sql.codegen.hugeMethodLimit`"))

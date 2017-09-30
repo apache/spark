@@ -1108,7 +1108,7 @@ object CodeGenerator extends Logging {
         logError(msg)
         val maxLines = SQLConf.get.loggingMaxLinesForCodegen
         logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-        throw new IllegalArgumentException(msg)
+        throw new CompileException(msg, null)
       }
     }
 
