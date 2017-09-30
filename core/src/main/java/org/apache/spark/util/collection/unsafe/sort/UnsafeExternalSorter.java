@@ -85,7 +85,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private final LinkedList<UnsafeSorterSpillWriter> spillWriters = new LinkedList<>();
 
   // These variables are reset after spilling:
-  private @Nullable volatile UnsafeInMemorySorter inMemSorter;
+  @Nullable private volatile UnsafeInMemorySorter inMemSorter;
 
   private MemoryBlock currentPage = null;
   private long pageCursor = -1;

@@ -19,18 +19,11 @@ package org.apache.spark.util.collection.unsafe.sort;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.PrintWriter;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
-import jodd.io.StringOutputStream;
-import org.hamcrest.Description;
-import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
-import org.hamcrest.TypeSafeMatcher;
-import org.junit.Rule;
-import org.junit.rules.ExpectedException;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -526,22 +519,22 @@ public class UnsafeExternalSorterSuite {
     // the original code messed with a released array within the spill code
     // and ended up with a failed assertion.
     // we also expect the location of the OOM to be org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
-    memoryManager.markConseqOOM(2);
+    memoryManager.markconsequentOOM(2);
     OutOfMemoryError expectedOOM = null;
     try {
       insertNumber(sorter, 1024);
     }
     // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
-    catch( OutOfMemoryError oom ){
+    catch (OutOfMemoryError oom ){
       expectedOOM = oom;
     }
 
     assertNotNull("expected OutOfMmoryError but it seems operation surprisingly succeeded"
             ,expectedOOM);
     String oomStackTrace = Utils.exceptionString(expectedOOM);
-    assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"
-            , oomStackTrace
-            , Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+    assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+            oomStackTrace,
+            Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
   }
 
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)

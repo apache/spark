@@ -27,8 +27,8 @@ class TestMemoryManager(conf: SparkConf)
       numBytes: Long,
       taskAttemptId: Long,
       memoryMode: MemoryMode): Long = {
-    if (conseqOOM > 0) {
-      conseqOOM -= 1
+    if (consequentOOM > 0) {
+      consequentOOM -= 1
       0
     } else if (available >= numBytes) {
       available -= numBytes
@@ -58,15 +58,15 @@ class TestMemoryManager(conf: SparkConf)
 
   override def maxOffHeapStorageMemory: Long = 0L
 
-  private var conseqOOM = 0
+  private var consequentOOM = 0
   private var available = Long.MaxValue
 
   def markExecutionAsOutOfMemoryOnce(): Unit = {
-    markConseqOOM(1)
+    markconsequentOOM(1)
   }
 
-  def markConseqOOM( n : Int) : Unit = {
-    conseqOOM += n
+  def markconsequentOOM(n : Int) : Unit = {
+    consequentOOM += n
   }
 
   def limit(avail: Long): Unit = {

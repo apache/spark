@@ -162,7 +162,7 @@ public final class UnsafeInMemorySorter {
    */
   public void free() {
     if (consumer != null) {
-      if (null != array) {
+      if (array != null) {
         consumer.freeArray(array);
       }
       array = null;
@@ -172,7 +172,6 @@ public final class UnsafeInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
-      // this is needed to prevent a 'nested' spill,
       // the call to consumer.allocateArray may trigger a spill
       // which in turn access this instance and eventually re-enter this method and try to free the array again.
       // by setting the array to null and its length to 0 we effectively make the spill code-path a no-op.

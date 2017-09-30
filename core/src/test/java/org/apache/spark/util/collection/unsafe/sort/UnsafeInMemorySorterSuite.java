@@ -142,7 +142,12 @@ public class UnsafeInMemorySorterSuite {
 
   @Test
   public void freeAfterOOM() {
-    final TestMemoryManager testMemoryManager = new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false"));
+    final SparkConf sparkConf =
+            new SparkConf()
+                    .set("spark.memory.offHeap.enabled",
+                         "false");
+    final TestMemoryManager testMemoryManager =
+            new TestMemoryManager(sparkConf);
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
             testMemoryManager, 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
@@ -170,12 +175,12 @@ public class UnsafeInMemorySorterSuite {
     testMemoryManager.markExecutionAsOutOfMemoryOnce();
     try {
       sorter.reset();
-    } catch( OutOfMemoryError oom ) {
-      //as expected
+    } catch (OutOfMemoryError oom) {
+      // as expected
     }
-    // this currently fails on NPE at org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
+    // [SPARK-21907] this failed on NPE at org.apache.spark.memory.MemoryConsumer.freeArray(MemoryConsumer.java:108)
     sorter.free();
-    //simulate a 'back to back' free.
+    // simulate a 'back to back' free.
     sorter.free();
   }
 
