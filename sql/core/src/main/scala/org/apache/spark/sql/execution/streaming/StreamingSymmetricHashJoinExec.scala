@@ -221,14 +221,10 @@ case class StreamingSymmetricHashJoinExec(
     //    matching new left input with new right input, since the new left input has become stored
     //    by that point. This tiny asymmetry is necessary to avoid duplication.
     val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
-      (inputRow: UnsafeRow, matchedRow: UnsafeRow) => {
-        joinedRow.withLeft(inputRow).withRight(matchedRow)
-      }
+      (input: UnsafeRow, matched: UnsafeRow) => joinedRow.withLeft(input).withRight(matched)
     }
     val rightOutputIter = rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner) {
-      (inputRow: UnsafeRow, matchedRow: UnsafeRow) => {
-        joinedRow.withLeft(matchedRow).withRight(inputRow)
-      }
+      (input: UnsafeRow, matched: UnsafeRow) => joinedRow.withLeft(matched).withRight(input)
     }
 
     // Filter the joined rows based on the given condition.
@@ -242,6 +238,22 @@ case class StreamingSymmetricHashJoinExec(
     }
     val filteredInnerOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
       (leftOutputIter ++ rightOutputIter).filter(outputFilterFunction), onInnerOutputCompletion)
+
+    def matchesWithRightSideState(leftKeyValue: UnsafeRowPair) = {
+      rightSideJoiner.get(leftKeyValue.key).exists(
+        rightValue => {
+          outputFilterFunction(
+            joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
+        })
+    }
+
+    def matchesWithLeftSideState(rightKeyValue: UnsafeRowPair) = {
+      leftSideJoiner.get(rightKeyValue.key).exists(
+        leftValue => {
+          outputFilterFunction(
+            joinedRow.withLeft(leftValue).withRight(rightKeyValue.value))
+        })
+    }
 
     val outputIter: Iterator[InternalRow] = joinType match {
       case Inner =>
@@ -259,13 +271,7 @@ case class StreamingSymmetricHashJoinExec(
         val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
         val removedRowIter = leftSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter
-          .filterNot(pair => {
-            rightSideJoiner.get(pair.key).exists(
-              rightValue => {
-                outputFilterFunction(
-                  joinedRow.withLeft(pair.value).withRight(rightValue))
-              })
-          })
+          .filterNot(pair => matchesWithRightSideState(pair))
           .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
 
         filteredInnerOutputIter ++ outerOutputIter
@@ -274,13 +280,7 @@ case class StreamingSymmetricHashJoinExec(
         val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
         val removedRowIter = rightSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter
-          .filterNot(pair => {
-            leftSideJoiner.get(pair.key).exists(
-              leftValue => {
-                outputFilterFunction(
-                  joinedRow.withLeft(leftValue).withRight(pair.value))
-              })
-          })
+          .filterNot(pair => matchesWithLeftSideState(pair))
           .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
         filteredInnerOutputIter ++ outerOutputIter
