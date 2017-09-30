@@ -238,15 +238,9 @@ class Dataset[T] private[sql](
   private[sql] def showString(
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
     val numRows = _numRows.max(0)
-
-    val (data, hasMoreData) = if (numRows < Int.MaxValue) {
-      val takeResult = toDF().take(numRows + 1)
-      (takeResult.take(numRows), takeResult.length > numRows)
-    } else {
-      val takeResult = toDF().take(numRows)
-      val numTotalRows = toDF().count()
-      (takeResult, numTotalRows > numRows)
-    }
+    val takeResult = toDF().take(if (numRows == Int.MaxValue) numRows else numRows + 1)
+    val hasMoreData = takeResult.length > numRows
+    val data = takeResult.take(numRows)
 
     lazy val timeZone =
       DateTimeUtils.getTimeZone(sparkSession.sessionState.conf.sessionLocalTimeZone)
