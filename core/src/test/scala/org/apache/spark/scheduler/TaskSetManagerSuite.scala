@@ -19,20 +19,18 @@ package org.apache.spark.scheduler
 
 import java.util.{Properties, Random}
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
+import org.apache.spark._
+import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.{AccumulatorV2, ManualClock}
 import org.mockito.Matchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
-import org.apache.spark._
-import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config
-import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock, Utils}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -162,7 +160,7 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
 }
 
 class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logging {
-  import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
+  import TaskLocality.{ANY, NODE_LOCAL, NO_PREF, PROCESS_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
 
@@ -753,20 +751,22 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc.conf.set("spark.speculation.quantile", "0.5")
     sc.conf.set("spark.speculation", "true")
 
+    var killTaskCalled = false
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"),
       ("exec2", "host2"), ("exec3", "host3"))
     sched.initialize(new FakeSchedulerBackend() {
       override def killTask(
-       taskId: Long,
-       executorId: String,
-       interruptThread: Boolean,
-       reason: String): Unit = {
+          taskId: Long,
+          executorId: String,
+          interruptThread: Boolean,
+          reason: String): Unit = {
         // Check the only one killTask event in this case, which triggered by
         // task 2.1 completed.
         assert(taskId === 2)
         assert(executorId === "exec3")
         assert(interruptThread)
         assert(reason === "another attempt succeeded")
+        killTaskCalled = true
       }
     })
 
@@ -841,9 +841,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(task4.attemptNumber === 1)
     // Complete the speculative attempt for the running task
     manager.handleSuccessfulTask(4, createTaskResult(2, accumUpdatesByTask(2)))
-    // With this successful task end, the sched.backend will kill other running attempt,
-    // verify the request of killTask(2, "exec3", true, "another attempt succeeded") in
-    // FakeDAGScheduler subclass
+    // Make sure schedBackend.killTask(2, "exec3", true, "another attempt succeeded") gets called
+    assert(killTaskCalled)
     // Host 3 Losts, there's only task 2.0 on it, which killed by task 2.1
     manager.executorLost("exec3", "host3", SlaveLost())
     // Check the resubmittedTasks
