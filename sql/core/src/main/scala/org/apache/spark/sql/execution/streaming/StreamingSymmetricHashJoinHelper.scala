@@ -35,7 +35,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * Helper object for [[StreamingSymmetricHashJoinExec]]. See that object for more details.
  */
-object StreamingSymmetricHashJoinHelper extends PredicateHelper with Logging {
+object StreamingSymmetricHashJoinHelper extends Logging {
 
   sealed trait JoinSide
   case object LeftSide extends JoinSide { override def toString(): String = "left" }
