@@ -2083,23 +2083,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
-      select(Column("*"), col.as(colName))
-    }
-  }
+  def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
 
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
