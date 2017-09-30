@@ -113,11 +113,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     val normalFile = new File(normalDir, "part-00000")
     val normalContent = sc.sequenceFile[String, String](normalDir).collect
-    assert(normalContent === Array.fill(100)("abc", "abc"))
+    assert(normalContent === Array.fill(100)(("abc", "abc")))
 
     val compressedFile = new File(compressedOutputDir, "part-00000" + codec.getDefaultExtension)
     val compressedContent = sc.sequenceFile[String, String](compressedOutputDir).collect
-    assert(compressedContent === Array.fill(100)("abc", "abc"))
+    assert(compressedContent === Array.fill(100)(("abc", "abc")))
 
     assert(compressedFile.length < normalFile.length)
   }

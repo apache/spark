@@ -35,12 +35,13 @@ import org.apache.spark.sql.types.NumericType
 import org.apache.spark.sql.types.StructType
 
 /**
- * A set of methods for aggregations on a `DataFrame`, created by `Dataset.groupBy`.
+ * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
+ * [[Dataset#cube cube]] or [[Dataset#rollup rollup]] (and also `pivot`).
  *
- * The main method is the agg function, which has multiple variants. This class also contains
- * convenience some first order statistics such as mean, sum for convenience.
+ * The main method is the `agg` function, which has multiple variants. This class also contains
+ * some first-order statistics such as `mean`, `sum` for convenience.
  *
- * This class was named `GroupedData` in Spark 1.x.
+ * @note This class was named `GroupedData` in Spark 1.x.
  *
  * @since 2.0.0
  */
@@ -297,8 +298,9 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Pivots a column of the current `DataFrame` and perform the specified aggregation.
-   * There are two versions of pivot function: one that requires the caller to specify the list
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
+   *
+   * There are two versions of `pivot` function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
    *
@@ -337,7 +339,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Pivots a column of the current `DataFrame` and perform the specified aggregation.
+   * Pivots a column of the current `DataFrame` and performs the specified aggregation.
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -369,7 +371,9 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Pivots a column of the current `DataFrame` and perform the specified aggregation.
+   * (Java-specific) Pivots a column of the current `DataFrame` and performs the specified
+   * aggregation.
+   *
    * There are two versions of pivot function: one that requires the caller to specify the list
    * of distinct values to pivot on, and one that does not. The latter is more concise but less
    * efficient, because Spark needs to first compute the list of distinct values internally.
@@ -433,10 +437,6 @@ class RelationalGroupedDataset protected[sql](
   }
 }
 
-
-/**
- * Companion object for GroupedData.
- */
 private[sql] object RelationalGroupedDataset {
 
   def apply(

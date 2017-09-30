@@ -19,16 +19,14 @@ package org.apache.spark.sql.streaming
 
 import java.util.UUID
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.SparkSession
 
 /**
- * :: Experimental ::
  * A handle to a query that is executing continuously in the background as new data arrives.
  * All these methods are thread-safe.
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 trait StreamingQuery {
 

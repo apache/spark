@@ -110,77 +110,77 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
 
   /** @group getParam */
   final def getMaxDepth: Int = $(maxDepth)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxBins(value: Int): this.type = set(maxBins, value)
 
   /** @group getParam */
   final def getMaxBins: Int = $(maxBins)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMinInstancesPerNode(value: Int): this.type = set(minInstancesPerNode, value)
 
   /** @group getParam */
   final def getMinInstancesPerNode: Int = $(minInstancesPerNode)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMinInfoGain(value: Double): this.type = set(minInfoGain, value)
 
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group expertSetParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
   /** @group expertGetParam */
   final def getMaxMemoryInMB: Int = $(maxMemoryInMB)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group expertSetParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setCacheNodeIds(value: Boolean): this.type = set(cacheNodeIds, value)
 
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -226,10 +226,10 @@ private[ml] trait TreeClassifierParams extends Params {
   setDefault(impurity -> "gini")
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
@@ -277,10 +277,10 @@ private[ml] trait TreeRegressorParams extends Params {
   setDefault(impurity -> "variance")
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setImpurity(value: String): this.type = set(impurity, value)
 
   /** @group getParam */
@@ -339,10 +339,10 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
   setDefault(subsamplingRate -> 1.0)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setSubsamplingRate(value: Double): this.type = set(subsamplingRate, value)
 
   /** @group getParam */
@@ -383,10 +383,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   setDefault(numTrees -> 20)
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setNumTrees(value: Int): this.type = set(numTrees, value)
 
   /** @group getParam */
@@ -431,10 +431,10 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   setDefault(featureSubsetStrategy -> "auto")
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
 
   /** @group getParam */
@@ -458,7 +458,7 @@ private[ml] trait RandomForestRegressorParams
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -472,10 +472,10 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   // validationTol -> 1e-5
 
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /**
@@ -484,18 +484,15 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
    * (default = 0.1)
    * @group param
    */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
+  final override val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size " +
     "(a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each estimator.",
     ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
 
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
-
   /**
-   * @deprecated This method is deprecated and will be removed in 2.2.0.
+   * @deprecated This method is deprecated and will be removed in 3.0.0.
    * @group setParam
    */
-  @deprecated("This method is deprecated and will be removed in 2.2.0.", "2.1.0")
+  @deprecated("This method is deprecated and will be removed in 3.0.0.", "2.1.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   setDefault(maxIter -> 20, stepSize -> 0.1)

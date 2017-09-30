@@ -35,6 +35,11 @@ import org.apache.spark.unsafe.Platform;
  * if the fields of row are all fixed-length, as the size of result row is also fixed.
  */
 public class BufferHolder {
+
+  // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
+  // smaller. Be conservative and lower the cap a little.
+  private static final int ARRAY_MAX = Integer.MAX_VALUE - 8;
+
   public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
   private final UnsafeRow row;
@@ -61,15 +66,15 @@ public class BufferHolder {
    * Grows the buffer by at least neededSize and points the row to the buffer.
    */
   public void grow(int neededSize) {
-    if (neededSize > Integer.MAX_VALUE - totalSize()) {
+    if (neededSize > ARRAY_MAX - totalSize()) {
       throw new UnsupportedOperationException(
         "Cannot grow BufferHolder by size " + neededSize + " because the size after growing " +
-          "exceeds size limitation " + Integer.MAX_VALUE);
+          "exceeds size limitation " + ARRAY_MAX);
     }
     final int length = totalSize() + neededSize;
     if (buffer.length < length) {
       // This will not happen frequently, because the buffer is re-used.
-      int newLength = length < Integer.MAX_VALUE / 2 ? length * 2 : Integer.MAX_VALUE;
+      int newLength = length < ARRAY_MAX / 2 ? length * 2 : ARRAY_MAX;
       final byte[] tmp = new byte[newLength];
       Platform.copyMemory(
         buffer,

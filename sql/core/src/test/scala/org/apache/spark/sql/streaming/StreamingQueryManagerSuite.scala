@@ -78,9 +78,9 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       eventually(Timeout(streamingTimeout)) {
         require(!q2.isActive)
         require(q2.exception.isDefined)
+        assert(spark.streams.get(q2.id) === null)
+        assert(spark.streams.active.toSet === Set(q3))
       }
-      assert(spark.streams.get(q2.id) === null)
-      assert(spark.streams.active.toSet === Set(q3))
     }
   }
 
@@ -289,7 +289,7 @@ class StreamingQueryManagerSuite extends StreamTest with BeforeAndAfter {
       }
     }
 
-    AwaitTerminationTester.test(expectedBehavior, awaitTermFunc, testBehaviorFor)
+    AwaitTerminationTester.test(expectedBehavior, () => awaitTermFunc(), testBehaviorFor)
   }
 
   /** Stop a random active query either with `stop()` or with an error */

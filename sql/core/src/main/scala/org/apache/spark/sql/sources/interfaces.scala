@@ -91,7 +91,7 @@ trait RelationProvider {
  *
  * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
  * users need to provide a schema when using a [[SchemaRelationProvider]].
- * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
+ * A relation provider can inherit both [[RelationProvider]] and [[SchemaRelationProvider]]
  * if it can support both schema inference and user-specified schemas.
  *
  * @since 1.3.0
@@ -163,16 +163,13 @@ trait StreamSinkProvider {
 @InterfaceStability.Stable
 trait CreatableRelationProvider {
   /**
-   * Save the DataFrame to the destination and return a relation with the given parameters based on
-   * the contents of the given DataFrame. The mode specifies the expected behavior of createRelation
-   * when data already exists.
-   * Right now, there are three modes, Append, Overwrite, and ErrorIfExists.
-   * Append mode means that when saving a DataFrame to a data source, if data already exists,
-   * contents of the DataFrame are expected to be appended to existing data.
-   * Overwrite mode means that when saving a DataFrame to a data source, if data already exists,
-   * existing data is expected to be overwritten by the contents of the DataFrame.
-   * ErrorIfExists mode means that when saving a DataFrame to a data source,
-   * if data already exists, an exception is expected to be thrown.
+   * Saves a DataFrame to a destination (using data source-specific parameters)
+   *
+   * @param sqlContext SQLContext
+   * @param mode specifies what happens when the destination already exists
+   * @param parameters data source-specific parameters
+   * @param data DataFrame to save (i.e. the rows after executing the query)
+   * @return Relation with a known schema
    *
    * @since 1.3.0
    */

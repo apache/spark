@@ -116,6 +116,7 @@ class DiskBlockObjectWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
     writer.revertPartialWritesAndClose()
     assert(firstSegment.length === file.length())
     assert(writeMetrics.bytesWritten === file.length())
+    assert(writeMetrics.recordsWritten == 1)
   }
 
   test("calling revertPartialWritesAndClose() after commit() should have no effect") {

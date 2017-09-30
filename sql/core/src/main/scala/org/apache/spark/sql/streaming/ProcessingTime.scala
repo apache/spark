@@ -23,11 +23,10 @@ import scala.concurrent.duration.Duration
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.annotation.{Experimental, InterfaceStability}
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
- * :: Experimental ::
  * A trigger that runs a query periodically based on the processing time. If `interval` is 0,
  * the query will run as fast as possible.
  *
@@ -49,7 +48,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 @deprecated("use Trigger.ProcessingTime(intervalMs)", "2.2.0")
 case class ProcessingTime(intervalMs: Long) extends Trigger {
@@ -57,12 +55,10 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
 }
 
 /**
- * :: Experimental ::
  * Used to create [[ProcessingTime]] triggers for [[StreamingQuery]]s.
  *
  * @since 2.0.0
  */
-@Experimental
 @InterfaceStability.Evolving
 @deprecated("use Trigger.ProcessingTime(intervalMs)", "2.2.0")
 object ProcessingTime {

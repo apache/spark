@@ -76,7 +76,7 @@ case class CreateTempViewUsing(
       CatalogUtils.maskCredentials(options)
   }
 
-  def run(sparkSession: SparkSession): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     if (provider.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
       throw new AnalysisException("Hive data source can only be used with tables, " +
         "you can't use it with CREATE TEMP VIEW USING")

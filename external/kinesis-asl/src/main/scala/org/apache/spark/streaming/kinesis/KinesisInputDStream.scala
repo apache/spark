@@ -46,6 +46,8 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
     val cloudWatchCreds: Option[SparkAWSCredentials]
   ) extends ReceiverInputDStream[T](_ssc) {
 
+  import KinesisReadConfigurations._
+
   private[streaming]
   override def createBlockRDD(time: Time, blockInfos: Seq[ReceivedBlockInfo]): RDD[T] = {
 
@@ -60,12 +62,13 @@ private[kinesis] class KinesisInputDStream[T: ClassTag](
       val isBlockIdValid = blockInfos.map { _.isBlockIdValid() }.toArray
       logDebug(s"Creating KinesisBackedBlockRDD for $time with ${seqNumRanges.length} " +
           s"seq number ranges: ${seqNumRanges.mkString(", ")} ")
+
       new KinesisBackedBlockRDD(
         context.sc, regionName, endpointUrl, blockIds, seqNumRanges,
         isBlockIdValid = isBlockIdValid,
-        retryTimeoutMs = ssc.graph.batchDuration.milliseconds.toInt,
         messageHandler = messageHandler,
-        kinesisCreds = kinesisCreds)
+        kinesisCreds = kinesisCreds,
+        kinesisReadConfigs = KinesisReadConfigurations(ssc))
     } else {
       logWarning("Kinesis sequence number information was not present with some block metadata," +
         " it may not be possible to recover from failures")

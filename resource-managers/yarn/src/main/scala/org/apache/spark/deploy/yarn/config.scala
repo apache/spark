@@ -40,11 +40,6 @@ package object config {
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
-  private[spark] val AM_PORT =
-    ConfigBuilder("spark.yarn.am.port")
-      .intConf
-      .createWithDefault(0)
-
   private[spark] val EXECUTOR_ATTEMPT_FAILURE_VALIDITY_INTERVAL_MS =
     ConfigBuilder("spark.yarn.executor.failuresValidityInterval")
       .doc("Interval after which Executor failures will be considered independent and not " +
@@ -132,7 +127,7 @@ package object config {
     .stringConf
     .createOptional
 
-  /* Cluster-mode launcher configuration. */
+  /* Launcher configuration. */
 
   private[spark] val WAIT_FOR_APP_COMPLETION = ConfigBuilder("spark.yarn.submit.waitAppCompletion")
     .doc("In cluster mode, whether to wait for the application to finish before exiting the " +
@@ -141,9 +136,15 @@ package object config {
     .createWithDefault(true)
 
   private[spark] val REPORT_INTERVAL = ConfigBuilder("spark.yarn.report.interval")
-    .doc("Interval between reports of the current app status in cluster mode.")
+    .doc("Interval between reports of the current app status.")
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("1s")
+
+  private[spark] val CLIENT_LAUNCH_MONITOR_INTERVAL =
+    ConfigBuilder("spark.yarn.clientLaunchMonitorInterval")
+      .doc("Interval between requests for status the client mode AM when starting the app.")
+      .timeConf(TimeUnit.MILLISECONDS)
+      .createWithDefaultString("1s")
 
   /* Shared Client-mode AM / Driver configuration. */
 

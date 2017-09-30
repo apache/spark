@@ -27,8 +27,8 @@ import scala.collection.mutable.Queue
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{Assertions, BeforeAndAfter, PrivateMethodTester}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.SpanSugar._
 
@@ -42,7 +42,7 @@ import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.util.Utils
 
 
-class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeouts with Logging {
+class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with TimeLimits with Logging {
 
   val master = "local[2]"
   val appName = this.getClass.getSimpleName
@@ -406,6 +406,8 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // test whether awaitTermination() does not exit if not time is given
     val exception = intercept[Exception] {
+      // Necessary to make failAfter interrupt awaitTermination() in ScalaTest 3.x
+      implicit val signaler: Signaler = ThreadSignaler
       failAfter(1000 millis) {
         ssc.awaitTermination()
         throw new Exception("Did not wait for stop")
@@ -573,8 +575,6 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
   test("getActive and getActiveOrCreate") {
     require(StreamingContext.getActive().isEmpty, "context exists from before")
-    sc = new SparkContext(conf)
-
     var newContextCreated = false
 
     def creatingFunc(): StreamingContext = {
@@ -601,6 +601,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
     // getActiveOrCreate should create new context and getActive should return it only
     // after starting the context
     testGetActiveOrCreate {
+      sc = new SparkContext(conf)
       ssc = StreamingContext.getActiveOrCreate(creatingFunc _)
       assert(ssc != null, "no context created")
       assert(newContextCreated === true, "new context not created")
@@ -620,6 +621,7 @@ class StreamingContextSuite extends SparkFunSuite with BeforeAndAfter with Timeo
 
     // getActiveOrCreate and getActive should return independently created context after activating
     testGetActiveOrCreate {
+      sc = new SparkContext(conf)
       ssc = creatingFunc()  // Create
       assert(StreamingContext.getActive().isEmpty,
         "new initialized context returned before starting")

@@ -18,10 +18,13 @@
 package org.apache.spark.network.netty
 
 import java.nio.ByteBuffer
+import java.util.{HashMap => JHashMap, Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
+
+import com.codahale.metrics.{Metric, MetricSet}
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.network._
@@ -29,7 +32,7 @@ import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap, TransportClientFactory}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, OneForOneBlockFetcher, RetryingBlockFetcher, TempShuffleFileManager}
 import org.apache.spark.network.shuffle.protocol.UploadBlock
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
@@ -83,18 +86,33 @@ private[spark] class NettyBlockTransferService(
     Utils.startServiceOnPort(_port, startService, conf, getClass.getName)._1
   }
 
+  override def shuffleMetrics(): MetricSet = {
+    require(server != null && clientFactory != null, "NettyBlockTransferServer is not initialized")
+
+    new MetricSet {
+      val allMetrics = new JHashMap[String, Metric]()
+      override def getMetrics: JMap[String, Metric] = {
+        allMetrics.putAll(clientFactory.getAllMetrics.getMetrics)
+        allMetrics.putAll(server.getAllMetrics.getMetrics)
+        allMetrics
+      }
+    }
+  }
+
   override def fetchBlocks(
       host: String,
       port: Int,
       execId: String,
       blockIds: Array[String],
-      listener: BlockFetchingListener): Unit = {
+      listener: BlockFetchingListener,
+      tempShuffleFileManager: TempShuffleFileManager): Unit = {
     logTrace(s"Fetch blocks from $host:$port (executor id $execId)")
     try {
       val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
         override def createAndStart(blockIds: Array[String], listener: BlockFetchingListener) {
           val client = clientFactory.createClient(host, port)
-          new OneForOneBlockFetcher(client, appId, execId, blockIds.toArray, listener).start()
+          new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
+            transportConf, tempShuffleFileManager).start()
         }
       }
 

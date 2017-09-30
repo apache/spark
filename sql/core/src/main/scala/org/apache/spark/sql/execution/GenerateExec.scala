@@ -78,7 +78,7 @@ case class GenerateExec(
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
-  val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
+  lazy val boundGenerator: Generator = BindReferences.bindReference(generator, child.output)
 
   protected override def doExecute(): RDD[InternalRow] = {
     // boundGenerator.terminate() should be triggered after all of the rows in the partition
@@ -96,7 +96,7 @@ case class GenerateExec(
           } else {
             outputRows.map(joinedRow.withRight)
           }
-        } ++ LazyIterator(boundGenerator.terminate).map { row =>
+        } ++ LazyIterator(() => boundGenerator.terminate()).map { row =>
           // we leave the left side as the last element of its child output
           // keep it the same as Hive does
           joinedRow.withRight(row)
@@ -109,7 +109,7 @@ case class GenerateExec(
           } else {
             outputRows
           }
-        } ++ LazyIterator(boundGenerator.terminate)
+        } ++ LazyIterator(() => boundGenerator.terminate())
       }
 
       // Convert the rows to unsafe rows.

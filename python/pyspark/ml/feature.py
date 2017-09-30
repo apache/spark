@@ -34,6 +34,7 @@ __all__ = ['Binarizer',
            'CountVectorizer', 'CountVectorizerModel',
            'DCT',
            'ElementwiseProduct',
+           'FeatureHasher',
            'HashingTF',
            'IDF', 'IDFModel',
            'Imputer', 'ImputerModel',
@@ -314,7 +315,8 @@ class BucketedRandomProjectionLSHModel(LSHModel, JavaMLReadable, JavaMLWritable)
 
 
 @inherit_doc
-class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, HasHandleInvalid,
+                 JavaMLReadable, JavaMLWritable):
     """
     Maps a column of continuous features to a column of feature buckets.
 
@@ -397,20 +399,6 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
         Gets the value of threshold or its default value.
         """
         return self.getOrDefault(self.splits)
-
-    @since("2.1.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
-
-    @since("2.1.0")
-    def getHandleInvalid(self):
-        """
-        Gets the value of :py:attr:`handleInvalid` or its default value.
-        """
-        return self.getOrDefault(self.handleInvalid)
 
 
 @inherit_doc
@@ -707,6 +695,82 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
         Gets the value of scalingVec or its default value.
         """
         return self.getOrDefault(self.scalingVec)
+
+
+@inherit_doc
+class FeatureHasher(JavaTransformer, HasInputCols, HasOutputCol, HasNumFeatures, JavaMLReadable,
+                    JavaMLWritable):
+    """
+    .. note:: Experimental
+
+    Feature hashing projects a set of categorical or numerical features into a feature vector of
+    specified dimension (typically substantially smaller than that of the original feature
+    space). This is done using the hashing trick (https://en.wikipedia.org/wiki/Feature_hashing)
+    to map features to indices in the feature vector.
+
+    The FeatureHasher transformer operates on multiple columns. Each column may contain either
+    numeric or categorical features. Behavior and handling of column data types is as follows:
+
+    * Numeric columns:
+        For numeric features, the hash value of the column name is used to map the
+        feature value to its index in the feature vector. Numeric features are never
+        treated as categorical, even when they are integers. You must explicitly
+        convert numeric columns containing categorical features to strings first.
+
+    * String columns:
+        For categorical features, the hash value of the string "column_name=value"
+        is used to map to the vector index, with an indicator value of `1.0`.
+        Thus, categorical features are "one-hot" encoded
+        (similarly to using :py:class:`OneHotEncoder` with `dropLast=false`).
+
+    * Boolean columns:
+        Boolean values are treated in the same way as string columns. That is,
+        boolean features are represented as "column_name=true" or "column_name=false",
+        with an indicator value of `1.0`.
+
+    Null (missing) values are ignored (implicitly zero in the resulting feature vector).
+
+    Since a simple modulo is used to transform the hash function to a vector index,
+    it is advisable to use a power of two as the `numFeatures` parameter;
+    otherwise the features will not be mapped evenly to the vector indices.
+
+    >>> data = [(2.0, True, "1", "foo"), (3.0, False, "2", "bar")]
+    >>> cols = ["real", "bool", "stringNum", "string"]
+    >>> df = spark.createDataFrame(data, cols)
+    >>> hasher = FeatureHasher(inputCols=cols, outputCol="features")
+    >>> hasher.transform(df).head().features
+    SparseVector(262144, {51871: 1.0, 63643: 1.0, 174475: 2.0, 253195: 1.0})
+    >>> hasherPath = temp_path + "/hasher"
+    >>> hasher.save(hasherPath)
+    >>> loadedHasher = FeatureHasher.load(hasherPath)
+    >>> loadedHasher.getNumFeatures() == hasher.getNumFeatures()
+    True
+    >>> loadedHasher.transform(df).head().features == hasher.transform(df).head().features
+    True
+
+    .. versionadded:: 2.3.0
+    """
+
+    @keyword_only
+    def __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None):
+        """
+        __init__(self, numFeatures=1 << 18, inputCols=None, outputCol=None)
+        """
+        super(FeatureHasher, self).__init__()
+        self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.FeatureHasher", self.uid)
+        self._setDefault(numFeatures=1 << 18)
+        kwargs = self._input_kwargs
+        self.setParams(**kwargs)
+
+    @keyword_only
+    @since("2.3.0")
+    def setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None):
+        """
+        setParams(self, numFeatures=1 << 18, inputCols=None, outputCol=None)
+        Sets params for this FeatureHasher.
+        """
+        kwargs = self._input_kwargs
+        return self._set(**kwargs)
 
 
 @inherit_doc
@@ -1623,7 +1687,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid,
+                          JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -1742,20 +1807,6 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
         Gets the value of relativeError or its default value.
         """
         return self.getOrDefault(self.relativeError)
-
-    @since("2.1.0")
-    def setHandleInvalid(self, value):
-        """
-        Sets the value of :py:attr:`handleInvalid`.
-        """
-        return self._set(handleInvalid=value)
-
-    @since("2.1.0")
-    def getHandleInvalid(self):
-        """
-        Gets the value of :py:attr:`handleInvalid` or its default value.
-        """
-        return self.getOrDefault(self.handleInvalid)
 
     def _create_model(self, java_model):
         """
@@ -2082,10 +2133,12 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     """
     A label indexer that maps a string column of labels to an ML column of label indices.
     If the input column is numeric, we cast it to string and index the string values.
-    The indices are in [0, numLabels), ordered by label frequencies.
-    So the most frequent label gets index 0.
+    The indices are in [0, numLabels). By default, this is ordered by label frequencies
+    so the most frequent label gets index 0. The ordering behavior is controlled by
+    setting :py:attr:`stringOrderType`. Its default value is 'frequencyDesc'.
 
-    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid='error')
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
+    ...     stringOrderType="frequencyDesc")
     >>> model = stringIndexer.fit(stringIndDf)
     >>> td = model.transform(stringIndDf)
     >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
@@ -2111,26 +2164,52 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
     >>> loadedInverter = IndexToString.load(indexToStringPath)
     >>> loadedInverter.getLabels() == inverter.getLabels()
     True
+    >>> stringIndexer.getStringOrderType()
+    'frequencyDesc'
+    >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed", handleInvalid="error",
+    ...     stringOrderType="alphabetDesc")
+    >>> model = stringIndexer.fit(stringIndDf)
+    >>> td = model.transform(stringIndDf)
+    >>> sorted(set([(i[0], i[1]) for i in td.select(td.id, td.indexed).collect()]),
+    ...     key=lambda x: x[0])
+    [(0, 2.0), (1, 1.0), (2, 0.0), (3, 2.0), (4, 2.0), (5, 0.0)]
 
     .. versionadded:: 1.4.0
     """
 
+    stringOrderType = Param(Params._dummy(), "stringOrderType",
+                            "How to order labels of string column. The first label after " +
+                            "ordering is assigned an index of 0. Supported options: " +
+                            "frequencyDesc, frequencyAsc, alphabetDesc, alphabetAsc.",
+                            typeConverter=TypeConverters.toString)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid data (unseen " +
+                          "or NULL values) in features and label column of string type. " +
+                          "Options are 'skip' (filter out rows with invalid data), " +
+                          "error (throw an error), or 'keep' (put invalid data " +
+                          "in a special additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def __init__(self, inputCol=None, outputCol=None, handleInvalid="error",
+                 stringOrderType="frequencyDesc"):
         """
-        __init__(self, inputCol=None, outputCol=None, handleInvalid="error")
+        __init__(self, inputCol=None, outputCol=None, handleInvalid="error", \
+                 stringOrderType="frequencyDesc")
         """
         super(StringIndexer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StringIndexer", self.uid)
-        self._setDefault(handleInvalid="error")
+        self._setDefault(handleInvalid="error", stringOrderType="frequencyDesc")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
-    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error"):
+    def setParams(self, inputCol=None, outputCol=None, handleInvalid="error",
+                  stringOrderType="frequencyDesc"):
         """
-        setParams(self, inputCol=None, outputCol=None, handleInvalid="error")
+        setParams(self, inputCol=None, outputCol=None, handleInvalid="error", \
+                  stringOrderType="frequencyDesc")
         Sets params for this StringIndexer.
         """
         kwargs = self._input_kwargs
@@ -2138,6 +2217,20 @@ class StringIndexer(JavaEstimator, HasInputCol, HasOutputCol, HasHandleInvalid, 
 
     def _create_model(self, java_model):
         return StringIndexerModel(java_model)
+
+    @since("2.3.0")
+    def setStringOrderType(self, value):
+        """
+        Sets the value of :py:attr:`stringOrderType`.
+        """
+        return self._set(stringOrderType=value)
+
+    @since("2.3.0")
+    def getStringOrderType(self):
+        """
+        Gets the value of :py:attr:`stringOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringOrderType)
 
 
 class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
@@ -2658,6 +2751,8 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     |   c|[-0.3794820010662...|
     +----+--------------------+
     ...
+    >>> model.findSynonymsArray("a", 2)
+    [(u'b', 0.25053444504737854), (u'c', -0.6980510950088501)]
     >>> from pyspark.sql.functions import format_number as fmt
     >>> model.findSynonyms("a", 2).select("word", fmt("similarity", 5).alias("similarity")).show()
     +----+----------+
@@ -2834,6 +2929,19 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
             word = _convert_to_vector(word)
         return self._call_java("findSynonyms", word, num)
 
+    @since("2.3.0")
+    def findSynonymsArray(self, word, num):
+        """
+        Find "num" number of words closest in similarity to "word".
+        word can be a string or vector representation.
+        Returns an array with two fields word and similarity (which
+        gives the cosine similarity).
+        """
+        if not isinstance(word, basestring):
+            word = _convert_to_vector(word)
+        tuples = self._java_obj.findSynonymsArray(word, num)
+        return list(map(lambda st: (st._1(), st._2()), list(tuples)))
+
 
 @inherit_doc
 class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
@@ -2936,7 +3044,8 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
 
 @inherit_doc
-class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaMLWritable):
+class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, HasHandleInvalid,
+               JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -2979,6 +3088,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     True
     >>> loadedRF.getLabelCol() == rf.getLabelCol()
     True
+    >>> loadedRF.getHandleInvalid() == rf.getHandleInvalid()
+    True
     >>> str(loadedRF)
     'RFormula(y ~ x + s) (uid=...)'
     >>> modelPath = temp_path + "/rFormulaModel"
@@ -3008,26 +3119,46 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
                             "Force to index label whether it is numeric or string",
                             typeConverter=TypeConverters.toBoolean)
 
+    stringIndexerOrderType = Param(Params._dummy(), "stringIndexerOrderType",
+                                   "How to order categories of a string feature column used by " +
+                                   "StringIndexer. The last category after ordering is dropped " +
+                                   "when encoding strings. Supported options: frequencyDesc, " +
+                                   "frequencyAsc, alphabetDesc, alphabetAsc. The default value " +
+                                   "is frequencyDesc. When the ordering is set to alphabetDesc, " +
+                                   "RFormula drops the same category as R when encoding strings.",
+                                   typeConverter=TypeConverters.toString)
+
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. " +
+                          "Options are 'skip' (filter out rows with invalid values), " +
+                          "'error' (throw an error), or 'keep' (put invalid data in a special " +
+                          "additional bucket, at index numLabels).",
+                          typeConverter=TypeConverters.toString)
+
     @keyword_only
     def __init__(self, formula=None, featuresCol="features", labelCol="label",
-                 forceIndexLabel=False):
+                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                 handleInvalid="error"):
         """
         __init__(self, formula=None, featuresCol="features", labelCol="label", \
-                 forceIndexLabel=False)
+                 forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
+                 handleInvalid="error")
         """
         super(RFormula, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.RFormula", self.uid)
-        self._setDefault(forceIndexLabel=False)
+        self._setDefault(forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                         handleInvalid="error")
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.5.0")
     def setParams(self, formula=None, featuresCol="features", labelCol="label",
-                  forceIndexLabel=False):
+                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc",
+                  handleInvalid="error"):
         """
         setParams(self, formula=None, featuresCol="features", labelCol="label", \
-                  forceIndexLabel=False)
+                  forceIndexLabel=False, stringIndexerOrderType="frequencyDesc", \
+                  handleInvalid="error")
         Sets params for RFormula.
         """
         kwargs = self._input_kwargs
@@ -3060,6 +3191,20 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         Gets the value of :py:attr:`forceIndexLabel`.
         """
         return self.getOrDefault(self.forceIndexLabel)
+
+    @since("2.3.0")
+    def setStringIndexerOrderType(self, value):
+        """
+        Sets the value of :py:attr:`stringIndexerOrderType`.
+        """
+        return self._set(stringIndexerOrderType=value)
+
+    @since("2.3.0")
+    def getStringIndexerOrderType(self):
+        """
+        Gets the value of :py:attr:`stringIndexerOrderType` or its default value 'frequencyDesc'.
+        """
+        return self.getOrDefault(self.stringIndexerOrderType)
 
     def _create_model(self, java_model):
         return RFormulaModel(java_model)

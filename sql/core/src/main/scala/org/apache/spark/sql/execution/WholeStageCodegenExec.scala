@@ -70,7 +70,7 @@ trait CodegenSupport extends SparkPlan {
   /**
    * Returns all the RDDs of InternalRow which generates the input rows.
    *
-   * Note: right now we support up to two RDDs.
+   * @note Right now we support up to two RDDs
    */
   def inputRDDs(): Seq[RDD[InternalRow]]
 
@@ -197,11 +197,14 @@ trait CodegenSupport extends SparkPlan {
    *
    * This should be override by subclass to support codegen.
    *
-   * For example, Filter will generate the code like this:
+   * Note: The operator should not assume the existence of an outer processing loop,
+   *       which it can jump from with "continue;"!
    *
+   * For example, filter could generate this:
    *   # code to evaluate the predicate expression, result is isNull1 and value2
-   *   if (isNull1 || !value2) continue;
-   *   # call consume(), which will call parent.doConsume()
+   *   if (!isNull1 && value2) {
+   *     # call consume(), which will call parent.doConsume()
+   *   }
    *
    * Note: A plan can either consume the rows as UnsafeRow (row), or a list of variables (input).
    */
@@ -227,7 +230,7 @@ trait CodegenSupport extends SparkPlan {
 
 
 /**
- * InputAdapter is used to hide a SparkPlan from a subtree that support codegen.
+ * InputAdapter is used to hide a SparkPlan from a subtree that supports codegen.
  *
  * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
  * that consumes an RDD iterator of InternalRow.
@@ -282,10 +285,10 @@ object WholeStageCodegenExec {
 }
 
 /**
- * WholeStageCodegen compile a subtree of plans that support codegen together into single Java
+ * WholeStageCodegen compiles a subtree of plans that support codegen together into single Java
  * function.
  *
- * Here is the call graph of to generate Java source (plan A support codegen, but plan B does not):
+ * Here is the call graph of to generate Java source (plan A supports codegen, but plan B does not):
  *
  *   WholeStageCodegen       Plan A               FakeInput        Plan B
  * =========================================================================
@@ -304,10 +307,10 @@ object WholeStageCodegenExec {
  *                             |
  *  doConsume()  <--------  consume()
  *
- * SparkPlan A should override doProduce() and doConsume().
+ * SparkPlan A should override `doProduce()` and `doConsume()`.
  *
- * doCodeGen() will create a CodeGenContext, which will hold a list of variables for input,
- * used to generated code for BoundReference.
+ * `doCodeGen()` will create a `CodeGenContext`, which will hold a list of variables for input,
+ * used to generated code for [[BoundReference]].
  */
 case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
@@ -329,6 +332,15 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+
+    // main next function.
+    ctx.addNewFunction("processNext",
+      s"""
+        protected void processNext() throws java.io.IOException {
+          ${code.trim}
+        }
+       """, inlineToOuterClass = true)
+
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
@@ -352,11 +364,9 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
           ${ctx.initPartition()}
         }
 
-        ${ctx.declareAddedFunctions()}
+        ${ctx.emitExtraCode()}
 
-        protected void processNext() throws java.io.IOException {
-          ${code.trim}
-        }
+        ${ctx.declareAddedFunctions()}
       }
       """.trim
 
@@ -370,11 +380,19 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
+    if (ctx.isTooLongGeneratedFunction) {
+      logWarning("Found too long generated codes and JIT optimization might not work, " +
+        "Whole-stage codegen disabled for this plan, " +
+        "You can change the config spark.sql.codegen.MaxFunctionLength " +
+        "to adjust the function length limit:\n "
+        + s"$treeString")
+      return child.execute()
+    }
     // try to compile and fallback if it failed
     try {
       CodeGenerator.compile(cleanedSource)
     } catch {
-      case e: Exception if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
+      case _: Exception if !Utils.isTesting && sqlContext.conf.codegenFallback =>
         // We should already saw the error message
         logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
@@ -489,13 +507,13 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
    * Inserts an InputAdapter on top of those that do not support codegen.
    */
   private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
-    case j @ SortMergeJoinExec(_, _, _, _, left, right) if j.supportCodegen =>
-      // The children of SortMergeJoin should do codegen separately.
-      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
-        right = InputAdapter(insertWholeStageCodegen(right)))
     case p if !supportCodegen(p) =>
       // collapse them recursively
       InputAdapter(insertWholeStageCodegen(p))
+    case j @ SortMergeJoinExec(_, _, _, _, left, right) =>
+      // The children of SortMergeJoin should do codegen separately.
+      j.copy(left = InputAdapter(insertWholeStageCodegen(left)),
+        right = InputAdapter(insertWholeStageCodegen(right)))
     case p =>
       p.withNewChildren(p.children.map(insertInputAdapter))
   }

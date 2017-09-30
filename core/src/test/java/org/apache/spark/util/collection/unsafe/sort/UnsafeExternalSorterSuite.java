@@ -154,7 +154,7 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      () -> recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
       pageSizeBytes,
@@ -395,12 +395,37 @@ public class UnsafeExternalSorterSuite {
         sorter.spill();
       }
     }
-    UnsafeSorterIterator iter = sorter.getIterator();
+    UnsafeSorterIterator iter = sorter.getIterator(0);
     for (int i = 0; i < n; i++) {
       iter.hasNext();
       iter.loadNext();
       assertEquals(i, Platform.getLong(iter.getBaseObject(), iter.getBaseOffset()));
     }
+    sorter.cleanupResources();
+    assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testDiskSpilledBytes() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long[] record = new long[100];
+    int recordSize = record.length * 8;
+    int n = (int) pageSizeBytes / recordSize * 3;
+    for (int i = 0; i < n; i++) {
+      record[0] = (long) i;
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
+    }
+    // We will have at-least 2 memory pages allocated because of rounding happening due to
+    // integer division of pageSizeBytes and recordSize.
+    assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() == 0);
+    UnsafeExternalSorter.SpillableIterator iter =
+            (UnsafeExternalSorter.SpillableIterator) sorter.getSortedIterator();
+    assertTrue(iter.spill() > 0);
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() > 0);
+    assertEquals(0, iter.spill());
+    // Even if we did not spill second time, the disk spilled bytes should still be non-zero
+    assertTrue(taskContext.taskMetrics().diskBytesSpilled() > 0);
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
   }
@@ -415,7 +440,7 @@ public class UnsafeExternalSorterSuite {
       blockManager,
       serializerManager,
       taskContext,
-      recordComparator,
+      () -> recordComparator,
       prefixComparator,
       1024,
       pageSizeBytes,
@@ -454,5 +479,37 @@ public class UnsafeExternalSorterSuite {
     }
   }
 
+  @Test
+  public void testGetIterator() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    for (int i = 0; i < 100; i++) {
+      insertNumber(sorter, i);
+    }
+    verifyIntIterator(sorter.getIterator(0), 0, 100);
+    verifyIntIterator(sorter.getIterator(79), 79, 100);
+
+    sorter.spill();
+    for (int i = 100; i < 200; i++) {
+      insertNumber(sorter, i);
+    }
+    sorter.spill();
+    verifyIntIterator(sorter.getIterator(79), 79, 200);
+
+    for (int i = 200; i < 300; i++) {
+      insertNumber(sorter, i);
+    }
+    verifyIntIterator(sorter.getIterator(79), 79, 300);
+    verifyIntIterator(sorter.getIterator(139), 139, 300);
+    verifyIntIterator(sorter.getIterator(279), 279, 300);
+  }
+
+  private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
+      throws IOException {
+    for (int i = start; i < end; i++) {
+      assert (iter.hasNext());
+      iter.loadNext();
+      assert (Platform.getInt(iter.getBaseObject(), iter.getBaseOffset()) == i);
+    }
+  }
 }
 

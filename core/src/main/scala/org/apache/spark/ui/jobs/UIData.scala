@@ -20,6 +20,8 @@ package org.apache.spark.ui.jobs
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, LinkedHashMap}
 
+import com.google.common.collect.Interners
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor._
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
@@ -62,6 +64,7 @@ private[spark] object UIData {
     var numTasks: Int = 0,
     var numActiveTasks: Int = 0,
     var numCompletedTasks: Int = 0,
+    var completedIndices: OpenHashSet[(Int, Int)] = new OpenHashSet[(Int, Int)](),
     var numSkippedTasks: Int = 0,
     var numFailedTasks: Int = 0,
     var reasonToNumKilled: Map[String, Int] = Map.empty,
@@ -94,6 +97,7 @@ private[spark] object UIData {
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
     var isBlacklisted: Int = _
+    var lastUpdateTime: Option[Long] = None
 
     var schedulingPool: String = ""
     var description: Option[String] = None
@@ -106,15 +110,15 @@ private[spark] object UIData {
     def hasOutput: Boolean = outputBytes > 0
     def hasShuffleRead: Boolean = shuffleReadTotalBytes > 0
     def hasShuffleWrite: Boolean = shuffleWriteBytes > 0
-    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 || diskBytesSpilled > 0
   }
 
   /**
    * These are kept mutable and reused throughout a task's lifetime to avoid excessive reallocation.
    */
-  class TaskUIData private(
-      private var _taskInfo: TaskInfo,
-      private var _metrics: Option[TaskMetricsUIData]) {
+  class TaskUIData private(private var _taskInfo: TaskInfo) {
+
+    private[this] var _metrics: Option[TaskMetricsUIData] = Some(TaskMetricsUIData.EMPTY)
 
     var errorMessage: Option[String] = None
 
@@ -127,12 +131,12 @@ private[spark] object UIData {
     }
 
     def updateTaskMetrics(metrics: Option[TaskMetrics]): Unit = {
-      _metrics = TaskUIData.toTaskMetricsUIData(metrics)
+      _metrics = metrics.map(TaskMetricsUIData.fromTaskMetrics)
     }
 
-    def taskDuration: Option[Long] = {
+    def taskDuration(lastUpdateTime: Option[Long] = None): Option[Long] = {
       if (taskInfo.status == "RUNNING") {
-        Some(_taskInfo.timeRunning(System.currentTimeMillis))
+        Some(_taskInfo.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis)))
       } else {
         _metrics.map(_.executorRunTime)
       }
@@ -140,28 +144,16 @@ private[spark] object UIData {
   }
 
   object TaskUIData {
-    def apply(taskInfo: TaskInfo, metrics: Option[TaskMetrics]): TaskUIData = {
-      new TaskUIData(dropInternalAndSQLAccumulables(taskInfo), toTaskMetricsUIData(metrics))
+
+    private val stringInterner = Interners.newWeakInterner[String]()
+
+    /** String interning to reduce the memory usage. */
+    private def weakIntern(s: String): String = {
+      stringInterner.intern(s)
     }
 
-    private def toTaskMetricsUIData(metrics: Option[TaskMetrics]): Option[TaskMetricsUIData] = {
-      metrics.map { m =>
-        TaskMetricsUIData(
-          executorDeserializeTime = m.executorDeserializeTime,
-          executorDeserializeCpuTime = m.executorDeserializeCpuTime,
-          executorRunTime = m.executorRunTime,
-          executorCpuTime = m.executorCpuTime,
-          resultSize = m.resultSize,
-          jvmGCTime = m.jvmGCTime,
-          resultSerializationTime = m.resultSerializationTime,
-          memoryBytesSpilled = m.memoryBytesSpilled,
-          diskBytesSpilled = m.diskBytesSpilled,
-          peakExecutionMemory = m.peakExecutionMemory,
-          inputMetrics = InputMetricsUIData(m.inputMetrics),
-          outputMetrics = OutputMetricsUIData(m.outputMetrics),
-          shuffleReadMetrics = ShuffleReadMetricsUIData(m.shuffleReadMetrics),
-          shuffleWriteMetrics = ShuffleWriteMetricsUIData(m.shuffleWriteMetrics))
-      }
+    def apply(taskInfo: TaskInfo): TaskUIData = {
+      new TaskUIData(dropInternalAndSQLAccumulables(taskInfo))
     }
 
     /**
@@ -174,8 +166,8 @@ private[spark] object UIData {
         index = taskInfo.index,
         attemptNumber = taskInfo.attemptNumber,
         launchTime = taskInfo.launchTime,
-        executorId = taskInfo.executorId,
-        host = taskInfo.host,
+        executorId = weakIntern(taskInfo.executorId),
+        host = weakIntern(taskInfo.host),
         taskLocality = taskInfo.taskLocality,
         speculative = taskInfo.speculative
       )
@@ -205,6 +197,28 @@ private[spark] object UIData {
       outputMetrics: OutputMetricsUIData,
       shuffleReadMetrics: ShuffleReadMetricsUIData,
       shuffleWriteMetrics: ShuffleWriteMetricsUIData)
+
+  object TaskMetricsUIData {
+    def fromTaskMetrics(m: TaskMetrics): TaskMetricsUIData = {
+      TaskMetricsUIData(
+        executorDeserializeTime = m.executorDeserializeTime,
+        executorDeserializeCpuTime = m.executorDeserializeCpuTime,
+        executorRunTime = m.executorRunTime,
+        executorCpuTime = m.executorCpuTime,
+        resultSize = m.resultSize,
+        jvmGCTime = m.jvmGCTime,
+        resultSerializationTime = m.resultSerializationTime,
+        memoryBytesSpilled = m.memoryBytesSpilled,
+        diskBytesSpilled = m.diskBytesSpilled,
+        peakExecutionMemory = m.peakExecutionMemory,
+        inputMetrics = InputMetricsUIData(m.inputMetrics),
+        outputMetrics = OutputMetricsUIData(m.outputMetrics),
+        shuffleReadMetrics = ShuffleReadMetricsUIData(m.shuffleReadMetrics),
+        shuffleWriteMetrics = ShuffleWriteMetricsUIData(m.shuffleWriteMetrics))
+    }
+
+    val EMPTY: TaskMetricsUIData = fromTaskMetrics(TaskMetrics.empty)
+  }
 
   case class InputMetricsUIData(bytesRead: Long, recordsRead: Long)
   object InputMetricsUIData {
@@ -238,6 +252,7 @@ private[spark] object UIData {
       remoteBlocksFetched: Long,
       localBlocksFetched: Long,
       remoteBytesRead: Long,
+      remoteBytesReadToDisk: Long,
       localBytesRead: Long,
       fetchWaitTime: Long,
       recordsRead: Long,
@@ -261,6 +276,7 @@ private[spark] object UIData {
           remoteBlocksFetched = metrics.remoteBlocksFetched,
           localBlocksFetched = metrics.localBlocksFetched,
           remoteBytesRead = metrics.remoteBytesRead,
+          remoteBytesReadToDisk = metrics.remoteBytesReadToDisk,
           localBytesRead = metrics.localBytesRead,
           fetchWaitTime = metrics.fetchWaitTime,
           recordsRead = metrics.recordsRead,
@@ -269,7 +285,7 @@ private[spark] object UIData {
         )
       }
     }
-    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0)
+    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0, 0)
   }
 
   case class ShuffleWriteMetricsUIData(

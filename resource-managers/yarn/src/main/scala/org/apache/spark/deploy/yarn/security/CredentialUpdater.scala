@@ -34,7 +34,7 @@ import org.apache.spark.util.{ThreadUtils, Utils}
 private[spark] class CredentialUpdater(
     sparkConf: SparkConf,
     hadoopConf: Configuration,
-    credentialManager: ConfigurableCredentialManager) extends Logging {
+    credentialManager: YARNHadoopDelegationTokenManager) extends Logging {
 
   @volatile private var lastCredentialsFileSuffix = 0
 

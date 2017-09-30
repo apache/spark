@@ -37,7 +37,7 @@ import org.apache.spark.sql.types._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns the first non-null argument if exists. Otherwise, null.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(NULL, 1, NULL);
        1
@@ -52,10 +52,11 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def foldable: Boolean = children.forall(_.foldable)
 
   override def checkInputDataTypes(): TypeCheckResult = {
-    if (children == Nil) {
-      TypeCheckResult.TypeCheckFailure("input to function coalesce cannot be empty")
+    if (children.length < 1) {
+      TypeCheckResult.TypeCheckFailure(
+        s"input to function $prettyName requires at least one argument")
     } else {
-      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), "function coalesce")
+      TypeUtils.checkForSameTypeInputExpr(children.map(_.dataType), s"function $prettyName")
     }
   }
 
@@ -96,7 +97,7 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
        ["2"]
@@ -115,10 +116,10 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
-  extended = """
-   Examples:
-     > SELECT _FUNC_(2, 2);
-      NULL
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2, 2);
+       NULL
   """)
 case class NullIf(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
@@ -134,7 +135,7 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
 
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr2` if `expr1` is null, or `expr1` otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(NULL, array('2'));
        ["2"]
@@ -153,7 +154,7 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, expr3) - Returns `expr2` if `expr1` is not null, or `expr3` otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(NULL, 2, 1);
        1
@@ -176,7 +177,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is NaN, or false otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(cast('NaN' as double));
        true
@@ -218,7 +219,7 @@ case class IsNaN(child: Expression) extends UnaryExpression
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns `expr1` if it's not NaN, or `expr2` otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(cast('NaN' as double), 123);
        123.0
@@ -278,7 +279,7 @@ case class NaNvl(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is null, or false otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1);
        false
@@ -304,7 +305,7 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns true if `expr` is not null, or false otherwise.",
-  extended = """
+  examples = """
     Examples:
       > SELECT _FUNC_(1);
        true

@@ -160,6 +160,9 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val featureAndProbabilities = model.transform(validationDataset)
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "multinomial")
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, NaiveBayesModel](model, testDataset)
   }
 
   test("Naive Bayes with weighted samples") {
@@ -168,7 +171,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       assert(m1.pi ~== m2.pi relTol 0.01)
       assert(m1.theta ~== m2.theta relTol 0.01)
     }
-    val testParams = Seq(
+    val testParams = Seq[(String, Dataset[_])](
       ("bernoulli", bernoulliDataset),
       ("multinomial", dataset)
     )
@@ -213,6 +216,9 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val featureAndProbabilities = model.transform(validationDataset)
       .select("features", "probability")
     validateProbabilities(featureAndProbabilities, model, "bernoulli")
+
+    ProbabilisticClassifierSuite.testPredictMethods[
+      Vector, NaiveBayesModel](model, testDataset)
   }
 
   test("detect negative values") {

@@ -201,7 +201,8 @@ trait AccumulableParam[R, T] extends Serializable {
 
 @deprecated("use AccumulatorV2", "2.0.0")
 private[spark] class
-GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
+GrowableAccumulableParam[R : ClassTag, T]
+  (implicit rg: R => Growable[T] with TraversableOnce[T] with Serializable)
   extends AccumulableParam[R, T] {
 
   def addAccumulator(growable: R, elem: T): R = {

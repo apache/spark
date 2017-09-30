@@ -422,7 +422,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         v
       }
       withSQLConf(
-        (SQLConf.WHOLESTAGE_FALLBACK.key, codegenFallback.toString),
+        (SQLConf.CODEGEN_FALLBACK.key, codegenFallback.toString),
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString)) {
         val df = spark.range(0, 4, 1, 4).withColumn("c", c)
         val rows = df.collect()
@@ -447,6 +447,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       monotonically_increasing_id(), spark_partition_id(),
       rand(Random.nextLong()), randn(Random.nextLong())
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
+  }
+
+  test("SPARK-21281 use string types by default if array and map have no argument") {
+    val ds = spark.range(1)
+    var expectedSchema = new StructType()
+      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
+    assert(ds.select(array().as("x")).schema == expectedSchema)
+    expectedSchema = new StructType()
+      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
+    assert(ds.select(map().as("x")).schema == expectedSchema)
+  }
+
+  test("SPARK-21281 fails if functions have no argument") {
+    val df = Seq(1).toDF("a")
+
+    val funcsMustHaveAtLeastOneArg =
+      ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
+      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
+      ("named_struct", (df: DataFrame) => df.select(struct())) ::
+      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
+      ("hash", (df: DataFrame) => df.select(hash())) ::
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+    funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least one argument"))
+    }
+
+    val funcsMustHaveAtLeastTwoArgs =
+      ("greatest", (df: DataFrame) => df.select(greatest())) ::
+      ("greatest", (df: DataFrame) => df.selectExpr("greatest()")) ::
+      ("least", (df: DataFrame) => df.select(least())) ::
+      ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
+    funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
+    }
   }
 }
 

@@ -255,10 +255,8 @@ class SQLListener(conf: SparkConf) extends SparkListener with Logging {
                 // heartbeat reports
               }
             case None =>
-              // TODO Now just set attemptId to 0. Should fix here when we can get the attempt
-              // id from SparkListenerExecutorMetricsUpdate
               stageMetrics.taskIdToMetricUpdates(taskId) = new SQLTaskMetrics(
-                  attemptId = 0, finished = finishTask, accumulatorUpdates)
+                  finished = finishTask, accumulatorUpdates)
           }
         }
       case None =>
@@ -478,10 +476,11 @@ private[ui] class SQLStageMetrics(
     val stageAttemptId: Long,
     val taskIdToMetricUpdates: mutable.HashMap[Long, SQLTaskMetrics] = mutable.HashMap.empty)
 
+
+// TODO Should add attemptId here when we can get it from SparkListenerExecutorMetricsUpdate
 /**
  * Store all accumulatorUpdates for a Spark task.
  */
 private[ui] class SQLTaskMetrics(
-    val attemptId: Long, // TODO not used yet
     var finished: Boolean,
     var accumulatorUpdates: Seq[(Long, Any)])
