@@ -191,6 +191,11 @@ class QuantileSummaries(
       return Some(sampled.last.value)
     }
 
+    if (quantile * count <= 1) {
+      // the first sample already reaches the quantile
+      return Some(sampled.head.value)
+    }
+
     // Target rank
     val rank = math.ceil(quantile * count).toInt
     val targetError = math.ceil(relativeError * count)
