@@ -51,7 +51,7 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   private var testDirPath: Path = _
 
   before {
-    testDir = Utils.createTempDir(namePrefix = s"history log")
+    testDir = new File(System.getProperty("java.io.tmpdir") + "/history log")
     testDir.deleteOnExit()
     testDirPath = new Path(testDir.getAbsolutePath())
   }
@@ -109,6 +109,9 @@ class EventLoggingListenerSuite extends SparkFunSuite with LocalSparkContext wit
   }
 
   test("Log overwriting") {
+    val conf = getLoggingConf(testDirPath)
+    val eventLogger = new EventLoggingListener("test", None, testDirPath.toUri(), conf)
+    eventLogger.start()
     val logUri = EventLoggingListener.getLogPath(testDir.toURI, "test", None)
     val logPath = new Path(logUri).toUri.getPath
     // Create file before writing the event log
