@@ -1101,21 +1101,23 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
   test("Resolve type conflicts - decimals, dates and timestamps in partition column") {
     withTempPath { path =>
-      val df = Seq((1, "2015-01-01"), (2, "2016-01-01 00:01:00")).toDF("i", "ts")
+      val df = Seq((1, "2014-01-01"), (2, "2016-01-01"), (3, "2015-01-01 00:01:00")).toDF("i", "ts")
       df.write.format("parquet").partitionBy("ts").save(path.getAbsolutePath)
       checkAnswer(
         spark.read.load(path.getAbsolutePath),
-        Row(1, Timestamp.valueOf("2015-01-01 00:00:00")) ::
-          Row(2, Timestamp.valueOf("2016-01-01 00:01:00")) :: Nil)
+        Row(1, Timestamp.valueOf("2014-01-01 00:00:00")) ::
+          Row(2, Timestamp.valueOf("2016-01-01 00:00:00")) ::
+          Row(3, Timestamp.valueOf("2015-01-01 00:01:00")) :: Nil)
     }
 
     withTempPath { path =>
-      val df = Seq((1, "1"), (2, "1" * 30)).toDF("i", "decimal")
+      val df = Seq((1, "1"), (2, "3"), (3, "2" * 30)).toDF("i", "decimal")
       df.write.format("parquet").partitionBy("decimal").save(path.getAbsolutePath)
       checkAnswer(
         spark.read.load(path.getAbsolutePath),
         Row(1, BigDecimal("1")) ::
-          Row(2, BigDecimal("1" * 30)) :: Nil)
+          Row(2, BigDecimal("3")) ::
+          Row(3, BigDecimal("2" * 30)) :: Nil)
     }
   }
 }
