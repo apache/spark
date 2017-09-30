@@ -27,7 +27,8 @@
 # to load the SparkR package on the worker nodes.
 
 set -o pipefail
-set -xe
+set -e
+set -x
 
 FWDIR="$(cd "`dirname "${BASH_SOURCE[0]}"`"; pwd)"
 LIB_DIR="$FWDIR/lib"
