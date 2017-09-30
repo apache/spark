@@ -19,18 +19,20 @@ package org.apache.spark.scheduler
 
 import java.util.{Properties, Random}
 
-import org.apache.spark._
-import org.apache.spark.internal.{Logging, config}
-import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AccumulatorV2, ManualClock}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 import org.mockito.Matchers.{any, anyInt, anyString}
 import org.mockito.Mockito.{mock, never, spy, times, verify, when}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark._
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
+import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.{AccumulatorV2, ManualClock, Utils}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -160,7 +162,7 @@ class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
 }
 
 class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logging {
-  import TaskLocality.{ANY, NODE_LOCAL, NO_PREF, PROCESS_LOCAL, RACK_LOCAL}
+  import TaskLocality.{ANY, PROCESS_LOCAL, NO_PREF, NODE_LOCAL, RACK_LOCAL}
 
   private val conf = new SparkConf
 
