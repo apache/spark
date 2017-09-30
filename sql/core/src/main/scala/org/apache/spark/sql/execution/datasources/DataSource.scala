@@ -24,7 +24,7 @@ import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -154,7 +154,7 @@ case class DataSource(
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+        getGlobbedPaths(fs, qualified)
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
@@ -384,7 +384,7 @@ case class DataSource(
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val hadoopConf = sparkSession.sessionState.newHadoopConf()
         val globbedPaths = allPaths.flatMap(
-          DataSource.checkAndGlobPathIfNecessary(hadoopConf, _, checkFilesExist)).toArray
+          DataSource.checkAndGlobPathIfNecessary(hadoopConf, _, checkFilesExist, this)).toArray
 
         val fileStatusCache = FileStatusCache.getOrCreate(sparkSession)
         val (dataSchema, partitionSchema) = getOrInferFileFormatSchema(format, fileStatusCache)
@@ -432,6 +432,27 @@ case class DataSource(
     }
 
     relation
+  }
+
+  /**
+   * Return all paths represented by the wildcard string.
+   * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
+   */
+  private def getGlobbedPaths(fs: FileSystem, qualified: Path): Seq[Path] = {
+    val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
+    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+    } else {
+      val parallelPartitionDiscoveryParallelism =
+        sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
+      val numParallelism = Math.min(paths.size, parallelPartitionDiscoveryParallelism)
+      val expanded = sparkSession.sparkContext
+        .parallelize(paths, numParallelism)
+        .map { pathString =>
+          SparkHadoopUtil.get.globPathIfNecessary(fs, new Path(pathString)).map(_.toString)
+        }.collect()
+      expanded.flatMap(paths => paths.map(new Path(_))).toSeq
+    }
   }
 
   /**
@@ -668,11 +689,12 @@ object DataSource extends Logging {
   private def checkAndGlobPathIfNecessary(
       hadoopConf: Configuration,
       path: String,
-      checkFilesExist: Boolean): Seq[Path] = {
+      checkFilesExist: Boolean,
+      dataSource: DataSource): Seq[Path] = {
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(hadoopConf)
     val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+    val globPath = dataSource.getGlobbedPaths(fs, qualified)
 
     if (globPath.isEmpty) {
       throw new AnalysisException(s"Path does not exist: $qualified")

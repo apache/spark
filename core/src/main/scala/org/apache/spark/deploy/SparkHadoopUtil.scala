@@ -252,6 +252,18 @@ class SparkHadoopUtil extends Logging {
     if (isGlobPath(pattern)) globPath(fs, pattern) else Seq(pattern)
   }
 
+  def expandGlobPath(fs: FileSystem, pattern: Path): Seq[String] = {
+    val arr = pattern.toString.split("/")
+    val firstIdx = arr.indexWhere(_.exists("{}[]*?\\".toSet.contains))
+    if (isGlobPath(pattern) && firstIdx != arr.length - 1) {
+      val parentPath = arr.slice(0, firstIdx + 1).mkString("/")
+      Option(fs.globStatus(new Path(parentPath))).map{ statuses =>
+        statuses.map(_.getPath.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+          + "/" + arr.slice(firstIdx + 1, arr.length).mkString("/")).toSeq
+      }.getOrElse(Seq.empty[String])
+    } else Seq(pattern.toString)
+  }
+
   /**
    * Lists all the files in a directory with the specified prefix, and does not end with the
    * given suffix. The returned {{FileStatus}} instances are sorted by the modification times of
