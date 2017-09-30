@@ -271,7 +271,7 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
-    val distanceSuite = DistanceMeasure.decodeFromString(this.distanceMeasure)
+    val distanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
@@ -280,7 +280,7 @@ class KMeans private (
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
-          initKMeansParallel(data, distanceSuite)
+          initKMeansParallel(data, distanceMeasure)
         }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
@@ -308,7 +308,7 @@ class KMeans private (
         val counts = Array.fill(thisCenters.length)(0L)
 
         points.foreach { point =>
-          val (bestCenter, cost) = distanceSuite.findClosest(thisCenters, point)
+          val (bestCenter, cost) = distanceMeasure.findClosest(thisCenters, point)
           costAccum.add(cost)
           val sum = sums(bestCenter)
           axpy(1.0, point.vector, sum)
@@ -329,7 +329,7 @@ class KMeans private (
       // Update the cluster centers and costs
       converged = true
       newCenters.foreach { case (j, newCenter) =>
-        if (converged && !distanceSuite.isCenterConverged(centers(j), newCenter, epsilon)) {
+        if (converged && !distanceMeasure.isCenterConverged(centers(j), newCenter, epsilon)) {
           converged = false
         }
         centers(j) = newCenter
@@ -373,7 +373,7 @@ class KMeans private (
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
   private[clustering] def initKMeansParallel(data: RDD[VectorWithNorm],
-      distanceSuite: DistanceMeasure): Array[VectorWithNorm] = {
+      distanceMeasure: DistanceMeasure): Array[VectorWithNorm] = {
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
 
@@ -397,7 +397,7 @@ class KMeans private (
       bcNewCentersList += bcNewCenters
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
-        math.min(distanceSuite.pointCost(bcNewCenters.value, point), cost)
+        math.min(distanceMeasure.pointCost(bcNewCenters.value, point), cost)
       }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs.sum()
 
@@ -425,7 +425,7 @@ class KMeans private (
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
       // on the weighted centers to pick k of them
       val bcCenters = data.context.broadcast(distinctCenters)
-      val countMap = data.map(distanceSuite.findClosest(bcCenters.value, _)._1).countByValue()
+      val countMap = data.map(distanceMeasure.findClosest(bcCenters.value, _)._1).countByValue()
 
       bcCenters.destroy(blocking = false)
 
@@ -614,7 +614,20 @@ private[spark] abstract class DistanceMeasure extends Serializable {
    */
   def findClosest(
      centers: TraversableOnce[VectorWithNorm],
-     point: VectorWithNorm): (Int, Double)
+     point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = Double.PositiveInfinity
+    var bestIndex = 0
+    var i = 0
+    centers.foreach { center =>
+      val currentDistance = distance(center, point)
+      if (currentDistance < bestDistance) {
+        bestDistance = currentDistance
+        bestIndex = i
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
 
   /**
    * Returns the K-means cost of a given point against the given cluster centers.
@@ -630,7 +643,15 @@ private[spark] abstract class DistanceMeasure extends Serializable {
   def isCenterConverged(
       oldCenter: VectorWithNorm,
       newCenter: VectorWithNorm,
-      epsilon: Double): Boolean
+      epsilon: Double): Boolean =
+    distance(oldCenter, newCenter) <= epsilon
+
+  /**
+   * Computes the cosine distance between two points.
+   */
+  abstract def distance(
+      v1: VectorWithNorm,
+      v2: VectorWithNorm): Double
 
 }
 
@@ -688,7 +709,13 @@ private[spark] class EuclideanDistanceMeasure extends DistanceMeasure {
     EuclideanDistanceMeasure.fastSquaredDistance(newCenter, oldCenter) <= epsilon * epsilon
   }
 
-
+  /**
+   * Computes the Euclidean distance between two points.
+   * @param v1: first vector
+   * @param v2: second vector
+   */
+  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double =
+    Math.sqrt(EuclideanDistanceMeasure.fastSquaredDistance(v1, v2))
 }
 
 
@@ -706,35 +733,10 @@ private[spark] object EuclideanDistanceMeasure {
 
 private[spark] class CosineDistanceMeasure extends DistanceMeasure {
   /**
-   * Returns the index of the closest center to the given point, as well as the squared distance.
+   * Computes the cosine distance between two points.
+   * @param v1: first vector
+   * @param v2: second vector
    */
-  override def findClosest(
-      centers: TraversableOnce[VectorWithNorm],
-      point: VectorWithNorm): (Int, Double) = {
-    var bestDistance = Double.PositiveInfinity
-    var bestIndex = 0
-    var i = 0
-    centers.foreach { center =>
-      val distance = cosineDistance(center, point)
-      if (distance < bestDistance) {
-        bestDistance = distance
-        bestIndex = i
-      }
-      i += 1
-    }
-    (bestIndex, bestDistance)
-  }
-
-  /**
-   * Returns whether a center converged or not, given the epsilon parameter.
-   */
-  override def isCenterConverged(
-      oldCenter: VectorWithNorm,
-      newCenter: VectorWithNorm,
-      epsilon: Double): Boolean = {
-    cosineDistance(oldCenter, newCenter) <= epsilon
-  }
-
-  def cosineDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double =
+  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double =
     1 - dot(v1.vector, v2.vector) / v1.norm / v2.norm
 }
