@@ -23,7 +23,8 @@ import scala.collection.JavaConverters._
 import scala.language.{existentials, implicitConversions}
 import scala.util.{Failure, Success, Try}
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
@@ -542,7 +543,7 @@ case class DataSource(
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+      val globPath = getGlobbedPaths(fs, qualified)
 
       if (checkEmptyGlobPath && globPath.isEmpty) {
         throw new AnalysisException(s"Path does not exist: $qualified")
@@ -731,6 +732,27 @@ object DataSource extends Logging {
            |Datasource does not support writing empty or nested empty schemas.
            |Please make sure the data schema has at least one or more column(s).
          """.stripMargin)
+    }
+  }
+
+  /**
+   * Return all paths represented by the wildcard string.
+   * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
+   */
+  private def getGlobbedPaths(fs: FileSystem, qualified: Path): Seq[Path] = {
+    val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
+    if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
+      SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
+    } else {
+      val parallelPartitionDiscoveryParallelism =
+        sparkSession.sessionState.conf.parallelPartitionDiscoveryParallelism
+      val numParallelism = Math.min(paths.size, parallelPartitionDiscoveryParallelism)
+      val expanded = sparkSession.sparkContext
+        .parallelize(paths, numParallelism)
+        .map { pathString =>
+          SparkHadoopUtil.get.globPathIfNecessary(fs, new Path(pathString)).map(_.toString)
+        }.collect()
+      expanded.flatMap(paths => paths.map(new Path(_))).toSeq
     }
   }
 }
