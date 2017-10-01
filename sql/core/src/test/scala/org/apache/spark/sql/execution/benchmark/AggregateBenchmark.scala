@@ -301,10 +301,10 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
-  ignore("max function length of wholestagecodegen") {
+  ignore("max function length of codegen") {
     val N = 20 << 15
 
-    val benchmark = new Benchmark("max function length of wholestagecodegen", N)
+    val benchmark = new Benchmark("max function length of codegen", N)
     def f(): Unit = sparkSession.range(N)
       .selectExpr(
         "id",
@@ -333,33 +333,27 @@ class AggregateBenchmark extends BenchmarkBase {
       .sum()
       .collect()
 
-    benchmark.addCase(s"codegen = F") { iter =>
-      sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
+    benchmark.addCase(s"hugeMethodLimit = 8000") { iter =>
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.hugeMethodLimit", "8000")
       f()
     }
 
-    benchmark.addCase(s"codegen = T maxLinesPerFunction = 10000") { iter =>
+    benchmark.addCase(s"hugeMethodLimit = 16000") { iter =>
       sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "10000")
-      f()
-    }
-
-    benchmark.addCase(s"codegen = T maxLinesPerFunction = 1500") { iter =>
-      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.maxLinesPerFunction", "1500")
+      sparkSession.conf.set("spark.sql.codegen.hugeMethodLimit", "16000")
       f()
     }
 
     benchmark.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_111-b14 on Windows 7 6.1
-    Intel64 Family 6 Model 58 Stepping 9, GenuineIntel
-    max function length of wholestagecodegen: Best/Avg Time(ms)    Rate(M/s)  Per Row(ns)  Relative
-    ----------------------------------------------------------------------------------------------
-    codegen = F                                    462 /  533          1.4       704.4     1.0X
-    codegen = T maxLinesPerFunction = 10000       3444 / 3447          0.2      5255.3     0.1X
-    codegen = T maxLinesPerFunction = 1500         447 /  478          1.5       682.1     1.0X
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_31-b13 on Mac OS X 10.10.2
+    Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
+    max function length of codegen:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    hugeMethodLimit = 8000                         704 /  868          0.9        1074.2       1.0X
+    hugeMethodLimit = 16000                       2447 / 2457          0.3        3733.1       0.3X
      */
   }
 

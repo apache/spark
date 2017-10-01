@@ -179,38 +179,8 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
   }
 
-  test("SPARK-21603 check there is a too long generated function") {
-    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "1500") {
-      val (ctx, _) = genGroupByCodeGenContext(30)
-      assert(ctx.isTooLongGeneratedFunction === true)
-    }
-  }
-
-  test("SPARK-21603 check there is not a too long generated function") {
-    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "1500") {
-      val (ctx, _) = genGroupByCodeGenContext(1)
-      assert(ctx.isTooLongGeneratedFunction === false)
-    }
-  }
-
-  test("SPARK-21603 check there is not a too long generated function when threshold is Int.Max") {
-    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString) {
-      val (ctx, _) = genGroupByCodeGenContext(30)
-      assert(ctx.isTooLongGeneratedFunction === false)
-    }
-  }
-
-  test("SPARK-21603 check there is a too long generated function when threshold is 0") {
-    withSQLConf(SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> "0") {
-      val (ctx, _) = genGroupByCodeGenContext(1)
-      assert(ctx.isTooLongGeneratedFunction === true)
-    }
-  }
-
   test("SPARK-21871 turn off whole-stage codegen if bytecode size goes over hugeMethodLimit") {
-    withSQLConf(
-        SQLConf.WHOLESTAGE_MAX_LINES_PER_FUNCTION.key -> Int.MaxValue.toString,
-        SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "8000") {
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "8000") {
       val (_, code) = genGroupByCodeGenContext(20)
       val errMsg = intercept[ExecutionException] {
         CodeGenerator.compile(code)
