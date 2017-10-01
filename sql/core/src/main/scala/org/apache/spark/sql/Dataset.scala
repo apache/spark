@@ -2104,15 +2104,11 @@ class Dataset[T] private[sql](
     val columnMap = colNames.zip(cols).toMap
 
     val replacedAndExistingColumns = output.map { field =>
-      val dupColumn = columnMap.find { case (colName, col) =>
+      columnMap.find { case (colName, _) =>
         resolver(field.name, colName)
-      }
-      if (dupColumn.isDefined) {
-        val colName = dupColumn.get._1
-        val col = dupColumn.get._2
-        col.as(colName)
-      } else {
-        Column(field)
+      } match {
+        case Some((colName: String, col: Column)) => col.as(colName)
+        case _ => Column(field)
       }
     }
 
@@ -2121,19 +2117,6 @@ class Dataset[T] private[sql](
     }.map { case (colName, col) => col.as(colName) }
 
     select(replacedAndExistingColumns ++ newColumns : _*)
-  }
-
-  /**
-   * Returns a new Dataset by adding columns with metadata.
-   */
-  private[spark] def withColumns(
-      colNames: Seq[String],
-      cols: Seq[Column],
-      metadata: Seq[Metadata]): DataFrame = {
-    val newCols = colNames.zip(cols).zip(metadata).map { case ((colName, col), metadata) =>
-      col.as(colName, metadata)
-    }
-    withColumns(colNames, newCols)
   }
 
   /**
