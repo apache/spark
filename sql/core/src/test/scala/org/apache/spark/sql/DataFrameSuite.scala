@@ -641,12 +641,64 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df.schema.map(_.name) === Seq("key", "value", "newCol"))
   }
 
+  test("withColumns") {
+    val df = testData.toDF().withColumns(Seq("newCol1", "newCol2"),
+      Seq(col("key") + 1, col("key") + 2))
+    checkAnswer(
+      df,
+      testData.collect().map { case Row(key: Int, value: String) =>
+        Row(key, value, key + 1, key + 2)
+      }.toSeq)
+    assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCol2"))
+
+    val err = intercept[IllegalArgumentException] {
+      testData.toDF().withColumns(Seq("newCol1"),
+        Seq(col("key") + 1, col("key") + 2))
+    }
+    assert(
+      err.getMessage.contains("The size of column names: 1 isn't equal to the size of columns: 2"))
+
+    val err2 = intercept[AnalysisException] {
+      testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
+        Seq(col("key") + 1, col("key") + 2))
+    }
+    assert(err2.getMessage.contains("Found duplicate column(s)"))
+  }
+
+  test("withColumns: case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
+        Seq(col("key") + 1, col("key") + 2))
+      checkAnswer(
+        df,
+        testData.collect().map { case Row(key: Int, value: String) =>
+          Row(key, value, key + 1, key + 2)
+        }.toSeq)
+      assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCOL1"))
+
+      val err = intercept[AnalysisException] {
+        testData.toDF().withColumns(Seq("newCol1", "newCol1"),
+          Seq(col("key") + 1, col("key") + 2))
+      }
+      assert(err.getMessage.contains("Found duplicate column(s)"))
+    }
+  }
+
   test("replace column using withColumn") {
     val df2 = sparkContext.parallelize(Array(1, 2, 3)).toDF("x")
     val df3 = df2.withColumn("x", df2("x") + 1)
     checkAnswer(
       df3.select("x"),
       Row(2) :: Row(3) :: Row(4) :: Nil)
+  }
+
+  test("replace column using withColumns") {
+    val df2 = sparkContext.parallelize(Array((1, 2), (2, 3), (3, 4))).toDF("x", "y")
+    val df3 = df2.withColumns(Seq("x", "newCol1", "newCol2"),
+      Seq(df2("x") + 1, df2("y"), df2("y") + 1))
+    checkAnswer(
+      df3.select("x", "newCol1", "newCol2"),
+      Row(2, 2, 3) :: Row(3, 3, 4) :: Row(4, 4, 5) :: Nil)
   }
 
   test("drop column using drop") {
