@@ -47,7 +47,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructField, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -543,7 +543,7 @@ case class DataSource(
       val hdfsPath = new Path(path)
       val fs = hdfsPath.getFileSystem(hadoopConf)
       val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      val globPath = getGlobbedPaths(fs, qualified)
+      val globPath = dataSource.getGlobbedPaths(fs, qualified)
 
       if (checkEmptyGlobPath && globPath.isEmpty) {
         throw new AnalysisException(s"Path does not exist: $qualified")
