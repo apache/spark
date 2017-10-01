@@ -507,12 +507,14 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
+    // we assume that given default configuration, the size of
+    // the data we insert to the sorter (ints) and assuming we shouldn't
+    // spill before pointers array is exhausted (memory manager is not configured to throw at this point)
+    // - so this loop run a reasonable number of loops (<2000)
+    // test test indeed completed within <30ms (on a quad i7 laptop).
     for (int i = 0; sorter.hasSpaceForAnotherRecord(); ++i) {
       insertNumber(sorter, i);
     }
-    // todo: this might actually not be zero if pageSize is somehow configured differently,
-    // so we actually have to compute the expected spill size according to the configured page size
-    assertEquals(0,  sorter.getSpillSize());
     // we expect the next insert to attempt growing the pointerssArray
     // first allocation is expected to fail, then a spill is triggered which attempts another allocation
     // which also fails and we expect to see this OOM here.
