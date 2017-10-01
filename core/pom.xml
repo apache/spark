@@ -499,7 +499,7 @@
               </execution>
             </executions>
             <configuration>
-              <executable>..${file.separator}R${file.separator}install-dev${script.extension}</executable>
+              <executable>${project.basedir}${file.separator}..${file.separator}R${file.separator}install-dev${script.extension}</executable>
             </configuration>
           </plugin>
         </plugins>
