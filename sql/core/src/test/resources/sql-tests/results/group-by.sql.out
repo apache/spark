@@ -125,11 +125,11 @@ NULL	1
 
 
 -- !query 13
-SET spark.sql.codegen.wholeStage=false
+SET spark.sql.codegen.hugeMethodLimit=16000
 -- !query 13 schema
 struct<key:string,value:string>
 -- !query 13 output
-spark.sql.codegen.wholeStage	false
+spark.sql.codegen.hugeMethodLimit	16000
 
 
 -- !query 14
@@ -142,11 +142,11 @@ struct<skewness(CAST(a AS DOUBLE)):double,kurtosis(CAST(a AS DOUBLE)):double,min
 
 
 -- !query 15
-SET spark.sql.codegen.wholeStage=true
+SET spark.sql.codegen.hugeMethodLimit=8000
 -- !query 15 schema
 struct<key:string,value:string>
 -- !query 15 output
-spark.sql.codegen.wholeStage	true
+spark.sql.codegen.hugeMethodLimit	8000
 
 
 -- !query 16

@@ -98,9 +98,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   test("sliding window grouping") {
     // In SPARK-21871, we added code to check the actual bytecode size of gen'd methods. If the size
     // goes over `hugeMethodLimit`, Spark fails to compile the methods and the execution also fails
-    // in a test mode. So, we explicitly turn off whole-stage codegen here.
-    // This guard can be removed if this issue fixed.
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+    // in a test mode. So, we explicitly made this threshold higher here.
+    // This workaround can be removed if this issue fixed.
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "16000") {
       val df = Seq(
         ("2016-03-27 19:39:34", 1, "a"),
         ("2016-03-27 19:39:56", 2, "a"),
@@ -131,9 +131,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   test("sliding window projection") {
     // In SPARK-21871, we added code to check the actual bytecode size of gen'd methods. If the size
     // goes over `hugeMethodLimit`, Spark fails to compile the methods and the execution also fails
-    // in a test mode. So, we explicitly turn off whole-stage codegen here.
-    // This guard can be removed if this issue fixed.
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+    // in a test mode. So, we explicitly made this threshold higher here.
+    // This workaround can be removed if this issue fixed.
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "16000") {
       val df = Seq(
           ("2016-03-27 19:39:34", 1, "a"),
           ("2016-03-27 19:39:56", 2, "a"),
@@ -243,9 +243,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
   test("millisecond precision sliding windows") {
     // In SPARK-21871, we added code to check the actual bytecode size of gen'd methods. If the size
     // goes over `hugeMethodLimit`, Spark fails to compile the methods and the execution also fails
-    // in a test mode. So, we explicitly turn off whole-stage codegen here.
-    // This guard can be removed if this issue fixed.
-    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+    // in a test mode. So, we explicitly made this threshold higher here.
+    // This workaround can be removed if this issue fixed.
+    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "16000") {
       val df = Seq(
         ("2016-03-27 09:00:00.41", 3),
         ("2016-03-27 09:00:00.62", 6),
