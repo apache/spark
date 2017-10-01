@@ -267,11 +267,12 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
         useTempCheckpointLocation = true,
         trigger = trigger)
     } else {
-      val (useTempCheckpointLocation, recoverFromCheckpointLocation) =
+      val recoverFromCheckpointLocation = true
+      val useTempCheckpointLocation =
         if (source == "console") {
-          (true, true)
+          true
         } else {
-          (false, true)
+          false
         }
       val dataSource =
         DataSource(
