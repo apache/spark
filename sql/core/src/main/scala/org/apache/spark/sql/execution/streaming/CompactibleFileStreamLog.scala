@@ -139,10 +139,12 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
       out.write('\n')
       out.write(Serialization.write(data).getBytes(UTF_8))
     }
+    out.flush()
   }
 
   override def deserialize(in: InputStream): Array[T] = {
     val lines = IOSource.fromInputStream(in, UTF_8.name()).getLines()
+    assert(lines.length != 0)
     if (!lines.hasNext) {
       throw new IllegalStateException("Incomplete log file")
     }
