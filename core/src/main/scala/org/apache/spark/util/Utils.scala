@@ -982,9 +982,19 @@ private[spark] object Utils extends Logging {
       return cached
     }
 
-    val indx: Int = hostPort.lastIndexOf(':')
-    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
-    // but then hadoop does not support ipv6 right now.
+    val indx: Int =
+      // Interpret hostPort as literal IPv6 address if it contains multiple colons.
+      // IPv6 addresses  enclosed in square brackets like [::1]:123 are not included.
+      // scalastyle:off SingleSpaceBetweenRParenAndLCurlyBrace
+      if (hostPort.matches("(([0-9a-fA-F]*):([0-9a-fA-F]*)){2,}")) {
+      // scalastyle:on SingleSpaceBetweenRParenAndLCurlyBrace
+        -1
+      } else {
+        // Else last colon defines start of port definition
+        hostPort.lastIndexOf(':')
+      }
+
+
     // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
     if (-1 == indx) {
       val retval = (hostPort, 0)

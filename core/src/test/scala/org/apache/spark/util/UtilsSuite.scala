@@ -1146,6 +1146,20 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     }
   }
 
+  test("parseHostPort") {
+    assert(Utils.parseHostPort("abc:123")          === (("abc", 123)))
+    assert(Utils.parseHostPort("example.com")      === (("example.com", 0)))
+    assert(Utils.parseHostPort("example.com:123")  === (("example.com", 123)))
+    assert(Utils.parseHostPort("127.0.0.1")        === (("127.0.0.1", 0)))
+    assert(Utils.parseHostPort("127.0.0.1:123")    === (("127.0.0.1", 123)))
+    assert(Utils.parseHostPort("2001:db8::1")      === (("2001:db8::1", 0)))
+    assert(Utils.parseHostPort("2001:DB8::1")      === (("2001:DB8::1", 0)))
+    assert(Utils.parseHostPort("2001:dB8::1")      === (("2001:dB8::1", 0)))
+    assert(Utils.parseHostPort("0:0:0:0:0:0:0:0")  === (("0:0:0:0:0:0:0:0", 0)))
+    assert(Utils.parseHostPort("::1")              === (("::1", 0)))
+    assert(Utils.parseHostPort("[::1]:123")        === (("[::1]", 123)))
+    assert(Utils.parseHostPort("[2001:db8:42::1]:123")  === (("[2001:db8:42::1]", 123)))
+  }
 }
 
 private class SimpleExtension
@@ -1165,3 +1179,4 @@ private class ExtensionWithError {
 }
 
 private class ListenerImpl extends SparkListener
+
