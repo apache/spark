@@ -44,7 +44,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.sql.util.SchemaUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * The main class responsible for representing a pluggable Data Source in Spark SQL. In addition to
@@ -154,7 +154,8 @@ case class DataSource(
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        getGlobbedPaths(fs, qualified)
+        val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+        getGlobbedPaths(fs, serializableConfiguration, qualified)
       }.toArray
       new InMemoryFileIndex(sparkSession, globbedPaths, options, None, fileStatusCache)
     }
@@ -438,7 +439,10 @@ case class DataSource(
    * Return all paths represented by the wildcard string.
    * Follow [[InMemoryFileIndex]].bulkListLeafFile and reuse the conf.
    */
-  private def getGlobbedPaths(fs: FileSystem, qualified: Path): Seq[Path] = {
+  private def getGlobbedPaths(
+      fs: FileSystem,
+      hadoopConf: SerializableConfiguration,
+      qualified: Path): Seq[Path] = {
     val paths = SparkHadoopUtil.get.expandGlobPath(fs, qualified)
     if (paths.size <= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       SparkHadoopUtil.get.globPathIfNecessary(fs, qualified)
@@ -449,7 +453,9 @@ case class DataSource(
       val expanded = sparkSession.sparkContext
         .parallelize(paths, numParallelism)
         .map { pathString =>
-          SparkHadoopUtil.get.globPathIfNecessary(fs, new Path(pathString)).map(_.toString)
+          val path = new Path(pathString)
+          val fs = path.getFileSystem(hadoopConf.value)
+          SparkHadoopUtil.get.globPathIfNecessary(fs, path).map(_.toString)
         }.collect()
       expanded.flatMap(paths => paths.map(new Path(_))).toSeq
     }
@@ -694,7 +700,8 @@ object DataSource extends Logging {
     val hdfsPath = new Path(path)
     val fs = hdfsPath.getFileSystem(hadoopConf)
     val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    val globPath = dataSource.getGlobbedPaths(fs, qualified)
+    val serializableConfiguration = new SerializableConfiguration(hadoopConf)
+    val globPath = dataSource.getGlobbedPaths(fs, serializableConfiguration, qualified)
 
     if (globPath.isEmpty) {
       throw new AnalysisException(s"Path does not exist: $qualified")
