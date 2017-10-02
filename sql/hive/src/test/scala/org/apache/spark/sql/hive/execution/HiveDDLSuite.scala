@@ -1459,11 +1459,7 @@ class HiveDDLSuite
         checkAnswer(spark.table("t"), Row(1))
         // Check if this is compressed as ZLIB.
         val maybeOrcFile = path.listFiles().find(_.getName.startsWith("part"))
-        assert(maybeOrcFile.isDefined)
-        val orcFilePath = maybeOrcFile.get.toPath.toString
-        val expectedCompressionKind =
-          OrcFileOperator.getFileReader(orcFilePath).get.getCompression
-        assert("ZLIB" === expectedCompressionKind.name())
+        assertCompression(maybeOrcFile, "orc", "ZLIB")
 
         sql("CREATE TABLE t2 USING HIVE AS SELECT 1 AS c1, 'a' AS c2")
         val table2 = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
@@ -2029,8 +2025,7 @@ class HiveDDLSuite
     assert(compression === actualCompression)
   }
 
-  // Since ORC uses 'ZLIB' and Parquet uses 'SNAPPY' by default, we test with different formats.
-  Seq(("orc", "SNAPPY"), ("parquet", "GZIP")).foreach { case (fileFormat, compression) =>
+  Seq(("orc", "ZLIB"), ("parquet", "GZIP")).foreach { case (fileFormat, compression) =>
     test(s"SPARK-22158 convertMetastore should not ignore table property - $fileFormat") {
       withSQLConf(CONVERT_METASTORE_ORC.key -> "true", CONVERT_METASTORE_PARQUET.key -> "true") {
         withTable("t") {
