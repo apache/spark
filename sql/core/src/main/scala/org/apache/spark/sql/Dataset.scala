@@ -2126,6 +2126,9 @@ class Dataset[T] private[sql](
       colNames: Seq[String],
       cols: Seq[Column],
       metadata: Seq[Metadata]): DataFrame = {
+    require(colNames.size == metadata.size,
+      s"The size of column names: ${colNames.size} isn't equal to " +
+        s"the size of metadata elements: ${metadata.size}")
     val newCols = colNames.zip(cols).zip(metadata).map { case ((colName, col), metadata) =>
       col.as(colName, metadata)
     }
