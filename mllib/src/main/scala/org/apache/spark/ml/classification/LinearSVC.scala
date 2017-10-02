@@ -340,10 +340,6 @@ class LinearSVC @Since("2.2.0") (
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
 
-    println("total iterations: " + objectiveHistory.length)
-    println("loss: " + objectiveHistory.takeRight(5).mkString("\n"))
-
-
     val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
     instr.logSuccess(model)
     model
