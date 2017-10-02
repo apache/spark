@@ -29,7 +29,8 @@ class ParquetSchemaPruningSuite
     with FileSchemaPruningTest
     with SharedSQLContext {
   case class FullName(first: String, middle: String, last: String)
-  case class Contact(name: FullName, address: String, pets: Int)
+  case class Contact(name: FullName, address: String, pets: Int, friends: Array[FullName] = Array(),
+    relatives: Map[String, FullName] = Map())
 
   val contacts =
     Contact(FullName("Jane", "X.", "Doe"), "123 Main Street", 1) ::
@@ -88,15 +89,20 @@ class ParquetSchemaPruningSuite
       spark.read.parquet(path + "/contacts").createOrReplaceTempView("contacts")
 
       val query =
-        sql("select name.last, name.middle, name.first, pets, address from contacts where p=2")
+        sql("select name.last, name.middle, name.first, relatives[''].last, " +
+          "relatives[''].middle, relatives[''].first, friends[0].last, friends[0].middle, " +
+          "friends[0].first, pets, address from contacts where p=2")
       // We've selected every field in the schema. Therefore, no schema pruning should be performed.
       // We check this by asserting that the scanned schema of the query is identical to the schema
       // of the contacts relation, even though the fields are selected in different orders.
       checkScanSchemata(query,
-        "struct<name:struct<first:string,middle:string,last:string>,address:string,pets:int>")
+        "struct<name:struct<first:string,middle:string,last:string>,address:string,pets:int," +
+        "friends:array<struct<first:string,middle:string,last:string>>," +
+        "relatives:map<string,struct<first:string,middle:string,last:string>>>")
       checkAnswer(query,
-        Row("Jones", null, "Janet", null, "567 Maple Drive") ::
-        Row("Jones", null, "Jim", null, "6242 Ash Street") :: Nil)
+        Row("Jones", null, "Janet", null, null, null, null, null, null, null, "567 Maple Drive") ::
+        Row("Jones", null, "Jim", null, null, null, null, null, null, null, "6242 Ash Street") ::
+        Nil)
     }
   }
 

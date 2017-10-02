@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ProjectionOver
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructField, StructType}
 
 /**
  * Prunes unnecessary Parquet columns given a [[PhysicalOperation]] over a
@@ -31,8 +31,6 @@ import org.apache.spark.sql.types.{StructField, StructType}
  * SQL column, and a nested Parquet column corresponds to a [[StructField]].
  */
 private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
-  private val schemaConverter = new ParquetSchemaConverter()
-
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ PhysicalOperation(projects, filters,
@@ -52,13 +50,11 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
           val prunedDataSchema =
             StructType(prunedSchema.filter(f => dataSchemaFieldNames.contains(f.name)))
 
-          // If the original Parquet relation data fields are different from the pruned data fields,
-          // continue. Otherwise, return [[op]]. We effect this comparison by counting the number of
-          // paths in each schema's Parquet message type. It's a rather heavy-handed way to do this,
-          // but it's easy and I can't think of an easy way to compare two struct types ignoring
-          // the order of their fields, recursively.
-          if (schemaConverter.convert(dataSchema).getPaths.size !=
-            schemaConverter.convert(prunedDataSchema).getPaths.size) {
+          // If the data schema is different from the pruned data schema, continue. Otherwise,
+          // return [[op]]. We effect this comparison by counting the number of "leaf" fields in
+          // each schemata, assuming the fields in [[prunedDataSchema]] are a subset of the fields
+          // in [[dataSchema]].
+          if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
             val prunedParquetRelation =
               hadoopFsRelation.copy(dataSchema = prunedDataSchema)(hadoopFsRelation.sparkSession)
 
@@ -124,7 +120,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
    * When [[expr]] is an [[Attribute]], construct a field around it and return the
    * attribute as the second component of the returned tuple.
    */
-  private def getFields(expr: Expression): Seq[(StructField, Option[Attribute])] =
+  private def getFields(expr: Expression): Seq[(StructField, Option[Attribute])] = {
     expr match {
       case att: Attribute =>
         (StructField(att.name, att.dataType, att.nullable), Some(att)) :: Nil
@@ -132,4 +128,20 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
       case _ =>
         expr.children.flatMap(getFields)
     }
+  }
+
+  /**
+   * Counts the "leaf" fields of the given [[dataType]]. Informally, this is the
+   * number of fields of non-complex data type in the tree representation of
+   * [[dataType]].
+   */
+  private def countLeaves(dataType: DataType): Int = {
+    dataType match {
+      case array: ArrayType => countLeaves(array.elementType)
+      case map: MapType => countLeaves(map.keyType) + countLeaves(map.valueType)
+      case struct: StructType =>
+        struct.map(field => countLeaves(field.dataType)).sum
+      case _ => 1
+    }
+  }
 }
