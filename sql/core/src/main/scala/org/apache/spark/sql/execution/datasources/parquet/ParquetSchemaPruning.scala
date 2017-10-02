@@ -42,7 +42,7 @@ private[sql] object ParquetSchemaPruning extends Rule[LogicalPlan] {
         val filterFields = filters.flatMap(getFields)
         val requestedFields = (projectionFields ++ filterFields).distinct
 
-        // If [[requestedFields]] includes a proper field, continue. Otherwise,
+        // If [[requestedFields]] includes a nested field, continue. Otherwise,
         // return [[op]]
         if (requestedFields.exists { case (_, optAtt) => optAtt.isEmpty }) {
           val prunedSchema = requestedFields
