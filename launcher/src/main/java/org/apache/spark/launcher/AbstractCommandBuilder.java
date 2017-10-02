@@ -201,6 +201,9 @@ abstract class AbstractCommandBuilder {
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
     addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
+    if (getenv("SPARK_DAEMON_CLASSPATH") != null) {
+      addToClassPath(cp, getenv("SPARK_DAEMON_CLASSPATH"));
+    }
     return new ArrayList<>(cp);
   }
 
