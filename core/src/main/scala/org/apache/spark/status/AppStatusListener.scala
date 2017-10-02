@@ -19,7 +19,6 @@ package org.apache.spark.status
 
 import java.util.Date
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark._
@@ -29,7 +28,6 @@ import org.apache.spark.scheduler._
 import org.apache.spark.status.api.v1
 import org.apache.spark.storage._
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.ui.scope._
 import org.apache.spark.util.kvstore.KVStore
 
 /**
@@ -156,8 +154,8 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
   }
 
   override def onJobStart(event: SparkListenerJobStart): Unit = {
-    // Compute (a potential underestimate of) the number of tasks that will be run by this job.
-    // This may be an underestimate because the job start event references all of the result
+    // Compute (a potential over-estimate of) the number of tasks that will be run by this job.
+    // This may be an over-estimate because the job start event references all of the result
     // stages' transitive stage dependencies, but some of these stages might be skipped if their
     // output is available from earlier runs.
     // See https://github.com/apache/spark/pull/3009 for a more extensive discussion.
@@ -175,19 +173,24 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     val job = new LiveJob(
       event.jobId,
       lastStageName,
-      Option(event.time).filter(_ >= 0).map(new Date(_)),
+      Some(new Date(event.time)),
       event.stageIds,
       jobGroup,
       numTasks)
     liveJobs.put(event.jobId, job)
     update(job)
 
+    val schedulingPool = Option(event.properties).flatMap { p =>
+      Option(p.getProperty("spark.scheduler.pool"))
+    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
+
     event.stageInfos.foreach { stageInfo =>
       // A new job submission may re-use an existing stage, so this code needs to do an update
       // instead of just a write.
       val stage = getOrCreateStage(stageInfo)
-      stage.jobs = stage.jobs :+ job
+      stage.jobs :+= job
       stage.jobIds += event.jobId
+      stage.schedulingPool = schedulingPool
       update(stage)
     }
 
@@ -200,7 +203,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
         case JobFailed(_) => JobExecutionStatus.FAILED
       }
 
-      job.completionTime = if (event.time != -1) Some(new Date(event.time)) else None
+      job.completionTime = Some(new Date(event.time))
       update(job)
     }
   }
@@ -214,10 +217,6 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       .filter(_.stageIds.contains(event.stageInfo.stageId))
       .toSeq
     stage.jobIds = stage.jobs.map(_.jobId).toSet
-
-    stage.schedulingPool = Option(event.properties).flatMap { p =>
-      Option(p.getProperty("spark.scheduler.pool"))
-    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
 
     stage.jobs.foreach { job =>
       job.completedStages = job.completedStages - event.stageInfo.stageId
@@ -348,10 +347,10 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       // Because of SPARK-20205, old event logs may contain valid stages without a submission time
       // in their start event. In those cases, we can only detect whether a stage was skipped by
       // waiting until the completion event, at which point the field would have been set.
-      val skipped = !event.stageInfo.submissionTime.isDefined
       stage.status = event.stageInfo.failureReason match {
         case Some(_) => v1.StageStatus.FAILED
-        case None => if (skipped) v1.StageStatus.SKIPPED else v1.StageStatus.COMPLETE
+        case _ if event.stageInfo.submissionTime.isDefined => v1.StageStatus.COMPLETE
+        case _ => v1.StageStatus.SKIPPED
       }
       update(stage)
 

@@ -101,11 +101,11 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       new StageInfo(1, 0, "stage1", 4, Nil, Nil, "details1"),
       new StageInfo(2, 0, "stage2", 4, Nil, Seq(1), "details2"))
 
-    val stageProps = new Properties()
-    stageProps.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "jobGroup")
-    stageProps.setProperty("spark.scheduler.pool", "schedPool")
+    val jobProps = new Properties()
+    jobProps.setProperty(SparkContext.SPARK_JOB_GROUP_ID, "jobGroup")
+    jobProps.setProperty("spark.scheduler.pool", "schedPool")
 
-    listener.onJobStart(SparkListenerJobStart(1, time, stages, null))
+    listener.onJobStart(SparkListenerJobStart(1, time, stages, jobProps))
 
     check[JobDataWrapper](1) { job =>
       assert(job.info.jobId === 1)
@@ -113,11 +113,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
       assert(job.info.description === None)
       assert(job.info.status === JobExecutionStatus.RUNNING)
       assert(job.info.submissionTime === Some(new Date(time)))
+      assert(job.info.jobGroup === Some("jobGroup"))
     }
 
     stages.foreach { info =>
       check[StageDataWrapper](key(info)) { stage =>
         assert(stage.info.status === v1.StageStatus.PENDING)
+        assert(stage.info.schedulingPool === "schedPool")
         assert(stage.jobIds === Set(1))
       }
     }
@@ -125,7 +127,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // Submit stage 1
     time += 1
     stages.head.submissionTime = Some(time)
-    listener.onStageSubmitted(SparkListenerStageSubmitted(stages.head, stageProps))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stages.head, jobProps))
 
     check[JobDataWrapper](1) { job =>
       assert(job.info.numActiveStages === 1)
@@ -298,7 +300,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     // Submit stage 2.
     time += 1
     stages.last.submissionTime = Some(time)
-    listener.onStageSubmitted(SparkListenerStageSubmitted(stages.last, stageProps))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(stages.last, jobProps))
 
     check[JobDataWrapper](1) { job =>
       assert(job.info.numActiveStages === 1)
@@ -358,7 +360,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     time += 1
     newS2.submissionTime = Some(time)
-    listener.onStageSubmitted(SparkListenerStageSubmitted(newS2, stageProps))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(newS2, jobProps))
     assert(store.count(classOf[StageDataWrapper]) === 3)
 
     val newS2Tasks = createTasks(4, time)
@@ -411,9 +413,9 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     listener.onJobStart(SparkListenerJobStart(2, time, j2Stages, null))
     assert(store.count(classOf[JobDataWrapper]) === 2)
 
-    listener.onStageSubmitted(SparkListenerStageSubmitted(j2Stages.head, stageProps))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(j2Stages.head, jobProps))
     listener.onStageCompleted(SparkListenerStageCompleted(j2Stages.head))
-    listener.onStageSubmitted(SparkListenerStageSubmitted(j2Stages.last, stageProps))
+    listener.onStageSubmitted(SparkListenerStageSubmitted(j2Stages.last, jobProps))
     assert(store.count(classOf[StageDataWrapper]) === 5)
 
     time += 1
