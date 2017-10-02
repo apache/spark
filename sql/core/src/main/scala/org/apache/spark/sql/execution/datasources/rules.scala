@@ -108,8 +108,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       }
 
       // Check if the specified data source match the data source of the existing table.
-      val existingProvider = DataSource.lookupDataSource(existingTable.provider.get)
-      val specifiedProvider = DataSource.lookupDataSource(tableDesc.provider.get)
+      val existingProvider = DataSource.lookupDataSource(sparkSession, existingTable.provider.get)
+      val specifiedProvider = DataSource.lookupDataSource(sparkSession, tableDesc.provider.get)
       // TODO: Check that options from the resolved relation match the relation that we are
       // inserting into (i.e. using the same compression).
       if (existingProvider != specifiedProvider) {

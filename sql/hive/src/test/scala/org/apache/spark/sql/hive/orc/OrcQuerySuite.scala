@@ -344,44 +344,49 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   }
 
   test("SPARK-8501: Avoids discovery schema from empty ORC files") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
+    // This bug exists in only `sql/hive` ORCFileFormat .
+    // For `sql/core` ORCFileFormat, see the test case,
+    // `Schema discovery on empty ORC files`
+    withSQLConf(SQLConf.ORC_ENABLED.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
 
-      withTable("empty_orc") {
-        withTempView("empty", "single") {
-          spark.sql(
-            s"""CREATE TABLE empty_orc(key INT, value STRING)
-               |STORED AS ORC
-               |LOCATION '${dir.toURI}'
+        withTable("empty_orc") {
+          withTempView("empty", "single") {
+            spark.sql(
+              s"""CREATE TABLE empty_orc(key INT, value STRING)
+                 |STORED AS ORC
+                 |LOCATION '${dir.toURI}'
              """.stripMargin)
 
-          val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.createOrReplaceTempView("empty")
+            val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
+            emptyDF.createOrReplaceTempView("empty")
 
-          // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
-          // Spark SQL ORC data source always avoids write empty ORC files.
-          spark.sql(
-            s"""INSERT INTO TABLE empty_orc
-               |SELECT key, value FROM empty
+            // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
+            // Spark SQL ORC data source always avoids write empty ORC files.
+            spark.sql(
+              s"""INSERT INTO TABLE empty_orc
+                 |SELECT key, value FROM empty
              """.stripMargin)
 
-          val errorMessage = intercept[AnalysisException] {
-            spark.read.orc(path)
-          }.getMessage
+            val errorMessage = intercept[AnalysisException] {
+              spark.read.orc(path)
+            }.getMessage
 
-          assert(errorMessage.contains("Unable to infer schema for ORC"))
+            assert(errorMessage.contains("Unable to infer schema for ORC"))
 
-          val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-          singleRowDF.createOrReplaceTempView("single")
+            val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
+            singleRowDF.createOrReplaceTempView("single")
 
-          spark.sql(
-            s"""INSERT INTO TABLE empty_orc
-               |SELECT key, value FROM single
+            spark.sql(
+              s"""INSERT INTO TABLE empty_orc
+                 |SELECT key, value FROM single
              """.stripMargin)
 
-          val df = spark.read.orc(path)
-          assert(df.schema === singleRowDF.schema.asNullable)
-          checkAnswer(df, singleRowDF)
+            val df = spark.read.orc(path)
+            assert(df.schema === singleRowDF.schema.asNullable)
+            checkAnswer(df, singleRowDF)
+          }
         }
       }
     }
