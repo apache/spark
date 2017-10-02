@@ -17,7 +17,9 @@
 
 package org.apache.spark.graphx
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.util.Utils
 
 class PregelSuite extends SparkFunSuite with LocalSparkContext {
 
@@ -52,4 +54,55 @@ class PregelSuite extends SparkFunSuite with LocalSparkContext {
         chain.vertices.mapValues { (vid, attr) => attr + 1 }.collect.toSet)
     }
   }
+
+  test("should preserve intermediate checkpoint files when there are even amount of iterations") {
+    withEvictedGraph(iterations = 4) { _ => }
+  }
+
+  test("should preserve intermediate checkpoint files when there are odd amount of iterations") {
+    withEvictedGraph(iterations = 5) { _ => }
+  }
+
+  test("preserve last checkpoint files when there are even amount of iterations") {
+    withEvictedGraph(iterations = 4) { graph =>
+      graph.vertices.count()
+      graph.edges.count()
+    }
+  }
+
+  test("preserve last checkpoint files when there are odd amount of iterations") {
+    withEvictedGraph(iterations = 5) { graph =>
+      graph.vertices.count()
+      graph.edges.count()
+    }
+  }
+
+  private def withEvictedGraph(iterations: Int)(f: Graph[Long, Int] => Unit): Unit = {
+    implicit val conf: SparkConf = new SparkConf()
+      .set("spark.graphx.pregel.checkpointInterval", "2")
+      // set testing memory to evict cached RDDs from it and force
+      // reading checkpointed RDDs from disk
+      .set("spark.testing.reservedMemory", "128")
+      .set("spark.testing.memory", "256")
+    withSpark { sc =>
+      val dir = Utils.createTempDir().getCanonicalFile
+      try {
+        sc.setCheckpointDir(dir.toURI.toString)
+        val edges = (1 to iterations).map(x => (x: VertexId, x + 1: VertexId))
+        val graph = Pregel(Graph.fromEdgeTuples(sc.parallelize(edges, 3), 0L), 1L)(
+          (vid, attr, msg) => if (vid == msg) msg else attr,
+          et =>
+            if (et.dstId != et.dstAttr && et.srcId < et.dstId) {
+              Iterator((et.dstId, et.srcAttr + 1))
+            } else {
+              Iterator.empty
+            },
+          (a: Long, b: Long) => math.max(a, b))
+        f(graph)
+      } finally {
+        Utils.deleteRecursively(dir)
+      }
+    }
+  }
+
 }

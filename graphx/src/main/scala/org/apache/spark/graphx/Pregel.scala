@@ -170,8 +170,42 @@ object Pregel extends Logging {
       i += 1
     }
     messageCheckpointer.unpersistDataSet()
-    graphCheckpointer.deleteAllCheckpoints()
-    messageCheckpointer.deleteAllCheckpoints()
+
+    // in case of low system resources when cached RDDs are going to be evicted from memory
+    // there may be a chance that it will be necessary to read checkpointed files from disk,
+    // in that case all the checkpoints, the resulting graph depends on, should not be deleted
+    import PeriodicRDDCheckpointer._
+
+    val graphDeps = rddDeps(g.vertices) ++ rddDeps(g.edges)
+    val lastGraphCheckpoint = graphCheckpointer.getLastCheckpoint
+    val lastGraphCheckpointDeps = lastGraphCheckpoint match {
+      case Some(value) => rddDeps(value.vertices) ++ rddDeps(value.edges)
+      case _ => Set.empty
+    }
+
+    val messagesDeps = rddDeps(messages)
+    val lastMessagesCheckpoint = messageCheckpointer.getLastCheckpoint
+    val lastMessagesCheckpointDeps = lastMessagesCheckpoint match {
+      case Some(value) => rddDeps(value)
+      case _ => Set.empty
+    }
+
+    graphCheckpointer.deleteAllCheckpoints { item =>
+      val itemDeps = rddDeps(item.vertices) ++ rddDeps(item.edges)
+      !lastGraphCheckpoint.exists(_ eq item) &&
+        !haveCommonCheckpoint(itemDeps, lastGraphCheckpointDeps) &&
+        !haveCommonCheckpoint(messagesDeps, itemDeps) &&
+        !haveCommonCheckpoint(messagesDeps, lastGraphCheckpointDeps)
+    }
+
+    messageCheckpointer.deleteAllCheckpoints { item =>
+      val itemDeps = rddDeps(item)
+      !lastMessagesCheckpoint.exists(_ eq item) &&
+        !haveCommonCheckpoint(itemDeps, lastMessagesCheckpointDeps) &&
+        !haveCommonCheckpoint(graphDeps, itemDeps) &&
+        !haveCommonCheckpoint(graphDeps, lastMessagesCheckpointDeps)
+    }
+
     g
   } // end of apply
 

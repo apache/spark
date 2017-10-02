@@ -26,8 +26,7 @@ import org.apache.spark.SparkContext
 */
 trait LocalSparkContext {
   /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
-  def withSpark[T](f: SparkContext => T): T = {
-    val conf = new SparkConf()
+  def withSpark[T](f: SparkContext => T)(implicit conf: SparkConf = new SparkConf()): T = {
     GraphXUtils.registerKryoClasses(conf)
     val sc = new SparkContext("local", "test", conf)
     try {
