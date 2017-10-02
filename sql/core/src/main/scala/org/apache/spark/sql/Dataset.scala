@@ -2083,23 +2083,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  def withColumn(colName: String, col: Column): DataFrame = {
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
-    val shouldReplace = output.exists(f => resolver(f.name, colName))
-    if (shouldReplace) {
-      val columns = output.map { field =>
-        if (resolver(field.name, colName)) {
-          col.as(colName)
-        } else {
-          Column(field)
-        }
-      }
-      select(columns : _*)
-    } else {
-      select(Column("*"), col.as(colName))
-    }
-  }
+  def withColumn(colName: String, col: Column): DataFrame = withColumns(Seq(colName), Seq(col))
 
   /**
    * Returns a new Dataset by adding columns or replacing the existing columns that has
@@ -2109,8 +2093,10 @@ class Dataset[T] private[sql](
     require(colNames.size == cols.size,
       s"The size of column names: ${colNames.size} isn't equal to " +
         s"the size of columns: ${cols.size}")
-    require(colNames.distinct.size == colNames.size,
-      s"It is disallowed to use duplicate column names: $colNames")
+    SchemaUtils.checkColumnNameDuplication(
+      colNames,
+      "in given column names",
+      sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
     val resolver = sparkSession.sessionState.analyzer.resolver
     val output = queryExecution.analyzed.output
@@ -2118,15 +2104,11 @@ class Dataset[T] private[sql](
     val columnMap = colNames.zip(cols).toMap
 
     val replacedAndExistingColumns = output.map { field =>
-      val dupColumn = columnMap.find { case (colName, col) =>
+      columnMap.find { case (colName, _) =>
         resolver(field.name, colName)
-      }
-      if (dupColumn.isDefined) {
-        val colName = dupColumn.get._1
-        val col = dupColumn.get._2
-        col.as(colName)
-      } else {
-        Column(field)
+      } match {
+        case Some((colName: String, col: Column)) => col.as(colName)
+        case _ => Column(field)
       }
     }
 

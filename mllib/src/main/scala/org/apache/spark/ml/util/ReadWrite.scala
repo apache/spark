@@ -396,17 +396,27 @@ private[ml] object DefaultParamsReader {
 
   /**
    * Extract Params from metadata, and set them in the instance.
-   * This works if all Params implement [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   * This works if all Params (except params included by `skipParams` list) implement
+   * [[org.apache.spark.ml.param.Param.jsonDecode()]].
+   *
+   * @param skipParams The params included in `skipParams` won't be set. This is useful if some
+   *                   params don't implement [[org.apache.spark.ml.param.Param.jsonDecode()]]
+   *                   and need special handling.
    * TODO: Move to [[Metadata]] method
    */
-  def getAndSetParams(instance: Params, metadata: Metadata): Unit = {
+  def getAndSetParams(
+      instance: Params,
+      metadata: Metadata,
+      skipParams: Option[List[String]] = None): Unit = {
     implicit val format = DefaultFormats
     metadata.params match {
       case JObject(pairs) =>
         pairs.foreach { case (paramName, jsonValue) =>
-          val param = instance.getParam(paramName)
-          val value = param.jsonDecode(compact(render(jsonValue)))
-          instance.set(param, value)
+          if (skipParams == None || !skipParams.get.contains(paramName)) {
+            val param = instance.getParam(paramName)
+            val value = param.jsonDecode(compact(render(jsonValue)))
+            instance.set(param, value)
+          }
         }
       case _ =>
         throw new IllegalArgumentException(

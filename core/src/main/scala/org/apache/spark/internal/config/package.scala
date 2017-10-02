@@ -385,4 +385,29 @@ package object config {
       .checkValue(v => v > 0 && v <= Int.MaxValue,
         s"The buffer size must be greater than 0 and less than ${Int.MaxValue}.")
       .createWithDefault(1024 * 1024)
+
+  private[spark] val UNROLL_MEMORY_CHECK_PERIOD =
+    ConfigBuilder("spark.storage.unrollMemoryCheckPeriod")
+      .internal()
+      .doc("The memory check period is used to determine how often we should check whether "
+        + "there is a need to request more memory when we try to unroll the given block in memory.")
+      .longConf
+      .createWithDefault(16)
+
+  private[spark] val UNROLL_MEMORY_GROWTH_FACTOR =
+    ConfigBuilder("spark.storage.unrollMemoryGrowthFactor")
+      .internal()
+      .doc("Memory to request as a multiple of the size that used to unroll the block.")
+      .doubleConf
+      .createWithDefault(1.5)
+
+  private[spark] val FORCE_DOWNLOAD_SCHEMES =
+    ConfigBuilder("spark.yarn.dist.forceDownloadSchemes")
+      .doc("Comma-separated list of schemes for which files will be downloaded to the " +
+        "local disk prior to being added to YARN's distributed cache. For use in cases " +
+        "where the YARN service does not support schemes that are supported by Spark, like http, " +
+        "https and ftp.")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

@@ -27,7 +27,7 @@ import org.apache.spark.storage._
  * Test various functionality in the StorageListener that supports the StorageTab.
  */
 class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
-  private var bus: LiveListenerBus = _
+  private var bus: SparkListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
   private var storageListener: StorageListener = _
   private val memAndDisk = StorageLevel.MEMORY_AND_DISK
@@ -43,7 +43,7 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
 
   before {
     val conf = new SparkConf()
-    bus = new LiveListenerBus(conf)
+    bus = new ReplayListenerBus()
     storageStatusListener = new StorageStatusListener(conf)
     storageListener = new StorageListener(storageStatusListener)
     bus.addListener(storageStatusListener)

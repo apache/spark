@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, OneRowRelation, Union}
 import org.apache.spark.sql.execution.{FilterExec, QueryExecution}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSQLContext}
@@ -658,11 +658,30 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(
       err.getMessage.contains("The size of column names: 1 isn't equal to the size of columns: 2"))
 
-    val err2 = intercept[IllegalArgumentException] {
-      testData.toDF().withColumns(Seq("newCol1", "newCol1"),
+    val err2 = intercept[AnalysisException] {
+      testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
         Seq(col("key") + 1, col("key") + 2))
     }
-    assert(err2.getMessage.contains("It is disallowed to use duplicate column names"))
+    assert(err2.getMessage.contains("Found duplicate column(s)"))
+  }
+
+  test("withColumns: case sensitive") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val df = testData.toDF().withColumns(Seq("newCol1", "newCOL1"),
+        Seq(col("key") + 1, col("key") + 2))
+      checkAnswer(
+        df,
+        testData.collect().map { case Row(key: Int, value: String) =>
+          Row(key, value, key + 1, key + 2)
+        }.toSeq)
+      assert(df.schema.map(_.name) === Seq("key", "value", "newCol1", "newCOL1"))
+
+      val err = intercept[AnalysisException] {
+        testData.toDF().withColumns(Seq("newCol1", "newCol1"),
+          Seq(col("key") + 1, col("key") + 2))
+      }
+      assert(err.getMessage.contains("Found duplicate column(s)"))
+    }
   }
 
   test("replace column using withColumn") {
@@ -836,9 +855,9 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Row("mean", null, "33.0", "178.0"),
       Row("stddev", null, "19.148542155126762", "11.547005383792516"),
       Row("min", "Alice", "16", "164"),
-      Row("25%", null, "24.0", "176.0"),
-      Row("50%", null, "24.0", "176.0"),
-      Row("75%", null, "32.0", "180.0"),
+      Row("25%", null, "24", "176"),
+      Row("50%", null, "24", "176"),
+      Row("75%", null, "32", "180"),
       Row("max", "David", "60", "192"))
 
     val emptySummaryResult = Seq(
@@ -1562,7 +1581,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
           fail("Should not have back to back Aggregates")
         }
         atFirstAgg = true
-      case e: ShuffleExchange => atFirstAgg = false
+      case e: ShuffleExchangeExec => atFirstAgg = false
       case _ =>
     }
   }
@@ -1743,19 +1762,19 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       val plan = join.queryExecution.executedPlan
       checkAnswer(join, df)
       assert(
-        join.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+        join.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size === 1)
       assert(
         join.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 1)
       val broadcasted = broadcast(join)
       val join2 = join.join(broadcasted, "id").join(broadcasted, "id")
       checkAnswer(join2, df)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ShuffleExchange => true }.size === 1)
+        join2.queryExecution.executedPlan.collect { case e: ShuffleExchangeExec => true }.size == 1)
       assert(
         join2.queryExecution.executedPlan
           .collect { case e: BroadcastExchangeExec => true }.size === 1)
       assert(
-        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size === 4)
+        join2.queryExecution.executedPlan.collect { case e: ReusedExchangeExec => true }.size == 4)
     }
   }
 

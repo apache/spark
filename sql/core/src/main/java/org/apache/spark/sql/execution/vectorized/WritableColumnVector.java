@@ -59,6 +59,24 @@ public abstract class WritableColumnVector extends ColumnVector {
     }
   }
 
+  @Override
+  public void close() {
+    if (childColumns != null) {
+      for (int i = 0; i < childColumns.length; i++) {
+        childColumns[i].close();
+        childColumns[i] = null;
+      }
+      childColumns = null;
+    }
+    if (dictionaryIds != null) {
+      dictionaryIds.close();
+      dictionaryIds = null;
+    }
+    dictionary = null;
+    resultStruct = null;
+    resultArray = null;
+  }
+
   public void reserve(int requiredCapacity) {
     if (requiredCapacity > capacity) {
       int newCapacity = (int) Math.min(MAX_CAPACITY, requiredCapacity * 2L);
@@ -559,7 +577,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
-  protected int MAX_CAPACITY = Integer.MAX_VALUE;
+  protected int MAX_CAPACITY = Integer.MAX_VALUE - 8;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.
