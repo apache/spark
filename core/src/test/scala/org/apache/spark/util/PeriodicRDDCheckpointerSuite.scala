@@ -20,6 +20,7 @@ package org.apache.spark.util
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SharedSparkContext, SparkContext, SparkFunSuite}
+import org.apache.spark.rdd.MapPartitionsRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
@@ -79,29 +80,158 @@ class PeriodicRDDCheckpointerSuite extends SparkFunSuite with SharedSparkContext
     Utils.deleteRecursively(tempDir)
   }
 
-  test("Checkpointing of dependent RDD should not fail when materializing it") {
-    val tempDir = Utils.createTempDir()
-    val checkpointInterval = 2
-    sc.setCheckpointDir(tempDir.toURI.toString)
+  test("Getting RDD dependencies should return RDD itself") {
+    val rdd = sc.emptyRDD[Int]
+    assert(PeriodicRDDCheckpointer.rddDeps(rdd) == Set(rdd))
+  }
 
-    val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, sc)
-
-    val rdd1 = createRDD(sc)
-    checkpointer.update(rdd1)
-    checkpointer.update(rdd1)
-    rdd1.count()
-
-    val rdd2 = rdd1.filter(_ => true)
-    checkpointer.update(rdd2)
-    checkpointer.update(rdd2)
-    rdd2.count()
-
-    checkpointer.deleteAllCheckpoints()
-    Seq(rdd1, rdd2).foreach { rdd =>
-      confirmCheckpointRemoved(rdd)
+  test("Getting RDD dependencies should return all the DAG RDDs") {
+    val data = 0 until 10
+    val initialRdd = sc.parallelize(data)
+    val targetRdd = data.foldLeft(initialRdd) { (rdd, num) =>
+      rdd.filter(_ == num)
     }
 
-    Utils.deleteRecursively(tempDir)
+    val deps = PeriodicRDDCheckpointer.rddDeps(targetRdd)
+    assert(deps.size == data.size + 1)
+    assert(deps.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) == data.size)
+  }
+
+  test("Common checkpoint should be found when RDDs are related") {
+    val tempDir = Utils.createTempDir()
+    try {
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val rdd1 = createRDD(sc)
+      rdd1.checkpoint()
+      rdd1.count()
+
+      val rdd2 = rdd1.filter(_ => true)
+
+      assert(PeriodicRDDCheckpointer.haveCommonCheckpoint(Set(rdd1), Set(rdd2)))
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("Common checkpoint should not be found when RDDs are unrelated") {
+    val tempDir = Utils.createTempDir()
+    try {
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val rdd1 = createRDD(sc)
+      rdd1.checkpoint()
+      rdd1.count()
+
+      val rdd2 = createRDD(sc)
+      rdd2.checkpoint()
+      rdd2.count()
+
+      assert(!PeriodicRDDCheckpointer.haveCommonCheckpoint(Set(rdd1), Set(rdd2)))
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("Checkpointing of dependent RDD should not fail when materializing it") {
+    val tempDir = Utils.createTempDir()
+    try {
+      val checkpointInterval = 2
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, sc)
+
+      val rdd1 = createRDD(sc)
+      checkpointer.update(rdd1)
+      checkpointer.update(rdd1)
+      rdd1.count()
+
+      val rdd2 = rdd1.filter(_ => true)
+      checkpointer.update(rdd2)
+      checkpointer.update(rdd2)
+      rdd2.count()
+
+      checkpointer.deleteAllCheckpoints()
+      Seq(rdd1, rdd2).foreach { rdd =>
+        confirmCheckpointRemoved(rdd)
+      }
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("deleteAllCheckpointsButLast should retain last checkpoint only when RDDs are unrelated") {
+    val tempDir = Utils.createTempDir()
+    try {
+      val checkpointInterval = 2
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, sc)
+
+      val rdd1 = createRDD(sc)
+      checkpointer.update(rdd1)
+      checkpointer.update(rdd1)
+      rdd1.count()
+
+      val rdd2 = createRDD(sc)
+      checkpointer.update(rdd2)
+      checkpointer.update(rdd2)
+
+      checkpointer.deleteAllCheckpointsButLast()
+      Seq(rdd1).foreach(confirmCheckpointRemoved)
+      Seq(rdd2).foreach(confirmCheckpointExists)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("deleteAllCheckpointsButLast should retain last checkpoint and dependent checkpoints " +
+    "when RDDs are related") {
+    val tempDir = Utils.createTempDir()
+    try {
+      val checkpointInterval = 2
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, sc)
+
+      val rdd1 = createRDD(sc)
+      checkpointer.update(rdd1)
+      checkpointer.update(rdd1)
+      rdd1.count()
+
+      val rdd2 = rdd1.filter(_ => true)
+      checkpointer.update(rdd2)
+      checkpointer.update(rdd2)
+
+      checkpointer.deleteAllCheckpointsButLast()
+      Seq(rdd1, rdd2).foreach(confirmCheckpointExists)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("deleteAllCheckpoints should remove all the checkpoints") {
+    val tempDir = Utils.createTempDir()
+    try {
+      val checkpointInterval = 2
+      sc.setCheckpointDir(tempDir.toURI.toString)
+
+      val checkpointer = new PeriodicRDDCheckpointer[Double](checkpointInterval, sc)
+
+      val rdd1 = createRDD(sc)
+      checkpointer.update(rdd1)
+      checkpointer.update(rdd1)
+      rdd1.count()
+
+      val rdd2 = rdd1.filter(_ => true)
+      checkpointer.update(rdd2)
+      checkpointer.update(rdd2)
+
+      checkpointer.deleteAllCheckpoints()
+      Seq(rdd1, rdd2).foreach(confirmCheckpointRemoved)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 }
 
@@ -156,6 +286,15 @@ private object PeriodicRDDCheckpointerSuite {
       val path = new Path(checkpointFile)
       val fs = path.getFileSystem(hadoopConf)
       assert(!fs.exists(path), "RDD checkpoint file should have been removed")
+    }
+  }
+
+  def confirmCheckpointExists(rdd: RDD[_]): Unit = {
+    val hadoopConf = rdd.sparkContext.hadoopConfiguration
+    rdd.getCheckpointFile.foreach { checkpointFile =>
+      val path = new Path(checkpointFile)
+      val fs = path.getFileSystem(hadoopConf)
+      assert(fs.exists(path), "RDD checkpoint file should not have been removed")
     }
   }
 

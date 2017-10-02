@@ -17,6 +17,9 @@
 
 package org.apache.spark.rdd.util
 
+import scala.collection.mutable
+import scala.collection.Set
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -73,8 +76,6 @@ import org.apache.spark.util.PeriodicCheckpointer
  *
  * @param checkpointInterval  RDDs will be checkpointed at this interval
  * @tparam T  RDD element type
- *
- * TODO: Move this out of MLlib?
  */
 private[spark] class PeriodicRDDCheckpointer[T](
     checkpointInterval: Int,
@@ -96,4 +97,33 @@ private[spark] class PeriodicRDDCheckpointer[T](
   override protected def getCheckpointFiles(data: RDD[T]): Iterable[String] = {
     data.getCheckpointFile.map(x => x)
   }
+
+  override protected def haveCommonCheckpoint(newData: RDD[T], oldData: RDD[T]): Boolean = {
+    PeriodicRDDCheckpointer.haveCommonCheckpoint(Set(newData), Set(oldData))
+  }
+
+}
+
+private[spark] object PeriodicRDDCheckpointer {
+
+  def rddDeps(rdd: RDD[_]): Set[RDD[_]] = {
+    val parents = new mutable.HashSet[RDD[_]]
+    def visit(rdd: RDD[_]) {
+      parents.add(rdd)
+      rdd.dependencies.foreach(dep => visit(dep.rdd))
+    }
+    visit(rdd)
+    parents
+  }
+
+  def haveCommonCheckpoint(rdds1: Set[_ <: RDD[_]], rdds2: Set[_ <: RDD[_]]): Boolean = {
+    val deps1 = rdds1.foldLeft(new mutable.HashSet[RDD[_]]()) { (set, rdd) =>
+      set ++= rddDeps(rdd)
+    }
+    val deps2 = rdds2.foldLeft(new mutable.HashSet[RDD[_]]()) { (set, rdd) =>
+      set ++= rddDeps(rdd)
+    }
+    deps1.intersect(deps2).exists(_.isCheckpointed)
+  }
+
 }

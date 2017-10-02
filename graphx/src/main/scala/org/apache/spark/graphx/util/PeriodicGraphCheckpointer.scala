@@ -19,6 +19,7 @@ package org.apache.spark.graphx.util
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph
+import org.apache.spark.rdd.util.PeriodicRDDCheckpointer
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.PeriodicCheckpointer
 
@@ -103,4 +104,11 @@ private[spark] class PeriodicGraphCheckpointer[VD, ED](
   override protected def getCheckpointFiles(data: Graph[VD, ED]): Iterable[String] = {
     data.getCheckpointFiles
   }
+
+  override protected def haveCommonCheckpoint(
+      newData: Graph[VD, ED], oldData: Graph[VD, ED]): Boolean = {
+    PeriodicRDDCheckpointer.haveCommonCheckpoint(
+      Set(newData.vertices, newData.edges), Set(oldData.vertices, oldData.edges))
+  }
+
 }

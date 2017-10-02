@@ -97,18 +97,7 @@ private[spark] abstract class PeriodicCheckpointer[T](
       checkpoint(newData)
       checkpointQueue.enqueue(newData)
       // Remove checkpoints before the latest one.
-      var canDelete = true
-      // Do not remove previous checkpoint and its data until materializing newData.
-      // Early removal may lead to FileNotFoundExceptions in case of newData
-      // depends on materialized checkpointQueue.head
-      while (checkpointQueue.size > 2 && canDelete) {
-        // Delete the oldest checkpoint only if the next checkpoint exists and materialized.
-        if (isCheckpointed(checkpointQueue.head)) {
-          removeCheckpointFile()
-        } else {
-          canDelete = false
-        }
-      }
+      deleteAllCheckpointsButLast()
     }
   }
 
@@ -131,6 +120,11 @@ private[spark] abstract class PeriodicCheckpointer[T](
   protected def getCheckpointFiles(data: T): Iterable[String]
 
   /**
+   * Checks whether the two datasets depend on the same checkpointed data.
+   */
+  protected def haveCommonCheckpoint(newData: T, oldData: T): Boolean
+
+  /**
    * Call this to unpersist the Dataset.
    */
   def unpersistDataSet(): Unit = {
@@ -141,21 +135,37 @@ private[spark] abstract class PeriodicCheckpointer[T](
   }
 
   /**
+   * Gets last checkpoint if it is available.
+   */
+  def getLastCheckpoint: Option[T] = {
+    checkpointQueue.lastOption
+  }
+
+  /**
    * Call this at the end to delete any remaining checkpoint files.
    */
   def deleteAllCheckpoints(): Unit = {
-    while (checkpointQueue.nonEmpty) {
-      removeCheckpointFile()
-    }
+    deleteAllCheckpoints(_ => true)
+  }
+
+  /**
+   * Deletes all the checkpoints which match the given predicate.
+   */
+  def deleteAllCheckpoints(f: T => Boolean): Unit = {
+    val checkpoints = checkpointQueue.dequeueAll(f)
+    checkpoints.foreach(removeCheckpointFile)
   }
 
   /**
    * Call this at the end to delete any remaining checkpoint files, except for the last checkpoint.
-   * Note that there may not be any checkpoints at all.
+   * Note that there may not be any checkpoints at all and in case there are more than one
+   * checkpoint, all the checkpoints, the last one depends on, will not be deleted.
    */
   def deleteAllCheckpointsButLast(): Unit = {
-    while (checkpointQueue.size > 1) {
-      removeCheckpointFile()
+    getLastCheckpoint.foreach { last =>
+      deleteAllCheckpoints { item =>
+        item != last && !haveCommonCheckpoint(last, item)
+      }
     }
   }
 
@@ -174,7 +184,14 @@ private[spark] abstract class PeriodicCheckpointer[T](
   private def removeCheckpointFile(): Unit = {
     val old = checkpointQueue.dequeue()
     // Since the old checkpoint is not deleted by Spark, we manually delete it.
-    getCheckpointFiles(old).foreach(
+    removeCheckpointFile(old)
+  }
+
+  /**
+   * Removes checkpoint files of the provided Dataset.
+   */
+  private def removeCheckpointFile(item: T): Unit = {
+    getCheckpointFiles(item).foreach(
       PeriodicCheckpointer.removeCheckpointFile(_, sc.hadoopConfiguration))
   }
 }
