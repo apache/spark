@@ -147,7 +147,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...
-        pos = (pos + delta) & _mask
+        pos = (pos + delta * delta) & _mask
         delta += 1
       }
     }
@@ -181,7 +181,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
         return pos
       } else {
         // quadratic probing with values increase by 1, 2, 3, ...
-        pos = (pos + delta) & _mask
+        pos = (pos + delta * delta) & _mask
         delta += 1
       }
     }
@@ -250,7 +250,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
             keepGoing = false
           } else {
             val delta = i
-            newPos = (newPos + delta) & newMask
+            newPos = (newPos + delta * delta) & newMask
             i += 1
           }
         }
