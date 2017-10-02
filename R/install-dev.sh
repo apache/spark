@@ -28,6 +28,7 @@
 
 set -o pipefail
 set -e
+set -x
 
 FWDIR="$(cd `dirname $0`; pwd)"
 LIB_DIR="$FWDIR/lib"
