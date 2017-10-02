@@ -17,8 +17,8 @@
 
 package org.apache.spark.rdd.util
 
-import scala.collection.mutable
 import scala.collection.Set
+import scala.collection.mutable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -125,5 +125,4 @@ private[spark] object PeriodicRDDCheckpointer {
     }
     deps1.intersect(deps2).exists(_.isCheckpointed)
   }
-
 }
