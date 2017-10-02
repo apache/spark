@@ -236,7 +236,7 @@ class LinearSVC @Since("2.2.0") (
           (c1._1.merge(c2._1), c1._2.merge(c2._2))
 
       instances.treeAggregate(
-        new MultivariateOnlineSummarizer, new MultiClassSummarizer
+        (new MultivariateOnlineSummarizer, new MultiClassSummarizer)
       )(seqOp, combOp, $(aggregationDepth))
     }
 
@@ -339,6 +339,10 @@ class LinearSVC @Since("2.2.0") (
       }
       (Vectors.dense(coefficientArray), intercept, scaledObjectiveHistory.result())
     }
+
+    println("total iterations: " + objectiveHistory.length)
+    println("loss: " + objectiveHistory.takeRight(5).mkString("\n"))
+
 
     val model = copyValues(new LinearSVCModel(uid, coefficientVector, interceptVector))
     instr.logSuccess(model)

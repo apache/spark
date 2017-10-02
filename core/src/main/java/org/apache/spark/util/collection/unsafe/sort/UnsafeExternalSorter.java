@@ -219,15 +219,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics,
           inMemSorter.numRecords());
       spillWriters.add(spillWriter);
-      final UnsafeSorterIterator sortedRecords = inMemSorter.getSortedIterator();
-      while (sortedRecords.hasNext()) {
-        sortedRecords.loadNext();
-        final Object baseObject = sortedRecords.getBaseObject();
-        final long baseOffset = sortedRecords.getBaseOffset();
-        final int recordLength = sortedRecords.getRecordLength();
-        spillWriter.write(baseObject, baseOffset, recordLength, sortedRecords.getKeyPrefix());
-      }
-      spillWriter.close();
+      spillIterator(inMemSorter.getSortedIterator(), spillWriter);
     }
 
     final long spillSize = freeMemory();
@@ -488,6 +480,18 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  private static void spillIterator(UnsafeSorterIterator inMemIterator,
+      UnsafeSorterSpillWriter spillWriter) throws IOException {
+    while (inMemIterator.hasNext()) {
+      inMemIterator.loadNext();
+      final Object baseObject = inMemIterator.getBaseObject();
+      final long baseOffset = inMemIterator.getBaseOffset();
+      final int recordLength = inMemIterator.getRecordLength();
+      spillWriter.write(baseObject, baseOffset, recordLength, inMemIterator.getKeyPrefix());
+    }
+    spillWriter.close();
+  }
+
   /**
    * An UnsafeSorterIterator that support spilling.
    */
@@ -503,6 +507,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       this.numRecords = inMemIterator.getNumRecords();
     }
 
+    @Override
     public int getNumRecords() {
       return numRecords;
     }
@@ -521,14 +526,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         // Iterate over the records that have not been returned and spill them.
         final UnsafeSorterSpillWriter spillWriter =
           new UnsafeSorterSpillWriter(blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
-        while (inMemIterator.hasNext()) {
-          inMemIterator.loadNext();
-          final Object baseObject = inMemIterator.getBaseObject();
-          final long baseOffset = inMemIterator.getBaseOffset();
-          final int recordLength = inMemIterator.getRecordLength();
-          spillWriter.write(baseObject, baseOffset, recordLength, inMemIterator.getKeyPrefix());
-        }
-        spillWriter.close();
+        spillIterator(inMemIterator, spillWriter);
         spillWriters.add(spillWriter);
         nextUpstream = spillWriter.getReader(serializerManager);
 

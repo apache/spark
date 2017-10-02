@@ -31,8 +31,8 @@ Top level targets are
 All other inputs are environment variables
 
 GIT_REF - Release tag or commit to build from
-SPARK_VERSION - Release identifier used when publishing
-SPARK_PACKAGE_VERSION - Release identifier in top level package directory
+SPARK_VERSION - Version of Spark being built (e.g. 2.1.2)
+SPARK_PACKAGE_VERSION - Release identifier in top level package directory (e.g. 2.1.2-rc1)
 REMOTE_PARENT_DIR - Parent in which to create doc or release builds.
 REMOTE_PARENT_MAX_LENGTH - If set, parent directory will be cleaned to only
  have this number of subdirectories (by deleting old ones). WARNING: This deletes data.
@@ -74,7 +74,7 @@ GIT_REF=${GIT_REF:-master}
 # Destination directory parent on remote server
 REMOTE_PARENT_DIR=${REMOTE_PARENT_DIR:-/home/$ASF_USERNAME/public_html}
 
-GPG="gpg --no-tty --batch"
+GPG="gpg -u $GPG_KEY --no-tty --batch"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 BASE_DIR=$(pwd)
@@ -104,6 +104,33 @@ if [ -z "$SPARK_VERSION" ]; then
     | grep -v INFO | grep -v WARNING | grep -v Download)
 fi
 
+# Verify we have the right java version set
+if [ -z "$JAVA_HOME" ]; then
+  echo "Please set JAVA_HOME."
+  exit 1
+fi
+
+java_version=$("${JAVA_HOME}"/bin/javac -version 2>&1 | cut -d " " -f 2)
+
+if [[ ! $SPARK_VERSION < "2.2." ]]; then
+  if [[ $java_version < "1.8." ]]; then
+    echo "Java version $java_version is less than required 1.8 for 2.2+"
+    echo "Please set JAVA_HOME correctly."
+    exit 1
+  fi
+else
+  if [[ $java_version > "1.7." ]]; then
+    if [ -z "$JAVA_7_HOME" ]; then
+      echo "Java version $java_version is higher than required 1.7 for pre-2.2"
+      echo "Please set JAVA_HOME correctly."
+      exit 1
+    else
+      export JAVA_HOME="$JAVA_7_HOME"
+    fi
+  fi
+fi
+
+
 if [ -z "$SPARK_PACKAGE_VERSION" ]; then
   SPARK_PACKAGE_VERSION="${SPARK_VERSION}-$(date +%Y_%m_%d_%H_%M)-${git_hash}"
 fi
@@ -113,7 +140,7 @@ DEST_DIR_NAME="spark-$SPARK_PACKAGE_VERSION"
 function LFTP {
   SSH="ssh -o ConnectTimeout=300 -o StrictHostKeyChecking=no -i $ASF_RSA_KEY"
   COMMANDS=$(cat <<EOF
-     set net:max-retries 1 &&
+     set net:max-retries 2 &&
      set sftp:connect-program $SSH &&
      connect -u $ASF_USERNAME,p sftp://home.apache.org &&
      $@
@@ -318,7 +345,7 @@ if [[ "$1" == "publish-snapshot" ]]; then
   #  -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   rm $tmp_settings
   cd ..
@@ -355,7 +382,7 @@ if [[ "$1" == "publish-release" ]]; then
   #  -DskipTests $SCALA_2_12_PROFILES §$PUBLISH_PROFILES clean install
 
   # Clean-up Zinc nailgun process
-  /usr/sbin/lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
+  lsof -P |grep $ZINC_PORT | grep LISTEN | awk '{ print $2; }' | xargs kill
 
   #./dev/change-scala-version.sh 2.11
 
