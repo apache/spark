@@ -1094,6 +1094,7 @@ object SQLContext {
    * bean info & schema. This is not related to the singleton, but is a static
    * method for internal use.
    */
+ /*
   private[sql] def beansToRows(
       data: Iterator[_],
       beanClass: Class[_],
@@ -1107,6 +1108,43 @@ object SQLContext {
       new GenericInternalRow(
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }
       ): InternalRow
+    }
+  }
+  */
+  /**
+   * Converts an iterator of Java Beans to InternalRow using the provided
+   * bean info & schema. This is not related to the singleton, but is a static
+   * method for internal use.
+   */
+  private[sql] def beansToRows(
+        data: Iterator[_],
+      beanClass: Class[_],
+      attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
+    val converters = getExtractors(beanClass, attrs)
+    data.map{ element =>
+      new GenericInternalRow(
+        converters.map { case (e, convert) => convert(e.invoke(element)) }
+      ): InternalRow
+    }
+  }
+
+  def getExtractors( beanClass: Class[_],
+                     attrs: Seq[AttributeReference]): Array[(Method, Any => Any)] = {
+   val methodsToConverts = JavaTypeInference.getJavaBeanReadableProperties(beanClass).
+    map(_.getReadMethod).zip(attrs)
+    methodsToConverts.map { case (e, attr) =>
+      attr.dataType match {
+        case strct: StructType => {
+          val extractors = getExtractors(e.getReturnType,
+            strct.map(sf => AttributeReference(sf.name, sf.dataType, sf.nullable)()))
+          (e, (x: Any) => {
+            val arr = Array.tabulate[Any](strct.length)(i =>
+              extractors(i)._2(extractors(i)._1.invoke(x)))
+            new GenericInternalRow(arr)
+          })
+        }
+        case _ => (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
+      }
     }
   }
 
