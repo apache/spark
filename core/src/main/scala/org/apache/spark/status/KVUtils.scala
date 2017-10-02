@@ -68,6 +68,6 @@ private[spark] object KVUtils extends Logging {
     db
   }
 
-  private[spark]class MetadataMismatchException extends Exception
+  private[spark] class MetadataMismatchException extends Exception
 
 }
