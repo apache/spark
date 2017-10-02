@@ -353,11 +353,14 @@ class Word2Vec extends Serializable with Logging {
     val syn0Global =
       Array.fill[Float](vocabSize * vectorSize)((initRandom.nextFloat() - 0.5f) / vectorSize)
     val syn1Global = new Array[Float](vocabSize * vectorSize)
+    val totalWordsCounts = numIterations * trainWordsCount + 1
     var alpha = learningRate
 
     for (k <- 1 to numIterations) {
       val bcSyn0Global = sc.broadcast(syn0Global)
       val bcSyn1Global = sc.broadcast(syn1Global)
+      val numWordsProcessedInPreviousIterations = (k - 1) * trainWordsCount
+
       val partial = newSentences.mapPartitionsWithIndex { case (idx, iter) =>
         val random = new XORShiftRandom(seed ^ ((idx + 1) << 16) ^ ((-k - 1) << 8))
         val syn0Modify = new Array[Int](vocabSize)
@@ -369,10 +372,10 @@ class Word2Vec extends Serializable with Logging {
             if (wordCount - lastWordCount > 10000) {
               lwc = wordCount
               alpha = learningRate *
-                (1 - (numPartitions * wordCount.toDouble + (k - 1) * trainWordsCount) /
-                  (numIterations * trainWordsCount + 1))
+                (1 - (numPartitions * wordCount.toDouble + numWordsProcessedInPreviousIterations) /
+                  totalWordsCounts)
               if (alpha < learningRate * 0.0001) alpha = learningRate * 0.0001
-              logInfo("wordCount = " + (wordCount + (k - 1) * trainWordsCount) +
+              logInfo("wordCount = " + (wordCount + numWordsProcessedInPreviousIterations) +
                 ", alpha = " + alpha)
             }
             wc += sentence.length
