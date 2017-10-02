@@ -1951,8 +1951,8 @@ def udf(f=None, returnType=StringType(), nullable=True):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType, nullable=nullable)
+    def _udf(f, returnType=StringType(), nullable=True):
+        udf_obj = UserDefinedFunction(f, returnType, nullable)
 
         @functools.wraps(f)
         def wrapper(*args):
@@ -1968,9 +1968,9 @@ def udf(f=None, returnType=StringType(), nullable=True):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type)
+        return functools.partial(_udf, returnType=return_type, nullable=nullable)
     else:
-        return _udf(f=f, returnType=returnType)
+        return _udf(f=f, returnType=returnType, nullable=nullable)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
