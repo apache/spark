@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
+
 @deprecated("This suite is deprecated to silent compiler deprecation warnings", "2.0.0")
 class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
@@ -57,14 +58,36 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
         k.toByte, k.toDouble *86.7543d, k.toFloat *7.31f,
         true, Array.fill[Byte](k)(k.toByte),
         new java.sql.Date(7836*k*1000), new Timestamp(7896*k*1000),
-        new Address("12320 sw horizon", 97007))
+        new Address("12320 sw horizon," + k, 97007*k))
     }
 
     // create a pair RDD from the collection
     val personsRDD = sc.parallelize(personsCollection)
     val df = sqlContext.createDataFrame(personsRDD, classOf[Person])
-    df.printSchema()
-    df.collect()
+    val rows = df.collect()
+    val keys = scala.collection.mutable.Set[Int]()
+    for(i <- 1 until 100) keys.add(i)
+    for(row <- rows) {
+      assert(keys.remove(row.getAs[Int]("id")))
+      val k = row.getAs[Int]("id")
+      assert("name_" + k == row.getAs[String]("name"), "String field match not as expected")
+      assert(k.toLong == row.getAs[Long]("longField"), "Long field match not as expected")
+      assert(k.toShort == row.getAs[Short]("shortField"), "Short field match not as expected")
+      assert(k.toByte == row.getAs[Byte]("byteField"), "Byte field match not as expected")
+      assert(k*86.7543d == row.getAs[Double]("doubleField"), "Double field match not as expected")
+      assert(k*7.31f == row.getAs[Float]("floatField"), "Float field match not as expected")
+      assert(true == row.getAs[Boolean]("booleanField"), "Boolean field match not as expected")
+      assertResult(Array.fill[Byte](k)(k.toByte).seq) {row.getAs[Array[Byte]]("binaryField").toSeq}
+      assert(new java.sql.Date(7836*k*1000).toString == row.getAs[Date]("datee").toString,
+        "Date field match not as expected")
+      assert(new Timestamp(7896*k*1000).toString == row.getAs[Timestamp]("timeeStamp").toString,
+        "TimeStamp field match not as expected")
+      val addressStruct = row.getAs[Row]("address")
+      assert("12320 sw horizon," + k == addressStruct.getAs[String]("street"),
+        "struct field match not as expected")
+      assert(97007*k == addressStruct.getAs[Int]("zip"), "struct field match not as expected")
+    }
+    assert(keys.isEmpty)
   }
 
   test("Sessions of SQLContext") {
