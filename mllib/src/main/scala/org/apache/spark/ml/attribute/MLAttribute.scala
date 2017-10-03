@@ -77,7 +77,7 @@ abstract class BaseAttribute extends MLAttribute with Serializable {
  * The basic operations of ML Attributes.
  */
 @DeveloperApi
-abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with MetadataAPI {
+abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with MetadataInterface {
   def withIndices(indices: Seq[Int]): SimpleAttribute
   def withoutIndices: SimpleAttribute
 
@@ -90,7 +90,7 @@ abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with Me
  * The basic operations of ML vector Attributes.
  */
 @DeveloperApi
-abstract class ComplexAttribute extends BaseAttribute with VectorAttribute with MetadataAPI {
+abstract class ComplexAttribute extends BaseAttribute with VectorAttribute with MetadataInterface {
   def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
   def withoutAttributes: ComplexAttribute
 

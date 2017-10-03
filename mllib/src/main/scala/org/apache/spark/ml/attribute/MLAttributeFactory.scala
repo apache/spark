@@ -25,7 +25,7 @@ import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, Struct
  * The APIs for converting ML Attributes to SQL `Metadata` and `StructField`.
  */
 @DeveloperApi
-trait MetadataAPI {
+trait MetadataInterface {
 
   val name: Option[String]
 
