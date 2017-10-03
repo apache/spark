@@ -237,7 +237,7 @@ class Dataset[T] private[sql](
    */
   private[sql] def showString(
       _numRows: Int, truncate: Int = 20, vertical: Boolean = false): String = {
-    val numRows = _numRows.max(0)
+    val numRows = _numRows.max(0).min(Int.MaxValue - 1)
     val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)

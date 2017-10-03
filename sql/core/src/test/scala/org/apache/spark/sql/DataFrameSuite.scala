@@ -1045,6 +1045,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(testData.select($"*").showString(0) === expectedAnswer)
   }
 
+  test("showString(Int.MaxValue)") {
+    val df = Seq((1, 2), (3, 4)).toDF("a", "b")
+    val expectedAnswer = """+---+---+
+                           ||  a|  b|
+                           |+---+---+
+                           ||  1|  2|
+                           ||  3|  4|
+                           |+---+---+
+                           |""".stripMargin
+    assert(df.showString(Int.MaxValue) === expectedAnswer)
+  }
+
   test("showString(0), vertical = true") {
     val expectedAnswer = "(0 rows)\n"
     assert(testData.select($"*").showString(0, vertical = true) === expectedAnswer)
