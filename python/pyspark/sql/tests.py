@@ -3452,26 +3452,6 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
         self.assertFramesEqual(expected, result)
 
-    def test_dtypes(self):
-        from pyspark.sql.functions import pandas_udf
-        df = self.data
-
-        def foo(df):
-            ret = df
-            ret = ret.assign(v3=df.v * 5.0 + 1)
-            return ret
-
-        sample_df = df.filter(df.id == 1).toPandas()
-
-        foo_udf = pandas_udf(
-            foo,
-            foo(sample_df).dtypes
-        )
-
-        result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
-        expected = df.toPandas().groupby('id').apply(foo).reset_index(drop=True)
-        self.assertFramesEqual(expected, result)
-
     def test_coerce(self):
         from pyspark.sql.functions import pandas_udf
         df = self.data

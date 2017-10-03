@@ -1624,34 +1624,6 @@ def to_arrow_type(dt):
     return arrow_type
 
 
-def from_pandas_type(dt):
-    """ Convert pandas data type to Spark data type
-    """
-    import pandas as pd
-    import numpy as np
-    if dt == np.int32:
-        return IntegerType()
-    elif dt == np.int64:
-        return LongType()
-    elif dt == np.float32:
-        return FloatType()
-    elif dt == np.float64:
-        return DoubleType()
-    elif dt == np.object:
-        return StringType()
-    elif dt == np.dtype('datetime64[ns]') or type(dt) == pd.api.types.DatetimeTZDtype:
-        return TimestampType()
-    else:
-        raise ValueError("Unsupported numpy type in conversion to Spark: {}".format(dt))
-
-
-def from_pandas_dtypes(dtypes):
-    """ Convert pandas DataFrame dtypes to Spark schema
-    """
-    return StructType([StructField(dtypes.axes[0][i], from_pandas_type(dtypes[i]))
-                       for i in range(len(dtypes))])
-
-
 def _test():
     import doctest
     from pyspark.context import SparkContext
