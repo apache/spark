@@ -325,7 +325,7 @@ class SparkSubmitSuite
       mainClass should be ("org.apache.spark.deploy.Client")
     }
     classpath should have size 0
-    sysProps should have size 9
+    sysProps should have size 10
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
@@ -336,6 +336,7 @@ class SparkSubmitSuite
     sysProps.keys should contain ("spark.ui.enabled")
     sysProps.keys should contain ("spark.submit.deployMode")
     sysProps("spark.ui.enabled") should be ("false")
+    sysProps("spark.ui.showConsoleProgress") should be ("false")
   }
 
   test("handles standalone client mode") {
@@ -397,6 +398,19 @@ class SparkSubmitSuite
     sysProps("spark.master") should be ("yarn")
     sysProps("spark.submit.deployMode") should be ("cluster")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
+  }
+
+  test("SPARK-21568 ConsoleProgressBar should be enabled only in shells") {
+    val clArgs = Seq(
+      "--master", "yarn",
+      "--conf", "spark.ui.showConsoleProgress=true",
+      "--class", "org.SomeClass",
+      "thejar.jar"
+    )
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (_, _, sysProps, _) = prepareSubmitEnvironment(appArgs)
+
+    sysProps("spark.ui.showConsoleProgress") should be("false")
   }
 
   test("launch simple application with spark-submit") {
