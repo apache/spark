@@ -527,8 +527,10 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(leftInput, 21),
       AddData(rightInput, 22),
       CheckLastBatch(),
+      assertNumStateRows(total = 12, updated = 2),
       AddData(leftInput, 22),
-      CheckLastBatch(Row(22, 30, 44, 66), Row(1, 10, 2, null), Row(2, 10, 4, null))
+      CheckLastBatch(Row(22, 30, 44, 66), Row(1, 10, 2, null), Row(2, 10, 4, null)),
+      assertNumStateRows(total = 3, updated = 1)
     )
   }
 
@@ -545,8 +547,10 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(leftInput, 21),
       AddData(rightInput, 22),
       CheckLastBatch(),
+      assertNumStateRows(total = 12, updated = 2),
       AddData(leftInput, 22),
-      CheckLastBatch(Row(22, 30, 44, 66), Row(6, 10, null, 18), Row(7, 10, null, 21))
+      CheckLastBatch(Row(22, 30, 44, 66), Row(6, 10, null, 18), Row(7, 10, null, 21)),
+      assertNumStateRows(total = 3, updated = 1)
     )
   }
 
@@ -592,7 +596,9 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
         CheckLastBatch(),
         assertNumStateRows(total = 8, updated = 1),
         AddData(rightInput, (0, 30)),
-        CheckLastBatch(outerResult))
+        CheckLastBatch(outerResult),
+        assertNumStateRows(total = 3, updated = 1)
+      )
     }
   }
 
@@ -620,8 +626,10 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(leftInput, 30),
       AddData(rightInput, 31),
       CheckLastBatch(),
+      assertNumStateRows(total = 8, updated = 2),
       AddData(rightInput, 32),
-      CheckLastBatch(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null))
+      CheckLastBatch(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
+      assertNumStateRows(total = 3, updated = 1)
     )
   }
 
@@ -635,21 +643,23 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     val joined = left.join(
       right,
       left("key") === right("key") && left("window") === right("window") &&
-        'leftValue > 20 && 'rightValue < 200,
+        'leftValue > 20 && 'rightValue < 300,
       "left_outer")
       .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(
-      // both values between 20 and 200 should not generate outer join rows
+      // both values between 20 and 300 should not generate outer join rows
       AddData(leftInput, 40, 50),
       AddData(rightInput, 40, 50),
       CheckLastBatch((40, 50, 80, 120), (50, 60, 100, 150)),
       AddData(leftInput, 70),
       AddData(rightInput, 71),
       CheckLastBatch(),
+      assertNumStateRows(total = 6, updated = 2),
       AddData(leftInput, 72),
       AddData(rightInput, 73),
-      CheckLastBatch()
+      CheckLastBatch(),
+      assertNumStateRows(total = 4, updated = 2)
     )
   }
 
@@ -674,9 +684,12 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
       AddData(leftInput, 100),
       AddData(rightInput, 101),
       CheckLastBatch(),
+      // rightInput 4, 5 filtered out because rightValue < 20
+      assertNumStateRows(total = 4, updated = 2),
       AddData(leftInput, 102),
       AddData(rightInput, 103),
-      CheckLastBatch(Row(4, 10, 8, null), Row(5, 10, 10, null))
+      CheckLastBatch(Row(4, 10, 8, null), Row(5, 10, 10, null)),
+      assertNumStateRows(total = 4, updated = 2)
     )
   }
 }
