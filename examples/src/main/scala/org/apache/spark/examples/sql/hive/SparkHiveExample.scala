@@ -104,6 +104,14 @@ object SparkHiveExample {
     // ...
     // $example off:spark_hive$
 
+    // Hive serde's are also supported with serde properties.
+    val sqlQuery = "CREATE TABLE src_serde(key decimal(38,18), value int) USING hive" +
+      " OPTIONS (SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe', input.regex '([^ ]*) ([^ ]*)')"
+    sql(sqlQuery)
+    sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv7.txt' INTO TABLE src_serde")
+    // Executed the data with the specified serde properties.
+    sql("SELECT key, value FROM src_serde ORDER BY key, value").show()
+
     spark.stop()
   }
 }
