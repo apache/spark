@@ -79,6 +79,9 @@ private[spark] object JettyUtils extends Logging {
     val allowFramingFrom = conf.getOption("spark.ui.allowFramingFrom")
     val xFrameOptionsValue =
       allowFramingFrom.map(uri => s"ALLOW-FROM $uri").getOrElse("SAMEORIGIN")
+    val xXssProtectionValue = conf.getOption("spark.ui.xXssProtection.enabled")
+    val xContentTypeOptionsValue = conf.getOption("spark.ui.xContentType.options")
+    val strictTransportSecurityValue = conf.getOption("spark.ui.strictTransportSecurity.age")
 
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
@@ -89,6 +92,9 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
+            response.setHeader("X-XSS-Protection", xXssProtectionValue.get)
+            response.setHeader("X-Content-Type-Options", xContentTypeOptionsValue.get)
+            response.setHeader("Strict-Transport-Security", strictTransportSecurityValue.get)
             response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN)
