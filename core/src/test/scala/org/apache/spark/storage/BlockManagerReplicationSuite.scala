@@ -243,8 +243,8 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
     )
 
     // Test if 3x replication of two different blocks gives two different sets of locations
-    val a1Locs3x = putBlockAndGetLocations("a1", storageLevel3x)
-    assert(a1Locs3x !== a2Locs3x, "Two blocks gave same locations with 3x replication")
+    val a3Locs3x = putBlockAndGetLocations("a3", storageLevel3x)
+    assert(a3Locs3x !== a2Locs3x, "Two blocks gave same locations with 3x replication")
   }
 
   test("block replication - replication failures") {
