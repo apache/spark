@@ -2102,31 +2102,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-15327: fail to compile generated code with complex data structure") {
-    // In SPARK-21871, we added code to check the actual bytecode size of gen'd methods. If the size
-    // goes over `hugeMethodLimit`, Spark fails to compile the methods and the execution also fails
-    // in a test mode. So, we explicitly made this threshold higher here.
-    // This workaround can be removed if this issue fixed.
-    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "16000") {
-      withTempDir { dir =>
-        val json =
-          """
-            |{"h": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
-            |"b": [{"e": "test", "count": 1}]}}, "d": {"b": {"c": [{"e": "adfgd"}],
-            |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
-            |"c": {"b": {"c": [{"e": "adfgd"}], "a": [{"count": 3}],
-            |"b": [{"e": "test", "count": 1}]}}, "a": {"b": {"c": [{"e": "adfgd"}],
-            |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}},
-            |"e": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
-            |"b": [{"e": "test", "count": 1}]}}, "g": {"b": {"c": [{"e": "adfgd"}],
-            |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
-            |"f": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
-            |"b": [{"e": "test", "count": 1}]}}, "b": {"b": {"c": [{"e": "adfgd"}],
-            |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}}}'
-            |
-          """.stripMargin
-        spark.read.json(Seq(json).toDS()).write.mode("overwrite").parquet(dir.toString)
-        spark.read.parquet(dir.toString).collect()
-      }
+    withTempDir{ dir =>
+      val json =
+        """
+          |{"h": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "d": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"c": {"b": {"c": [{"e": "adfgd"}], "a": [{"count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "a": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"e": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "g": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"f": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "b": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}}}'
+          |
+        """.stripMargin
+      spark.read.json(Seq(json).toDS()).write.mode("overwrite").parquet(dir.toString)
+      spark.read.parquet(dir.toString).collect()
     }
   }
 

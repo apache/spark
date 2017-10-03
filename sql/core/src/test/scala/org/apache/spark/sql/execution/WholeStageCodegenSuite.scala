@@ -179,13 +179,12 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
   }
 
-  test("SPARK-21871 turn off whole-stage codegen if bytecode size goes over hugeMethodLimit") {
-    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> "8000") {
-      val (_, code) = genGroupByCodeGenContext(20)
-      val errMsg = intercept[ExecutionException] {
-        CodeGenerator.compile(code)
-      }.getMessage
-      assert(errMsg.contains("this value went over the limit `spark.sql.codegen.hugeMethodLimit`"))
-    }
+  test("SPARK-21871 check if we can get large code size when compiling too long functions") {
+    val (_, codeWithShortFunctions) = genGroupByCodeGenContext(3)
+    val (_, maxCodeSize1) = CodeGenerator.compile(codeWithShortFunctions)
+    assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
+    val (_, codeWithLongFunctions) = genGroupByCodeGenContext(20)
+    val (_, maxCodeSize2) = CodeGenerator.compile(codeWithLongFunctions)
+    assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
 }

@@ -381,7 +381,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   override def doExecute(): RDD[InternalRow] = {
     val (ctx, cleanedSource) = doCodeGen()
     // try to compile and fallback if it failed
-    try {
+    val (_, maxCodeSize) = try {
       CodeGenerator.compile(cleanedSource)
     } catch {
       case _: Exception if !Utils.isTesting && sqlContext.conf.codegenFallback =>
@@ -389,6 +389,15 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
     }
+
+    // Check if compiled code has a too large function
+    if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
+      logWarning(s"Found too long generated codes: the bytecode size was $maxCodeSize and " +
+        s"this value went over the limit ${sqlContext.conf.hugeMethodLimit}. To avoid this, " +
+        s"you can the limit ${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key} higher:\n$treeString")
+      return child.execute()
+    }
+
     val references = ctx.references.toArray
 
     val durationMs = longMetric("pipelineTime")
@@ -397,7 +406,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     assert(rdds.size <= 2, "Up to two input RDDs can be supported")
     if (rdds.length == 1) {
       rdds.head.mapPartitionsWithIndex { (index, iter) =>
-        val clazz = CodeGenerator.compile(cleanedSource)
+        val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(iter))
         new Iterator[InternalRow] {
@@ -416,7 +425,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         // a small hack to obtain the correct partition index
       }.mapPartitionsWithIndex { (index, zippedIter) =>
         val (leftIter, rightIter) = zippedIter.next()
-        val clazz = CodeGenerator.compile(cleanedSource)
+        val (clazz, _) = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(leftIter, rightIter))
         new Iterator[InternalRow] {

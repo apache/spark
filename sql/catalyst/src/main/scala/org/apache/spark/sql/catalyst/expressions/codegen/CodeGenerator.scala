@@ -1008,12 +1008,12 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
 object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
-  val DEFAULT_OPENJDK_JVM_HUGE_METHOD_LIMIT = 8000
+  val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
 
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: CodeAndComment): GeneratedClass = try {
+  def compile(code: CodeAndComment): (GeneratedClass, Int) = try {
     cache.get(code)
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
@@ -1026,7 +1026,7 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
+  private[this] def doCompile(code: CodeAndComment): (GeneratedClass, Int) = {
     val evaluator = new ClassBodyEvaluator()
 
     // A special classloader used to wrap the actual parent classloader of
@@ -1065,7 +1065,7 @@ object CodeGenerator extends Logging {
       s"\n${CodeFormatter.format(code)}"
     })
 
-    val methodsToByteCodeSize = try {
+    val maxCodeSize = try {
       evaluator.cook("generated.java", code.body)
       updateAndGetCompilationStats(evaluator)
     } catch {
@@ -1083,29 +1083,14 @@ object CodeGenerator extends Logging {
         throw new CompileException(msg, e.getLocation)
     }
 
-    // Check if compiled code has a too large function
-    methodsToByteCodeSize.foreach { case (name, byteCodeSize) =>
-      if (byteCodeSize > SQLConf.get.hugeMethodLimit) {
-        val clazzName = evaluator.getClazz.getSimpleName
-        val methodName = name.replace("$", "")
-        val msg = s"failed to compile: the size of $clazzName.$methodName was $byteCodeSize and " +
-          "this value went over the limit `spark.sql.codegen.hugeMethodLimit`" +
-          s"(${SQLConf.get.hugeMethodLimit}). To avoid this error, you can make this limit higher."
-        logError(msg)
-        val maxLines = SQLConf.get.loggingMaxLinesForCodegen
-        logInfo(s"\n${CodeFormatter.format(code, maxLines)}")
-        throw new CompileException(msg, null)
-      }
-    }
-
-    evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass]
+    (evaluator.getClazz().newInstance().asInstanceOf[GeneratedClass], maxCodeSize)
   }
 
   /**
-   * Returns the pairs of the generated class and method bytecode sizes by inspecting janino
-   * private fields. Also, this method updates the metrics information.
+   * Returns the max bytecode size of the generated functions by inspecting janino private fields.
+   * Also, this method updates the metrics information.
    */
-  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Seq[(String, Int)] = {
+  private def updateAndGetCompilationStats(evaluator: ClassBodyEvaluator): Int = {
     // First retrieve the generated classes.
     val classes = {
       val resultField = classOf[SimpleCompiler].getDeclaredField("result")
@@ -1120,7 +1105,7 @@ object CodeGenerator extends Logging {
     val codeAttr = Utils.classForName("org.codehaus.janino.util.ClassFile$CodeAttribute")
     val codeAttrField = codeAttr.getDeclaredField("code")
     codeAttrField.setAccessible(true)
-    val methodsToByteCodeSize = classes.flatMap { case (_, classBytes) =>
+    val codeSizes = classes.flatMap { case (_, classBytes) =>
       CodegenMetrics.METRIC_GENERATED_CLASS_BYTECODE_SIZE.update(classBytes.length)
       try {
         val cf = new ClassFile(new ByteArrayInputStream(classBytes))
@@ -1128,7 +1113,7 @@ object CodeGenerator extends Logging {
           method.getAttributes().filter(_.getClass.getName == codeAttr.getName).map { a =>
             val byteCodeSize = codeAttrField.get(a).asInstanceOf[Array[Byte]].length
             CodegenMetrics.METRIC_GENERATED_METHOD_BYTECODE_SIZE.update(byteCodeSize)
-            (method.getName, byteCodeSize)
+            byteCodeSize
           }
         }
         Some(stats)
@@ -1139,7 +1124,7 @@ object CodeGenerator extends Logging {
       }
     }.flatten
 
-    methodsToByteCodeSize.toSeq
+    codeSizes.max
   }
 
   /**
@@ -1154,8 +1139,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[CodeAndComment, GeneratedClass]() {
-        override def load(code: CodeAndComment): GeneratedClass = {
+      new CacheLoader[CodeAndComment, (GeneratedClass, Int)]() {
+        override def load(code: CodeAndComment): (GeneratedClass, Int) = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

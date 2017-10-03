@@ -19,18 +19,17 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import java.nio.charset.StandardCharsets
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.util.GenericArrayData
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A test suite for generated projections
  */
-class GeneratedProjectionSuite extends PlanTest {
+class GeneratedProjectionSuite extends SparkFunSuite {
 
   test("generated projections on wider table") {
     val N = 1000
@@ -84,57 +83,54 @@ class GeneratedProjectionSuite extends PlanTest {
   }
 
   test("SPARK-18016: generated projections on wider table requiring class-splitting") {
-    // Set the max value at `WHOLESTAGE_HUGE_METHOD_LIMIT` to compile gen'd code by janino
-    withSQLConf(SQLConf.CODEGEN_HUGE_METHOD_LIMIT.key -> Int.MaxValue.toString) {
-      val N = 4000
-      val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
-      val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
-      val wideRow2 = new GenericInternalRow(
-        (0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
-      val schema2 = StructType((1 to N).map(i => StructField("", StringType)))
-      val joined = new JoinedRow(wideRow1, wideRow2)
-      val joinedSchema = StructType(schema1 ++ schema2)
-      val nested = new JoinedRow(InternalRow(joined, joined), joined)
-      val nestedSchema = StructType(
-        Seq(StructField("", joinedSchema), StructField("", joinedSchema)) ++ joinedSchema)
+    val N = 4000
+    val wideRow1 = new GenericInternalRow((0 until N).toArray[Any])
+    val schema1 = StructType((1 to N).map(i => StructField("", IntegerType)))
+    val wideRow2 = new GenericInternalRow(
+      (0 until N).map(i => UTF8String.fromString(i.toString)).toArray[Any])
+    val schema2 = StructType((1 to N).map(i => StructField("", StringType)))
+    val joined = new JoinedRow(wideRow1, wideRow2)
+    val joinedSchema = StructType(schema1 ++ schema2)
+    val nested = new JoinedRow(InternalRow(joined, joined), joined)
+    val nestedSchema = StructType(
+      Seq(StructField("", joinedSchema), StructField("", joinedSchema)) ++ joinedSchema)
 
-      // test generated UnsafeProjection
-      val unsafeProj = UnsafeProjection.create(nestedSchema)
-      val unsafe: UnsafeRow = unsafeProj(nested)
-      (0 until N).foreach { i =>
-        val s = UTF8String.fromString(i.toString)
-        assert(i === unsafe.getInt(i + 2))
-        assert(s === unsafe.getUTF8String(i + 2 + N))
-        assert(i === unsafe.getStruct(0, N * 2).getInt(i))
-        assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N))
-        assert(i === unsafe.getStruct(1, N * 2).getInt(i))
-        assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N))
-      }
-
-      // test generated SafeProjection
-      val safeProj = FromUnsafeProjection(nestedSchema)
-      val result = safeProj(unsafe)
-      // Can't compare GenericInternalRow with JoinedRow directly
-      (0 until N).foreach { i =>
-        val s = UTF8String.fromString(i.toString)
-        assert(i === result.getInt(i + 2))
-        assert(s === result.getUTF8String(i + 2 + N))
-        assert(i === result.getStruct(0, N * 2).getInt(i))
-        assert(s === result.getStruct(0, N * 2).getUTF8String(i + N))
-        assert(i === result.getStruct(1, N * 2).getInt(i))
-        assert(s === result.getStruct(1, N * 2).getUTF8String(i + N))
-      }
-
-      // test generated MutableProjection
-      val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
-        BoundReference(i, f.dataType, true)
-      }
-      val mutableProj = GenerateMutableProjection.generate(exprs)
-      val row1 = mutableProj(result)
-      assert(result === row1)
-      val row2 = mutableProj(result)
-      assert(result === row2)
+    // test generated UnsafeProjection
+    val unsafeProj = UnsafeProjection.create(nestedSchema)
+    val unsafe: UnsafeRow = unsafeProj(nested)
+    (0 until N).foreach { i =>
+      val s = UTF8String.fromString(i.toString)
+      assert(i === unsafe.getInt(i + 2))
+      assert(s === unsafe.getUTF8String(i + 2 + N))
+      assert(i === unsafe.getStruct(0, N * 2).getInt(i))
+      assert(s === unsafe.getStruct(0, N * 2).getUTF8String(i + N))
+      assert(i === unsafe.getStruct(1, N * 2).getInt(i))
+      assert(s === unsafe.getStruct(1, N * 2).getUTF8String(i + N))
     }
+
+    // test generated SafeProjection
+    val safeProj = FromUnsafeProjection(nestedSchema)
+    val result = safeProj(unsafe)
+    // Can't compare GenericInternalRow with JoinedRow directly
+    (0 until N).foreach { i =>
+      val s = UTF8String.fromString(i.toString)
+      assert(i === result.getInt(i + 2))
+      assert(s === result.getUTF8String(i + 2 + N))
+      assert(i === result.getStruct(0, N * 2).getInt(i))
+      assert(s === result.getStruct(0, N * 2).getUTF8String(i + N))
+      assert(i === result.getStruct(1, N * 2).getInt(i))
+      assert(s === result.getStruct(1, N * 2).getUTF8String(i + N))
+    }
+
+    // test generated MutableProjection
+    val exprs = nestedSchema.fields.zipWithIndex.map { case (f, i) =>
+      BoundReference(i, f.dataType, true)
+    }
+    val mutableProj = GenerateMutableProjection.generate(exprs)
+    val row1 = mutableProj(result)
+    assert(result === row1)
+    val row2 = mutableProj(result)
+    assert(result === row2)
   }
 
   test("generated unsafe projection with array of binary") {

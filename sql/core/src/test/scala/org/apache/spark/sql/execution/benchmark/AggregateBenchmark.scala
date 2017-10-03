@@ -24,6 +24,7 @@ import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
@@ -301,10 +302,10 @@ class AggregateBenchmark extends BenchmarkBase {
     */
   }
 
-  ignore("max function length of codegen") {
+  ignore("max function bytecode size of wholestagecodegen") {
     val N = 20 << 15
 
-    val benchmark = new Benchmark("max function length of codegen", N)
+    val benchmark = new Benchmark("max function bytecode size", N)
     def f(): Unit = sparkSession.range(N)
       .selectExpr(
         "id",
@@ -334,14 +335,14 @@ class AggregateBenchmark extends BenchmarkBase {
       .collect()
 
     benchmark.addCase(s"hugeMethodLimit = 8000") { iter =>
-      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.hugeMethodLimit", "8000")
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key, "8000")
       f()
     }
 
     benchmark.addCase(s"hugeMethodLimit = 16000") { iter =>
-      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
-      sparkSession.conf.set("spark.sql.codegen.hugeMethodLimit", "16000")
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key, "16000")
       f()
     }
 
@@ -350,10 +351,11 @@ class AggregateBenchmark extends BenchmarkBase {
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_31-b13 on Mac OS X 10.10.2
     Intel(R) Core(TM) i7-4578U CPU @ 3.00GHz
-    max function length of codegen:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+
+    max function bytecode size:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    hugeMethodLimit = 8000                         704 /  868          0.9        1074.2       1.0X
-    hugeMethodLimit = 16000                       2447 / 2457          0.3        3733.1       0.3X
+    hugeMethodLimit = 8000                        1043 / 1159          0.6        1591.5       1.0X
+    hugeMethodLimit = 16000                       3908 / 3996          0.2        5962.9       0.3X
      */
   }
 
