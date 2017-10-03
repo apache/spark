@@ -21,7 +21,8 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 import java.math.BigDecimal
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -71,10 +72,17 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
       """.stripMargin.replaceAll("\n", " ")).executeUpdate()
     conn.commit()
 
-    conn.prepareStatement("CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)")
-        .executeUpdate()
-    conn.prepareStatement("INSERT INTO ts_with_timezone VALUES (1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))")
-        .executeUpdate()
+    conn.prepareStatement(
+      "CREATE TABLE ts_with_timezone (id NUMBER(10), t TIMESTAMP WITH TIME ZONE)").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO ts_with_timezone VALUES " +
+        "(1, to_timestamp_tz('1999-12-01 11:00:00 UTC','YYYY-MM-DD HH:MI:SS TZR'))").executeUpdate()
+    conn.commit()
+
+    conn.prepareStatement(
+      "CREATE TABLE tableWithCustomSchema (id NUMBER, n1 NUMBER(1), n2 NUMBER(1))").executeUpdate()
+    conn.prepareStatement(
+      "INSERT INTO tableWithCustomSchema values(12312321321321312312312312123, 1, 0)").executeUpdate()
     conn.commit()
 
     sql(
@@ -103,7 +111,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   }
 
 
-  test("SPARK-16625 : Importing Oracle numeric types") { 
+  test("SPARK-16625 : Importing Oracle numeric types") {
     val df = sqlContext.read.jdbc(jdbcUrl, "numerics", new Properties);
     val rows = df.collect()
     assert(rows.size == 1)
@@ -255,17 +263,48 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     val df = dfRead.filter(dfRead.col("date_type").lt(dt))
       .filter(dfRead.col("timestamp_type").lt(ts))
 
-    val metadata = df.queryExecution.sparkPlan.metadata
-    // The "PushedFilters" part should be exist in Datafrome's
+    val parentPlan = df.queryExecution.executedPlan
+    assert(parentPlan.isInstanceOf[WholeStageCodegenExec])
+    val node = parentPlan.asInstanceOf[WholeStageCodegenExec]
+    val metadata = node.child.asInstanceOf[RowDataSourceScanExec].metadata
+    // The "PushedFilters" part should exist in Dataframe's
     // physical plan and the existence of right literals in
     // "PushedFilters" is used to prove that the predicates
     // pushing down have been effective.
-    assert(metadata.get("PushedFilters").ne(None))
+    assert(metadata.get("PushedFilters").isDefined)
     assert(metadata("PushedFilters").contains(dt.toString))
     assert(metadata("PushedFilters").contains(ts.toString))
 
     val row = df.collect()(0)
     assert(row.getDate(0).equals(dateVal))
     assert(row.getTimestamp(1).equals(timestampVal))
+  }
+
+  test("SPARK-20427/SPARK-20921: read table use custom schema by jdbc api") {
+    // default will throw IllegalArgumentException
+    val e = intercept[org.apache.spark.SparkException] {
+      spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", new Properties()).collect()
+    }
+    assert(e.getMessage.contains(
+      "requirement failed: Decimal precision 39 exceeds max precision 38"))
+
+    // custom schema can read data
+    val props = new Properties()
+    props.put("customSchema",
+      s"ID DECIMAL(${DecimalType.MAX_PRECISION}, 0), N1 INT, N2 BOOLEAN")
+    val dfRead = spark.read.jdbc(jdbcUrl, "tableWithCustomSchema", props)
+
+    val rows = dfRead.collect()
+    // verify the data type
+    val types = rows(0).toSeq.map(x => x.getClass.toString)
+    assert(types(0).equals("class java.math.BigDecimal"))
+    assert(types(1).equals("class java.lang.Integer"))
+    assert(types(2).equals("class java.lang.Boolean"))
+
+    // verify the value
+    val values = rows(0)
+    assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
+    assert(values.getInt(1).equals(1))
+    assert(values.getBoolean(2).equals(false))
   }
 }

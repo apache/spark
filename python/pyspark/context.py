@@ -30,7 +30,7 @@ from py4j.protocol import Py4JError
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
-from pyspark.broadcast import Broadcast
+from pyspark.broadcast import Broadcast, BroadcastPickleRegistry
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
@@ -195,7 +195,7 @@ class SparkContext(object):
         # This allows other code to determine which Broadcast instances have
         # been pickled, so it can determine which Java broadcast objects to
         # send.
-        self._pickled_broadcast_vars = set()
+        self._pickled_broadcast_vars = BroadcastPickleRegistry()
 
         SparkFiles._sc = self
         root_dir = SparkFiles.getRootDirectory()
@@ -997,12 +997,20 @@ class SparkContext(object):
 
     def show_profiles(self):
         """ Print the profile stats to stdout """
-        self.profiler_collector.show_profiles()
+        if self.profiler_collector is not None:
+            self.profiler_collector.show_profiles()
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def dump_profiles(self, path):
         """ Dump the profile stats into directory `path`
         """
-        self.profiler_collector.dump_profiles(path)
+        if self.profiler_collector is not None:
+            self.profiler_collector.dump_profiles(path)
+        else:
+            raise RuntimeError("'spark.python.profile' configuration must be set "
+                               "to 'true' to enable Python profile.")
 
     def getConf(self):
         conf = SparkConf()

@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.sql.expressions.{MutableAggregationBuffer, UserDefinedAggregateFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.CalendarInterval
 
 /**
  * Window function testing for DataFrame API.
@@ -149,6 +152,96 @@ class DataFrameWindowFunctionsSuite extends QueryTest with SharedSQLContext {
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
       Seq(Row(4.0d / 3.0d), Row(4.0d / 3.0d), Row(7.0d / 4.0d), Row(5.0d / 2.0d),
         Row(2.0d), Row(2.0d)))
+  }
+
+  test("row between should accept integer values as boundary") {
+    val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
+      (3L, "2"), (2L, "1"), (2147483650L, "2"))
+      .toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483647))),
+      Seq(Row(1, 3), Row(1, 4), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
+    )
+
+    val e = intercept[AnalysisException](
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rowsBetween(0, 2147483648L))))
+    assert(e.message.contains("Boundary end is not a valid integer: 2147483648"))
+  }
+
+  test("range between should accept int/long values as boundary") {
+    val df = Seq((1L, "1"), (1L, "1"), (2147483650L, "1"),
+      (3L, "2"), (2L, "1"), (2147483650L, "2"))
+      .toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(0, 2147483648L))),
+      Seq(Row(1, 3), Row(1, 3), Row(2, 2), Row(3, 2), Row(2147483650L, 1), Row(2147483650L, 1))
+    )
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(-2147483649L, 0))),
+      Seq(Row(1, 2), Row(1, 2), Row(2, 3), Row(2147483650L, 2), Row(2147483650L, 4), Row(3, 1))
+    )
+
+    def dt(date: String): Date = Date.valueOf(date)
+
+    val df2 = Seq((dt("2017-08-01"), "1"), (dt("2017-08-01"), "1"), (dt("2020-12-31"), "1"),
+      (dt("2017-08-03"), "2"), (dt("2017-08-02"), "1"), (dt("2020-12-31"), "2"))
+      .toDF("key", "value")
+    checkAnswer(
+      df2.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key").rangeBetween(lit(0), lit(2)))),
+      Seq(Row(dt("2017-08-01"), 3), Row(dt("2017-08-01"), 3), Row(dt("2020-12-31"), 1),
+        Row(dt("2017-08-03"), 1), Row(dt("2017-08-02"), 1), Row(dt("2020-12-31"), 1))
+    )
+  }
+
+  test("range between should accept double values as boundary") {
+    val df = Seq((1.0D, "1"), (1.0D, "1"), (100.001D, "1"),
+      (3.3D, "2"), (2.02D, "1"), (100.001D, "2"))
+      .toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key")
+            .rangeBetween(currentRow, lit(2.5D)))),
+      Seq(Row(1.0, 3), Row(1.0, 3), Row(100.001, 1), Row(3.3, 1), Row(2.02, 1), Row(100.001, 1))
+    )
+  }
+
+  test("range between should accept interval values as boundary") {
+    def ts(timestamp: Long): Timestamp = new Timestamp(timestamp * 1000)
+
+    val df = Seq((ts(1501545600), "1"), (ts(1501545600), "1"), (ts(1609372800), "1"),
+      (ts(1503000000), "2"), (ts(1502000000), "1"), (ts(1609372800), "2"))
+      .toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    checkAnswer(
+      df.select(
+        $"key",
+        count("key").over(
+          Window.partitionBy($"value").orderBy($"key")
+            .rangeBetween(currentRow,
+              lit(CalendarInterval.fromString("interval 23 days 4 hours"))))),
+      Seq(Row(ts(1501545600), 3), Row(ts(1501545600), 3), Row(ts(1609372800), 1),
+        Row(ts(1503000000), 1), Row(ts(1502000000), 1), Row(ts(1609372800), 1))
+    )
   }
 
   test("aggregation and rows between with unbounded") {

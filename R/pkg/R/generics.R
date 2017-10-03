@@ -385,7 +385,7 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 #' @return A SparkDataFrame.
 #' @rdname summarize
 #' @export
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
+setGeneric("agg", function(x, ...) { standardGeneric("agg") })
 
 #' alias
 #'
@@ -521,7 +521,7 @@ setGeneric("gapplyCollect", function(x, ...) { standardGeneric("gapplyCollect") 
 # @export
 setGeneric("getNumPartitions", function(x) { standardGeneric("getNumPartitions") })
 
-#' @rdname summary
+#' @rdname describe
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
 
@@ -645,7 +645,7 @@ setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 #' @rdname sample
 #' @export
 setGeneric("sample",
-           function(x, withReplacement, fraction, seed) {
+           function(x, withReplacement = FALSE, fraction, seed) {
              standardGeneric("sample")
            })
 
@@ -656,7 +656,7 @@ setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 #' @rdname sample
 #' @export
 setGeneric("sample_frac",
-           function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
+           function(x, withReplacement = FALSE, fraction, seed) { standardGeneric("sample_frac") })
 
 #' @rdname sampleBy
 #' @export
@@ -731,7 +731,7 @@ setGeneric("schema", function(x) { standardGeneric("schema") })
 
 #' @rdname select
 #' @export
-setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
+setGeneric("select", function(x, col, ...) { standardGeneric("select") })
 
 #' @rdname selectExpr
 #' @export
@@ -768,6 +768,10 @@ setGeneric("union", function(x, y) { standardGeneric("union") })
 #' @rdname union
 #' @export
 setGeneric("unionAll", function(x, y) { standardGeneric("unionAll") })
+
+#' @rdname unionByName
+#' @export
+setGeneric("unionByName", function(x, y) { standardGeneric("unionByName") })
 
 #' @rdname unpersist
 #' @export
@@ -1212,6 +1216,16 @@ setGeneric("lpad", function(x, len, pad) { standardGeneric("lpad") })
 #' @export
 #' @name NULL
 setGeneric("ltrim", function(x) { standardGeneric("ltrim") })
+
+#' @rdname column_collection_functions
+#' @export
+#' @name NULL
+setGeneric("map_keys", function(x) { standardGeneric("map_keys") })
+
+#' @rdname column_collection_functions
+#' @export
+#' @name NULL
+setGeneric("map_values", function(x) { standardGeneric("map_values") })
 
 #' @rdname column_misc_functions
 #' @export

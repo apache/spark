@@ -368,26 +368,42 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     Aggregate(
       Seq(attributeWithWatermark),
       aggExprs("c"),
-      Deduplicate(Seq(att), streamRelation, streaming = true)),
+      Deduplicate(Seq(att), streamRelation)),
     outputMode = Append)
 
   assertNotSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on streaming relation after aggregation",
-    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation), streaming = true),
+    Deduplicate(Seq(att), Aggregate(Nil, aggExprs("c"), streamRelation)),
     outputMode = Complete,
     expectedMsgs = Seq("dropDuplicates"))
 
   assertSupportedInStreamingPlan(
     "Deduplicate - Deduplicate on batch relation inside a streaming query",
-    Deduplicate(Seq(att), batchRelation, streaming = false),
+    Deduplicate(Seq(att), batchRelation),
     outputMode = Append
   )
 
-  // Inner joins: Stream-stream not supported
+  // Inner joins: Multiple stream-stream joins supported only in append mode
   testBinaryOperationInStreamingPlan(
-    "inner join",
+    "single inner join in append mode",
     _.join(_, joinType = Inner),
-    streamStreamSupported = false)
+    outputMode = Append,
+    streamStreamSupported = true)
+
+  testBinaryOperationInStreamingPlan(
+    "multiple inner joins in append mode",
+    (x: LogicalPlan, y: LogicalPlan) => {
+      x.join(y, joinType = Inner).join(streamRelation, joinType = Inner)
+    },
+    outputMode = Append,
+    streamStreamSupported = true)
+
+  testBinaryOperationInStreamingPlan(
+    "inner join in update mode",
+    _.join(_, joinType = Inner),
+    outputMode = Update,
+    streamStreamSupported = false,
+    expectedMsg = "inner join")
 
   // Full outer joins: only batch-batch is allowed
   testBinaryOperationInStreamingPlan(
