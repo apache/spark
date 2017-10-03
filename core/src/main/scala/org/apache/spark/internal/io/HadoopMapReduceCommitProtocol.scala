@@ -35,6 +35,9 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * (from the newer mapreduce API, not the old mapred API).
  *
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
+ *
+ * @param jobId the job's or stage's id
+ * @param path the job's output path, or null if committer acts as a noop
  */
 class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   extends FileCommitProtocol with Serializable with Logging {
