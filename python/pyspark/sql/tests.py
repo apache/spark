@@ -3447,7 +3447,6 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
             ret = ret.assign(v2=df.v + df.id)
             return ret
 
-
         result = df.groupby('id').apply(foo).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
         self.assertFramesEqual(expected, result)
