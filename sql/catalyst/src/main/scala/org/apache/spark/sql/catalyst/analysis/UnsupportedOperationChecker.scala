@@ -253,7 +253,6 @@ object UnsupportedOperationChecker {
                   StreamingJoinHelper.getStateValueWatermark(
                     left.outputSet, right.outputSet, condition, Some(1000000)).isDefined
 
-
                 if (!watermarkInJoinKeys && !hasValidWatermarkRange) {
                   throwError("Stream-stream outer join between two streaming DataFrame/Datasets " +
                     "is not supported without a watermark in the join keys, or a watermark on " +
