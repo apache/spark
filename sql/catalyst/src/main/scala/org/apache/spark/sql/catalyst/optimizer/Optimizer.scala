@@ -299,7 +299,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
   private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
     (limitExp, plan.maxRowsPerPartition) match {
       case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
-        // If the child has a cap on max rows per partition and the cap is smaller than
+        // If the child has a cap on max rows per partition and the cap is larger than
         // the new limit, put a new LocalLimit there.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
 
