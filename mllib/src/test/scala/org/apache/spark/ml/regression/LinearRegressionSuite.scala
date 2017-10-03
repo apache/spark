@@ -1080,16 +1080,21 @@ class LinearRegressionSuite
       array([ 4.68998007,  7.19429011])
       >>> huber.intercept_
       6.3002404351083037
+      >>> huber.scale_
+      0.077810159205220747
      */
     val coefficientsPy = Vectors.dense(4.68998007, 7.19429011)
     val interceptPy = 6.30024044
+    val scalePy = 0.07781016
 
     assert(model1.coefficients ~= coefficientsPy relTol 1E-3)
     assert(model1.intercept ~== interceptPy relTol 1E-3)
+    assert(model1.scale ~== scalePy relTol 1E-3)
 
     // Without regularization, with or without standardization will converge to the same solution.
     assert(model2.coefficients ~= coefficientsPy relTol 1E-3)
     assert(model2.intercept ~== interceptPy relTol 1E-3)
+    assert(model2.scale ~== scalePy relTol 1E-3)
   }
 
   test("linear regression (huber loss) without intercept without regularization") {
@@ -1109,16 +1114,21 @@ class LinearRegressionSuite
       array([ 6.71756703,  5.08873222])
       >>> huber.intercept_
       0.0
+      >>> huber.scale_
+      2.5560209922722317
      */
     val coefficientsPy = Vectors.dense(6.71756703, 5.08873222)
     val interceptPy = 0.0
+    val scalePy = 2.55602099
 
     assert(model1.coefficients ~= coefficientsPy relTol 1E-3)
     assert(model1.intercept === interceptPy)
+    assert(model1.scale ~== scalePy relTol 1E-3)
 
     // Without regularization, with or without standardization will converge to the same solution.
     assert(model2.coefficients ~= coefficientsPy relTol 1E-3)
     assert(model2.intercept === interceptPy)
+    assert(model2.scale ~== scalePy relTol 1E-3)
   }
 
   test("linear regression (huber loss) with intercept with L2 regularization") {
@@ -1143,12 +1153,16 @@ class LinearRegressionSuite
       array([ 1.97732633,  3.38816722])
       >>> huber.intercept_
       3.7527581430531227
+      >>> huber.scale_
+      3.787363673371801
      */
     val coefficientsPy1 = Vectors.dense(1.97732633, 3.38816722)
     val interceptPy1 = 3.75275814
+    val scalePy1 = 3.78736367
 
     assert(model1.coefficients ~= coefficientsPy1 relTol 1E-2)
     assert(model1.intercept ~== interceptPy1 relTol 1E-2)
+    assert(model1.scale ~== scalePy1 relTol 1E-2)
 
     /*
       huber = HuberRegressor(fit_intercept=True, alpha=210, max_iter=100, epsilon=1.35)
@@ -1158,12 +1172,16 @@ class LinearRegressionSuite
       array([ 1.73346444,  3.63746999])
       >>> huber.intercept_
       4.3017134790781739
+      >>> huber.scale_
+      3.6472742809286793
      */
     val coefficientsPy2 = Vectors.dense(1.73346444, 3.63746999)
     val interceptPy2 = 4.30171347
+    val scalePy2 = 3.64727428
 
     assert(model2.coefficients ~= coefficientsPy2 relTol 1E-3)
     assert(model2.intercept ~== interceptPy2 relTol 1E-3)
+    assert(model2.scale ~== scalePy2 relTol 1E-3)
   }
 
   test("linear regression (huber loss) without intercept with L2 regularization") {
@@ -1188,12 +1206,16 @@ class LinearRegressionSuite
       array([ 2.59679008,  2.26973102])
       >>> huber.intercept_
       0.0
+      >>> huber.scale_
+      4.5766311924091791
      */
     val coefficientsPy1 = Vectors.dense(2.59679008, 2.26973102)
     val interceptPy1 = 0.0
+    val scalePy1 = 4.57663119
 
     assert(model1.coefficients ~= coefficientsPy1 relTol 1E-2)
     assert(model1.intercept === interceptPy1)
+    assert(model1.scale ~== scalePy1 relTol 1E-2)
 
     /*
       huber = HuberRegressor(fit_intercept=False, alpha=210, max_iter=100, epsilon=1.35)
@@ -1203,12 +1225,16 @@ class LinearRegressionSuite
       array([ 2.28423908,  2.25196887])
       >>> huber.intercept_
       0.0
+      >>> huber.scale_
+      4.5979643506051753
      */
     val coefficientsPy2 = Vectors.dense(2.28423908, 2.25196887)
     val interceptPy2 = 0.0
+    val scalePy2 = 4.59796435
 
     assert(model2.coefficients ~= coefficientsPy2 relTol 1E-3)
     assert(model2.intercept === interceptPy2)
+    assert(model2.scale ~== scalePy2 relTol 1E-3)
   }
 
   test("huber loss model match squared error for large m") {

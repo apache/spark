@@ -46,6 +46,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.VersionUtils.majorMinorVersion
 
 /**
  * Params for linear regression.
@@ -499,7 +500,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
       initialValues.asBreeze.toDenseVector)
 
-    val (coefficients, intercept, objectiveHistory) = {
+    val (coefficients, intercept, scale, objectiveHistory) = {
       /*
          Note that in Linear Regression, the objective history (loss + regularization) returned
          from optimizer is computed in the scaled space given by the following formula.
@@ -562,12 +563,17 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
         0.0
       }
 
-      (Vectors.dense(rawCoefficients).compressed, interceptValue, arrayBuilder.result())
+      val scaleValue: Double = $(loss) match {
+        case SquaredError => 1.0
+        case Huber => parameters.last
+      }
+
+      (Vectors.dense(rawCoefficients).compressed, interceptValue, scaleValue, arrayBuilder.result())
     }
 
     if (handlePersistence) instances.unpersist()
 
-    val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept))
+    val model = copyValues(new LinearRegressionModel(uid, coefficients, intercept, scale))
     // Handle possible missing or invalid prediction columns
     val (summaryModel, predictionColName) = model.findSummaryModelAndPredictionCol()
 
@@ -632,9 +638,13 @@ object LinearRegression extends DefaultParamsReadable[LinearRegression] {
 class LinearRegressionModel private[ml] (
     @Since("1.4.0") override val uid: String,
     @Since("2.0.0") val coefficients: Vector,
-    @Since("1.3.0") val intercept: Double)
+    @Since("1.3.0") val intercept: Double,
+    @Since("2.3.0") val scale: Double)
   extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams with MLWritable {
+
+  def this(uid: String, coefficients: Vector, intercept: Double) =
+    this(uid, coefficients, intercept, 1.0)
 
   private var trainingSummary: Option[LinearRegressionTrainingSummary] = None
 
@@ -722,13 +732,13 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
   private[LinearRegressionModel] class LinearRegressionModelWriter(instance: LinearRegressionModel)
     extends MLWriter with Logging {
 
-    private case class Data(intercept: Double, coefficients: Vector)
+    private case class Data(intercept: Double, coefficients: Vector, scale: Double)
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
-      // Save model data: intercept, coefficients
-      val data = Data(instance.intercept, instance.coefficients)
+      // Save model data: intercept, coefficients, scale
+      val data = Data(instance.intercept, instance.coefficients, instance.scale)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -744,11 +754,20 @@ object LinearRegressionModel extends MLReadable[LinearRegressionModel] {
 
       val dataPath = new Path(path, "data").toString
       val data = sparkSession.read.format("parquet").load(dataPath)
-      val Row(intercept: Double, coefficients: Vector) =
-        MLUtils.convertVectorColumnsToML(data, "coefficients")
-          .select("intercept", "coefficients")
-          .head()
-      val model = new LinearRegressionModel(metadata.uid, coefficients, intercept)
+      val (majorVersion, minorVersion) = majorMinorVersion(metadata.sparkVersion)
+      val model = if (majorVersion < 2 || (majorVersion == 2 && minorVersion <= 2)) {
+        // Spark 2.2 and before
+        val Row(intercept: Double, coefficients: Vector) =
+          MLUtils.convertVectorColumnsToML(data, "coefficients")
+            .select("intercept", "coefficients")
+            .head()
+        new LinearRegressionModel(metadata.uid, coefficients, intercept)
+      } else {
+        // Spark 2.3 and later
+        val Row(intercept: Double, coefficients: Vector, scale: Double) =
+          data.select("intercept", "coefficients", "scale").head()
+        new LinearRegressionModel(metadata.uid, coefficients, intercept, scale)
+      }
 
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
