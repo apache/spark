@@ -475,8 +475,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   override def refreshTable(tableName: String): Unit = {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     val tableMetadata = sessionCatalog.getTempViewOrPermanentTableMetadata(tableIdent)
-    // If this table is cached as an InMemoryRelation, drop the original
-    // cached version and make the new version cached lazily.
     val table = sparkSession.table(tableIdent)
 
     if (tableMetadata.tableType == CatalogTableType.VIEW) {
@@ -488,6 +486,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       sessionCatalog.refreshTable(tableIdent)
     }
 
+    // If this table is cached as an InMemoryRelation, drop the original
+    // cached version and make the new version cached lazily.
     if (isCached(table)) {
       // Uncache the logicalPlan.
       sparkSession.sharedState.cacheManager.uncacheQuery(table, blocking = true)
