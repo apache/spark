@@ -34,9 +34,9 @@ class RunLengthEncodingSuite extends SparkFunSuite {
   testRunLengthEncoding(new StringColumnStats, STRING, false)
 
   def testRunLengthEncoding[T <: AtomicType](
-                                              columnStats: ColumnStats,
-                                              columnType: NativeColumnType[T],
-                                              testDecompress: Boolean = true) {
+      columnStats: ColumnStats,
+      columnType: NativeColumnType[T],
+      testDecompress: Boolean = true) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 

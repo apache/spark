@@ -34,8 +34,8 @@ class PassThroughSuite extends SparkFunSuite {
   testPassThrough(new DoubleColumnStats, DOUBLE)
 
   def testPassThrough[T <: AtomicType](
-                                        columnStats: ColumnStats,
-                                        columnType: NativeColumnType[T]) {
+      columnStats: ColumnStats,
+      columnType: NativeColumnType[T]) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
 
