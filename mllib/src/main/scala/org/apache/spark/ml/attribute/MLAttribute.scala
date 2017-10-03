@@ -56,10 +56,10 @@ sealed trait InnerAttribute {
 sealed trait VectorAttribute {
 
   /** Indices of the attribute. */
-  val attributes: Seq[Attribute]
+  val attributes: Seq[InnerAttribute]
 
   /** The number of attributes. */
-  val numOfAttributes: Int
+  // val numOfAttributes: Int
 }
 
 /**
@@ -77,7 +77,7 @@ abstract class BaseAttribute extends MLAttribute with Serializable {
  * The basic operations of ML Attributes.
  */
 @DeveloperApi
-abstract class SimpleAttribute extends BaseAttribute with InnerAttribute {
+abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with MetadataAPI {
   def withIndices(indices: Seq[Int]): SimpleAttribute
   def withoutIndices: SimpleAttribute
 
@@ -90,11 +90,11 @@ abstract class SimpleAttribute extends BaseAttribute with InnerAttribute {
  * The basic operations of ML vector Attributes.
  */
 @DeveloperApi
-abstract class ComplexAttribute extends BaseAttribute with VectorAttribute {
-  def withAttributes(attributes: Seq[Attribute]): ComplexAttribute
+abstract class ComplexAttribute extends BaseAttribute with VectorAttribute with MetadataAPI {
+  def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
   def withoutAttributes: ComplexAttribute
 
-  def withNumOfAttributes(num: Int): ComplexAttribute
+  // def withNumOfAttributes(num: Int): ComplexAttribute
 }
 
 case object UnresolvedMLAttribute extends BaseAttribute with Serializable {

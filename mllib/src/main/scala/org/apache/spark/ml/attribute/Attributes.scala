@@ -32,7 +32,7 @@ case class NominalAttr(
     names: Seq[String] = Seq.empty,
     indices: Seq[Int] = Seq.empty,
     isOrdinal: Option[Boolean] = None,
-    values: Option[Array[String]] = None) extends SimpleAttribute with MetadataAPI {
+    values: Option[Array[String]] = None) extends SimpleAttribute {
 
   override val attrType: AttributeType = AttributeType.Numeric
 
@@ -70,7 +70,7 @@ case class BinaryAttr(
     name: Option[String] = None,
     names: Seq[String] = Seq.empty,
     indices: Seq[Int] = Seq.empty,
-    values: Option[Array[String]] = None) extends SimpleAttribute with MetadataAPI {
+    values: Option[Array[String]] = None) extends SimpleAttribute {
 
   values.foreach { v =>
     require(v.length == 2, s"Number of values must be 2 for a binary attribute but got ${v.toSeq}.")
@@ -116,7 +116,7 @@ case class NumericAttr(
     min: Option[Double] = None,
     max: Option[Double] = None,
     std: Option[Double] = None,
-    sparsity: Option[Double] = None) extends SimpleAttribute with MetadataAPI {
+    sparsity: Option[Double] = None) extends SimpleAttribute {
 
   std.foreach { s =>
     require(s >= 0.0, s"Standard deviation cannot be negative but got $s.")
@@ -156,19 +156,18 @@ case class NumericAttr(
 
 case class ComplexAttr(
     name: Option[String] = None,
-    attributes: Seq[Attribute] = Seq.empty,
-    numOfAttributes: Int = 0) extends ComplexAttribute with MetadataAPI {
+    attributes: Seq[SimpleAttribute] = Seq.empty) extends ComplexAttribute {
 
   override val attrType: AttributeType = AttributeType.Complex
 
   override def withName(name: String): ComplexAttribute = copy(name = Some(name))
   override def withoutName: ComplexAttribute = copy(name = None)
 
-  override def withAttributes(attributes: Seq[Attribute]): ComplexAttribute =
+  override def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute =
     copy(attributes = attributes)
   override def withoutAttributes: ComplexAttribute = copy(attributes = Seq.empty)
 
-  override def withNumOfAttributes(num: Int): ComplexAttribute = copy(numOfAttributes = num)
+  // override def withNumOfAttributes(num: Int): ComplexAttribute = copy(numOfAttributes = num)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -176,7 +175,81 @@ case class ComplexAttr(
     bldr.putString(AttributeKeys.TYPE, attrType.name)
     name.foreach(bldr.putString(AttributeKeys.NAME, _))
 
+    // Build the metadata of attributes included in this complex attribute.
+    val attrMetadata = attributes.map { attr =>
+      attr.toMetadata()
+    }
+    bldr.putMetadataArray(AttributeKeys.ATTRIBUTES, attrMetadata.toArray)
+    // bldr.putLong(AttributeKeys.NUM_ATTRIBUTES, attributes.length)
+
     bldr.build()
   }
 }
 
+@DeveloperApi
+object NumericAttr extends MLAttributeFactory {
+  override def fromMetadata(metadata: Metadata): NumericAttr = {
+    import org.apache.spark.ml.attribute.AttributeKeys._
+
+    val (name, names, indices) = loadCommonMetadata(metadata)
+
+    val min = if (metadata.contains(MIN)) Some(metadata.getDouble(MIN)) else None
+    val max = if (metadata.contains(MAX)) Some(metadata.getDouble(MAX)) else None
+    val std = if (metadata.contains(STD)) Some(metadata.getDouble(STD)) else None
+    val sparsity = if (metadata.contains(SPARSITY)) Some(metadata.getDouble(SPARSITY)) else None
+
+    NumericAttr(name, names, indices, min, max, std, sparsity)
+  }
+}
+
+@DeveloperApi
+object BinaryAttr extends MLAttributeFactory {
+  override def fromMetadata(metadata: Metadata): BinaryAttr = {
+    import org.apache.spark.ml.attribute.AttributeKeys._
+
+    val (name, names, indices) = loadCommonMetadata(metadata)
+
+    val values = if (metadata.contains(VALUES)) {
+      Some(metadata.getStringArray(VALUES))
+    } else {
+      None
+    }
+
+    BinaryAttr(name, names, indices, values)
+  }
+}
+
+@DeveloperApi
+object NominalAttr extends MLAttributeFactory {
+  override def fromMetadata(metadata: Metadata): NominalAttr = {
+    import org.apache.spark.ml.attribute.AttributeKeys._
+
+    val (name, names, indices) = loadCommonMetadata(metadata)
+
+    val isOrdinal = if (metadata.contains(ORDINAL)) Some(metadata.getBoolean(ORDINAL)) else None
+    val values = if (metadata.contains(VALUES)) {
+      Some(metadata.getStringArray(VALUES))
+    } else {
+      None
+    }
+
+    NominalAttr(name, names, indices, isOrdinal, values)
+  }
+}
+
+@DeveloperApi
+object ComplexAttr extends MLAttributeFactory {
+  override def fromMetadata(metadata: Metadata): ComplexAttr = {
+    val (name, _, _) = loadCommonMetadata(metadata)
+    val attributes = if (metadata.contains(AttributeKeys.ATTRIBUTES)) {
+      // `ComplexAttr` can only contains `SimpleAttribute`.
+      metadata.getMetadataArray(AttributeKeys.ATTRIBUTES).map { metadata =>
+        MLAttributes.fromMetadata(metadata).asInstanceOf[SimpleAttribute]
+      }.toSeq
+    } else {
+      Seq.empty
+    }
+
+    ComplexAttr(name, attributes)
+  }
+}

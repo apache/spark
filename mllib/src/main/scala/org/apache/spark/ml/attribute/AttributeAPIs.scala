@@ -80,13 +80,13 @@ object MLAttributes {
   /** Gets the attribute factory given the attribute type name. */
   private def getFactory(attrType: String): MLAttributeFactory = {
     if (attrType == AttributeType.Numeric.name) {
-      NumericAttrFactory
+      NumericAttr
     } else if (attrType == AttributeType.Nominal.name) {
-      NominalAttrFactory
+      NominalAttr
     } else if (attrType == AttributeType.Binary.name) {
-      BinaryAttrFactory
+      BinaryAttr
     } else if (attrType == AttributeType.Complex.name) {
-      ComplexAttrFactory
+      ComplexAttr
     } else {
       throw new IllegalArgumentException(s"Cannot recognize type $attrType.")
     }
@@ -136,67 +136,5 @@ trait MLAttributeFactory {
     }
 
     (name, names, indices)
-  }
-}
-
-@DeveloperApi
-object NumericAttrFactory extends MLAttributeFactory {
-  override def fromMetadata(metadata: Metadata): NumericAttr = {
-    import org.apache.spark.ml.attribute.AttributeKeys._
-
-    val (name, names, indices) = loadCommonMetadata(metadata)
-
-    val min = if (metadata.contains(MIN)) Some(metadata.getDouble(MIN)) else None
-    val max = if (metadata.contains(MAX)) Some(metadata.getDouble(MAX)) else None
-    val std = if (metadata.contains(STD)) Some(metadata.getDouble(STD)) else None
-    val sparsity = if (metadata.contains(SPARSITY)) Some(metadata.getDouble(SPARSITY)) else None
-
-    NumericAttr(name, names, indices, min, max, std, sparsity)
-  }
-}
-
-@DeveloperApi
-object BinaryAttrFactory extends MLAttributeFactory {
-  override def fromMetadata(metadata: Metadata): BinaryAttr = {
-    import org.apache.spark.ml.attribute.AttributeKeys._
-
-    val (name, names, indices) = loadCommonMetadata(metadata)
-
-    val values = if (metadata.contains(VALUES)) {
-      Some(metadata.getStringArray(VALUES))
-    } else {
-      None
-    }
-
-    BinaryAttr(name, names, indices, values)
-  }
-}
-
-@DeveloperApi
-object NominalAttrFactory extends MLAttributeFactory {
-  override def fromMetadata(metadata: Metadata): NominalAttr = {
-    import org.apache.spark.ml.attribute.AttributeKeys._
-
-    val (name, names, indices) = loadCommonMetadata(metadata)
-
-    val isOrdinal = if (metadata.contains(ORDINAL)) Some(metadata.getBoolean(ORDINAL)) else None
-    val values = if (metadata.contains(VALUES)) {
-      Some(metadata.getStringArray(VALUES))
-    } else {
-      None
-    }
-
-    NominalAttr(name, names, indices, isOrdinal, values)
-  }
-}
-
-object ComplexAttrFactory extends MLAttributeFactory {
-  override def fromMetadata(metadata: Metadata): ComplexAttr = {
-    import org.apache.spark.ml.attribute.AttributeKeys._
-
-    val (name, names, indices) = loadCommonMetadata(metadata)
-
-    // NominalAttr(name, names, indices, isOrdinal, values)
-    null
   }
 }
