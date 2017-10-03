@@ -170,7 +170,7 @@ class GroupedData(object):
     @since(1.6)
     def pivot(self, pivot_col, values=None):
         """
-        Pivots a column of the current [[DataFrame]] and perform the specified aggregation.
+        Pivots a column of the current :class:`DataFrame` and perform the specified aggregation.
         There are two versions of pivot function: one that requires the caller to specify the list
         of distinct values to pivot on, and one that does not. The latter is more concise but less
         efficient, because Spark needs to first compute the list of distinct values internally.
@@ -194,22 +194,50 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self.sql_ctx)
 
-    def apply(self, udf_obj):
+    def apply(self, udf):
         """
-        Maps each group of the current [[DataFrame]] using a pandas udf and returns the result
+        Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
         as a :class:`DataFrame`.
+
+        The user-function should take a `pandas.DataFrame` and return another `pandas.DataFrame`.
+        Each group is passed as a `pandas.DataFrame` to the user-function and the returned
+        `pandas.DataFrame` are combined as a :class:`DataFrame`. The returned `pandas.DataFrame`
+        can be arbitrary length and its schema should match the returnType of the pandas udf.
+
+        :param udf: A wrapped function returned by `pandas_udf`
+
+        >>> df = spark.createDataFrame(
+        ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+        ...     ("id", "v"))
+        >>> @pandas_udf(returnType=df.schema)
+        ... def normalize(pdf):
+        ...     v = pdf.v
+        ...     return pdf.assign(v=(v - v.mean()) / v.std())
+        >>> df.groupby('id').apply(normalize).show() # doctest: + SKIP
+        +---+-------------------+
+        | id|                  v|
+        +---+-------------------+
+        |  1|-0.7071067811865475|
+        |  1| 0.7071067811865475|
+        |  2|-0.8320502943378437|
+        |  2|-0.2773500981126146|
+        |  2| 1.1094003924504583|
+        +---+-------------------+
+
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
         from pyspark.sql.functions import pandas_udf
 
-        if not udf_obj._vectorized:
-            raise ValueError("Must pass a pandas_udf")
-        if not isinstance(udf_obj.returnType, StructType):
-            raise ValueError("Must pass a StructType as return type in pandas_udf")
+        # Columns are special because hasattr always return True
+        if isinstance(udf, Column) or not hasattr(udf, 'func') or not udf.vectorized:
+            raise ValueError("The argument to apply must be a pandas_udf")
+        if not isinstance(udf.returnType, StructType):
+            raise ValueError("The returnType of the pandas_udf must be a StructType")
 
         df = DataFrame(self._jgd.df(), self.sql_ctx)
-        func = udf_obj.func
-        returnType = udf_obj.returnType
+        func = udf.func
+        returnType = udf.returnType
 
         # The python executors expects the function to take a list of pd.Series as input
         # So we to create a wrapper function that turns that to a pd.DataFrame before passing

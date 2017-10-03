@@ -2058,7 +2058,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
-        self._vectorized = vectorized
+        self.vectorized = vectorized
 
     @property
     def returnType(self):
@@ -2090,7 +2090,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self._vectorized)
+            self._name, wrapped_func, jdt, self.vectorized)
         return judf
 
     def __call__(self, *cols):
@@ -2118,9 +2118,10 @@ class UserDefinedFunction(object):
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
                               else self.func.__class__.__module__)
+
         wrapper.func = self.func
         wrapper.returnType = self.returnType
-        wrapper._vectorized = self._vectorized
+        wrapper.vectorized = self.vectorized
 
         return wrapper
 
@@ -2151,7 +2152,7 @@ def _create_udf(f, returnType, vectorized):
 
 @since(1.3)
 def udf(f=None, returnType=StringType()):
-    """Creates a :class:`Column` expression representing a user defined function (UDF).
+    """Creates a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
         duplicate invocations may be eliminated or the function may even be invoked more times than
@@ -2186,15 +2187,19 @@ def udf(f=None, returnType=StringType()):
 @since(2.3)
 def pandas_udf(f=None, returnType=StringType()):
     """
-    Creates a :class:`Column` expression representing a vectorized user defined function (UDF).
+    Creates a vectorized user defined function (UDF).
+
+    :param f: user-defined function. A python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
 
     The user-defined function can define one of the following transformations:
+
     1. One or more `pandas.Series` -> A `pandas.Series`
 
-       This udf is used with `DataFrame.withColumn` and `DataFrame.select`.
-       The returnType should be a primitive data type, e.g., DoubleType()
-
-       Example:
+       This udf is used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
+       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
 
        >>> from pyspark.sql.types import IntegerType, StringType
        >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
@@ -2217,33 +2222,31 @@ def pandas_udf(f=None, returnType=StringType()):
 
     2. A `pandas.DataFrame` -> A `pandas.DataFrame`
 
-       This udf is used with `GroupedData.apply`
-       The returnType should be a StructType describing the schema of the returned
+       This udf is used with :meth:`pyspark.sql.GroupedData.apply`.
+       The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
 
-       Example:
-
-       >>> df = spark.createDataFrame([(1, 1.0), (1, 2.0), (2, 3.0), (2, 4.0)], ("id", "v"))
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
        >>> @pandas_udf(returnType=df.schema)
-       ... def normalize(df):
-       ...     v = df.v
-       ...     ret = df.assign(v=(v - v.mean()) / v.std())
+       ... def normalize(pdf):
+       ...     v = pdf.v
+       ...     return pdf.assign(v=(v - v.mean()) / v.std())
        >>> df.groupby('id').apply(normalize).show() # doctest: + SKIP
-      +---+-------------------+
-      | id|                  v|
-      +---+-------------------+
-      |  1|-0.7071067811865475|
-      |  1| 0.7071067811865475|
-      |  2|-0.7071067811865475|
-      |  2| 0.7071067811865475|
-      +---+-------------------+
+       +---+-------------------+
+       | id|                  v|
+       +---+-------------------+
+       |  1|-0.7071067811865475|
+       |  1| 0.7071067811865475|
+       |  2|-0.8320502943378437|
+       |  2|-0.2773500981126146|
+       |  2| 1.1094003924504583|
+       +---+-------------------+
 
+       .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 
-    .. note:: The user-defined functions must be deterministic.
-
-    :param f: python function if used as a standalone function
-    :param returnType: a :class:`pyspark.sql.types.DataType` object
-
+    .. note:: The user-defined function must be deterministic.
     """
     import pandas as pd
     if isinstance(returnType, pd.Series):

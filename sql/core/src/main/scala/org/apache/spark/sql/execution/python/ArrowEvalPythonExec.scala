@@ -26,25 +26,22 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructType
 
-private object BatchIterator {
-  class InnerIterator[T](iter: Iterator[T], batchSize: Int) extends Iterator[T] {
-    var count = 0
-    override def hasNext: Boolean = iter.hasNext && count < batchSize
-
-    override def next(): T = {
-      count += 1
-      iter.next()
-    }
-  }
-}
-
 private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
   extends Iterator[Iterator[T]] {
 
   override def hasNext: Boolean = iter.hasNext
 
   override def next(): Iterator[T] = {
-    new BatchIterator.InnerIterator[T](iter, batchSize)
+    new Iterator[T] {
+      var count = 0
+
+      override def hasNext: Boolean = iter.hasNext && count < batchSize
+
+      override def next(): T = {
+        count += 1
+        iter.next()
+      }
+    }
   }
 }
 
@@ -70,10 +67,8 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
 
     val batchIter = if (batchSize > 0) {
       new BatchIterator(iter, batchSize)
-    } else if (batchSize == 0) {
-      Iterator(iter)
     } else {
-      throw new IllegalArgumentException(s"MaxRecordsPerBatch must be >= 0, but is $batchSize")
+      Iterator(iter)
     }
 
     val columnarBatchIter = new ArrowPythonRunner(

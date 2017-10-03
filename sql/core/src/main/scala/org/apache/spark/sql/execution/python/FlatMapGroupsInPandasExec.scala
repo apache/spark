@@ -23,7 +23,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression, NamedExpression, SortOrder, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 
@@ -63,11 +63,9 @@ case class FlatMapGroupsInPandasExec(
         PythonEvalType.SQL_PANDAS_UDF, argOffsets, child.schema)
         .compute(grouped.map(_._2), context.partitionId(), context)
 
-      val vectorRowIter = new Iterator[InternalRow] {
+      val rowIter = new Iterator[InternalRow] {
         private var currentIter = if (columnarBatchIter.hasNext) {
           val batch = columnarBatchIter.next()
-          // assert(schemaOut.equals(batch.schema),
-          //  s"Invalid schema from pandas_udf: expected $schemaOut, got ${batch.schema}")
           batch.rowIterator.asScala
         } else {
           Iterator.empty
@@ -85,7 +83,7 @@ case class FlatMapGroupsInPandasExec(
         override def next(): InternalRow = currentIter.next()
       }
 
-      vectorRowIter.map(UnsafeProjection.create(output, output))
+      rowIter.map(UnsafeProjection.create(output, output))
     }
   }
 }

@@ -34,7 +34,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
     BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import to_arrow_type
 from pyspark import shuffle
-from pyspark.sql.types import StructType, IntegerType, LongType, FloatType, DoubleType
+from pyspark.sql.types import StructType
 
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
@@ -76,14 +76,18 @@ def wrap_udf(f, return_type):
 
 def wrap_pandas_udf(f, return_type):
     if isinstance(return_type, StructType):
+        import pyarrow as pa
+
         arrow_return_types = list(to_arrow_type(field.dataType) for field in return_type)
 
         def fn(*a):
             import pandas as pd
             out = f(*a)
-            assert isinstance(out, pd.DataFrame), 'Must return a pd.DataFrame'
+            assert isinstance(out, pd.DataFrame), \
+                'Return value from the user function is not a pandas.DataFrame.'
             assert len(out.columns) == len(arrow_return_types), \
-                'Columns of pd.DataFrame don\'t match return schema'
+                'Number of columns of the returned pd.DataFrame doesn\'t match output schema. ' \
+                'Expected: {} Actual: {}'.format(len(arrow_return_types), len(out.columns))
 
             return list((out[out.columns[i]], arrow_return_types[i])
                         for i in range(len(arrow_return_types)))
