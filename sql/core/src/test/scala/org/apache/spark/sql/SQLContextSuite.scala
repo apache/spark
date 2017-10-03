@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.sql.{Date, Timestamp}
+
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -46,6 +48,23 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     SparkSession.setActiveSession(newSession.sparkSession)
     assert(SQLContext.getOrCreate(sc).eq(newSession),
       "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
+  }
+
+  test("Bug SPARK-22192 Nested POJO object not handled when creating DataFrame from RDD") {
+    val sqlContext = SQLContext.getOrCreate(sc)
+    val personsCollection = for (k <- 1 until 100) yield {
+      new Person(k, "name_" + k, k.toLong, k.toShort,
+        k.toByte, k.toDouble *86.7543d, k.toFloat *7.31f,
+        true, Array.fill[Byte](k)(k.toByte),
+        new java.sql.Date(7836*k*1000), new Timestamp(7896*k*1000),
+        new Address("12320 sw horizon", 97007))
+    }
+
+    // create a pair RDD from the collection
+    val personsRDD = sc.parallelize(personsCollection)
+    val df = sqlContext.createDataFrame(personsRDD, classOf[Person])
+    df.printSchema()
+    df.collect()
   }
 
   test("Sessions of SQLContext") {
@@ -142,4 +161,48 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     }
   }
 
+}
+
+
+class Person(var id: Int, var name: String, var longField: Long, var shortField: Short,
+             var byteField: Byte, var doubleField: Double, var floatField: Float,
+             var booleanField: Boolean, var binaryField: Array[Byte],
+             var datee: Date, var timeeStamp: Timestamp,
+             var address: Address  ) extends java.io.Serializable{
+  def this() = this(0, null, 0, 0, 0, 0d, 0f, false, null, null, null, null)
+  def getName: String = name
+  def getId: Int = id
+  def getLongField: Long = longField
+  def getShortField: Short = shortField
+  def getByteField: Byte = byteField
+  def getDoubleField: Double = doubleField
+  def getFloatField: Float = floatField
+  def getBooleanField: Boolean = booleanField
+  def getBinaryField: Array[Byte] = binaryField
+  def getDatee: Date = datee
+  def getTimeeStamp: Timestamp = timeeStamp
+  def getAddress: Address = address
+
+  def setName(name: String): Unit = {this.name = name}
+  def setId(id: Int): Unit = {this.id = id}
+  def setLongField(longField: Long): Unit = {this.longField = longField}
+  def setShortField(shortField: Short): Unit = {this.shortField = shortField}
+  def setByteField(byteField: Byte): Unit = {this.byteField = byteField}
+  def setDoubleField(doubleField: Double): Unit = {this.doubleField = doubleField}
+  def setFloatField(floatField: Float): Unit = {this.floatField = floatField}
+  def setBooleanField(booleanField: Boolean): Unit = {this.booleanField = booleanField}
+  def setBinaryField(binaryField: Array[Byte]): Unit = {this.binaryField = binaryField}
+  def setDatee(datee: Date): Unit = {this.datee = datee}
+  def setTimeeStamp(ts: Timestamp): Unit = {this.timeeStamp = ts}
+  def setAddress(address: Address): Unit = {this.address = address}
+}
+
+
+
+class Address(var street: String, var zip: Int) extends java.io.Serializable {
+  def this() = this(null, -1)
+  def getStreet: String = this.street
+  def getZip: Int = this.zip
+  def setStreet(street: String): Unit = {this.street = street}
+  def setZip(zip: Int): Unit = {this.zip = zip}
 }

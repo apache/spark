@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.lang.reflect.Method
 import java.util.Properties
 
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental, InterfaceStability}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -31,7 +31,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
-import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{SQLConf, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types._
@@ -1134,7 +1134,7 @@ object SQLContext {
     map(_.getReadMethod).zip(attrs)
     methodsToConverts.map { case (e, attr) =>
       attr.dataType match {
-        case strct: StructType => {
+        case strct: StructType =>
           val extractors = getExtractors(e.getReturnType,
             strct.map(sf => AttributeReference(sf.name, sf.dataType, sf.nullable)()))
           (e, (x: Any) => {
@@ -1142,7 +1142,7 @@ object SQLContext {
               extractors(i)._2(extractors(i)._1.invoke(x)))
             new GenericInternalRow(arr)
           })
-        }
+
         case _ => (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
       }
     }
