@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 
-class StreamingJoinSuite extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
+class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
 
   before {
     SparkSession.setActiveSession(spark)  // set this before force initializing 'joinExec'
@@ -492,7 +492,6 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
   private def setupStream(prefix: String, multiplier: Int): (MemoryStream[Int], DataFrame) = {
     val input = MemoryStream[Int]
-
     val df = input.toDF
       .select(
         'value as "key",
@@ -503,14 +502,12 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     return (input, df)
   }
 
-  private def setupWindowedJoin(joinType: String) = {
+  private def setupWindowedJoin(joinType: String):
+  (MemoryStream[Int], MemoryStream[Int], DataFrame) = {
     val (input1, df1) = setupStream("left", 2)
     val (input2, df2) = setupStream("right", 3)
-
     val windowed1 = df1.select('key, window('leftTime, "10 second"), 'leftValue)
-
     val windowed2 = df2.select('key, window('rightTime, "10 second"), 'rightValue)
-
     val joined = windowed1.join(windowed2, Seq("key", "window"), joinType)
       .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
 
