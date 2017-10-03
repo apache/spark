@@ -174,8 +174,8 @@ case class StreamingSymmetricHashJoinExec(
   override def outputPartitioning: Partitioning = joinType match {
     case _: InnerLike =>
       PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
-    case LeftOuter => PartitioningCollection(Seq(right.outputPartitioning))
-    case RightOuter => PartitioningCollection(Seq(left.outputPartitioning))
+    case LeftOuter => PartitioningCollection(Seq(left.outputPartitioning))
+    case RightOuter => PartitioningCollection(Seq(right.outputPartitioning))
     case x =>
       throw new IllegalArgumentException(
         s"${getClass.getSimpleName} should not take $x as the JoinType")
