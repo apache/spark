@@ -29,27 +29,32 @@ class FlatMapGroupsWithState_StateManager(
     stateEncoder: ExpressionEncoder[Any],
     shouldStoreTimestamp: Boolean) extends Serializable {
 
+  /** Schema of the state rows saved in the state store */
   val stateSchema = {
     val schema = new StructType().add("groupState", stateEncoder.schema, nullable = true)
     if (shouldStoreTimestamp) schema.add("timeoutTimestamp", LongType) else schema
   }
 
+  /** Get deserialized state and corresponding timeout timestamp for a key */
   def getState(store: StateStore, keyRow: UnsafeRow): FlatMapGroupsWithState_StateData = {
     val stateRow = store.get(keyRow)
     stateDataForGets.withNew(
       keyRow, stateRow, getStateObj(stateRow), getTimestamp(stateRow))
   }
 
+  /** Put state and timeout timestamp for a key */
   def putState(store: StateStore, keyRow: UnsafeRow, state: Any, timestamp: Long): Unit = {
     val stateRow = getStateRow(state)
     setTimestamp(stateRow, timestamp)
     store.put(keyRow, stateRow)
   }
 
+  /** Removed all information related to a key */
   def removeState(store: StateStore, keyRow: UnsafeRow): Unit = {
     store.remove(keyRow)
   }
 
+  /** Get all the keys and corresponding state rows in the state store */
   def getAllState(store: StateStore): Iterator[FlatMapGroupsWithState_StateData] = {
     val stateDataForGetAllState = FlatMapGroupsWithState_StateData()
     store.getRange(None, None).map { pair =>
@@ -58,7 +63,9 @@ class FlatMapGroupsWithState_StateManager(
     }
   }
 
-  private val stateAttributes: Seq[Attribute] = stateSchema.toAttributes
+  // Ordinals of the information stored in the state row
+  private lazy val nestedStateOrdinal = 0
+  private lazy val timeoutTimestampOrdinal = 1
 
   // Get the serializer for the state, taking into account whether we need to save timestamps
   private val stateSerializer = {
@@ -82,14 +89,12 @@ class FlatMapGroupsWithState_StateManager(
     CaseWhen(Seq(IsNull(boundRefToNestedState) -> Literal(null)), elseValue = deser).toCodegen()
   }
 
-  private lazy val nestedStateOrdinal = 0
-  private lazy val timeoutTimestampOrdinal = 1
-
   // Converters for translating state between rows and Java objects
   private lazy val getStateObjFromRow = ObjectOperator.deserializeRowToObject(
-    stateDeserializer, stateAttributes)
+    stateDeserializer, stateSchema.toAttributes)
   private lazy val getStateRowFromObj = ObjectOperator.serializeObjectToRow(stateSerializer)
 
+  // Reusable instance for returning state information
   private lazy val stateDataForGets = FlatMapGroupsWithState_StateData()
 
   /** Returns the state as Java object if defined */
@@ -119,10 +124,12 @@ class FlatMapGroupsWithState_StateManager(
   private def setTimestamp(stateRow: UnsafeRow, timeoutTimestamps: Long): Unit = {
     if (shouldStoreTimestamp) stateRow.setLong(timeoutTimestampOrdinal, timeoutTimestamps)
   }
-
 }
 
-
+/**
+ * Class to capture deserialized state and timestamp return by the state manager.
+ * This is intended for reuse.
+ */
 case class FlatMapGroupsWithState_StateData(
     var keyRow: UnsafeRow = null,
     var stateRow: UnsafeRow = null,

@@ -295,7 +295,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   val beforeTimeoutThreshold = 999
   val afterTimeoutThreshold = 1001
 
-  // Tests for InputProcessor.updateStateForKeysWithData() when timeout = NoTimeout
+  // Tests for InputProcessor.processNewData() when timeout = NoTimeout
   for (priorState <- Seq(None, Some(0))) {
     val priorStateStr = if (priorState.nonEmpty) "prior state set" else "no prior state"
     val testName = s"NoTimeout - $priorStateStr - "
@@ -322,7 +322,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState = None)        // should be removed
   }
 
-  // Tests for InputProcessor.updateStateForKeysWithData() when timeout != NoTimeout
+  // Tests for InputProcessor.processTimedOutState() when timeout != NoTimeout
   for (priorState <- Seq(None, Some(0))) {
     for (priorTimeoutTimestamp <- Seq(NO_TIMESTAMP, 1000)) {
       var testName = ""
@@ -451,7 +451,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  // Tests for InputProcessor.updateStateForTimedOutKeys()
+  // Tests for InputProcessor.processTimedOutState()
   val preTimeoutState = Some(5)
   for (timeoutConf <- Seq(ProcessingTimeTimeout, EventTimeTimeout)) {
     testStateUpdateWithTimeout(
@@ -935,7 +935,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     if (priorState.isEmpty && priorTimeoutTimestamp != NO_TIMESTAMP) {
       return // there can be no prior timestamp, when there is no prior state
     }
-    test(s"InputProcessor - updates with data - $testName") {
+    test(s"InputProcessor - process new data - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
         assert(state.hasTimedOut === false, "hasTimedOut not false")
         assert(values.nonEmpty, "Some value is expected")
@@ -957,7 +957,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState: Option[Int],
       expectedTimeoutTimestamp: Long = NO_TIMESTAMP): Unit = {
 
-    test(s"InputProcessor - processing timed out state - $testName") {
+    test(s"InputProcessor - process timed out state - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
         assert(state.hasTimedOut === true, "hasTimedOut not true")
         assert(values.isEmpty, "values not empty")
@@ -1011,10 +1011,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       val updatedState = stateManager.getState(store, key)
       assert(Option(updatedState.stateObj).map(_.toString.toInt) === expectedState,
         "final state not as expected")
-      if (updatedState.stateObj != null) {
-        assert(updatedState.timeoutTimestamp === expectedTimeoutTimestamp,
-          "final timeout timestamp not as expected")
-      }
+      assert(updatedState.timeoutTimestamp === expectedTimeoutTimestamp,
+        "final timeout timestamp not as expected")
     }
   }
 
