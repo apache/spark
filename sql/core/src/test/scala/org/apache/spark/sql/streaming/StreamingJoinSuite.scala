@@ -598,7 +598,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
 
   // When the join condition isn't true, the outer null rows must be generated, even if the join
   // keys themselves have a match.
-  test("outer join with non-key condition violated on left") {
+  test("left outer join with non-key condition violated on left") {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
 
@@ -625,7 +625,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     )
   }
 
-  test("outer join with non-key condition which is met") {
+  test("left outer join with non-key condition which is met") {
     val (leftInput, simpleLeftDf) = setupStream("left", 2)
     val (rightInput, simpleRightDf) = setupStream("right", 3)
 
