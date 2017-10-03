@@ -23,10 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Attribut
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.util.CompletionIterator
 
 /**
@@ -61,8 +59,8 @@ case class FlatMapGroupsWithStateExec(
 
   import GroupStateImpl._
 
-  val isTimeoutEnabled = timeoutConf != NoTimeout
-  val stateManager = new StateManagerV1(isTimeoutEnabled)
+  private val isTimeoutEnabled = timeoutConf != NoTimeout
+  val stateManager = new FlatMapGroupsWithState_StateManager(stateEncoder, isTimeoutEnabled)
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
@@ -181,7 +179,7 @@ case class FlatMapGroupsWithStateExec(
      * @param hasTimedOut Whether this function is being called for a key timeout
      */
     private def callFunctionAndUpdateState(
-        stateData: StateData,
+        stateData: FlatMapGroupsWithState_StateData,
         valueRowIter: Iterator[InternalRow],
         hasTimedOut: Boolean): Iterator[InternalRow] = {
 
@@ -220,127 +218,6 @@ case class FlatMapGroupsWithStateExec(
 
       // Return an iterator of rows such that fully consumed, the updated state value will be saved
       CompletionIterator[InternalRow, Iterator[InternalRow]](mappedIterator, onIteratorCompletion)
-    }
-  }
-
-  case class StateData(
-      var keyRow: UnsafeRow = null,
-      var stateRow: UnsafeRow = null,
-      var stateObj: Any = null,
-      var timeoutTimestamp: Long = -1) {
-    def withNew(
-        newKeyRow: UnsafeRow,
-        newStateRow: UnsafeRow,
-        newStateObj: Any,
-        newTimeout: Long): this.type = {
-      keyRow = newKeyRow
-      stateRow = newStateRow
-      stateObj = newStateObj
-      timeoutTimestamp = newTimeout
-      this
-    }
-  }
-
-  trait StateManager extends Serializable {
-    def stateSchema: StructType
-    def getState(store: StateStore, keyRow: UnsafeRow): StateData
-    def putState(store: StateStore, keyRow: UnsafeRow, state: Any, timeoutTimestamp: Long): Unit
-    def removeState(store: StateStore, keyRow: UnsafeRow): Unit
-    def getAllState(store: StateStore): Iterator[StateData]
-  }
-
-  class StateManagerV1(shouldStoreTimestamp: Boolean) extends StateManager {
-
-    private val timestampTimeoutAttribute =
-      AttributeReference("timeoutTimestamp", dataType = IntegerType, nullable = false)()
-
-    private val stateAttributes: Seq[Attribute] = {
-      val encSchemaAttribs = stateEncoder.schema.toAttributes
-      if (shouldStoreTimestamp) encSchemaAttribs :+ timestampTimeoutAttribute else encSchemaAttribs
-    }
-    // Get the serializer for the state, taking into account whether we need to save timestamps
-    private val stateSerializer = {
-      val encoderSerializer = stateEncoder.namedExpressions
-      if (shouldStoreTimestamp) {
-        encoderSerializer :+ Literal(GroupStateImpl.NO_TIMESTAMP)
-      } else {
-        encoderSerializer
-      }
-    }
-    // Get the deserializer for the state. Note that this must be done in the driver, as
-    // resolving and binding of deserializer expressions to the encoded type can be safely done
-    // only in the driver.
-    private val stateDeserializer = stateEncoder.resolveAndBind().deserializer
-
-    // Index of the additional metadata fields in the state row
-    private val timeoutTimestampIndex = stateAttributes.indexOf(timestampTimeoutAttribute)
-    // Converters for translating state between rows and Java objects
-    private lazy val getStateObjFromRow = ObjectOperator.deserializeRowToObject(
-      stateDeserializer, stateAttributes)
-    private lazy val getStateRowFromObj = ObjectOperator.serializeObjectToRow(stateSerializer)
-
-    private lazy val stateDataForGets = StateData()
-
-    override def stateSchema: StructType = stateAttributes.toStructType
-
-    override def getState(store: StateStore, keyRow: UnsafeRow): StateData = {
-      val stateRow = store.get(keyRow)
-      stateDataForGets.withNew(
-        keyRow, stateRow, getStateObj(stateRow), getTimestamp(stateRow))
-    }
-
-    override def putState(
-        store: StateStore, keyRow: UnsafeRow, state: Any, timestamp: Long): Unit = {
-      // If the state has not yet been set but timeout has been set, then
-      // we have to generate a row to save the timeout. However, attempting serialize
-      // null using case class encoder throws -
-      //    java.lang.NullPointerException: Null value appeared in non-nullable field:
-      //    If the schema is inferred from a Scala tuple / case class, or a Java bean, please
-      //    try to use scala.Option[_] or other nullable types.
-      if (state == null && timestamp != NO_TIMESTAMP) {
-        throw new IllegalStateException(
-          "Cannot set timeout when state is not defined, that is, state has not been" +
-            "initialized or has been removed")
-      }
-
-      val stateRow = getStateRow(state)
-      setTimestamp(stateRow, timestamp)
-      store.put(keyRow, stateRow)
-    }
-
-    override def removeState(store: StateStore, keyRow: UnsafeRow): Unit = {
-      store.remove(keyRow)
-    }
-
-    override def getAllState(store: StateStore): Iterator[StateData] = {
-      val stateDataForGetAllState = StateData()
-      store.getRange(None, None).map { pair =>
-        stateDataForGetAllState.withNew(
-          pair.key, pair.value, getStateObjFromRow(pair.value), getTimestamp(pair.value))
-      }
-    }
-
-    /** Returns the state as Java object if defined */
-    private def getStateObj(stateRow: UnsafeRow): Any = {
-      if (stateRow != null) getStateObjFromRow(stateRow) else null
-    }
-
-    /** Returns the row for an updated state */
-    private def getStateRow(obj: Any): UnsafeRow = {
-      assert(obj != null)
-      getStateRowFromObj(obj)
-    }
-
-    /** Returns the timeout timestamp of a state row is set */
-    def getTimestamp(stateRow: UnsafeRow): Long = {
-      if (shouldStoreTimestamp && stateRow != null) {
-        stateRow.getLong(timeoutTimestampIndex)
-      } else NO_TIMESTAMP
-    }
-
-    /** Set the timestamp in a state row */
-    def setTimestamp(stateRow: UnsafeRow, timeoutTimestamps: Long): Unit = {
-      if (shouldStoreTimestamp) stateRow.setLong(timeoutTimestampIndex, timeoutTimestamps)
     }
   }
 }
