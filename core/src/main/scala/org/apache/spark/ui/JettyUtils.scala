@@ -79,9 +79,9 @@ private[spark] object JettyUtils extends Logging {
     val allowFramingFrom = conf.getOption("spark.ui.allowFramingFrom")
     val xFrameOptionsValue =
       allowFramingFrom.map(uri => s"ALLOW-FROM $uri").getOrElse("SAMEORIGIN")
-    val xXssProtectionValue = conf.getOption("spark.ui.xXssProtection.enabled")
+    val xXssProtectionValue = conf.getOption("spark.ui.xXssProtection")
     val xContentTypeOptionsValue = conf.getOption("spark.ui.xContentType.options")
-    val strictTransportSecurityValue = conf.getOption("spark.ui.strictTransportSecurity.age")
+    val strictTransportSecurityValue = conf.getOption("spark.ui.strictTransportSecurity")
 
     new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {

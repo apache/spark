@@ -27,8 +27,8 @@
 # spark.executor.extraJavaOptions       -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"
 
 #spark.ui.allowFramingFrom              https://example.com/
-#spark.ui.xXssProtection.enabled        1; mode=block
+#spark.ui.xXssProtection                1; mode=block
 #spark.ui.xContentType.options          nosniff
 
 #Enable below only when Spark is running on HTTPS
-#spark.ui.strictTransportSecurity.age   max-age=31536000
+#spark.ui.strictTransportSecurity       max-age=31536000
