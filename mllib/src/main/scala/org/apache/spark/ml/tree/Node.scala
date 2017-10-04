@@ -276,6 +276,8 @@ private[tree] class LearningNode(
       new InternalNode(stats.impurityCalculator.predict, stats.impurity, stats.gain,
         leftChild.get.toNode, rightChild.get.toNode, split.get, stats.impurityCalculator)
     } else {
+      assert(stats != null, "Unknown error during Decision Tree learning. Could not convert " +
+        "LearningNode to Node")
       if (stats.valid) {
         new LeafNode(stats.impurityCalculator.predict, stats.impurity,
           stats.impurityCalculator)
@@ -334,7 +336,7 @@ private[tree] object LearningNode {
       id: Int,
       isLeaf: Boolean,
       stats: ImpurityStats): LearningNode = {
-    new LearningNode(id, None, None, None, false, stats)
+    new LearningNode(id, None, None, None, isLeaf, stats)
   }
 
   /** Create an empty node with the given node index.  Values must be set later on. */
@@ -403,5 +405,6 @@ private[tree] object LearningNode {
     }
     tmpNode
   }
+
 
 }
