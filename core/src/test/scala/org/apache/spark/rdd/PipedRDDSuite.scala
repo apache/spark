@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.io.File
 
 import scala.collection.Map
+import scala.collection.mutable.ArrayBuffer
 import scala.io.Codec
 
 import org.apache.hadoop.fs.Path
@@ -215,8 +216,9 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       override val getDependencies = List[Dependency[_]]()
 
       override def compute(theSplit: Partition, context: TaskContext) = {
-        new InterruptibleIterator[(LongWritable, Text)](context, Iterator((new LongWritable(1),
-          new Text("b"))))
+        val iterator = new InterruptibleIterator[(LongWritable, Text)](context,
+          Iterator((new LongWritable(1), new Text("b"))))
+        new MultipleIterator[(LongWritable, Text)](List(iterator))
       }
     }
     val hadoopPart1 = generateFakeHadoopPartition()
@@ -241,7 +243,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
   def generateFakeHadoopPartition(): HadoopPartition = {
     val split = new FileSplit(new Path("/some/path"), 0, 1,
       Array[String]("loc1", "loc2", "loc3", "loc4", "loc5"))
-    new HadoopPartition(sc.newRddId(), 1, split)
+    new HadoopPartition(sc.newRddId(), 1, ArrayBuffer(split))
   }
 
 }

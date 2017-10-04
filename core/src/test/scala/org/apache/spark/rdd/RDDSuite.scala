@@ -1091,26 +1091,20 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     assert(thrown.getMessage.contains("SPARK-5063"))
   }
 
-  test("custom RDD coalescer") {
-    val maxSplitSize = 512
+  test("test combine hadoop input split") {
     val outDir = new File(tempDir, "output").getAbsolutePath
-    sc.makeRDD(1 to 1000, 10).saveAsTextFile(outDir)
+    val parallelizedRDD = sc.makeRDD(1 to 1000, 10)
+    // Number of partitions should be ten
+    assert(parallelizedRDD.partitions.length == 10)
+    parallelizedRDD.saveAsTextFile(outDir)
+
+    // Create a Hadoop RDD
     val hadoopRDD =
       sc.hadoopFile(outDir, classOf[TextInputFormat], classOf[LongWritable], classOf[Text])
-    val coalescedHadoopRDD =
-      hadoopRDD.coalesce(2, partitionCoalescer = Option(new SizeBasedCoalescer(maxSplitSize)))
-    assert(coalescedHadoopRDD.partitions.size <= 10)
-    var totalPartitionCount = 0L
-    coalescedHadoopRDD.partitions.foreach(partition => {
-      var splitSizeSum = 0L
-      partition.asInstanceOf[CoalescedRDDPartition].parents.foreach(partition => {
-        val split = partition.asInstanceOf[HadoopPartition].inputSplit.value.asInstanceOf[FileSplit]
-        splitSizeSum += split.getLength
-        totalPartitionCount += 1
-      })
-      assert(splitSizeSum <= maxSplitSize)
-    })
-    assert(totalPartitionCount == 10)
+
+    // This should coalesce the partitions to 4 based on the coalescing logic in
+    // Hadoop RDD getPartitions
+    assert(hadoopRDD.partitions.length == 4)
   }
 
   test("SPARK-18406: race between end-of-task and completion iterator read lock release") {
@@ -1152,61 +1146,5 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
     }
     assertFails { sc.parallelize(1 to 100) }
     assertFails { sc.textFile("/nonexistent-path") }
-  }
-}
-
-/**
- * Coalesces partitions based on their size assuming that the parent RDD is a [[HadoopRDD]].
- * Took this class out of the test suite to prevent "Task not serializable" exceptions.
- */
-class SizeBasedCoalescer(val maxSize: Int) extends PartitionCoalescer with Serializable {
-  override def coalesce(maxPartitions: Int, parent: RDD[_]): Array[PartitionGroup] = {
-    val partitions: Array[Partition] = parent.asInstanceOf[HadoopRDD[Any, Any]].getPartitions
-    val groups = ArrayBuffer[PartitionGroup]()
-    var currentGroup = new PartitionGroup()
-    var currentSum = 0L
-    var totalSum = 0L
-    var index = 0
-
-    // sort partitions based on the size of the corresponding input splits
-    partitions.sortWith((partition1, partition2) => {
-      val partition1Size = partition1.asInstanceOf[HadoopPartition].inputSplit.value.getLength
-      val partition2Size = partition2.asInstanceOf[HadoopPartition].inputSplit.value.getLength
-      partition1Size < partition2Size
-    })
-
-    def updateGroups(): Unit = {
-      groups += currentGroup
-      currentGroup = new PartitionGroup()
-      currentSum = 0
-    }
-
-    def addPartition(partition: Partition, splitSize: Long): Unit = {
-      currentGroup.partitions += partition
-      currentSum += splitSize
-      totalSum += splitSize
-    }
-
-    while (index < partitions.size) {
-      val partition = partitions(index)
-      val fileSplit =
-        partition.asInstanceOf[HadoopPartition].inputSplit.value.asInstanceOf[FileSplit]
-      val splitSize = fileSplit.getLength
-      if (currentSum + splitSize < maxSize) {
-        addPartition(partition, splitSize)
-        index += 1
-        if (index == partitions.size) {
-          updateGroups
-        }
-      } else {
-        if (currentGroup.partitions.size == 0) {
-          addPartition(partition, splitSize)
-          index += 1
-        } else {
-          updateGroups
-        }
-      }
-    }
-    groups.toArray
   }
 }
