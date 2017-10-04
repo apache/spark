@@ -223,20 +223,18 @@ class ImputerModel private[ml] (
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    var outputDF = dataset
     val surrogates = surrogateDF.select($(inputCols).map(col): _*).head().toSeq
 
-    $(inputCols).zip($(outputCols)).zip(surrogates).foreach {
+    val newCols = $(inputCols).zip($(outputCols)).zip(surrogates).map {
       case ((inputCol, outputCol), surrogate) =>
         val inputType = dataset.schema(inputCol).dataType
         val ic = col(inputCol)
-        outputDF = outputDF.withColumn(outputCol,
-          when(ic.isNull, surrogate)
+        when(ic.isNull, surrogate)
           .when(ic === $(missingValue), surrogate)
           .otherwise(ic)
-          .cast(inputType))
+          .cast(inputType)
     }
-    outputDF.toDF()
+    dataset.withColumns($(outputCols), newCols).toDF()
   }
 
   override def transformSchema(schema: StructType): StructType = {

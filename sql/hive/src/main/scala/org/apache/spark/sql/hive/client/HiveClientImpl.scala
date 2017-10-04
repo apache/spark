@@ -461,7 +461,7 @@ private[hive] class HiveClientImpl(
         // in table properties. This means, if we have bucket spec in both hive metastore and
         // table properties, we will trust the one in table properties.
         bucketSpec = bucketSpec,
-        owner = h.getOwner,
+        owner = Option(h.getOwner).getOrElse(""),
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(

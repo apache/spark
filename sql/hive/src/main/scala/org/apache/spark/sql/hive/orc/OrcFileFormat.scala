@@ -58,7 +58,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     OrcFileOperator.readSchema(
-      files.map(_.getPath.toUri.toString),
+      files.map(_.getPath.toString),
       Some(sparkSession.sessionState.newHadoopConf())
     )
   }

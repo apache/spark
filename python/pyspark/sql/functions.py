@@ -2199,16 +2199,14 @@ def pandas_udf(f=None, returnType=StringType()):
     ...
     >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
     >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
-    ...     .show() # doctest: +SKIP
+    ...     .show()  # doctest: +SKIP
     +----------+--------------+------------+
     |slen(name)|to_upper(name)|add_one(age)|
     +----------+--------------+------------+
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    wrapped_udf = _create_udf(f, returnType=returnType, vectorized=True)
-
-    return wrapped_udf
+    return _create_udf(f, returnType=returnType, vectorized=True)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']

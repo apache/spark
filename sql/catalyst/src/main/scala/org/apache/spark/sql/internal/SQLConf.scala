@@ -668,7 +668,7 @@ object SQLConf {
       .createWithDefault(40)
 
   val ENABLE_TWOLEVEL_AGG_MAP =
-    buildConf("spark.sql.codegen.aggregate.map.twolevel.enable")
+    buildConf("spark.sql.codegen.aggregate.map.twolevel.enabled")
       .internal()
       .doc("Enable two-level aggregate hash map. When enabled, records will first be " +
         "inserted/looked-up at a 1st-level, small, fast map, and then fallback to a " +
@@ -907,8 +907,16 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION =
+    buildConf("spark.sql.execution.rangeExchange.sampleSizePerPartition")
+      .internal()
+      .doc("Number of points to sample per partition in order to determine the range boundaries" +
+          " for range partitioning, typically used in global sorting (without limit).")
+      .intConf
+      .createWithDefault(100)
+
   val ARROW_EXECUTION_ENABLE =
-    buildConf("spark.sql.execution.arrow.enable")
+    buildConf("spark.sql.execution.arrow.enabled")
       .internal()
       .doc("Make use of Apache Arrow for columnar data transfers. Currently available " +
         "for use with pyspark.sql.DataFrame.toPandas with the following data types: " +
@@ -1198,6 +1206,8 @@ class SQLConf extends Serializable with Logging {
   def starSchemaFTRatio: Double = getConf(STARSCHEMA_FACT_TABLE_RATIO)
 
   def supportQuotedRegexColumnName: Boolean = getConf(SUPPORT_QUOTED_REGEX_COLUMN_NAME)
+
+  def rangeExchangeSampleSizePerPartition: Int = getConf(RANGE_EXCHANGE_SAMPLE_SIZE_PER_PARTITION)
 
   def arrowEnable: Boolean = getConf(ARROW_EXECUTION_ENABLE)
 
