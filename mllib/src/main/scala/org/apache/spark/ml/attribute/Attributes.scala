@@ -29,8 +29,7 @@ import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, Numeri
 @DeveloperApi
 case class NominalAttr(
     name: Option[String] = None,
-    names: Seq[String] = Seq.empty,
-    indices: Seq[Int] = Seq.empty,
+    indicesRange: Seq[Int] = Seq.empty,
     isOrdinal: Option[Boolean] = None,
     values: Option[Array[String]] = None) extends SimpleAttribute {
 
@@ -39,19 +38,18 @@ case class NominalAttr(
   override def withName(name: String): SimpleAttribute = copy(name = Some(name))
   override def withoutName: SimpleAttribute = copy(name = None)
 
-  override def withIndices(indices: Seq[Int]): SimpleAttribute = copy(indices = indices)
-  override def withoutIndices: SimpleAttribute = copy(indices = Seq.empty)
+  override def withIndicesRange(begin: Int, end: Int): SimpleAttribute =
+    copy(indicesRange = Seq(begin, end))
+  override def withIndicesRange(index: Int): SimpleAttribute = copy(indicesRange = Seq(index))
 
-  override def withNames(names: Seq[String]): SimpleAttribute = copy(names = names)
-  override def withoutNames: SimpleAttribute = copy(names = Seq.empty)
+  override def withoutIndicesRange: SimpleAttribute = copy(indicesRange = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
 
     bldr.putString(AttributeKeys.TYPE, attrType.name)
     name.foreach(bldr.putString(AttributeKeys.NAME, _))
-    bldr.putStringArray(AttributeKeys.NAMES, names.toArray)
-    bldr.putLongArray(AttributeKeys.INDICES, indices.toArray.map(_.toLong))
+    bldr.putLongArray(AttributeKeys.INDICES, indicesRange.toArray.map(_.toLong))
     isOrdinal.foreach(bldr.putBoolean(AttributeKeys.ORDINAL, _))
     values.foreach(v => bldr.putStringArray(AttributeKeys.VALUES, v.toArray))
 
@@ -68,8 +66,7 @@ case class NominalAttr(
 @DeveloperApi
 case class BinaryAttr(
     name: Option[String] = None,
-    names: Seq[String] = Seq.empty,
-    indices: Seq[Int] = Seq.empty,
+    indicesRange: Seq[Int] = Seq.empty,
     values: Option[Array[String]] = None) extends SimpleAttribute {
 
   values.foreach { v =>
@@ -81,19 +78,18 @@ case class BinaryAttr(
   override def withName(name: String): SimpleAttribute = copy(name = Some(name))
   override def withoutName: SimpleAttribute = copy(name = None)
 
-  override def withIndices(indices: Seq[Int]): SimpleAttribute = copy(indices = indices)
-  override def withoutIndices: SimpleAttribute = copy(indices = Seq.empty)
+  override def withIndicesRange(begin: Int, end: Int): SimpleAttribute =
+    copy(indicesRange = Seq(begin, end))
+  override def withIndicesRange(index: Int): SimpleAttribute = copy(indicesRange = Seq(index))
 
-  override def withNames(names: Seq[String]): SimpleAttribute = copy(names = names)
-  override def withoutNames: SimpleAttribute = copy(names = Seq.empty)
+  override def withoutIndicesRange: SimpleAttribute = copy(indicesRange = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
 
     bldr.putString(AttributeKeys.TYPE, attrType.name)
     name.foreach(bldr.putString(AttributeKeys.NAME, _))
-    bldr.putStringArray(AttributeKeys.NAMES, names.toArray)
-    bldr.putLongArray(AttributeKeys.INDICES, indices.toArray.map(_.toLong))
+    bldr.putLongArray(AttributeKeys.INDICES, indicesRange.toArray.map(_.toLong))
     values.foreach(v => bldr.putStringArray(AttributeKeys.VALUES, v.toArray))
 
     bldr.build()
@@ -111,8 +107,7 @@ case class BinaryAttr(
 @DeveloperApi
 case class NumericAttr(
     name: Option[String] = None,
-    names: Seq[String] = Seq.empty,
-    indices: Seq[Int] = Seq.empty,
+    indicesRange: Seq[Int] = Seq.empty,
     min: Option[Double] = None,
     max: Option[Double] = None,
     std: Option[Double] = None,
@@ -130,20 +125,18 @@ case class NumericAttr(
   override def withName(name: String): SimpleAttribute = copy(name = Some(name))
   override def withoutName: SimpleAttribute = copy(name = None)
 
-  override def withIndices(indices: Seq[Int]): SimpleAttribute = copy(indices = indices)
-  override def withoutIndices: SimpleAttribute = copy(indices = Seq.empty)
+  override def withIndicesRange(begin: Int, end: Int): SimpleAttribute =
+    copy(indicesRange = Seq(begin, end))
+  override def withIndicesRange(index: Int): SimpleAttribute = copy(indicesRange = Seq(index))
 
-  override def withNames(names: Seq[String]): SimpleAttribute = copy(names = names)
-  override def withoutNames: SimpleAttribute = copy(names = Seq.empty)
-
+  override def withoutIndicesRange: SimpleAttribute = copy(indicesRange = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
 
     bldr.putString(AttributeKeys.TYPE, attrType.name)
     name.foreach(bldr.putString(AttributeKeys.NAME, _))
-    bldr.putStringArray(AttributeKeys.NAMES, names.toArray)
-    bldr.putLongArray(AttributeKeys.INDICES, indices.toArray.map(_.toLong))
+    bldr.putLongArray(AttributeKeys.INDICES, indicesRange.toArray.map(_.toLong))
 
     min.foreach(bldr.putDouble(AttributeKeys.MIN, _))
     max.foreach(bldr.putDouble(AttributeKeys.MAX, _))
@@ -154,18 +147,24 @@ case class NumericAttr(
   }
 }
 
-case class ComplexAttr(
+/**
+ * :: DeveloperApi ::
+ * A numeric attribute with optional summary statistics.
+ * @param attributes the attributes included in this vector column.
+ */
+@DeveloperApi
+case class VectorAttr(
     name: Option[String] = None,
     attributes: Seq[SimpleAttribute] = Seq.empty) extends ComplexAttribute {
 
-  override val attrType: AttributeType = AttributeType.Complex
+  override val attrType: AttributeType = AttributeType.Vector
 
-  override def withName(name: String): ComplexAttribute = copy(name = Some(name))
-  override def withoutName: ComplexAttribute = copy(name = None)
+  override def withName(name: String): VectorAttr = copy(name = Some(name))
+  override def withoutName: VectorAttr = copy(name = None)
 
-  override def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute =
+  override def withAttributes(attributes: Seq[SimpleAttribute]): VectorAttr =
     copy(attributes = attributes)
-  override def withoutAttributes: ComplexAttribute = copy(attributes = Seq.empty)
+  override def withoutAttributes: VectorAttr = copy(attributes = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -173,7 +172,7 @@ case class ComplexAttr(
     bldr.putString(AttributeKeys.TYPE, attrType.name)
     name.foreach(bldr.putString(AttributeKeys.NAME, _))
 
-    // Build the metadata of attributes included in this complex attribute.
+    // Build the metadata of attributes included in this vector attribute.
     val attrMetadata = attributes.map { attr =>
       attr.toMetadata()
     }
@@ -188,14 +187,14 @@ object NumericAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): NumericAttr = {
     import org.apache.spark.ml.attribute.AttributeKeys._
 
-    val (name, names, indices) = loadCommonMetadata(metadata)
+    val (name, indicesRange) = loadCommonMetadata(metadata)
 
     val min = if (metadata.contains(MIN)) Some(metadata.getDouble(MIN)) else None
     val max = if (metadata.contains(MAX)) Some(metadata.getDouble(MAX)) else None
     val std = if (metadata.contains(STD)) Some(metadata.getDouble(STD)) else None
     val sparsity = if (metadata.contains(SPARSITY)) Some(metadata.getDouble(SPARSITY)) else None
 
-    NumericAttr(name, names, indices, min, max, std, sparsity)
+    NumericAttr(name, indicesRange, min, max, std, sparsity)
   }
 }
 
@@ -204,7 +203,7 @@ object BinaryAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): BinaryAttr = {
     import org.apache.spark.ml.attribute.AttributeKeys._
 
-    val (name, names, indices) = loadCommonMetadata(metadata)
+    val (name, indicesRange) = loadCommonMetadata(metadata)
 
     val values = if (metadata.contains(VALUES)) {
       Some(metadata.getStringArray(VALUES))
@@ -212,7 +211,7 @@ object BinaryAttr extends MLAttributeFactory {
       None
     }
 
-    BinaryAttr(name, names, indices, values)
+    BinaryAttr(name, indicesRange, values)
   }
 }
 
@@ -221,7 +220,7 @@ object NominalAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): NominalAttr = {
     import org.apache.spark.ml.attribute.AttributeKeys._
 
-    val (name, names, indices) = loadCommonMetadata(metadata)
+    val (name, indicesRange) = loadCommonMetadata(metadata)
 
     val isOrdinal = if (metadata.contains(ORDINAL)) Some(metadata.getBoolean(ORDINAL)) else None
     val values = if (metadata.contains(VALUES)) {
@@ -230,16 +229,16 @@ object NominalAttr extends MLAttributeFactory {
       None
     }
 
-    NominalAttr(name, names, indices, isOrdinal, values)
+    NominalAttr(name, indicesRange, isOrdinal, values)
   }
 }
 
 @DeveloperApi
-object ComplexAttr extends MLAttributeFactory {
-  override def fromMetadata(metadata: Metadata): ComplexAttr = {
-    val (name, _, _) = loadCommonMetadata(metadata)
+object VectorAttr extends MLAttributeFactory {
+  override def fromMetadata(metadata: Metadata): VectorAttr = {
+    val (name, _) = loadCommonMetadata(metadata)
     val attributes = if (metadata.contains(AttributeKeys.ATTRIBUTES)) {
-      // `ComplexAttr` can only contains `SimpleAttribute`.
+      // `VectorAttr` can only contains `SimpleAttribute`.
       metadata.getMetadataArray(AttributeKeys.ATTRIBUTES).map { metadata =>
         MLAttributes.fromMetadata(metadata).asInstanceOf[SimpleAttribute]
       }.toSeq
@@ -247,6 +246,6 @@ object ComplexAttr extends MLAttributeFactory {
       Seq.empty
     }
 
-    ComplexAttr(name, attributes)
+    VectorAttr(name, attributes)
   }
 }

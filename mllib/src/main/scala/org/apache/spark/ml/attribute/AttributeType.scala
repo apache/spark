@@ -51,10 +51,10 @@ object AttributeType {
     Binary
   }
 
-  /** Complex type. */
-  val Complex: AttributeType = {
-    case object Complex extends AttributeType("complex")
-    Complex
+  /** Vector type. */
+  val Vector: AttributeType = {
+    case object Vector extends AttributeType("vector")
+    Vector
   }
 
   /** Unresolved type. */

@@ -32,7 +32,6 @@ sealed trait MLAttribute {
 
   /** Optional name of the attribute. */
   val name: Option[String]
-
 }
 
 /**
@@ -43,26 +42,22 @@ sealed trait MLAttribute {
 sealed trait InnerAttribute {
 
   /**
-   * Names of the attribute:
+   * The range of indices of the attribute:
    * An `InnerAttribute` can represent multiple ML columns if those columns share the same
-   * properties. In this case, this `names` can be the all attribute names for the columns.
+   * properties. This range can be at most 2 indices which represent the beginning and ending
+   * indices. It can be empty so that this attribute isn't included in a vector column.
    */
-  val names: Seq[String]
+  val indicesRange: Seq[Int]
 
-  /**
-   * Indices of the attribute:
-   * An `InnerAttribute` can represent multiple ML columns if those columns share the same
-   * properties. In this case, this `indices` can be the all attribute indices for the columns.
-   */
-  val indices: Seq[Int]
+  require(indicesRange.length <= 2, "Range of indices should be less than or equal to 2")
 }
 
 /**
  * :: DeveloperApi ::
- * Describes ML attributes that describe ML vector columns.
+ * Describes ML attributes that describe ML columns which can contain other columns.
  */
 @DeveloperApi
-sealed trait VectorAttribute {
+sealed trait ContainerAttribute {
 
   /** The attributes included in this attribute. */
   val attributes: Seq[InnerAttribute]
@@ -83,12 +78,11 @@ abstract class BaseAttribute extends MLAttribute with Serializable {
  * The basic operations of ML simple attributes which can't include other attributes.
  */
 @DeveloperApi
-abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with MetadataInterface {
-  def withIndices(indices: Seq[Int]): SimpleAttribute
-  def withoutIndices: SimpleAttribute
-
-  def withNames(names: Seq[String]): SimpleAttribute
-  def withoutNames: SimpleAttribute
+abstract class SimpleAttribute
+    extends BaseAttribute with InnerAttribute with MetadataInterface {
+  def withIndicesRange(begin: Int, end: Int): SimpleAttribute
+  def withIndicesRange(index: Int): SimpleAttribute
+  def withoutIndicesRange: SimpleAttribute
 }
 
 /**
@@ -96,7 +90,8 @@ abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with Me
  * The basic operations of ML complex attributes which can include other attributes.
  */
 @DeveloperApi
-abstract class ComplexAttribute extends BaseAttribute with VectorAttribute with MetadataInterface {
+abstract class ComplexAttribute
+    extends BaseAttribute with ContainerAttribute with MetadataInterface {
   def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
   def withoutAttributes: ComplexAttribute
 }

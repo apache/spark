@@ -85,8 +85,8 @@ object MLAttributes {
       NominalAttr
     } else if (attrType == AttributeType.Binary.name) {
       BinaryAttr
-    } else if (attrType == AttributeType.Complex.name) {
-      ComplexAttr
+    } else if (attrType == AttributeType.Vector.name) {
+      VectorAttr
     } else {
       throw new IllegalArgumentException(s"Cannot recognize type $attrType.")
     }
@@ -116,25 +116,19 @@ object MLAttributes {
 trait MLAttributeFactory {
   def fromMetadata(metadata: Metadata): BaseAttribute
 
-  def loadCommonMetadata(metadata: Metadata): (Option[String], Seq[String], Seq[Int]) = {
+  def loadCommonMetadata(metadata: Metadata): (Option[String], Seq[Int]) = {
     val name = if (metadata.contains(AttributeKeys.NAME)) {
       Some(metadata.getString(AttributeKeys.NAME))
     } else {
       None
     }
 
-    val indices = if (metadata.contains(AttributeKeys.INDICES)) {
+    val indicesRange = if (metadata.contains(AttributeKeys.INDICES)) {
       metadata.getLongArray(AttributeKeys.INDICES).map(_.toInt).toSeq
     } else {
       Seq.empty
     }
 
-    val names = if (metadata.contains(AttributeKeys.NAMES)) {
-      metadata.getStringArray(AttributeKeys.NAMES).toSeq
-    } else {
-      Seq.empty
-    }
-
-    (name, names, indices)
+    (name, indicesRange)
   }
 }
