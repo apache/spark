@@ -3474,6 +3474,25 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         expected = expected.assign(norm=expected.norm.astype('float64'))
         self.assertFramesEqual(expected, result)
 
+    def test_empty_groupby(self):
+        from pyspark.sql.functions import pandas_udf, col
+        df = self.data
+
+        @pandas_udf(StructType(
+            [StructField('id', LongType()),
+             StructField('v', IntegerType()),
+             StructField('norm', DoubleType())]))
+        def normalize(pdf):
+            v = pdf.v
+            return pdf.assign(norm=(v - v.mean()) / v.std())
+
+        result = df.groupby().apply(normalize).sort('id', 'v').toPandas()
+        pdf = df.toPandas()
+        expected = normalize.func(pdf)
+        expected = expected.sort_values(['id', 'v']).reset_index(drop=True)
+        expected = expected.assign(norm=expected.norm.astype('float64'))
+        self.assertFramesEqual(expected, result)
+
     def test_wrong_return_type(self):
         from pyspark.sql.functions import pandas_udf
         df = self.data
