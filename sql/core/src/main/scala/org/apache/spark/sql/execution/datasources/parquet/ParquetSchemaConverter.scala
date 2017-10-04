@@ -600,8 +600,6 @@ private[sql] object ParquetSchemaConverter {
         Math.pow(2, 8 * numBytes - 1) - 1)))  // max value stored in numBytes
       .asInstanceOf[Int]
   }
-}
 
-object SqlParquetSchemaConverter {
   def SqlParquetSchemaConverter: ParquetSchemaConverter = new ParquetSchemaConverter()
 }

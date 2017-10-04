@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.hadoop.ParquetFileReader
@@ -36,7 +37,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.SqlParquetSchemaConverter
+import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.StructType
 
@@ -1238,7 +1239,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       val metaData = ParquetFileReader.readFooter(hadoopConf, new Path(sourceFileLocation.toString))
       val parquetSchema = metaData.getFileMetaData.getSchema
 
-      val dataCols: StructType = SqlParquetSchemaConverter.
+      val dataCols: StructType = ParquetSchemaConverter.
         SqlParquetSchemaConverter.convert(parquetSchema)
       val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
       val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).
