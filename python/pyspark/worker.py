@@ -79,14 +79,15 @@ def wrap_pandas_udf(f, return_type):
 
         def fn(*a):
             import pandas as pd
-            out = f(*a)
-            assert isinstance(out, pd.DataFrame), \
-                'Return value from the user function is not a pandas.DataFrame.'
-            assert len(out.columns) == len(arrow_return_types), \
-                'Number of columns of the returned pd.DataFrame doesn\'t match output schema. ' \
-                'Expected: {} Actual: {}'.format(len(arrow_return_types), len(out.columns))
+            result = f(*a)
+            assert isinstance(result, pd.DataFrame), \
+                'Return value of the user-defined function is not a pandas.DataFrame.'
+            assert len(result.columns) == len(arrow_return_types), \
+                'Number of columns of the returned pandas.DataFrame doesn\'t match ' \
+                'specified schema. ' \
+                'Expected: {} Actual: {}'.format(len(arrow_return_types), len(result.columns))
 
-            return [(out[out.columns[i]], arrow_return_types[i])
+            return [(result[result.columns[i]], arrow_return_types[i])
                     for i in range(len(arrow_return_types))]
         return fn
 

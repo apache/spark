@@ -446,23 +446,12 @@ class RelationalGroupedDataset protected[sql](
       case other => Alias(other, other.toString)()
     }
     val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-
     val child = df.logicalPlan
     val project = Project(groupingNamedExpressions ++ child.output, child)
-
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
 
-    val plan = FlatMapGroupsInPandas(
-      groupingAttributes,
-      expr,
-      output,
-      project
-    )
-
-    Dataset.ofRows(
-      df.sparkSession,
-      plan
-    )
+    Dataset.ofRows(df.sparkSession, plan)
   }
 }
 

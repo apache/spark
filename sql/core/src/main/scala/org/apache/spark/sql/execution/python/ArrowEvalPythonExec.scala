@@ -26,6 +26,12 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.types.StructType
 
+/**
+ * Grouped a iterator into batches.
+ * This is similar to iter.grouped but returns Iterator[T] instead of Seq[T].
+ * This is necessary because sometimes we cannot hold reference of input rows
+ * because the some input rows are mutable and can be reused.
+ */
 private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
   extends Iterator[Iterator[T]] {
 
@@ -38,8 +44,12 @@ private class BatchIterator[T](iter: Iterator[T], batchSize: Int)
       override def hasNext: Boolean = iter.hasNext && count < batchSize
 
       override def next(): T = {
-        count += 1
-        iter.next()
+        if (!hasNext) {
+          Iterator.empty.next()
+        } else {
+          count += 1
+          iter.next()
+        }
       }
     }
   }
@@ -64,6 +74,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       .map { case (attr, i) => attr.withName(s"_$i") })
 
     val batchSize = conf.arrowMaxRecordsPerBatch
+    // DO NOT use iter.grouped(). See BatchIterator.
     val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
     val columnarBatchIter = new ArrowPythonRunner(

@@ -28,6 +28,11 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistrib
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.types.StructType
 
+/**
+ * FlatMap groups using a pandas udf.
+ *
+ * This is used by pyspark.sql.DataFrame.groupby().apply()
+ */
 case class FlatMapGroupsInPandasExec(
     groupingAttributes: Seq[Attribute],
     func: Expression,
@@ -69,7 +74,7 @@ case class FlatMapGroupsInPandasExec(
         val dropGrouping =
           UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
         groupedIter.map {
-          case (_, iter) => iter.map(dropGrouping)
+          case (_, groupedRowIter) => groupedRowIter.map(dropGrouping)
         }
       }
 
@@ -80,27 +85,7 @@ case class FlatMapGroupsInPandasExec(
         PythonEvalType.SQL_PANDAS_UDF, argOffsets, schema)
         .compute(grouped, context.partitionId(), context)
 
-      val rowIter = new Iterator[InternalRow] {
-        private var currentIter = if (columnarBatchIter.hasNext) {
-          val batch = columnarBatchIter.next()
-          batch.rowIterator.asScala
-        } else {
-          Iterator.empty
-        }
-
-        override def hasNext: Boolean = currentIter.hasNext || {
-          if (columnarBatchIter.hasNext) {
-            currentIter = columnarBatchIter.next().rowIterator.asScala
-            hasNext
-          } else {
-            false
-          }
-        }
-
-        override def next(): InternalRow = currentIter.next()
-      }
-
-      rowIter.map(UnsafeProjection.create(output, output))
+      columnarBatchIter.flatMap(_.rowIterator.asScala).map(UnsafeProjection.create(output, output))
     }
   }
 }

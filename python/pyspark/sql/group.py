@@ -55,8 +55,8 @@ class GroupedData(object):
     """
 
     def __init__(self, jgd, df):
-        self._df = df
         self._jgd = jgd
+        self._df = df
         self.sql_ctx = df.sql_ctx
 
     @ignore_unicode_prefix
@@ -193,17 +193,18 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col)
         else:
             jgd = self._jgd.pivot(pivot_col, values)
-        return GroupedData(jgd, self)
+        return GroupedData(jgd, self._df)
 
     def apply(self, udf):
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
         as a :class:`DataFrame`.
 
-        The user-function should take a `pandas.DataFrame` and return another `pandas.DataFrame`.
-        Each group is passed as a `pandas.DataFrame` to the user-function and the returned
-        `pandas.DataFrame` are combined as a :class:`DataFrame`. The returned `pandas.DataFrame`
-        can be arbitrary length and its schema should match the returnType of the pandas udf.
+        The user-defined function should take a `pandas.DataFrame` and return another
+        `pandas.DataFrame`. Each group is passed as a `pandas.DataFrame` to the user-function and
+        the returned`pandas.DataFrame` are combined as a :class:`DataFrame`. The returned
+        `pandas.DataFrame` can be arbitrary length and its schema should match the returnType of
+        the pandas udf.
 
         :param udf: A wrapped function returned by `pandas_udf`
 
@@ -214,7 +215,7 @@ class GroupedData(object):
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
-        >>> df.groupby('id').apply(normalize).show() # doctest: + SKIP
+        >>> df.groupby('id').apply(normalize).show() #  doctest: +SKIP
         +---+-------------------+
         | id|                  v|
         +---+-------------------+

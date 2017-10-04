@@ -111,7 +111,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    // FlatMapGroupsInPandas and be evaluated in python worker
+    // FlatMapGroupsInPandas can be evaluated directly in python worker
     // Therefore we don't need to extract the UDFs
     case plan: FlatMapGroupsInPandasExec => plan
     case plan: SparkPlan => extract(plan)
