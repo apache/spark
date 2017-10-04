@@ -505,82 +505,49 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     val joined = left.join(
         right,
         left("key") === right("key") && left("window") === right("window") &&
-            'leftValue > 20 && 'rightValue < 200,
+            'leftValue > 10 && ('rightValue < 300 || 'rightValue > 1000),
         "left_outer")
       .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
 
     testStream(joined)(
-      // leftValue <= 20 should generate outer join rows even though it matches right keys
+      // leftValue <= 10 should generate outer join rows even though it matches right keys
       AddData(leftInput, 1, 2, 3),
       AddData(rightInput, 1, 2, 3),
       CheckLastBatch(),
-      AddData(leftInput, 30),
-      AddData(rightInput, 31),
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
       CheckLastBatch(),
       assertNumStateRows(total = 8, updated = 2),
-      AddData(rightInput, 32),
-      CheckLastBatch(Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
-      assertNumStateRows(total = 3, updated = 1)
-    )
-  }
-
-  test("left outer join with non-key condition which is met") {
-    val (leftInput, simpleLeftDf) = setupStream("left", 2)
-    val (rightInput, simpleRightDf) = setupStream("right", 3)
-
-    val left = simpleLeftDf.select('key, window('leftTime, "10 second"), 'leftValue)
-    val right = simpleRightDf.select('key, window('rightTime, "10 second"), 'rightValue)
-
-    val joined = left.join(
-      right,
-      left("key") === right("key") && left("window") === right("window") &&
-        'leftValue > 20 && 'rightValue < 300,
-      "left_outer")
-      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
-
-    testStream(joined)(
-      // both values between 20 and 300 should not generate outer join rows
-      AddData(leftInput, 40, 50),
-      AddData(rightInput, 40, 50),
-      CheckLastBatch((40, 50, 80, 120), (50, 60, 100, 150)),
+      AddData(rightInput, 20),
+      CheckLastBatch(
+        Row(20, 30, 40, 60), Row(1, 10, 2, null), Row(2, 10, 4, null), Row(3, 10, 6, null)),
+      assertNumStateRows(total = 3, updated = 1),
+      // leftValue and rightValue both satisfying condition should not generate outer join rows
+      AddData(leftInput, 40, 41),
+      AddData(rightInput, 40, 41),
+      CheckLastBatch((40, 50, 80, 120), (41, 50, 82, 123)),
       AddData(leftInput, 70),
       AddData(rightInput, 71),
       CheckLastBatch(),
       assertNumStateRows(total = 6, updated = 2),
-      AddData(leftInput, 72),
-      AddData(rightInput, 73),
+      AddData(rightInput, 70),
+      CheckLastBatch((70, 80, 140, 210)),
+      assertNumStateRows(total = 3, updated = 1),
+      // rightValue between 300 and 1000 should generate outer join rows even though it matches left
+      AddData(leftInput, 101, 102, 103),
+      AddData(rightInput, 101, 102, 103),
       CheckLastBatch(),
-      assertNumStateRows(total = 4, updated = 2)
-    )
-  }
-
-  test("outer join with non-key condition violated on right") {
-    val (leftInput, simpleLeftDf) = setupStream("left", 2)
-    val (rightInput, simpleRightDf) = setupStream("right", 3)
-
-    val left = simpleLeftDf.select('key, window('leftTime, "10 second"), 'leftValue)
-    val right = simpleRightDf.select('key, window('rightTime, "10 second"), 'rightValue)
-
-    val joined = left.join(
-      right,
-      left("key") === right("key") && left("window") === right("window") && 'rightValue > 20,
-      "left_outer")
-      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
-
-    testStream(joined)(
-      // rightValue < 20 should generate outer join rows even though it matches left keys
-      AddData(leftInput, 4, 5),
-      AddData(rightInput, 4, 5),
+      AddData(leftInput, 1000),
+      AddData(rightInput, 1001),
       CheckLastBatch(),
-      AddData(leftInput, 100),
-      AddData(rightInput, 101),
-      CheckLastBatch(),
-      // rightInput 4, 5 filtered out because rightValue < 20
-      assertNumStateRows(total = 4, updated = 2),
-      AddData(leftInput, 102),
-      AddData(rightInput, 103),
-      CheckLastBatch(Row(4, 10, 8, null), Row(5, 10, 10, null)),
-      assertNumStateRows(total = 4, updated = 2)
+      assertNumStateRows(total = 8, updated = 2),
+      AddData(rightInput, 1000),
+      CheckLastBatch(
+        Row(1000, 1010, 2000, 3000),
+        Row(101, 110, 202, null),
+        Row(102, 110, 204, null),
+        Row(103, 110, 206, null)),
+      assertNumStateRows(total = 3, updated = 1)
     )
   }
 }
