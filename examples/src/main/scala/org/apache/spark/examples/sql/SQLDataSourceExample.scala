@@ -48,13 +48,15 @@ object SQLDataSourceExample {
     // $example on:manual_load_options$
     val peopleDF = spark.read.format("json").load("examples/src/main/resources/people.json")
     peopleDF.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
+    // $example off:manual_load_options$
     // $example on:manual_load_options_csv$
     val peopleDFCsv = spark.read.format("csv")
-            .option("sep", ";")
-            .option("inferSchema", "true")
-            .option("header", "true")
-            .load("examples/src/main/resources/people.csv")
+         .option("sep", ";")
+         .option("inferSchema", "true")
+         .option("header", "true")
+         .load("examples/src/main/resources/people.csv")
     // $example off:manual_load_options_csv$
+
     // $example on:direct_sql$
     val sqlDF = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
     // $example off:direct_sql$
