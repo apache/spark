@@ -851,6 +851,18 @@ private[spark] object RandomForest extends Logging {
     (bestSplit, bestSplitStats)
   }
 
+  private[impl] def findUnorderedSplits(
+      metadata: DecisionTreeMetadata,
+      featureIndex: Int): Array[Split] = {
+    // Unordered features
+    // 2^(maxFeatureValue - 1) - 1 combinations
+    val featureArity = metadata.featureArity(featureIndex)
+    Array.tabulate[Split](metadata.numSplits(featureIndex)) { splitIndex =>
+      val categories = extractMultiClassCategories(splitIndex + 1, featureArity)
+      new CategoricalSplit(featureIndex, categories.toArray, featureArity)
+    }
+  }
+
   /**
    * Returns splits for decision tree calculation.
    * Continuous and categorical features are handled differently.
