@@ -21,7 +21,8 @@ import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
- * The base abstraction for ML Attributes that describe ML columns.
+ * The base abstraction for ML attributes that describe ML columns.
+ * A ML attribute has an attribute type and an optinal name.
  */
 @DeveloperApi
 sealed trait MLAttribute {
@@ -36,35 +37,40 @@ sealed trait MLAttribute {
 
 /**
  * :: DeveloperApi ::
- * Describes ML inner Attributes which are included in a ML vector column.
+ * Describes ML inner attributes which are included in a ML vector column.
  */
 @DeveloperApi
 sealed trait InnerAttribute {
 
-  /** Names of the attribute. */
+  /**
+   * Names of the attribute:
+   * An `InnerAttribute` can represent multiple ML columns if those columns share the same
+   * properties. In this case, this `names` can be the all attribute names for the columns.
+   */
   val names: Seq[String]
 
-  /** Indices of the attribute. */
+  /**
+   * Indices of the attribute:
+   * An `InnerAttribute` can represent multiple ML columns if those columns share the same
+   * properties. In this case, this `indices` can be the all attribute indices for the columns.
+   */
   val indices: Seq[Int]
 }
 
 /**
  * :: DeveloperApi ::
- * Describes ML Attributes that describe ML vector columns.
+ * Describes ML attributes that describe ML vector columns.
  */
 @DeveloperApi
 sealed trait VectorAttribute {
 
-  /** Indices of the attribute. */
+  /** The attributes included in this attribute. */
   val attributes: Seq[InnerAttribute]
-
-  /** The number of attributes. */
-  // val numOfAttributes: Int
 }
 
 /**
  * :: DeveloperApi ::
- * The basic operations of ML Attributes.
+ * The basic operations of ML attributes.
  */
 @DeveloperApi
 abstract class BaseAttribute extends MLAttribute with Serializable {
@@ -74,7 +80,7 @@ abstract class BaseAttribute extends MLAttribute with Serializable {
 
 /**
  * :: DeveloperApi ::
- * The basic operations of ML Attributes.
+ * The basic operations of ML simple attributes which can't include other attributes.
  */
 @DeveloperApi
 abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with MetadataInterface {
@@ -87,18 +93,16 @@ abstract class SimpleAttribute extends BaseAttribute with InnerAttribute with Me
 
 /**
  * :: DeveloperApi ::
- * The basic operations of ML vector Attributes.
+ * The basic operations of ML complex attributes which can include other attributes.
  */
 @DeveloperApi
 abstract class ComplexAttribute extends BaseAttribute with VectorAttribute with MetadataInterface {
   def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
   def withoutAttributes: ComplexAttribute
-
-  // def withNumOfAttributes(num: Int): ComplexAttribute
 }
 
+@DeveloperApi
 case object UnresolvedMLAttribute extends BaseAttribute with Serializable {
-
   val attrType: AttributeType = AttributeType.Unresolved
   val name: Option[String] = None
 

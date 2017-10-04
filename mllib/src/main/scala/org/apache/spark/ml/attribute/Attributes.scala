@@ -167,8 +167,6 @@ case class ComplexAttr(
     copy(attributes = attributes)
   override def withoutAttributes: ComplexAttribute = copy(attributes = Seq.empty)
 
-  // override def withNumOfAttributes(num: Int): ComplexAttribute = copy(numOfAttributes = num)
-
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
 
@@ -180,7 +178,6 @@ case class ComplexAttr(
       attr.toMetadata()
     }
     bldr.putMetadataArray(AttributeKeys.ATTRIBUTES, attrMetadata.toArray)
-    // bldr.putLong(AttributeKeys.NUM_ATTRIBUTES, attributes.length)
 
     bldr.build()
   }
