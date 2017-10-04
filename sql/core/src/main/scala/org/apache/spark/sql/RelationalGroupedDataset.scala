@@ -47,7 +47,7 @@ import org.apache.spark.sql.types.{NumericType, StructField, StructType}
  */
 @InterfaceStability.Stable
 class RelationalGroupedDataset protected[sql](
-    val df: DataFrame,
+    df: DataFrame,
     groupingExprs: Seq[Expression],
     groupType: RelationalGroupedDataset.GroupType) {
 

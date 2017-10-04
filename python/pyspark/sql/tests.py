@@ -3405,7 +3405,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
 
     @property
     def data(self):
-        from pyspark.sql.functions import pandas_udf, array, explode, col, lit
+        from pyspark.sql.functions import array, explode, col, lit
         return self.spark.range(10).toDF('id') \
             .withColumn("vs", array([lit(i) for i in range(20, 30)])) \
             .withColumn("v", explode(col('vs'))).drop('vs')
@@ -3414,14 +3414,8 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         from pyspark.sql.functions import pandas_udf
         df = self.data
 
-        def foo(df):
-            ret = df
-            ret = ret.assign(v1=df.v * df.id * 1.0)
-            ret = ret.assign(v2=df.v + df.id)
-            return ret
-
         foo_udf = pandas_udf(
-            foo,
+            lambda df: df.assign(v1=df.v * df.id * 1.0, v2=df.v + df.id),
             StructType(
                 [StructField('id', LongType()),
                  StructField('v', IntegerType()),
@@ -3429,7 +3423,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
                  StructField('v2', LongType())]))
 
         result = df.groupby('id').apply(foo_udf).sort('id').toPandas()
-        expected = df.toPandas().groupby('id').apply(foo).reset_index(drop=True)
+        expected = df.toPandas().groupby('id').apply(foo_udf.func).reset_index(drop=True)
         self.assertFramesEqual(expected, result)
 
     def test_decorator(self):
@@ -3442,10 +3436,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
              StructField('v1', DoubleType()),
              StructField('v2', LongType())]))
         def foo(df):
-            ret = df
-            ret = ret.assign(v1=df.v * df.id * 1.0)
-            ret = ret.assign(v2=df.v + df.id)
-            return ret
+            return df.assign(v1=df.v * df.id * 1.0, v2=df.v + df.id)
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
@@ -3455,14 +3446,9 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         from pyspark.sql.functions import pandas_udf
         df = self.data
 
-        def foo(df):
-            ret = df
-            ret = ret.assign(v=df.v + 1)
-            return ret
-
-        @pandas_udf(StructType([StructField('id', LongType()), StructField('v', DoubleType())]))
-        def foo(df):
-            return df
+        foo = pandas_udf(
+            lambda df: df,
+            StructType([StructField('id', LongType()), StructField('v', DoubleType())]))
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
@@ -3473,14 +3459,9 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         from pyspark.sql.functions import pandas_udf
         df = self.data
 
-        def foo(df):
-            ret = df
-            ret = ret.assign(v=df.v + 1)
-            return ret
-
-        @pandas_udf(StructType([StructField('id', LongType()), StructField('v', StringType())]))
-        def foo(df):
-            return df
+        foo = pandas_udf(
+            lambda df: df,
+            StructType([StructField('id', LongType()), StructField('v', StringType())]))
 
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Invalid.*type'):

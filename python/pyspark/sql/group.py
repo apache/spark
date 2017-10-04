@@ -54,9 +54,10 @@ class GroupedData(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jgd, sql_ctx):
+    def __init__(self, jgd, df):
+        self._df = df
         self._jgd = jgd
-        self.sql_ctx = sql_ctx
+        self.sql_ctx = df.sql_ctx
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -192,7 +193,7 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col)
         else:
             jgd = self._jgd.pivot(pivot_col, values)
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     def apply(self, udf):
         """
@@ -235,7 +236,7 @@ class GroupedData(object):
         if not isinstance(udf.returnType, StructType):
             raise ValueError("The returnType of the pandas_udf must be a StructType")
 
-        df = DataFrame(self._jgd.df(), self.sql_ctx)
+        df = self._df
         func = udf.func
         returnType = udf.returnType
 

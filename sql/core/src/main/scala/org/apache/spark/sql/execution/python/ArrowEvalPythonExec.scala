@@ -64,12 +64,7 @@ case class ArrowEvalPythonExec(udfs: Seq[PythonUDF], output: Seq[Attribute], chi
       .map { case (attr, i) => attr.withName(s"_$i") })
 
     val batchSize = conf.arrowMaxRecordsPerBatch
-
-    val batchIter = if (batchSize > 0) {
-      new BatchIterator(iter, batchSize)
-    } else {
-      Iterator(iter)
-    }
+    val batchIter = if (batchSize > 0) new BatchIterator(iter, batchSize) else Iterator(iter)
 
     val columnarBatchIter = new ArrowPythonRunner(
         funcs, bufferSize, reuseWorker,
