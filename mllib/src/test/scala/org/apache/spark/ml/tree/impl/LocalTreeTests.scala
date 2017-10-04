@@ -28,6 +28,74 @@ import org.apache.spark.rdd.RDD
 
 /** Object providing test-only methods for local decision tree training. */
 private[impl] object LocalTreeTests extends Logging {
+
+  /**
+   * Given the root node of a decision tree, returns a corresponding DecisionTreeModel
+   * @param algo Enum describing the algorithm used to fit the tree
+   * @param numClasses Number of label classes (for classification trees)
+   * @param parentUID UID of parent estimator
+   */
+  private[impl] def finalizeTree(
+      rootNode: Node,
+      algo: OldAlgo.Algo,
+      numClasses: Int,
+      numFeatures: Int,
+      parentUID: Option[String]): DecisionTreeModel = {
+    parentUID match {
+      case Some(uid) =>
+        if (algo == OldAlgo.Classification) {
+          new DecisionTreeClassificationModel(uid, rootNode, numFeatures = numFeatures,
+            numClasses = numClasses)
+        } else {
+          new DecisionTreeRegressionModel(uid, rootNode, numFeatures = numFeatures)
+        }
+      case None =>
+        if (algo == OldAlgo.Classification) {
+          new DecisionTreeClassificationModel(rootNode, numFeatures = numFeatures,
+            numClasses = numClasses)
+        } else {
+          new DecisionTreeRegressionModel(rootNode, numFeatures = numFeatures)
+        }
+    }
+  }
+
+  /**
+   * Method to locally train a decision tree model over an RDD. Assumes the RDD is small enough
+   * to be collected at a single worker and used to fit a decision tree locally.
+   * Only used for testing.
+   */
+  private[impl] def train(
+      input: RDD[LabeledPoint],
+      strategy: OldStrategy,
+      seed: Long,
+      parentUID: Option[String] = None): DecisionTreeModel = {
+
+    // Validate input data
+    require(input.count() > 0, "Local decision tree training requires > 0 training examples.")
+    val numFeatures = input.first().features.size
+    require(numFeatures > 0, "Local decision tree training requires > 0 features.")
+
+    // Construct metadata, find splits
+    val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
+    val splits = RandomForest.findSplits(input, metadata, seed)
+
+    // Bin feature values (convert to TreePoint representation).
+    val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
+    // Convert binned training data to an array of BaggedPoints for a single subsample
+    // (a single tree)
+    val baggedInput: Array[BaggedPoint[TreePoint]] = BaggedPoint
+      .convertToBaggedRDD(input = treeInput, subsamplingRate = strategy.subsamplingRate,
+        numSubsamples = 1, withReplacement = false, seed = seed)
+      .collect()
+
+    // Create tree root node
+    val initialRoot = LearningNode.emptyNode(nodeIndex = 1)
+    // TODO: Create rng for feature subsampling (using seed), pass to fitNode
+    // Fit tree
+    val rootNode = LocalDecisionTree.fitNode(baggedInput, initialRoot, metadata, splits)
+    finalizeTree(rootNode, strategy.algo, strategy.numClasses, numFeatures, parentUID)
+  }
+
   /**
    * Returns an array containing a single element; an array of continuous splits for
    * the feature with index featureIndex and the passed-in set of values. Creates one
