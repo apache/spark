@@ -255,7 +255,7 @@ case class InnerOuterEstimation(join: Join) extends Logging {
         leftKeyStats.histogram)
       val newRightStats = newLeftStats.copy(histogram = rightKeyStats.histogram)
 
-        intersectedStats.put(leftKey, newLeftStats)
+      intersectedStats.put(leftKey, newLeftStats)
       intersectedStats.put(rightKey, newRightStats)
     }
     AttributeMap(intersectedStats.toSeq)
