@@ -25,6 +25,10 @@ import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
 
 
+/**
+ * Class to serialize/write/read/deserialize state for
+ * [[org.apache.spark.sql.execution.streaming.FlatMapGroupsWithStateExec]].
+ */
 class FlatMapGroupsWithState_StateManager(
     stateEncoder: ExpressionEncoder[Any],
     shouldStoreTimestamp: Boolean) extends Serializable {
@@ -100,7 +104,6 @@ class FlatMapGroupsWithState_StateManager(
   /** Returns the state as Java object if defined */
   private def getStateObj(stateRow: UnsafeRow): Any = {
     if (stateRow == null) null
-    // else if (stateRow.isNullAt(nestedStateOrdinal)) null
     else getStateObjFromRow(stateRow)
   }
 
