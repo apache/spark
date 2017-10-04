@@ -92,9 +92,15 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
-            response.setHeader("X-XSS-Protection", xXssProtectionValue.get)
-            response.setHeader("X-Content-Type-Options", xContentTypeOptionsValue.get)
-            response.setHeader("Strict-Transport-Security", strictTransportSecurityValue.get)
+            if (xXssProtectionValue.isDefined) {
+              response.setHeader("X-XSS-Protection", xXssProtectionValue.get)
+            }
+            if (xContentTypeOptionsValue.isDefined) {
+              response.setHeader("X-Content-Type-Options", xContentTypeOptionsValue.get)
+            }
+            if (strictTransportSecurityValue.isDefined) {
+              response.setHeader("Strict-Transport-Security", strictTransportSecurityValue.get)
+            }
             response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN)
