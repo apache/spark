@@ -394,9 +394,9 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
       logWarning(s"Found too long generated codes and JIT optimization might not work: " +
         s"the bytecode size was $maxCodeSize, this value went over the limit " +
-        s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disable " +
-        s"for this plan. To avoid this, you can set the limit " +
-        s"${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key} higher:\n$treeString")
+        s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
+        s"for this plan. To avoid this, you can raise the limit " +
+        s"${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}:\n$treeString")
       return child.execute()
     }
 
