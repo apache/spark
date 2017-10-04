@@ -62,11 +62,17 @@ case class FlatMapGroupsInPandasExec(
     val schema = StructType(child.schema.drop(groupingAttributes.length))
 
     inputRDD.mapPartitionsInternal { iter =>
-      val dropGrouping =
-        UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
-      val grouped = GroupedIterator(iter, groupingAttributes, child.output).map {
-        case (_, iter) => iter.map(dropGrouping)
+      val grouped = if (groupingAttributes.isEmpty) {
+        Iterator(iter)
+      } else {
+        val groupedIter = GroupedIterator(iter, groupingAttributes, child.output)
+        val dropGrouping =
+          UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
+        groupedIter.map {
+          case (_, iter) => iter.map(dropGrouping)
+        }
       }
+
       val context = TaskContext.get()
 
       val columnarBatchIter = new ArrowPythonRunner(
