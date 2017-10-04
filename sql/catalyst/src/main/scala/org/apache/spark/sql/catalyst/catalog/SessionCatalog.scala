@@ -99,7 +99,7 @@ class SessionCatalog(
   protected var currentDb: String = formatDatabaseName(DEFAULT_DATABASE)
 
   /**
-   * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
+   * Checks if the given name conforms the Hive standard ("[a-zA-Z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
    *
    * This method is intended to have the same behavior of
