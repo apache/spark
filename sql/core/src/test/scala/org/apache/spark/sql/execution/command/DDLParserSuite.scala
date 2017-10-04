@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
 import java.net.URI
 import java.util.Locale
 
-import scala.reflect.{classTag, ClassTag}
-
+import scala.reflect.{ClassTag, classTag}
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -1610,6 +1610,38 @@ class DDLParserSuite extends PlanTest with SharedSQLContext {
       TableIdentifier("tab1", None),
       "MSCK REPAIR TABLE")
     comparePlans(parsed, expected)
+  }
+
+  test("create table like parquet") {
+
+    val f = getClass.getClassLoader.
+      getResource("test-data/dec-in-fixed-len.parquet").getPath
+    val v1 =
+      """
+        |create table if not exists db1.table1 like 'parquet'
+      """.stripMargin.concat("'" + f + "'").concat(
+      """
+        |stored as sequencefile
+        |location '/tmp/table1'
+      """.stripMargin
+      )
+
+    val (desc, allowExisting) = extractTableDesc(v1)
+
+    assert(allowExisting)
+    assert(desc.identifier.database == Some("db1"))
+    assert(desc.identifier.table == "table1")
+    assert(desc.tableType == CatalogTableType.EXTERNAL)
+    assert(desc.schema == new StructType()
+      .add("fixed_len_dec", "decimal(10,2)"))
+    assert(desc.bucketSpec.isEmpty)
+    assert(desc.viewText.isEmpty)
+    assert(desc.viewDefaultDatabase.isEmpty)
+    assert(desc.viewQueryColumnNames.isEmpty)
+    assert(desc.storage.locationUri == Some(new URI("/tmp/table1")))
+    assert(desc.storage.inputFormat == Some("org.apache.hadoop.mapred.SequenceFileInputFormat"))
+    assert(desc.storage.outputFormat == Some("org.apache.hadoop.mapred.SequenceFileOutputFormat"))
+    assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
   }
 
   test("create table like") {

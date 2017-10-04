@@ -23,6 +23,9 @@ import scala.collection.JavaConverters._
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetFileReader
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
@@ -33,6 +36,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.parquet.SqlParquetSchemaConverter
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.StructType
 
@@ -1194,6 +1198,101 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder(conf) {
       case None => CreateTable(tableDesc, mode, None)
     }
   }
+
+  /**
+    * Create a Hive serde table, returning a [[CreateTable]] logical plan.
+    *
+    * Expect Format:
+    * {{{
+    *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name].[table_name]
+    *   LIKE 'parquet' 'parquert-file-location'
+    *   [COMMENT table_comment]
+    *   [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
+    *   [ROW FORMAT row_format]
+    *   [STORED AS file_format]
+    *   [LOCATION path]
+    *   [TBLPROPERTIES (property_name=property_value, ...)]
+    * }}}
+    */
+  override def visitCreateTableLikeFile(ctx: CreateTableLikeFileContext): LogicalPlan =
+    withOrigin(ctx) {
+
+      val (name, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
+      // TODO: implement temporary tables
+      if (temp) {
+        throw new ParseException(
+          "CREATE TEMPORARY TABLE is not supported yet. " +
+            "Please use CREATE TEMPORARY VIEW as an alternative.", ctx)
+      }
+      if (ctx.skewSpec != null) {
+        operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)
+      }
+
+      val sourceFileFormat = Option(ctx.sourceFormat.getText).get.toString.replace("'", "")
+      if (!sourceFileFormat.toLowerCase.equals("parquet")) {
+        operationNotAllowed("CREATE TABLE ... LIKE File only supports parquet", ctx)
+      }
+      val sourceFileLocation = Option(ctx.sourceLocation.getText).get.toString.replace("'", "")
+
+      val hadoopConf = new Configuration()
+      val metaData = ParquetFileReader.readFooter(hadoopConf, new Path(sourceFileLocation.toString))
+      val parquetSchema = metaData.getFileMetaData.getSchema
+
+      val dataCols: StructType = SqlParquetSchemaConverter.
+        SqlParquetSchemaConverter.convert(parquetSchema)
+      val partitionCols = Option(ctx.partitionColumns).map(visitColTypeList).getOrElse(Nil)
+      val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).
+        getOrElse(Map.empty)
+      val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
+
+      // Note: Hive requires partition columns to be distinct from the schema, so we need
+      // to include the partition columns here explicitly
+      val schema = StructType(dataCols ++ partitionCols)
+
+      // Storage format
+      val defaultStorage = HiveSerDe.getDefaultStorage(conf)
+      validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
+      val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
+        .getOrElse(CatalogStorageFormat.empty)
+      val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+        .getOrElse(CatalogStorageFormat.empty)
+      val location = Option(ctx.locationSpec).map(visitLocationSpec)
+      // If we are creating an EXTERNAL table, then the LOCATION field is required
+      if (external && location.isEmpty) {
+        operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
+      }
+
+      val locUri = location.map(CatalogUtils.stringToURI(_))
+      val storage = CatalogStorageFormat(
+        locationUri = locUri,
+        inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
+        outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
+        serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+        compressed = false,
+        properties = rowStorage.properties ++ fileStorage.properties)
+      // If location is defined, we'll assume this is an external table.
+      // Otherwise, we may accidentally delete existing data.
+      val tableType = if (external || location.isDefined) {
+        CatalogTableType.EXTERNAL
+      } else {
+        CatalogTableType.MANAGED
+      }
+
+      // TODO support the sql text - have a proper location for this!
+      val tableDesc = CatalogTable(
+        identifier = name,
+        tableType = tableType,
+        storage = storage,
+        schema = schema,
+        bucketSpec = bucketSpec,
+        provider = Some(DDLUtils.HIVE_PROVIDER),
+        partitionColumnNames = partitionCols.map(_.name),
+        properties = properties,
+        comment = Option(ctx.comment).map(string))
+
+      val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+      CreateTable(tableDesc, mode, None)
+    }
 
   /**
    * Create a [[CreateTableLikeCommand]] command.

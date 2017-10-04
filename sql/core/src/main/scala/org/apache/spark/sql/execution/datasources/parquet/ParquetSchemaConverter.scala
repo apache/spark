@@ -601,3 +601,7 @@ private[sql] object ParquetSchemaConverter {
       .asInstanceOf[Int]
   }
 }
+
+object SqlParquetSchemaConverter {
+  def SqlParquetSchemaConverter: ParquetSchemaConverter = new ParquetSchemaConverter()
+}

@@ -92,6 +92,13 @@ statement
         (AS? query)?                                                   #createHiveTable
     | CREATE TABLE (IF NOT EXISTS)? target=tableIdentifier
         LIKE source=tableIdentifier locationSpec?                      #createTableLike
+    | createTableHeader
+        LIKE sourceFormat=STRING sourceLocation=STRING
+        (COMMENT comment=STRING)?
+        (PARTITIONED BY '(' partitionColumns=colTypeList ')')?
+        bucketSpec? skewSpec?
+        rowFormat?  createFileFormat? locationSpec?
+        (TBLPROPERTIES tablePropertyList)?                             #createTableLikeFile
     | ANALYZE TABLE tableIdentifier partitionSpec? COMPUTE STATISTICS
         (identifier | FOR COLUMNS identifierSeq)?                      #analyze
     | ALTER TABLE tableIdentifier
