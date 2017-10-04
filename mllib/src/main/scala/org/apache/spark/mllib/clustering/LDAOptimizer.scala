@@ -463,10 +463,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
     val optimizeDocConcentration = this.optimizeDocConcentration
-    // We calculate logphat in the same pass as other statistics, but we only need
-    // it if we are optimizing docConcentration
-    val logphatPartOptionBase = () => if (optimizeDocConcentration) Some(BDV.zeros[Double](k))
-                                      else None
+    // If and only if optimizeDocConcentration is set true,
+    // we calculate logphat in the same pass as other statistics.
+    // No calculation of loghat happens otherwise.
+    val logphatPartOptionBase = () => if (optimizeDocConcentration) {
+                                          Some(BDV.zeros[Double](k))
+                                        } else {
+                                          None
+                                        }
 
     val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitions { docs =>
       val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
@@ -485,13 +489,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     }
 
     val elementWiseSum = (u : (BDM[Double], Option[BDV[Double]], Long),
-                                 v : (BDM[Double], Option[BDV[Double]], Long)) => {
+                          v : (BDM[Double], Option[BDV[Double]], Long)) => {
       u._1 += v._1
       u._2.foreach(_ += v._2.get)
       (u._1, u._2, u._3 + v._3)
     }
 
-    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN : Long) = stats
+    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN: Long) = stats
       .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))(
         elementWiseSum, elementWiseSum
       )
@@ -501,7 +505,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val batchSize = (miniBatchFraction * corpusSize).ceil.toInt
     updateLambda(batchResult, batchSize)
 
-    logphatOption.foreach(_ /= batchSize.toDouble)
+    logphatOption.foreach(_ /= nonEmptyDocsN.toDouble)
     logphatOption.foreach(updateAlpha(_, nonEmptyDocsN))
 
     expElogbetaBc.destroy(false)
@@ -510,7 +514,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   }
 
   /**
-   * Update lambda based on the batch submitted. nonEmptyDocsN can be different for each iteration.
+   * Update lambda based on the batch submitted. batchSize can be different for each iteration.
    */
   private def updateLambda(stat: BDM[Double], batchSize: Int): Unit = {
     // weight of the mini-batch.
