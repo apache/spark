@@ -112,6 +112,11 @@ namesAndAges <- select(df, "name", "age")
 write.df(namesAndAges, "namesAndAges.parquet", "parquet")
 # $example off:manual_load_options$
 
+# $example on:manual_load_options_csv$
+df <- read.df("examples/src/main/resources/people.csv", "csv")
+namesAndAges <- select(df, "name", "age")
+# $example off:manual_load_options_csv$
+
 
 # $example on:direct_sql$
 df <- sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
