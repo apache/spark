@@ -438,23 +438,25 @@ class RelationalGroupedDataset protected[sql](
 
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
     require(expr.vectorized, "Must pass a vectorized python udf")
+    require(expr.dataType.isInstanceOf[StructType],
+      "The returnType of the vectorized python udf must be a StructType")
 
-    val output = expr.dataType match {
-      case s: StructType => s.map {
-        case StructField(name, dataType, nullable, metadata) =>
-          AttributeReference(name, dataType, nullable, metadata)()
-      }
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
     }
+    val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
 
-    val groupingAttributes: Seq[Attribute] = groupingExprs.map {
-      case ne: NamedExpression => ne.toAttribute
-    }
+    val child = df.logicalPlan
+    val project = Project(groupingNamedExpressions ++ child.output, child)
+
+    val output = expr.dataType.asInstanceOf[StructType].toAttributes
 
     val plan = FlatMapGroupsInPandas(
       groupingAttributes,
       expr,
       output,
-      df.logicalPlan
+      project
     )
 
     Dataset.ofRows(

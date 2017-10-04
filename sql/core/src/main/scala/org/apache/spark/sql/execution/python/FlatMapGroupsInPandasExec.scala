@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.types.StructType
 
 case class FlatMapGroupsInPandasExec(
     groupingAttributes: Seq[Attribute],
@@ -52,16 +53,21 @@ case class FlatMapGroupsInPandasExec(
     val bufferSize = inputRDD.conf.getInt("spark.buffer.size", 65536)
     val reuseWorker = inputRDD.conf.getBoolean("spark.python.worker.reuse", defaultValue = true)
     val chainedFunc = Seq(ChainedPythonFunctions(Seq(pandasFunction)))
-    val argOffsets = Array((0 until child.schema.length).toArray)
+    val argOffsets = Array((0 until (child.output.length - groupingAttributes.length)).toArray)
+    val schema = StructType(child.schema.drop(groupingAttributes.length))
 
     inputRDD.mapPartitionsInternal { iter =>
-      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
+      val dropGrouping =
+        UnsafeProjection.create(child.output.drop(groupingAttributes.length), child.output)
+      val grouped = GroupedIterator(iter, groupingAttributes, child.output).map {
+        case (_, iter) => iter.map(dropGrouping)
+      }
       val context = TaskContext.get()
 
       val columnarBatchIter = new ArrowPythonRunner(
         chainedFunc, bufferSize, reuseWorker,
-        PythonEvalType.SQL_PANDAS_UDF, argOffsets, child.schema)
-        .compute(grouped.map(_._2), context.partitionId(), context)
+        PythonEvalType.SQL_PANDAS_UDF, argOffsets, schema)
+        .compute(grouped, context.partitionId(), context)
 
       val rowIter = new Iterator[InternalRow] {
         private var currentIter = if (columnarBatchIter.hasNext) {
