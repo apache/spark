@@ -334,15 +334,20 @@ class AggregateBenchmark extends BenchmarkBase {
       .sum()
       .collect()
 
-    benchmark.addCase(s"hugeMethodLimit = 8000") { iter =>
-      sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
-      sparkSession.conf.set(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key, "8000")
+    benchmark.addCase("codegen = F") { iter =>
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "false")
       f()
     }
 
-    benchmark.addCase(s"hugeMethodLimit = 16000") { iter =>
+    benchmark.addCase("codegen = T hugeMethodLimit = 10000") { iter =>
       sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
-      sparkSession.conf.set(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key, "16000")
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key, "10000")
+      f()
+    }
+
+    benchmark.addCase("codegen = T hugeMethodLimit = 1500") { iter =>
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+      sparkSession.conf.set(SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key, "1500")
       f()
     }
 
@@ -354,8 +359,9 @@ class AggregateBenchmark extends BenchmarkBase {
 
     max function bytecode size:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    hugeMethodLimit = 8000                        1043 / 1159          0.6        1591.5       1.0X
-    hugeMethodLimit = 16000                       3908 / 3996          0.2        5962.9       0.3X
+    codegen = F                                    709 /  803          0.9        1082.1       1.0X
+    codegen = T hugeMethodLimit = 10000           3485 / 3548          0.2        5317.7       0.2X
+    codegen = T hugeMethodLimit = 1500             636 /  701          1.0         969.9       1.1X
      */
   }
 

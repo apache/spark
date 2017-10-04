@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.ExecutionException
-
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodegenContext, CodeGenerator}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeGenerator}
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
@@ -151,7 +149,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     }
   }
 
-  def genGroupByCodeGenContext(caseNum: Int): CodeAndComment = {
+  def genGroupByCode(caseNum: Int): CodeAndComment = {
     val caseExp = (1 to caseNum).map { i =>
       s"case when id > $i and id <= ${i + 1} then 1 else 0 end as v$i"
     }.toList
@@ -180,10 +178,10 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
   }
 
   test("SPARK-21871 check if we can get large code size when compiling too long functions") {
-    val codeWithShortFunctions = genGroupByCodeGenContext(3)
+    val codeWithShortFunctions = genGroupByCode(3)
     val (_, maxCodeSize1) = CodeGenerator.compile(codeWithShortFunctions)
     assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
-    val codeWithLongFunctions = genGroupByCodeGenContext(20)
+    val codeWithLongFunctions = genGroupByCode(20)
     val (_, maxCodeSize2) = CodeGenerator.compile(codeWithLongFunctions)
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
