@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
-import org.apache.spark.sql.execution.LeafExecNode
-import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.types.UserDefinedType
 
 
@@ -32,12 +32,28 @@ case class InMemoryTableScanExec(
     attributes: Seq[Attribute],
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
-  extends LeafExecNode {
+  extends LeafExecNode with ColumnarBatchScan {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
-  override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+  override def vectorTypes: Option[Seq[String]] =
+    Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
+
+  override val columnIndexes =
+    attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
+
+  override val supportCodegen: Boolean = relation.useColumnarBatches
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    if (supportCodegen) {
+      val buffers = relation.cachedColumnBuffers
+      // HACK ALERT: This is actually an RDD[CachedBatch].
+      // We're taking advantage of Scala's type erasure here to pass these batches along.
+      Seq(buffers.asInstanceOf[RDD[InternalRow]])
+    } else {
+      Seq()
+    }
+  }
 
   override def output: Seq[Attribute] = attributes
 

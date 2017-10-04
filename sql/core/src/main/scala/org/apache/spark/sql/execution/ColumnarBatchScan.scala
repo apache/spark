@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector, WritableColumnVector}
+import org.apache.spark.sql.types.{DataType, DataTypes}
 
 
 /**
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.DataType
  */
 private[sql] trait ColumnarBatchScan extends CodegenSupport {
 
-  val inMemoryTableScan: InMemoryTableScanExec = null
+  val columnIndexes: Array[Int] = null
 
   def vectorTypes: Option[Seq[String]] = None
 
@@ -84,25 +84,45 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.freshName("batch")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    val cachedBatchClz = "org.apache.spark.sql.execution.columnar.CachedBatch"
+    val cachedBatch = ctx.freshName("cachedBatch")
 
     val idx = ctx.freshName("batchIdx")
     ctx.addMutableState("int", idx, s"$idx = 0;")
     val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(colVars.size)(classOf[ColumnVector].getName))
+    val columnAccessorClz = "org.apache.spark.sql.execution.columnar.ColumnAccessor"
+    val writableColumnVectorClz = classOf[WritableColumnVector].getName
+    val dataTypesClz = classOf[DataTypes].getName
     val columnAssigns = colVars.zip(columnVectorClzs).zipWithIndex.map {
       case ((name, columnVectorClz), i) =>
         ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-        s"$name = ($columnVectorClz) $batch.column($i);"
+        val index = if (columnIndexes == null) i else columnIndexes(i)
+        s"$name = ($columnVectorClz) $batch.column($index);" + (if (columnIndexes == null) "" else {
+          val dt = output.attrs(i).dataType
+          s"\n$columnAccessorClz$$.MODULE$$.decompress(" +
+            s"$cachedBatch.buffers()[$index], ($writableColumnVectorClz) $name, " +
+            s"$dataTypesClz.$dt, $cachedBatch.numRows());"
+        })
     }
 
+    val assignBatch = if (columnIndexes == null) {
+      s"$batch = ($columnarBatchClz)$input.next();"
+    } else {
+      val inMemoryRelationClz = classOf[InMemoryRelation].getName
+      s"""
+        $cachedBatchClz $cachedBatch = ($cachedBatchClz)$input.next();
+        $batch = $inMemoryRelationClz$$.MODULE$$.createColumn($cachedBatch);
+      """
+    }
     val nextBatch = ctx.freshName("nextBatch")
     val nextBatchFuncName = ctx.addNewFunction(nextBatch,
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
          |  if ($input.hasNext()) {
-         |    $batch = ($columnarBatchClz)$input.next();
+         |    $assignBatch
          |    $numOutputRows.add($batch.numRows());
          |    $idx = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}

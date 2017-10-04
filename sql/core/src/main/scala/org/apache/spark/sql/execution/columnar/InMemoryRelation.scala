@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
 
@@ -39,6 +41,16 @@ object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String]): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
+
+  def createColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
+    val rowCount = cachedColumnarBatch.numRows
+    val schema = cachedColumnarBatch.schema
+    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, schema)
+    val columnarBatch = new ColumnarBatch(
+      schema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
+    columnarBatch.setNumRows(rowCount)
+    return columnarBatch
+  }
 }
 
 
@@ -48,9 +60,11 @@ object InMemoryRelation {
  * @param numRows The total number of rows in this batch
  * @param buffers The buffers for serialized columns
  * @param stats The stat of columns
+ * @param schema The schema of columns
  */
 private[columnar]
-case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
+case class CachedBatch(
+  numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow, schema: StructType)
 
 case class InMemoryRelation(
     output: Seq[Attribute],
@@ -62,6 +76,23 @@ case class InMemoryRelation(
     @transient var _cachedColumnBuffers: RDD[CachedBatch] = null,
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
   extends logical.LeafNode with MultiInstanceRelation {
+
+  /**
+   * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
+   * If false, get data from UnsafeRow build from ColumnVector
+   */
+  private[columnar] val useColumnarBatches: Boolean = {
+    // In the initial implementation, for ease of review
+    // support only primitive data types and # of fields is less than wholeStageMaxNumFields
+    val schema = StructType.fromAttributes(child.output)
+    schema.fields.find(f => f.dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType |
+            FloatType | DoubleType => false
+      case _ => true
+    }).isEmpty &&
+      !WholeStageCodegenExec.isTooManyFields(conf, child.schema) &&
+      children.find(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema)).isEmpty
+  }
 
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
 
@@ -87,6 +118,7 @@ case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
+    val useColumnarBatch = useColumnarBatches
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {
@@ -126,7 +158,8 @@ case class InMemoryRelation(
             columnBuilders.flatMap(_.columnStats.collectedStatistics))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
-          }, stats)
+          }, stats,
+          if (useColumnarBatch) StructType.fromAttributes(output) else null)
         }
 
         def hasNext: Boolean = rowIterator.hasNext
