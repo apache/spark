@@ -174,7 +174,6 @@ private[sql] object ArrowConverters {
         reader.loadNextBatch()  // throws IOException
         val root = reader.getVectorSchemaRoot  // throws IOException
         schemaRead = ArrowUtils.fromArrowSchema(root.getSchema)
-        println(s"*** $schemaRead")
 
         val columns = root.getFieldVectors.asScala.map { vector =>
           new ArrowColumnVector(vector).asInstanceOf[ColumnVector]
@@ -238,13 +237,4 @@ private[sql] object ArrowConverters {
 
     sqlContext.internalCreateDataFrame(rdd, schema)
   }
-
-  /*def toDataFrame(
-      payloadBytes: Array[Array[Byte]],
-      schemaString: String,
-      sqlContext: SQLContext): DataFrame = {
-    val jsc = JavaSparkContext.fromSparkContext(sqlContext.sparkContext)
-    val rdd = toJavaRDD(payloadBytes, jsc)
-    toDataFrame(rdd, schemaString, sqlContext)
-  }*/
 }

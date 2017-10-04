@@ -1623,6 +1623,32 @@ def toArrowType(dt):
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
 
+def from_arrow_type(at):
+    """ Convert pyarrow type to Spark data type
+    """
+    import pyarrow as pa
+    if at == pa.bool_():
+        spark_type = BooleanType()
+    elif at == pa.int8():
+        spark_type = ByteType()
+    elif at == pa.int16():
+        spark_type = ShortType()
+    elif at == pa.int32():
+        spark_type = IntegerType()
+    elif at == pa.int64():
+        spark_type = LongType()
+    elif at == pa.float32():
+        spark_type = FloatType()
+    elif at == pa.float64():
+        spark_type = DoubleType()
+    elif type(at) == pa.DecimalType:
+        spark_type = DecimalType(precision=at.precision, scale=at.scale)
+    elif at == pa.string():
+        spark_type = StringType()
+    else:
+        raise TypeError("Unsupport type in conversion from Arrow: " + str(at))
+    return spark_type
+
 
 def _test():
     import doctest

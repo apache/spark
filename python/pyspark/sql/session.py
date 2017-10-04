@@ -511,31 +511,24 @@ class SparkSession(object):
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
             if self.conf.get("spark.sql.execution.arrow.enable", "false").lower() == "true":
+
+                # slice the DataFrame into batches
                 from pyspark.serializers import ArrowSerializer
                 import pyarrow as pa
                 split = -(-len(data) // self.sparkContext.defaultParallelism)  # round int up
                 slices = (data[i:i + split] for i in xrange(0, len(data), split))
                 batches = [pa.RecordBatch.from_pandas(sliced_df, preserve_index=False)
-                           for sliced_df in slices]  # TODO: generator?
-                #ser = ArrowSerializer()
-                #payloads = [ser.dumps(batch) for batch in batches]
-                '''
-                payloads = []
-                arrow_schema = None
-                for sliced_df in slices:
-                    batch = pa.RecordBatch.from_pandas(sliced_df)
-                    if arrow_schema is None:
-                        arrow_schema = batch.schema
-                    payloads.append(ser.dumps(batch))
-                '''
-                #rdd = self._sc.parallelize(payloads, numSlices=len(payloads))  # TODO: make JavaRDD directly from payloads?
-                #jrdd = self._sc._jsc.sc.parallelize(payloads, numSlices=len(payloads))
+                           for sliced_df in slices]
+
+                # make the Spark schema
                 arrow_schema = batches[0].schema
-                # TODO
-                from pyspark.sql.types import DoubleType, StructField
+                from pyspark.sql.types import from_arrow_type, DoubleType, StructField
                 schema = StructType(
-                    [StructField("_%d" % i, DoubleType()) for i in xrange(len(arrow_schema))])
-                ######
+                    [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+                     for field in arrow_schema])
+
+                # write batches to a temp file for JVM to read
+                # NOTE: writing to temp file borrowed from context.parallelize
                 import os
                 from tempfile import NamedTemporaryFile
                 tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
@@ -548,7 +541,8 @@ class SparkSession(object):
                 finally:
                     # readRDDFromFile eagerily reads the file so we can delete right after.
                     os.unlink(tempFile.name)
-                #jrdd = self._jvm.org.apache.spark.sql.execution.arrow.ArrowConverters.toJavaRDD(payloads, self._jsc)
+
+                # create the Spark DataFrame
                 jdf = self._jvm.org.apache.spark.sql.execution.arrow.ArrowConverters.toDataFrame(
                     jrdd, schema.json(), self._wrapped._jsqlContext)
                 df = DataFrame(jdf, self._wrapped)
