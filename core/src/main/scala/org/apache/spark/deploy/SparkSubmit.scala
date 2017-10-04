@@ -599,12 +599,8 @@ object SparkSubmit extends CommandLineUtils with Logging {
     }
 
     // In case of shells, spark.ui.showConsoleProgress can be true by default or by user.
-    if (isShell(args.primaryResource)) {
-      if (!sparkConf.contains("spark.ui.showConsoleProgress")) {
-        sysProps("spark.ui.showConsoleProgress") = "true"
-      }
-    } else {
-      sysProps("spark.ui.showConsoleProgress") = "false"
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS.key)) {
+      sysProps(UI_SHOW_CONSOLE_PROGRESS.key) = "true"
     }
 
     // Add the application jar automatically so the user doesn't have to call sc.addJar
