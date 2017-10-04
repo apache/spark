@@ -151,7 +151,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     }
   }
 
-  def genGroupByCodeGenContext(caseNum: Int): (CodegenContext, CodeAndComment) = {
+  def genGroupByCodeGenContext(caseNum: Int): CodeAndComment = {
     val caseExp = (1 to caseNum).map { i =>
       s"case when id > $i and id <= ${i + 1} then 1 else 0 end as v$i"
     }.toList
@@ -176,14 +176,14 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     })
 
     assert(wholeStageCodeGenExec.isDefined)
-    wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()
+    wholeStageCodeGenExec.get.asInstanceOf[WholeStageCodegenExec].doCodeGen()._2
   }
 
   test("SPARK-21871 check if we can get large code size when compiling too long functions") {
-    val (_, codeWithShortFunctions) = genGroupByCodeGenContext(3)
+    val codeWithShortFunctions = genGroupByCodeGenContext(3)
     val (_, maxCodeSize1) = CodeGenerator.compile(codeWithShortFunctions)
     assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
-    val (_, codeWithLongFunctions) = genGroupByCodeGenContext(20)
+    val codeWithLongFunctions = genGroupByCodeGenContext(20)
     val (_, maxCodeSize2) = CodeGenerator.compile(codeWithLongFunctions)
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
