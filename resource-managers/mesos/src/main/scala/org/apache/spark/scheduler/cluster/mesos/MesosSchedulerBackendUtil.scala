@@ -17,10 +17,14 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos.{ContainerInfo, Image, NetworkInfo, Parameter, Volume}
+import org.apache.mesos.Protos._
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
+import org.apache.mesos.Protos.Environment.Variable
+import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
+import org.apache.spark.SparkException
+import org.apache.spark.deploy.mesos.MesosSecretConfig
 import org.apache.spark.deploy.mesos.config.{NETWORK_LABELS, NETWORK_NAME}
 import org.apache.spark.internal.Logging
 
@@ -122,7 +126,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def containerInfo(conf: SparkConf): ContainerInfo.Builder = {
+  def containerInfo(conf: SparkConf, secretConfig: MesosSecretConfig): ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -170,7 +174,120 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       containerInfo.addNetworkInfos(info)
     }
 
+    getSecretVolume(conf, secretConfig).foreach { volume =>
+      if (volume.getSource.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName}" +
+          s"on file ${volume.getContainerPath}")
+      } else {
+        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
+      }
+      containerInfo.addVolumes(volume)
+    }
+
     containerInfo
+  }
+
+  def addSecretEnvVar(
+      envBuilder: Environment.Builder,
+      conf: SparkConf,
+      secretConfig: MesosSecretConfig): Unit = {
+    getSecretEnvVar(conf, secretConfig).foreach { variable =>
+      if (variable.getSecret.getReference.isInitialized) {
+        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName}" +
+          s"on file ${variable.getName}")
+      } else {
+        logInfo(s"Setting secret on environment variable name=${variable.getName}")
+      }
+      envBuilder.addVariables(variable)
+    }
+  }
+
+  private def getSecrets(conf: SparkConf, secretConfig: MesosSecretConfig):
+  Seq[Secret] = {
+    def createValueSecret(data: String): Secret = {
+      Secret.newBuilder()
+        .setType(Secret.Type.VALUE)
+        .setValue(Secret.Value.newBuilder().setData(ByteString.copyFrom(data.getBytes)))
+        .build()
+    }
+
+    def createReferenceSecret(name: String): Secret = {
+      Secret.newBuilder()
+        .setReference(Secret.Reference.newBuilder().setName(name))
+        .setType(Secret.Type.REFERENCE)
+        .build()
+    }
+
+    val referenceSecrets: Seq[Secret] =
+      conf.get(secretConfig.SECRET_NAME).getOrElse(Nil).map(s => createReferenceSecret(s))
+
+    val valueSecrets: Seq[Secret] = {
+      conf.get(secretConfig.SECRET_VALUE).getOrElse(Nil).map(s => createValueSecret(s))
+    }
+
+    if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
+      throw new SparkException("Cannot specify VALUE type secrets and REFERENCE types ones")
+    }
+
+    if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets
+  }
+
+  private def illegalSecretInput(dest: Seq[String], s: Seq[Secret]): Boolean = {
+    if (dest.isEmpty) {  // no destination set (ie not using secrets of this type
+      return false
+    }
+    if (dest.nonEmpty && s.nonEmpty) {
+      // make sure there is a destination for each secret of this type
+      if (dest.length != s.length) {
+        return true
+      }
+    }
+    false
+  }
+
+  private def getSecretVolume(conf: SparkConf, secretConfig: MesosSecretConfig): List[Volume] = {
+    val secrets = getSecrets(conf, secretConfig)
+    val secretPaths: Seq[String] =
+      conf.get(secretConfig.SECRET_FILENAME).getOrElse(Nil)
+
+    if (illegalSecretInput(secretPaths, secrets)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secrets and file paths for file-based " +
+          s"reference secrets got secrets $secrets, and paths $secretPaths")
+    }
+
+    secrets.zip(secretPaths).map {
+      case (s, p) =>
+        val source = Volume.Source.newBuilder()
+          .setType(Volume.Source.Type.SECRET)
+          .setSecret(s)
+        Volume.newBuilder()
+          .setContainerPath(p)
+          .setSource(source)
+          .setMode(Volume.Mode.RO)
+          .build
+    }.toList
+  }
+
+  private def getSecretEnvVar(conf: SparkConf, secretConfig: MesosSecretConfig):
+  List[Variable] = {
+    val secrets = getSecrets(conf, secretConfig)
+    val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEY).getOrElse(Nil)
+    if (illegalSecretInput(secretEnvKeys, secrets)) {
+      throw new SparkException(
+        s"Need to give equal numbers of secrets and environment keys " +
+          s"for environment-based reference secrets got secrets $secrets, " +
+          s"and keys $secretEnvKeys")
+    }
+
+    secrets.zip(secretEnvKeys).map {
+      case (s, k) =>
+        Variable.newBuilder()
+          .setName(k)
+          .setType(Variable.Type.SECRET)
+          .setSecret(s)
+          .build
+    }.toList
   }
 
   private def dockerInfo(

@@ -232,6 +232,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         .setValue(value)
         .build())
     }
+
+    MesosSchedulerBackendUtil.addSecretEnvVar(environment, conf, executorSecretConfig)
+
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
 
@@ -457,7 +460,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
             .setName(s"${sc.appName} $taskId")
             .setLabels(MesosProtoUtils.mesosLabels(taskLabels))
             .addAllResources(resourcesToUse.asJava)
-            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf))
+            .setContainer(MesosSchedulerBackendUtil.containerInfo(sc.conf, executorSecretConfig))
 
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
