@@ -24,6 +24,7 @@ import scala.annotation.tailrec
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{UnsafeArrayData, UnsafeMapData, UnsafeRow}
 import org.apache.spark.sql.execution.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.execution.vectorized.WritableColumnVector
 import org.apache.spark.sql.types._
 
 /**
@@ -62,6 +63,9 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
   }
 
   protected def underlyingBuffer = buffer
+
+  def getByteBuffer: ByteBuffer =
+    buffer.duplicate.order(ByteOrder.nativeOrder())
 }
 
 private[columnar] class NullColumnAccessor(buffer: ByteBuffer)
@@ -122,7 +126,7 @@ private[columnar] class MapColumnAccessor(buffer: ByteBuffer, dataType: MapType)
   extends BasicColumnAccessor[UnsafeMapData](buffer, MAP(dataType))
   with NullableColumnAccessor
 
-private[columnar] object ColumnAccessor {
+private[sql] object ColumnAccessor {
   @tailrec
   def apply(dataType: DataType, buffer: ByteBuffer): ColumnAccessor = {
     val buf = buffer.order(ByteOrder.nativeOrder)
@@ -147,6 +151,16 @@ private[columnar] object ColumnAccessor {
       case udt: UserDefinedType[_] => ColumnAccessor(udt.sqlType, buffer)
       case other =>
         throw new Exception(s"not support type: $other")
+    }
+  }
+
+  def decompress(columnAccessor: ColumnAccessor, columnVector: WritableColumnVector, numRows: Int):
+      Unit = {
+    if (columnAccessor.isInstanceOf[NativeColumnAccessor[_]]) {
+      val nativeAccessor = columnAccessor.asInstanceOf[NativeColumnAccessor[_]]
+      nativeAccessor.decompress(columnVector, numRows)
+    } else {
+      throw new RuntimeException("Not support non-primitive type now")
     }
   }
 }

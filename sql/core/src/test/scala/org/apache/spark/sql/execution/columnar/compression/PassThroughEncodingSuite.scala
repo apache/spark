@@ -22,34 +22,31 @@ import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
-import org.apache.spark.sql.types.IntegralType
+import org.apache.spark.sql.types.AtomicType
 
-class IntegralDeltaSuite extends SparkFunSuite {
+class PassThroughSuite extends SparkFunSuite {
   val nullValue = -1
-  testIntegralDelta(new IntColumnStats, INT, IntDelta)
-  testIntegralDelta(new LongColumnStats, LONG, LongDelta)
+  testPassThrough(new ByteColumnStats, BYTE)
+  testPassThrough(new ShortColumnStats, SHORT)
+  testPassThrough(new IntColumnStats, INT)
+  testPassThrough(new LongColumnStats, LONG)
+  testPassThrough(new FloatColumnStats, FLOAT)
+  testPassThrough(new DoubleColumnStats, DOUBLE)
 
-  def testIntegralDelta[I <: IntegralType](
+  def testPassThrough[T <: AtomicType](
       columnStats: ColumnStats,
-      columnType: NativeColumnType[I],
-      scheme: CompressionScheme) {
+      columnType: NativeColumnType[T]) {
 
-    def skeleton(input: Seq[I#InternalType]) {
+    val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
+
+    def skeleton(input: Seq[T#InternalType]) {
       // -------------
       // Tests encoder
       // -------------
 
-      val builder = TestCompressibleColumnBuilder(columnStats, columnType, scheme)
-      val deltas = if (input.isEmpty) {
-        Seq.empty[Long]
-      } else {
-        (input.tail, input.init).zipped.map {
-          case (x: Int, y: Int) => (x - y).toLong
-          case (x: Long, y: Long) => x - y
-        }
-      }
+      val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
 
-      input.foreach { value =>
+      input.map { value =>
         val row = new GenericInternalRow(1)
         columnType.setField(row, 0, value)
         builder.appendFrom(row, 0)
@@ -60,32 +57,17 @@ class IntegralDeltaSuite extends SparkFunSuite {
       val headerSize = CompressionScheme.columnHeaderSize(buffer)
 
       // Compression scheme ID + compressed contents
-      val compressedSize = 4 + (if (deltas.isEmpty) {
-        0
-      } else {
-        val oneBoolean = columnType.defaultSize
-        1 + oneBoolean + deltas.map {
-          d => if (math.abs(d) <= Byte.MaxValue) 1 else 1 + oneBoolean
-        }.sum
-      })
+      val compressedSize = 4 + input.size * columnType.defaultSize
 
       // 4 extra bytes for compression scheme type ID
       assertResult(headerSize + compressedSize, "Wrong buffer capacity")(buffer.capacity)
 
       buffer.position(headerSize)
-      assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
+      assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
       if (input.nonEmpty) {
-        assertResult(Byte.MinValue, "The first byte should be an escaping mark")(buffer.get())
-        assertResult(input.head, "The first value is wrong")(columnType.extract(buffer))
-
-        (input.tail, deltas).zipped.foreach { (value, delta) =>
-          if (math.abs(delta) <= Byte.MaxValue) {
-            assertResult(delta, "Wrong delta")(buffer.get())
-          } else {
-            assertResult(Byte.MinValue, "Expecting escaping mark here")(buffer.get())
-            assertResult(value, "Wrong value")(columnType.extract(buffer))
-          }
+        input.foreach { value =>
+          assertResult(value, "Wrong value")(columnType.extract(buffer))
         }
       }
 
@@ -96,7 +78,7 @@ class IntegralDeltaSuite extends SparkFunSuite {
       // Rewinds, skips column header and 4 more bytes for compression scheme ID
       buffer.rewind().position(headerSize + 4)
 
-      val decoder = scheme.decoder(buffer, columnType)
+      val decoder = PassThrough.decoder(buffer, columnType)
       val mutableRow = new GenericInternalRow(1)
 
       if (input.nonEmpty) {
@@ -111,8 +93,8 @@ class IntegralDeltaSuite extends SparkFunSuite {
       assert(!decoder.hasNext)
     }
 
-    def skeletonForDecompress(input: Seq[I#InternalType]) {
-      val builder = TestCompressibleColumnBuilder(columnStats, columnType, scheme)
+    def skeletonForDecompress(input: Seq[T#InternalType]) {
+      val builder = TestCompressibleColumnBuilder(columnStats, columnType, PassThrough)
       val row = new GenericInternalRow(1)
       val nullRow = new GenericInternalRow(1)
       nullRow.setNullAt(0)
@@ -132,9 +114,9 @@ class IntegralDeltaSuite extends SparkFunSuite {
       // Rewinds, skips column header and 4 more bytes for compression scheme ID
       val headerSize = CompressionScheme.columnHeaderSize(buffer)
       buffer.position(headerSize)
-      assertResult(scheme.typeId, "Wrong compression scheme ID")(buffer.getInt())
+      assertResult(PassThrough.typeId, "Wrong compression scheme ID")(buffer.getInt())
 
-      val decoder = scheme.decoder(buffer, columnType)
+      val decoder = PassThrough.decoder(buffer, columnType)
       val columnVector = new OnHeapColumnVector(input.length, columnType.dataType)
       decoder.decompress(columnVector, input.length)
 
@@ -144,6 +126,14 @@ class IntegralDeltaSuite extends SparkFunSuite {
             assertResult(true, s"Wrong null ${index}th-position") {
               columnVector.isNullAt(index)
             }
+          case (expected: Byte, index: Int) =>
+            assertResult(expected, s"Wrong ${index}-th decoded byte value") {
+              columnVector.getByte(index)
+            }
+          case (expected: Short, index: Int) =>
+            assertResult(expected, s"Wrong ${index}-th decoded short value") {
+              columnVector.getShort(index)
+            }
           case (expected: Int, index: Int) =>
             assertResult(expected, s"Wrong ${index}-th decoded int value") {
               columnVector.getInt(index)
@@ -152,52 +142,48 @@ class IntegralDeltaSuite extends SparkFunSuite {
             assertResult(expected, s"Wrong ${index}-th decoded long value") {
               columnVector.getLong(index)
             }
-          case _ =>
-            fail("Unsupported type")
+          case (expected: Float, index: Int) =>
+            assertResult(expected, s"Wrong ${index}-th decoded float value") {
+              columnVector.getFloat(index)
+            }
+          case (expected: Double, index: Int) =>
+            assertResult(expected, s"Wrong ${index}-th decoded double value") {
+              columnVector.getDouble(index)
+            }
+          case _ => fail("Unsupported type")
         }
       }
     }
 
-    test(s"$scheme: empty column") {
+    test(s"$PassThrough with $typeName: empty column") {
       skeleton(Seq.empty)
     }
 
-    test(s"$scheme: simple case") {
-      val input = columnType match {
-        case INT => Seq(2: Int, 1: Int, 2: Int, 130: Int)
-        case LONG => Seq(2: Long, 1: Long, 2: Long, 130: Long)
-      }
-
-      skeleton(input.map(_.asInstanceOf[I#InternalType]))
-    }
-
-    test(s"$scheme: long random series") {
-      // Have to workaround with `Any` since no `ClassTag[I#JvmType]` available here.
+    test(s"$PassThrough with $typeName: long random series") {
       val input = Array.fill[Any](10000)(makeRandomValue(columnType))
-      skeleton(input.map(_.asInstanceOf[I#InternalType]))
+      skeleton(input.map(_.asInstanceOf[T#InternalType]))
     }
 
-
-    test(s"$scheme: empty column for decompress()") {
+    test(s"$PassThrough with $typeName: empty column for decompress()") {
       skeletonForDecompress(Seq.empty)
     }
 
-    test(s"$scheme: simple case for decompress()") {
-      val input = columnType match {
-        case INT => Seq(2: Int, 1: Int, 2: Int, 130: Int)
-        case LONG => Seq(2: Long, 1: Long, 2: Long, 130: Long)
-      }
-
-      skeletonForDecompress(input.map(_.asInstanceOf[I#InternalType]))
+    test(s"$PassThrough with $typeName: long random series for decompress()") {
+      val input = Array.fill[Any](10000)(makeRandomValue(columnType))
+      skeletonForDecompress(input.map(_.asInstanceOf[T#InternalType]))
     }
 
-    test(s"$scheme: simple case with null for decompress()") {
+    test(s"$PassThrough with $typeName: simple case with null for decompress()") {
       val input = columnType match {
+        case BYTE => Seq(2: Byte, 1: Byte, 2: Byte, nullValue.toByte: Byte, 5: Byte)
+        case SHORT => Seq(2: Short, 1: Short, 2: Short, nullValue.toShort: Short, 5: Short)
         case INT => Seq(2: Int, 1: Int, 2: Int, nullValue: Int, 5: Int)
         case LONG => Seq(2: Long, 1: Long, 2: Long, nullValue: Long, 5: Long)
+        case FLOAT => Seq(2: Float, 1: Float, 2: Float, nullValue: Float, 5: Float)
+        case DOUBLE => Seq(2: Double, 1: Double, 2: Double, nullValue: Double, 5: Double)
       }
 
-      skeletonForDecompress(input.map(_.asInstanceOf[I#InternalType]))
+      skeletonForDecompress(input.map(_.asInstanceOf[T#InternalType]))
     }
   }
 }
