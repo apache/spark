@@ -208,6 +208,7 @@ class GroupedData(object):
 
         :param udf: A wrapped function returned by `pandas_udf`
 
+        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
@@ -267,6 +268,7 @@ def _test():
         .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc
+    globs['spark'] = spark
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
