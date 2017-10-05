@@ -698,13 +698,11 @@ class CodegenContext {
         """
       s"${addNewFunction(compareFunc, funcCode)}($c1, $c2)"
     case other if other.isInstanceOf[AtomicType] =>
-      s"""
-        if ($c1.getClass.getMethods.map(_.getName).filter(_ matches "compare").size == 1) {
-          $c1.compare($c2)
-        } else {
-          0
-        }
-      """
+      if (s"$c1".getClass.getMethods.map(_.getName).filter(_ matches "compare").size == 1) {
+        s"$c1.compare($c2)"
+      } else {
+        s"0"
+      }
     case udt: UserDefinedType[_] => genComp(udt.sqlType, c1, c2)
     case _ =>
       throw new IllegalArgumentException(
