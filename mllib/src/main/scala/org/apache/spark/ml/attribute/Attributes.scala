@@ -249,3 +249,46 @@ object VectorAttr extends MLAttributeFactory {
     VectorAttr(name, attributes)
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ * Builder classes used to build ML attributes.
+ */
+@DeveloperApi
+trait AttrBuilder {
+  def buildAttr(fields: Seq[StructField]): BaseAttribute
+}
+
+@DeveloperApi
+object VectorAttrBuilder extends AttrBuilder {
+  def buildAttr(fields: Seq[StructField]): BaseAttribute = {
+    val innerAttributes = fields.zipWithIndex.flatMap { case (field, fieldIdx) =>
+      val attr = MLAttributes.fromStructField(field, preserveName = false)
+      field.dataType match {
+        case DoubleType =>
+          if (attr == UnresolvedMLAttribute) {
+            // Assume numeric attribute.
+            Seq(NumericAttr().withIndicesRange(fieldIdx))
+          } else {
+            Seq(attr.asInstanceOf[SimpleAttribute].withIndicesRange(fieldIdx).withoutName())
+          }
+        case _: NumericType | BooleanType =>
+          // Assume numeric attribute.
+          Seq(NumericAttr().withIndicesRange(fieldIdx))
+        case _: VectorUDT =>
+          val vectorAttr = attr.asInstanceOf[ComplexAttribute]
+          vectorAttr.attributes.map { a =>
+            val innerAttr = if (a.name.isDefined) {
+              a.withoutName()
+            } else {
+              a
+            }
+            // Rebase the inner attribute indices.
+            val indices = innerAttr.indicesRange
+            innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
+          }
+      }
+    }
+    VectorAttr(name = None, attributes = innerAttributes)
+  }
+}
