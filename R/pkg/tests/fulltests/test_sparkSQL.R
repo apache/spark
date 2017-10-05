@@ -3075,6 +3075,11 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
   expect_identical(df1Collect, expected)
 
+  # gapply on empty grouping columns.
+  df1 <- gapply(df, c(), function(key, x) { x }, schema(df))
+  actual <- collect(df1)
+  expect_identical(actual, expected)
+
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
   schemas <- list(structType(structField("a", "integer"), structField("e", "boolean")),
