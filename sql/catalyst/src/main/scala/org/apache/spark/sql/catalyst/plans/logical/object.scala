@@ -526,7 +526,7 @@ case class FlatMapGroupsInPandas(
     output: Seq[Attribute],
     child: LogicalPlan) extends UnaryNode {
   /**
-   * This is needed because output attributes is considered `reference` when
+   * This is needed because output attributes are considered `references` when
    * passed through the constructor.
    *
    * Without this, catalyst will complain that output attributes are missing
