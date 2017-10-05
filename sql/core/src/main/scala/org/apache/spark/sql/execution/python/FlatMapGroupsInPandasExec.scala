@@ -29,9 +29,22 @@ import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode
 import org.apache.spark.sql.types.StructType
 
 /**
- * FlatMap groups using a pandas udf.
+ * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
+ * This is used by pyspark.sql.DataFrame.groupby().apply().
  *
- * This is used by pyspark.sql.DataFrame.groupby().apply()
+ * Rows in each group are passed to the python worker as a Arrow record batch.
+ * The python worker turns the record batch to a pandas.DataFrame, invoke the
+ * use-defined function, and passes the resulting pandas.DataFrame
+ * as a Arrow record batch. Finally, each record batch is turned to
+ * Iterator[InternalRow] using ColumnarBatch.
+ *
+ * Note on memory usage:
+ * Both the python worker and the java executor need to have enough memory to
+ * hold the largest group. The memory on the java side is used to construct the
+ * record batch (off heap memory). The memory on the python side is used for
+ * holding the pandas.DataFrame. It's possible to further split one group into
+ * multiple record batches to reduce the memory footprint on the java side, this
+ * is left as future work.
  */
 case class FlatMapGroupsInPandasExec(
     groupingAttributes: Seq[Attribute],
