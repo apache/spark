@@ -2538,7 +2538,7 @@ test_that("describe() and summary() on a DataFrame", {
 
   stats2 <- summary(df)
   expect_equal(collect(stats2)[5, "summary"], "25%")
-  expect_equal(collect(stats2)[5, "age"], "30")
+  expect_equal(collect(stats2)[5, "age"], "19")
 
   stats3 <- summary(df, "min", "max", "55.1%")
 
