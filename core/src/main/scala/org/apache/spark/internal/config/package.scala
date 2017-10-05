@@ -205,7 +205,7 @@ package object config {
 
   private[spark] val UI_SHOW_CONSOLE_PROGRESS = ConfigBuilder("spark.ui.showConsoleProgress")
     .booleanConf
-    .createOptional
+    .createWithDefault(false)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
