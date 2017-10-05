@@ -522,6 +522,43 @@ See the [configuration page](configuration.html) for information on Spark config
 </tr>
 
 <tr>
+  <td><code>spark.mesos.executor.secret.envkeys</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list that, if set, the contents of the secret referenced
+    by spark.mesos.executor.secret.names or spark.mesos.executor.secret.values will be
+    set to the provided environment variable in the executor's process.
+  </td>
+  </tr>
+  <tr>
+<td><code>spark.mesos.executor.secret.filenames</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list that, if set, the contents of the secret referenced by
+    spark.mesos.executor.secret.names or spark.mesos.executor.secret.values will be
+    written to the provided file. Paths are relative to the container's work
+    directory.  Absolute paths must already exist.  Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.secret.names</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list of secret references. Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.secret.values</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    A comma-separated list of secret values. Consult the Mesos Secret
+    protobuf for more information.
+  </td>
+</tr>
+
+<tr>
   <td><code>spark.mesos.driverEnv.[EnvironmentVariableName]</code></td>
   <td><code>(none)</code></td>
   <td>
