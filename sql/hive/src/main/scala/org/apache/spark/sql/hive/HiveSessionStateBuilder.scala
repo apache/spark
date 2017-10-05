@@ -80,7 +80,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
         HiveAnalysis +:
-        TimestampTableTimeZone(session) +:
+        AdjustTimestamps(session) +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =

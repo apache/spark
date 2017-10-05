@@ -24,11 +24,12 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.SparkPlanTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 
-abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTestUtils
+abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
     with BeforeAndAfterAll {
 
   var originalTz: TimeZone = _
@@ -78,7 +79,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
 
   protected def checkHasTz(spark: SparkSession, table: String, tz: Option[String]): Unit = {
     val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
-    assert(tableMetadata.properties.get(TimestampTableTimeZone.TIMEZONE_PROPERTY) === tz,
+    assert(tableMetadata.properties.get(DateTimeUtils.TIMEZONE_PROPERTY) === tz,
       s"for table $table")
   }
 
@@ -126,7 +127,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
         tz: Option[String],
         format: String): Boolean = {
       val writer = df.write.format(format)
-      tz.foreach { writer.option(TimestampTableTimeZone.TIMEZONE_PROPERTY, _)}
+      tz.foreach { writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _)}
       writer.saveAsTable(table)
       true
     }
@@ -151,7 +152,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
         destTz: Option[String],
         destFormat: String): Boolean = {
       val writer = spark.sql(s"select * from $source").write.format(destFormat)
-      destTz.foreach { writer.option(TimestampTableTimeZone.TIMEZONE_PROPERTY, _)}
+      destTz.foreach { writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _)}
       writer.saveAsTable(dest)
       true
     }
@@ -161,7 +162,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
 
   test("SPARK-12297: Read and write with table timezones") {
     assert(TimeZone.getDefault.getID() === "America/Los_Angeles")
-    val key = TimestampTableTimeZone.TIMEZONE_PROPERTY
+    val key = DateTimeUtils.TIMEZONE_PROPERTY
     val originalData = createRawData(spark)
     withTempPath { basePath =>
       val dsPath = new File(basePath, "dsFlat").getAbsolutePath
@@ -190,7 +191,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
         // values have been adjusted as we expect.
         val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
         val location = tableMeta.location.toString()
-        val tz = tableMeta.properties.get(TimestampTableTimeZone.TIMEZONE_PROPERTY)
+        val tz = tableMeta.properties.get(DateTimeUtils.TIMEZONE_PROPERTY)
         // some formats need the schema specified
         val df = spark.read.schema(originalData.schema).format(format).load(location)
         checkRawData(df, tz.getOrElse("America/Los_Angeles"))
@@ -280,7 +281,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
 
   test("SPARK-12297: exception on bad timezone") {
     // make sure there is an exception anytime we try to read or write with a bad timezone
-    val key = TimestampTableTimeZone.TIMEZONE_PROPERTY
+    val key = DateTimeUtils.TIMEZONE_PROPERTY
     val badVal = "Blart Versenwald III"
     val data = createRawData(spark)
     def hasBadTzException(command: => Unit): Unit = {
@@ -321,7 +322,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
       val origData = createRawData(spark)
       origData.write.saveAsTable("some_table")
       val exc = intercept[AnalysisException]{
-        createRawData(spark).write.option(TimestampTableTimeZone.TIMEZONE_PROPERTY, "UTC")
+        createRawData(spark).write.option(DateTimeUtils.TIMEZONE_PROPERTY, "UTC")
           .insertInto("some_table")
       }
       assert(exc.getMessage.contains("Cannot provide a table timezone on insert"))
@@ -329,7 +330,7 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
   }
 
   test("SPARK-12297: refuse table timezone on views") {
-    val key = TimestampTableTimeZone.TIMEZONE_PROPERTY
+    val key = DateTimeUtils.TIMEZONE_PROPERTY
     val originalData = createRawData(spark)
 
     withTable("ok_table") {
@@ -352,4 +353,4 @@ abstract class BaseTimestampTableTimeZoneSuite extends SparkPlanTest with SQLTes
   }
 }
 
-class TimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite with SharedSQLContext
+class AdjustTimestampsSuite extends BaseAdjustTimestampsSuite with SharedSQLContext

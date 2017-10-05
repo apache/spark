@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTableType._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, DateTimeUtils}
-import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils, TimestampTableTimeZone}
+import org.apache.spark.sql.execution.datasources.{DataSource, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -77,7 +77,7 @@ case class CreateTableLikeCommand(
     // Otherwise create a managed table.
     val tblType = if (location.isEmpty) CatalogTableType.MANAGED else CatalogTableType.EXTERNAL
     val properties =
-      sourceTableDesc.properties.filterKeys(_ == TimestampTableTimeZone.TIMEZONE_PROPERTY)
+      sourceTableDesc.properties.filterKeys(_ == DateTimeUtils.TIMEZONE_PROPERTY)
 
     val newTableDesc =
       CatalogTable(
@@ -130,7 +130,7 @@ case class CreateTableCommand(
     Seq.empty[Row]
   }
 
-  TimestampTableTimeZone.checkTableTz(table.identifier, table.properties)
+  DateTimeUtils.checkTableTz(table.identifier, table.properties)
 }
 
 

@@ -1217,7 +1217,7 @@ case class ToUTCTimestamp(left: Expression, right: Expression)
  * another, for the same instant in time.
  *
  * We intentionally do not provide an ExpressionDescription as this is not meant to be exposed to
- * users, its only used for internal conversions.
+ * users, it's only used for internal conversions.
  */
 private[spark] case class TimestampTimezoneCorrection(
     time: Expression,
@@ -1226,8 +1226,8 @@ private[spark] case class TimestampTimezoneCorrection(
   extends TernaryExpression with ImplicitCastInputTypes {
 
   // convertTz() does the *opposite* conversion we want, which is why from & to appear reversed
-  // in all the calls to convertTz.  Its used for showing how the display time changes when we go
-  // from one timezone to another.  We want to see how should change the SQLTimestamp value to
+  // in all the calls to convertTz.  It's used for showing how the display time changes when we go
+  // from one timezone to another.  We want to see how the SQLTimestamp value should change to
   // ensure the display does *not* change, despite going from one TZ to another.
 
   override def children: Seq[Expression] = Seq(time, from, to)

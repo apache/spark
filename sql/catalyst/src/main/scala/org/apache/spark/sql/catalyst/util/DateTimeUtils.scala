@@ -26,6 +26,8 @@ import javax.xml.bind.DatatypeConverter
 
 import scala.annotation.tailrec
 
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -64,6 +66,7 @@ object DateTimeUtils {
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   val TIMEZONE_OPTION = "timeZone"
+  val TIMEZONE_PROPERTY = "table.timezone-adjustment"
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
 
@@ -109,7 +112,8 @@ object DateTimeUtils {
     computedTimeZones.computeIfAbsent(timeZoneId, computeTimeZone)
   }
 
-  lazy val validTimezones = TimeZone.getAvailableIDs().toSet
+  private lazy val validTimezones = TimeZone.getAvailableIDs().toSet
+
   def isValidTimezone(timezoneId: String): Boolean = {
     validTimezones.contains(timezoneId)
   }
@@ -1074,4 +1078,24 @@ object DateTimeUtils {
     threadLocalTimestampFormat.remove()
     threadLocalDateFormat.remove()
   }
+
+  /**
+   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
+   */
+  def checkTableTz(table: TableIdentifier, properties: Map[String, String]): Unit = {
+    checkTableTz(s"in table ${table.toString}", properties)
+  }
+
+  /**
+   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
+   */
+  def checkTableTz(dest: String, properties: Map[String, String]): Unit = {
+    properties.get(TIMEZONE_PROPERTY).foreach { tz =>
+      if (!DateTimeUtils.isValidTimezone(tz)) {
+        throw new AnalysisException(s"Cannot set $TIMEZONE_PROPERTY to invalid " +
+          s"timezone $tz $dest")
+      }
+    }
+  }
+
 }

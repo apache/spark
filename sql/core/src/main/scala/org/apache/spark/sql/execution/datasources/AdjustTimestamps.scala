@@ -27,12 +27,12 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType}
 
 /**
- * Apply a correction to data loaded from, or saved to, Parquet, so that it timestamps can be read
- * like TIMESTAMP WITHOUT TIMEZONE.  This gives correct behavior if you process data with
- * machines in different timezones, or if you access the data from multiple SQL engines.
+ * Apply a correction to data loaded from, or saved to, tables that have a configured time zone, so
+ * that timestamps can be read like TIMESTAMP WITHOUT TIMEZONE.  This gives correct behavior if you
+ * process data with machines in different timezones, or if you access the data from multiple SQL
+ * engines.
  */
-private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
-    extends Rule[LogicalPlan] {
+private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
     // we can't use transformUp because we want to terminate recursion if there was already
@@ -138,7 +138,7 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
   }
 
   private def extractTableTz(options: Map[String, String]): Option[String] = {
-    options.get(TimestampTableTimeZone.TIMEZONE_PROPERTY)
+    options.get(DateTimeUtils.TIMEZONE_PROPERTY)
   }
 
   private def extractTableTz(
@@ -186,28 +186,5 @@ private[sql] case class TimestampTableTimeZone(sparkSession: SparkSession)
       }
     }
     (foundTs, modifiedFields, replacements)
-  }
-}
-
-private[sql] object TimestampTableTimeZone {
-  val TIMEZONE_PROPERTY = "table.timezone-adjustment"
-
-  /**
-   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
-   */
-  private[sql] def checkTableTz(table: TableIdentifier, properties: Map[String, String]): Unit = {
-    checkTableTz(s"in table ${table.toString}", properties)
-  }
-
-  /**
-   * Throw an AnalysisException if we're trying to set an invalid timezone for this table.
-   */
-  private[sql] def checkTableTz(dest: String, properties: Map[String, String]): Unit = {
-    properties.get(TIMEZONE_PROPERTY).foreach { tz =>
-      if (!DateTimeUtils.isValidTimezone(tz)) {
-        throw new AnalysisException(s"Cannot set $TIMEZONE_PROPERTY to invalid " +
-          s"timezone $tz $dest")
-      }
-    }
   }
 }

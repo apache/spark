@@ -17,11 +17,11 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.execution.datasources.{BaseTimestampTableTimeZoneSuite, TimestampTableTimeZone}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.execution.datasources.{AdjustTimestamps, BaseAdjustTimestampsSuite}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
-    with TestHiveSingleton {
+class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveSingleton {
 
   override protected def createAndSaveTableFunctions(): Seq[CreateAndSaveTable] = {
     super.createAndSaveTableFunctions() ++ Seq(CreateHiveTableAndInsert)
@@ -39,7 +39,7 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
         format: String): Boolean = {
       if (format == "parquet") {
         val tblProperties = tzOpt.map { tz =>
-          s"""TBLPROPERTIES ("${TimestampTableTimeZone.TIMEZONE_PROPERTY}"="$tz")"""
+          s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
         }.getOrElse("")
         spark.sql(
           s"""CREATE TABLE $table (
@@ -65,7 +65,7 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
         destFormat: String): Boolean = {
       if (destFormat == "parquet") {
         val tblProperties = destTz.map { tz =>
-          s"""TBLPROPERTIES ("${TimestampTableTimeZone.TIMEZONE_PROPERTY}"="$tz")"""
+          s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
         }.getOrElse("")
         // this isn't just a "ctas" sql statement b/c that doesn't let us specify the table tz
         spark.sql(
@@ -86,7 +86,7 @@ class HiveTimestampTableTimeZoneSuite extends BaseTimestampTableTimeZoneSuite
   }
 
   test("SPARK-12297: copy table timezone in CREATE TABLE LIKE") {
-    val key = TimestampTableTimeZone.TIMEZONE_PROPERTY
+    val key = DateTimeUtils.TIMEZONE_PROPERTY
     withTable("orig_hive", "copy_hive", "orig_ds", "copy_ds") {
       spark.sql(
         s"""CREATE TABLE orig_hive (

@@ -164,7 +164,7 @@ abstract class BaseSessionStateBuilder(
       PreprocessTableCreation(session) +:
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
-        TimestampTableTimeZone(session) +:
+        AdjustTimestamps(session) +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
