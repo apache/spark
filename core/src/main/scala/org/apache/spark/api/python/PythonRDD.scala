@@ -49,7 +49,7 @@ private[spark] class PythonRDD(
   extends RDD[Array[Byte]](parent) {
 
   val bufferSize = conf.getInt("spark.buffer.size", 65536)
-  val reuse_worker = conf.getBoolean("spark.python.worker.reuse", true)
+  val reuseWorker = conf.getBoolean("spark.python.worker.reuse", true)
 
   override def getPartitions: Array[Partition] = firstParent.partitions
 
@@ -60,7 +60,7 @@ private[spark] class PythonRDD(
   val asJavaRDD: JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-    val runner = PythonRunner(func, bufferSize, reuse_worker)
+    val runner = PythonRunner(func, bufferSize, reuseWorker)
     runner.compute(firstParent.iterator(split, context), split.index, context)
   }
 }
@@ -85,6 +85,7 @@ private[spark] case class PythonFunction(
  */
 private[spark] case class ChainedPythonFunctions(funcs: Seq[PythonFunction])
 
+<<<<<<< HEAD
 /**
  * Enumerate the type of command that will be sent to the Python worker
  */
@@ -401,8 +402,11 @@ private[spark] class PythonRunner(
   }
 }
 
+=======
+>>>>>>> origin/master
 /** Thrown for exceptions in user Python code. */
-private class PythonException(msg: String, cause: Exception) extends RuntimeException(msg, cause)
+private[spark] class PythonException(msg: String, cause: Exception)
+  extends RuntimeException(msg, cause)
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from Python.
@@ -417,14 +421,6 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends RDD[(Long, Array[Byte]
       case x => throw new SparkException("PairwiseRDD: unexpected value: " + x)
     }
   val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
-}
-
-private object SpecialLengths {
-  val END_OF_DATA_SECTION = -1
-  val PYTHON_EXCEPTION_THROWN = -2
-  val TIMING_DATA = -3
-  val END_OF_STREAM = -4
-  val NULL = -5
 }
 
 private[spark] object PythonRDD extends Logging {

@@ -535,20 +535,36 @@ object StringTrim {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading and trailing space characters from `str`.
-    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing trimString from `str`
+
+    _FUNC_(BOTH trimStr FROM str) - Remove the leading and trailing `trimStr` characters from `str`
+
+    _FUNC_(LEADING trimStr FROM str) - Remove the leading `trimStr` characters from `str`
+
+    _FUNC_(TRAILING trimStr FROM str) - Remove the trailing `trimStr` characters from `str`
   """,
   arguments = """
     Arguments:
       * str - a string expression
-      * trimString - the trim string
-      * BOTH, FROM - these are keyword to specify for trim string from both ends of the string
+      * trimStr - the trim string characters to trim, the default value is a single space
+      * BOTH, FROM - these are keywords to specify trimming string characters from both ends of
+          the string
+      * LEADING, FROM - these are keywords to specify trimming string characters from the left
+          end of the string
+      * TRAILING, FROM - these are keywords to specify trimming string characters from the right
+          end of the string
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('    SparkSQL   ');
        SparkSQL
+      > SELECT _FUNC_('SL', 'SSparkSQLS');
+       parkSQ
       > SELECT _FUNC_(BOTH 'SL' FROM 'SSparkSQLS');
        parkSQ
+      > SELECT _FUNC_(LEADING 'SL' FROM 'SSparkSQLS');
+       parkSQLS
+      > SELECT _FUNC_(TRAILING 'SL' FROM 'SSparkSQLS');
+       SSparkSQ
   """)
 case class StringTrim(
     srcStr: Expression,
@@ -634,13 +650,13 @@ object StringTrimLeft {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the leading space characters from `str`.
+
     _FUNC_(trimStr, str) - Removes the leading string contains the characters from the trim string
   """,
   arguments = """
     Arguments:
       * str - a string expression
-      * trimString - the trim string
-      * BOTH, FROM - these are keyword to specify for trim string from both ends of the string
+      * trimStr - the trim string characters to trim, the default value is a single space
   """,
   examples = """
     Examples:
@@ -735,13 +751,13 @@ object StringTrimRight {
 @ExpressionDescription(
   usage = """
     _FUNC_(str) - Removes the trailing space characters from `str`.
+
     _FUNC_(trimStr, str) - Removes the trailing string which contains the characters from the trim string from the `str`
   """,
   arguments = """
     Arguments:
       * str - a string expression
-      * trimString - the trim string
-      * BOTH, FROM - these are keyword to specify for trim string from both ends of the string
+      * trimStr - the trim string characters to trim, the default value is a single space
   """,
   examples = """
     Examples:
