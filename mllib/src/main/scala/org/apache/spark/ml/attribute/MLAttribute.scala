@@ -54,17 +54,6 @@ sealed trait InnerAttribute {
 
 /**
  * :: DeveloperApi ::
- * Describes ML attributes that describe ML columns which can contain other columns.
- */
-@DeveloperApi
-sealed trait ContainerAttribute {
-
-  /** The attributes included in this attribute. */
-  val attributes: Seq[InnerAttribute]
-}
-
-/**
- * :: DeveloperApi ::
  * The basic operations of ML attributes.
  */
 @DeveloperApi
@@ -80,8 +69,13 @@ abstract class BaseAttribute extends MLAttribute with Serializable {
 @DeveloperApi
 abstract class SimpleAttribute
     extends BaseAttribute with InnerAttribute with MetadataInterface {
+  def withName(name: String): SimpleAttribute
+  def withoutName: SimpleAttribute
+
   def withIndicesRange(begin: Int, end: Int): SimpleAttribute
   def withIndicesRange(index: Int): SimpleAttribute
+  def withIndicesRange(indices: Seq[Int]): SimpleAttribute
+
   def withoutIndicesRange: SimpleAttribute
 }
 
@@ -91,7 +85,14 @@ abstract class SimpleAttribute
  */
 @DeveloperApi
 abstract class ComplexAttribute
-    extends BaseAttribute with ContainerAttribute with MetadataInterface {
+    extends BaseAttribute with MetadataInterface {
+
+  def withName(name: String): ComplexAttribute
+  def withoutName: ComplexAttribute
+
+  /** The attributes included in this attribute. */
+  val attributes: Seq[SimpleAttribute]
+
   def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
   def withoutAttributes: ComplexAttribute
 }

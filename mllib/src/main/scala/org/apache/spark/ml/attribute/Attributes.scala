@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.linalg.VectorUDT
-import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
+import org.apache.spark.sql.types.{BooleanType, DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
 
 /**
  * :: DeveloperApi ::
@@ -38,14 +38,16 @@ case class NominalAttr(
 
   override val attrType: AttributeType = AttributeType.Numeric
 
-  override def withName(name: String): SimpleAttribute = copy(name = Some(name))
-  override def withoutName: SimpleAttribute = copy(name = None)
+  override def withName(name: String): NominalAttr = copy(name = Some(name))
+  override def withoutName: NominalAttr = copy(name = None)
 
-  override def withIndicesRange(begin: Int, end: Int): SimpleAttribute =
+  override def withIndicesRange(begin: Int, end: Int): NominalAttr =
     copy(indicesRange = Seq(begin, end))
-  override def withIndicesRange(index: Int): SimpleAttribute = copy(indicesRange = Seq(index))
+  override def withIndicesRange(index: Int): NominalAttr = copy(indicesRange = Seq(index))
+  override def withIndicesRange(indices: Seq[Int]): NominalAttr =
+    copy(indicesRange = indices)
 
-  override def withoutIndicesRange: SimpleAttribute = copy(indicesRange = Seq.empty)
+  override def withoutIndicesRange: NominalAttr = copy(indicesRange = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -78,14 +80,16 @@ case class BinaryAttr(
 
   override val attrType: AttributeType = AttributeType.Binary
 
-  override def withName(name: String): SimpleAttribute = copy(name = Some(name))
-  override def withoutName: SimpleAttribute = copy(name = None)
+  override def withName(name: String): BinaryAttr = copy(name = Some(name))
+  override def withoutName: BinaryAttr = copy(name = None)
 
-  override def withIndicesRange(begin: Int, end: Int): SimpleAttribute =
+  override def withIndicesRange(begin: Int, end: Int): BinaryAttr =
     copy(indicesRange = Seq(begin, end))
-  override def withIndicesRange(index: Int): SimpleAttribute = copy(indicesRange = Seq(index))
+  override def withIndicesRange(index: Int): BinaryAttr = copy(indicesRange = Seq(index))
+  override def withIndicesRange(indices: Seq[Int]): BinaryAttr =
+    copy(indicesRange = indices)
 
-  override def withoutIndicesRange: SimpleAttribute = copy(indicesRange = Seq.empty)
+  override def withoutIndicesRange: BinaryAttr = copy(indicesRange = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -125,14 +129,16 @@ case class NumericAttr(
 
   override val attrType: AttributeType = AttributeType.Numeric
 
-  override def withName(name: String): SimpleAttribute = copy(name = Some(name))
-  override def withoutName: SimpleAttribute = copy(name = None)
+  override def withName(name: String): NumericAttr = copy(name = Some(name))
+  override def withoutName: NumericAttr = copy(name = None)
 
-  override def withIndicesRange(begin: Int, end: Int): SimpleAttribute =
+  override def withIndicesRange(begin: Int, end: Int): NumericAttr =
     copy(indicesRange = Seq(begin, end))
-  override def withIndicesRange(index: Int): SimpleAttribute = copy(indicesRange = Seq(index))
+  override def withIndicesRange(index: Int): NumericAttr = copy(indicesRange = Seq(index))
+  override def withIndicesRange(indices: Seq[Int]): NumericAttr =
+    copy(indicesRange = indices)
 
-  override def withoutIndicesRange: SimpleAttribute = copy(indicesRange = Seq.empty)
+  override def withoutIndicesRange: NumericAttr = copy(indicesRange = Seq.empty)
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -266,14 +272,14 @@ trait AttrBuilder {
 object VectorAttrBuilder extends AttrBuilder {
   // Whether two attributes are the same after dropping their names and indices.
   private def sameAttr(attr1: SimpleAttribute, attr2: SimpleAttribute): Boolean = {
-    attr1.withoutIndicesRange().withoutName == attr2.withoutIndicesRange().withoutName
+    attr1.withoutIndicesRange.withoutName == attr2.withoutIndicesRange.withoutName
   }
 
   def buildAttr(fields: Seq[StructField]): BaseAttribute = {
     var currAttr: Option[SimpleAttribute] = None
     val innerAttributes = mutable.ArrayBuffer[SimpleAttribute]()
 
-    fields.zipWithIndex.flatMap { case (field, fieldIdx) =>
+    fields.zipWithIndex.foreach { case (field, fieldIdx) =>
       val attr = MLAttributes.fromStructField(field, preserveName = false)
       field.dataType match {
         case DoubleType =>
@@ -281,6 +287,7 @@ object VectorAttrBuilder extends AttrBuilder {
             // Assume numeric attribute.
             NumericAttr().withIndicesRange(fieldIdx)
           } else {
+            // Double column can only have `SimpleAttribute`.
             attr.asInstanceOf[SimpleAttribute].withIndicesRange(fieldIdx).withoutName
           }
           // If this attribute is basically the same with previous one, we combine them together.
@@ -303,7 +310,7 @@ object VectorAttrBuilder extends AttrBuilder {
           } else {
             currAttr.map(innerAttributes += _)
             currAttr = Some(newAttr)
-          }  
+          }
         case _: VectorUDT =>
           currAttr.map(innerAttributes += _)
           currAttr = None
