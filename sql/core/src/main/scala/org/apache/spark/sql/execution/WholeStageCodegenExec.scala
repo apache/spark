@@ -400,7 +400,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       child match {
         // For batch file source scan, we should continue executing it
         case f: FileSourceScanExec if f.supportsBatch => // do nothing
-        case _ => child.execute()
+        case _ => return child.execute()
       }
     }
 
