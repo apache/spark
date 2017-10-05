@@ -215,7 +215,7 @@ class GroupedData(object):
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
-        >>> df.groupby('id').apply(normalize).show() #  doctest: +SKIP
+        >>> df.groupby('id').apply(normalize).show()  # doctest: +SKIP
         +---+-------------------+
         | id|                  v|
         +---+-------------------+
