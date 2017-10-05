@@ -92,8 +92,8 @@ def wrap_pandas_udf(f, return_type):
                                 "Pandas.DataFrame")
             if not len(result.columns) == len(arrow_return_types):
                 raise RuntimeError(
-                    "Number of columns of the returned Pandas.DataFrame " \
-                    "doesn't match specified schema. " \
+                    "Number of columns of the returned Pandas.DataFrame "
+                    "doesn't match specified schema. "
                     "Expected: {} Actual: {}".format(len(arrow_return_types), len(result.columns)))
 
             return [(result[result.columns[i]], arrow_return_types[i])
