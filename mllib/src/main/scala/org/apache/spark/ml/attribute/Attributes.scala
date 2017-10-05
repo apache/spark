@@ -36,7 +36,7 @@ case class NominalAttr(
     isOrdinal: Option[Boolean] = None,
     values: Option[Array[String]] = None) extends SimpleAttribute {
 
-  override val attrType: AttributeType = AttributeType.Numeric
+  override val attrType: AttributeType = AttributeType.Nominal
 
   override def withName(name: String): NominalAttr = copy(name = Some(name))
   override def withoutName: NominalAttr = copy(name = None)
@@ -245,11 +245,13 @@ object NominalAttr extends MLAttributeFactory {
 @DeveloperApi
 object VectorAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): VectorAttr = {
+    import org.apache.spark.ml.attribute.AttributeKeys._
+
     val (name, _) = loadCommonMetadata(metadata)
-    val attributes = if (metadata.contains(AttributeKeys.ATTRIBUTES)) {
+    val attributes = if (metadata.contains(ATTRIBUTES)) {
       // `VectorAttr` can only contains `SimpleAttribute`.
-      metadata.getMetadataArray(AttributeKeys.ATTRIBUTES).map { metadata =>
-        MLAttributes.fromMetadata(metadata).asInstanceOf[SimpleAttribute]
+      metadata.getMetadataArray(ATTRIBUTES).map { metadata =>
+        MLAttributes.fromMetadata(metadata.getMetadata(ML_ATTRV2)).asInstanceOf[SimpleAttribute]
       }.toSeq
     } else {
       Seq.empty
@@ -265,6 +267,10 @@ object VectorAttr extends MLAttributeFactory {
  */
 @DeveloperApi
 trait AttrBuilder {
+  /**
+   * Given a sequence of `StructField`, a `AttrBuilder` should be able to build a `BaseAttribute`.
+   * The type of attribute built is decided by the concrete builder extending this trait.
+   */
   def buildAttr(fields: Seq[StructField]): BaseAttribute
 }
 
@@ -275,11 +281,12 @@ object VectorAttrBuilder extends AttrBuilder {
     attr1.withoutIndicesRange.withoutName == attr2.withoutIndicesRange.withoutName
   }
 
-  def buildAttr(fields: Seq[StructField]): BaseAttribute = {
+  override def buildAttr(fields: Seq[StructField]): VectorAttr = {
     var currAttr: Option[SimpleAttribute] = None
+    var fieldIdx = 0
     val innerAttributes = mutable.ArrayBuffer[SimpleAttribute]()
 
-    fields.zipWithIndex.foreach { case (field, fieldIdx) =>
+    fields.foreach { field =>
       val attr = MLAttributes.fromStructField(field, preserveName = false)
       field.dataType match {
         case DoubleType =>
@@ -293,30 +300,32 @@ object VectorAttrBuilder extends AttrBuilder {
           // If this attribute is basically the same with previous one, we combine them together.
           if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
             currAttr = currAttr.map { attr =>
-              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(1))
+              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(0))
             }
           } else {
             currAttr.map(innerAttributes += _)
             currAttr = Some(newAttr)
           }
+          fieldIdx += 1
         case _: NumericType | BooleanType =>
           // Assume numeric attribute.
           val newAttr = NumericAttr().withIndicesRange(fieldIdx)
           // If this attribute is basically the same with previous one, we combine them together.
           if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
             currAttr = currAttr.map { attr =>
-              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(1))
+              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(0))
             }
           } else {
             currAttr.map(innerAttributes += _)
             currAttr = Some(newAttr)
           }
+          fieldIdx += 1
         case _: VectorUDT =>
           currAttr.map(innerAttributes += _)
           currAttr = None
 
           val vectorAttr = attr.asInstanceOf[ComplexAttribute]
-          vectorAttr.attributes.foreach { a =>
+          fieldIdx = vectorAttr.attributes.map { a =>
             val innerAttr = if (a.name.isDefined) {
               a.withoutName
             } else {
@@ -325,9 +334,11 @@ object VectorAttrBuilder extends AttrBuilder {
             // Rebase the inner attribute indices.
             val indices = innerAttr.indicesRange
             innerAttributes += innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
-          }
+            indices(indices.length - 1) + fieldIdx
+          }.max + 1
       }
     }
+    currAttr.map(innerAttributes += _)
     VectorAttr(name = None, attributes = innerAttributes.toSeq)
   }
 }
