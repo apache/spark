@@ -468,10 +468,10 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     // we calculate logphat in the same pass as other statistics.
     // No calculation of loghat happens otherwise.
     val logphatPartOptionBase = () => if (optimizeDocConcentration) {
-                                          Some(BDV.zeros[Double](k))
-                                        } else {
-                                          None
-                                        }
+                                        Some(BDV.zeros[Double](k))
+                                      } else {
+                                        None
+                                      }
 
     val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitions { docs =>
       val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
@@ -501,6 +501,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
         elementWiseSum, elementWiseSum
       )
 
+    expElogbetaBc.destroy(false)
+
     if (nonEmptyDocsN == 0) {
       logWarning("No non-empty documents were submitted in the batch.")
       // Therefore, there is no need to update any of the model parameters
@@ -514,8 +516,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
 
     logphatOption.foreach(_ /= nonEmptyDocsN.toDouble)
     logphatOption.foreach(updateAlpha(_, nonEmptyDocsN))
-
-    expElogbetaBc.destroy(false)
 
     this
   }
