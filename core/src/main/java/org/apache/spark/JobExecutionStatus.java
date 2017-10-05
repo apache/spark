@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
-
 import org.apache.spark.util.EnumUtil;
 
 public enum JobExecutionStatus {
