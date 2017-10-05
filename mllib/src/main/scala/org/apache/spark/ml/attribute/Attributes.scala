@@ -17,7 +17,10 @@
 
 package org.apache.spark.ml.attribute
 
+import scala.collection.mutable
+
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
 
 /**
@@ -261,34 +264,63 @@ trait AttrBuilder {
 
 @DeveloperApi
 object VectorAttrBuilder extends AttrBuilder {
+  // Whether two attributes are the same after dropping their names and indices.
+  private def sameAttr(attr1: SimpleAttribute, attr2: SimpleAttribute): Boolean = {
+    attr1.withoutIndicesRange().withoutName == attr2.withoutIndicesRange().withoutName
+  }
+
   def buildAttr(fields: Seq[StructField]): BaseAttribute = {
-    val innerAttributes = fields.zipWithIndex.flatMap { case (field, fieldIdx) =>
+    var currAttr: Option[SimpleAttribute] = None
+    val innerAttributes = mutable.ArrayBuffer[SimpleAttribute]()
+
+    fields.zipWithIndex.flatMap { case (field, fieldIdx) =>
       val attr = MLAttributes.fromStructField(field, preserveName = false)
       field.dataType match {
         case DoubleType =>
-          if (attr == UnresolvedMLAttribute) {
+          val newAttr = if (attr == UnresolvedMLAttribute) {
             // Assume numeric attribute.
-            Seq(NumericAttr().withIndicesRange(fieldIdx))
+            NumericAttr().withIndicesRange(fieldIdx)
           } else {
-            Seq(attr.asInstanceOf[SimpleAttribute].withIndicesRange(fieldIdx).withoutName())
+            attr.asInstanceOf[SimpleAttribute].withIndicesRange(fieldIdx).withoutName
+          }
+          // If this attribute is basically the same with previous one, we combine them together.
+          if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
+            currAttr = currAttr.map { attr =>
+              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(1))
+            }
+          } else {
+            currAttr.map(innerAttributes += _)
+            currAttr = Some(newAttr)
           }
         case _: NumericType | BooleanType =>
           // Assume numeric attribute.
-          Seq(NumericAttr().withIndicesRange(fieldIdx))
+          val newAttr = NumericAttr().withIndicesRange(fieldIdx)
+          // If this attribute is basically the same with previous one, we combine them together.
+          if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
+            currAttr = currAttr.map { attr =>
+              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(1))
+            }
+          } else {
+            currAttr.map(innerAttributes += _)
+            currAttr = Some(newAttr)
+          }  
         case _: VectorUDT =>
+          currAttr.map(innerAttributes += _)
+          currAttr = None
+
           val vectorAttr = attr.asInstanceOf[ComplexAttribute]
-          vectorAttr.attributes.map { a =>
+          vectorAttr.attributes.foreach { a =>
             val innerAttr = if (a.name.isDefined) {
-              a.withoutName()
+              a.withoutName
             } else {
               a
             }
             // Rebase the inner attribute indices.
             val indices = innerAttr.indicesRange
-            innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
+            innerAttributes += innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
           }
       }
     }
-    VectorAttr(name = None, attributes = innerAttributes)
+    VectorAttr(name = None, attributes = innerAttributes.toSeq)
   }
 }
