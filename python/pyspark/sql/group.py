@@ -195,6 +195,7 @@ class GroupedData(object):
             jgd = self._jgd.pivot(pivot_col, values)
         return GroupedData(jgd, self._df)
 
+    @since(2.3)
     def apply(self, udf):
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
@@ -206,7 +207,7 @@ class GroupedData(object):
         `pandas.DataFrame` can be arbitrary length and its schema should match the returnType of
         the pandas udf.
 
-        :param udf: A wrapped function returned by `pandas_udf`
+        :param udf: A wrapped udf function returned by :meth:`pyspark.sql.functions.pandas_udf`
 
         >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(

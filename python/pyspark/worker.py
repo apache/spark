@@ -74,22 +74,32 @@ def wrap_udf(f, return_type):
 
 
 def wrap_pandas_udf(f, return_type):
+    # If the return_type is a StructType, it indicates this is a groupby apply udf,
+    # otherwise, it's a vectorized column udf.
+    # We can distinguish these two by return type because in groupby apply, we always specify
+    # returnType as a StructType, and in vectorized column udf, StructType is not supported.
+    #
+    # TODO: This logic is a bit hacky and might not work for future pandas udfs. Need refactoring.
     if isinstance(return_type, StructType):
         arrow_return_types = [to_arrow_type(field.dataType) for field in return_type]
 
-        def fn(*a):
+        # Verify the return type and number of columns in result
+        def verify_result_type(*a):
             import pandas as pd
             result = f(*a)
-            assert isinstance(result, pd.DataFrame), \
-                'Return value of the user-defined function is not a pandas.DataFrame.'
-            assert len(result.columns) == len(arrow_return_types), \
-                'Number of columns of the returned pandas.DataFrame doesn\'t match ' \
-                'specified schema. ' \
-                'Expected: {} Actual: {}'.format(len(arrow_return_types), len(result.columns))
+            if not isinstance(result, pd.DataFrame):
+                raise TypeError("Return type of the user-defined function should be a "
+                                "Pandas.DataFrame")
+            if not len(result.columns) == len(arrow_return_types):
+                raise RuntimeError(
+                    "Number of columns of the returned Pandas.DataFrame " \
+                    "doesn't match specified schema. " \
+                    "Expected: {} Actual: {}".format(len(arrow_return_types), len(result.columns)))
 
             return [(result[result.columns[i]], arrow_return_types[i])
                     for i in range(len(arrow_return_types))]
-        return fn
+
+        return verify_result_type
 
     else:
         arrow_return_type = to_arrow_type(return_type)
@@ -97,7 +107,8 @@ def wrap_pandas_udf(f, return_type):
         def verify_result_length(*a):
             result = f(*a)
             if not hasattr(result, "__len__"):
-                raise TypeError("Return type of pandas_udf should be a Pandas.Series")
+                raise TypeError("Return type of the user-defined functon should be a "
+                                "Pandas.Series")
             if len(result) != len(a[0]):
                 raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                    "expected %d, got %d" % (len(a[0]), len(result)))
