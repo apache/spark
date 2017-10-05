@@ -228,7 +228,7 @@ class SQLMetricsSuite extends SparkFunSuite with SQLMetricsTestUtils with Shared
     testSparkPlanMetrics(df, 2, Map(
       1L -> (("BroadcastHashJoin", Map(
         "number of output rows" -> 2L,
-        "avg hash probe (min, med, max)" -> "\n(1, 1, 1)"))))
+        "avg hash probe (min, med, max)" -> "\n(1.1, 1.1, 1.1)"))))
     )
   }
 
