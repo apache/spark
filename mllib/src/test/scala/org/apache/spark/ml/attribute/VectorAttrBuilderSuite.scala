@@ -55,13 +55,20 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
         NumericAttr(indicesRange = Seq(6))
       )
     ).toStructField.metadata
-    println(col2Metadata)
     val fields3 = Seq(
-      StructField("col1", DoubleType, metadata = col1Metadata),
+      StructField("col1", DoubleType),
       StructField("col2", new VectorUDT(), metadata = col2Metadata),
       StructField("col3", DoubleType)
     )
     val attr3 = VectorAttrBuilder.buildAttr(fields3)
-    println(attr3)
+    assert(attr3.attributes.length == 4 &&
+      attr3.attributes(0).isInstanceOf[NumericAttr] &&
+      attr3.attributes(0).indicesRange === Seq(0) &&
+      attr3.attributes(1).isInstanceOf[NominalAttr] &&
+      attr3.attributes(1).indicesRange === Seq(1, 6) &&
+      attr3.attributes(2).isInstanceOf[NumericAttr] &&
+      attr3.attributes(2).indicesRange === Seq(7) &&
+      attr3.attributes(3).isInstanceOf[NumericAttr] &&
+      attr3.attributes(3).indicesRange === Seq(8))
   }
 }
