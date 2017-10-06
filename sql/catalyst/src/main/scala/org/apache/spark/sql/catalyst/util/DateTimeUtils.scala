@@ -66,6 +66,12 @@ object DateTimeUtils {
   final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   val TIMEZONE_OPTION = "timeZone"
+
+  /**
+   * Property that holds the time zone used for adjusting "timestamp without time zone"
+   * columns to the session's time zone. See SPARK-12297 for more details (including the
+   * specified name of this property).
+   */
   val TIMEZONE_PROPERTY = "table.timezone-adjustment"
 
   def defaultTimeZone(): TimeZone = TimeZone.getDefault()
