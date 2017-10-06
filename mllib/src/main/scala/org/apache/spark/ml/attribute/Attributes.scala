@@ -292,30 +292,30 @@ object VectorAttr extends MLAttributeFactory {
 
 /**
  * :: DeveloperApi ::
- * Builder classes used to build ML attributes from `StructField`s.
+ * Builder used to build ML vector attributes from `StructField`s.
  */
 @DeveloperApi
-trait AttrBuilder {
-  /**
-   * Given a sequence of `StructField`, a `AttrBuilder` should be able to build a `BaseAttribute`.
-   * The type of attribute built is decided by the concrete builder extending this trait.
-   */
-  def buildAttr(fields: Seq[StructField]): BaseAttribute
-}
-
-@DeveloperApi
-object VectorAttrBuilder extends AttrBuilder {
+object VectorAttrBuilder {
   // Whether two attributes are the same after dropping their names and indices.
   private def sameAttr(attr1: SimpleAttribute, attr2: SimpleAttribute): Boolean = {
     attr1.withoutIndicesRange.withoutName == attr2.withoutIndicesRange.withoutName
   }
 
-  override def buildAttr(fields: Seq[StructField]): VectorAttr = {
+  /**
+   * Given a sequence of `StructField`, a `AttrBuilder` should be able to build a `VectorAttr`.
+   *
+   * @param numAttrsInVectors The number of attributes in vector columns. For non-vector columns,
+   *                            the number is zero.
+   */
+  def buildAttr(fields: Seq[StructField], numAttrsInVectors: Seq[Int]): VectorAttr = {
+    require(fields.length == numAttrsInVectors.length,
+      "`numAttrsInVectors`'s length should be the same with `fields`'s length")
+
     var currAttr: Option[SimpleAttribute] = None
     var fieldIdx = 0
     val innerAttributes = mutable.ArrayBuffer[SimpleAttribute]()
 
-    fields.foreach { field =>
+    fields.zipWithIndex.foreach { case (field, idx) =>
       val attr = MLAttributes.fromStructField(field, preserveName = false)
       field.dataType match {
         case DoubleType =>
@@ -371,6 +371,10 @@ object VectorAttrBuilder extends AttrBuilder {
               innerAttributes += innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
               indices(indices.length - 1) + fieldIdx
             }.max + 1
+          } else {
+            // If this vector has no metadata, we need to add up the number of attributes in the
+            // vector, so the next field index can be correct.
+            fieldIdx += numAttrsInVectors(idx)
           }
       }
     }

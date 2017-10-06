@@ -28,7 +28,7 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
       StructField("col1", DoubleType),
       StructField("col2", DoubleType)
     )
-    val attr1 = VectorAttrBuilder.buildAttr(fields1)
+    val attr1 = VectorAttrBuilder.buildAttr(fields1, Seq(0, 0))
     assert(attr1.attributes.length == 1 &&
       attr1.attributes(0).isInstanceOf[NumericAttr] &&
       attr1.attributes(0).indicesRange === Seq(0, 1))
@@ -39,7 +39,7 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
       StructField("col1", DoubleType, metadata = col1Metadata),
       StructField("col2", DoubleType)
     )
-    val attr2 = VectorAttrBuilder.buildAttr(fields2)
+    val attr2 = VectorAttrBuilder.buildAttr(fields2, Seq(0, 0))
     assert(attr2.attributes.length == 2 &&
       attr2.attributes(0).isInstanceOf[NominalAttr] &&
       attr2.attributes(0).indicesRange === Seq(0) &&
@@ -60,7 +60,7 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
       StructField("col2", new VectorUDT(), metadata = col2Metadata),
       StructField("col3", DoubleType)
     )
-    val attr3 = VectorAttrBuilder.buildAttr(fields3)
+    val attr3 = VectorAttrBuilder.buildAttr(fields3, Seq(0, 2, 0))
     assert(attr3.attributes.length == 4 &&
       attr3.attributes(0).isInstanceOf[NumericAttr] &&
       attr3.attributes(0).indicesRange === Seq(0) &&
