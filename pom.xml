@@ -98,15 +98,13 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>assembly</module>
-    <module>external/flume</module>
-    <module>external/flume-sink</module>
-    <module>external/flume-assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
     <module>external/kafka-0-10</module>
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
+    <!-- See additional modules enabled by profiles below -->
   </modules>
 
   <properties>
@@ -2581,6 +2579,15 @@
           <scope>compile</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <id>flume</id>
+      <modules>
+        <module>external/flume</module>
+        <module>external/flume-sink</module>
+        <module>external/flume-assembly</module>
+      </modules>
     </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
