@@ -934,6 +934,15 @@ object SQLConf {
       .intConf
       .createWithDefault(10000)
 
+  val GENERATED_CLASS_LENGTH_THRESHOLD =
+    buildConf("spark.sql.codegen.generatedClass.size.threshold")
+      .doc("Threshold in bytes for the size of a generated class. If the generated class " +
+        "size is higher of this value, a private nested class is created and used." +
+        "This is useful to limit the number of named constants in the class " +
+        "and therefore its Constant Pool. The default is 1600k.")
+      .intConf
+      .createWithDefault(1600000)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }

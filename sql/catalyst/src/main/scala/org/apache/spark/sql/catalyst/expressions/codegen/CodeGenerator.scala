@@ -279,11 +279,13 @@ class CodegenContext {
       inlineToOuterClass: Boolean = false): String = {
     // The number of named constants that can exist in the class is limited by the Constant Pool
     // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
-    // threshold of 1600k bytes to determine when a function should be inlined to a private, nested
-    // sub-class.
+    // threshold to determine when a function should be inlined to a private, nested sub-class
+    val generatedClassLengthThreshold = SparkEnv.get.conf.getInt(
+      SQLConf.GENERATED_CLASS_LENGTH_THRESHOLD.key,
+      SQLConf.GENERATED_CLASS_LENGTH_THRESHOLD.defaultValue.get)
     val (className, classInstance) = if (inlineToOuterClass) {
       outerClassName -> ""
-    } else if (currClassSize > 1600000) {
+    } else if (currClassSize > generatedClassLengthThreshold) {
       val className = freshName("NestedClass")
       val classInstance = freshName("nestedClassInstance")
 
