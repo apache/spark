@@ -69,6 +69,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
+      ReplaceExceptWithNotFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
@@ -1238,6 +1239,53 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
+  }
+}
+
+/**
+ * If one or both of the datasets in the logical [[Except]] operator are purely transformed using
+ * [[Filter]], this rule will replace logical [[Except]] operator with a [[Filter]] operator by
+ * flipping the filter condition of the right child.
+ * {{{
+ *   SELECT a1, a2 FROM Tab1 WHERE a2 = 12 EXCEPT SELECT a1, a2 FROM Tab1 WHERE a1 = 5
+ *   ==>  SELECT a1, a2 FROM Tab1 WHERE a2 = 12 AND a1 <> 5
+ * }}}
+ *
+ * Note:
+ * 1. We should combine all the [[Filter]] of the right node before flipping it using NOT operator.
+ */
+object ReplaceExceptWithNotFilter extends Rule[LogicalPlan] {
+
+  implicit def nodeToFilter(node: LogicalPlan): Filter = node.asInstanceOf[Filter]
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case Except(left, right) if isEligible(left, right) =>
+      Distinct(
+        Filter(Not(replaceAttributesIn(combineFilters(right).condition, left)), left)
+      )
+  }
+
+  def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
+    case (left: Filter, right: Filter) => parent(left).sameResult(parent(right))
+    case (left, right: Filter) => left.sameResult(parent(right))
+    case _ => false
+  }
+
+  def parent(plan: LogicalPlan): LogicalPlan = plan match {
+    case x @ Filter(_, child) => parent(child)
+    case x => x
+  }
+
+  def combineFilters(plan: LogicalPlan): LogicalPlan = CombineFilters(plan) match {
+    case result if !result.fastEquals(plan) => combineFilters(result)
+    case result => result
+  }
+
+  def replaceAttributesIn(condition: Expression, leftChild: LogicalPlan): Expression = {
+    condition transform {
+      case AttributeReference(name, _, _, _) =>
+        leftChild.output.find(_.name == name).get
+    }
   }
 }
 
