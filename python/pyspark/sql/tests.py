@@ -2583,6 +2583,28 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.first(), Row(longarray=[-9223372036854775808, 0, 9223372036854775807]))
 
 
+    def test_create_function_by_column_name(self):
+        import pyspark.sql.functions as func
+
+        # If column name argument is not accepted, exception will be thrown
+        for function_name in func._functions_by_column_name.keys():
+            f = getattr(func, function_name)
+            col = f('text')
+            # We expect to get column as an output
+            self.assertTrue(isinstance(col, Column))
+
+
+    def test_create_function(self):
+        import pyspark.sql.functions as func
+
+        # If column name argument is not accepted, exception will be thrown
+        for function_name in func._functions.keys():
+            f = getattr(func, function_name)
+            col = f('text')
+            # We expect to get column as an output
+            self.assertTrue(isinstance(col, Column))
+
+
 class HiveSparkSubmitTests(SparkSubmitTests):
 
     def test_hivecontext(self):
