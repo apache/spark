@@ -26,37 +26,14 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types.{StringType, TimestampType}
 
-/**
- * Apply a correction to data loaded from, or saved to, tables that have a configured time zone, so
- * that timestamps can be read like TIMESTAMP WITHOUT TIMEZONE.  This gives correct behavior if you
- * process data with machines in different timezones, or if you access the data from multiple SQL
- * engines.
- */
-private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    // we can't use transformUp because we want to terminate recursion if there was already
-    // timestamp correction, to keep this idempotent.
-    plan match {
-      case insertIntoHadoopFs: InsertIntoHadoopFsRelationCommand =>
-        // The query might be reading from a parquet table which requires a different conversion;
-        // this makes sure we apply the correct conversions there.
-        val (fixedQuery, _) = convertInputs(insertIntoHadoopFs.query)
-        writeConversion(insertIntoHadoopFs.copy(query = fixedQuery))
-
-      case other =>
-        // recurse into children to see if we're reading data that needs conversion
-        val (convertedPlan, _) = convertInputs(plan)
-        convertedPlan
-    }
-  }
+abstract class BaseAdjustTimestampsRule(sparkSession: SparkSession) extends Rule[LogicalPlan] {
 
   /**
    * Apply the correction to all timestamp inputs, and replace all references to the raw attributes
    * with the new converted inputs.
    * @return The converted plan, and the replacements to be applied further up the plan
    */
-  private def convertInputs(
+  protected def convertInputs(
       plan: LogicalPlan
       ): (LogicalPlan, Map[ExprId, NamedExpression]) = plan match {
     case alreadyConverted@Project(exprs, _) if hasCorrection(exprs) =>
@@ -103,31 +80,32 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
       (fixedExpressions, newReplacements)
   }
 
-  private def hasCorrection(exprs: Seq[Expression]): Boolean = {
+  protected def hasCorrection(exprs: Seq[Expression]): Boolean = {
     exprs.exists { expr =>
       expr.isInstanceOf[TimestampTimezoneCorrection] || hasCorrection(expr.children)
     }
   }
 
-  private def writeConversion(
-      insertIntoHadoopFs: InsertIntoHadoopFsRelationCommand): InsertIntoHadoopFsRelationCommand = {
-    val query = insertIntoHadoopFs.query
-    val tableTz = extractTableTz(insertIntoHadoopFs.catalogTable, insertIntoHadoopFs.options)
+  protected def writeConversion(
+      table: Option[CatalogTable],
+      options: Map[String, String],
+      query: LogicalPlan): LogicalPlan = {
+    val tableTz = extractTableTz(table, options)
     val internalTz = sparkSession.sessionState.conf.sessionLocalTimeZone
     if (tableTz.isDefined && tableTz != internalTz) {
       convertTzForAllTimestamps(query, internalTz, tableTz.get).map { case (fields, _) =>
-        insertIntoHadoopFs.copy(query = new Project(fields, query))
-      }.getOrElse(insertIntoHadoopFs)
+        new Project(fields, query)
+      }.getOrElse(query)
     } else {
-      insertIntoHadoopFs
+      query
     }
   }
 
-  private def extractTableTz(options: Map[String, String]): Option[String] = {
+  protected def extractTableTz(options: Map[String, String]): Option[String] = {
     options.get(DateTimeUtils.TIMEZONE_PROPERTY)
   }
 
-  private def extractTableTz(
+  protected def extractTableTz(
       table: Option[CatalogTable],
       options: Map[String, String]): Option[String] = {
     table.flatMap { tbl => extractTableTz(tbl.properties) }.orElse(extractTableTz(options))
@@ -139,7 +117,7 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
    * (Leave non-timestamp fields alone.)  Also return a map from the original id for the timestamp
    * field, to the new alias of the timezone-corrected expression.
    */
-  private def convertTzForAllTimestamps(
+  protected def convertTzForAllTimestamps(
       relation: LogicalPlan,
       fromTz: String,
       toTz: String): Option[(Seq[NamedExpression], Map[ExprId, NamedExpression])] = {
@@ -173,4 +151,33 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
     }
     if (foundTs) Some((modifiedFields, replacements)) else None
   }
+}
+
+/**
+ * Apply a correction to data loaded from, or saved to, tables that have a configured time zone, so
+ * that timestamps can be read like TIMESTAMP WITHOUT TIMEZONE.  This gives correct behavior if you
+ * process data with machines in different timezones, or if you access the data from multiple SQL
+ * engines.
+ */
+case class AdjustTimestamps(sparkSession: SparkSession)
+    extends BaseAdjustTimestampsRule(sparkSession) {
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    // we can't use transformUp because we want to terminate recursion if there was already
+    // timestamp correction, to keep this idempotent.
+    plan match {
+      case insert: InsertIntoHadoopFsRelationCommand =>
+        // The query might be reading from a parquet table which requires a different conversion;
+        // this makes sure we apply the correct conversions there.
+        val (fixedQuery, _) = convertInputs(insert.query)
+        val fixedOutput = writeConversion(insert.catalogTable, insert.options, insert.query)
+        insert.copy(query = fixedOutput)
+
+      case other =>
+        // recurse into children to see if we're reading data that needs conversion
+        val (convertedPlan, _) = convertInputs(plan)
+        convertedPlan
+    }
+  }
+
 }

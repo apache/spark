@@ -80,6 +80,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
         HiveAnalysis +:
+        HiveAdjustTimestamps(session) +:
         AdjustTimestamps(session) +:
         customPostHocResolutionRules
 
