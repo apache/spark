@@ -47,5 +47,9 @@ public class ShuffleSecretManagerSuite {
     secretManager.unregisterApp(app1);
     assertNull(secretManager.getSecretKey(app1));
     assertEquals(pw2update, secretManager.getSecretKey(app2));
+
+    secretManager.unregisterApp(app2);
+    assertNull(secretManager.getSecretKey(app2));
+    assertNull(secretManager.getSecretKey(app1));
   }
 }

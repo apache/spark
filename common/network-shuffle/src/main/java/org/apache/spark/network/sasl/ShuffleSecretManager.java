@@ -47,7 +47,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
    * fetching shuffle files written by other executors in this application.
    */
   public void registerApp(String appId, String shuffleSecret) {
-    // Always just put the new secret information to make sure it's the most up to date.
+    // Always put the new secret information to make sure it's the most up to date.
     // Otherwise we have to specifically look at the application attempt in addition
     // to the applicationId since the secrets change between application attempts on yarn.
     shuffleSecretMap.put(appId, shuffleSecret);
