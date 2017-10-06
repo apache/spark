@@ -2650,6 +2650,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
       sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+
+      withTable("struct1", "struct2") {
+        sql("CREATE TABLE struct1(a struct<a:int>) USING parquet")
+        sql("CREATE TABLE struct2(A struct<A:int>) USING parquet")
+        checkAnswer(sql("SELECT * FROM struct1, struct2 WHERE struct1.a = struct2.A"), Seq.empty)
+      }
     }
 
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
@@ -2662,6 +2668,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
       }.message
       assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+
+      withTable("struct1", "struct2") {
+        sql("CREATE TABLE struct1(a struct<a:int>) USING parquet")
+        sql("CREATE TABLE struct2(A struct<A:int>) USING parquet")
+        val m = intercept[AnalysisException] {
+          sql("SELECT * FROM struct1, struct2 WHERE a = A")
+        }.message
+        assert(m.contains("cannot resolve '(struct1.`a` = struct2.`A`)' due to data type mismatch"))
+      }
     }
   }
 
