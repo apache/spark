@@ -95,6 +95,8 @@ abstract class ComplexAttribute
 
   def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
   def withoutAttributes: ComplexAttribute
+
+  def getAttribute(idx: Int): BaseAttribute
 }
 
 @DeveloperApi

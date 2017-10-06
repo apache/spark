@@ -158,7 +158,10 @@ case class NumericAttr(
 
 /**
  * :: DeveloperApi ::
- * A numeric attribute with optional summary statistics.
+ * An attribute that can contain other attributes, represents a ML vector column.
+ * The inner attributes can be accessed by using indices in the vector. The names of the
+ * inner attributes are meaningless and won't be serialized.
+ *
  * @param attributes the attributes included in this vector column.
  */
 @DeveloperApi
@@ -172,8 +175,18 @@ case class VectorAttr(
   override def withoutName: VectorAttr = copy(name = None)
 
   override def withAttributes(attributes: Seq[SimpleAttribute]): VectorAttr =
-    copy(attributes = attributes)
+    copy(attributes = attributes.map(_.withoutName))
   override def withoutAttributes: VectorAttr = copy(attributes = Seq.empty)
+
+  override def getAttribute(idx: Int): BaseAttribute = {
+    attributes.find { attr =>
+      attr.indicesRange match {
+        case Seq(exactIdx) if exactIdx == idx => true
+        case Seq(from, to) if from <= idx && idx <= to => true
+        case _ => false
+      }
+    }.getOrElse(UnresolvedMLAttribute).withoutName
+  }
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -183,7 +196,7 @@ case class VectorAttr(
 
     // Build the metadata of attributes included in this vector attribute.
     val attrMetadata = attributes.map { attr =>
-      attr.toMetadata()
+      attr.withoutName.toMetadata()
     }
     bldr.putMetadataArray(AttributeKeys.ATTRIBUTES, attrMetadata.toArray)
 
@@ -191,6 +204,10 @@ case class VectorAttr(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * The factory object for `NumericAttr` used to load the attribute from `Metadata`.
+ */
 @DeveloperApi
 object NumericAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): NumericAttr = {
@@ -207,6 +224,10 @@ object NumericAttr extends MLAttributeFactory {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * The factory object for `BinaryAttr` used to load the attribute from `Metadata`.
+ */
 @DeveloperApi
 object BinaryAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): BinaryAttr = {
@@ -224,6 +245,10 @@ object BinaryAttr extends MLAttributeFactory {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * The factory object for `NominalAttr` used to load the attribute from `Metadata`.
+ */
 @DeveloperApi
 object NominalAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): NominalAttr = {
@@ -242,6 +267,10 @@ object NominalAttr extends MLAttributeFactory {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ * The factory object for `VectorAttr` used to load the attribute from `Metadata`.
+ */
 @DeveloperApi
 object VectorAttr extends MLAttributeFactory {
   override def fromMetadata(metadata: Metadata): VectorAttr = {
@@ -263,7 +292,7 @@ object VectorAttr extends MLAttributeFactory {
 
 /**
  * :: DeveloperApi ::
- * Builder classes used to build ML attributes.
+ * Builder classes used to build ML attributes from `StructField`s.
  */
 @DeveloperApi
 trait AttrBuilder {
@@ -292,6 +321,7 @@ object VectorAttrBuilder extends AttrBuilder {
         case DoubleType =>
           val newAttr = if (attr == UnresolvedMLAttribute) {
             // Assume numeric attribute.
+            // Or just use `UnresolvedMLAttribute`?
             NumericAttr().withIndicesRange(fieldIdx)
           } else {
             // Double column can only have `SimpleAttribute`.
@@ -308,7 +338,10 @@ object VectorAttrBuilder extends AttrBuilder {
           }
           fieldIdx += 1
         case _: NumericType | BooleanType =>
+          require(attr == UnresolvedMLAttribute, "numeric/boolean column shouldn't have attribute.")
+
           // Assume numeric attribute.
+          // Note: should we assume `UnresolvedMLAttribute` for this kind of columns?
           val newAttr = NumericAttr().withIndicesRange(fieldIdx)
           // If this attribute is basically the same with previous one, we combine them together.
           if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
@@ -324,18 +357,21 @@ object VectorAttrBuilder extends AttrBuilder {
           currAttr.map(innerAttributes += _)
           currAttr = None
 
-          val vectorAttr = attr.asInstanceOf[ComplexAttribute]
-          fieldIdx = vectorAttr.attributes.map { a =>
-            val innerAttr = if (a.name.isDefined) {
-              a.withoutName
-            } else {
-              a
-            }
-            // Rebase the inner attribute indices.
-            val indices = innerAttr.indicesRange
-            innerAttributes += innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
-            indices(indices.length - 1) + fieldIdx
-          }.max + 1
+          // If there is an attribute for this vector column.
+          if (attr != UnresolvedMLAttribute) {
+            val vectorAttr = attr.asInstanceOf[ComplexAttribute]
+            fieldIdx = vectorAttr.attributes.map { a =>
+              val innerAttr = if (a.name.isDefined) {
+                a.withoutName
+              } else {
+                a
+              }
+              // Rebase the inner attribute indices.
+              val indices = innerAttr.indicesRange
+              innerAttributes += innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
+              indices(indices.length - 1) + fieldIdx
+            }.max + 1
+          }
       }
     }
     currAttr.map(innerAttributes += _)
