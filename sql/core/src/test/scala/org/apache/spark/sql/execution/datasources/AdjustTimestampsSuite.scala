@@ -127,7 +127,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
         tz: Option[String],
         format: String): Boolean = {
       val writer = df.write.format(format)
-      tz.foreach { writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _)}
+      tz.foreach(writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _))
       writer.saveAsTable(table)
       true
     }

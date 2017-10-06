@@ -24,20 +24,26 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveSingleton {
 
   override protected def createAndSaveTableFunctions(): Seq[CreateAndSaveTable] = {
-    super.createAndSaveTableFunctions() ++ Seq(CreateHiveTableAndInsert)
+    super.createAndSaveTableFunctions() ++
+      Seq(true, false).map(new CreateHiveTableAndInsert(_))
   }
 
   override protected def ctasFunctions(): Seq[CTAS] = {
-    super.ctasFunctions() ++ Seq(CreateHiveTableWithTimezoneAndInsert)
+    super.ctasFunctions() ++
+      Seq(true, false).map(new CreateHiveTableWithTimezoneAndInsert(_))
   }
 
-  object CreateHiveTableAndInsert extends CreateAndSaveTable {
+  class CreateHiveTableAndInsert(convertMetastore: Boolean) extends CreateAndSaveTable {
     override def createAndSave(
         df: DataFrame,
         table: String,
         tzOpt: Option[String],
         format: String): Boolean = {
-      if (format == "parquet") {
+      if (format != "parquet") {
+        return false
+      }
+
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertMetastore.toString) {
         val tblProperties = tzOpt.map { tz =>
           s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
         }.getOrElse("")
@@ -46,24 +52,27 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
              |  display string,
              |  ts timestamp
              |)
-             |STORED AS parquet
+             |STORED AS $format
              |$tblProperties
              |""".stripMargin)
         df.write.insertInto(table)
-        true
-      } else {
-        false
       }
+
+      true
     }
   }
 
-  object CreateHiveTableWithTimezoneAndInsert extends CTAS {
+  class CreateHiveTableWithTimezoneAndInsert(convertMetastore: Boolean) extends CTAS {
     override def createTableFromSourceTable(
         source: String,
         dest: String,
         destTz: Option[String],
         destFormat: String): Boolean = {
-      if (destFormat == "parquet") {
+      if (destFormat != "parquet") {
+        return false
+      }
+
+      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertMetastore.toString) {
         val tblProperties = destTz.map { tz =>
           s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
         }.getOrElse("")
@@ -73,15 +82,13 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
              |  display string,
              |  ts timestamp
              |)
-             |STORED AS parquet
+             |STORED AS $destFormat
              |$tblProperties
              |""".stripMargin)
         spark.sql(s"insert into $dest select * from $source")
-        true
-      } else {
-        false
       }
 
+      true
     }
   }
 
