@@ -91,7 +91,8 @@ case class BroadcastExchangeExec(
             case arr: Array[InternalRow] =>
               arr.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
             case _ =>
-              numRows * 512 // guess: each row is about 512 bytes
+              throw new SparkException("[BUG] BroadcastMode.transform returned unexpected type: " +
+                  relation.getClass.getName)
           }
 
           longMetric("dataSize") += dataSize
