@@ -586,6 +586,15 @@ object SQLConf {
     .intConf
     .createWithDefault(CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT)
 
+  val CODEGEN_MAX_LINES_PER_FUNC =
+    buildConf("spark.sql.codegen.expressions.maxCodegenLinesPerFunction")
+      .internal()
+      .doc("The maximum line number of a single Java function splited by " +
+        "CodeGenerator.splitExpression() method. This threshold is defined to reduce " +
+        "possibility of exceeding 64KB of Java bytecode size of the splitted method.")
+      .intConf
+      .createWithDefault(100)
+
   val FILES_MAX_PARTITION_BYTES = buildConf("spark.sql.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .longConf
@@ -1060,6 +1069,8 @@ class SQLConf extends Serializable with Logging {
   def loggingMaxLinesForCodegen: Int = getConf(CODEGEN_LOGGING_MAX_LINES)
 
   def hugeMethodLimit: Int = getConf(WHOLESTAGE_HUGE_METHOD_LIMIT)
+
+  def maxCodegenLinesPerFunction: Int = getConf(CODEGEN_MAX_LINES_PER_FUNC)
 
   def tableRelationCacheSize: Int =
     getConf(StaticSQLConf.FILESOURCE_TABLE_RELATION_CACHE_SIZE)
