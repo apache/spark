@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, MonotonicallyIncreasingID}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
@@ -127,6 +127,16 @@ object UnsupportedOperationChecker {
       val aggs = subplan.collect { case a@Aggregate(_, _, _) if a.isStreaming => a }
       // Either the subplan has no streaming source, or it has aggregation with Complete mode
       !subplan.isStreaming || (aggs.nonEmpty && outputMode == InternalOutputModes.Complete)
+    }
+
+    def checkUnsupportedExpressions(implicit operator: LogicalPlan): Unit = {
+      val unsupportedExprs = operator.expressions.flatMap(_.collect {
+        case m: MonotonicallyIncreasingID => m
+      }).distinct
+      if (unsupportedExprs.nonEmpty) {
+        throwError("Expression(s): " + unsupportedExprs.map(_.sql).mkString(", ") +
+          " is not supported with streaming DataFrames/Datasets")
+      }
     }
 
     plan.foreachUp { implicit subPlan =>
@@ -323,6 +333,9 @@ object UnsupportedOperationChecker {
 
         case _ =>
       }
+
+      // Check if there are unsupported expressions in streaming query plan.
+      checkUnsupportedExpressions(subPlan)
     }
   }
 
