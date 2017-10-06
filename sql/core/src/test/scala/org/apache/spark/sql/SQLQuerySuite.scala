@@ -2651,10 +2651,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
       sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
 
-      withTable("struct1", "struct2") {
-        sql("CREATE TABLE struct1(a struct<a:int>) USING parquet")
-        sql("CREATE TABLE struct2(A struct<A:int>) USING parquet")
-        checkAnswer(sql("SELECT * FROM struct1, struct2 WHERE struct1.a = struct2.A"), Seq.empty)
+      withTable("t", "S") {
+        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
+        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
+        Seq(("c", "C"), ("C", "c"), ("c.f", "C.F"), ("C.F", "c.f")).foreach {
+          case (left, right) =>
+            checkAnswer(sql(s"SELECT * FROM t, S WHERE t.$left = S.$right"), Seq.empty)
+        }
       }
     }
 
@@ -2669,13 +2672,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }.message
       assert(m2.contains("Except can only be performed on tables with the compatible column types"))
 
-      withTable("struct1", "struct2") {
-        sql("CREATE TABLE struct1(a struct<a:int>) USING parquet")
-        sql("CREATE TABLE struct2(A struct<A:int>) USING parquet")
+      withTable("t", "S") {
+        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
+        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
+        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
         val m = intercept[AnalysisException] {
-          sql("SELECT * FROM struct1, struct2 WHERE a = A")
+          sql("SELECT * FROM t, S WHERE c = C")
         }.message
-        assert(m.contains("cannot resolve '(struct1.`a` = struct2.`A`)' due to data type mismatch"))
+        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
       }
     }
   }
