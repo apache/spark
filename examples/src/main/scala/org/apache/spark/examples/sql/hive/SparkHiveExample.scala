@@ -111,7 +111,6 @@ object SparkHiveExample {
     sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv7.txt' INTO TABLE src_serde")
     // Executed the data with the specified serde properties.
     sql("SELECT key, value FROM src_serde ORDER BY key, value").show()
-
     spark.stop()
   }
 }

@@ -125,8 +125,8 @@ public class JavaSparkHiveExample {
     // $example off:spark_hive$
 
     // Hive serde's are also supported with serde properties.
-	String sqlQuery = "CREATE TABLE src_serde(key decimal(38,18), value int) USING hive"
-			+ " OPTIONS (SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe', input.regex '([^ ]*) ([^ ]*)')";
+	String sqlQuery = "CREATE TABLE src_serde(key decimal(38,18), value int) USING hive" +
+      " OPTIONS (SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe', input.regex '([^ ]*) ([^ ]*)')";
 	spark.sql(sqlQuery);
 	spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv7.txt' INTO TABLE src_serde");
 	// Executed the data with the specified serde properties.

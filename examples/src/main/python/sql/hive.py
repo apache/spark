@@ -95,7 +95,7 @@ if __name__ == "__main__":
     
     # Hive serde's are also supported with serde properties.
     sqlQuery = """CREATE TABLE src_serde(key decimal(38,18), value int) USING hive
-       		   OPTIONS (SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe', input.regex '([^ ]*) ([^ ]*)')"""
+      OPTIONS (SERDE 'org.apache.hadoop.hive.serde2.RegexSerDe', input.regex '([^ ]*) ([^ ]*)')"""
     spark.sql(sqlQuery)
     spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv7.txt' INTO TABLE src_serde")
     # Executed the data with the specified serde properties.
