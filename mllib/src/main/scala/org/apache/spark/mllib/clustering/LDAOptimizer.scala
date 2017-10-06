@@ -489,8 +489,9 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
       Iterator((stat, logphatPartOption, nonEmptyDocCount))
     }
 
-    val elementWiseSum = (u : (BDM[Double], Option[BDV[Double]], Long),
-                          v : (BDM[Double], Option[BDV[Double]], Long)) => {
+    val elementWiseSum = (
+        u : (BDM[Double], Option[BDV[Double]], Long),
+        v : (BDM[Double], Option[BDV[Double]], Long)) => {
       u._1 += v._1
       u._2.foreach(_ += v._2.get)
       (u._1, u._2, u._3 + v._3)
