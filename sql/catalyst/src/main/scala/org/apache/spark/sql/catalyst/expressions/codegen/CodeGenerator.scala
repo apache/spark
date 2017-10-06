@@ -78,6 +78,20 @@ case class SubExprEliminationState(isNull: String, value: String)
 case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprEliminationState])
 
 /**
+ * The main information about a new added function.
+ *
+ * @param functionName String representing the name of the function
+ * @param subclassName Optional value which is empty if the function is added to
+ *                     the superclass, otherwise it contains the name of the
+ *                     inner class in which the function has been added.
+ * @param subclassInstance Optional value which is empty if the function is added to
+ *                         the superclass, otherwise it contains the name of the
+ *                         instance of the inner class in the outer class.
+ */
+private[codegen] case class NewFunction(functionName: String, subclassName: Option[String],
+  subclassInstance: Option[String])
+
+/**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
  * function.
  */
@@ -277,6 +291,18 @@ class CodegenContext {
       funcName: String,
       funcCode: String,
       inlineToOuterClass: Boolean = false): String = {
+    val newFunction = addNewFunctionInternal(funcName, funcCode, inlineToOuterClass)
+    newFunction match {
+      case NewFunction(functionName, None, None) => functionName
+      case NewFunction(functionName, Some(_), Some(subclassInstance)) =>
+        subclassInstance + "." + functionName
+    }
+  }
+
+  private[this] def addNewFunctionInternal(
+      funcName: String,
+      funcCode: String,
+      inlineToOuterClass: Boolean): NewFunction = {
     // The number of named constants that can exist in the class is limited by the Constant Pool
     // limit, 65,536. We cannot know how many constants will be inserted for a class, so we use a
     // threshold of 1600k bytes to determine when a function should be inlined to a private, nested
@@ -298,10 +324,9 @@ class CodegenContext {
     classFunctions(className) += funcName -> funcCode
 
     if (className == outerClassName) {
-      funcName
+      NewFunction(funcName, None, None)
     } else {
-
-      s"$classInstance.$funcName"
+      NewFunction(funcName, Some(className), Some(classInstance))
     }
   }
 
@@ -798,10 +823,36 @@ class CodegenContext {
            |  ${makeSplitFunction(body)}
            |}
          """.stripMargin
-        addNewFunction(name, code)
+        addNewFunctionInternal(name, code, inlineToOuterClass = false)
       }
 
-      foldFunctions(functions.map(name => s"$name(${arguments.map(_._2).mkString(", ")})"))
+      val outerClassFunctions = functions
+        .filter(_.subclassName.isEmpty)
+        .map(_.functionName)
+
+      val innerClassFunctions = functions
+        .filter(_.subclassName.isDefined)
+        .foldLeft(Map.empty[(String, String), Seq[String]]) { case (acc, f) =>
+          val key = (f.subclassName.get, f.subclassInstance.get)
+          acc.updated(key, acc.getOrElse(key, Seq.empty[String]) ++ Seq(f.functionName))
+        }
+        .map { case ((subclassName, subclassInstance), subclassFunctions) =>
+          // Adding a new function to each subclass which contains
+          // the invocation of all the ones which have been added to
+          // that subclass
+          val code = s"""
+              |private $returnType $func($argString) {
+              |  ${makeSplitFunction(foldFunctions(subclassFunctions.map(name =>
+                    s"$name(${arguments.map(_._2).mkString(", ")})")))}
+              |}
+            """.stripMargin
+          classSize(subclassName) += code.length
+          classFunctions(subclassName) += func -> code
+          s"$subclassInstance.$func"
+        }
+
+      foldFunctions((outerClassFunctions ++ innerClassFunctions).map(
+        name => s"$name(${arguments.map(_._2).mkString(", ")})"))
     }
   }
 
