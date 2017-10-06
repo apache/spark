@@ -267,6 +267,10 @@ case class SampleExec(
     }
   }
 
+  // Mark this as empty. This plan doesn't need to evaluate any inputs and can defer the evaluation
+  // to the parent operator.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
@@ -550,6 +554,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
 /**
  * Physical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * If we change how this is implemented physically, we'd need to update
+ * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
 case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
   override def output: Seq[Attribute] =

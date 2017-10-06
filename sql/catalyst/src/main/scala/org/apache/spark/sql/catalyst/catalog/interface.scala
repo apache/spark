@@ -307,7 +307,7 @@ case class CatalogTable(
 
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
-    if (owner.nonEmpty) map.put("Owner", owner)
+    if (owner != null && owner.nonEmpty) map.put("Owner", owner)
     map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
     map.put("Created By", "Spark " + createVersion)

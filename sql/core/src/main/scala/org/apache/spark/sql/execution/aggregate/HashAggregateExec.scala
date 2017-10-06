@@ -621,7 +621,7 @@ case class HashAggregateExec(
         }
       } else ""
     }
-    ctx.addExtraCode(generateGenerateCode())
+    ctx.addInnerClass(generateGenerateCode())
 
     val doAgg = ctx.freshName("doAggregateWithKeys")
     val peakMemory = metricTerm(ctx, "peakMemory")

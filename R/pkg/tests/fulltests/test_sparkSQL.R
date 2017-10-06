@@ -560,9 +560,9 @@ test_that("Collect DataFrame with complex types", {
   expect_equal(nrow(ldf), 3)
   expect_equal(ncol(ldf), 3)
   expect_equal(names(ldf), c("c1", "c2", "c3"))
-  expect_equal(ldf$c1, list(list(1, 2, 3), list(4, 5, 6), list (7, 8, 9)))
-  expect_equal(ldf$c2, list(list("a", "b", "c"), list("d", "e", "f"), list ("g", "h", "i")))
-  expect_equal(ldf$c3, list(list(1.0, 2.0, 3.0), list(4.0, 5.0, 6.0), list (7.0, 8.0, 9.0)))
+  expect_equal(ldf$c1, list(list(1, 2, 3), list(4, 5, 6), list(7, 8, 9)))
+  expect_equal(ldf$c2, list(list("a", "b", "c"), list("d", "e", "f"), list("g", "h", "i")))
+  expect_equal(ldf$c3, list(list(1.0, 2.0, 3.0), list(4.0, 5.0, 6.0), list(7.0, 8.0, 9.0)))
 
   # MapType
   schema <- structType(structField("name", "string"),
@@ -1524,7 +1524,7 @@ test_that("column functions", {
     expect_equal(ncol(s), 1)
     expect_equal(nrow(s), 3)
     expect_is(s[[1]][[1]], "struct")
-    expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 } )))
+    expect_true(any(apply(s, 1, function(x) { x[[1]]$age == 16 })))
   }
 
   # passing option
@@ -2710,7 +2710,7 @@ test_that("freqItems() on a DataFrame", {
   input <- 1:1000
   rdf <- data.frame(numbers = input, letters = as.character(input),
                     negDoubles = input * -1.0, stringsAsFactors = F)
-  rdf[ input %% 3 == 0, ] <- c(1, "1", -1)
+  rdf[input %% 3 == 0, ] <- c(1, "1", -1)
   df <- createDataFrame(rdf)
   multiColResults <- freqItems(df, c("numbers", "letters"), support = 0.1)
   expect_true(1 %in% multiColResults$numbers[[1]])
@@ -3064,7 +3064,7 @@ test_that("coalesce, repartition, numPartitions", {
 })
 
 test_that("gapply() and gapplyCollect() on a DataFrame", {
-  df <- createDataFrame (
+  df <- createDataFrame(
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
@@ -3074,6 +3074,11 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
 
   df1Collect <- gapplyCollect(df, list("a"), function(key, x) { x })
   expect_identical(df1Collect, expected)
+
+  # gapply on empty grouping columns.
+  df1 <- gapply(df, c(), function(key, x) { x }, schema(df))
+  actual <- collect(df1)
+  expect_identical(actual, expected)
 
   # Computes the sum of second column by grouping on the first and third columns
   # and checks if the sum is larger than 2
@@ -3135,7 +3140,7 @@ test_that("gapply() and gapplyCollect() on a DataFrame", {
   actual <- df3Collect[order(df3Collect$a), ]
   expect_identical(actual$avg, expected$avg)
 
-  irisDF <- suppressWarnings(createDataFrame (iris))
+  irisDF <- suppressWarnings(createDataFrame(iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
   # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
   df4 <- gapply(
