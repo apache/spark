@@ -398,7 +398,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         s"for this plan. To avoid this, you can raise the limit " +
         s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
       child match {
-        // For batch file source scan, we should continue executing it
+        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
         case f: FileSourceScanExec if f.supportsBatch => // do nothing
         case _ => return child.execute()
       }

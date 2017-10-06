@@ -186,7 +186,7 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
 
-  test("returning batch for wide table") {
+  test("bytecode of batch file scan exceeds the limit of WHOLESTAGE_HUGE_METHOD_LIMIT") {
     import testImplicits._
     withTempPath { dir =>
       val path = dir.getCanonicalPath
@@ -194,8 +194,9 @@ class WholeStageCodegenSuite extends QueryTest with SharedSQLContext {
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "202",
-        SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "8000") {
-        // donot return batch, because whole stage codegen is disabled for wide table (>202 columns)
+        SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key -> "2000") {
+        // wide table batch scan causes the byte code of codegen exceeds the limit of
+        // WHOLESTAGE_HUGE_METHOD_LIMIT
         val df2 = spark.read.parquet(path)
         val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[FileSourceScanExec]).get
         assert(fileScan2.asInstanceOf[FileSourceScanExec].supportsBatch)
