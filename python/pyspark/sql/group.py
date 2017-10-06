@@ -202,10 +202,10 @@ class GroupedData(object):
         as a :class:`DataFrame`.
 
         The user-defined function should take a `pandas.DataFrame` and return another
-        `pandas.DataFrame`. Each group is passed as a `pandas.DataFrame` to the user-function and
-        the returned`pandas.DataFrame` are combined as a :class:`DataFrame`. The returned
-        `pandas.DataFrame` can be arbitrary length and its schema should match the returnType of
-        the pandas udf.
+        `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
+        to the user-function and the returned `pandas.DataFrame` are combined as a
+        :class:`DataFrame`. The returned `pandas.DataFrame` can be arbitrary length and its schema
+        must match the returnType of the pandas udf.
 
         :param udf: A wrapped udf function returned by :meth:`pyspark.sql.functions.pandas_udf`
 
