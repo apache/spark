@@ -1238,8 +1238,8 @@ private[spark] case class TimestampTimezoneCorrection(
   override def nullSafeEval(time: Any, from: Any, to: Any): Any = {
     DateTimeUtils.convertTz(
       time.asInstanceOf[Long],
-      to.asInstanceOf[UTF8String].toString(),
-      from.asInstanceOf[UTF8String].toString())
+      DateTimeUtils.getTimeZone(to.asInstanceOf[UTF8String].toString()),
+      DateTimeUtils.getTimeZone(from.asInstanceOf[UTF8String].toString()))
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
@@ -1253,14 +1253,20 @@ private[spark] case class TimestampTimezoneCorrection(
           |long ${ev.value} = 0;
           """.stripMargin)
       } else {
+        val fromTerm = ctx.freshName("from")
+        val toTerm = ctx.freshName("to")
+        val tzClass = classOf[TimeZone].getName
         val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
+        ctx.addMutableState(tzClass, fromTerm, s"""$fromTerm = $dtu.getTimeZone("$fromTz");""")
+        ctx.addMutableState(tzClass, toTerm, s"""$toTerm = $dtu.getTimeZone("$toTz");""")
+
         val eval = time.genCode(ctx)
         ev.copy(code = s"""
           |${eval.code}
           |boolean ${ev.isNull} = ${eval.isNull};
           |long ${ev.value} = 0;
           |if (!${ev.isNull}) {
-          |  ${ev.value} = $dtu.convertTz(${eval.value}, "$toTz", "$fromTz");
+          |  ${ev.value} = $dtu.convertTz(${eval.value}, $toTerm, $fromTerm);
           |}
          """.stripMargin)
       }
@@ -1269,8 +1275,8 @@ private[spark] case class TimestampTimezoneCorrection(
         s"""
            |${ev.value} = $dtu.convertTz(
            |  $time,
-           |  $to.toString(),
-           |  $from.toString());
+           |  $dtu.getTimeZone($to.toString()),
+           |  $dtu.getTimeZone($from.toString()));
          """.stripMargin
       )
     }

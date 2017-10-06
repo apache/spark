@@ -1024,10 +1024,6 @@ object DateTimeUtils {
     guess
   }
 
-  def convertTz(ts: SQLTimestamp, fromZone: String, toZone: String): SQLTimestamp = {
-    convertTz(ts, getTimeZone(fromZone), getTimeZone(toZone))
-  }
-
   /**
    * Convert the timestamp `ts` from one timezone to another.
    *
