@@ -49,6 +49,10 @@ case class NominalAttr(
 
   override def withoutIndicesRange: NominalAttr = copy(indicesRange = Seq.empty)
 
+  // Java-friendly APIs to set up attribute properties.
+  def withIsOrdinal(isOrdinal: Boolean): NominalAttr = copy(isOrdinal = Some(isOrdinal))
+  def withValues(values: Array[String]): NominalAttr = copy(values = Some(values))
+
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
 
@@ -90,6 +94,9 @@ case class BinaryAttr(
     copy(indicesRange = indices)
 
   override def withoutIndicesRange: BinaryAttr = copy(indicesRange = Seq.empty)
+
+  // Java-friendly APIs to set up attribute properties.
+  def withValues(values: Array[String]): BinaryAttr = copy(values = Some(values))
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
@@ -139,6 +146,12 @@ case class NumericAttr(
     copy(indicesRange = indices)
 
   override def withoutIndicesRange: NumericAttr = copy(indicesRange = Seq.empty)
+
+  // Java-friendly APIs to set up attribute properties.
+  def withMin(min: Double): NumericAttr = copy(min = Some(min))
+  def withMax(max: Double): NumericAttr = copy(max = Some(max))
+  def withStd(std: Double): NumericAttr = copy(std = Some(std))
+  def withSparsity(sparsity: Double): NumericAttr = copy(sparsity = Some(sparsity))
 
   override def toMetadataImpl(): Metadata = {
     val bldr = new MetadataBuilder()
