@@ -3356,7 +3356,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         df = self.spark.range(10)
         f = pandas_udf(lambda x: 1.0, DoubleType())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, 'Return.*type.*pandas_udf.*Series'):
+            with self.assertRaisesRegexp(Exception, 'Return.*type.*Series'):
                 df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_decorator(self):

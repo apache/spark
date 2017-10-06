@@ -88,8 +88,8 @@ def wrap_pandas_udf(f, return_type):
             import pandas as pd
             result = f(*a)
             if not isinstance(result, pd.DataFrame):
-                raise TypeError("Return type of the user-defined function should be a "
-                                "Pandas.DataFrame")
+                raise TypeError("Return type of the user-defined function should be "
+                                "Pandas.DataFrame, but is {}".format(type(result)))
             if not len(result.columns) == len(arrow_return_types):
                 raise RuntimeError(
                     "Number of columns of the returned Pandas.DataFrame "
@@ -107,8 +107,8 @@ def wrap_pandas_udf(f, return_type):
         def verify_result_length(*a):
             result = f(*a)
             if not hasattr(result, "__len__"):
-                raise TypeError("Return type of the user-defined functon should be a "
-                                "Pandas.Series")
+                raise TypeError("Return type of the user-defined functon should be "
+                                "Pandas.Series, but is {}".format(type(result)))
             if len(result) != len(a[0]):
                 raise RuntimeError("Result vector from pandas_udf was not the required length: "
                                    "expected %d, got %d" % (len(a[0]), len(result)))
