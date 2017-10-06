@@ -1923,13 +1923,15 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' @param i,subset (Optional) a logical expression to filter on rows.
 #'                 For extract operator [[ and replacement operator [[<-, the indexing parameter for
 #'                 a single Column.
-#' @param j,select expression for the single Column or a list of columns to select from the SparkDataFrame.
+#' @param j,select expression for the single Column or a list of columns to select from the
+#'                 SparkDataFrame.
 #' @param drop if TRUE, a Column will be returned if the resulting dataset has only one column.
 #'             Otherwise, a SparkDataFrame will always be returned.
 #' @param value a Column or an atomic vector in the length of 1 as literal value, or \code{NULL}.
 #'              If \code{NULL}, the specified Column is dropped.
 #' @param ... currently not used.
-#' @return A new SparkDataFrame containing only the rows that meet the condition with selected columns.
+#' @return A new SparkDataFrame containing only the rows that meet the condition with selected
+#'         columns.
 #' @export
 #' @family SparkDataFrame functions
 #' @aliases subset,SparkDataFrame-method
@@ -2608,12 +2610,12 @@ setMethod("merge",
             } else {
               # if by or both by.x and by.y have length 0, use Cartesian Product
               joinRes <- crossJoin(x, y)
-              return (joinRes)
+              return(joinRes)
             }
 
             # sets alias for making colnames unique in dataframes 'x' and 'y'
-            colsX <- generateAliasesForIntersectedCols(x, by, suffixes[1])
-            colsY <- generateAliasesForIntersectedCols(y, by, suffixes[2])
+            colsX <- genAliasesForIntersectedCols(x, by, suffixes[1])
+            colsY <- genAliasesForIntersectedCols(y, by, suffixes[2])
 
             # selects columns with their aliases from dataframes
             # in case same column names are present in both data frames
@@ -2661,9 +2663,8 @@ setMethod("merge",
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
 #' @param suffix a suffix for the column name
 #' @return list of columns
-#'
-#' @note generateAliasesForIntersectedCols since 1.6.0
-generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
+#' @noRd
+genAliasesForIntersectedCols <- function(x, intersectedColNames, suffix) {
   allColNames <- names(x)
   # sets alias for making colnames unique in dataframe 'x'
   cols <- lapply(allColNames, function(colName) {
@@ -2671,7 +2672,7 @@ generateAliasesForIntersectedCols <- function (x, intersectedColNames, suffix) {
     if (colName %in% intersectedColNames) {
       newJoin <- paste(colName, suffix, sep = "")
       if (newJoin %in% allColNames){
-        stop ("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
+        stop("The following column name: ", newJoin, " occurs more than once in the 'DataFrame'.",
           "Please use different suffixes for the intersected columns.")
       }
       col <- alias(col, newJoin)
@@ -3058,7 +3059,8 @@ setMethod("describe",
 #' summary(select(df, "age", "height"))
 #' }
 #' @note summary(SparkDataFrame) since 1.5.0
-#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for previous defaults.
+#' @note The statistics provided by \code{summary} were change in 2.3.0 use \link{describe} for
+#'       previous defaults.
 #' @seealso \link{describe}
 setMethod("summary",
           signature(object = "SparkDataFrame"),
@@ -3765,8 +3767,8 @@ setMethod("checkpoint",
 #'
 #' Create a multi-dimensional cube for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing \code{cube} creates a single global aggregate and is equivalent to
-#' direct application of \link{agg}.
+#' If grouping expression is missing \code{cube} creates a single global aggregate and is
+#' equivalent to direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... character name(s) or Column(s) to group on.
@@ -3800,8 +3802,8 @@ setMethod("cube",
 #'
 #' Create a multi-dimensional rollup for the SparkDataFrame using the specified columns.
 #'
-#' If grouping expression is missing \code{rollup} creates a single global aggregate and is equivalent to
-#' direct application of \link{agg}.
+#' If grouping expression is missing \code{rollup} creates a single global aggregate and is
+#' equivalent to direct application of \link{agg}.
 #'
 #' @param x a SparkDataFrame.
 #' @param ... character name(s) or Column(s) to group on.

@@ -230,11 +230,9 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
 
     val resNaN1 = dfNaN.stat.approxQuantile("input1", Array(q1, q2), epsilon)
     assert(resNaN1.count(_.isNaN) === 0)
-    assert(resNaN1.count(_ == null) === 0)
 
     val resNaN2 = dfNaN.stat.approxQuantile("input2", Array(q1, q2), epsilon)
     assert(resNaN2.count(_.isNaN) === 0)
-    assert(resNaN2.count(_ == null) === 0)
 
     val resNaN3 = dfNaN.stat.approxQuantile("input3", Array(q1, q2), epsilon)
     assert(resNaN3.isEmpty)
@@ -242,7 +240,6 @@ class DataFrameStatSuite extends QueryTest with SharedSQLContext {
     val resNaNAll = dfNaN.stat.approxQuantile(Array("input1", "input2", "input3"),
       Array(q1, q2), epsilon)
     assert(resNaNAll.flatten.count(_.isNaN) === 0)
-    assert(resNaNAll.flatten.count(_ == null) === 0)
 
     assert(resNaN1(0) === resNaNAll(0)(0))
     assert(resNaN1(1) === resNaNAll(0)(1))

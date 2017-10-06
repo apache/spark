@@ -79,6 +79,7 @@ class SpecialLengths(object):
     TIMING_DATA = -3
     END_OF_STREAM = -4
     NULL = -5
+    START_ARROW_STREAM = -6
 
 
 class PythonEvalType(object):
@@ -190,7 +191,7 @@ class FramedSerializer(Serializer):
 
 class ArrowSerializer(FramedSerializer):
     """
-    Serializes an Arrow stream.
+    Serializes bytes as Arrow data with the Arrow file format.
     """
 
     def dumps(self, batch):
@@ -211,53 +212,61 @@ class ArrowSerializer(FramedSerializer):
         return "ArrowSerializer"
 
 
-class ArrowPandasSerializer(ArrowSerializer):
+def _create_batch(series):
+    import pyarrow as pa
+    # Make input conform to [(series1, type1), (series2, type2), ...]
+    if not isinstance(series, (list, tuple)) or \
+            (len(series) == 2 and isinstance(series[1], pa.DataType)):
+        series = [series]
+    series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
+
+    # If a nullable integer series has been promoted to floating point with NaNs, need to cast
+    # NOTE: this is not necessary with Arrow >= 0.7
+    def cast_series(s, t):
+        if t is None or s.dtype == t.to_pandas_dtype():
+            return s
+        else:
+            return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
+
+    arrs = [pa.Array.from_pandas(cast_series(s, t), mask=s.isnull(), type=t) for s, t in series]
+    return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
+
+
+class ArrowStreamPandasSerializer(Serializer):
     """
-    Serializes Pandas.Series as Arrow data.
+    Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
-    def __init__(self):
-        super(ArrowPandasSerializer, self).__init__()
-
-    def dumps(self, series):
+    def dump_stream(self, iterator, stream):
         """
-        Make an ArrowRecordBatch from a Pandas Series and serialize. Input is a single series or
+        Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
         a list of series accompanied by an optional pyarrow type to coerce the data to.
         """
         import pyarrow as pa
-        # Make input conform to [(series1, type1), (series2, type2), ...]
-        if not isinstance(series, (list, tuple)) or \
-                (len(series) == 2 and isinstance(series[1], pa.DataType)):
-            series = [series]
-        series = ((s, None) if not isinstance(s, (list, tuple)) else s for s in series)
+        writer = None
+        try:
+            for series in iterator:
+                batch = _create_batch(series)
+                if writer is None:
+                    write_int(SpecialLengths.START_ARROW_STREAM, stream)
+                    writer = pa.RecordBatchStreamWriter(stream, batch.schema)
+                writer.write_batch(batch)
+        finally:
+            if writer is not None:
+                writer.close()
 
-        # If a nullable integer series has been promoted to floating point with NaNs, need to cast
-        # NOTE: this is not necessary with Arrow >= 0.7
-        def cast_series(s, t):
-            if t is None or s.dtype == t.to_pandas_dtype():
-                return s
-            else:
-                return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
-
-        arrs = [pa.Array.from_pandas(cast_series(s, t), mask=s.isnull(), type=t) for s, t in series]
-        batch = pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
-        return super(ArrowPandasSerializer, self).dumps(batch)
-
-    def loads(self, obj):
+    def load_stream(self, stream):
         """
-        Deserialize an ArrowRecordBatch to an Arrow table and return as a list of pandas.Series
-        followed by a dictionary containing length of the loaded batches.
+        Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
         import pyarrow as pa
-        reader = pa.RecordBatchFileReader(pa.BufferReader(obj))
-        batches = [reader.get_batch(i) for i in xrange(reader.num_record_batches)]
-        # NOTE: a 0-parameter pandas_udf will produce an empty batch that can have num_rows set
-        num_rows = sum((batch.num_rows for batch in batches))
-        table = pa.Table.from_batches(batches)
-        return [c.to_pandas() for c in table.itercolumns()] + [{"length": num_rows}]
+        reader = pa.open_stream(stream)
+        for batch in reader:
+            table = pa.Table.from_batches([batch])
+            yield [c.to_pandas() for c in table.itercolumns()]
 
     def __repr__(self):
-        return "ArrowPandasSerializer"
+        return "ArrowStreamPandasSerializer"
 
 
 class BatchedSerializer(Serializer):

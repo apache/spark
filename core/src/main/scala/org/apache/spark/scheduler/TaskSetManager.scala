@@ -27,7 +27,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.internal.Logging
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 import org.apache.spark.util.collection.MedianHeap
@@ -670,9 +670,14 @@ private[spark] class TaskSetManager(
           }
           if (blacklistedEverywhere) {
             val partition = tasks(indexInTaskSet).partitionId
-            abort(s"Aborting $taskSet because task $indexInTaskSet (partition $partition) " +
-              s"cannot run anywhere due to node and executor blacklist.  Blacklisting behavior " +
-              s"can be configured via spark.blacklist.*.")
+            abort(s"""
+              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+              |cannot run anywhere due to node and executor blacklist.
+              |Most recent failure:
+              |${taskSetBlacklist.getLatestFailureReason}
+              |
+              |Blacklisting behavior can be configured via spark.blacklist.*.
+              |""".stripMargin)
           }
         }
       }
@@ -837,9 +842,9 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (!isZombie && reason.countTowardsTaskFailures) {
-      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
-        info.host, info.executorId, index))
       assert (null != failureReason)
+      taskSetBlacklistHelperOpt.foreach(_.updateBlacklistForFailedTask(
+        info.host, info.executorId, index, failureReason))
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
         logError("Task %d in stage %s failed %d times; aborting job".format(
@@ -975,7 +980,7 @@ private[spark] class TaskSetManager(
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = conf.get("spark.locality.wait", "3s")
+    val defaultWait = conf.get(config.LOCALITY_WAIT)
     val localityWaitKey = level match {
       case TaskLocality.PROCESS_LOCAL => "spark.locality.wait.process"
       case TaskLocality.NODE_LOCAL => "spark.locality.wait.node"
@@ -984,7 +989,7 @@ private[spark] class TaskSetManager(
     }
 
     if (localityWaitKey != null) {
-      conf.getTimeAsMs(localityWaitKey, defaultWait)
+      conf.getTimeAsMs(localityWaitKey, defaultWait.toString)
     } else {
       0L
     }

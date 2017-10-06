@@ -137,14 +137,16 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
         BoundReference(
           1, inputValueAttribWithWatermark.dataType, inputValueAttribWithWatermark.nullable),
         Literal(threshold))
-    manager.removeByKeyCondition(GeneratePredicate.generate(expr).eval _)
+    val iter = manager.removeByKeyCondition(GeneratePredicate.generate(expr).eval _)
+    while (iter.hasNext) iter.next()
   }
 
   /** Remove values where `time <= threshold` */
   def removeByValue(watermark: Long)(implicit manager: SymmetricHashJoinStateManager): Unit = {
     val expr = LessThanOrEqual(inputValueAttribWithWatermark, Literal(watermark))
-    manager.removeByValueCondition(
+    val iter = manager.removeByValueCondition(
       GeneratePredicate.generate(expr, inputValueAttribs).eval _)
+    while (iter.hasNext) iter.next()
   }
 
   def numRows(implicit manager: SymmetricHashJoinStateManager): Long = {
