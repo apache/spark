@@ -235,6 +235,7 @@ class GroupedData(object):
 
         """
         from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.types import to_arrow_type
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') or not udf.vectorized:
@@ -246,14 +247,25 @@ class GroupedData(object):
         func = udf.func
         returnType = udf.returnType
 
-        # The python executors expects the function to take a list of pd.Series as input
+        # The python executors expects the function to use pd.Series as input and output
         # So we to create a wrapper function that turns that to a pd.DataFrame before passing
-        # down to the user function
+        # down to the user function, then turn the result pd.DataFrame back into pd.Series
         columns = df.columns
+        arrow_return_types = [to_arrow_type(field.dataType) for field in returnType]
 
         def wrapped(*cols):
             import pandas as pd
-            return func(pd.concat(cols, axis=1, keys=columns))
+            result = func(pd.concat(cols, axis=1, keys=columns))
+            if not isinstance(result, pd.DataFrame):
+                raise TypeError("Return type of the user-defined function should be "
+                                "Pandas.DataFrame, but is {}".format(type(result)))
+            if not len(result.columns) == len(arrow_return_types):
+                raise RuntimeError(
+                    "Number of columns of the returned Pandas.DataFrame "
+                    "doesn't match specified schema. "
+                    "Expected: {} Actual: {}".format(len(arrow_return_types), len(result.columns)))
+            return [(result[result.columns[i]], arrow_return_types[i])
+                    for i in range(len(arrow_return_types))]
 
         wrapped_udf_obj = pandas_udf(wrapped, returnType)
         udf_column = wrapped_udf_obj(*[df[col] for col in df.columns])
