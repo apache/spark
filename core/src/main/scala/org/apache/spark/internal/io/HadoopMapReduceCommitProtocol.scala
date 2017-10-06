@@ -63,8 +63,8 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   /**
    * Checks whether there are files to be committed to an absolute output location.
    *
-   * As the committing and aborting the job occurs on driver where `addedAbsPathFiles` is always
-   * null, it is necessary to check whether the output path is specified, that may not be the case
+   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
+   * it is necessary to check whether the output path is specified. Output path may not be required
    * for committers not writing to distributed file systems.
    */
   private def hasAbsPathFiles: Boolean = path != null
