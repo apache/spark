@@ -63,7 +63,7 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
       (alreadyConverted, Map())
     case lr@LogicalRelation(fsRelation: HadoopFsRelation, _, _, _) =>
       val tzOpt = extractTableTz(lr.catalogTable, fsRelation.options)
-      tzOpt.map { tableTz =>
+      tzOpt.flatMap { tableTz =>
         // the table has a timezone set, so after reading the data, apply a conversion
 
         // SessionTZ (instead of JVM TZ) will make the time display correctly in SQL queries, but
@@ -72,17 +72,13 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
         if (toTz != tableTz) {
           logDebug(s"table tz = $tableTz; converting to current session tz = $toTz")
           // find timestamp columns, and convert their tz
-          val (foundTs, modifiedFields, replacements) =
-            convertTzForAllTimestamps(lr, tableTz, toTz)
-          if (foundTs) {
-            (new Project(modifiedFields, lr), replacements)
-          } else {
-            (lr, Map[ExprId, NamedExpression]())
+          convertTzForAllTimestamps(lr, tableTz, toTz).map { case (fields, replacements) =>
+            (new Project(fields, lr), replacements)
           }
         } else {
-          (lr, Map[ExprId, NamedExpression]())
+          None
         }
-      }.getOrElse((lr, Map[ExprId, NamedExpression]()))
+      }.getOrElse((lr, Map()))
     case other =>
       // first, process all the children -- this ensures we have the right renames in scope.
       var newReplacements = Map[ExprId, NamedExpression]()
@@ -107,16 +103,10 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
       (fixedExpressions, newReplacements)
   }
 
-  private def hasCorrection(exprs: Seq[NamedExpression]): Boolean = {
-    var hasCorrection = false
-    exprs.foreach { expr =>
-      expr.foreach {
-        case _: TimestampTimezoneCorrection =>
-          hasCorrection = true
-        case other => // no-op
-      }
+  private def hasCorrection(exprs: Seq[Expression]): Boolean = {
+    exprs.exists { expr =>
+      expr.isInstanceOf[TimestampTimezoneCorrection] || hasCorrection(expr.children)
     }
-    hasCorrection
   }
 
   private def writeConversion(
@@ -125,13 +115,9 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
     val tableTz = extractTableTz(insertIntoHadoopFs.catalogTable, insertIntoHadoopFs.options)
     val internalTz = sparkSession.sessionState.conf.sessionLocalTimeZone
     if (tableTz.isDefined && tableTz != internalTz) {
-      val (foundTsFields, modifiedFields, _) =
-        convertTzForAllTimestamps(query, internalTz, tableTz.get)
-      if (foundTsFields) {
-        insertIntoHadoopFs.copy(query = new Project(modifiedFields, query))
-      } else {
-        insertIntoHadoopFs
-      }
+      convertTzForAllTimestamps(query, internalTz, tableTz.get).map { case (fields, _) =>
+        insertIntoHadoopFs.copy(query = new Project(fields, query))
+      }.getOrElse(insertIntoHadoopFs)
     } else {
       insertIntoHadoopFs
     }
@@ -156,7 +142,7 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
   private def convertTzForAllTimestamps(
       relation: LogicalPlan,
       fromTz: String,
-      toTz: String): (Boolean, Seq[NamedExpression], Map[ExprId, NamedExpression]) = {
+      toTz: String): Option[(Seq[NamedExpression], Map[ExprId, NamedExpression])] = {
     val schema = relation.schema
     var foundTs = false
     var replacements = Map[ExprId, NamedExpression]()
@@ -185,6 +171,6 @@ private[sql] case class AdjustTimestamps(sparkSession: SparkSession) extends Rul
         exp
       }
     }
-    (foundTs, modifiedFields, replacements)
+    if (foundTs) Some((modifiedFields, replacements)) else None
   }
 }
