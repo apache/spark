@@ -23,26 +23,24 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveSingleton {
 
-  override protected def createAndSaveTableFunctions(): Seq[CreateAndSaveTable] = {
-    super.createAndSaveTableFunctions() ++
-      Seq(true, false).map(new CreateHiveTableAndInsert(_))
+  override protected def createAndSaveTableFunctions(): Map[String, CreateAndSaveTable] = {
+    val hiveFns = Map(
+      "hive_parquet" -> new CreateHiveTableAndInsert(true),
+      "hive_parquet_no_conversion" ->  new CreateHiveTableAndInsert(false))
+
+    super.createAndSaveTableFunctions() ++ hiveFns
   }
 
-  override protected def ctasFunctions(): Seq[CTAS] = {
-    super.ctasFunctions() ++
-      Seq(true, false).map(new CreateHiveTableWithTimezoneAndInsert(_))
+  override protected def ctasFunctions(): Map[String, CTAS] = {
+    val hiveFns = Map(
+      "hive_parquet" -> new CreateHiveTableWithTimezoneAndInsert(true),
+      "hive_parquet_no_conversion" ->  new CreateHiveTableWithTimezoneAndInsert(false))
+
+    super.ctasFunctions() ++ hiveFns
   }
 
   class CreateHiveTableAndInsert(convertMetastore: Boolean) extends CreateAndSaveTable {
-    override def createAndSave(
-        df: DataFrame,
-        table: String,
-        tzOpt: Option[String],
-        format: String): Boolean = {
-      if (format != "parquet") {
-        return false
-      }
-
+    override def createAndSave(df: DataFrame, table: String, tzOpt: Option[String]): Unit = {
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertMetastore.toString) {
         val tblProperties = tzOpt.map { tz =>
           s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
@@ -52,26 +50,18 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
              |  display string,
              |  ts timestamp
              |)
-             |STORED AS $format
+             |STORED AS parquet
              |$tblProperties
              |""".stripMargin)
         df.write.insertInto(table)
       }
-
-      true
     }
+
+    override val format: String = "parquet"
   }
 
   class CreateHiveTableWithTimezoneAndInsert(convertMetastore: Boolean) extends CTAS {
-    override def createTableFromSourceTable(
-        source: String,
-        dest: String,
-        destTz: Option[String],
-        destFormat: String): Boolean = {
-      if (destFormat != "parquet") {
-        return false
-      }
-
+    override def createFromSource(source: String, dest: String, destTz: Option[String]): Unit = {
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertMetastore.toString) {
         val tblProperties = destTz.map { tz =>
           s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
@@ -82,17 +72,15 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
              |  display string,
              |  ts timestamp
              |)
-             |STORED AS $destFormat
+             |STORED AS parquet
              |$tblProperties
              |""".stripMargin)
         spark.sql(s"insert into $dest select * from $source")
       }
-
-      true
     }
   }
 
-  test("SPARK-12297: copy table timezone in CREATE TABLE LIKE") {
+  test("copy table timezone in CREATE TABLE LIKE") {
     val key = DateTimeUtils.TIMEZONE_PROPERTY
     withTable("orig_hive", "copy_hive", "orig_ds", "copy_ds") {
       spark.sql(

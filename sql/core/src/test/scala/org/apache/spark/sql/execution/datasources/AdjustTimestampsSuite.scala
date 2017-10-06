@@ -99,68 +99,67 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
     }
   }
 
+  private val formats = Seq("parquet", "csv", "json")
+
   // we want to test that this works w/ hive-only methods as well, so provide a few extension
   // points so we can also easily re-use this with hive support.
-  protected def createAndSaveTableFunctions(): Seq[CreateAndSaveTable] = {
-    Seq(CreateAndSaveDatasourceTable)
+  protected def createAndSaveTableFunctions(): Map[String, CreateAndSaveTable] = {
+    formats.map { format =>
+      (format, new CreateAndSaveDatasourceTable(format))
+    }.toMap
   }
-  protected def ctasFunctions(): Seq[CTAS] = {
-    Seq(DatasourceCTAS)
+
+  protected def ctasFunctions(): Map[String, CTAS] = {
+    formats.map { format =>
+      (format, new DatasourceCTAS(format))
+    }.toMap
   }
 
   trait CreateAndSaveTable {
-    /**
-     * if the format is unsupported return false (and do nothing else).
-     * otherwise, create the table, save the dataset into it, and return true
-     */
-    def createAndSave(
-        ds: DataFrame,
-        table: String,
-        tz: Option[String],
-        format: String): Boolean
+    /** Create the table and save the contents of the dataset into it. */
+    def createAndSave(df: DataFrame, table: String, tz: Option[String]): Unit
+
+    /** The target table's format. */
+    val format: String
   }
 
-  object CreateAndSaveDatasourceTable extends CreateAndSaveTable {
-    override def createAndSave(
-        df: DataFrame,
-        table: String,
-        tz: Option[String],
-        format: String): Boolean = {
+  class CreateAndSaveDatasourceTable(override val format: String) extends CreateAndSaveTable {
+    override def createAndSave(df: DataFrame, table: String, tz: Option[String]): Unit = {
       val writer = df.write.format(format)
       tz.foreach(writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _))
       writer.saveAsTable(table)
-      true
     }
   }
 
   trait CTAS {
     /**
-     * If the format is unsupported, return false (and do nothing else).  Otherwise, create a table
-     * with the given time zone, and copy the entire contents of another table into it.
+     * Create a table with the given time zone, and copy the entire contents of the source table
+     * into it.
      */
-    def createTableFromSourceTable(
-      source: String,
-      dest: String,
-      destTz: Option[String],
-      destFormat: String): Boolean
+    def createFromSource(source: String, dest: String, destTz: Option[String]): Unit
   }
 
-  object DatasourceCTAS extends CTAS {
-    override def createTableFromSourceTable(
-        source: String,
-        dest: String,
-        destTz: Option[String],
-        destFormat: String): Boolean = {
-      val writer = spark.sql(s"select * from $source").write.format(destFormat)
+  class DatasourceCTAS(format: String) extends CTAS {
+    override def createFromSource(source: String, dest: String, destTz: Option[String]): Unit = {
+      val writer = spark.sql(s"select * from $source").write.format(format)
       destTz.foreach { writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _)}
       writer.saveAsTable(dest)
-      true
     }
   }
 
-  val formats = Seq("parquet", "csv", "json")
+  createAndSaveTableFunctions().foreach { case (fmt, createFn) =>
+    ctasFunctions().foreach { case (destFmt, ctasFn) =>
+      test(s"timestamp adjustment: in=$fmt, out=$destFmt") {
+        testTimestampAdjustment(fmt, destFmt, createFn, ctasFn)
+      }
+    }
+  }
 
-  test("SPARK-12297: Read and write with table timezones") {
+  private def testTimestampAdjustment(
+      format: String,
+      destFormat: String,
+      createFn: CreateAndSaveTable,
+      ctasFn: CTAS): Unit = {
     assert(TimeZone.getDefault.getID() === "America/Los_Angeles")
     val key = DateTimeUtils.TIMEZONE_PROPERTY
     val originalData = createRawData(spark)
@@ -212,74 +211,61 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       // save to tables, and read the data back -- this time, the timezone conversion should be
       // automatic from the table metadata, we don't need to supply any options when reading the
       // data.  Works across different ways of creating the tables and different data formats.
-      createAndSaveTableFunctions().foreach { createAndSave =>
-        formats.foreach { format =>
-          val tblName = s"save_$format"
-          withTable(tblName) {
-            // create the table (if we can -- not all createAndSave() methods support all formats,
-            // eg. hive tables don't support json)
-            if (createAndSave.createAndSave(readWithCorrection, tblName, Some("UTC"), format)) {
-              // make sure it has the right timezone, and the data is correct.
-              checkHasTz(spark, tblName, Some("UTC"))
-              checkTableData(tblName, format)
+      val tblName = s"save_$format"
+      withTable(tblName) {
+        // create the table (if we can -- not all createAndSave() methods support all formats,
+        // eg. hive tables don't support json)
+        createFn.createAndSave(readWithCorrection, tblName, Some("UTC"))
+        // make sure it has the right timezone, and the data is correct.
+        checkHasTz(spark, tblName, Some("UTC"))
+        checkTableData(tblName, createFn.format)
 
-              // also try to copy this table directly into another table with a different timezone
-              // setting, for all formats.
-              ctasFunctions().foreach { ctas =>
-                formats.foreach { destFormat =>
-                  val destTableUTC = s"copy_to_utc_$format"
-                  val destTableNoTZ = s"copy_to_no_tz_$format"
-                  withTable(destTableUTC, destTableNoTZ) {
-                    val ctasSupported = ctas.createTableFromSourceTable(source = tblName,
-                      dest = destTableUTC, destTz = Some("UTC"), destFormat = destFormat)
-                    if (ctasSupported) {
-                      checkHasTz(spark, destTableUTC, Some("UTC"))
-                      checkTableData(destTableUTC, destFormat)
+        // also try to copy this table directly into another table with a different timezone
+        // setting, for all formats.
+        val destTableUTC = s"copy_to_utc_$destFormat"
+        val destTableNoTZ = s"copy_to_no_tz_$destFormat"
+        withTable(destTableUTC, destTableNoTZ) {
+          ctasFn.createFromSource(tblName, destTableUTC, Some("UTC"))
+          checkHasTz(spark, destTableUTC, Some("UTC"))
+          checkTableData(destTableUTC, destFormat)
 
-                      ctas.createTableFromSourceTable(source = tblName, dest = destTableNoTZ,
-                        destTz = None, destFormat = destFormat)
-                      checkHasTz(spark, destTableNoTZ, None)
-                      checkTableData(destTableNoTZ, destFormat)
+          ctasFn.createFromSource(tblName, destTableNoTZ, None)
+          checkHasTz(spark, destTableNoTZ, None)
+          checkTableData(destTableNoTZ, destFormat)
 
-                      // By now, we've checked that the data in both tables is different in terms
-                      // of the raw values on disk, but they are the same after we apply the
-                      // timezone conversions from the table properties.  Just to be extra-sure,
-                      // we join the tables and make sure its OK.
-                      val joinedRows = spark.sql(
-                        s"""SELECT a.display, a.ts
-                           |FROM $tblName AS a
-                           |JOIN $destTableUTC AS b
-                           |ON (a.ts = b.ts)""".stripMargin).collect()
-                      assert(joinedRows.size === 4)
-                      joinedRows.foreach { row =>
-                        assert(row.getAs[String]("display") ===
-                          row.getAs[Timestamp]("ts").toString())
-                      }
-                    }
-                  }
-                }
-              }
-
-              // Finally, try changing the tbl timezone.  This destroys integrity
-              // of the existing data, but at this point we're just checking we can change
-              // the metadata
-              spark.sql(
-                s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="America/Los_Angeles")""")
-              checkHasTz(spark, tblName, Some("America/Los_Angeles"))
-
-              spark.sql(s"""ALTER TABLE $tblName UNSET TBLPROPERTIES ("$key")""")
-              checkHasTz(spark, tblName, None)
-
-              spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="UTC")""")
-              checkHasTz(spark, tblName, Some("UTC"))
-            }
+          // By now, we've checked that the data in both tables is different in terms
+          // of the raw values on disk, but they are the same after we apply the
+          // timezone conversions from the table properties.  Just to be extra-sure,
+          // we join the tables and make sure its OK.
+          val joinedRows = spark.sql(
+            s"""SELECT a.display, a.ts
+               |FROM $tblName AS a
+               |JOIN $destTableUTC AS b
+               |ON (a.ts = b.ts)""".stripMargin).collect()
+          assert(joinedRows.size === 4)
+          joinedRows.foreach { row =>
+            assert(row.getAs[String]("display") ===
+              row.getAs[Timestamp]("ts").toString())
           }
         }
+
+        // Finally, try changing the tbl timezone.  This destroys integrity
+        // of the existing data, but at this point we're just checking we can change
+        // the metadata
+        spark.sql(
+          s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="America/Los_Angeles")""")
+        checkHasTz(spark, tblName, Some("America/Los_Angeles"))
+
+        spark.sql(s"""ALTER TABLE $tblName UNSET TBLPROPERTIES ("$key")""")
+        checkHasTz(spark, tblName, None)
+
+        spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="UTC")""")
+        checkHasTz(spark, tblName, Some("UTC"))
       }
     }
   }
 
-  test("SPARK-12297: exception on bad timezone") {
+  test("exception on bad timezone") {
     // make sure there is an exception anytime we try to read or write with a bad timezone
     val key = DateTimeUtils.TIMEZONE_PROPERTY
     val badVal = "Blart Versenwald III"
@@ -302,19 +288,19 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       }
     }
 
-    createAndSaveTableFunctions().foreach { createAndSave =>
+    createAndSaveTableFunctions().foreach { case (_, createFn) =>
       hasBadTzException{
-        createAndSave.createAndSave(data.toDF(), "bad_tz_table", Some(badVal), "parquet")
+        createFn.createAndSave(data.toDF(), "bad_tz_table", Some(badVal))
       }
 
-      createAndSave.createAndSave(data.toDF(), "bad_tz_table", None, "parquet")
+      createFn.createAndSave(data.toDF(), "bad_tz_table", None)
       hasBadTzException {
         spark.sql(s"""ALTER TABLE bad_tz_table SET TBLPROPERTIES("$key"="$badVal")""")
       }
     }
   }
 
-  test("SPARK-12297: insertInto must not specify timezone") {
+  test("insertInto must not specify timezone") {
     // You can't specify the timezone for just a portion of inserted data.  You can only specify
     // the timezone for the *entire* table (data previously in the table and any future data) so
     // complain loudly if the user tries to set the timezone on an insert.
@@ -329,7 +315,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
     }
   }
 
-  test("SPARK-12297: refuse table timezone on views") {
+  test("disallow table timezone on views") {
     val key = DateTimeUtils.TIMEZONE_PROPERTY
     val originalData = createRawData(spark)
 
