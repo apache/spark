@@ -72,7 +72,7 @@ case class BroadcastExchangeExec(
       SQLExecution.withExecutionId(sparkContext, executionId) {
         try {
           val beforeCollect = System.nanoTime()
-          // Note that we use .executeCollect() because we don't want to convert data to Scala types
+          // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
           val (numRows, input) = child.executeCollectIterator()
           if (numRows >= 512000000) {
             throw new SparkException(
