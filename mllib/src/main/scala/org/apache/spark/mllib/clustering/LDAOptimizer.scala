@@ -478,7 +478,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
 
       val stat = BDM.zeros[Double](k, vocabSize)
       val logphatPartOption = logphatPartOptionBase()
-      var nonEmptyDocCount : Long = 0L
+      var nonEmptyDocCount: Long = 0L
       nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
         nonEmptyDocCount += 1
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
@@ -490,8 +490,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     }
 
     val elementWiseSum = (
-        u : (BDM[Double], Option[BDV[Double]], Long),
-        v : (BDM[Double], Option[BDV[Double]], Long)) => {
+        u: (BDM[Double], Option[BDV[Double]], Long),
+        v: (BDM[Double], Option[BDV[Double]], Long)) => {
       u._1 += v._1
       u._2.foreach(_ += v._2.get)
       (u._1, u._2, u._3 + v._3)
@@ -542,7 +542,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
    *                topics in a document averaged over the batch.
    * @param nonEmptyDocsN number of non-empty documents
    */
-  private def updateAlpha(logphat: BDV[Double], nonEmptyDocsN : Double): Unit = {
+  private def updateAlpha(logphat: BDV[Double], nonEmptyDocsN: Double): Unit = {
     val weight = rho()
     val alpha = this.alpha.asBreeze.toDenseVector
 
