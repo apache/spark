@@ -17,7 +17,7 @@
 
 $(document).ajaxStop($.unblockUI);
 $(document).ajaxStart(function () {
-    $.blockUI({message: '<h3>Loading Tasks Page...</h3>'});
+    $.blockUI({message: '<h3>Loading Stage Page...</h3>'});
 });
 
 $.extend( $.fn.dataTable.ext.type.order, {
@@ -36,24 +36,9 @@ $.extend( $.fn.dataTable.ext.type.order, {
     }
 } );
 
-function createTemplateURI(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/stagespage-template.html';
-        return baseURI;
-    }
-    ind = words.indexOf("history");
-    if(ind > 0) {
-        var baseURI = words.slice(0, ind).join('/') + '/static/stagespage-template.html';
-        return baseURI;
-    }
-    return location.origin + "/static/stagespage-template.html";
-}
-
 // This function will only parse the URL under certain formate
 // e.g. https://axonitered-jt1.red.ygrid.yahoo.com:50509/history/application_1502220952225_59143/stages/stage/?id=0&attempt=0
-function StageEndPoint(appId) {
+function stageEndPoint(appId) {
     var words = document.baseURI.split('/');
     var words2 = document.baseURI.split('?');
     var ind = words.indexOf("proxy");
@@ -99,11 +84,7 @@ function quantile(array, percentile) {
 }
 
 $(document).ready(function () {
-    $.extend($.fn.dataTable.defaults, {
-        stateSave: true,
-        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
-        pageLength: 20
-    });
+    setDataTableDefaults();
 
     $("#showAdditionalMetrics").append(
         "<div><a id='taskMetric'>" +
@@ -124,20 +105,20 @@ $(document).ready(function () {
     tasksSummary = $("#active-tasks");
     getStandAloneAppId(function (appId) {
 
-        var endPoint = StageEndPoint(appId);
+        var endPoint = stageEndPoint(appId);
         $.getJSON(endPoint, function(response, status, jqXHR) {
 
             // prepare data for tasks table
             var indices = Object.keys(response[0].tasks);
             var task_table = [];
-            indices.forEach(function (ix){
+            indices.forEach(function (ix) {
                task_table.push(response[0].tasks[ix]);
             });
 
             // prepare data for task aggregated metrics table
             indices = Object.keys(response[0].executorSummary);
             var task_summary_table = [];
-            indices.forEach(function (ix){
+            indices.forEach(function (ix) {
                response[0].executorSummary[ix].id = ix;
                task_summary_table.push(response[0].executorSummary[ix]);
             });
@@ -190,7 +171,7 @@ $(document).ready(function () {
             var indices = Object.keys(response[0].accumulatorUpdates);
             var accumulator_table_all = [];
             var accumulator_table = [];
-            indices.forEach(function (ix){
+            indices.forEach(function (ix) {
                accumulator_table_all.push(response[0].accumulatorUpdates[ix]);
             });
 
@@ -203,7 +184,7 @@ $(document).ready(function () {
 
             // rendering the UI page
             var data = {executors: response, "taskstable": task_table, "task_metrics_table": task_metrics_table};
-            $.get(createTemplateURI(appId), function(template) {
+            $.get(createTemplateURI(appId, "stagespage"), function(template) {
                 tasksSummary.append(Mustache.render($(template).filter("#stages-summary-template").html(), data));
 
                 $("#taskMetric").click(function(){
@@ -461,7 +442,7 @@ $(document).ready(function () {
                 });
 
                 // title number and toggle list
-                $("#summaryMetricsTitle").html("Summary Metrics for " + task_table.length + " Completed Tasks");
+                $("#summaryMetricsTitle").html("Summary Metrics for " + "<a href='#tasksTitle'>" + task_table.length + " Completed Tasks" + "</a>");
                 $("#tasksTitle").html("Task (" + task_table.length + ")");
 
                 // hide or show the accumulate update table

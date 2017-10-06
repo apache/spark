@@ -268,7 +268,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           currentTime) ++
       <div id="active-tasks">
           <script src={UIUtils.prependBaseUri("/static/utils.js")}></script>
-          <script src={UIUtils.prependBaseUri("/static/taskspages.js")}></script>
+          <script src={UIUtils.prependBaseUri("/static/stagepage.js")}></script>
       </div>
       UIUtils.headerSparkPage(stageHeader, content, parent, showVisualization = true,
         useDataTables = true)

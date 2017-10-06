@@ -53,21 +53,6 @@ $(document).ajaxStart(function () {
     $.blockUI({message: '<h3>Loading Executors Page...</h3>'});
 });
 
-function createTemplateURI(appId) {
-    var words = document.baseURI.split('/');
-    var ind = words.indexOf("proxy");
-    if (ind > 0) {
-        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    ind = words.indexOf("history");
-    if(ind > 0) {
-        var baseURI = words.slice(0, ind).join('/') + '/static/executorspage-template.html';
-        return baseURI;
-    }
-    return location.origin + "/static/executorspage-template.html";
-}
-
 function createRESTEndPoint(appId) {
     var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
@@ -137,11 +122,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 $(document).ready(function () {
-    $.extend($.fn.dataTable.defaults, {
-        stateSave: true,
-        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
-        pageLength: 20
-    });
+    setDataTableDefaults();
 
     executorsSummary = $("#active-executors");
 
@@ -367,7 +348,7 @@ $(document).ready(function () {
             };
 
             var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
-            $.get(createTemplateURI(appId), function (template) {
+            $.get(createTemplateURI(appId, "executorspage"), function (template) {
 
                 executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(), data));
                 var selector = "#active-executors-table";

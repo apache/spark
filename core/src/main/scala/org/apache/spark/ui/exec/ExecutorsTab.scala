@@ -74,7 +74,9 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener, conf: Spar
   private val retainedDeadExecutors = conf.getInt("spark.ui.retainedDeadExecutors", 100)
 
   def activeStorageStatusList: Seq[StorageStatus] = storageStatusListener.storageStatusList
+
   def deadStorageStatusList: Seq[StorageStatus] = storageStatusListener.deadStorageStatusList
+
   override def onExecutorAdded(
       executorAdded: SparkListenerExecutorAdded): Unit = synchronized {
     val eid = executorAdded.executorId

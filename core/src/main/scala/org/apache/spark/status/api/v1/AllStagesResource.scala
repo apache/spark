@@ -161,7 +161,7 @@ private[v1] object AllStagesResource {
         info.finishTime - info.gettingResultTime
       } else {
         // The task is still fetching the result.
-        System.currentTimeMillis() - info.gettingResultTime
+        currentTime - info.gettingResultTime
       }
     } else {
       0L

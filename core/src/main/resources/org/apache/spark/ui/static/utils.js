@@ -107,3 +107,26 @@ function ConvertDurationString(data) {
     }
     return parseFloat(data) * multiplier;
 }
+
+function createTemplateURI(appId, templateName) {
+    var words = document.baseURI.split('/');
+    var ind = words.indexOf("proxy");
+    if (ind > 0) {
+        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/' + templateName + '-template.html';
+        return baseURI;
+    }
+    ind = words.indexOf("history");
+    if(ind > 0) {
+        var baseURI = words.slice(0, ind).join('/') + '/static/' + templateName + '-template.html';
+        return baseURI;
+    }
+    return location.origin + "/static/" + templateName + "-template.html";
+}
+
+function setDataTableDefaults() {
+    $.extend($.fn.dataTable.defaults, {
+        stateSave: true,
+        lengthMenu: [[20, 40, 60, 100, -1], [20, 40, 60, 100, "All"]],
+        pageLength: 20
+    });
+}
