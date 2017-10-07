@@ -271,11 +271,11 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[InternalRow] = {
-    val byteArrayRdd = getByteArrayRdd().map(_._2)
+    val byteArrayRdd = getByteArrayRdd()
 
     val results = ArrayBuffer[InternalRow]()
-    byteArrayRdd.collect().foreach { bytes =>
-      decodeUnsafeRows(bytes).foreach(results.+=)
+    byteArrayRdd.collect().foreach { rdd =>
+      decodeUnsafeRows(rdd._2).foreach(results.+=)
     }
     results.toArray
   }
@@ -283,7 +283,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
     val countsAndBytes = getByteArrayRdd().collect()
     val total = countsAndBytes.map(_._1).sum
-    val rows = countsAndBytes.iterator.map(_._2).flatMap(decodeUnsafeRows)
+    val rows = countsAndBytes.iterator.flatMap(rdd => decodeUnsafeRows(rdd._2))
     (total, rows)
   }
 
@@ -293,7 +293,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    getByteArrayRdd().toLocalIterator.map(_._2).flatMap(decodeUnsafeRows)
+    getByteArrayRdd().toLocalIterator.flatMap(rdd => decodeUnsafeRows(rdd._2))
   }
 
   /**
