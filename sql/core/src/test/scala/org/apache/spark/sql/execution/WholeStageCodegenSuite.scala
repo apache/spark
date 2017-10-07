@@ -181,7 +181,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     val codeWithShortFunctions = genGroupByCode(3)
     val (_, maxCodeSize1) = CodeGenerator.compile(codeWithShortFunctions)
     assert(maxCodeSize1 < SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
-    val codeWithLongFunctions = genGroupByCode(20)
+    val codeWithLongFunctions = genGroupByCode(50)
     val (_, maxCodeSize2) = CodeGenerator.compile(codeWithLongFunctions)
     assert(maxCodeSize2 > SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.defaultValue.get)
   }
