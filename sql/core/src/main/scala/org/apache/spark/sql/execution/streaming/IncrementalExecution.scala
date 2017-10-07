@@ -124,7 +124,7 @@ class IncrementalExecution(
           eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
           stateWatermarkPredicates =
             StreamingSymmetricHashJoinHelper.getStateWatermarkPredicates(
-              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition,
+              j.left.output, j.right.output, j.leftKeys, j.rightKeys, j.condition.full,
               Some(offsetSeqMetadata.batchWatermarkMs))
         )
     }

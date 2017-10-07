@@ -127,7 +127,7 @@ case class StreamingSymmetricHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
-    condition: Option[Expression],
+    condition: JoinConditionSplitPredicates,
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
@@ -142,8 +142,10 @@ case class StreamingSymmetricHashJoinExec(
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan) = {
+
     this(
-      leftKeys, rightKeys, joinType, condition, stateInfo = None, eventTimeWatermark = None,
+      leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
+      stateInfo = None, eventTimeWatermark = None,
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), left, right)
   }
 
@@ -193,32 +195,6 @@ case class StreamingSymmetricHashJoinExec(
       right.execute(), stateInfo.get, stateStoreNames, stateStoreCoord)(processPartitions)
   }
 
-  // Split the condition into 3 parts:
-  // * Conjuncts that can be applied to the left before storing.
-  // * Conjuncts that can be applied to the right before storing.
-  // * Conjuncts that must be applied to the full row at join time.
-  //
-  // Note that the third category includes both conjuncts that reference both sides
-  // and all nondeterministic conjuncts. Nondeterministic conjuncts can't be shortcutted
-  // to preserve any stateful semantics they may have.
-  private def splitCondition(): (Option[Expression], Option[Expression], Option[Expression]) = {
-    if (condition.isEmpty) return (None, None, None)
-
-    val (candidates, containingNonDeterministic) =
-      splitConjunctivePredicates(condition.get).span(_.deterministic)
-
-    val (leftConjuncts, nonLeftConjuncts) = candidates.partition { cond =>
-      cond.references.subsetOf(left.outputSet)
-    }
-
-    val (rightConjuncts, remainingConjuncts) = candidates.partition { cond =>
-      cond.references.subsetOf(right.outputSet)
-    }
-
-    (leftConjuncts.reduceOption(And), rightConjuncts.reduceOption(And),
-     (containingNonDeterministic ++ remainingConjuncts).reduceOption(And))
-  }
-
   private def processPartitions(
       leftInputIter: Iterator[InternalRow],
       rightInputIter: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -237,17 +213,15 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
-    val (leftFilterExpr, rightFilterExpr, joinedFilterExpr) = splitCondition()
-
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      leftFilterExpr, stateWatermarkPredicates.left)
+      condition.left, stateWatermarkPredicates.left)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      rightFilterExpr, stateWatermarkPredicates.right)
+      condition.right, stateWatermarkPredicates.right)
 
     // Filter the joined rows based on the given condition.
-    val joinedFilter = newPredicate(joinedFilterExpr.getOrElse(Literal(true)), output).eval _
+    val joinedFilter = newPredicate(condition.joined.getOrElse(Literal(true)), output).eval _
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
