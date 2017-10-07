@@ -74,7 +74,7 @@ private[mllib] object LocalKMeans extends Logging {
 
     }
 
-    val distanceSuite = new EuclideanDistanceMeasure
+    val distanceMeasureInstance = new EuclideanDistanceMeasure
 
     // Run up to maxIterations iterations of Lloyd's algorithm
     val oldClosest = Array.fill(points.length)(-1)
@@ -87,7 +87,7 @@ private[mllib] object LocalKMeans extends Logging {
       var i = 0
       while (i < points.length) {
         val p = points(i)
-        val index = distanceSuite.findClosest(centers, p)._1
+        val index = distanceMeasureInstance.findClosest(centers, p)._1
         axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
         if (index != oldClosest(i)) {

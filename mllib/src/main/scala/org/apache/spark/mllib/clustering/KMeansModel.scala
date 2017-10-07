@@ -40,7 +40,8 @@ class KMeansModel @Since("2.3.0") (@Since("1.0.0") val clusterCenters: Array[Vec
   @Since("2.3.0") val distanceMeasure: String)
   extends Saveable with Serializable with PMMLExportable {
 
-  private val distanceSuite: DistanceMeasure = DistanceMeasure.decodeFromString(distanceMeasure)
+  private val distanceMeasureInstance: DistanceMeasure =
+    DistanceMeasure.decodeFromString(distanceMeasure)
 
   private val clusterCentersWithNorm =
     if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
@@ -66,7 +67,7 @@ class KMeansModel @Since("2.3.0") (@Since("1.0.0") val clusterCenters: Array[Vec
    */
   @Since("0.8.0")
   def predict(point: Vector): Int = {
-    distanceSuite.findClosest(clusterCentersWithNorm, new VectorWithNorm(point))._1
+    distanceMeasureInstance.findClosest(clusterCentersWithNorm, new VectorWithNorm(point))._1
   }
 
   /**
@@ -75,7 +76,8 @@ class KMeansModel @Since("2.3.0") (@Since("1.0.0") val clusterCenters: Array[Vec
   @Since("1.0.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
     val bcCentersWithNorm = points.context.broadcast(clusterCentersWithNorm)
-    points.map(p => distanceSuite.findClosest(bcCentersWithNorm.value, new VectorWithNorm(p))._1)
+    points.map(p =>
+      distanceMeasureInstance.findClosest(bcCentersWithNorm.value, new VectorWithNorm(p))._1)
   }
 
   /**
@@ -92,8 +94,9 @@ class KMeansModel @Since("2.3.0") (@Since("1.0.0") val clusterCenters: Array[Vec
   @Since("0.8.0")
   def computeCost(data: RDD[Vector]): Double = {
     val bcCentersWithNorm = data.context.broadcast(clusterCentersWithNorm)
-    val cost = data
-      .map(p => distanceSuite.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p))).sum()
+    val cost = data.map(p =>
+      distanceMeasureInstance.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p)))
+      .sum()
     bcCentersWithNorm.destroy(blocking = false)
     cost
   }
