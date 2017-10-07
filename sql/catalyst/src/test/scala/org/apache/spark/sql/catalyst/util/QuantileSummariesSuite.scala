@@ -58,7 +58,7 @@ class QuantileSummariesSuite extends SparkFunSuite {
     if (data.nonEmpty) {
       val approx = summary.query(quant).get
       // The rank of the approximation.
-      val rank = data.count(_ < approx) // has to be <, not <= to be exact
+      val rank = data.count(_ <= approx)
       val lower = math.floor((quant - summary.relativeError) * data.size)
       val upper = math.ceil((quant + summary.relativeError) * data.size)
       val msg =
