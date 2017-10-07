@@ -271,7 +271,7 @@ class KMeans private (
 
     val initStartTime = System.nanoTime()
 
-    val distanceMeasure = DistanceMeasure.decodeFromString(this.distanceMeasure)
+    val distanceMeasureInstance = DistanceMeasure.decodeFromString(this.distanceMeasure)
 
     val centers = initialModel match {
       case Some(kMeansCenters) =>
@@ -280,7 +280,7 @@ class KMeans private (
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
-          initKMeansParallel(data, distanceMeasure)
+          initKMeansParallel(data, distanceMeasureInstance)
         }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
@@ -308,7 +308,7 @@ class KMeans private (
         val counts = Array.fill(thisCenters.length)(0L)
 
         points.foreach { point =>
-          val (bestCenter, cost) = distanceMeasure.findClosest(thisCenters, point)
+          val (bestCenter, cost) = distanceMeasureInstance.findClosest(thisCenters, point)
           costAccum.add(cost)
           val sum = sums(bestCenter)
           axpy(1.0, point.vector, sum)
@@ -329,7 +329,8 @@ class KMeans private (
       // Update the cluster centers and costs
       converged = true
       newCenters.foreach { case (j, newCenter) =>
-        if (converged && !distanceMeasure.isCenterConverged(centers(j), newCenter, epsilon)) {
+        if (converged &&
+          !distanceMeasureInstance.isCenterConverged(centers(j), newCenter, epsilon)) {
           converged = false
         }
         centers(j) = newCenter
@@ -649,7 +650,7 @@ private[spark] abstract class DistanceMeasure extends Serializable {
   /**
    * Computes the cosine distance between two points.
    */
-  abstract def distance(
+  def distance(
       v1: VectorWithNorm,
       v2: VectorWithNorm): Double
 
