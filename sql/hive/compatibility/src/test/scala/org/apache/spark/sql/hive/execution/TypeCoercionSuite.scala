@@ -23,9 +23,10 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.LocalSparkSession.withSparkSession
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.SharedSQLContext
 
-class TypeCoercionSuite extends QueryTest with SharedSQLContext {
+class TypeCoercionSuite extends QueryTest {
+
+  val spark: SparkSession = null
 
   val hiveSparkConf = new SparkConf()
     .setMaster("local")
