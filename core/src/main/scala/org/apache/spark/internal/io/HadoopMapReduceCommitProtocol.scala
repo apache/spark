@@ -35,6 +35,9 @@ import org.apache.spark.mapred.SparkHadoopMapRedUtil
  * (from the newer mapreduce API, not the old mapred API).
  *
  * Unlike Hadoop's OutputCommitter, this implementation is serializable.
+ *
+ * @param jobId the job's or stage's id
+ * @param path the job's output path, or null if committer acts as a noop
  */
 class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   extends FileCommitProtocol with Serializable with Logging {
@@ -56,6 +59,15 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    * The staging directory for all files committed with absolute output paths.
    */
   private def absPathStagingDir: Path = new Path(path, "_temporary-" + jobId)
+
+  /**
+   * Checks whether there are files to be committed to an absolute output location.
+   *
+   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
+   * it is necessary to check whether the output path is specified. Output path may not be required
+   * for committers not writing to distributed file systems.
+   */
+  private def hasAbsPathFiles: Boolean = path != null
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.newInstance()
@@ -129,17 +141,21 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
       .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
-    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
-    for ((src, dst) <- filesToMove) {
-      fs.rename(new Path(src), new Path(dst))
+    if (hasAbsPathFiles) {
+      val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+      for ((src, dst) <- filesToMove) {
+        fs.rename(new Path(src), new Path(dst))
+      }
+      fs.delete(absPathStagingDir, true)
     }
-    fs.delete(absPathStagingDir, true)
   }
 
   override def abortJob(jobContext: JobContext): Unit = {
     committer.abortJob(jobContext, JobStatus.State.FAILED)
-    val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
-    fs.delete(absPathStagingDir, true)
+    if (hasAbsPathFiles) {
+      val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
+      fs.delete(absPathStagingDir, true)
+    }
   }
 
   override def setupTask(taskContext: TaskAttemptContext): Unit = {
