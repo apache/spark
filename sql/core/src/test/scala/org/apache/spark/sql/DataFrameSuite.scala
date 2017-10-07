@@ -2098,6 +2098,28 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-21520: the fields of project contains nondeterministic") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      withTempPath { path =>
+        val p = path.getAbsolutePath
+        Seq((1, 2, 3), (4, 5, 6)).toDF("a", "b", "c").write.partitionBy("a").parquet(p)
+        val df = spark.read.parquet(p)
+
+        val qe = df.select($"a", rand(10).as('rand))
+        // FileScan parquet [a#38]
+        assert(qe.queryExecution.sparkPlan.inputSet.toString.contains("a#"))
+        assert(!qe.queryExecution.sparkPlan.inputSet.toString.contains("b#"))
+        assert(!qe.queryExecution.sparkPlan.inputSet.toString.contains("c#"))
+
+        val qe2 = df.select($"a", $"b", rand(10).as('rand2))
+        // FileScan parquet [b#70,a#72]
+        assert(qe2.queryExecution.sparkPlan.inputSet.toString.contains("a#"))
+        assert(qe2.queryExecution.sparkPlan.inputSet.toString.contains("b#"))
+        assert(!qe2.queryExecution.sparkPlan.inputSet.toString.contains("c#"))
+      }
+    }
+  }
+
   test("order-by ordinal.") {
     checkAnswer(
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),

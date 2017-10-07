@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.SparkPlan
 
@@ -51,6 +51,15 @@ import org.apache.spark.sql.execution.SparkPlan
  */
 object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case p @ Project(fields, child)
+      if !fields.forall(_.deterministic) && p.references.nonEmpty =>
+      collectFileSource(Project(child.output.filter(p.references.contains), child))
+        .map(p => execution.ProjectExec(fields, p)).toList
+
+    case _ => collectFileSource(plan)
+  }
+
+  private def collectFileSource(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(projects, filters,
       l @ LogicalRelation(fsRelation: HadoopFsRelation, _, table, _)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
