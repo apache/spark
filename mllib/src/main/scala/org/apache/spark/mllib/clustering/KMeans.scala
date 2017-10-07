@@ -374,7 +374,7 @@ class KMeans private (
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
   private[clustering] def initKMeansParallel(data: RDD[VectorWithNorm],
-      distanceMeasure: DistanceMeasure): Array[VectorWithNorm] = {
+      distanceMeasureInstance: DistanceMeasure): Array[VectorWithNorm] = {
     // Initialize empty centers and point costs.
     var costs = data.map(_ => Double.PositiveInfinity)
 
@@ -398,7 +398,7 @@ class KMeans private (
       bcNewCentersList += bcNewCenters
       val preCosts = costs
       costs = data.zip(preCosts).map { case (point, cost) =>
-        math.min(distanceMeasure.pointCost(bcNewCenters.value, point), cost)
+        math.min(distanceMeasureInstance.pointCost(bcNewCenters.value, point), cost)
       }.persist(StorageLevel.MEMORY_AND_DISK)
       val sumCosts = costs.sum()
 
@@ -426,7 +426,9 @@ class KMeans private (
       // candidate by the number of points in the dataset mapping to it and run a local k-means++
       // on the weighted centers to pick k of them
       val bcCenters = data.context.broadcast(distinctCenters)
-      val countMap = data.map(distanceMeasure.findClosest(bcCenters.value, _)._1).countByValue()
+      val countMap = data
+        .map(distanceMeasureInstance.findClosest(bcCenters.value, _)._1)
+        .countByValue()
 
       bcCenters.destroy(blocking = false)
 
