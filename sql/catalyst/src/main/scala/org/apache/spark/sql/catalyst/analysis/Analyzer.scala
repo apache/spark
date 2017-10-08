@@ -854,15 +854,6 @@ class Analyzer(
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q.transformExpressionsUp  {
-          case u @ UnresolvedAttribute(nameParts)
-              if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
-            withPosition(u) {
-              q.resolveChildren(nameParts, resolver).getOrElse {
-                Alias(
-                  catalog.lookupFunction(FunctionIdentifier("grouping_id"), Nil),
-                  VirtualColumn.hiveGroupingIdName)()
-              }
-            }
           case u @ UnresolvedAttribute(nameParts) =>
             // Leave unchanged if resolution fails. Hopefully will be resolved next round.
             val result = withPosition(u) { q.resolveChildren(nameParts, resolver).getOrElse(u) }
@@ -954,15 +945,6 @@ class Analyzer(
     try {
       expr transformUp {
         case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
-        case u @ UnresolvedAttribute(nameParts)
-            if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
-          withPosition(u) {
-            plan.resolve(nameParts, resolver).getOrElse {
-              Alias(
-                catalog.lookupFunction(FunctionIdentifier("grouping_id"), Nil),
-                VirtualColumn.hiveGroupingIdName)()
-            }
-          }
         case u @ UnresolvedAttribute(nameParts) =>
           withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
@@ -1195,6 +1177,10 @@ class Analyzer(
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
+          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
+            withPosition(u) {
+              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
+            }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {
               catalog.lookupFunction(name, children) match {
