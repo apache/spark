@@ -2544,6 +2544,8 @@ class Dataset[T] private[sql](
 
   /**
     * Returns a new Dataset by by flattening a traversable collection into a collection itself.
+    *
+    * @since 2.3.0
     */
   def flatten[U: Encoder](implicit func: T => TraversableOnce[U]): Dataset[U] = mapPartitions(_.flatMap(x => x))
 
