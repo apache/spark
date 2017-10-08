@@ -1341,6 +1341,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
   }
+
+  test ("the calculation precision of sizeInBytes in Statistics") {
+    val N = 1 << 3
+    val df = spark.range(N).selectExpr("id as k1",
+      "cast(id  % 3 as string) as idString1",
+      "cast((id + 1) % 5 as string) as idString2")
+    val sizeInBytes = df.logicalPlan.stats.sizeInBytes
+    // LongType defaultSize: 8
+    // StringType defaultSize: 20
+    // StringType defaultSize: 20
+    // so sizeInBytes is 48 * 8 = 384
+    assert(sizeInBytes == 384)
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])

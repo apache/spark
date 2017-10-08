@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.plans.logical.statsEstimation
 
 import org.apache.spark.sql.catalyst.expressions.AttributeMap
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 
 /**
@@ -32,12 +31,14 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
    * same as the output row number, and compute sizes based on the column types.
    */
   private def visitUnaryNode(p: UnaryNode): Statistics = {
-    // There should be some overhead in Row object, the size should not be zero when there is
-    // no columns, this help to prevent divide-by-zero error.
-    val childRowSize = p.child.output.map(_.dataType.defaultSize).sum + 8
-    val outputRowSize = p.output.map(_.dataType.defaultSize).sum + 8
+    // There should be some overhead in Row object.
+    val childRowSize = p.child.output.map(_.dataType.defaultSize).sum
+    // the size should not be zero when there is no columns, set defaultSize is 8
+    // this help to prevent divide-by-zero error.
+    val childDivRowSize = if (childRowSize > 0) childRowSize else 8
+    val outputRowSize = p.output.map(_.dataType.defaultSize).sum
     // Assume there will be the same number of rows as child has.
-    var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childRowSize
+    var sizeInBytes = (p.child.stats.sizeInBytes * outputRowSize) / childDivRowSize
     if (sizeInBytes == 0) {
       // sizeInBytes can't be zero, or sizeInBytes of BinaryNode will also be zero
       // (product of children).
