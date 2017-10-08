@@ -66,9 +66,12 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val WEIGHT_PROPERTY = "weight"
   val POOL_NAME_PROPERTY = "@name"
   val POOLS_PROPERTY = "pool"
-  val DEFAULT_SCHEDULING_MODE = SchedulingMode.FIFO
-  val DEFAULT_MINIMUM_SHARE = 0
-  val DEFAULT_WEIGHT = 1
+  val DEFAULT_SCHEDULING_MODE = conf
+    .getOption("spark.scheduler.default.mode")
+    .flatMap(s => SchedulingMode.values.find(_.toString == s))
+    .getOrElse(SchedulingMode.FIFO)
+  val DEFAULT_MINIMUM_SHARE = conf.getInt("spark.scheduler.default.minShare", 0)
+  val DEFAULT_WEIGHT = conf.getInt("spark.scheduler.default.weight", 1)
 
   override def buildPools() {
     var fileData: Option[(InputStream, String)] = None
