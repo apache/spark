@@ -97,6 +97,7 @@ def wrap_pandas_udf(f, return_type):
 
         return lambda *a: (verify_result_length(*a), arrow_return_type)
 
+
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
     arg_offsets = [read_int(infile) for i in range(num_arg)]

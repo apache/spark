@@ -235,7 +235,6 @@ class GroupedData(object):
 
         """
         from pyspark.sql.functions import pandas_udf
-        from pyspark.sql.types import to_arrow_type
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') or not udf.vectorized:
@@ -253,6 +252,7 @@ class GroupedData(object):
         columns = df.columns
 
         def wrapped(*cols):
+            from pyspark.sql.types import to_arrow_type
             import pandas as pd
             result = func(pd.concat(cols, axis=1, keys=columns))
             if not isinstance(result, pd.DataFrame):
