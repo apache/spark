@@ -57,7 +57,7 @@ abstract class BaseAdjustTimestampsRule(sparkSession: SparkSession) extends Rule
         }
       }.getOrElse((lr, Map()))
 
-    case relation @ HiveTableRelation(table, cols, parts) =>
+    case relation @ HiveTableRelation(table, _, _) =>
       val tzOpt = extractTableTz(Some(table), Map())
       tzOpt.flatMap { tz =>
         val toTz = sparkSession.sessionState.conf.sessionLocalTimeZone
