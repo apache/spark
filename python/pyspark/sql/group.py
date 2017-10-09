@@ -199,13 +199,16 @@ class GroupedData(object):
     def apply(self, udf):
         """
         Maps each group of the current :class:`DataFrame` using a pandas udf and returns the result
-        as a :class:`DataFrame`.
+        as a `DataFrame`.
 
         The user-defined function should take a `pandas.DataFrame` and return another
         `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame` are combined as a
-        :class:`DataFrame`. The returned `pandas.DataFrame` can be arbitrary length and its schema
-        must match the returnType of the pandas udf.
+        to the user-function and the returned `pandas.DataFrame` are combined as a `DataFrame`.
+        The returned `pandas.DataFrame` can be arbitrary length and its schema must match the
+        returnType of the pandas udf.
+
+        This function does not support partial aggregation, and requires shuffling all the data in
+        the `DataFrame`.
 
         :param udf: A wrapped udf function returned by :meth:`pyspark.sql.functions.pandas_udf`
 

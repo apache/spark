@@ -436,6 +436,17 @@ class RelationalGroupedDataset protected[sql](
           df.logicalPlan))
   }
 
+  /**
+   * Applies a vectorized python use-defined function to each group of data.
+   * The user-defined function defines a transformation: `Pandas.DataFrame` -> `Pandas.DataFrame`.
+   * For each group, all elements in the group are passed as a `Pandas.DataFrame` and the results
+   * for all groups are combined into a new `DataFrame`.
+   *
+   * This function does not support partial aggregation, and requires shuffling all the data in
+   * the `DataFrame`.
+   *
+   * This function uses `Arrow` as serialization format between JVM and python workers.
+   */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
     require(expr.vectorized, "Must pass a vectorized python udf")
     require(expr.dataType.isInstanceOf[StructType],

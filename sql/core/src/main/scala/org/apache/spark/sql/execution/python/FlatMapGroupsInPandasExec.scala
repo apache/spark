@@ -29,8 +29,7 @@ import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode
 import org.apache.spark.sql.types.StructType
 
 /**
- * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
- * This is used by pyspark.sql.DataFrame.groupby().apply().
+ * Physical node for [[org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsInPandas]]
  *
  * Rows in each group are passed to the python worker as a Arrow record batch.
  * The python worker turns the record batch to a pandas.DataFrame, invoke the

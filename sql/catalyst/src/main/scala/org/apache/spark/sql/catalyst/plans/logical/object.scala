@@ -520,17 +520,3 @@ case class CoGroup(
     left: LogicalPlan,
     right: LogicalPlan) extends BinaryNode with ObjectProducer
 
-case class FlatMapGroupsInPandas(
-    groupingAttributes: Seq[Attribute],
-    functionExpr: Expression,
-    output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-  /**
-   * This is needed because output attributes are considered `references` when
-   * passed through the constructor.
-   *
-   * Without this, catalyst will complain that output attributes are missing
-   * from the input.
-   */
-  override val producedAttributes = AttributeSet(output)
-}
