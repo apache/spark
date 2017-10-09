@@ -283,7 +283,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   private[spark] def executeCollectIterator(): (Long, Iterator[InternalRow]) = {
     val countsAndBytes = getByteArrayRdd().collect()
     val total = countsAndBytes.map(_._1).sum
-    val rows = countsAndBytes.iterator.flatMap(rdd => decodeUnsafeRows(rdd._2))
+    val rows = countsAndBytes.iterator.flatMap(countAndBytes => decodeUnsafeRows(countAndBytes._2))
     (total, rows)
   }
 
@@ -293,7 +293,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note Triggers multiple jobs (one for each partition).
    */
   def executeToIterator(): Iterator[InternalRow] = {
-    getByteArrayRdd().toLocalIterator.flatMap(rdd => decodeUnsafeRows(rdd._2))
+    getByteArrayRdd().map(_._2).toLocalIterator.flatMap(decodeUnsafeRows)
   }
 
   /**
