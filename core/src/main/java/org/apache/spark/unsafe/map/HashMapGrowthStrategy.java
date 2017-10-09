@@ -33,7 +33,7 @@ public interface HashMapGrowthStrategy {
 
   class Doubling implements HashMapGrowthStrategy {
 
-    private static final int ARRAY_MAX = ByteArrayMethods.maxWordRoundedArrayLength();
+    private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
     @Override
     public int nextCapacity(int currentCapacity) {

@@ -98,5 +98,5 @@ private[spark] class PartitionedPairBuffer[K, V](initialCapacity: Int = 64)
 }
 
 private object PartitionedPairBuffer {
-  val MAXIMUM_CAPACITY: Int = ByteArrayMethods.maxWordRoundedArrayLength() / 2
+  val MAXIMUM_CAPACITY: Int = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 2
 }

@@ -596,7 +596,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    * Upper limit for the maximum capacity for this column.
    */
   @VisibleForTesting
-  protected int MAX_CAPACITY = ByteArrayMethods.maxWordRoundedArrayLength();
+  protected int MAX_CAPACITY = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
   /**
    * Number of nulls in this column. This is an optimization for the reader, to skip NULL checks.

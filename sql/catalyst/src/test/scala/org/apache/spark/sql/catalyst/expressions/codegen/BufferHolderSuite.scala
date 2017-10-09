@@ -17,14 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
-import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Timeouts
-
-import org.apache.spark.{SparkFunSuite, TestUtils}
-import org.apache.spark.deploy.SparkSubmitSuite
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.util.ResetSystemProperties
 
 class BufferHolderSuite extends SparkFunSuite {
 
@@ -41,56 +35,5 @@ class BufferHolderSuite extends SparkFunSuite {
       holder.grow(Integer.MAX_VALUE)
     }
     assert(e.getMessage.contains("exceeds size limitation"))
-  }
-}
-
-// A test for growing the buffer holder to nearly 2GB. Due to the heap size limitation of the Spark
-// unit tests JVM, the actually test code is running as a submit job.
-class BufferHolderSparkSubmitSuite
-  extends SparkFunSuite
-    with Matchers
-    with BeforeAndAfterEach
-    with ResetSystemProperties
-    with Timeouts {
-
-  test("SPARK-22222: Buffer holder should be able to allocate memory larger than 1GB") {
-    val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
-
-    val argsForSparkSubmit = Seq(
-      "--class", BufferHolderSparkSubmitSuite.getClass.getName.stripSuffix("$"),
-      "--name", "SPARK-22222",
-      "--master", "local-cluster[2,1,1024]",
-      "--driver-memory", "4g",
-      "--conf", "spark.ui.enabled=false",
-      "--conf", "spark.master.rest.enabled=false",
-      "--conf", "spark.driver.extraJavaOptions=-ea",
-      unusedJar.toString)
-    SparkSubmitSuite.runSparkSubmit(argsForSparkSubmit, "../..")
-  }
-}
-
-object BufferHolderSparkSubmitSuite {
-
-  def main(args: Array[String]): Unit = {
-
-    val ARRAY_MAX = ByteArrayMethods.maxWordRoundedArrayLength()
-
-    val holder = new BufferHolder(new UnsafeRow(1000))
-
-    holder.reset()
-    holder.grow(roundToWord(ARRAY_MAX / 2))
-
-    holder.reset()
-    holder.grow(roundToWord(ARRAY_MAX / 2 + 8))
-
-    holder.reset()
-    holder.grow(roundToWord(Integer.MAX_VALUE / 2))
-
-    holder.reset()
-    holder.grow(roundToWord(Integer.MAX_VALUE))
-  }
-
-  private def roundToWord(len: Int): Int = {
-    ByteArrayMethods.roundNumberOfBytesToNearestWord(len)
   }
 }

@@ -37,7 +37,7 @@ import org.apache.spark.unsafe.array.ByteArrayMethods;
  */
 public class BufferHolder {
 
-  private static final int ARRAY_MAX = ByteArrayMethods.maxWordRoundedArrayLength();
+  private static final int ARRAY_MAX = ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH;
 
   public byte[] buffer;
   public int cursor = Platform.BYTE_ARRAY_OFFSET;
