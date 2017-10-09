@@ -18,7 +18,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.{AdjustTimestamps, BaseAdjustTimestampsSuite}
+import org.apache.spark.sql.execution.datasources.BaseAdjustTimestampsSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveSingleton {
@@ -85,7 +85,6 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
   }
 
   test("copy table timezone in CREATE TABLE LIKE") {
-    val key = DateTimeUtils.TIMEZONE_PROPERTY
     withTable("orig_hive", "copy_hive", "orig_ds", "copy_ds") {
       spark.sql(
         s"""CREATE TABLE orig_hive (
@@ -93,15 +92,15 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
            |  ts timestamp
            |)
            |STORED AS parquet
-           |TBLPROPERTIES ("$key"="UTC")
+           |TBLPROPERTIES ("$TZ_KEY"="$UTC")
            |""".
           stripMargin)
       spark.sql("CREATE TABLE copy_hive LIKE orig_hive")
-      checkHasTz(spark, "copy_hive", Some("UTC"))
+      checkHasTz(spark, "copy_hive", Some(UTC))
 
-      createRawData(spark).write.option(key, "America/New_York").saveAsTable("orig_ds")
+      createRawData(spark).write.option(TZ_KEY, TABLE_TZ).saveAsTable("orig_ds")
       spark.sql("CREATE TABLE copy_ds LIKE orig_ds")
-      checkHasTz(spark, "copy_ds", Some("America/New_York"))
+      checkHasTz(spark, "copy_ds", Some(TABLE_TZ))
     }
 
   }

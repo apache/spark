@@ -32,11 +32,16 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
     with BeforeAndAfterAll {
 
+  protected val SESSION_TZ = "America/Los_Angeles"
+  protected val TABLE_TZ = "Europe/Berlin"
+  protected val UTC = "UTC"
+  protected val TZ_KEY = DateTimeUtils.TIMEZONE_PROPERTY
+
   var originalTz: TimeZone = _
   protected override def beforeAll(): Unit = {
     super.beforeAll()
     originalTz = TimeZone.getDefault()
-    TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    TimeZone.setDefault(TimeZone.getTimeZone(SESSION_TZ))
   }
 
   protected override def afterAll(): Unit = {
@@ -59,7 +64,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
     val originalTz = TimeZone.getDefault
     try {
       desiredTimestampStrings.flatMap { timestampString =>
-        Seq("America/Los_Angeles", "Europe/Berlin", "UTC").map { tzId =>
+        Seq(SESSION_TZ, TABLE_TZ, UTC).map { tzId =>
           TimeZone.setDefault(TimeZone.getTimeZone(tzId))
           val timestamp = Timestamp.valueOf(timestampString)
           (timestampString, tzId) -> timestamp.getTime()
@@ -104,15 +109,11 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
   // we want to test that this works w/ hive-only methods as well, so provide a few extension
   // points so we can also easily re-use this with hive support.
   protected def createAndSaveTableFunctions(): Map[String, CreateAndSaveTable] = {
-    formats.map { format =>
-      (format, new CreateAndSaveDatasourceTable(format))
-    }.toMap
+    formats.map { f => (f, new CreateAndSaveDatasourceTable(f)) }.toMap
   }
 
   protected def ctasFunctions(): Map[String, CTAS] = {
-    formats.map { format =>
-      (format, new DatasourceCTAS(format))
-    }.toMap
+    formats.map { f => (f, new DatasourceCTAS(f)) }.toMap
   }
 
   trait CreateAndSaveTable {
@@ -163,13 +164,12 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       destFormat: String,
       createFn: CreateAndSaveTable,
       ctasFn: CTAS): Unit = {
-    assert(TimeZone.getDefault.getID() === "America/Los_Angeles")
-    val key = DateTimeUtils.TIMEZONE_PROPERTY
+    assert(TimeZone.getDefault.getID() === SESSION_TZ)
     val originalData = createRawData(spark)
     withTempPath { basePath =>
       val dsPath = new File(basePath, "dsFlat").getAbsolutePath
       originalData.write
-        .option(key, "Europe/Berlin")
+        .option(TZ_KEY, TABLE_TZ)
         .parquet(dsPath)
 
       /**
@@ -186,26 +186,26 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
           val query =
             s"select ts from $table where $filter"
           val countWithFilter = spark.sql(query).count()
-          assert(countWithFilter === 4, query)
+          assert(countWithFilter === desiredTimestampStrings.size, query)
         }
 
-        // also, read the raw parquet data, without any TZ correction, and make sure the raw
+        // also, read the raw table data, without any TZ correction, and make sure the raw
         // values have been adjusted as we expect.
         val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
         val location = tableMeta.location.toString()
         val tz = tableMeta.properties.get(DateTimeUtils.TIMEZONE_PROPERTY)
         // some formats need the schema specified
         val df = spark.read.schema(originalData.schema).format(format).load(location)
-        checkRawData(df, tz.getOrElse("America/Los_Angeles"))
+        checkRawData(df, tz.getOrElse(SESSION_TZ))
       }
 
       // read it back, without supplying the right timezone.  Won't match the original, but we
       // expect specific values.
       val readNoCorrection = spark.read.parquet(dsPath)
-      checkRawData(readNoCorrection, "Europe/Berlin")
+      checkRawData(readNoCorrection, TABLE_TZ)
 
       // now read it back *with* the right timezone -- everything should match.
-      val readWithCorrection = spark.read.option(key, "Europe/Berlin").parquet(dsPath)
+      val readWithCorrection = spark.read.option(TZ_KEY, TABLE_TZ).parquet(dsPath)
 
       readWithCorrection.collect().foreach { row =>
         assert(row.getAs[String]("display") === row.getAs[Timestamp]("ts").toString())
@@ -218,9 +218,9 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       withTable(tblName) {
         // create the table (if we can -- not all createAndSave() methods support all formats,
         // eg. hive tables don't support json)
-        createFn.createAndSave(readWithCorrection, tblName, Some("UTC"))
+        createFn.createAndSave(readWithCorrection, tblName, Some(UTC))
         // make sure it has the right timezone, and the data is correct.
-        checkHasTz(spark, tblName, Some("UTC"))
+        checkHasTz(spark, tblName, Some(UTC))
         checkTableData(tblName, createFn.format)
 
         // also try to copy this table directly into another table with a different timezone
@@ -228,8 +228,8 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
         val destTableUTC = s"copy_to_utc_$destFormat"
         val destTableNoTZ = s"copy_to_no_tz_$destFormat"
         withTable(destTableUTC, destTableNoTZ) {
-          ctasFn.createFromSource(tblName, destTableUTC, Some("UTC"))
-          checkHasTz(spark, destTableUTC, Some("UTC"))
+          ctasFn.createFromSource(tblName, destTableUTC, Some(UTC))
+          checkHasTz(spark, destTableUTC, Some(UTC))
           checkTableData(destTableUTC, ctasFn.format)
 
           ctasFn.createFromSource(tblName, destTableNoTZ, None)
@@ -256,21 +256,20 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
         // of the existing data, but at this point we're just checking we can change
         // the metadata
         spark.sql(
-          s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="America/Los_Angeles")""")
-        checkHasTz(spark, tblName, Some("America/Los_Angeles"))
+          s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$TZ_KEY"="$SESSION_TZ")""")
+        checkHasTz(spark, tblName, Some(SESSION_TZ))
 
-        spark.sql(s"""ALTER TABLE $tblName UNSET TBLPROPERTIES ("$key")""")
+        spark.sql(s"""ALTER TABLE $tblName UNSET TBLPROPERTIES ("$TZ_KEY")""")
         checkHasTz(spark, tblName, None)
 
-        spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$key"="UTC")""")
-        checkHasTz(spark, tblName, Some("UTC"))
+        spark.sql(s"""ALTER TABLE $tblName SET TBLPROPERTIES ("$TZ_KEY"="$UTC")""")
+        checkHasTz(spark, tblName, Some(UTC))
       }
     }
   }
 
   test("exception on bad timezone") {
     // make sure there is an exception anytime we try to read or write with a bad timezone
-    val key = DateTimeUtils.TIMEZONE_PROPERTY
     val badVal = "Blart Versenwald III"
     val data = createRawData(spark)
     def hasBadTzException(command: => Unit): Unit = {
@@ -282,12 +281,12 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
 
     withTempPath { p =>
       hasBadTzException {
-        data.write.option(key, badVal).parquet(p.getAbsolutePath)
+        data.write.option(TZ_KEY, badVal).parquet(p.getAbsolutePath)
       }
 
       data.write.parquet(p.getAbsolutePath)
       hasBadTzException {
-        spark.read.option(key, badVal).parquet(p.getAbsolutePath)
+        spark.read.option(TZ_KEY, badVal).parquet(p.getAbsolutePath)
       }
     }
 
@@ -298,7 +297,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
 
       createFn.createAndSave(data.toDF(), "bad_tz_table", None)
       hasBadTzException {
-        spark.sql(s"""ALTER TABLE bad_tz_table SET TBLPROPERTIES("$key"="$badVal")""")
+        spark.sql(s"""ALTER TABLE bad_tz_table SET TBLPROPERTIES("$TZ_KEY"="$badVal")""")
       }
     }
   }
@@ -311,7 +310,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       val origData = createRawData(spark)
       origData.write.saveAsTable("some_table")
       val exc = intercept[AnalysisException]{
-        createRawData(spark).write.option(DateTimeUtils.TIMEZONE_PROPERTY, "UTC")
+        createRawData(spark).write.option(DateTimeUtils.TIMEZONE_PROPERTY, UTC)
           .insertInto("some_table")
       }
       assert(exc.getMessage.contains("Cannot provide a table timezone on insert"))
@@ -319,7 +318,6 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
   }
 
   test("disallow table timezone on views") {
-    val key = DateTimeUtils.TIMEZONE_PROPERTY
     val originalData = createRawData(spark)
 
     withTable("ok_table") {
@@ -327,14 +325,14 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       withView("view_with_tz") {
         val exc1 = intercept[AnalysisException]{
           spark.sql(s"""CREATE VIEW view_with_tz
-                       |TBLPROPERTIES ("$key"="UTC")
+                       |TBLPROPERTIES ("$TZ_KEY"="$UTC")
                        |AS SELECT * FROM ok_table
            """.stripMargin)
         }
         assert(exc1.getMessage.contains("Timezone cannot be set for view"))
         spark.sql("CREATE VIEW view_with_tz AS SELECT * FROM ok_table")
         val exc2 = intercept[AnalysisException]{
-          spark.sql(s"""ALTER VIEW view_with_tz SET TBLPROPERTIES("$key"="UTC")""")
+          spark.sql(s"""ALTER VIEW view_with_tz SET TBLPROPERTIES("$TZ_KEY"="$UTC")""")
         }
         assert(exc2.getMessage.contains("Timezone cannot be set for view"))
       }
