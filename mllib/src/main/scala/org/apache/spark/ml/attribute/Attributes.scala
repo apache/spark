@@ -43,10 +43,8 @@ case class NominalAttr(
   override def withoutName(): NominalAttr = copy(name = None)
 
   override def withIndicesRange(indices: Seq[Int]): NominalAttr = copy(indicesRange = indices)
-
   override def withoutIndicesRange: NominalAttr = copy(indicesRange = Seq.empty)
 
-  // Java-friendly APIs to set up attribute properties.
   def withIsOrdinal(isOrdinal: Boolean): NominalAttr = copy(isOrdinal = Some(isOrdinal))
   def withValues(values: Array[String]): NominalAttr = copy(values = Some(values))
 
@@ -85,10 +83,8 @@ case class BinaryAttr(
   override def withoutName(): BinaryAttr = copy(name = None)
 
   override def withIndicesRange(indices: Seq[Int]): BinaryAttr = copy(indicesRange = indices)
-
   override def withoutIndicesRange: BinaryAttr = copy(indicesRange = Seq.empty)
 
-  // Java-friendly APIs to set up attribute properties.
   def withValues(values: Array[String]): BinaryAttr = copy(values = Some(values))
 
   override def toMetadataImpl(): Metadata = {
@@ -133,10 +129,8 @@ case class NumericAttr(
   override def withoutName(): NumericAttr = copy(name = None)
 
   override def withIndicesRange(indices: Seq[Int]): NumericAttr = copy(indicesRange = indices)
-
   override def withoutIndicesRange: NumericAttr = copy(indicesRange = Seq.empty)
 
-  // Java-friendly APIs to set up attribute properties.
   def withMin(min: Double): NumericAttr = copy(min = Some(min))
   def withMax(max: Double): NumericAttr = copy(max = Some(max))
   def withStd(std: Double): NumericAttr = copy(std = Some(std))
