@@ -74,20 +74,28 @@ def wrap_udf(f, return_type):
 
 
 def wrap_pandas_udf(f, return_type):
-    arrow_return_type = to_arrow_type(return_type)
+    # If the return_type is a StructType, it indicates this is a groupby apply udf,
+    # and has already been wrapped under apply(), otherwise, it's a vectorized column udf.
+    # We can distinguish these two by return type because in groupby apply, we always specify
+    # returnType as a StructType, and in vectorized column udf, StructType is not supported.
+    #
+    # TODO: Look into refactoring use of StructType to be more flexible for future pandas_udfs
+    if isinstance(return_type, StructType):
+        return lambda *a: f(*a)
+    else:
+        arrow_return_type = to_arrow_type(return_type)
 
-    def verify_result_length(*a):
-        result = f(*a)
-        if not hasattr(result, "__len__"):
-            raise TypeError("Return type of the user-defined functon should be "
-                            "Pandas.Series, but is {}".format(type(result)))
-        if len(result) != len(a[0]):
-            raise RuntimeError("Result vector from pandas_udf was not the required length: "
-                               "expected %d, got %d" % (len(a[0]), len(result)))
-        return result
+        def verify_result_length(*a):
+            result = f(*a)
+            if not hasattr(result, "__len__"):
+                raise TypeError("Return type of the user-defined functon should be "
+                                "Pandas.Series, but is {}".format(type(result)))
+            if len(result) != len(a[0]):
+                raise RuntimeError("Result vector from pandas_udf was not the required length: "
+                                   "expected %d, got %d" % (len(a[0]), len(result)))
+            return result
 
-    return lambda *a: (verify_result_length(*a), arrow_return_type)
-
+        return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 def read_single_udf(pickleSer, infile, eval_type):
     num_arg = read_int(infile)
@@ -101,16 +109,7 @@ def read_single_udf(pickleSer, infile, eval_type):
             row_func = chain(row_func, f)
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_PANDAS_UDF:
-        # If the return_type is a StructType, it indicates this is a groupby apply udf,
-        # and has already been wrapped under apply(), otherwise, it's a vectorized column udf.
-        # We can distinguish these two by return type because in groupby apply, we always specify
-        # returnType as a StructType, and in vectorized column udf, StructType is not supported.
-        #
-        # TODO: This logic is a bit hacky and might not work for future pandas udfs. Need refactoring.
-        if isinstance(return_type, StructType):
-            return arg_offsets, row_func
-        else:
-            return arg_offsets, wrap_pandas_udf(row_func, return_type)
+        return arg_offsets, wrap_pandas_udf(row_func, return_type)
     else:
         return arg_offsets, wrap_udf(row_func, return_type)
 

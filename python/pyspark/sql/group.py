@@ -251,7 +251,6 @@ class GroupedData(object):
         # So we to create a wrapper function that turns that to a pd.DataFrame before passing
         # down to the user function, then turn the result pd.DataFrame back into pd.Series
         columns = df.columns
-        arrow_return_types = [to_arrow_type(field.dataType) for field in returnType]
 
         def wrapped(*cols):
             import pandas as pd
@@ -259,13 +258,14 @@ class GroupedData(object):
             if not isinstance(result, pd.DataFrame):
                 raise TypeError("Return type of the user-defined function should be "
                                 "Pandas.DataFrame, but is {}".format(type(result)))
-            if not len(result.columns) == len(arrow_return_types):
+            if not len(result.columns) == len(returnType):
                 raise RuntimeError(
                     "Number of columns of the returned Pandas.DataFrame "
                     "doesn't match specified schema. "
-                    "Expected: {} Actual: {}".format(len(arrow_return_types), len(result.columns)))
-            return [(result[result.columns[i]], arrow_return_types[i])
-                    for i in range(len(arrow_return_types))]
+                    "Expected: {} Actual: {}".format(len(returnType), len(result.columns)))
+            arrow_return_types = (to_arrow_type(field.dataType) for field in returnType)
+            return [(result[result.columns[i]], arrow_type)
+                    for i, arrow_type in enumerate(arrow_return_types)]
 
         wrapped_udf_obj = pandas_udf(wrapped, returnType)
         udf_column = wrapped_udf_obj(*[df[col] for col in df.columns])
