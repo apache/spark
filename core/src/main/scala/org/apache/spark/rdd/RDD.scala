@@ -382,6 +382,13 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+    * Return a new RDD by flattening a traversable collection into a collection itself.
+    */
+  def flatten[U: ClassTag](implicit f: T => TraversableOnce[U]): RDD[U] = withScope {
+    this.flatMap(identity(_))
+  }
+
+  /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: T => Boolean): RDD[T] = withScope {

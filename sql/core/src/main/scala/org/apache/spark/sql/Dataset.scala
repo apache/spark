@@ -2543,6 +2543,14 @@ class Dataset[T] private[sql](
     mapPartitions(_.flatMap(func))
 
   /**
+    * Returns a new Dataset by by flattening a traversable collection into a collection itself.
+    *
+    * @since 2.3.0
+    */
+  def flatten[U: Encoder](implicit func: T => TraversableOnce[U]): Dataset[U] =
+    mapPartitions(_.flatMap(x => x))
+
+  /**
    * :: Experimental ::
    * (Java-specific)
    * Returns a new Dataset by first applying a function to all elements of this Dataset,

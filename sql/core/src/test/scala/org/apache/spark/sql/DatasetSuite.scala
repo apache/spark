@@ -1341,6 +1341,17 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
   }
+  test("SPARK-22152: a dataset of sequence should be flattened"){
+    val ds: Dataset[Seq[Int]] = Seq(Seq(1, 2, 3)).toDS
+    val out: Dataset[Int] = ds.flatten
+    assert(out.collect.toSeq == Seq(1, 2, 3))
+  }
+
+  test("SPARK-22152: a dataset of option elements should be flattened"){
+    val ds: Dataset[Option[String]] = Seq(Some("a"),None,Some("b")).toDS
+    val out: Dataset[String] = ds.flatten
+    assert(out.collect.toSeq == Seq("a", "b"))
+  }
 }
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
