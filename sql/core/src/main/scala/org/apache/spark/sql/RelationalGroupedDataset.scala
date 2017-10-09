@@ -21,6 +21,7 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.broadcast.Broadcast
@@ -465,6 +466,24 @@ class RelationalGroupedDataset protected[sql](
 
     Dataset.ofRows(df.sparkSession, plan)
   }
+
+  override def toString: String = {
+    try {
+      val builder = new StringBuilder
+      builder.append("RelationalGroupedDataset: [key: [")
+      val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
+        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+      }
+      builder.append(kFields.take(2).mkString(", "))
+      if (kFields.length > 2) {
+        builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+      }
+      builder.append(s"], value: ${df.toString}, $groupType]").toString()
+    } catch {
+      case NonFatal(e) =>
+        s"Invalid tree; ${e.getMessage}:\n${df.queryExecution}"
+    }
+  }
 }
 
 private[sql] object RelationalGroupedDataset {
@@ -479,7 +498,9 @@ private[sql] object RelationalGroupedDataset {
   /**
    * The Grouping Type
    */
-  private[sql] trait GroupType
+  private[sql] trait GroupType {
+    override def toString: String = getClass.getSimpleName.replace("$", "")
+  }
 
   /**
    * To indicate it's the GroupBy

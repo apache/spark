@@ -15,31 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.test
+package org.apache.spark.sql
 
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.util.sideBySide
-
-case class TestData1(id: Int)
-case class TestData2(id: Int, val1: String)
-case class TestData3(id: Int, val1: String, val2: Long)
+import org.apache.spark.sql.test.SharedSQLContext
 
 class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  private def checkString(expected: String, actual: String): Unit = {
-    if (expected != actual) {
-      fail(
-        "KeyValueGroupedDataset.toString() gives wrong result:\n\n" + sideBySide(
-          "== Expected ==\n" + expected,
-          "== Actual ==\n" + actual
-        ).mkString("\n")
-      )
-    }
-  }
-
   test("Check KeyValueGroupedDataset toString: Sigle data") {
-    val kvDataset = (1 to 3).toDF("id").as[TestData1].groupByKey(identity)
+    val kvDataset = (1 to 3).toDF("id").as[SingleData].groupByKey(identity)
     val expected = "KeyValueGroupedDataset: [key: [id: int], value: [id: int]]"
     val actual = kvDataset.toString
 
@@ -48,7 +32,7 @@ class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
 
   test("Check KeyValueGroupedDataset toString: Unnamed KV-pair") {
     val kvDataset = (1 to 3).map(x => (x, x.toString))
-      .toDF("id", "val1").as[TestData2].groupByKey(x => (x.id, x.val1))
+      .toDF("id", "val1").as[DoubleData].groupByKey(x => (x.id, x.val1))
     val expected = "KeyValueGroupedDataset:" +
       " [key: [_1: int, _2: string]," +
       " value: [id: int, val1: string]]"
@@ -61,7 +45,7 @@ class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
 
   test("Check KeyValueGroupedDataset toString: Named KV-pair") {
     val kvDataset = (1 to 3).map( x => (x, x.toString))
-      .toDF("id", "val1").as[TestData2].groupByKey(x => TestData2(x.id, x.val1))
+      .toDF("id", "val1").as[DoubleData].groupByKey(x => DoubleData(x.id, x.val1))
     val expected = "KeyValueGroupedDataset:" +
       " [key: [id: int, val1: string]," +
       " value: [id: int, val1: string]]"
@@ -72,7 +56,7 @@ class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
 
   test("Check KeyValueGroupedDataset toString: over length schema ") {
     val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
-      .toDF("id", "val1", "val2").as[TestData3].groupByKey(identity)
+      .toDF("id", "val1", "val2").as[TripleData].groupByKey(identity)
     val expected = "KeyValueGroupedDataset:" +
       " [key: [id: int, val1: string ... 1 more field(s)]," +
       " value: [id: int, val1: string ... 1 more field(s)]]"

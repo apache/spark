@@ -17,23 +17,13 @@
 
 package org.apache.spark.sql
 
-import java.util.{ArrayDeque, Locale, TimeZone}
+import java.util.{Locale, TimeZone}
 
 import scala.collection.JavaConverters._
-import scala.util.control.NonFatal
 
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.ImperativeAggregate
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.streaming.MemoryPlan
-import org.apache.spark.sql.types.{Metadata, ObjectType}
 
 
 abstract class QueryTest extends PlanTest {
@@ -44,6 +34,20 @@ abstract class QueryTest extends PlanTest {
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
   // Add Locale setting
   Locale.setDefault(Locale.US)
+
+  /**
+   * Makes sure the answer matches the expected result
+   */
+  def checkString(expected: String, actual: String): Unit = {
+    if (expected != actual) {
+      fail(
+        "KeyValueGroupedDataset.toString() gives wrong result:\n\n" + sideBySide(
+          "== Expected ==\n" + expected,
+          "== Actual ==\n" + actual
+        ).mkString("\n")
+      )
+    }
+  }
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords.
@@ -374,3 +378,7 @@ class QueryTestSuite extends QueryTest with test.SharedSQLContext {
     }
   }
 }
+
+case class SingleData(id: Int)
+case class DoubleData(id: Int, val1: String)
+case class TripleData(id: Int, val1: String, val2: Long)
