@@ -20,7 +20,8 @@ package org.apache.spark.ml.attribute
 import scala.collection.mutable
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BooleanType, DoubleType, Metadata, MetadataBuilder, NumericType, StructField}
 
 /**
@@ -39,13 +40,9 @@ case class NominalAttr(
   override val attrType: AttributeType = AttributeType.Nominal
 
   override def withName(name: String): NominalAttr = copy(name = Some(name))
-  override def withoutName: NominalAttr = copy(name = None)
+  override def withoutName(): NominalAttr = copy(name = None)
 
-  override def withIndicesRange(begin: Int, end: Int): NominalAttr =
-    copy(indicesRange = Seq(begin, end))
-  override def withIndicesRange(index: Int): NominalAttr = copy(indicesRange = Seq(index))
-  override def withIndicesRange(indices: Seq[Int]): NominalAttr =
-    copy(indicesRange = indices)
+  override def withIndicesRange(indices: Seq[Int]): NominalAttr = copy(indicesRange = indices)
 
   override def withoutIndicesRange: NominalAttr = copy(indicesRange = Seq.empty)
 
@@ -85,13 +82,9 @@ case class BinaryAttr(
   override val attrType: AttributeType = AttributeType.Binary
 
   override def withName(name: String): BinaryAttr = copy(name = Some(name))
-  override def withoutName: BinaryAttr = copy(name = None)
+  override def withoutName(): BinaryAttr = copy(name = None)
 
-  override def withIndicesRange(begin: Int, end: Int): BinaryAttr =
-    copy(indicesRange = Seq(begin, end))
-  override def withIndicesRange(index: Int): BinaryAttr = copy(indicesRange = Seq(index))
-  override def withIndicesRange(indices: Seq[Int]): BinaryAttr =
-    copy(indicesRange = indices)
+  override def withIndicesRange(indices: Seq[Int]): BinaryAttr = copy(indicesRange = indices)
 
   override def withoutIndicesRange: BinaryAttr = copy(indicesRange = Seq.empty)
 
@@ -137,13 +130,9 @@ case class NumericAttr(
   override val attrType: AttributeType = AttributeType.Numeric
 
   override def withName(name: String): NumericAttr = copy(name = Some(name))
-  override def withoutName: NumericAttr = copy(name = None)
+  override def withoutName(): NumericAttr = copy(name = None)
 
-  override def withIndicesRange(begin: Int, end: Int): NumericAttr =
-    copy(indicesRange = Seq(begin, end))
-  override def withIndicesRange(index: Int): NumericAttr = copy(indicesRange = Seq(index))
-  override def withIndicesRange(indices: Seq[Int]): NumericAttr =
-    copy(indicesRange = indices)
+  override def withIndicesRange(indices: Seq[Int]): NumericAttr = copy(indicesRange = indices)
 
   override def withoutIndicesRange: NumericAttr = copy(indicesRange = Seq.empty)
 
@@ -172,33 +161,58 @@ case class NumericAttr(
 /**
  * :: DeveloperApi ::
  * An attribute that can contain other attributes, represents a ML vector column.
- * The inner attributes can be accessed by using indices in the vector. The names of the
- * inner attributes are meaningless and won't be serialized.
- *
- * @param attributes the attributes included in this vector column.
+ * The inner attributes included are in sparse format. The inner attributes can be accessed by
+ * using indices in the vector. The names of the inner attributes are meaningless and won't be
+ * serialized.
  */
 @DeveloperApi
 case class VectorAttr(
+    val numOfAttributes: Int,
     name: Option[String] = None,
-    attributes: Seq[SimpleAttribute] = Seq.empty) extends ComplexAttribute {
+    private val innerAttrs: mutable.ArrayBuffer[SimpleAttribute] = mutable.ArrayBuffer.empty)
+    extends ComplexAttribute {
+
+  require(numOfAttributes > 0, "The number of attributes must be larger than zero.")
+
+  override def attributes: Seq[SimpleAttribute] = innerAttrs.toSeq
 
   override val attrType: AttributeType = AttributeType.Vector
 
   override def withName(name: String): VectorAttr = copy(name = Some(name))
-  override def withoutName: VectorAttr = copy(name = None)
+  override def withoutName(): VectorAttr = copy(name = None)
 
-  override def withAttributes(attributes: Seq[SimpleAttribute]): VectorAttr =
-    copy(attributes = attributes.map(_.withoutName))
-  override def withoutAttributes: VectorAttr = copy(attributes = Seq.empty)
+  override def addAttribute(newAttr: SimpleAttribute): this.type = innerAttrs.synchronized {
+    require(newAttr.indicesRange.length > 0, "The indices of added attribute can't be empty.")
+    require(newAttr.getMaxIndex() < numOfAttributes, "The indices of added attribute exceed " +
+      "the number of attributes of this vector column.")
+
+    var attrToAdd = newAttr
+    if (innerAttrs.length > 0) {
+      val previousAttr = innerAttrs(innerAttrs.length - 1)
+
+      require(previousAttr.getMaxIndex() < newAttr.getMinIndex(),
+        "The indices of added attributes must be in ascending order.")
+
+      // We can combine two continuous inner attributes if ther have the same properties.
+      if (VectorAttrBuilder.sameAttrProps(previousAttr, newAttr) &&
+          VectorAttrBuilder.isContinuousAttrs(previousAttr, newAttr)) {
+        innerAttrs -= previousAttr
+        attrToAdd = previousAttr.withIndicesRange(
+          Seq(previousAttr.getMinIndex(), newAttr.getMaxIndex()))
+      }
+    }
+    innerAttrs += attrToAdd.withoutName
+    this
+  }
 
   override def getAttribute(idx: Int): BaseAttribute = {
-    attributes.find { attr =>
+    innerAttrs.find { attr =>
       attr.indicesRange match {
         case Seq(exactIdx) if exactIdx == idx => true
         case Seq(from, to) if from <= idx && idx <= to => true
         case _ => false
       }
-    }.getOrElse(UnresolvedMLAttribute).withoutName
+    }.getOrElse(UnresolvedMLAttribute).withoutName()
   }
 
   override def toMetadataImpl(): Metadata = {
@@ -206,10 +220,11 @@ case class VectorAttr(
 
     bldr.putString(AttributeKeys.TYPE, attrType.name)
     name.foreach(bldr.putString(AttributeKeys.NAME, _))
+    bldr.putLong(AttributeKeys.NUM_ATTRIBUTES, numOfAttributes)
 
     // Build the metadata of attributes included in this vector attribute.
-    val attrMetadata = attributes.map { attr =>
-      attr.withoutName.toMetadata()
+    val attrMetadata = innerAttrs.map { attr =>
+      attr.withoutName().toMetadata()
     }
     bldr.putMetadataArray(AttributeKeys.ATTRIBUTES, attrMetadata.toArray)
 
@@ -290,6 +305,9 @@ object VectorAttr extends MLAttributeFactory {
     import org.apache.spark.ml.attribute.AttributeKeys._
 
     val (name, _) = loadCommonMetadata(metadata)
+    val numOfAttributes = metadata.getLong(NUM_ATTRIBUTES).toInt
+    val vectorAttr = VectorAttr(numOfAttributes = numOfAttributes, name)
+
     val attributes = if (metadata.contains(ATTRIBUTES)) {
       // `VectorAttr` can only contains `SimpleAttribute`.
       metadata.getMetadataArray(ATTRIBUTES).map { metadata =>
@@ -298,8 +316,7 @@ object VectorAttr extends MLAttributeFactory {
     } else {
       Seq.empty
     }
-
-    VectorAttr(name, attributes)
+    vectorAttr.addAttributes(attributes)
   }
 }
 
@@ -309,89 +326,82 @@ object VectorAttr extends MLAttributeFactory {
  */
 @DeveloperApi
 object VectorAttrBuilder {
-  // Whether two attributes are the same after dropping their names and indices.
-  private def sameAttr(attr1: SimpleAttribute, attr2: SimpleAttribute): Boolean = {
-    attr1.withoutIndicesRange.withoutName == attr2.withoutIndicesRange.withoutName
+  // Test two attributes have same properties without considering their names and indices.
+  def sameAttrProps(attr1: SimpleAttribute, attr2: SimpleAttribute): Boolean = {
+    attr1.withoutIndicesRange.withoutName() == attr2.withoutIndicesRange.withoutName()
+  }
+
+  def isContinuousAttrs(prevAttr: SimpleAttribute, nextAttr: SimpleAttribute): Boolean = {
+    prevAttr.getMaxIndex() == nextAttr.getMinIndex() - 1
+  }
+
+  def getAttributeSizes(fields: Seq[StructField], row: Row): Seq[Int] = {
+    fields.zipWithIndex.map { case (field, idx) =>
+      field.dataType match {
+        case _: VectorUDT => row.getAs[Vector](idx).size
+        case _ => 1
+      }
+    }
   }
 
   /**
    * Given a sequence of `StructField`, a `AttrBuilder` should be able to build a `VectorAttr`.
    *
-   * @param numAttrsInVectors The number of attributes in vector columns. For non-vector columns,
-   *                            the number is zero.
+   * @param attributeSizes The attribute sizes for each field. For non-vector columns, it is
+   *                       always 1. For vector columns, it is the size of vectors.
    */
-  def buildAttr(fields: Seq[StructField], numAttrsInVectors: Seq[Int]): VectorAttr = {
-    require(fields.length == numAttrsInVectors.length,
-      "`numAttrsInVectors`'s length should be the same with `fields`'s length")
+  def buildAttr(fields: Seq[StructField], attributeSizes: Seq[Int]): VectorAttr = {
+    require(fields.length == attributeSizes.length,
+      "The elements of attribute size don't match the elements of fields.")
 
-    var currAttr: Option[SimpleAttribute] = None
     var fieldIdx = 0
-    val innerAttributes = mutable.ArrayBuffer[SimpleAttribute]()
+    val builtAttr = VectorAttr(numOfAttributes = attributeSizes.sum, name = None)
 
     fields.zipWithIndex.foreach { case (field, idx) =>
       val attr = MLAttributes.fromStructField(field, preserveName = false)
       field.dataType match {
         case DoubleType =>
+          require(attributeSizes(idx) == 1, s"$idx-th field should be just 1 attribute but given " +
+            s"${attributeSizes(idx)}.")
           val newAttr = if (attr == UnresolvedMLAttribute) {
             // Assume numeric attribute.
-            // Or just use `UnresolvedMLAttribute`?
-            NumericAttr().withIndicesRange(fieldIdx)
+            // Note: should we assume `UnresolvedMLAttribute`?
+            NumericAttr()
           } else {
-            // Double column can only have `SimpleAttribute`.
-            attr.asInstanceOf[SimpleAttribute].withIndicesRange(fieldIdx).withoutName
+            attr
           }
-          // If this attribute is basically the same with previous one, we combine them together.
-          if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
-            currAttr = currAttr.map { attr =>
-              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(0))
-            }
-          } else {
-            currAttr.map(innerAttributes += _)
-            currAttr = Some(newAttr)
-          }
+          newAttr.asInstanceOf[SimpleAttribute].addIntoComplexAttribute(fieldIdx, builtAttr)
           fieldIdx += 1
         case _: NumericType | BooleanType =>
           require(attr == UnresolvedMLAttribute, "numeric/boolean column shouldn't have attribute.")
+          require(attributeSizes(idx) == 1, s"$idx-th field should be just 1 attribute but given " +
+            s"${attributeSizes(idx)}.")
 
           // Assume numeric attribute.
           // Note: should we assume `UnresolvedMLAttribute` for this kind of columns?
-          val newAttr = NumericAttr().withIndicesRange(fieldIdx)
-          // If this attribute is basically the same with previous one, we combine them together.
-          if (currAttr.isDefined && sameAttr(currAttr.get, newAttr)) {
-            currAttr = currAttr.map { attr =>
-              attr.withIndicesRange(attr.indicesRange(0), newAttr.indicesRange(0))
-            }
-          } else {
-            currAttr.map(innerAttributes += _)
-            currAttr = Some(newAttr)
-          }
+          val newAttr = NumericAttr()
+          newAttr.addIntoComplexAttribute(fieldIdx, builtAttr)
           fieldIdx += 1
         case _: VectorUDT =>
-          currAttr.map(innerAttributes += _)
-          currAttr = None
-
-          // If there is an attribute for this vector column.
           if (attr != UnresolvedMLAttribute) {
             val vectorAttr = attr.asInstanceOf[ComplexAttribute]
-            fieldIdx = vectorAttr.attributes.map { a =>
-              val innerAttr = if (a.name.isDefined) {
-                a.withoutName
-              } else {
-                a
-              }
-              // Rebase the inner attribute indices.
+            vectorAttr.attributes.foreach { innerAttr =>
               val indices = innerAttr.indicesRange
-              innerAttributes += innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
-              indices(indices.length - 1) + fieldIdx
-            }.max + 1
+              val rebasedAttr = innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
+              builtAttr.addAttribute(rebasedAttr)
+            }
+            require(vectorAttr.numOfAttributes == attributeSizes(idx),
+              s"The given attribute size ${attributeSizes(idx)} at $idx-th field doesn't match " +
+                s"actual vector attribute size: ${vectorAttr.numOfAttributes}.")
+            fieldIdx += vectorAttr.numOfAttributes
           } else {
-            // If this vector has no metadata, we need to add up the number of attributes in the
-            // vector, so the next field index can be correct.
-            fieldIdx += numAttrsInVectors(idx)
+            // For an unresolved attribute of a vector column, we still need to add up the known
+            // number of attributes in this vector to the field index. So the next field index
+            // can be correct.
+            fieldIdx += attributeSizes(idx)
           }
       }
     }
-    currAttr.map(innerAttributes += _)
-    VectorAttr(name = None, attributes = innerAttributes.toSeq)
+    builtAttr
   }
 }

@@ -49,7 +49,11 @@ sealed trait InnerAttribute {
    */
   val indicesRange: Seq[Int]
 
-  require(indicesRange.length <= 2, "Range of indices should be less than or equal to 2")
+  require(indicesRange.length <= 2, "Range of indices should be less than or equal to 2.")
+  require(indicesRange == indicesRange.sorted, "Range of indices must be in ascending order.")
+
+  def getMinIndex(): Int = indicesRange.min
+  def getMaxIndex(): Int = indicesRange.max
 }
 
 /**
@@ -59,7 +63,7 @@ sealed trait InnerAttribute {
 @DeveloperApi
 abstract class BaseAttribute extends MLAttribute with Serializable {
   def withName(name: String): BaseAttribute
-  def withoutName: BaseAttribute
+  def withoutName(): BaseAttribute
 }
 
 /**
@@ -69,14 +73,19 @@ abstract class BaseAttribute extends MLAttribute with Serializable {
 @DeveloperApi
 abstract class SimpleAttribute
     extends BaseAttribute with InnerAttribute with MetadataInterface {
+
   def withName(name: String): SimpleAttribute
-  def withoutName: SimpleAttribute
+  def withoutName(): SimpleAttribute
 
-  def withIndicesRange(begin: Int, end: Int): SimpleAttribute
-  def withIndicesRange(index: Int): SimpleAttribute
   def withIndicesRange(indices: Seq[Int]): SimpleAttribute
-
   def withoutIndicesRange: SimpleAttribute
+
+  def addIntoComplexAttribute(index: Int, complexAttr: ComplexAttribute): Unit = {
+    complexAttr.addAttribute(withIndicesRange(Seq(index)))
+  }
+  def addIntoComplexAttribute(beginIdx: Int, endIdx: Int, complexAttr: ComplexAttribute): Unit = {
+    complexAttr.addAttribute(withIndicesRange(Seq(beginIdx, endIdx)))
+  }
 }
 
 /**
@@ -87,14 +96,19 @@ abstract class SimpleAttribute
 abstract class ComplexAttribute
     extends BaseAttribute with MetadataInterface {
 
+  def numOfAttributes: Int
+  def attributes: Seq[SimpleAttribute]
+
   def withName(name: String): ComplexAttribute
-  def withoutName: ComplexAttribute
+  def withoutName(): ComplexAttribute
 
-  /** The attributes included in this attribute. */
-  val attributes: Seq[SimpleAttribute]
-
-  def withAttributes(attributes: Seq[SimpleAttribute]): ComplexAttribute
-  def withoutAttributes: ComplexAttribute
+  // Add an inner attribute into this complex attribute. Note the addition checks if added
+  // attribute has indices following previous added attributes.
+  def addAttribute(attr: SimpleAttribute): this.type
+  def addAttributes(attrs: Seq[SimpleAttribute]): this.type = {
+    attrs.map(addAttribute)
+    this
+  }
 
   def getAttribute(idx: Int): BaseAttribute
 }
@@ -105,5 +119,5 @@ case object UnresolvedMLAttribute extends BaseAttribute with Serializable {
   val name: Option[String] = None
 
   def withName(name: String): BaseAttribute = this
-  def withoutName: BaseAttribute = this
+  def withoutName(): BaseAttribute = this
 }

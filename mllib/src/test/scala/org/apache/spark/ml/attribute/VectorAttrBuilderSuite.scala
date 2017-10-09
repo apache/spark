@@ -23,52 +23,76 @@ import org.apache.spark.sql.types._
 
 class VectorAttrBuilderSuite extends SparkFunSuite {
 
-  test("build VectorAttr") {
+  test("build VectorAttr: simple attributes") {
     val fields1 = Seq(
       StructField("col1", DoubleType),
       StructField("col2", DoubleType)
     )
-    val attr1 = VectorAttrBuilder.buildAttr(fields1, Seq(0, 0))
-    assert(attr1.attributes.length == 1 &&
-      attr1.attributes(0).isInstanceOf[NumericAttr] &&
-      attr1.attributes(0).indicesRange === Seq(0, 1))
+    val attr1 = VectorAttrBuilder.buildAttr(fields1, attributeSizes = Seq(1, 1))
+    assert(attr1.numOfAttributes == 2 &&
+      attr1.getAttribute(0).isInstanceOf[NumericAttr] &&
+      attr1.getAttribute(0).asInstanceOf[NumericAttr].indicesRange === Seq(0, 1))
+  }
 
-    val col1Metadata = NominalAttr(name = Some("col1Attr"), indicesRange = Seq(5))
+  test("build VectorAttr: simple attribute with metadata") {
+    val col1Metadata = NominalAttr(name = Some("col1Attr"))
       .toStructField.metadata
     val fields2 = Seq(
       StructField("col1", DoubleType, metadata = col1Metadata),
       StructField("col2", DoubleType)
     )
-    val attr2 = VectorAttrBuilder.buildAttr(fields2, Seq(0, 0))
-    assert(attr2.attributes.length == 2 &&
-      attr2.attributes(0).isInstanceOf[NominalAttr] &&
-      attr2.attributes(0).indicesRange === Seq(0) &&
-      attr2.attributes(1).isInstanceOf[NumericAttr] &&
-      attr2.attributes(1).indicesRange === Seq(1))
+    val attr2 = VectorAttrBuilder.buildAttr(fields2, attributeSizes = Seq(1, 1))
+    assert(attr2.numOfAttributes == 2 &&
+      attr2.getAttribute(0).isInstanceOf[NominalAttr] &&
+      attr2.getAttribute(0).asInstanceOf[NominalAttr].indicesRange === Seq(0) &&
+      attr2.getAttribute(1).isInstanceOf[NumericAttr] &&
+      attr2.getAttribute(1).asInstanceOf[NumericAttr].indicesRange === Seq(1))
+  }
 
+  test("build VectorAttr: nested vector attribute") {
     // 0 to 5 dimensions in this vector attribute are nominal attributes.
     // 6 dimension in this vector attribute are numeric attribute.
-    val col2Metadata = VectorAttr(
-      name = Some("col2Attr"),
-      attributes = Seq(
+    // This vector has totally 7 attributes.
+    val col2Metadata = VectorAttr(numOfAttributes = 7, name = Some("col2Attr"))
+      .addAttributes(Seq(
         NominalAttr(indicesRange = Seq(0, 5)),
         NumericAttr(indicesRange = Seq(6))
-      )
-    ).toStructField.metadata
+      )).toStructField.metadata
+
+    val col4Metadata = NominalAttr(name = Some("col4Attr"))
+      .toStructField.metadata
+
     val fields3 = Seq(
       StructField("col1", DoubleType),
       StructField("col2", new VectorUDT(), metadata = col2Metadata),
-      StructField("col3", DoubleType)
+      StructField("col3", DoubleType),
+      StructField("col4", DoubleType, metadata = col4Metadata)
     )
-    val attr3 = VectorAttrBuilder.buildAttr(fields3, Seq(0, 2, 0))
-    assert(attr3.attributes.length == 4 &&
-      attr3.attributes(0).isInstanceOf[NumericAttr] &&
-      attr3.attributes(0).indicesRange === Seq(0) &&
-      attr3.attributes(1).isInstanceOf[NominalAttr] &&
-      attr3.attributes(1).indicesRange === Seq(1, 6) &&
-      attr3.attributes(2).isInstanceOf[NumericAttr] &&
-      attr3.attributes(2).indicesRange === Seq(7) &&
-      attr3.attributes(3).isInstanceOf[NumericAttr] &&
-      attr3.attributes(3).indicesRange === Seq(8))
+    val attr3 = VectorAttrBuilder.buildAttr(fields3, attributeSizes = Seq(1, 7, 1, 1))
+
+    // There're 10 attributes in this vector.
+    // [0] is a numeric attribute. [1-6] are nominal attributes.
+    // [7-8] are numeric attributes. [9] is a nominal attribute.
+    assert(attr3.numOfAttributes == 10 &&
+      attr3.getAttribute(0).isInstanceOf[NumericAttr] &&
+      attr3.getAttribute(0).asInstanceOf[NumericAttr].indicesRange === Seq(0) &&
+      attr3.getAttribute(1).isInstanceOf[NominalAttr] &&
+      attr3.getAttribute(1).asInstanceOf[NominalAttr].indicesRange === Seq(1, 6) &&
+      attr3.getAttribute(7).isInstanceOf[NumericAttr] &&
+      attr3.getAttribute(7).asInstanceOf[NumericAttr].indicesRange === Seq(7, 8) &&
+      attr3.getAttribute(9).isInstanceOf[NominalAttr] &&
+      attr3.getAttribute(9).asInstanceOf[NominalAttr].indicesRange === Seq(9))
+  }
+
+  test("sameAttrProps") {
+    val attr1 = NominalAttr(name = Some("col1Attr"), indicesRange = Seq(0))
+    val attr2 = NominalAttr(name = Some("col2Attr"), indicesRange = Seq(1, 5))
+    val attr3 = NumericAttr(name = Some("col3Attr"), min = Some(1), indicesRange = Seq(1))
+    val attr4 = NumericAttr(name = Some("col4Attr"), max = Some(10), indicesRange = Seq(1))
+    val attr5 = NumericAttr(name = Some("col5Attr"), min = Some(1), indicesRange = Seq(2))
+    assert(VectorAttrBuilder.sameAttrProps(attr1, attr2))
+    assert(!VectorAttrBuilder.sameAttrProps(attr1, attr3))
+    assert(!VectorAttrBuilder.sameAttrProps(attr3, attr4))
+    assert(VectorAttrBuilder.sameAttrProps(attr3, attr5))
   }
 }
