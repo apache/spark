@@ -28,7 +28,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.StructType
 
 /**
  * :: Experimental ::
@@ -575,7 +574,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       val vFields = vExprEnc.schema.map {
         case f => s"${f.name}: ${f.dataType.simpleString(2)}"
       }
-      builder.append("[key: [")
+      builder.append("KeyValueGroupedDataset: [key: [")
       builder.append(kFields.take(2).mkString(", "))
       if (kFields.length > 2) {
         builder.append(" ... " + (kFields.length - 2) + " more field(s)")
