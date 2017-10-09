@@ -278,14 +278,8 @@ private[tree] class LearningNode(
     } else {
       assert(stats != null, "Unknown error during Decision Tree learning. Could not convert " +
         "LearningNode to Node")
-      if (stats.valid) {
-        new LeafNode(stats.impurityCalculator.predict, stats.impurity,
-          stats.impurityCalculator)
-      } else {
-        // Here we want to keep same behavior with the old mllib.DecisionTreeModel
-        new LeafNode(stats.impurityCalculator.predict, -1.0, stats.impurityCalculator)
-      }
-
+      new LeafNode(stats.impurityCalculator.predict, stats.impurity,
+        stats.impurityCalculator)
     }
   }
 

@@ -51,9 +51,7 @@ private[ml] object LocalDecisionTreeUtils extends Logging {
     val numFeatures = rowStore(0).length
     require(numFeatures > 0, "Local decision tree training requires numFeatures > 0.")
     // Return the transpose of the rowStore matrix
-    0.until(numFeatures).map { colIdx =>
-      rowStore.map(row => row(colIdx))
-    }.toArray
+    rowStore.transpose
   }
 
 }

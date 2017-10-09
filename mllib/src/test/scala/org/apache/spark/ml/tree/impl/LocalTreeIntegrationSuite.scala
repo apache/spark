@@ -94,31 +94,4 @@ class LocalTreeIntegrationSuite extends SparkFunSuite with MLlibTestSparkContext
     testEquivalence(df, TreeTests.allParamSettings)
   }
 
-  // TODO(smurching): Probably remove this (since it depends on user env). Currently fails, partly
-  // because collecting data for local training is slow but also because local training is
-  // slightly slower than distributed training.
-//  test("Local tree training is faster than distributed training on a medium-sized dataset") {
-//    val sqlContext = spark.sqlContext
-//    import sqlContext.implicits._
-//    val df = LogisticRegressionDataGenerator.generateLogisticRDD(spark.sparkContext,
-//      nexamples = 100000, nfeatures = 5, eps = 2.0, nparts = 1, probOne = 0.2)
-//      .map(_.asML).toDF().cache()
-//
-//    val timer = new TimeTracker()
-//
-//    timer.start("local")
-//    val localTree = setParams(new LocalDecisionTreeRegressor(), TreeTests.allParamSettings)
-//    localTree.fit(df)
-//    val localTrainTime = timer.stop("local")
-//
-//    timer.start("distributed")
-//    val distribTree = setParams(new DecisionTreeRegressor(), TreeTests.allParamSettings)
-//    distribTree.fit(df)
-//    val distribTrainTime = timer.stop("distributed")
-//
-//    assert(localTrainTime < distribTrainTime, s"Local tree training time ($localTrainTime) " +
-//      s"should be less than distributed tree training time ($distribTrainTime).")
-//  }
-
-
 }

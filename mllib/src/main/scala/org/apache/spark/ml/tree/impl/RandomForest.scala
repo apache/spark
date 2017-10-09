@@ -638,16 +638,8 @@ private[spark] object RandomForest extends Logging {
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
     val splitsAndImpurityInfo =
-      validFeatureSplits.flatMap { case (featureIndexIdx, featureIndex) =>
-        val (split, stats) = SplitUtils.chooseSplit(binAggregates,
-          featureIndex, featureIndexIdx, splits)
-        // Filter out invalid splits
-        // TODO(smurching): Better to use map + filter or flatmap?
-        if (stats.valid) {
-          Seq((split, stats))
-        } else {
-          Seq.empty
-        }
+      validFeatureSplits.map { case (featureIndexIdx, featureIndex) =>
+        SplitUtils.chooseSplit(binAggregates, featureIndex, featureIndexIdx, splits)
       }
 
     val (bestSplit, bestSplitStats) =

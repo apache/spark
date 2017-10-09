@@ -75,8 +75,9 @@ class InformationGainStats(
  * @param impurityCalculator impurity statistics for current node
  * @param leftImpurityCalculator impurity statistics for left child node
  * @param rightImpurityCalculator impurity statistics for right child node
- * @param valid whether the current split satisfies minimum info gain or
- *              minimum number of instances per node
+ * @param valid whether the current split should be performed; true if split
+ *              satisfies minimum info gain, minimum number of instances per node, and
+ *              has positive info gain.
  */
 private[spark] class ImpurityStats(
     val gain: Double,
@@ -112,7 +113,7 @@ private[spark] object ImpurityStats {
    * minimum number of instances per node.
    */
   def getInvalidImpurityStats(impurityCalculator: ImpurityCalculator): ImpurityStats = {
-    new ImpurityStats(Double.MinValue, impurityCalculator.calculate(),
+    new ImpurityStats(Double.MinValue, impurity = -1,
       impurityCalculator, null, null, false)
   }
 

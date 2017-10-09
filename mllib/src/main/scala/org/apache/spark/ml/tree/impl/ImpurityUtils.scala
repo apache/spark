@@ -60,12 +60,18 @@ private[impl] object ImpurityUtils {
     val rightWeight = rightCount / totalCount.toDouble
 
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
-    // if information gain doesn't satisfy minimum information gain,
+    // If information gain doesn't satisfy minimum information gain,
     // then this split is invalid, return invalid information gain stats.
-    // NOTE: We check gain < metadata.minInfoGain and gain <= 0 separately as this is what the
-    // original tree training logic did.
-    if (gain < metadata.minInfoGain || gain <= 0) {
+    if (gain < metadata.minInfoGain) {
       return ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
+    }
+
+    // If information gain is non-positive but doesn't violate the minimum info gain constraint,
+    // return a stats object with correct values but valid = false to indicate that we should not
+    // split.
+    if (gain <= 0) {
+      return new ImpurityStats(gain, impurity, parentImpurityCalculator, leftImpurityCalculator,
+        rightImpurityCalculator, valid = false)
     }
 
     new ImpurityStats(gain, impurity, parentImpurityCalculator,
