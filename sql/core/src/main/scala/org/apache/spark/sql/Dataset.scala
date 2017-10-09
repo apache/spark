@@ -2547,7 +2547,8 @@ class Dataset[T] private[sql](
     *
     * @since 2.3.0
     */
-  def flatten[U: Encoder](implicit func: T => TraversableOnce[U]): Dataset[U] = mapPartitions(_.flatMap(x => x))
+  def flatten[U: Encoder](implicit func: T => TraversableOnce[U]): Dataset[U] =
+    mapPartitions(_.flatMap(x => x))
 
   /**
    * :: Experimental ::

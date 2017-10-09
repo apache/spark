@@ -385,7 +385,7 @@ abstract class RDD[T: ClassTag](
     * Return a new RDD by flattening a traversable collection into a collection itself.
     */
   def flatten[U: ClassTag](implicit f: T => TraversableOnce[U]): RDD[U] = withScope {
-    this.flatMap(y => y)
+    this.flatMap(identity(_))
   }
 
   /**
