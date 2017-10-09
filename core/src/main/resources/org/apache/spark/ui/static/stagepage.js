@@ -103,7 +103,10 @@ $(document).ready(function () {
         "</div>");
 
     tasksSummary = $("#active-tasks");
-    getStandAloneAppId(function (appId) {
+    var app_id = getStandAloneAppId();
+    buildStageDataTables(app_id);
+
+    function buildStageDataTables(appId) {
 
         var endPoint = stageEndPoint(appId);
         $.getJSON(endPoint, function(response, status, jqXHR) {
@@ -383,6 +386,15 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
+                                if (accumulator_table.length > 0) {
+                                    return row.accumulatorUpdates[0].name + ' : ' + row.accumulatorUpdates[0].update;
+                                } else {
+                                    return 0;
+                                }
+                            }
+                        },
+                        {
+                            data : function (row, type) {
                                 var msg = row.errorMessage;
                                 if (typeof msg === 'undefined'){
                                     return "";
@@ -402,7 +414,8 @@ $(document).ready(function () {
                         { "visible": false, "targets": 13 },
                         { "visible": false, "targets": 14 },
                         { "visible": false, "targets": 15 },
-                        { "visible": false, "targets": 16 }
+                        { "visible": false, "targets": 16 },
+                        { "visible": false, "targets": 17 }
                     ],
                     "order": [[0, "asc"]]
                 };
@@ -446,10 +459,13 @@ $(document).ready(function () {
                 $("#tasksTitle").html("Task (" + task_table.length + ")");
 
                 // hide or show the accumulate update table
-                if(accumulator_table.length == 0){
-                    $("accumulator-update-table").hide();
+                if (accumulator_table.length == 0) {
+                    $("#accumulator-update-table").hide();
+                } else {
+                    taskTableSelector.column(17).visible(true);
+                    $("#accumulator-update-table").show();
                 }
             });
         });
-    });
+    }
 });

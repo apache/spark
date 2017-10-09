@@ -126,7 +126,10 @@ $(document).ready(function () {
 
     executorsSummary = $("#active-executors");
 
-    getStandAloneAppId(function (appId) {
+    var app_id = getStandAloneAppId();
+    buildExecutorDataTables(app_id);
+
+    function buildExecutorDataTables(appId) {
 
         var endPoint = createRESTEndPoint(appId);
         $.getJSON(endPoint, function (response, status, jqXHR) {
@@ -545,5 +548,5 @@ $(document).ready(function () {
     
             });
         });
-    });
+    }
 });
