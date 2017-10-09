@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster.mesos
 
-import org.apache.mesos.Protos._
+import org.apache.mesos.Protos.{ContainerInfo, Environment, Image, NetworkInfo, Parameter, Secret, Volume}
 import org.apache.mesos.Protos.ContainerInfo.{DockerInfo, MesosInfo}
 import org.apache.mesos.Protos.Environment.Variable
 import org.apache.mesos.protobuf.ByteString
@@ -126,7 +126,8 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def containerInfo(conf: SparkConf, secretConfig: MesosSecretConfig): ContainerInfo.Builder = {
+  def buildContainerInfo(conf: SparkConf, secretConfig: MesosSecretConfig):
+  ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -219,10 +220,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     }
 
     val referenceSecrets: Seq[Secret] =
-      conf.get(secretConfig.SECRET_NAME).getOrElse(Nil).map(s => createReferenceSecret(s))
+      conf.get(secretConfig.SECRET_NAMES).getOrElse(Nil).map(s => createReferenceSecret(s))
 
     val valueSecrets: Seq[Secret] = {
-      conf.get(secretConfig.SECRET_VALUE).getOrElse(Nil).map(s => createValueSecret(s))
+      conf.get(secretConfig.SECRET_VALUES).getOrElse(Nil).map(s => createValueSecret(s))
     }
 
     if (valueSecrets.nonEmpty && referenceSecrets.nonEmpty) {
@@ -232,13 +233,10 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     if (referenceSecrets.nonEmpty) referenceSecrets else valueSecrets
   }
 
-  private def illegalSecretInput(dest: Seq[String], s: Seq[Secret]): Boolean = {
-    if (dest.isEmpty) {  // no destination set (ie not using secrets of this type
-      return false
-    }
-    if (dest.nonEmpty && s.nonEmpty) {
-      // make sure there is a destination for each secret of this type
-      if (dest.length != s.length) {
+  private def illegalSecretInput(dest: Seq[String], secrets: Seq[Secret]): Boolean = {
+    if (dest.nonEmpty) {
+      // make sure there is a one-to-one correspondence between destinations and secrets
+      if (dest.length != secrets.length) {
         return true
       }
     }
@@ -248,7 +246,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   private def getSecretVolume(conf: SparkConf, secretConfig: MesosSecretConfig): List[Volume] = {
     val secrets = getSecrets(conf, secretConfig)
     val secretPaths: Seq[String] =
-      conf.get(secretConfig.SECRET_FILENAME).getOrElse(Nil)
+      conf.get(secretConfig.SECRET_FILENAMES).getOrElse(Nil)
 
     if (illegalSecretInput(secretPaths, secrets)) {
       throw new SparkException(
@@ -272,7 +270,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   private def getSecretEnvVar(conf: SparkConf, secretConfig: MesosSecretConfig):
   List[Variable] = {
     val secrets = getSecrets(conf, secretConfig)
-    val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEY).getOrElse(Nil)
+    val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEYS).getOrElse(Nil)
     if (illegalSecretInput(secretEnvKeys, secrets)) {
       throw new SparkException(
         s"Need to give equal numbers of secrets and environment keys " +

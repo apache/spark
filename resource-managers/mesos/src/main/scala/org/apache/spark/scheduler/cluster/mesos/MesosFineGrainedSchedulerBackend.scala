@@ -161,7 +161,7 @@ private[spark] class MesosFineGrainedSchedulerBackend(
       .setData(ByteString.copyFrom(createExecArg()))
 
     executorInfo.setContainer(
-      MesosSchedulerBackendUtil.containerInfo(sc.conf, config.executorSecretConfig))
+      MesosSchedulerBackendUtil.buildContainerInfo(sc.conf, config.executorSecretConfig))
     (executorInfo.build(), resourcesAfterMem.asJava)
   }
 

@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit
 import org.apache.spark.internal.config.ConfigBuilder
 
 private[spark] class MesosSecretConfig(taskType: String) {
-  private[spark] val SECRET_NAME =
+  private[spark] val SECRET_NAMES =
     ConfigBuilder(s"spark.mesos.$taskType.secret.names")
       .doc("A comma-separated list of secret reference names. Consult the Mesos Secret " +
         "protobuf for more information.")
@@ -30,14 +30,14 @@ private[spark] class MesosSecretConfig(taskType: String) {
       .toSequence
       .createOptional
 
-  private[spark] val SECRET_VALUE =
+  private[spark] val SECRET_VALUES =
     ConfigBuilder(s"spark.mesos.$taskType.secret.values")
       .doc("A comma-separated list of secret values.")
       .stringConf
       .toSequence
       .createOptional
 
-  private[spark] val SECRET_ENVKEY =
+  private[spark] val SECRET_ENVKEYS =
     ConfigBuilder(s"spark.mesos.$taskType.secret.envkeys")
       .doc("A comma-separated list of the environment variables to contain the secrets." +
         "The environment variable will be set on the driver.")
@@ -45,7 +45,7 @@ private[spark] class MesosSecretConfig(taskType: String) {
       .toSequence
       .createOptional
 
-  private[spark] val SECRET_FILENAME =
+  private[spark] val SECRET_FILENAMES =
     ConfigBuilder(s"spark.mesos.$taskType.secret.filenames")
       .doc("A comma-separated list of file paths secret will be written to.  Consult the Mesos " +
         "Secret protobuf for more information.")

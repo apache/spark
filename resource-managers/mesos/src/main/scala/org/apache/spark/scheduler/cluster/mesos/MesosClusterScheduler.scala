@@ -543,7 +543,8 @@ private[spark] class MesosClusterScheduler(
       .setName(s"Driver for ${appName}")
       .setSlaveId(offer.offer.getSlaveId)
       .setCommand(buildDriverCommand(desc))
-      .setContainer(MesosSchedulerBackendUtil.containerInfo(desc.conf, config.driverSecretConfig))
+      .setContainer(MesosSchedulerBackendUtil.buildContainerInfo(
+        desc.conf, config.driverSecretConfig))
       .addAllResources(cpuResourcesToUse.asJava)
       .addAllResources(memResourcesToUse.asJava)
       .setLabels(driverLabels)

@@ -113,8 +113,8 @@ object Utils {
     val secretName = "/path/to/secret,/anothersecret"
     val envKey = "SECRET_ENV_KEY,PASSWORD"
     Map(
-      secretConfig.SECRET_NAME.key -> secretName,
-      secretConfig.SECRET_ENVKEY.key -> envKey
+      secretConfig.SECRET_NAMES.key -> secretName,
+      secretConfig.SECRET_ENVKEYS.key -> envKey
     )
   }
 
@@ -125,7 +125,7 @@ object Utils {
       .getVariablesList
       .asScala
     assert(envVars
-      .filter(!_.getName.startsWith("SPARK_")).length == 2)  // user-defined secret env vars
+      .count(!_.getName.startsWith("SPARK_")) == 2)  // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "SECRET_ENV_KEY").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.REFERENCE)
@@ -142,8 +142,8 @@ object Utils {
     val secretValues = "user,password"
     val envKeys = "USER,PASSWORD"
     Map(
-      secretConfig.SECRET_VALUE.key -> secretValues,
-      secretConfig.SECRET_ENVKEY.key -> envKeys
+      secretConfig.SECRET_VALUES.key -> secretValues,
+      secretConfig.SECRET_ENVKEYS.key -> envKeys
     )
   }
 
@@ -154,7 +154,7 @@ object Utils {
       .getVariablesList
       .asScala
     assert(envVars
-      .filter(!_.getName.startsWith("SPARK_")).length == 2)  // user-defined secret env vars
+      .count(!_.getName.startsWith("SPARK_")) == 2)  // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "USER").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.VALUE)
@@ -171,8 +171,8 @@ object Utils {
     val secretName = "/path/to/secret,/anothersecret"
     val secretPath = "/topsecret,/mypassword"
     Map(
-      secretConfig.SECRET_NAME.key -> secretName,
-      secretConfig.SECRET_FILENAME.key -> secretPath
+      secretConfig.SECRET_NAMES.key -> secretName,
+      secretConfig.SECRET_FILENAMES.key -> secretPath
     )
   }
 
@@ -193,8 +193,8 @@ object Utils {
     val secretValues = "user,password"
     val secretPath = "/whoami,/mypassword"
     Map(
-      secretConfig.SECRET_VALUE.key -> secretValues,
-      secretConfig.SECRET_FILENAME.key -> secretPath
+      secretConfig.SECRET_VALUES.key -> secretValues,
+      secretConfig.SECRET_FILENAMES.key -> secretPath
     )
   }
 
