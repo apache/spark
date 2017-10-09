@@ -270,6 +270,8 @@ supported and will be removed entirely in Airflow 2.0
   Previously, `Operator.__init__()` accepted any arguments (either positional `*args` or keyword `**kwargs`) without
   complaint. Now, invalid arguments will be rejected. (https://github.com/apache/incubator-airflow/pull/1285)
 
+- The config value secure_mode will default to True which will disable some insecure endpoints/features
+
 ### Known Issues
 There is a report that the default of "-1" for num_runs creates an issue where errors are reported while parsing tasks.
 It was not confirmed, but a workaround was found by changing the default back to `None`.

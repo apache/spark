@@ -37,7 +37,8 @@ import sqlalchemy as sqla
 from sqlalchemy import or_, desc, and_, union_all
 
 from flask import (
-    redirect, url_for, request, Markup, Response, current_app, render_template, make_response)
+    abort, redirect, url_for, request, Markup, Response, current_app, render_template, 
+    make_response)
 from flask_admin import BaseView, expose, AdminIndexView
 from flask_admin.contrib.sqla import ModelView
 from flask_admin.actions import action
@@ -299,6 +300,9 @@ class Airflow(BaseView):
     def chart_data(self):
         from airflow import macros
         import pandas as pd
+        if conf.getboolean('core', 'secure_mode'):
+            abort(404)
+
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         csv = request.args.get('csv') == "true"
@@ -437,6 +441,9 @@ class Airflow(BaseView):
     @expose('/chart')
     @data_profiling_required
     def chart(self):
+        if conf.getboolean('core', 'secure_mode'):
+            abort(404)
+
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         embed = request.args.get('embed')
