@@ -274,8 +274,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     val byteArrayRdd = getByteArrayRdd()
 
     val results = ArrayBuffer[InternalRow]()
-    byteArrayRdd.collect().foreach { rdd =>
-      decodeUnsafeRows(rdd._2).foreach(results.+=)
+    byteArrayRdd.collect().foreach { countAndBytes =>
+      decodeUnsafeRows(countAndBytes._2).foreach(results.+=)
     }
     results.toArray
   }
