@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ml.feature
+package org.apache.spark.ml.feature.impl
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.feature.Word2Vec
 import org.apache.spark.mllib.feature
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
-object Word2VecCBOWSolver extends Logging {
+private [feature] object Word2VecCBOWSolver extends Logging {
   // learning rate is updated for every batch of size batchSize
   private val batchSize = 10000
 
@@ -41,7 +42,8 @@ object Word2VecCBOWSolver extends Logging {
 
   /**
    * This method implements Word2Vec Continuous Bag Of Words based implementation using
-   * negative sampling optimization, using BLAS for vectorizing operations where applicable.
+   * negative sampling optimization, using level 1 and level 2 BLAS for vectorizing operations
+   * where applicable.
    * The algorithm is parallelized in the same way as the skip-gram based estimation.
    * We divide input data into N equally sized random partitions.
    * We then generate initial weights and broadcast them to the N partitions. This way
@@ -57,15 +59,15 @@ object Word2VecCBOWSolver extends Logging {
       word2Vec: Word2Vec,
       input: RDD[S]): feature.Word2VecModel = {
 
-    val negativeSamples = word2Vec.getNegativeSamples
-    val sample = word2Vec.getSample
+    val numNegativeSamples = word2Vec.getNumNegativeSamples
+    val samplingThreshold = word2Vec.getSamplingThreshold
 
     val Vocabulary(totalWordCount, vocabMap, uniTable, sampleTable) =
-      generateVocab(input, word2Vec.getMinCount, sample, word2Vec.getUnigramTableSize)
-    val vocabSize = vocabMap.size
+      generateVocab(input, word2Vec.getMinCount, samplingThreshold, word2Vec.getUnigramTableSize)
+    val vocabSize = sampleTable.length
 
-    assert(negativeSamples < vocabSize, s"Vocab size ($vocabSize) cannot be smaller" +
-      s" than negative samples($negativeSamples)")
+    assert(numNegativeSamples < vocabSize, s"Vocab size ($vocabSize) cannot be smaller" +
+      s" than negative samples($numNegativeSamples)")
 
     val seed = word2Vec.getSeed
     val initRandom = new XORShiftRandom(seed)
@@ -103,99 +105,115 @@ object Word2VecCBOWSolver extends Logging {
       val syn0bc = sc.broadcast(syn0Global)
       val syn1bc = sc.broadcast(syn1Global)
 
-      val partialFits = digitSentences.mapPartitionsWithIndex { case (i_, iter) =>
-        logInfo(s"Iteration: $iteration, Partition: $i_")
-        val random = new XORShiftRandom(seed ^ ((i_ + 1) << 16) ^ ((-iteration - 1) << 8))
-        val contextWordPairs = iter.flatMap { s =>
-          val doSample = sample > Double.MinPositiveValue
+      val partialFits = digitSentences.mapPartitionsWithIndex { case (partIndex, sentenceIter) =>
+        logInfo(s"Iteration: $iteration, Partition: $partIndex")
+        val random = new XORShiftRandom(seed ^ ((partIndex + 1) << 16) ^ ((-iteration - 1) << 8))
+        val contextWordPairs = sentenceIter.flatMap { s =>
+          val doSample = samplingThreshold > Double.MinPositiveValue
           generateContextWordPairs(s, windowSize, doSample, sampleTableBroadcast.value, random)
         }
 
         val groupedBatches = contextWordPairs.grouped(batchSize)
 
-        val negLabels = 1.0f +: Array.fill(negativeSamples)(0.0f)
+        val negLabels = 1.0f +: Array.fill(numNegativeSamples)(0.0f)
         val syn0 = syn0bc.value
         val syn1 = syn1bc.value
         val unigramTable = unigramTableBroadcast.value
 
         // initialize intermediate arrays
         val contextVec = new Array[Float](vectorSize)
-        val l2Vectors = new Array[Float](vectorSize * (negativeSamples + 1))
-        val gb = new Array[Float](negativeSamples + 1)
-        val neu1e = new Array[Float](vectorSize)
-        val wordIndices = new Array[Int](negativeSamples + 1)
+        val layer2Vectors = new Array[Float](vectorSize * (numNegativeSamples + 1))
+        val errGradients = new Array[Float](numNegativeSamples + 1)
+        val layer1Updates = new Array[Float](vectorSize)
+        val trainingWords = new Array[Int](numNegativeSamples + 1)
 
-        val time = System.nanoTime
-        var batchTime = System.nanoTime
-        var idx = -1L
-        for (batch <- groupedBatches) {
-          idx = idx + 1
+        val time = System.nanoTime()
+        var batchTime = System.nanoTime()
 
+        for ((batch, idx) <- groupedBatches.zipWithIndex) {
           val wordRatio =
             idx.toFloat * batchSize /
               (maxIter * (wordsPerPartition.toFloat + 1)) + ((iteration - 1).toFloat / maxIter)
           val alpha = math.max(learningRate * 0.0001, learningRate * (1 - wordRatio)).toFloat
 
-          if(idx % 10 == 0 && idx > 0) {
-            logInfo(s"Partition: $i_, wordRatio = $wordRatio, alpha = $alpha")
+          if((idx + 1) % 10 == 0) {
+            logInfo(s"Partition: $partIndex, wordRatio = $wordRatio, alpha = $alpha")
             val wordCount = batchSize * idx
-            val timeTaken = (System.nanoTime - time) / 1e6
+            val timeTaken = (System.nanoTime() - time) / 1e6
             val batchWordCount = 10 * batchSize
-            val currentBatchTime = (System.nanoTime - batchTime) / 1e6
-            batchTime = System.nanoTime
-            logDebug(s"Partition: $i_, Batch time: $currentBatchTime ms, batch speed: " +
+            val currentBatchTime = (System.nanoTime() - batchTime) / 1e6
+            batchTime = System.nanoTime()
+            logDebug(s"Partition: $partIndex, Batch time: $currentBatchTime ms, batch speed: " +
               s"${batchWordCount / currentBatchTime * 1000} words/s")
-            logDebug(s"Partition: $i_, Cumulative time: $timeTaken ms, cumulative speed: " +
+            logDebug(s"Partition: $partIndex, Cumulative time: $timeTaken ms, cumulative speed: " +
               s"${wordCount / timeTaken * 1000} words/s")
           }
 
           val errors = for ((contextIds, word) <- batch) yield {
             // initialize vectors to 0
-            zeroVector(contextVec)
-            zeroVector(l2Vectors)
-            zeroVector(gb)
-            zeroVector(neu1e)
+            java.util.Arrays.fill(contextVec, 0.0f)
+            java.util.Arrays.fill(layer2Vectors, 0.0f)
+            java.util.Arrays.fill(errGradients, 0.0f)
+            java.util.Arrays.fill(layer1Updates, 0.0f)
 
             val scale = 1.0f / contextIds.length
 
             // feed forward
+            // sum all of the context word embeddings into a single contextVec
             contextIds.foreach { c =>
               blas.saxpy(vectorSize, scale, syn0, c * vectorSize, 1, contextVec, 0, 1)
             }
 
-            generateNegativeSamples(random, word, unigramTable, negativeSamples, wordIndices)
+            generateNegativeSamples(random, word, unigramTable, numNegativeSamples, trainingWords)
 
-            Iterator.range(0, wordIndices.length).foreach { i =>
-              Array.copy(syn1, vectorSize * wordIndices(i), l2Vectors, vectorSize * i, vectorSize)
+            Iterator.range(0, trainingWords.length).foreach { i =>
+              Array.copy(syn1,
+                vectorSize * trainingWords(i),
+                layer2Vectors, vectorSize * i,
+                vectorSize)
             }
 
             // propagating hidden to output in batch
-            val rows = negativeSamples + 1
+            val rows = numNegativeSamples + 1
             val cols = vectorSize
-            blas.sgemv("T", cols, rows, 1.0f, l2Vectors, 0, cols, contextVec, 0, 1, 0.0f, gb, 0, 1)
+            blas.sgemv("T",
+              cols,
+              rows,
+              1.0f,
+              layer2Vectors,
+              0,
+              cols,
+              contextVec,
+              0,
+              1,
+              0.0f,
+              errGradients,
+              0,
+              1)
 
-            Iterator.range(0, negativeSamples + 1).foreach { i =>
-              if (gb(i) > -MAX_EXP && gb(i) < MAX_EXP) {
-                val v = 1.0f / (1 + math.exp(-gb(i)).toFloat)
+            Iterator.range(0, numNegativeSamples + 1).foreach { i =>
+              if (errGradients(i) > -MAX_EXP && errGradients(i) < MAX_EXP) {
+                val v = 1.0f / (1 + math.exp(-errGradients(i)).toFloat)
                 // computing error gradient
                 val err = (negLabels(i) - v) * alpha
-                // update hidden -> output layer, syn1
-                blas.saxpy(vectorSize, err, contextVec, 0, 1, syn1, wordIndices(i) * vectorSize, 1)
-                // update for word vectors
-                blas.saxpy(vectorSize, err, l2Vectors, i * vectorSize, 1, neu1e, 0, 1)
-                gb.update(i, err)
+                // update layer 2 vectors
+                blas
+                  .saxpy(vectorSize, err, contextVec, 0, 1, syn1, trainingWords(i) * vectorSize, 1)
+                // accumulate gradients for the cumulative context vector
+                blas.saxpy(vectorSize, err, layer2Vectors, i * vectorSize, 1, layer1Updates, 0, 1)
+                errGradients.update(i, err)
               } else {
-                gb.update(i, 0.0f)
+                errGradients.update(i, 0.0f)
               }
             }
 
-            // update input -> hidden layer, syn0
+            // update layer 1 vectors/word embeddings
             contextIds.foreach { i =>
-              blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, i * vectorSize, 1)
+              blas.saxpy(vectorSize, 1.0f, layer1Updates, 0, 1, syn0, i * vectorSize, 1)
             }
-            gb.map(math.abs).sum / alpha
+            errGradients.map(math.abs).sum / alpha
           }
-          logInfo(s"Partition: $i_, Average Batch Error = ${errors.sum / batchSize}")
+          logInfo(s"Partition: $partIndex, Average Batch Error = ${errors.sum / batchSize}")
         }
         Iterator.tabulate(vocabSize) { index =>
           (index, syn0.slice(index * vectorSize, (index + 1) * vectorSize))
@@ -222,7 +240,7 @@ object Word2VecCBOWSolver extends Logging {
       syn0bc.destroy(false)
       syn1bc.destroy(false)
       val timePerIteration = (System.nanoTime() - iterationStartTime) / 1e6
-      logInfo(s"Total time taken per iteration: ${timePerIteration} ms")
+      logInfo(s"Total time taken per iteration: $timePerIteration ms")
     }
     digitSentences.unpersist()
     vocabMapBroadcast.destroy()
@@ -234,14 +252,21 @@ object Word2VecCBOWSolver extends Logging {
 
   /**
    * Similar to InitUnigramTable in the original code.
+   * Given the frequency of all words, we create an array that has words in rough proportion
+   * to their frequencies. Randomly drawing an index from this array, would roughly replicate
+   * the words frequency distribution
+   *
+   * @param normalizedWeights word frequency distribution
+   * @param tableSize size of the array to create the frequency distribution
+   * @return array with the frequency distribution
    */
   private def generateUnigramTable(normalizedWeights: Array[Double], tableSize: Int): Array[Int] = {
     val table = new Array[Int](tableSize)
     var index = 0
     var wordId = 0
-    while (index < table.length) {
+    while (index < tableSize) {
       table.update(index, wordId)
-      if (index.toFloat / table.length >= normalizedWeights(wordId)) {
+      if (index.toFloat / tableSize >= normalizedWeights(wordId)) {
         wordId = math.min(normalizedWeights.length - 1, wordId + 1)
       }
       index += 1
@@ -249,25 +274,29 @@ object Word2VecCBOWSolver extends Logging {
     table
   }
 
+  /**
+   * Generate basic word stats given the input RDD. These include total word count,
+   * word->frequency map, word frequency distribution array, and sampling table to sample
+   * high frequency words
+   */
   private def generateVocab[S <: Iterable[String]](
       input: RDD[S],
       minCount: Int,
       sample: Double,
       unigramTableSize: Int): Vocabulary = {
-    val sc = input.context
 
     val words = input.flatMap(x => x)
 
     val sortedWordCounts = words.map(w => (w, 1L))
       .reduceByKey(_ + _)
-      .filter{case (w, c) => c >= minCount}
+      .filter { case (_, c) => c >= minCount}
       .collect()
-      .sortWith{case ((w1, c1), (w2, c2)) => c1 > c2}
+      .sortWith { case ((w1, c1), (w2, c2)) => c1 > c2}
       .zipWithIndex
 
     val totalWordCount = sortedWordCounts.map(_._1._2).sum
 
-    val vocabMap = sortedWordCounts.map{case ((w, c), i) =>
+    val vocabMap = sortedWordCounts.map { case ((w, c), i) =>
       w -> i
     }.toMap
 
@@ -283,21 +312,17 @@ object Word2VecCBOWSolver extends Logging {
     val weights = sortedWordCounts.map{ case((_, x), _) => scala.math.pow(x, power)}
     val totalWeight = weights.sum
 
-    val normalizedCumWeights = weights.scanLeft(0.0)(_ + _).tail.map(x => x / totalWeight)
+    val normalizedCumWeights = weights.scanLeft(0.0)(_ + _).tail.map(_ / totalWeight)
 
     val unigramTable = generateUnigramTable(normalizedCumWeights, unigramTableSize)
 
     Vocabulary(totalWordCount, vocabMap, unigramTable, samplingTable)
   }
 
-  private def zeroVector(v: Array[Float]): Unit = {
-    var i = 0
-    while(i < v.length) {
-      v.update(i, 0.0f)
-      i+= 1
-    }
-  }
-
+  /**
+   * Generate pairs of contexts and expected output words for use with training
+   * word-embeddings
+   */
   private def generateContextWordPairs(
       sentence: Array[Int],
       window: Int,
@@ -321,8 +346,10 @@ object Word2VecCBOWSolver extends Logging {
     }
   }
 
-  // This essentially helps translate from uniform distribution to a distribution
-  // resembling uni-gram frequency distribution.
+  /**
+   * This essentially helps translate from uniform distribution to a distribution
+   * resembling uni-gram frequency distribution.
+   */
   private def generateNegativeSamples(
       random: XORShiftRandom,
       word: Int,

@@ -18,10 +18,10 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
-
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.feature.impl.Word2VecCBOWSolver
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.ml.linalg.{BLAS, Vector, VectorUDT, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -107,16 +107,16 @@ private[feature] trait Word2VecBase extends Params
 
   /**
    * Number of negative samples to use with CBOW based estimation.
-   * This parameter is ignored for SkipGram based estimation.
+   * This parameter is ignored for SkipGram-Hierachical Softmax based estimation.
    * Default: 15
    * @group param
    */
-  final val negativeSamples = new IntParam(this, "negativeSamples", "Number of negative samples " +
+  final val numNegativeSamples = new IntParam(this, "numNegativeSamples", "Number of negative samples " +
     "to use with CBOW estimation", ParamValidators.gt(0))
-  setDefault(negativeSamples -> 15)
+  setDefault(numNegativeSamples -> 15)
 
   /** @group getParam */
-  def getNegativeSamples: Int = $(negativeSamples)
+  def getNumNegativeSamples: Int = $(numNegativeSamples)
 
   /**
    * Unigram table size. The unigram table is used to generate negative samples.
@@ -137,12 +137,23 @@ private[feature] trait Word2VecBase extends Params
    * Default: 0.0
    * @group param
    */
-  final val sample = new DoubleParam(this, "samplingThreshold", "Sampling threshold to reduce " +
-    "with high frequencies", ParamValidators.gtEq(0.0))
-  setDefault(sample -> 0.0)
+  final val samplingThreshold = new DoubleParam(this, "samplingThreshold", "Sampling threshold to reduce " +
+    "words with high frequencies", ParamValidators.gtEq(0.0))
+  setDefault(samplingThreshold -> 0.0)
 
   /** @group getParam */
-  def getSample: Double = $(sample)
+  def getSamplingThreshold: Double = $(samplingThreshold)
+
+  /**
+   * Solver used for Word2Vec.
+   * Supported options are "sg-hs" and "cbow-ns"
+   * Default: "sg-hs"
+   */
+  final override val solver: Param[String] = new Param[String](this, "solver",
+    "The solver used for word embeddings. Supported options: " +
+      s"${Word2Vec.supportedSolvers.mkString(", ")}. Default: sg-hs",
+    ParamValidators.inArray[String](Word2Vec.supportedSolvers)
+  )
 
   setDefault(stepSize -> 0.025)
   setDefault(maxIter -> 1)
@@ -211,25 +222,20 @@ final class Word2Vec @Since("1.4.0") (
 
   /** @group setParam */
   @Since("2.2.0")
-  val solvers = Set("sg-hs", "cbow-ns")
-  def setSolver(value: String): this.type = {
-    require(solvers.contains(value),
-      s"Solver $value was not supported. Supported options: ${solvers.mkString(", ")}")
-    set(solver, value)
-  }
+  def setSolver(value: String): this.type = set(solver, value)
   setDefault(solver -> "sg-hs")
 
   /** @group setParam */
   @Since("2.2.0")
-  def setNegativeSamples(value: Int): this.type = set(negativeSamples, value)
+  def setNegativeSamples(value: Int): this.type = set(numNegativeSamples, value)
 
   /** @group setParam */
   @Since("2.2.0")
-  def setMaxUnigramTableSize(value: Int): this.type = set(unigramTableSize, value)
+  def setUnigramTableSize(value: Int): this.type = set(unigramTableSize, value)
 
   /** @group setParam */
   @Since("2.2.0")
-  def setSample(value: Double): this.type = set(sample, value)
+  def setSample(value: Double): this.type = set(samplingThreshold, value)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Word2VecModel = {
@@ -263,6 +269,15 @@ final class Word2Vec @Since("1.4.0") (
 
 @Since("1.6.0")
 object Word2Vec extends DefaultParamsReadable[Word2Vec] {
+
+  /** String name for "SkipGram - Hierarchical Softmax" */
+  private [feature] val SG_HS = "sg-hs"
+
+  /** String name for "Continuous Bag of Words - Negative Sampling" */
+  private [feature] val CBOW_NS = "cbow-ns"
+
+  /** Set of supported solvers */
+  private [feature] val supportedSolvers = Array(SG_HS, CBOW_NS)
 
   @Since("1.6.0")
   override def load(path: String): Word2Vec = super.load(path)

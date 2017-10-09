@@ -102,7 +102,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     val w2v = new Word2Vec()
       .setSolver("cbow-ns")
       .setNegativeSamples(2)
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setVectorSize(3)
       .setInputCol("text")
       .setOutputCol("result")
@@ -178,7 +178,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val model = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setInputCol("text")
@@ -241,7 +241,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val model = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setInputCol("text")
@@ -316,7 +316,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val model = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
       .setWindowSize(2)
@@ -332,7 +332,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     // Increase the window size
     val biggerModel = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
       .setInputCol("text")
@@ -359,7 +359,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val model = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setWindowSize(2)
@@ -372,10 +372,10 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
       case Row(w: String, sim: Double) => (w, sim)
     }.collect().unzip
 
-    // Increase the window size
+    // Increase the negative samples
     val biggerModel = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(5)
       .setVectorSize(3)
       .setInputCol("text")
@@ -402,7 +402,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val model = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setWindowSize(2)
@@ -418,7 +418,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     // Set sub sampling
     val biggerModel = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(3)
       .setInputCol("text")
@@ -461,7 +461,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   test("Word2Vec read/write - CBOW") {
     val t = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(10)
       .setInputCol("myInputCol")
       .setOutputCol("myOutputCol")
@@ -520,7 +520,7 @@ class Word2VecSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
 
     val model = new Word2Vec()
       .setSolver("cbow-ns")
-      .setMaxUnigramTableSize(10000)
+      .setUnigramTableSize(10000)
       .setNegativeSamples(2)
       .setVectorSize(2)
       .setInputCol("ngrams")
