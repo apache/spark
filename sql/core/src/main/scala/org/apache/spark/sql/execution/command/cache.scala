@@ -34,15 +34,13 @@ case class CacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      Dataset.ofRows(sparkSession, logicalPlan)
-        .createTempViewCommand(tableIdent.quotedString, replace = false, global = false)
-        .run(sparkSession)
+      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
     }
     sparkSession.catalog.cacheTable(tableIdent.quotedString)
 
     if (!isLazy) {
       // Performs eager caching
-      sparkSession.table(tableIdent).countInternal()
+      sparkSession.table(tableIdent).count()
     }
 
     Seq.empty[Row]

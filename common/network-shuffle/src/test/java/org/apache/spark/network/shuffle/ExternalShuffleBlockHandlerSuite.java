@@ -83,9 +83,10 @@ public class ExternalShuffleBlockHandlerSuite {
 
     ManagedBuffer block0Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[3]));
     ManagedBuffer block1Marker = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
-    when(blockResolver.getBlockData("app0", "exec1", "b0")).thenReturn(block0Marker);
-    when(blockResolver.getBlockData("app0", "exec1", "b1")).thenReturn(block1Marker);
-    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1", new String[] { "b0", "b1" })
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 0)).thenReturn(block0Marker);
+    when(blockResolver.getBlockData("app0", "exec1", 0, 0, 1)).thenReturn(block1Marker);
+    ByteBuffer openBlocks = new OpenBlocks("app0", "exec1",
+      new String[] { "shuffle_0_0_0", "shuffle_0_0_1" })
       .toByteBuffer();
     handler.receive(client, openBlocks, callback);
 
@@ -105,8 +106,8 @@ public class ExternalShuffleBlockHandlerSuite {
     assertEquals(block0Marker, buffers.next());
     assertEquals(block1Marker, buffers.next());
     assertFalse(buffers.hasNext());
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b0");
-    verify(blockResolver, times(1)).getBlockData("app0", "exec1", "b1");
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
+    verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
 
     // Verify open block request latency metrics
     Timer openBlockRequestLatencyMillis = (Timer) ((ExternalShuffleBlockHandler) handler)

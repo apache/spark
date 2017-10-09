@@ -38,7 +38,7 @@ import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
 
@@ -460,7 +460,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("resolveURI") {
     def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
-      assume(before.split(",").length === 1)
+      assert(before.split(",").length === 1)
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
       assert(resolve(before) === after)
       assert(resolve(after) === after)
@@ -488,7 +488,6 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
-      assume(before.split(",").length > 1)
       def resolve(uri: String): String = Utils.resolveURIs(uri)
       assert(resolve(before) === after)
       assert(resolve(after) === after)
@@ -939,6 +938,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
         val file = File.createTempFile("temp-file-name", ".tmp")
+        file.deleteOnExit()
         val cmd =
           s"""
              |#!/bin/bash
@@ -1023,5 +1023,91 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(redactedConf("spark.regular.property") === "regular_value")
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
 
+  }
+
+  test("tryWithSafeFinally") {
+    var e = new Error("Block0")
+    val finallyBlockError = new Error("Finally Block")
+    var isErrorOccurred = false
+    // if the try and finally blocks throw different exception instances
+    try {
+      Utils.tryWithSafeFinally { throw e }(finallyBlock = { throw finallyBlockError })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.head == finallyBlockError)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try and finally blocks throw the same exception instance then it should not
+    // try to add to suppressed and get IllegalArgumentException
+    e = new Error("Block1")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinally { throw e }(finallyBlock = { throw e })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try throws the exception and finally doesn't throw exception
+    e = new Error("Block2")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinally { throw e }(finallyBlock = {})
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try and finally block don't throw exception
+    Utils.tryWithSafeFinally {}(finallyBlock = {})
+  }
+
+  test("tryWithSafeFinallyAndFailureCallbacks") {
+    var e = new Error("Block0")
+    val catchBlockError = new Error("Catch Block")
+    val finallyBlockError = new Error("Finally Block")
+    var isErrorOccurred = false
+    TaskContext.setTaskContext(TaskContext.empty())
+    // if the try, catch and finally blocks throw different exception instances
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(
+        catchBlock = { throw catchBlockError }, finallyBlock = { throw finallyBlockError })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.head == catchBlockError)
+        assert(t.getSuppressed.last == finallyBlockError)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try, catch and finally blocks throw the same exception instance then it should not
+    // try to add to suppressed and get IllegalArgumentException
+    e = new Error("Block1")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = { throw e },
+        finallyBlock = { throw e })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try throws the exception, catch and finally don't throw exceptions
+    e = new Error("Block2")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = {}, finallyBlock = {})
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try, catch and finally blocks don't throw exceptions
+    Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
+    TaskContext.unset
   }
 }

@@ -56,9 +56,9 @@ private[spark] object JavaUtils {
         val ui = underlying.iterator
         var prev : Option[A] = None
 
-        def hasNext: Boolean = ui.hasNext
+        override def hasNext: Boolean = ui.hasNext
 
-        def next(): Entry[A, B] = {
+        override def next(): Entry[A, B] = {
           val (k, v) = ui.next()
           prev = Some(k)
           new ju.Map.Entry[A, B] {
@@ -74,7 +74,7 @@ private[spark] object JavaUtils {
           }
         }
 
-        def remove() {
+        override def remove() {
           prev match {
             case Some(k) =>
               underlying match {

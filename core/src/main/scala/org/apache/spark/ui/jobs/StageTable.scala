@@ -60,7 +60,7 @@ private[ui] class StageTableBase(
   }.getOrElse("Stage Id")
   val stageSortDesc = Option(parameterStageSortDesc).map(_.toBoolean).getOrElse(
     // New stages should be shown above old jobs by default.
-    if (stageSortColumn == "Stage Id") true else false
+    stageSortColumn == "Stage Id"
   )
   val stagePageSize = Option(parameterStagePageSize).map(_.toInt).getOrElse(100)
   val stagePrevPageSize = Option(parameterStagePrevPageSize).map(_.toInt)

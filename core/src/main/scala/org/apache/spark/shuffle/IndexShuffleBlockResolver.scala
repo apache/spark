@@ -18,6 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.io._
+import java.nio.file.Files
 
 import com.google.common.io.ByteStreams
 
@@ -141,7 +142,8 @@ private[spark] class IndexShuffleBlockResolver(
     val indexFile = getIndexFile(shuffleId, mapId)
     val indexTmp = Utils.tempFileWith(indexFile)
     try {
-      val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
+      val out = new DataOutputStream(
+        new BufferedOutputStream(Files.newOutputStream(indexTmp.toPath)))
       Utils.tryWithSafeFinally {
         // We take in lengths of each block, need to convert it to offsets.
         var offset = 0L
@@ -196,7 +198,7 @@ private[spark] class IndexShuffleBlockResolver(
     // find out the consolidated file, then the offset within that from our index
     val indexFile = getIndexFile(blockId.shuffleId, blockId.mapId)
 
-    val in = new DataInputStream(new FileInputStream(indexFile))
+    val in = new DataInputStream(Files.newInputStream(indexFile.toPath))
     try {
       ByteStreams.skipFully(in, blockId.reduceId * 8)
       val offset = in.readLong()

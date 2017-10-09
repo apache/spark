@@ -30,11 +30,17 @@ public interface HashMapGrowthStrategy {
   HashMapGrowthStrategy DOUBLING = new Doubling();
 
   class Doubling implements HashMapGrowthStrategy {
+
+    // Some JVMs can't allocate arrays of length Integer.MAX_VALUE; actual max is somewhat
+    // smaller. Be conservative and lower the cap a little.
+    private static final int ARRAY_MAX = Integer.MAX_VALUE - 8;
+
     @Override
     public int nextCapacity(int currentCapacity) {
       assert (currentCapacity > 0);
+      int doubleCapacity = currentCapacity * 2;
       // Guard against overflow
-      return (currentCapacity * 2 > 0) ? (currentCapacity * 2) : Integer.MAX_VALUE;
+      return (doubleCapacity > 0 && doubleCapacity <= ARRAY_MAX) ? doubleCapacity : ARRAY_MAX;
     }
   }
 
