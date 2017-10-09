@@ -203,6 +203,11 @@ package object config {
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications").intConf.createWithDefault(Integer.MAX_VALUE)
 
+  private[spark] val UI_SHOW_CONSOLE_PROGRESS = ConfigBuilder("spark.ui.showConsoleProgress")
+    .doc("When true, show the progress bar in the console.")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .booleanConf
     .createWithDefault(false)
