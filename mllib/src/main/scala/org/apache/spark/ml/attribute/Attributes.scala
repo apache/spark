@@ -37,6 +37,8 @@ case class NominalAttr(
     isOrdinal: Option[Boolean] = None,
     values: Option[Array[String]] = None) extends SimpleAttribute {
 
+  def this() = this(name = None)
+
   override val attrType: AttributeType = AttributeType.Nominal
 
   override def withName(name: String): NominalAttr = copy(name = Some(name))
@@ -72,6 +74,8 @@ case class BinaryAttr(
     name: Option[String] = None,
     indicesRange: Seq[Int] = Seq.empty,
     values: Option[Array[String]] = None) extends SimpleAttribute {
+
+  def this() = this(name = None)
 
   values.foreach { v =>
     require(v.length == 2, s"Number of values must be 2 for a binary attribute but got ${v.toSeq}.")
@@ -115,6 +119,8 @@ case class NumericAttr(
     max: Option[Double] = None,
     std: Option[Double] = None,
     sparsity: Option[Double] = None) extends SimpleAttribute {
+
+  def this() = this(name = None)
 
   std.foreach { s =>
     require(s >= 0.0, s"Standard deviation cannot be negative but got $s.")
@@ -165,6 +171,8 @@ case class VectorAttr(
     name: Option[String] = None,
     private val innerAttrs: mutable.ArrayBuffer[SimpleAttribute] = mutable.ArrayBuffer.empty)
     extends ComplexAttribute {
+
+  def this(numOfAttributes: Int) = this(numOfAttributes, name = None)
 
   require(numOfAttributes > 0, "The number of attributes must be larger than zero.")
 

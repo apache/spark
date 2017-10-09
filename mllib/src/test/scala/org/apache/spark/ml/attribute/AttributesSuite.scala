@@ -24,6 +24,32 @@ class AttributesSuite extends SparkFunSuite {
   import AttributeKeys._
   import AttributeType._
 
+  test("NominalAttr: default constructor") {
+    val attr = NominalAttr()
+    val metadata = attr.toMetadata().getMetadata(ML_ATTRV2)
+    assert(metadata.getString(TYPE) == Nominal.name && !metadata.contains(NAME))
+  }
+
+  test("NumericAttr: default constructor") {
+    val attr = NumericAttr()
+    val metadata = attr.toMetadata().getMetadata(ML_ATTRV2)
+    assert(metadata.getString(TYPE) == Numeric.name && !metadata.contains(NAME))
+  }
+
+  test("BinaryAttr: default constructor") {
+    val attr = BinaryAttr()
+    val metadata = attr.toMetadata().getMetadata(ML_ATTRV2)
+    assert(metadata.getString(TYPE) == Binary.name && !metadata.contains(NAME))
+  }
+
+  test("VectorAttr: default constructor") {
+    val attr = VectorAttr(1)
+    val metadata = attr.toMetadata().getMetadata(ML_ATTRV2)
+    assert(metadata.getString(TYPE) == Vector.name
+      && !metadata.contains(NAME) &&
+      metadata.getLong(NUM_ATTRIBUTES) == 1L)
+  }
+
   test("NominalAttr") {
     val attr1 = NominalAttr(name = Some("col1"))
     val attr1Metadata = attr1.toMetadata().getMetadata(ML_ATTRV2)
