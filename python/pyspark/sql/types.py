@@ -1623,9 +1623,11 @@ def toArrowType(dt):
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
 
+
 def from_arrow_type(at):
-    """ Convert pyarrow type to Spark data type
+    """ Convert pyarrow type to Spark data type.
     """
+    # TODO: newer pyarrow has is_boolean(at) functions that would be better to check type
     import pyarrow as pa
     if at == pa.bool_():
         spark_type = BooleanType()
@@ -1646,8 +1648,16 @@ def from_arrow_type(at):
     elif at == pa.string():
         spark_type = StringType()
     else:
-        raise TypeError("Unsupport type in conversion from Arrow: " + str(at))
+        raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
+
+
+def from_arrow_schema(arrow_schema):
+    """ Convert schema from Arrow to Spark.
+    """
+    return StructType(
+        [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
+         for field in arrow_schema])
 
 
 def _test():

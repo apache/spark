@@ -510,25 +510,19 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
-            if self.conf.get("spark.sql.execution.arrow.enable", "false").lower() == "true":
-
-                # slice the DataFrame into batches
+            if self.conf.get("spark.sql.execution.arrow.enable", "false").lower() == "true" \
+                    and len(data) > 0:
                 from pyspark.serializers import ArrowSerializer
+                from pyspark.sql.types import from_arrow_schema
                 import pyarrow as pa
+
+                # Slice the DataFrame into batches
                 split = -(-len(data) // self.sparkContext.defaultParallelism)  # round int up
                 slices = (data[i:i + split] for i in xrange(0, len(data), split))
                 batches = [pa.RecordBatch.from_pandas(sliced_df, preserve_index=False)
                            for sliced_df in slices]
 
-                # make the Spark schema
-                arrow_schema = batches[0].schema
-                from pyspark.sql.types import from_arrow_type, DoubleType, StructField
-                schema = StructType(
-                    [StructField(field.name, from_arrow_type(field.type), nullable=field.nullable)
-                     for field in arrow_schema])
-
-                # write batches to a temp file for JVM to read
-                # NOTE: writing to temp file borrowed from context.parallelize
+                # write batches to temp file, read by JVM (borrowed from context.parallelize)
                 import os
                 from tempfile import NamedTemporaryFile
                 tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
@@ -542,7 +536,8 @@ class SparkSession(object):
                     # readRDDFromFile eagerily reads the file so we can delete right after.
                     os.unlink(tempFile.name)
 
-                # create the Spark DataFrame
+                # Create the Spark DataFrame, there will be at least 1 batch
+                schema = from_arrow_schema(batches[0].schema)
                 jdf = self._jvm.org.apache.spark.sql.execution.arrow.ArrowConverters.toDataFrame(
                     jrdd, schema.json(), self._wrapped._jsqlContext)
                 df = DataFrame(jdf, self._wrapped)

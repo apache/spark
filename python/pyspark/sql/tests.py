@@ -3095,15 +3095,26 @@ class ArrowTests(ReusedPySparkTestCase):
             StructField("3_long_t", LongType(), True),
             StructField("4_float_t", FloatType(), True),
             StructField("5_double_t", DoubleType(), True)])
-        cls.data = [("a", 1, 10, 0.2, 2.0),
-                    ("b", 2, 20, 0.4, 4.0),
-                    ("c", 3, 30, 0.8, 6.0)]
+        cls.data = [(u"a", 1, 10, 0.2, 2.0),
+                    (u"b", 2, 20, 0.4, 4.0),
+                    (u"c", 3, 30, 0.8, 6.0)]
 
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
                ("\n\nWith Arrow:\n%s\n%s" % (df_with_arrow, df_with_arrow.dtypes)) +
                ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
+
+    def createPandasDataFrameFromeData(self):
+        import pandas as pd
+        import numpy as np
+        data_dict = {}
+        for j, name in enumerate(self.schema.names):
+            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
+        # need to convert these to numpy types first
+        data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
+        data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
+        return pd.DataFrame(data=data_dict)
 
     def test_unsupported_datatype(self):
         schema = StructType([StructField("dt", DateType(), True)])
@@ -3127,15 +3138,7 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
-        import pandas as pd
-        import numpy as np
-        data_dict = {}
-        for j, name in enumerate(self.schema.names):
-            data_dict[name] = [self.data[i][j] for i in range(len(self.data))]
-        # need to convert these to numpy types first
-        data_dict["2_int_t"] = np.int32(data_dict["2_int_t"])
-        data_dict["4_float_t"] = np.float32(data_dict["4_float_t"])
-        pdf = pd.DataFrame(data=data_dict)
+        pdf = self.createPandasDataFrameFromeData()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
@@ -3146,6 +3149,14 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertEqual(len(pdf.columns), 1)
         self.assertEqual(pdf.columns[0], "i")
         self.assertTrue(pdf.empty)
+
+    def test_createDataFrame_toggle(self):
+        pdf = self.createPandasDataFrameFromeData()
+        self.spark.conf.set("spark.sql.execution.arrow.enable", "false")
+        df_no_arrow = self.spark.createDataFrame(pdf)
+        self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
+        df_arrow = self.spark.createDataFrame(pdf)
+        self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
