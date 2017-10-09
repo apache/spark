@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
+import java.util.UUID
 
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -77,6 +78,13 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val files = ids.map(id => diskBlockManager.getFile(id))
     files.foreach(file => writeToFile(file, 10))
     assert(diskBlockManager.getAllBlocks.toSet === ids.toSet)
+  }
+
+  test("SPARK-22227: non-block files are skipped") {
+    val blockId = TempShuffleBlockId(UUID.randomUUID())
+    val file = diskBlockManager.getFile(blockId)
+    writeToFile(file, 10)
+    assert(diskBlockManager.getAllBlocks().isEmpty)
   }
 
   def writeToFile(file: File, numBytes: Int) {

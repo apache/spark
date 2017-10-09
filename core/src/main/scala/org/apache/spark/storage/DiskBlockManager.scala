@@ -20,6 +20,8 @@ package org.apache.spark.storage
 import java.io.{File, IOException}
 import java.util.UUID
 
+import scala.util.Try
+
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.Logging
@@ -100,7 +102,9 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
 
   /** List all the blocks currently stored on disk by the disk manager. */
   def getAllBlocks(): Seq[BlockId] = {
-    getAllFiles().map(f => BlockId(f.getName))
+    // SPARK-22227: the Try guides against temporary files written
+    // during shuffle which do not correspond to valid block IDs.
+    getAllFiles().flatMap(f => Try(BlockId(f.getName)).toOption)
   }
 
   /** Produces a unique block id and File suitable for storing local intermediate results. */
