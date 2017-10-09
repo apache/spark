@@ -234,13 +234,14 @@ private[ml] object ProbabilisticClassificationModel {
    *
    * NOTE: This is NOT applicable to all models, only ones which effectively use class
    *       instance counts for raw predictions.
+   *
+   * @throws IllegalArgumentException if the input vector is all-0 or including negative values
    */
-  @throws[IllegalArgumentException]("If the input vector is all-0 or including negative values")
   def normalizeToProbabilitiesInPlace(v: DenseVector): Unit = {
     v.values.foreach(value => require(value >= 0,
       "The input raw predictions should be nonnegative."))
     val sum = v.values.sum
-    require(sum > 0, "All-0 vector is not allowed normalizing.")
+    require(sum > 0, "Can't normalize the 0-vector.")
     var i = 0
     val size = v.size
     while (i < size) {
