@@ -25,13 +25,17 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
 
   override protected def createAndSaveTableFunctions(): Map[String, CreateAndSaveTable] = {
     val hiveFns = Map(
-      "hive_parquet" -> new CreateHiveTableAndInsert(true),
-      "hive_parquet_no_conversion" ->  new CreateHiveTableAndInsert(false))
+      "hive_parquet" -> new CreateHiveTableAndInsert())
 
     super.createAndSaveTableFunctions() ++ hiveFns
   }
 
   override protected def ctasFunctions(): Map[String, CTAS] = {
+    // Disabling metastore conversion will also modify how data is read when the the CTAS query is
+    // run if the source is a Hive table; so, the test that uses "hive_parquet" as the source and
+    // "hive_parquet_no_conversion" as the target is actually using the "no metastore conversion"
+    // path for both, making it unnecessary to also have the "no conversion" case in the save
+    // functions.
     val hiveFns = Map(
       "hive_parquet" -> new CreateHiveTableWithTimezoneAndInsert(true),
       "hive_parquet_no_conversion" ->  new CreateHiveTableWithTimezoneAndInsert(false))
@@ -39,22 +43,20 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
     super.ctasFunctions() ++ hiveFns
   }
 
-  class CreateHiveTableAndInsert(convertMetastore: Boolean) extends CreateAndSaveTable {
+  class CreateHiveTableAndInsert extends CreateAndSaveTable {
     override def createAndSave(df: DataFrame, table: String, tzOpt: Option[String]): Unit = {
-      withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertMetastore.toString) {
-        val tblProperties = tzOpt.map { tz =>
-          s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
-        }.getOrElse("")
-        spark.sql(
-          s"""CREATE TABLE $table (
-             |  display string,
-             |  ts timestamp
-             |)
-             |STORED AS parquet
-             |$tblProperties
-             |""".stripMargin)
-        df.write.insertInto(table)
-      }
+      val tblProperties = tzOpt.map { tz =>
+        s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
+      }.getOrElse("")
+      spark.sql(
+        s"""CREATE TABLE $table (
+           |  display string,
+           |  ts timestamp
+           |)
+           |STORED AS parquet
+           |$tblProperties
+           |""".stripMargin)
+      df.write.insertInto(table)
     }
 
     override val format: String = "parquet"
@@ -78,6 +80,8 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
         spark.sql(s"insert into $dest select * from $source")
       }
     }
+
+    override val format: String = "parquet"
   }
 
   test("copy table timezone in CREATE TABLE LIKE") {

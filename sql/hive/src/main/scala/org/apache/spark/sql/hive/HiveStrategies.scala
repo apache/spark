@@ -234,7 +234,7 @@ case class HiveAdjustTimestamps(sparkSession: SparkSession)
         // The query might be reading from a parquet table which requires a different conversion;
         // this makes sure we apply the correct conversions there.
         val (fixedQuery, _) = convertInputs(insert.query)
-        val fixedOutput = writeConversion(Some(insert.table), Map(), insert.query)
+        val fixedOutput = writeConversion(Some(insert.table), Map(), fixedQuery)
         insert.copy(query = fixedOutput)
 
       case other =>

@@ -137,9 +137,12 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
      * into it.
      */
     def createFromSource(source: String, dest: String, destTz: Option[String]): Unit
+
+    /** The target table's format. */
+    val format: String
   }
 
-  class DatasourceCTAS(format: String) extends CTAS {
+  class DatasourceCTAS(override val format: String) extends CTAS {
     override def createFromSource(source: String, dest: String, destTz: Option[String]): Unit = {
       val writer = spark.sql(s"select * from $source").write.format(format)
       destTz.foreach { writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _)}
@@ -177,11 +180,11 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
         // These queries should return the entire dataset, but if the predicates were
         // applied to the raw values in parquet, they would incorrectly filter data out.
         Seq(
-          ">" -> "2015-12-31 22:00:00",
-          "<" -> "2016-01-01 02:00:00"
-        ).foreach { case (comparison, value) =>
+          "ts > '2015-12-31 22:00:00'",
+          "ts < '2016-01-01 02:00:00'"
+        ).foreach { filter =>
           val query =
-            s"select ts from $table where ts $comparison '$value'"
+            s"select ts from $table where $filter"
           val countWithFilter = spark.sql(query).count()
           assert(countWithFilter === 4, query)
         }
@@ -227,11 +230,11 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
         withTable(destTableUTC, destTableNoTZ) {
           ctasFn.createFromSource(tblName, destTableUTC, Some("UTC"))
           checkHasTz(spark, destTableUTC, Some("UTC"))
-          checkTableData(destTableUTC, destFormat)
+          checkTableData(destTableUTC, ctasFn.format)
 
           ctasFn.createFromSource(tblName, destTableNoTZ, None)
           checkHasTz(spark, destTableNoTZ, None)
-          checkTableData(destTableNoTZ, destFormat)
+          checkTableData(destTableNoTZ, ctasFn.format)
 
           // By now, we've checked that the data in both tables is different in terms
           // of the raw values on disk, but they are the same after we apply the

@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, HiveTableRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -38,7 +38,8 @@ abstract class BaseAdjustTimestampsRule(sparkSession: SparkSession) extends Rule
       ): (LogicalPlan, Map[ExprId, NamedExpression]) = plan match {
     case alreadyConverted@Project(exprs, _) if hasCorrection(exprs) =>
       (alreadyConverted, Map())
-    case lr@LogicalRelation(fsRelation: HadoopFsRelation, _, _, _) =>
+
+    case lr @ LogicalRelation(fsRelation: HadoopFsRelation, _, _, _) =>
       val tzOpt = extractTableTz(lr.catalogTable, fsRelation.options)
       tzOpt.flatMap { tableTz =>
         // the table has a timezone set, so after reading the data, apply a conversion
@@ -56,6 +57,22 @@ abstract class BaseAdjustTimestampsRule(sparkSession: SparkSession) extends Rule
           None
         }
       }.getOrElse((lr, Map()))
+
+    case relation @ HiveTableRelation(table, cols, parts) =>
+      val tzOpt = extractTableTz(Some(table), Map())
+      tzOpt.flatMap { tz =>
+        val toTz = sparkSession.sessionState.conf.sessionLocalTimeZone
+        if (toTz != tz) {
+          logDebug(s"table tz = $tz; converting to current session tz = $toTz")
+          // find timestamp columns, and convert their tz
+          convertTzForAllTimestamps(relation, tz, toTz).map { case (fields, replacements) =>
+            (new Project(fields, relation), replacements)
+          }
+        } else {
+          None
+        }
+      }.getOrElse((relation, Map()))
+
     case other =>
       // first, process all the children -- this ensures we have the right renames in scope.
       var newReplacements = Map[ExprId, NamedExpression]()
@@ -170,7 +187,7 @@ case class AdjustTimestamps(sparkSession: SparkSession)
         // The query might be reading from a parquet table which requires a different conversion;
         // this makes sure we apply the correct conversions there.
         val (fixedQuery, _) = convertInputs(insert.query)
-        val fixedOutput = writeConversion(insert.catalogTable, insert.options, insert.query)
+        val fixedOutput = writeConversion(insert.catalogTable, insert.options, fixedQuery)
         insert.copy(query = fixedOutput)
 
       case other =>
