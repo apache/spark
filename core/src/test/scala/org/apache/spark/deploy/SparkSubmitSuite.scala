@@ -399,6 +399,18 @@ class SparkSubmitSuite
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
+  test("SPARK-21568 ConsoleProgressBar should be enabled only in shells") {
+    val clArgs1 = Seq("--class", "org.apache.spark.repl.Main", "spark-shell")
+    val appArgs1 = new SparkSubmitArguments(clArgs1)
+    val (_, _, sysProps1, _) = prepareSubmitEnvironment(appArgs1)
+    sysProps1(UI_SHOW_CONSOLE_PROGRESS.key) should be ("true")
+
+    val clArgs2 = Seq("--class", "org.SomeClass", "thejar.jar")
+    val appArgs2 = new SparkSubmitArguments(clArgs2)
+    val (_, _, sysProps2, _) = prepareSubmitEnvironment(appArgs2)
+    sysProps2.keys should not contain UI_SHOW_CONSOLE_PROGRESS.key
+  }
+
   test("launch simple application with spark-submit") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
