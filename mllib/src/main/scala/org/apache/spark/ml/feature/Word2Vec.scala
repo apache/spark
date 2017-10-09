@@ -18,10 +18,11 @@
 package org.apache.spark.ml.feature
 
 import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Since
-import org.apache.spark.ml.feature.impl.Word2VecCBOWSolver
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{BLAS, Vector, VectorUDT, Vectors}
+import org.apache.spark.ml.feature.impl.Word2VecCBOWSolver
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -111,8 +112,8 @@ private[feature] trait Word2VecBase extends Params
    * Default: 15
    * @group param
    */
-  final val numNegativeSamples = new IntParam(this, "numNegativeSamples", "Number of negative samples " +
-    "to use with CBOW estimation", ParamValidators.gt(0))
+  final val numNegativeSamples = new IntParam(this, "numNegativeSamples", "Number of negative" +
+    " samples to use with CBOW estimation", ParamValidators.gt(0))
   setDefault(numNegativeSamples -> 15)
 
   /** @group getParam */
@@ -137,8 +138,8 @@ private[feature] trait Word2VecBase extends Params
    * Default: 0.0
    * @group param
    */
-  final val samplingThreshold = new DoubleParam(this, "samplingThreshold", "Sampling threshold to reduce " +
-    "words with high frequencies", ParamValidators.gtEq(0.0))
+  final val samplingThreshold = new DoubleParam(this, "samplingThreshold", "Sampling threshold" +
+    " to reduce words with high frequencies", ParamValidators.gtEq(0.0))
   setDefault(samplingThreshold -> 0.0)
 
   /** @group getParam */
