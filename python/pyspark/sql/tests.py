@@ -3099,6 +3099,11 @@ class ArrowTests(ReusedPySparkTestCase):
                     (u"b", 2, 20, 0.4, 4.0),
                     (u"c", 3, 30, 0.8, 6.0)]
 
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
+
     def assertFramesEqual(self, df_with_arrow, df_without):
         msg = ("DataFrame from Arrow is not equal" +
                ("\n\nWith Arrow:\n%s\n%s" % (df_with_arrow, df_with_arrow.dtypes)) +

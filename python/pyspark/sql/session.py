@@ -539,7 +539,7 @@ class SparkSession(object):
 
                 # Create the Spark DataFrame, there will be at least 1 batch
                 schema = from_arrow_schema(batches[0].schema)
-                jdf = self._jvm.org.apache.spark.sql.execution.arrow.ArrowConverters.toDataFrame(
+                jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
                     jrdd, schema.json(), self._wrapped._jsqlContext)
                 df = DataFrame(jdf, self._wrapped)
                 df._schema = schema

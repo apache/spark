@@ -206,11 +206,11 @@ private[sql] object ArrowConverters {
     }
   }
 
-  def toDataFrame(
-      arrowRDD: JavaRDD[Array[Byte]],
+  private[sql] def toDataFrame(
+      payloadRDD: JavaRDD[Array[Byte]],
       schemaString: String,
       sqlContext: SQLContext): DataFrame = {
-    val rdd = arrowRDD.rdd.mapPartitions { iter =>
+    val rdd = payloadRDD.rdd.mapPartitions { iter =>
       val context = TaskContext.get()
       ArrowConverters.fromPayloadIterator(iter.map(new ArrowPayload(_)), context)
     }
