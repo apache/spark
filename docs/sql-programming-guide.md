@@ -500,28 +500,6 @@ To load a csv file you can use:
 {% include_example manual_load_options_csv r/RSparkSQLExample.R %}
 </div>
 </div>
-
-To load a csv file you can use:
-
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example manual_load_options_csv python/sql/datasource.py %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
-</div>
-</div>
-
-
 ### Run SQL on files directly
 
 Instead of using read API to load a file into DataFrame and query it, you can also query that

@@ -56,7 +56,7 @@ def basic_datasource_example(spark):
     # $example on:manual_load_options_csv$
     df = spark.read.load("examples/src/main/resources/people.csv",
                          format="csv", sep=":", inferSchema="true", header="true")
-    # $example off:manual_load_options_csv
+    # $example off:manual_load_options_csv$
 
     # $example on:write_sorting_and_bucketing$
     df.write.bucketBy(42, "name").sortBy("age").saveAsTable("people_bucketed")
