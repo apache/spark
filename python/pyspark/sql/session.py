@@ -511,7 +511,7 @@ class SparkSession(object):
         except Exception:
             has_pandas = False
         if has_pandas and isinstance(data, pandas.DataFrame):
-            if self.conf.get("spark.sql.execution.arrow.enable", "false").lower() == "true" \
+            if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:
                 from pyspark.serializers import ArrowSerializer
                 from pyspark.sql.types import from_arrow_schema
