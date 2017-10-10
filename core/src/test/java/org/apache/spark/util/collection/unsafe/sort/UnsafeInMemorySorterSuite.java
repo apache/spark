@@ -35,6 +35,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.isIn;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 public class UnsafeInMemorySorterSuite {
@@ -142,10 +143,9 @@ public class UnsafeInMemorySorterSuite {
 
   @Test
   public void freeAfterOOM() {
-    final SparkConf sparkConf =
-            new SparkConf()
-                    .set("spark.memory.offHeap.enabled",
-                         "false");
+    final SparkConf sparkConf = new SparkConf();
+    sparkConf.set("spark.memory.offHeap.enabled", "false");
+
     final TestMemoryManager testMemoryManager =
             new TestMemoryManager(sparkConf);
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
@@ -175,6 +175,7 @@ public class UnsafeInMemorySorterSuite {
     testMemoryManager.markExecutionAsOutOfMemoryOnce();
     try {
       sorter.reset();
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
     } catch (OutOfMemoryError oom) {
       // as expected
     }

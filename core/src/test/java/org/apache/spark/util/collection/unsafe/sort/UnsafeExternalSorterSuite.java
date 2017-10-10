@@ -507,11 +507,12 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testOOMDuringSpill() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    // we assume that given default configuration, the size of
-    // the data we insert to the sorter (ints) and assuming we shouldn't
-    // spill before pointers array is exhausted (memory manager is not configured to throw at this point)
-    // - so this loop run a reasonable number of loops (<2000)
-    // test test indeed completed within <30ms (on a quad i7 laptop).
+    // we assume that given default configuration,
+    // the size of the data we insert to the sorter (ints)
+    // and assuming we shouldn't spill before pointers array is exhausted
+    // (memory manager is not configured to throw at this point)
+    // - so this loop runs a reasonable number of iterations (<2000).
+    // test indeed completed within <30ms (on a quad i7 laptop).
     for (int i = 0; sorter.hasSpaceForAnotherRecord(); ++i) {
       insertNumber(sorter, i);
     }
@@ -522,21 +523,17 @@ public class UnsafeExternalSorterSuite {
     // and ended up with a failed assertion.
     // we also expect the location of the OOM to be org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
     memoryManager.markconsequentOOM(2);
-    OutOfMemoryError expectedOOM = null;
     try {
       insertNumber(sorter, 1024);
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
     }
     // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
-    catch (OutOfMemoryError oom ){
-      expectedOOM = oom;
+    catch (OutOfMemoryError oom){
+      String oomStackTrace = Utils.exceptionString(oom);
+      assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+              oomStackTrace,
+              Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
     }
-
-    assertNotNull("expected OutOfMmoryError but it seems operation surprisingly succeeded"
-            ,expectedOOM);
-    String oomStackTrace = Utils.exceptionString(expectedOOM);
-    assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
-            oomStackTrace,
-            Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
   }
 
   private void verifyIntIterator(UnsafeSorterIterator iter, int start, int end)
