@@ -34,19 +34,4 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   attachPage(new AllJobsPage(this))
   attachPage(new JobPage(this))
 
-  def handleKillRequest(request: HttpServletRequest): Unit = {
-    if (killEnabled && parent.securityManager.checkModifyPermissions(request.getRemoteUser)) {
-      // stripXSS is called first to remove suspicious characters used in XSS attacks
-      val jobId = Option(UIUtils.stripXSS(request.getParameter("id"))).map(_.toInt)
-      jobId.foreach { id =>
-        if (jobProgresslistener.activeJobs.contains(id)) {
-          sc.foreach(_.cancelJob(id))
-          // Do a quick pause here to give Spark time to kill the job so it shows up as
-          // killed after the refresh. Note that this will block the serving thread so the
-          // time should be limited in duration.
-          Thread.sleep(100)
-        }
-      }
-    }
-  }
 }
