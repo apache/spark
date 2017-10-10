@@ -367,7 +367,7 @@ object SparkSubmit extends CommandLineUtils with Logging {
         downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
 
-      if (clusterManager == STANDALONE) {
+      if (clusterManager == STANDALONE || clusterManager == LOCAL) {
         // Use local files for standalone client mode.
         args.primaryResource = localPrimaryResource
         args.jars = localJars
