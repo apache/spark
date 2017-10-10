@@ -2222,7 +2222,7 @@ def pandas_udf(f=None, returnType=StringType()):
 
     2. A `pandas.DataFrame` -> A `pandas.DataFrame`
 
-       This udf is used with :meth:`pyspark.sql.GroupedData.apply`.
+       This udf is only used with :meth:`pyspark.sql.GroupedData.apply`.
        The returnType should be a :class:`StructType` describing the schema of the returned
        `pandas.DataFrame`.
 
@@ -2243,6 +2243,10 @@ def pandas_udf(f=None, returnType=StringType()):
        |  2|-0.2773500981126146|
        |  2| 1.1094003924504583|
        +---+-------------------+
+
+       .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
+                 because it defines a `DataFrame` transformation rather than `Column`
+                 transformation.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
 

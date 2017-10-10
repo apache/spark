@@ -3414,7 +3414,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         df = self.data
 
         foo_udf = pandas_udf(
-            lambda df: df.assign(v1=df.v * df.id * 1.0, v2=df.v + df.id),
+            lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
             StructType(
                 [StructField('id', LongType()),
                  StructField('v', IntegerType()),
@@ -3434,8 +3434,8 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
              StructField('v', IntegerType()),
              StructField('v1', DoubleType()),
              StructField('v2', LongType())]))
-        def foo(df):
-            return df.assign(v1=df.v * df.id * 1.0, v2=df.v + df.id)
+        def foo(pdf):
+            return pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id)
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
         expected = df.toPandas().groupby('id').apply(foo.func).reset_index(drop=True)
@@ -3446,7 +3446,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         df = self.data
 
         foo = pandas_udf(
-            lambda df: df,
+            lambda pdf: pdf,
             StructType([StructField('id', LongType()), StructField('v', DoubleType())]))
 
         result = df.groupby('id').apply(foo).sort('id').toPandas()
@@ -3497,7 +3497,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         df = self.data
 
         foo = pandas_udf(
-            lambda df: df,
+            lambda pdf: pdf,
             StructType([StructField('id', LongType()), StructField('v', StringType())]))
 
         with QuietTest(self.sc):

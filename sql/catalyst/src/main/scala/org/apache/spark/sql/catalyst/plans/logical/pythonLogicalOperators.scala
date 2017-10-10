@@ -20,11 +20,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 
 /**
- * Logical nodes specific to PySpark.
- */
-
-/**
- * FlatMap groups using a udf: pandas.Dataframe -> pandas.DataFrame.
+ * FlatMap groups using an udf: pandas.Dataframe -> pandas.DataFrame.
  * This is used by DataFrame.groupby().apply().
  */
 case class FlatMapGroupsInPandas(
