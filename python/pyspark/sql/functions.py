@@ -33,11 +33,22 @@ from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
 
 
+def _create_function_by_column_name(name, doc=""):
+    """ Create a function for aggregator by name"""
+    def _(col):
+        sc = SparkContext._active_spark_context
+        jc = getattr(sc._jvm.functions, name)(col)
+        return Column(jc)
+    _.__name__ = name
+    _.__doc__ = doc
+    return _
+
+
 def _create_function(name, doc=""):
     """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
-        jc = getattr(sc._jvm.functions, name)(col._jc if isinstance(col, Column) else col)
+        jc = getattr(sc._jvm.functions, name)(_to_java_column(col))
         return Column(jc)
     _.__name__ = name
     _.__doc__ = doc
@@ -67,19 +78,23 @@ def _create_window_function(name, doc=''):
     _.__doc__ = 'Window function: ' + doc
     return _
 
+
 _lit_doc = """
     Creates a :class:`Column` of literal value.
 
     >>> df.select(lit(5).alias('height')).withColumn('spark_user', lit(True)).take(1)
     [Row(height=5, spark_user=True)]
     """
-_functions = {
+
+_functions_by_column_name = {
     'lit': _lit_doc,
     'col': 'Returns a :class:`Column` based on the given column name.',
     'column': 'Returns a :class:`Column` based on the given column name.',
     'asc': 'Returns a sort expression based on the ascending order of the given column name.',
     'desc': 'Returns a sort expression based on the descending order of the given column name.',
+}
 
+_functions = {
     'upper': 'Converts a string expression to upper case.',
     'lower': 'Converts a string expression to upper case.',
     'sqrt': 'Computes the square root of the specified float value.',
@@ -207,6 +222,8 @@ _window_functions = {
         """returns the relative rank (i.e. percentile) of rows within a window partition.""",
 }
 
+for _name, _doc in _functions_by_column_name.items():
+    globals()[_name] = since(1.3)(_create_function_by_column_name(_name, _doc))
 for _name, _doc in _functions.items():
     globals()[_name] = since(1.3)(_create_function(_name, _doc))
 for _name, _doc in _functions_1_4.items():
@@ -220,6 +237,7 @@ for _name, _doc in _functions_1_6.items():
 for _name, _doc in _functions_2_1.items():
     globals()[_name] = since(2.1)(_create_function(_name, _doc))
 del _name, _doc
+
 
 
 @since(1.3)
