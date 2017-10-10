@@ -3132,8 +3132,10 @@ class ArrowTests(ReusedPySparkTestCase):
     def test_toPandas_arrow_toggle(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         self.spark.conf.set("spark.sql.execution.arrow.enable", "false")
-        pdf = df.toPandas()
-        self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
+        try:
+            pdf = df.toPandas()
+        finally:
+            self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
@@ -3153,8 +3155,10 @@ class ArrowTests(ReusedPySparkTestCase):
     def test_createDataFrame_toggle(self):
         pdf = self.createPandasDataFrameFromeData()
         self.spark.conf.set("spark.sql.execution.arrow.enable", "false")
-        df_no_arrow = self.spark.createDataFrame(pdf)
-        self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
+        try:
+            df_no_arrow = self.spark.createDataFrame(pdf)
+        finally:
+            self.spark.conf.set("spark.sql.execution.arrow.enable", "true")
         df_arrow = self.spark.createDataFrame(pdf)
         self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
 
