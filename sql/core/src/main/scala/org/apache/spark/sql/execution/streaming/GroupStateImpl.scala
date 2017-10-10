@@ -145,6 +145,15 @@ private[sql] class GroupStateImpl[S] private(
     setTimeoutTimestamp(timestamp.getTime + parseDuration(additionalDuration))
   }
 
+  override def getEventTimeWatermark(): Long = {
+    if (timeoutConf != EventTimeTimeout) {
+      throw new UnsupportedOperationException(
+        "Cannot get event time watermark timestamp without enabling event time timeout in " +
+          "map/flatMapGroupsWithState")
+    }
+    eventTimeWatermarkMs
+  }
+
   override def toString: String = {
     s"GroupState(${getOption.map(_.toString).getOrElse("<undefined>")})"
   }

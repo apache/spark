@@ -205,11 +205,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
   /** Get the state value as a scala Option. */
   def getOption: Option[S]
 
-  /**
-   * Update the value of the state. Note that `null` is not a valid value, and it throws
-   * IllegalArgumentException.
-   */
-  @throws[IllegalArgumentException]("when updating with null")
+  /** Update the value of the state. */
   def update(newState: S): Unit
 
   /** Remove this state. */
@@ -293,4 +289,9 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * @note EventTimeTimeout must be enabled in `[map/flatmap]GroupsWithStates`.
    */
   def setTimeoutTimestamp(timestamp: java.sql.Date, additionalDuration: String): Unit
+
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
+  /** */
+  def getEventTimeWatermark(): Long
 }

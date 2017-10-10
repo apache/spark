@@ -270,6 +270,27 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
+  test("GroupState - get watermark") {
+    def createState(timeoutConf: GroupStateTimeout, timestamp: Long): GroupState[Int] = {
+      GroupStateImpl.createForStreaming(None, 1000, timestamp, timeoutConf, hasTimedOut = false)
+    }
+
+    val e1 = intercept[UnsupportedOperationException] {
+      createState(NoTimeout, 1000).getEventTimeWatermark()
+    }
+    assert(e1.getMessage.contains(
+      "Cannot get event time watermark timestamp without enabling event time timeout"))
+
+    val e2 = intercept[UnsupportedOperationException] {
+      createState(ProcessingTimeTimeout, 1000).getEventTimeWatermark()
+    }
+    assert(e2.getMessage.contains(
+      "Cannot get event time watermark timestamp without enabling event time timeout"))
+
+    assert(createState(EventTimeTimeout, 1000).getEventTimeWatermark() === 1000)
+    assert(createState(EventTimeTimeout, 2000).getEventTimeWatermark() === 2000)
+  }
+
   test("GroupState - primitive type") {
     var intState = GroupStateImpl.createForStreaming[Int](
       None, 1000, 1000, NoTimeout, hasTimedOut = false)
