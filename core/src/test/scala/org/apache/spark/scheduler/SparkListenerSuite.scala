@@ -28,6 +28,7 @@ import org.scalatest.Matchers
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.LISTENER_BUS_EVENT_QUEUE_CAPACITY
+import org.apache.spark.internal.config.LISTENER_BUS_EVENT_QUEUE_OPEN_HOLD
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -478,6 +479,47 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
     bus.removeListener(counter3)
     assert(bus.activeQueues().isEmpty)
     assert(bus.findListenersByClass[BasicJobCounter]().isEmpty)
+  }
+
+  test("SPARK-21560: hold event while queue is full") {
+    val conf = new SparkConf()
+    // Set the queue capacity to 5, the number of events(50) is much larger than the queue size
+    conf.set(LISTENER_BUS_EVENT_QUEUE_CAPACITY, 5)
+
+    def postEvent(bus: LiveListenerBus, counter: BasicJobCounter): Unit = {
+      bus.addToSharedQueue(counter)
+      bus.start(mockSparkContext, mockMetricsSystem)
+
+      val thread = new Thread(bus.toString) {
+        override def run() {
+          (1 to 50).foreach {
+            _ => bus.post(SparkListenerJobEnd(0, jobCompletionTime, JobSucceeded))
+          }
+        }
+      }
+      thread.start()
+      thread.join()
+      bus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+    }
+
+    // Test for normal mode
+    val counter = new BasicJobCounter
+    val bus = new LiveListenerBus(conf)
+    postEvent(bus, counter)
+    assert(bus.metrics.numEventsPosted.getCount === 50)
+    // Some of events will be dropped when queue is full
+    assert(counter.count != 50)
+    bus.stop()
+
+    // Test for hold mode
+    conf.set(LISTENER_BUS_EVENT_QUEUE_OPEN_HOLD, true)
+    val hold_counter = new BasicJobCounter
+    val hold_bus = new LiveListenerBus(conf)
+    postEvent(hold_bus, hold_counter)
+    assert(hold_bus.metrics.numEventsPosted.getCount === 50)
+    // No events will be dropped when queue is full
+    assert(hold_counter.count === 50)
+    hold_bus.stop()
   }
 
   /**
