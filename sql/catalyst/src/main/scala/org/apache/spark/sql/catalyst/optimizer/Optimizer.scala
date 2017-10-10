@@ -1256,6 +1256,7 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  */
 object ReplaceExceptWithNotFilter extends Rule[LogicalPlan] {
 
+  import scala.language.implicitConversions
   implicit def nodeToFilter(node: LogicalPlan): Filter = node.asInstanceOf[Filter]
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
