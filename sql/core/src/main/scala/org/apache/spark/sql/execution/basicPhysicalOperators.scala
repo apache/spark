@@ -590,7 +590,9 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (child.execute().getNumPartitions < 1) {
+    if (numPartitions == 1 && child.execute().getNumPartitions < 1) {
+      // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
+      // `SinglePartition`.
       new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
     } else {
       child.execute().coalesce(numPartitions, shuffle = false)
@@ -599,8 +601,9 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
 }
 
 object CoalesceExec {
+  /** A simple RDD with no data, but with the given number of partitions. */
   class EmptyRDDWithPartitions(
-      sc: SparkContext,
+      @transient private val sc: SparkContext,
       numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
 
     override def getPartitions: Array[Partition] =
