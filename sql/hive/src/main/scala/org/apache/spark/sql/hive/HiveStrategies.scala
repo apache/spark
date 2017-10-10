@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTab
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
-import org.apache.spark.sql.execution.datasources.{BaseAdjustTimestampsRule, CreateTable, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{CreateTable, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetOptions}
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.hive.orc.OrcFileFormat
@@ -215,33 +215,6 @@ case class RelationConversions(
         convert(relation)
     }
   }
-}
-
-/**
- * Apply a correction to data loaded from, or saved to, tables that have a configured time zone, so
- * that timestamps can be read like TIMESTAMP WITHOUT TIMEZONE.  This gives correct behavior if you
- * process data with machines in different timezones, or if you access the data from multiple SQL
- * engines.
- */
-case class HiveAdjustTimestamps(sparkSession: SparkSession)
-  extends BaseAdjustTimestampsRule(sparkSession) {
-
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    // we can't use transformUp because we want to terminate recursion if there was already
-    // timestamp correction, to keep this idempotent.
-    plan match {
-      case insert: InsertIntoHiveTable =>
-        // The query might be reading from a parquet table which requires a different conversion;
-        // this makes sure we apply the correct conversions there.
-        val (fixedQuery, _) = convertInputs(insert.query)
-        val fixedOutput = writeConversion(Some(insert.table), Map(), fixedQuery)
-        insert.copy(query = fixedOutput)
-
-      case other =>
-        plan
-    }
-  }
-
 }
 
 private[hive] trait HiveStrategies {

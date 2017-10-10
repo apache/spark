@@ -71,6 +71,7 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
       new ResolveHiveSerdeTable(session) +:
         new FindDataSourceTable(session) +:
         new ResolveSQLOnFile(session) +:
+        AdjustTimestamps(conf) +:
         customResolutionRules
 
     override val postHocResolutionRules: Seq[Rule[LogicalPlan]] =
@@ -80,8 +81,6 @@ class HiveSessionStateBuilder(session: SparkSession, parentState: Option[Session
         PreprocessTableInsertion(conf) +:
         DataSourceAnalysis(conf) +:
         HiveAnalysis +:
-        HiveAdjustTimestamps(session) +:
-        AdjustTimestamps(session) +:
         customPostHocResolutionRules
 
     override val extendedCheckRules: Seq[LogicalPlan => Unit] =
