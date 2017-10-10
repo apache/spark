@@ -24,11 +24,11 @@ import org.apache.spark.sql.types._
 class VectorAttrBuilderSuite extends SparkFunSuite {
 
   test("build VectorAttr: simple attributes") {
-    val fields1 = Seq(
+    val fields1 = Array(
       StructField("col1", DoubleType),
       StructField("col2", DoubleType)
     )
-    val attr1 = VectorAttrBuilder.buildAttr(fields1, attributeSizes = Seq(1, 1))
+    val attr1 = VectorAttrBuilder.buildAttr(fields1, attributeSizes = Array(1, 1))
     assert(attr1.numOfAttributes == 2 &&
       attr1.getAttribute(0).isInstanceOf[NumericAttr] &&
       attr1.getAttribute(0).asInstanceOf[NumericAttr].indicesRange === Seq(0, 1))
@@ -37,11 +37,11 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
   test("build VectorAttr: simple attribute with metadata") {
     val col1Metadata = NominalAttr(name = Some("col1Attr"))
       .toStructField.metadata
-    val fields2 = Seq(
+    val fields2 = Array(
       StructField("col1", DoubleType, metadata = col1Metadata),
       StructField("col2", DoubleType)
     )
-    val attr2 = VectorAttrBuilder.buildAttr(fields2, attributeSizes = Seq(1, 1))
+    val attr2 = VectorAttrBuilder.buildAttr(fields2, attributeSizes = Array(1, 1))
     assert(attr2.numOfAttributes == 2 &&
       attr2.getAttribute(0).isInstanceOf[NominalAttr] &&
       attr2.getAttribute(0).asInstanceOf[NominalAttr].indicesRange === Seq(0) &&
@@ -54,7 +54,7 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
     // 6 dimension in this vector attribute are numeric attribute.
     // This vector has totally 7 attributes.
     val col2Metadata = VectorAttr(numOfAttributes = 7, name = Some("col2Attr"))
-      .addAttributes(Seq(
+      .addAttributes(Array(
         NominalAttr(indicesRange = Seq(0, 5)),
         NumericAttr(indicesRange = Seq(6))
       )).toStructField.metadata
@@ -62,13 +62,13 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
     val col4Metadata = NominalAttr(name = Some("col4Attr"))
       .toStructField.metadata
 
-    val fields3 = Seq(
+    val fields3 = Array(
       StructField("col1", DoubleType),
       StructField("col2", new VectorUDT(), metadata = col2Metadata),
       StructField("col3", DoubleType),
       StructField("col4", DoubleType, metadata = col4Metadata)
     )
-    val attr3 = VectorAttrBuilder.buildAttr(fields3, attributeSizes = Seq(1, 7, 1, 1))
+    val attr3 = VectorAttrBuilder.buildAttr(fields3, attributeSizes = Array(1, 7, 1, 1))
 
     // There're 10 attributes in this vector.
     // [0] is a numeric attribute. [1-6] are nominal attributes.

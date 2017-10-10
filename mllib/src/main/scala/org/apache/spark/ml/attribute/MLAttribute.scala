@@ -50,7 +50,9 @@ sealed trait InnerAttribute {
   val indicesRange: Seq[Int]
 
   require(indicesRange.length <= 2, "Range of indices should be less than or equal to 2.")
-  require(indicesRange == indicesRange.sorted, "Range of indices must be in ascending order.")
+  if (indicesRange.length > 1) {
+    require(indicesRange.head < indicesRange.last, "Range of indices must be in ascending order.")
+  }
 
   def getMinIndex(): Int = indicesRange.min
   def getMaxIndex(): Int = indicesRange.max
@@ -77,14 +79,14 @@ abstract class SimpleAttribute
   def withName(name: String): SimpleAttribute
   def withoutName(): SimpleAttribute
 
-  def withIndicesRange(indices: Seq[Int]): SimpleAttribute
+  def withIndicesRange(indices: Array[Int]): SimpleAttribute
   def withoutIndicesRange: SimpleAttribute
 
   def addIntoComplexAttribute(index: Int, complexAttr: ComplexAttribute): Unit = {
-    complexAttr.addAttribute(withIndicesRange(Seq(index)))
+    complexAttr.addAttribute(withIndicesRange(Array(index)))
   }
   def addIntoComplexAttribute(beginIdx: Int, endIdx: Int, complexAttr: ComplexAttribute): Unit = {
-    complexAttr.addAttribute(withIndicesRange(Seq(beginIdx, endIdx)))
+    complexAttr.addAttribute(withIndicesRange(Array(beginIdx, endIdx)))
   }
 }
 
@@ -105,7 +107,7 @@ abstract class ComplexAttribute
   // Add an inner attribute into this complex attribute. Note the addition checks if added
   // attribute has indices following previous added attributes.
   def addAttribute(attr: SimpleAttribute): this.type
-  def addAttributes(attrs: Seq[SimpleAttribute]): this.type = {
+  def addAttributes(attrs: Array[SimpleAttribute]): this.type = {
     attrs.map(addAttribute)
     this
   }

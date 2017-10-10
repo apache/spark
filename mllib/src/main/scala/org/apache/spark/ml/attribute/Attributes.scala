@@ -44,7 +44,8 @@ case class NominalAttr(
   override def withName(name: String): NominalAttr = copy(name = Some(name))
   override def withoutName(): NominalAttr = copy(name = None)
 
-  override def withIndicesRange(indices: Seq[Int]): NominalAttr = copy(indicesRange = indices)
+  override def withIndicesRange(indices: Array[Int]): NominalAttr =
+    copy(indicesRange = indices.toSeq)
   override def withoutIndicesRange: NominalAttr = copy(indicesRange = Seq.empty)
 
   def withIsOrdinal(isOrdinal: Boolean): NominalAttr = copy(isOrdinal = Some(isOrdinal))
@@ -86,7 +87,8 @@ case class BinaryAttr(
   override def withName(name: String): BinaryAttr = copy(name = Some(name))
   override def withoutName(): BinaryAttr = copy(name = None)
 
-  override def withIndicesRange(indices: Seq[Int]): BinaryAttr = copy(indicesRange = indices)
+  override def withIndicesRange(indices: Array[Int]): BinaryAttr =
+    copy(indicesRange = indices.toSeq)
   override def withoutIndicesRange: BinaryAttr = copy(indicesRange = Seq.empty)
 
   def withValues(values: Array[String]): BinaryAttr = copy(values = Some(values))
@@ -134,7 +136,8 @@ case class NumericAttr(
   override def withName(name: String): NumericAttr = copy(name = Some(name))
   override def withoutName(): NumericAttr = copy(name = None)
 
-  override def withIndicesRange(indices: Seq[Int]): NumericAttr = copy(indicesRange = indices)
+  override def withIndicesRange(indices: Array[Int]): NumericAttr =
+    copy(indicesRange = indices.toSeq)
   override def withoutIndicesRange: NumericAttr = copy(indicesRange = Seq.empty)
 
   def withMin(min: Double): NumericAttr = copy(min = Some(min))
@@ -200,7 +203,7 @@ case class VectorAttr(
           VectorAttrBuilder.isContinuousAttrs(previousAttr, newAttr)) {
         innerAttrs -= previousAttr
         attrToAdd = previousAttr.withIndicesRange(
-          Seq(previousAttr.getMinIndex(), newAttr.getMaxIndex()))
+          Array(previousAttr.getMinIndex(), newAttr.getMaxIndex()))
       }
     }
     innerAttrs += attrToAdd.withoutName
@@ -208,6 +211,8 @@ case class VectorAttr(
   }
 
   override def getAttribute(idx: Int): BaseAttribute = {
+    require(idx < numOfAttributes, s"Given index $idx exceeds the indices range of this vector.")
+
     innerAttrs.find { attr =>
       attr.indicesRange match {
         case Seq(exactIdx) if exactIdx == idx => true
@@ -314,9 +319,9 @@ object VectorAttr extends MLAttributeFactory {
       // `VectorAttr` can only contains `SimpleAttribute`.
       metadata.getMetadataArray(ATTRIBUTES).map { metadata =>
         MLAttributes.fromMetadata(metadata.getMetadata(ML_ATTRV2)).asInstanceOf[SimpleAttribute]
-      }.toSeq
+      }
     } else {
-      Seq.empty
+      Array.empty[SimpleAttribute]
     }
     vectorAttr.addAttributes(attributes)
   }
@@ -337,7 +342,7 @@ object VectorAttrBuilder {
     prevAttr.getMaxIndex() == nextAttr.getMinIndex() - 1
   }
 
-  def getAttributeSizes(fields: Seq[StructField], row: Row): Seq[Int] = {
+  def getAttributeSizes(fields: Array[StructField], row: Row): Array[Int] = {
     fields.zipWithIndex.map { case (field, idx) =>
       field.dataType match {
         case _: VectorUDT => row.getAs[Vector](idx).size
@@ -352,7 +357,7 @@ object VectorAttrBuilder {
    * @param attributeSizes The attribute sizes for each field. For non-vector columns, it is
    *                       always 1. For vector columns, it is the size of vectors.
    */
-  def buildAttr(fields: Seq[StructField], attributeSizes: Seq[Int]): VectorAttr = {
+  def buildAttr(fields: Array[StructField], attributeSizes: Array[Int]): VectorAttr = {
     require(fields.length == attributeSizes.length,
       "The elements of attribute size don't match the elements of fields.")
 
@@ -389,7 +394,7 @@ object VectorAttrBuilder {
             val vectorAttr = attr.asInstanceOf[ComplexAttribute]
             vectorAttr.attributes.foreach { innerAttr =>
               val indices = innerAttr.indicesRange
-              val rebasedAttr = innerAttr.withIndicesRange(indices.map(_ + fieldIdx))
+              val rebasedAttr = innerAttr.withIndicesRange(indices.map(_ + fieldIdx).toArray)
               builtAttr.addAttribute(rebasedAttr)
             }
             require(vectorAttr.numOfAttributes == attributeSizes(idx),

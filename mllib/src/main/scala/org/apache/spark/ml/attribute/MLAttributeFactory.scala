@@ -126,7 +126,7 @@ trait MLAttributeFactory {
     val indicesRange = if (metadata.contains(AttributeKeys.INDICES)) {
       metadata.getLongArray(AttributeKeys.INDICES).map(_.toInt).toSeq
     } else {
-      Seq.empty
+      Seq.empty[Int]
     }
 
     (name, indicesRange)
