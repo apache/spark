@@ -2245,7 +2245,7 @@ def pandas_udf(f=None, returnType=StringType()):
        +---+-------------------+
 
        .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
-                 because it defines a `DataFrame` transformation rather than `Column`
+                 because it defines a `DataFrame` transformation rather than a `Column`
                  transformation.
 
        .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
