@@ -776,7 +776,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       format: String,
       compressionCodec: Option[String]) {
     val tblProperties = compressionCodec match {
-      case Some(prop) => s"TBLPROPERTIES(${getTableCompressPropName(format)}=$prop)"
+      case Some(prop) => s"TBLPROPERTIES('${getTableCompressPropName(format)}'='$prop')"
       case _ => ""
     }
     val partitionCreate = if (isPartitioned) "PARTITIONED BY (p int)" else ""
