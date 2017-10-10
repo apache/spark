@@ -372,6 +372,9 @@ object SparkSubmit extends CommandLineUtils with Logging {
         args.primaryResource = localPrimaryResource
         args.jars = localJars
         args.pyFiles = localPyFiles
+        args.files = Option(args.files).map {
+          downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        }.orNull
       }
     }
 
