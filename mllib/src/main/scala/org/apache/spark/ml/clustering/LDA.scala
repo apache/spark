@@ -224,11 +224,15 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /**
    * For Online optimizer only: [[optimizer]] = "online".
    *
+   * A (positive) learning parameter that controls the convergence of variational inference.
+   * Smaller value will lead to more accuracy model and longer training time.
+   *
    * @group expertParam
    */
   @Since("2.3.0")
   final val epsilon = new DoubleParam(this, "epsilon", "(For online optimizer)" +
-    " A (positive) learning parameter that controls the convergence of variational inference.",
+    " A (positive) learning parameter that controls the convergence of variational inference." +
+    " Smaller value will lead to more accuracy model and longer training time.",
     ParamValidators.gt(0))
 
   /** @group expertGetParam */

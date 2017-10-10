@@ -328,7 +328,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
 
   @Since("2.3.0")
   def setEpsilon(epsilon: Double): this.type = {
-    require(epsilon> 0, s"LDA epsilon must be positive, but was set to $epsilon")
+    require(epsilon > 0, s"LDA epsilon must be positive, but was set to $epsilon")
     this.epsilon = epsilon
     this
   }
