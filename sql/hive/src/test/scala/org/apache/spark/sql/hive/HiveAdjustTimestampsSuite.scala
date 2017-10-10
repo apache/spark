@@ -17,7 +17,6 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.DataFrame
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.BaseAdjustTimestampsSuite
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
@@ -46,7 +45,7 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
   class CreateHiveTableAndInsert extends CreateAndSaveTable {
     override def createAndSave(df: DataFrame, table: String, tzOpt: Option[String]): Unit = {
       val tblProperties = tzOpt.map { tz =>
-        s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
+        s"""TBLPROPERTIES ("$TZ_KEY"="$tz")"""
       }.getOrElse("")
       spark.sql(
         s"""CREATE TABLE $table (
@@ -66,7 +65,7 @@ class HiveAdjustTimestampsSuite extends BaseAdjustTimestampsSuite with TestHiveS
     override def createFromSource(source: String, dest: String, destTz: Option[String]): Unit = {
       withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> convertMetastore.toString) {
         val tblProperties = destTz.map { tz =>
-          s"""TBLPROPERTIES ("${DateTimeUtils.TIMEZONE_PROPERTY}"="$tz")"""
+          s"""TBLPROPERTIES ("$TZ_KEY"="$tz")"""
         }.getOrElse("")
         // this isn't just a "ctas" sql statement b/c that doesn't let us specify the table tz
         spark.sql(

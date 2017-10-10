@@ -84,7 +84,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
 
   protected def checkHasTz(spark: SparkSession, table: String, tz: Option[String]): Unit = {
     val tableMetadata = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
-    assert(tableMetadata.properties.get(DateTimeUtils.TIMEZONE_PROPERTY) === tz,
+    assert(tableMetadata.properties.get(TZ_KEY) === tz,
       s"for table $table")
   }
 
@@ -127,7 +127,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
   class CreateAndSaveDatasourceTable(override val format: String) extends CreateAndSaveTable {
     override def createAndSave(df: DataFrame, table: String, tz: Option[String]): Unit = {
       val writer = df.write.format(format)
-      tz.foreach(writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _))
+      tz.foreach(writer.option(TZ_KEY, _))
       writer.saveAsTable(table)
     }
   }
@@ -146,7 +146,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
   class DatasourceCTAS(override val format: String) extends CTAS {
     override def createFromSource(source: String, dest: String, destTz: Option[String]): Unit = {
       val writer = spark.sql(s"select * from $source").write.format(format)
-      destTz.foreach { writer.option(DateTimeUtils.TIMEZONE_PROPERTY, _)}
+      destTz.foreach { writer.option(TZ_KEY, _)}
       writer.saveAsTable(dest)
     }
   }
@@ -193,7 +193,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
         // values have been adjusted as we expect.
         val tableMeta = spark.sessionState.catalog.getTableMetadata(TableIdentifier(table))
         val location = tableMeta.location.toString()
-        val tz = tableMeta.properties.get(DateTimeUtils.TIMEZONE_PROPERTY)
+        val tz = tableMeta.properties.get(TZ_KEY)
         // some formats need the schema specified
         val df = spark.read.schema(originalData.schema).format(format).load(location)
         checkRawData(df, tz.getOrElse(SESSION_TZ))
@@ -310,7 +310,7 @@ abstract class BaseAdjustTimestampsSuite extends SparkPlanTest with SQLTestUtils
       val origData = createRawData(spark)
       origData.write.saveAsTable("some_table")
       val exc = intercept[AnalysisException]{
-        createRawData(spark).write.option(DateTimeUtils.TIMEZONE_PROPERTY, UTC)
+        createRawData(spark).write.option(TZ_KEY, UTC)
           .insertInto("some_table")
       }
       assert(exc.getMessage.contains("Cannot provide a table timezone on insert"))
