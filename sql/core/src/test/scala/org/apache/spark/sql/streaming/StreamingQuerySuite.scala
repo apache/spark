@@ -652,7 +652,7 @@ class StreamingQuerySuite extends StreamTest with BeforeAndAfter with Logging wi
     }
   }
 
-  test("don't check for RDD partitions during streaming aggregation preparation") {
+  test("SPARK-22238: don't check for RDD partitions during streaming aggregation preparation") {
     val stream = MemoryStream[(Int, Int)]
     val baseDf = Seq((1, "A"), (2, "b")).toDF("num", "char").where("char = 'A'")
     val otherDf = stream.toDF().toDF("num", "numSq")
