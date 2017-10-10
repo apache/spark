@@ -22,22 +22,20 @@ import org.apache.spark.sql.test.SharedSQLContext
 class RelationalGroupedDatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("Check RelationalGroupedDataset toString: Sigle data") {
+  test("Check RelationalGroupedDataset toString: Single data") {
     val kvDataset = (1 to 3).toDF("id").as[SingleData].groupBy("id")
     val expected = "RelationalGroupedDataset: [key: [id: int], value: [id: int], GroupByType]"
     val actual = kvDataset.toString
-
     checkString(expected, actual)
   }
 
-  test("Check KeyValueGroupedDataset toString: over length schema ") {
+  test("Check RelationalGroupedDataset toString: over length schema ") {
     val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
       .toDF("id", "val1", "val2").as[TripleData].groupBy("id")
     val expected = "RelationalGroupedDataset:" +
       " [key: [id: int]," +
       " value: [id: int, val1: string ... 1 more field]," +
       " GroupByType]"
-
     val actual = kvDataset.toString
     checkString(expected, actual)
   }

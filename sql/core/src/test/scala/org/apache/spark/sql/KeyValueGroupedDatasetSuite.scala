@@ -22,11 +22,10 @@ import org.apache.spark.sql.test.SharedSQLContext
 class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
-  test("Check KeyValueGroupedDataset toString: Sigle data") {
+  test("Check KeyValueGroupedDataset toString: Single data") {
     val kvDataset = (1 to 3).toDF("id").as[SingleData].groupByKey(identity)
     val expected = "KeyValueGroupedDataset: [key: [id: int], value: [id: int]]"
     val actual = kvDataset.toString
-
     checkString(expected, actual)
   }
 
@@ -36,11 +35,8 @@ class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
     val expected = "KeyValueGroupedDataset:" +
       " [key: [_1: int, _2: string]," +
       " value: [id: int, val1: string]]"
-
     val actual = kvDataset.toString
-
     checkString(expected, actual)
-
   }
 
   test("Check KeyValueGroupedDataset toString: Named KV-pair") {
@@ -49,7 +45,6 @@ class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
     val expected = "KeyValueGroupedDataset:" +
       " [key: [id: int, val1: string]," +
       " value: [id: int, val1: string]]"
-
     val actual = kvDataset.toString
     checkString(expected, actual)
   }
@@ -60,7 +55,6 @@ class KeyValueGroupedDatasetSuite extends QueryTest with SharedSQLContext {
     val expected = "KeyValueGroupedDataset:" +
       " [key: [id: int, val1: string ... 1 more field(s)]," +
       " value: [id: int, val1: string ... 1 more field(s)]]"
-
     val actual = kvDataset.toString
     checkString(expected, actual)
   }
