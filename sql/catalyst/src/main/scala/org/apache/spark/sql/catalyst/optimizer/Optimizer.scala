@@ -1248,7 +1248,7 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  * flipping the filter condition of the right child.
  * {{{
  *   SELECT a1, a2 FROM Tab1 WHERE a2 = 12 EXCEPT SELECT a1, a2 FROM Tab1 WHERE a1 = 5
- *   ==>  SELECT a1, a2 FROM Tab1 WHERE a2 = 12 AND a1 <> 5
+ *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 WHERE a2 = 12 AND a1 <> 5
  * }}}
  *
  * Note:
@@ -1266,13 +1266,12 @@ object ReplaceExceptWithNotFilter extends Rule[LogicalPlan] {
   }
 
   def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
-    case (left: Filter, right: Filter) => parent(left).sameResult(parent(right))
-    case (left, right: Filter) => left.sameResult(parent(right))
+    case (left, right: Filter) => child(left).sameResult(child(right))
     case _ => false
   }
 
-  def parent(plan: LogicalPlan): LogicalPlan = plan match {
-    case x @ Filter(_, child) => parent(child)
+  def child(plan: LogicalPlan): LogicalPlan = plan match {
+    case _ : Filter => child(plan.child)
     case x => x
   }
 
@@ -1281,10 +1280,11 @@ object ReplaceExceptWithNotFilter extends Rule[LogicalPlan] {
     case result => result
   }
 
-  def replaceAttributesIn(condition: Expression, leftChild: LogicalPlan): Expression = {
-    condition transform {
-      case AttributeReference(name, _, _, _) =>
-        leftChild.output.find(_.name == name).get
+  def replaceAttributesIn(condition: Expression, node: LogicalPlan): Expression = {
+    val attributeNameMap: Map[String, Attribute] = node.output.map(x => (x.name, x)).toMap
+
+    condition transform { case AttributeReference(name, _, _, _) =>
+      attributeNameMap(name)
     }
   }
 }
