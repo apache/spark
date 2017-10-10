@@ -27,12 +27,12 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, FlatMapGroupsInR, Pivot}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
+import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.NumericType
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{NumericType, StructField, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -434,6 +434,36 @@ class RelationalGroupedDataset protected[sql](
           groupingAttributes,
           df.logicalPlan.output,
           df.logicalPlan))
+  }
+
+  /**
+   * Applies a vectorized python user-defined function to each group of data.
+   * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
+   * for all groups are combined into a new [[DataFrame]].
+   *
+   * This function does not support partial aggregation, and requires shuffling all the data in
+   * the [[DataFrame]].
+   *
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
+   */
+  private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
+    require(expr.vectorized, "Must pass a vectorized python udf")
+    require(expr.dataType.isInstanceOf[StructType],
+      "The returnType of the vectorized python udf must be a StructType")
+
+    val groupingNamedExpressions = groupingExprs.map {
+      case ne: NamedExpression => ne
+      case other => Alias(other, other.toString)()
+    }
+    val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
+    val child = df.logicalPlan
+    val project = Project(groupingNamedExpressions ++ child.output, child)
+    val output = expr.dataType.asInstanceOf[StructType].toAttributes
+    val plan = FlatMapGroupsInPandas(groupingAttributes, expr, output, project)
+
+    Dataset.ofRows(df.sparkSession, plan)
   }
 }
 
