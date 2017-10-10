@@ -2138,9 +2138,8 @@ class Dataset[T] private[sql](
   /**
    * Returns a new Dataset by adding a column with metadata.
    */
-  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
-    withColumn(colName, col.as(colName, metadata))
-  }
+  private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame =
+    withColumns(Seq(colName), Seq(col), Seq(metadata))
 
   /**
    * Returns a new Dataset with a column renamed.
