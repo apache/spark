@@ -203,14 +203,15 @@ class GroupedData(object):
 
         The user-defined function should take a `pandas.DataFrame` and return another
         `pandas.DataFrame`. For each group, all columns are passed together as a `pandas.DataFrame`
-        to the user-function and the returned `pandas.DataFrame` are combined as a `DataFrame`.
-        The returned `pandas.DataFrame` can be arbitrary length and its schema must match the
+        to the user-function and the returned `pandas.DataFrame`s are combined as a
+        :class:`DataFrame`.
+        The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
         returnType of the pandas udf.
 
         This function does not support partial aggregation, and requires shuffling all the data in
-        the `DataFrame`.
+        the :class:`DataFrame`.
 
-        :param udf: A wrapped udf function returned by :meth:`pyspark.sql.functions.pandas_udf`
+        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
 
         >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(

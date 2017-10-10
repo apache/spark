@@ -438,14 +438,15 @@ class RelationalGroupedDataset protected[sql](
 
   /**
    * Applies a vectorized python user-defined function to each group of data.
-   * The user-defined function defines a transformation: `Pandas.DataFrame` -> `Pandas.DataFrame`.
-   * For each group, all elements in the group are passed as a `Pandas.DataFrame` and the results
-   * for all groups are combined into a new `DataFrame`.
+   * The user-defined function defines a transformation: `pandas.DataFrame` -> `pandas.DataFrame`.
+   * For each group, all elements in the group are passed as a `pandas.DataFrame` and the results
+   * for all groups are combined into a new [[DataFrame]].
    *
    * This function does not support partial aggregation, and requires shuffling all the data in
-   * the `DataFrame`.
+   * the [[DataFrame]].
    *
-   * This function uses `Arrow` as serialization format between JVM and python workers.
+   * This function uses Apache Arrow as serialization format between Java executors and Python
+   * workers.
    */
   private[sql] def flatMapGroupsInPandas(expr: PythonUDF): DataFrame = {
     require(expr.vectorized, "Must pass a vectorized python udf")
