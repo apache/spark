@@ -510,4 +510,16 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("spark.hadoop.filterOutEmptySplit") {
+    val sf = new SparkConf()
+    sf.setAppName("test").setMaster("local").set("spark.hadoop.filterOutEmptySplit", "true")
+    sc = new SparkContext(sf)
+    val emptyRDD = sc.parallelize(Array.empty[Tuple2[String, String]], 1)
+    emptyRDD.saveAsHadoopFile[TextOutputFormat[String, String]](tempDir.getPath + "/output")
+    assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
+
+    val hadoopRDD = sc.textFile(tempDir.getPath + "/output/part-00000")
+    assert(hadoopRDD.partitions.length === 0)
+  }
+
 }

@@ -122,7 +122,10 @@ class NewHadoopRDD[K, V](
       case _ =>
     }
     val jobContext = new JobContextImpl(_conf, jobId)
-    val rawSplits = inputFormat.getSplits(jobContext).toArray
+    var rawSplits = inputFormat.getSplits(jobContext).toArray(Array.empty[InputSplit])
+    if (sparkContext.getConf.getBoolean("spark.hadoop.filterOutEmptySplit", false)) {
+      rawSplits = rawSplits.filter(_.getLength>0)
+    }
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
       result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])

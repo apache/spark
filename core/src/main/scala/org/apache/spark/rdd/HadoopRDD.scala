@@ -196,7 +196,10 @@ class HadoopRDD[K, V](
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
     val inputFormat = getInputFormat(jobConf)
-    val inputSplits = inputFormat.getSplits(jobConf, minPartitions)
+    var inputSplits = inputFormat.getSplits(jobConf, minPartitions)
+    if (sparkContext.getConf.getBoolean("spark.hadoop.filterOutEmptySplit", false)) {
+      inputSplits = inputSplits.filter(_.getLength>0)
+    }
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {
       array(i) = new HadoopPartition(id, i, inputSplits(i))
