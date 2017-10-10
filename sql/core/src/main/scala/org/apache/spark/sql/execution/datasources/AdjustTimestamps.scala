@@ -86,7 +86,7 @@ case class AdjustTimestamps(conf: SQLConf) extends Rule[LogicalPlan] {
           Alias(adjustment, e.name)()
 
         case other: NamedExpression =>
-          other
+          other.toAttribute
 
         case unnamed =>
           throw new AnalysisException(s"Unexpected expr: $unnamed")
