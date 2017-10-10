@@ -1878,7 +1878,7 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enable", "false").lower() == "true":
+        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 import pyarrow
                 tables = self._collectAsArrow()
@@ -1889,7 +1889,7 @@ class DataFrame(object):
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
                 msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enable=true"
+                      "if using spark.sql.execution.arrow.enabled=true"
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
             pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
