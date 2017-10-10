@@ -69,7 +69,7 @@ trait DataSourceScanExec extends LeafExecNode with CodegenSupport {
    * Shorthand for calling redactString() without specifying redacting rules
    */
   private def redact(text: String): String = {
-    Utils.redact(SparkSession.getActiveSession.get.sparkContext.conf, text)
+    Utils.redact(SparkSession.getActiveSession.map(_.sparkContext.conf).orNull, text)
   }
 }
 
@@ -173,6 +173,11 @@ case class FileSourceScanExec(
   } else {
     false
   }
+
+  override def vectorTypes: Option[Seq[String]] =
+    relation.fileFormat.vectorTypes(
+      requiredSchema = requiredSchema,
+      partitionSchema = relation.partitionSchema)
 
   @transient private lazy val selectedPartitions: Seq[PartitionDirectory] = {
     val optimizerMetadataTimeNs = relation.location.metadataOpsTimeNs.getOrElse(0L)

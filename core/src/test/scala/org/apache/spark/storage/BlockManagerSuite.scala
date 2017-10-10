@@ -23,8 +23,8 @@ import java.nio.ByteBuffer
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 import scala.reflect.ClassTag
 
@@ -33,7 +33,7 @@ import org.mockito.{Matchers => mc}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest._
 import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts._
+import org.scalatest.concurrent.TimeLimits._
 
 import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager

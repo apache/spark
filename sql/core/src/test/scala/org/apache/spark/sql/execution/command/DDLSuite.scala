@@ -68,6 +68,7 @@ class InMemoryCatalogedDDLSuite extends DDLSuite with SharedSQLContext with Befo
       provider = Some("parquet"),
       partitionColumnNames = Seq("a", "b"),
       createTime = 0L,
+      createVersion = org.apache.spark.SPARK_VERSION,
       tracksPartitionsInCatalog = true)
   }
 
@@ -782,7 +783,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     val df = (1 to 2).map { i => (i, i.toString) }.toDF("age", "name")
     df.write.insertInto("students")
     spark.catalog.cacheTable("students")
-    assume(spark.table("students").collect().toSeq == df.collect().toSeq, "bad test: wrong data")
+    checkAnswer(spark.table("students"), df)
     assume(spark.catalog.isCached("students"), "bad test: table was not cached in the first place")
     sql("ALTER TABLE students RENAME TO teachers")
     sql("CREATE TABLE students (age INT, name STRING) USING parquet")
@@ -791,10 +792,10 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     assert(!spark.catalog.isCached("students"))
     assert(spark.catalog.isCached("teachers"))
     assert(spark.table("students").collect().isEmpty)
-    assert(spark.table("teachers").collect().toSeq == df.collect().toSeq)
+    checkAnswer(spark.table("teachers"), df)
   }
 
-  test("rename temporary table - destination table with database name") {
+  test("rename temporary view - destination table with database name") {
     withTempView("tab1") {
       sql(
         """
@@ -811,7 +812,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE tab1 RENAME TO default.tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
+        "RENAME TEMPORARY VIEW from '`tab1`' to '`default`.`tab2`': " +
           "cannot specify database name 'default' in the destination table"))
 
       val catalog = spark.sessionState.catalog
@@ -819,7 +820,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename temporary table") {
+  test("rename temporary view") {
     withTempView("tab1", "tab2") {
       spark.range(10).createOrReplaceTempView("tab1")
       sql("ALTER TABLE tab1 RENAME TO tab2")
@@ -831,7 +832,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  test("rename temporary table - destination table already exists") {
+  test("rename temporary view - destination table already exists") {
     withTempView("tab1", "tab2") {
       sql(
         """
@@ -859,7 +860,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
         sql("ALTER TABLE tab1 RENAME TO tab2")
       }
       assert(e.getMessage.contains(
-        "RENAME TEMPORARY TABLE from '`tab1`' to '`tab2`': destination table already exists"))
+        "RENAME TEMPORARY VIEW from '`tab1`' to '`tab2`': destination table already exists"))
 
       val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
@@ -2356,18 +2357,9 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
             }.getMessage
             assert(e.contains("Found duplicate column(s)"))
           } else {
-            if (isUsingHiveMetastore) {
-              // hive catalog will still complains that c1 is duplicate column name because hive
-              // identifiers are case insensitive.
-              val e = intercept[AnalysisException] {
-                sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-              }.getMessage
-              assert(e.contains("HiveException"))
-            } else {
-              sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
-              assert(spark.table("t1").schema
-                .equals(new StructType().add("c1", IntegerType).add("C1", StringType)))
-            }
+            sql("ALTER TABLE t1 ADD COLUMNS (C1 string)")
+            assert(spark.table("t1").schema ==
+              new StructType().add("c1", IntegerType).add("C1", StringType))
           }
         }
       }

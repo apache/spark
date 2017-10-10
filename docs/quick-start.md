@@ -153,7 +153,7 @@ This first maps a line to an integer value and aliases it as "numWords", creatin
 One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can implement MapReduce flows easily:
 
 {% highlight python %}
->>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).as("word")).groupBy("word").count()
+>>> wordCounts = textFile.select(explode(split(textFile.value, "\s+")).alias("word")).groupBy("word").count()
 {% endhighlight %}
 
 Here, we use the `explode` function in `select`, to transfrom a Dataset of lines to a Dataset of words, and then combine `groupBy` and `count` to compute the per-word counts in the file as a DataFrame of 2 columns: "word" and "count". To collect the word counts in our shell, we can call `collect`:
@@ -297,12 +297,13 @@ We'll create a very simple Spark application, `SimpleApp.java`:
 {% highlight java %}
 /* SimpleApp.java */
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.Dataset;
 
 public class SimpleApp {
   public static void main(String[] args) {
     String logFile = "YOUR_SPARK_HOME/README.md"; // Should be some file on your system
     SparkSession spark = SparkSession.builder().appName("Simple Application").getOrCreate();
-    Dataset<String> logData = spark.read.textFile(logFile).cache();
+    Dataset<String> logData = spark.read().textFile(logFile).cache();
 
     long numAs = logData.filter(s -> s.contains("a")).count();
     long numBs = logData.filter(s -> s.contains("b")).count();

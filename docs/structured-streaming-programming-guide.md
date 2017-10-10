@@ -977,7 +977,7 @@ at the beginning of every trigger is the red line  For example, when the engine 
 `(12:14, dog)`, it sets the watermark for the next trigger as `12:04`.
 This watermark lets the engine maintain intermediate state for additional 10 minutes to allow late
 data to be counted. For example, the data `(12:09, cat)` is out of order and late, and it falls in
-windows `12:05 - 12:15` and `12:10 - 12:20`. Since, it is still ahead of the watermark `12:04` in 
+windows `12:00 - 12:10` and `12:05 - 12:15`. Since, it is still ahead of the watermark `12:04` in 
 the trigger, the engine still maintains the intermediate counts as state and correctly updates the 
 counts of the related windows. However, when the watermark is updated to `12:11`, the intermediate 
 state for window `(12:00 - 12:10)` is cleared, and all subsequent data (e.g. `(12:04, donkey)`) 
@@ -1041,8 +1041,8 @@ streamingDf.join(staticDf, "type", "right_join")  // right outer join with a sta
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-Dataset<Row> staticDf = spark.read. ...;
-Dataset<Row> streamingDf = spark.readStream. ...;
+Dataset<Row> staticDf = spark.read(). ...;
+Dataset<Row> streamingDf = spark.readStream(). ...;
 streamingDf.join(staticDf, "type");         // inner equi-join with a static DF
 streamingDf.join(staticDf, "type", "right_join");  // right outer join with a static DF
 {% endhighlight %}
@@ -1087,7 +1087,7 @@ streamingDf
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-Dataset<Row> streamingDf = spark.readStream. ...;  // columns: guid, eventTime, ...
+Dataset<Row> streamingDf = spark.readStream(). ...;  // columns: guid, eventTime, ...
 
 // Without watermark using guid column
 streamingDf.dropDuplicates("guid");
@@ -1168,7 +1168,7 @@ returned through `Dataset.writeStream()`. You will have to specify one or more o
 
 - *Query name:* Optionally, specify a unique name of the query for identification.
 
-- *Trigger interval:* Optionally, specify the trigger interval. If it is not specified, the system will check for availability of new data as soon as the previous processing has completed. If a trigger time is missed because the previous processing has not completed, then the system will attempt to trigger at the next trigger point, not immediately after the processing has completed.
+- *Trigger interval:* Optionally, specify the trigger interval. If it is not specified, the system will check for availability of new data as soon as the previous processing has completed. If a trigger time is missed because the previous processing has not completed, then the system will trigger processing immediately.
 
 - *Checkpoint location:* For some output sinks where the end-to-end fault-tolerance can be guaranteed, specify the location where the system will write all the checkpoint information. This should be a directory in an HDFS-compatible fault-tolerant file system. The semantics of checkpointing is discussed in more detail in the next section.
 

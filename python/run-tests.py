@@ -55,6 +55,7 @@ LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
 # Later, add back 2.12 to this list:
+# for scala in ["2.11", "2.12"]:
 for scala in ["2.11"]:
     build_dir = os.path.join(SPARK_HOME, "assembly", "target", "scala-" + scala)
     if os.path.isdir(build_dir):

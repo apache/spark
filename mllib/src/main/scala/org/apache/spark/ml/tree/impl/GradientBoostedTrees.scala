@@ -360,7 +360,9 @@ private[spark] object GradientBoostedTrees extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
+    predErrorCheckpointer.unpersistDataSet()
     predErrorCheckpointer.deleteAllCheckpoints()
+    validatePredErrorCheckpointer.unpersistDataSet()
     validatePredErrorCheckpointer.deleteAllCheckpoints()
     if (persistedInput) input.unpersist()
 

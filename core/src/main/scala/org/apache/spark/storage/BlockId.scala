@@ -41,11 +41,6 @@ sealed abstract class BlockId {
   def isBroadcast: Boolean = isInstanceOf[BroadcastBlockId]
 
   override def toString: String = name
-  override def hashCode: Int = name.hashCode
-  override def equals(other: Any): Boolean = other match {
-    case o: BlockId => getClass == o.getClass && name.equals(o.name)
-    case _ => false
-  }
 }
 
 @DeveloperApi

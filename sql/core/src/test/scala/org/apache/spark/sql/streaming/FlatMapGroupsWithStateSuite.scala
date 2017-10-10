@@ -289,13 +289,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
   }
 
-  // Values used for testing StateStoreUpdater
+  // Values used for testing InputProcessor
   val currentBatchTimestamp = 1000
   val currentBatchWatermark = 1000
   val beforeTimeoutThreshold = 999
   val afterTimeoutThreshold = 1001
 
-  // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout = NoTimeout
+  // Tests for InputProcessor.processNewData() when timeout = NoTimeout
   for (priorState <- Seq(None, Some(0))) {
     val priorStateStr = if (priorState.nonEmpty) "prior state set" else "no prior state"
     val testName = s"NoTimeout - $priorStateStr - "
@@ -322,7 +322,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState = None)        // should be removed
   }
 
-  // Tests for StateStoreUpdater.updateStateForKeysWithData() when timeout != NoTimeout
+  // Tests for InputProcessor.processTimedOutState() when timeout != NoTimeout
   for (priorState <- Seq(None, Some(0))) {
     for (priorTimeoutTimestamp <- Seq(NO_TIMESTAMP, 1000)) {
       var testName = ""
@@ -365,6 +365,18 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
           expectedState = None)                                 // state should be removed
       }
 
+      // Tests with ProcessingTimeTimeout
+      if (priorState == None) {
+        testStateUpdateWithData(
+          s"ProcessingTimeTimeout - $testName - timeout updated without initializing state",
+          stateUpdates = state => { state.setTimeoutDuration(5000) },
+          timeoutConf = ProcessingTimeTimeout,
+          priorState = None,
+          priorTimeoutTimestamp = priorTimeoutTimestamp,
+          expectedState = None,
+          expectedTimeoutTimestamp = currentBatchTimestamp + 5000)
+      }
+
       testStateUpdateWithData(
         s"ProcessingTimeTimeout - $testName - state and timeout duration updated",
         stateUpdates =
@@ -376,9 +388,35 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         expectedTimeoutTimestamp = currentBatchTimestamp + 5000) // timestamp should change
 
       testStateUpdateWithData(
+        s"ProcessingTimeTimeout - $testName - timeout updated after state removed",
+        stateUpdates = state => { state.remove(); state.setTimeoutDuration(5000) },
+        timeoutConf = ProcessingTimeTimeout,
+        priorState = priorState,
+        priorTimeoutTimestamp = priorTimeoutTimestamp,
+        expectedState = None,
+        expectedTimeoutTimestamp = currentBatchTimestamp + 5000)
+
+      // Tests with EventTimeTimeout
+
+      if (priorState == None) {
+        testStateUpdateWithData(
+          s"EventTimeTimeout - $testName - setting timeout without init state not allowed",
+          stateUpdates = state => {
+            state.setTimeoutTimestamp(10000)
+          },
+          timeoutConf = EventTimeTimeout,
+          priorState = None,
+          priorTimeoutTimestamp = priorTimeoutTimestamp,
+          expectedState = None,
+          expectedTimeoutTimestamp = 10000)
+      }
+
+      testStateUpdateWithData(
         s"EventTimeTimeout - $testName - state and timeout timestamp updated",
         stateUpdates =
-          (state: GroupState[Int]) => { state.update(5); state.setTimeoutTimestamp(5000) },
+          (state: GroupState[Int]) => {
+            state.update(5); state.setTimeoutTimestamp(5000)
+          },
         timeoutConf = EventTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
@@ -397,50 +435,23 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
         timeoutConf = EventTimeTimeout,
         priorState = priorState,
         priorTimeoutTimestamp = priorTimeoutTimestamp,
-        expectedState = Some(5),                                 // state should change
-        expectedTimeoutTimestamp = NO_TIMESTAMP)                 // timestamp should not update
+        expectedState = Some(5), // state should change
+        expectedTimeoutTimestamp = NO_TIMESTAMP) // timestamp should not update
+
+      testStateUpdateWithData(
+        s"EventTimeTimeout - $testName - setting timeout with state removal not allowed",
+        stateUpdates = state => {
+          state.remove(); state.setTimeoutTimestamp(10000)
+        },
+        timeoutConf = EventTimeTimeout,
+        priorState = priorState,
+        priorTimeoutTimestamp = priorTimeoutTimestamp,
+        expectedState = None,
+        expectedTimeoutTimestamp = 10000)
     }
   }
 
-  // Currently disallowed cases for StateStoreUpdater.updateStateForKeysWithData(),
-  // Try to remove these cases in the future
-  for (priorTimeoutTimestamp <- Seq(NO_TIMESTAMP, 1000)) {
-    val testName =
-      if (priorTimeoutTimestamp != NO_TIMESTAMP) "prior timeout set" else "no prior timeout"
-    testStateUpdateWithData(
-      s"ProcessingTimeTimeout - $testName - setting timeout without init state not allowed",
-      stateUpdates = state => { state.setTimeoutDuration(5000) },
-      timeoutConf = ProcessingTimeTimeout,
-      priorState = None,
-      priorTimeoutTimestamp = priorTimeoutTimestamp,
-      expectedException = classOf[IllegalStateException])
-
-    testStateUpdateWithData(
-      s"ProcessingTimeTimeout - $testName - setting timeout with state removal not allowed",
-      stateUpdates = state => { state.remove(); state.setTimeoutDuration(5000) },
-      timeoutConf = ProcessingTimeTimeout,
-      priorState = Some(5),
-      priorTimeoutTimestamp = priorTimeoutTimestamp,
-      expectedException = classOf[IllegalStateException])
-
-    testStateUpdateWithData(
-      s"EventTimeTimeout - $testName - setting timeout without init state not allowed",
-      stateUpdates = state => { state.setTimeoutTimestamp(10000) },
-      timeoutConf = EventTimeTimeout,
-      priorState = None,
-      priorTimeoutTimestamp = priorTimeoutTimestamp,
-      expectedException = classOf[IllegalStateException])
-
-    testStateUpdateWithData(
-      s"EventTimeTimeout - $testName - setting timeout with state removal not allowed",
-      stateUpdates = state => { state.remove(); state.setTimeoutTimestamp(10000) },
-      timeoutConf = EventTimeTimeout,
-      priorState = Some(5),
-      priorTimeoutTimestamp = priorTimeoutTimestamp,
-      expectedException = classOf[IllegalStateException])
-  }
-
-  // Tests for StateStoreUpdater.updateStateForTimedOutKeys()
+  // Tests for InputProcessor.processTimedOutState()
   val preTimeoutState = Some(5)
   for (timeoutConf <- Seq(ProcessingTimeTimeout, EventTimeTimeout)) {
     testStateUpdateWithTimeout(
@@ -924,7 +935,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     if (priorState.isEmpty && priorTimeoutTimestamp != NO_TIMESTAMP) {
       return // there can be no prior timestamp, when there is no prior state
     }
-    test(s"StateStoreUpdater - updates with data - $testName") {
+    test(s"InputProcessor - process new data - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
         assert(state.hasTimedOut === false, "hasTimedOut not false")
         assert(values.nonEmpty, "Some value is expected")
@@ -946,7 +957,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       expectedState: Option[Int],
       expectedTimeoutTimestamp: Long = NO_TIMESTAMP): Unit = {
 
-    test(s"StateStoreUpdater - updates for timeout - $testName") {
+    test(s"InputProcessor - process timed out state - $testName") {
       val mapGroupsFunc = (key: Int, values: Iterator[Int], state: GroupState[Int]) => {
         assert(state.hasTimedOut === true, "hasTimedOut not true")
         assert(values.isEmpty, "values not empty")
@@ -973,21 +984,20 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     val store = newStateStore()
     val mapGroupsSparkPlan = newFlatMapGroupsWithStateExec(
       mapGroupsFunc, timeoutConf, currentBatchTimestamp)
-    val updater = new mapGroupsSparkPlan.StateStoreUpdater(store)
+    val inputProcessor = new mapGroupsSparkPlan.InputProcessor(store)
+    val stateManager = mapGroupsSparkPlan.stateManager
     val key = intToRow(0)
     // Prepare store with prior state configs
-    if (priorState.nonEmpty) {
-      val row = updater.getStateRow(priorState.get)
-      updater.setTimeoutTimestamp(row, priorTimeoutTimestamp)
-      store.put(key.copy(), row.copy())
+    if (priorState.nonEmpty || priorTimeoutTimestamp != NO_TIMESTAMP) {
+      stateManager.putState(store, key, priorState.orNull, priorTimeoutTimestamp)
     }
 
     // Call updating function to update state store
     def callFunction() = {
       val returnedIter = if (testTimeoutUpdates) {
-        updater.updateStateForTimedOutKeys()
+        inputProcessor.processTimedOutState()
       } else {
-        updater.updateStateForKeysWithData(Iterator(key))
+        inputProcessor.processNewData(Iterator(key))
       }
       returnedIter.size // consume the iterator to force state updates
     }
@@ -998,15 +1008,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     } else {
       // Call function to update and verify updated state in store
       callFunction()
-      val updatedStateRow = store.get(key)
-      assert(
-        Option(updater.getStateObj(updatedStateRow)).map(_.toString.toInt) === expectedState,
+      val updatedState = stateManager.getState(store, key)
+      assert(Option(updatedState.stateObj).map(_.toString.toInt) === expectedState,
         "final state not as expected")
-      if (updatedStateRow != null) {
-        assert(
-          updater.getTimeoutTimestamp(updatedStateRow) === expectedTimeoutTimestamp,
-          "final timeout timestamp not as expected")
-      }
+      assert(updatedState.timeoutTimestamp === expectedTimeoutTimestamp,
+        "final timeout timestamp not as expected")
     }
   }
 

@@ -604,7 +604,7 @@ before the `reduce`, which would cause `lineLengths` to be saved in memory after
 Spark's API relies heavily on passing functions in the driver program to run on the cluster.
 There are two recommended ways to do this:
 
-* [Anonymous function syntax](http://docs.scala-lang.org/tutorials/tour/anonymous-function-syntax.html),
+* [Anonymous function syntax](http://docs.scala-lang.org/tour/basics.html#functions),
   which can be used for short pieces of code.
 * Static methods in a global singleton object. For example, you can define `object MyFunctions` and then
   pass `MyFunctions.func1`, as follows:
@@ -978,40 +978,40 @@ for details.
   <td> Return a new RDD that contains the intersection of elements in the source dataset and the argument. </td>
 </tr>
 <tr>
-  <td> <b>distinct</b>([<i>numTasks</i>])) </td>
+  <td> <b>distinct</b>([<i>numPartitions</i>])) </td>
   <td> Return a new dataset that contains the distinct elements of the source dataset.</td>
 </tr>
 <tr>
-  <td> <b>groupByKey</b>([<i>numTasks</i>]) <a name="GroupByLink"></a> </td>
+  <td> <b>groupByKey</b>([<i>numPartitions</i>]) <a name="GroupByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, Iterable&lt;V&gt;) pairs. <br />
     <b>Note:</b> If you are grouping in order to perform an aggregation (such as a sum or
       average) over each key, using <code>reduceByKey</code> or <code>aggregateByKey</code> will yield much better
       performance.
     <br />
     <b>Note:</b> By default, the level of parallelism in the output depends on the number of partitions of the parent RDD.
-      You can pass an optional <code>numTasks</code> argument to set a different number of tasks.
+      You can pass an optional <code>numPartitions</code> argument to set a different number of tasks.
   </td>
 </tr>
 <tr>
-  <td> <b>reduceByKey</b>(<i>func</i>, [<i>numTasks</i>]) <a name="ReduceByLink"></a> </td>
+  <td> <b>reduceByKey</b>(<i>func</i>, [<i>numPartitions</i>]) <a name="ReduceByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, V) pairs where the values for each key are aggregated using the given reduce function <i>func</i>, which must be of type (V,V) => V. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
-  <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numTasks</i>]) <a name="AggregateByLink"></a> </td>
+  <td> <b>aggregateByKey</b>(<i>zeroValue</i>)(<i>seqOp</i>, <i>combOp</i>, [<i>numPartitions</i>]) <a name="AggregateByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs, returns a dataset of (K, U) pairs where the values for each key are aggregated using the given combine functions and a neutral "zero" value. Allows an aggregated value type that is different than the input value type, while avoiding unnecessary allocations. Like in <code>groupByKey</code>, the number of reduce tasks is configurable through an optional second argument. </td>
 </tr>
 <tr>
-  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numTasks</i>]) <a name="SortByLink"></a> </td>
+  <td> <b>sortByKey</b>([<i>ascending</i>], [<i>numPartitions</i>]) <a name="SortByLink"></a> </td>
   <td> When called on a dataset of (K, V) pairs where K implements Ordered, returns a dataset of (K, V) pairs sorted by keys in ascending or descending order, as specified in the boolean <code>ascending</code> argument.</td>
 </tr>
 <tr>
-  <td> <b>join</b>(<i>otherDataset</i>, [<i>numTasks</i>]) <a name="JoinLink"></a> </td>
+  <td> <b>join</b>(<i>otherDataset</i>, [<i>numPartitions</i>]) <a name="JoinLink"></a> </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (V, W)) pairs with all pairs of elements for each key.
     Outer joins are supported through <code>leftOuterJoin</code>, <code>rightOuterJoin</code>, and <code>fullOuterJoin</code>.
   </td>
 </tr>
 <tr>
-  <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) <a name="CogroupLink"></a> </td>
+  <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numPartitions</i>]) <a name="CogroupLink"></a> </td>
   <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (Iterable&lt;V&gt;, Iterable&lt;W&gt;)) tuples. This operation is also called <code>groupWith</code>. </td>
 </tr>
 <tr>

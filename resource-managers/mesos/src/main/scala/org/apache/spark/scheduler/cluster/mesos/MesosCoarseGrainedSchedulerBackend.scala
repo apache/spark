@@ -22,15 +22,15 @@ import java.util.{Collections, List => JList}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong}
 import java.util.concurrent.locks.ReentrantLock
 
+import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
+import org.apache.mesos.SchedulerDriver
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.concurrent.Future
 
-import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
-import org.apache.mesos.SchedulerDriver
-
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.deploy.mesos.config._
+import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
@@ -55,8 +55,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     master: String,
     securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
-  with org.apache.mesos.Scheduler
-  with MesosSchedulerUtils {
+    with org.apache.mesos.Scheduler with MesosSchedulerUtils {
+
+  override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
+    Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -96,6 +98,14 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private val gpusByTaskId = new mutable.HashMap[String, Int]
   private var totalCoresAcquired = 0
   private var totalGpusAcquired = 0
+
+  // The amount of time to wait for locality scheduling
+  private val localityWait = conf.get(config.LOCALITY_WAIT)
+  // The start of the waiting, for data local scheduling
+  private var localityWaitStartTime = System.currentTimeMillis()
+  // If true, the scheduler is in the process of launching executors to reach the requested
+  // executor limit
+  private var launchingExecutors = false
 
   // SlaveID -> Slave
   // This map accumulates entries for the duration of the job.  Slaves are never deleted, because
@@ -309,6 +319,19 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         return
       }
 
+      if (numExecutors >= executorLimit) {
+        logDebug("Executor limit reached. numExecutors: " + numExecutors +
+          " executorLimit: " + executorLimit)
+        offers.asScala.map(_.getId).foreach(d.declineOffer)
+        launchingExecutors = false
+        return
+      } else {
+        if (!launchingExecutors) {
+          launchingExecutors = true
+          localityWaitStartTime = System.currentTimeMillis()
+        }
+      }
+
       logDebug(s"Received ${offers.size} resource offers.")
 
       val (matchedOffers, unmatchedOffers) = offers.asScala.partition { offer =>
@@ -411,7 +434,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         val offerId = offer.getId.getValue
         val resources = remainingResources(offerId)
 
-        if (canLaunchTask(slaveId, resources)) {
+        if (canLaunchTask(slaveId, offer.getHostname, resources)) {
           // Create a task
           launchTasks = true
           val taskId = newMesosTaskId()
@@ -475,7 +498,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse ++ gpuResourcesToUse)
   }
 
-  private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
+  private def canLaunchTask(slaveId: String, offerHostname: String,
+                            resources: JList[Resource]): Boolean = {
     val offerMem = getResource(resources, "mem")
     val offerCPUs = getResource(resources, "cpus").toInt
     val cpus = executorCores(offerCPUs)
@@ -487,15 +511,35 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus <= offerCPUs &&
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
-      numExecutors() < executorLimit &&
+      numExecutors < executorLimit &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
-      meetsPortRequirements
+      meetsPortRequirements &&
+      satisfiesLocality(offerHostname)
   }
 
   private def executorCores(offerCPUs: Int): Int = {
     executorCoresOption.getOrElse(
       math.min(offerCPUs, maxCores - totalCoresAcquired)
     )
+  }
+
+  private def satisfiesLocality(offerHostname: String): Boolean = {
+    if (!Utils.isDynamicAllocationEnabled(conf) || hostToLocalTaskCount.isEmpty) {
+      return true
+    }
+
+    // Check the locality information
+    val currentHosts = slaves.values.filter(_.taskIDs.nonEmpty).map(_.hostname).toSet
+    val allDesiredHosts = hostToLocalTaskCount.keys.toSet
+    // Try to match locality for hosts which do not have executors yet, to potentially
+    // increase coverage.
+    val remainingHosts = allDesiredHosts -- currentHosts
+    if (!remainingHosts.contains(offerHostname) &&
+      (System.currentTimeMillis() - localityWaitStartTime <= localityWait)) {
+      logDebug("Skipping host and waiting for locality. host: " + offerHostname)
+      return false
+    }
+    return true
   }
 
   override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
@@ -644,6 +688,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // since at coarse grain it depends on the amount of slaves available.
     logInfo("Capping the total amount of executors to " + requestedTotal)
     executorLimitOption = Some(requestedTotal)
+    // Update the locality wait start time to continue trying for locality.
+    localityWaitStartTime = System.currentTimeMillis()
     true
   }
 
@@ -668,7 +714,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   private def executorHostname(offer: Offer): String = {
-    if (sc.conf.getOption("spark.mesos.network.name").isDefined) {
+    if (sc.conf.get(NETWORK_NAME).isDefined) {
       // The agent's IP is not visible in a CNI container, so we bind to 0.0.0.0
       "0.0.0.0"
     } else {

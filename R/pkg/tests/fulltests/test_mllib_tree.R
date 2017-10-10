@@ -66,7 +66,7 @@ test_that("spark.gbt", {
   # label must be binary - GBTClassifier currently only supports binary classification.
   iris2 <- iris[iris$Species != "virginica", ]
   data <- suppressWarnings(createDataFrame(iris2))
-  model <- spark.gbt(data, Species ~ Petal_Length + Petal_Width, "classification")
+  model <- spark.gbt(data, Species ~ Petal_Length + Petal_Width, "classification", seed = 12)
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
@@ -94,7 +94,7 @@ test_that("spark.gbt", {
 
   iris2$NumericSpecies <- ifelse(iris2$Species == "setosa", 0, 1)
   df <- suppressWarnings(createDataFrame(iris2))
-  m <- spark.gbt(df, NumericSpecies ~ ., type = "classification")
+  m <- spark.gbt(df, NumericSpecies ~ ., type = "classification", seed = 12)
   s <- summary(m)
   # test numeric prediction values
   expect_equal(iris2$NumericSpecies, as.double(collect(predict(m, df))$prediction))
@@ -106,16 +106,31 @@ test_that("spark.gbt", {
   if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_binary_classification_data.txt"),
                   source = "libsvm")
-    model <- spark.gbt(data, label ~ features, "classification")
+    model <- spark.gbt(data, label ~ features, "classification", seed = 12)
     expect_equal(summary(model)$numFeatures, 692)
   }
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.gbt(traindf, clicked ~ ., type = "classification", seed = 23)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.gbt(traindf, clicked ~ ., type = "classification", handleInvalid = "keep",
+                    seed = 23)
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
 })
 
 test_that("spark.randomForest", {
   # regression
   data <- suppressWarnings(createDataFrame(longley))
   model <- spark.randomForest(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
-                              numTrees = 1)
+                              numTrees = 1, seed = 1)
 
   predictions <- collect(predict(model, data))
   expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
@@ -163,7 +178,7 @@ test_that("spark.randomForest", {
   # classification
   data <- suppressWarnings(createDataFrame(iris))
   model <- spark.randomForest(data, Species ~ Petal_Length + Petal_Width, "classification",
-                              maxDepth = 5, maxBins = 16)
+                              maxDepth = 5, maxBins = 16, seed = 123)
 
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
@@ -201,7 +216,7 @@ test_that("spark.randomForest", {
   iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
   data <- suppressWarnings(createDataFrame(iris[-5]))
   model <- spark.randomForest(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
-                              maxDepth = 5, maxBins = 16)
+                              maxDepth = 5, maxBins = 16, seed = 123)
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$numTrees, 20)
@@ -220,12 +235,12 @@ test_that("spark.randomForest", {
   traindf <- as.DataFrame(data[trainidxs, ])
   testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
   model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
-                          maxDepth = 10, maxBins = 10, numTrees = 10)
+                          maxDepth = 10, maxBins = 10, numTrees = 10, seed = 123)
   predictions <- predict(model, testdf)
   expect_error(collect(predictions))
   model <- spark.randomForest(traindf, clicked ~ ., type = "classification",
                              maxDepth = 10, maxBins = 10, numTrees = 10,
-                             handleInvalid = "keep")
+                             handleInvalid = "keep", seed = 123)
   predictions <- predict(model, testdf)
   expect_equal(class(collect(predictions)$clicked[1]), "character")
 
@@ -233,7 +248,7 @@ test_that("spark.randomForest", {
   if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                   source = "libsvm")
-    model <- spark.randomForest(data, label ~ features, "classification")
+    model <- spark.randomForest(data, label ~ features, "classification", seed = 123)
     expect_equal(summary(model)$numFeatures, 4)
   }
 })
@@ -241,7 +256,8 @@ test_that("spark.randomForest", {
 test_that("spark.decisionTree", {
   # regression
   data <- suppressWarnings(createDataFrame(longley))
-  model <- spark.decisionTree(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16)
+  model <- spark.decisionTree(data, Employed ~ ., "regression", maxDepth = 5, maxBins = 16,
+                            seed = 42)
 
   predictions <- collect(predict(model, data))
   expect_equal(predictions$prediction, c(60.323, 61.122, 60.171, 61.187,
@@ -274,7 +290,7 @@ test_that("spark.decisionTree", {
   # classification
   data <- suppressWarnings(createDataFrame(iris))
   model <- spark.decisionTree(data, Species ~ Petal_Length + Petal_Width, "classification",
-                              maxDepth = 5, maxBins = 16)
+                              maxDepth = 5, maxBins = 16, seed = 43)
 
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
@@ -311,7 +327,7 @@ test_that("spark.decisionTree", {
   iris$NumericSpecies <- lapply(iris$Species, labelToIndex)
   data <- suppressWarnings(createDataFrame(iris[-5]))
   model <- spark.decisionTree(data, NumericSpecies ~ Petal_Length + Petal_Width, "classification",
-                              maxDepth = 5, maxBins = 16)
+                              maxDepth = 5, maxBins = 16, seed = 44)
   stats <- summary(model)
   expect_equal(stats$numFeatures, 2)
   expect_equal(stats$maxDepth, 5)
@@ -325,9 +341,25 @@ test_that("spark.decisionTree", {
   if (windows_with_hadoop()) {
     data <- read.df(absoluteSparkPath("data/mllib/sample_multiclass_classification_data.txt"),
                   source = "libsvm")
-    model <- spark.decisionTree(data, label ~ features, "classification")
+    model <- spark.decisionTree(data, label ~ features, "classification", seed = 45)
     expect_equal(summary(model)$numFeatures, 4)
   }
+
+  # Test unseen labels
+  data <- data.frame(clicked = base::sample(c(0, 1), 10, replace = TRUE),
+  someString = base::sample(c("this", "that"), 10, replace = TRUE),
+                            stringsAsFactors = FALSE)
+  trainidxs <- base::sample(nrow(data), nrow(data) * 0.7)
+  traindf <- as.DataFrame(data[trainidxs, ])
+  testdf <- as.DataFrame(rbind(data[-trainidxs, ], c(0, "the other")))
+  model <- spark.decisionTree(traindf, clicked ~ ., type = "classification",
+                              maxDepth = 5, maxBins = 16, seed = 46)
+  predictions <- predict(model, testdf)
+  expect_error(collect(predictions))
+  model <- spark.decisionTree(traindf, clicked ~ ., type = "classification",
+                              maxDepth = 5, maxBins = 16, handleInvalid = "keep", seed = 46)
+  predictions <- predict(model, testdf)
+  expect_equal(class(collect(predictions)$clicked[1]), "character")
 })
 
 sparkR.session.stop()

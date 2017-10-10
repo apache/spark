@@ -190,7 +190,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          SpecifiedWindowFrame(RangeFrame, ValueFollowing(1), ValueFollowing(2)))).as('window)),
+          SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as('window)),
     "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(
@@ -505,7 +505,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       right,
       joinType = Cross,
       condition = Some('b === 'd))
-    assertAnalysisError(plan2, "Cannot use map type in EqualTo" :: Nil)
+    assertAnalysisError(plan2, "EqualTo does not support ordering on type MapType" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {

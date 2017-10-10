@@ -157,20 +157,25 @@ class HadoopRDD[K, V](
       if (conf.isInstanceOf[JobConf]) {
         logDebug("Re-using user-broadcasted JobConf")
         conf.asInstanceOf[JobConf]
-      } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
-        logDebug("Re-using cached JobConf")
-        HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
       } else {
-        // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
-        // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
-        // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
-        // Synchronize to prevent ConcurrentModificationException (SPARK-1097, HADOOP-10456).
-        HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
-          logDebug("Creating new JobConf and caching it for later re-use")
-          val newJobConf = new JobConf(conf)
-          initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
-          HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-          newJobConf
+        Option(HadoopRDD.getCachedMetadata(jobConfCacheKey))
+          .map { conf =>
+            logDebug("Re-using cached JobConf")
+            conf.asInstanceOf[JobConf]
+          }
+          .getOrElse {
+            // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in
+            // the local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
+            // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary
+            // objects. Synchronize to prevent ConcurrentModificationException (SPARK-1097,
+            // HADOOP-10456).
+            HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
+              logDebug("Creating new JobConf and caching it for later re-use")
+              val newJobConf = new JobConf(conf)
+              initLocalJobConfFuncOpt.foreach(f => f(newJobConf))
+              HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
+              newJobConf
+          }
         }
       }
     }
@@ -359,8 +364,6 @@ private[spark] object HadoopRDD extends Logging {
    * the local process.
    */
   def getCachedMetadata(key: String): Any = SparkEnv.get.hadoopJobMetadata.get(key)
-
-  def containsCachedMetadata(key: String): Boolean = SparkEnv.get.hadoopJobMetadata.containsKey(key)
 
   private def putCachedMetadata(key: String, value: Any): Unit =
     SparkEnv.get.hadoopJobMetadata.put(key, value)

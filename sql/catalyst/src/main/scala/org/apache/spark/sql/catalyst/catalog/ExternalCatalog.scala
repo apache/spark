@@ -106,8 +106,10 @@ abstract class ExternalCatalog
   final def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
     val db = tableDefinition.database
     val name = tableDefinition.identifier.table
+    val tableDefinitionWithVersion =
+      tableDefinition.copy(createVersion = org.apache.spark.SPARK_VERSION)
     postToAll(CreateTablePreEvent(db, name))
-    doCreateTable(tableDefinition, ignoreIfExists)
+    doCreateTable(tableDefinitionWithVersion, ignoreIfExists)
     postToAll(CreateTableEvent(db, name))
   }
 
@@ -164,8 +166,6 @@ abstract class ExternalCatalog
   def alterTableStats(db: String, table: String, stats: Option[CatalogStatistics]): Unit
 
   def getTable(db: String, table: String): CatalogTable
-
-  def getTableOption(db: String, table: String): Option[CatalogTable]
 
   def tableExists(db: String, table: String): Boolean
 
