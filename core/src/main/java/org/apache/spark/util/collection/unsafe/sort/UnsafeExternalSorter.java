@@ -473,6 +473,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  @VisibleForTesting boolean hasSpaceForAnotherRecord() {
+    return inMemSorter.hasSpaceForAnotherRecord();
+  }
+
   /**
    * An UnsafeSorterIterator that support spilling.
    */
