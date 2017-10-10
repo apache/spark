@@ -419,4 +419,11 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
+    .doc("Class names of listeners to add to SparkContext during initialization.")
+    .stringConf
+    .toSequence
+    .createOptional
+
 }
