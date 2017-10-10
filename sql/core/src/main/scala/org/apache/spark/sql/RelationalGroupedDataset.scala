@@ -437,7 +437,7 @@ class RelationalGroupedDataset protected[sql](
   }
 
   /**
-   * Applies a vectorized python use-defined function to each group of data.
+   * Applies a vectorized python user-defined function to each group of data.
    * The user-defined function defines a transformation: `Pandas.DataFrame` -> `Pandas.DataFrame`.
    * For each group, all elements in the group are passed as a `Pandas.DataFrame` and the results
    * for all groups are combined into a new `DataFrame`.

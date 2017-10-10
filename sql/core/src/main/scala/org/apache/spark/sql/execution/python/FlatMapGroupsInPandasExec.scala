@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
  *
  * Rows in each group are passed to the python worker as a Arrow record batch.
  * The python worker turns the record batch to a pandas.DataFrame, invoke the
- * use-defined function, and passes the resulting pandas.DataFrame
+ * user-defined function, and passes the resulting pandas.DataFrame
  * as a Arrow record batch. Finally, each record batch is turned to
  * Iterator[InternalRow] using ColumnarBatch.
  *
