@@ -1624,6 +1624,40 @@ def toArrowType(dt):
     return arrow_type
 
 
+def _localize_series_timestamps(s):
+    """ Convert a tz-aware timestamp to local tz-naive
+    """
+    return s.dt.tz_localize(None)
+
+
+def _check_localize_series_timestamps(s):
+    from pandas.types.common import is_datetime64tz_dtype
+    # TODO: handle nested timestamps?
+    return _localize_series_timestamps(s) if is_datetime64tz_dtype(s.dtype) else s
+
+
+def _check_localize_dataframe_timestamps(df):
+    from pandas.types.common import is_datetime64tz_dtype
+    for column, series in df.iteritems():
+        # TODO: handle nested timestamps?
+        if is_datetime64tz_dtype(series.dtype):
+            df[column] = _localize_series_timestamps(series)
+    return df
+
+
+def _convert_series_timestamps(s):
+    """ Convert a tz-naive timestamp in local tz to UTC normalized
+    """
+    # TODO: this should be system local tz or SESSION_LOCAL_TIMEZONE?
+    return s.dt.tz_convert("UTC")
+
+
+def _check_convert_series_timestamps(s):
+    from pandas.types.common import is_datetime64_dtype
+    # TODO: handle nested timestamps?
+    return _convert_series_timestamps(s) if is_datetime64_dtype(s.dtype) else s
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext

@@ -213,6 +213,7 @@ class ArrowSerializer(FramedSerializer):
 
 
 def _create_batch(series):
+    from pyspark.sql.types import _check_convert_series_timestamps
     import pyarrow as pa
     # Make input conform to [(series1, type1), (series2, type2), ...]
     if not isinstance(series, (list, tuple)) or \
@@ -228,7 +229,8 @@ def _create_batch(series):
         else:
             return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
 
-    arrs = [pa.Array.from_pandas(cast_series(s, t), mask=s.isnull(), type=t) for s, t in series]
+    arrs = [pa.Array.from_pandas(_check_convert_series_timestamps(cast_series(s, t)),
+                                 mask=s.isnull(), type=t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 
 
@@ -259,11 +261,12 @@ class ArrowStreamPandasSerializer(Serializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
+        from pyspark.sql.types import _check_localize_series_timestamps
         import pyarrow as pa
         reader = pa.open_stream(stream)
         for batch in reader:
             table = pa.Table.from_batches([batch])
-            yield [c.to_pandas() for c in table.itercolumns()]
+            yield [_check_localize_series_timestamps(c.to_pandas()) for c in table.itercolumns()]
 
     def __repr__(self):
         return "ArrowStreamPandasSerializer"

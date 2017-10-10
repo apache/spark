@@ -3141,9 +3141,6 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf = df.toPandas()
         self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
         pdf_arrow = df.toPandas()
-        # need to remove timezone for comparison
-        pdf_arrow["7_timestamp_t"] = \
-            pdf_arrow["7_timestamp_t"].apply(lambda ts: ts.tz_localize(None))
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
@@ -3158,9 +3155,6 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf = pd.DataFrame(data=data_dict)
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
-        # need to remove timezone for comparison
-        pdf_arrow["7_timestamp_t"] = \
-            pdf_arrow["7_timestamp_t"].apply(lambda ts: ts.tz_localize(None))
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_filtered_frame(self):

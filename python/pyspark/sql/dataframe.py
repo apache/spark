@@ -1880,11 +1880,13 @@ class DataFrame(object):
         import pandas as pd
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
+                from pyspark.sql.types import _check_localize_dataframe_timestamps
                 import pyarrow
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
-                    return table.to_pandas()
+                    df = table.to_pandas()
+                    return _check_localize_dataframe_timestamps(df)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
