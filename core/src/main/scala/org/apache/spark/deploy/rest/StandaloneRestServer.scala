@@ -139,7 +139,9 @@ private[rest] class StandaloneSubmitRequestServlet(
     val driverExtraLibraryPath = sparkProperties.get("spark.driver.extraLibraryPath")
     val superviseDriver = sparkProperties.get("spark.driver.supervise")
     val appArgs = request.appArgs
-    val environmentVariables = request.environmentVariables
+    // Filter SPARK_LOCAL_(IP|HOSTNAME) environment variables from being set on the remote system.
+    val environmentVariables =
+      request.environmentVariables.filterNot(x => x._1.matches("SPARK_LOCAL_(IP|HOSTNAME)"))
 
     // Construct driver description
     val conf = new SparkConf(false)

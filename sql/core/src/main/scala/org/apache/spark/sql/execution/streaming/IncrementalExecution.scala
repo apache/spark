@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, HashPartitioning, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
-import org.apache.spark.sql.execution.exchange.ShuffleExchange
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -155,7 +155,7 @@ object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
             child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
           child
         } else {
-          ShuffleExchange(expectedPartitioning, child)
+          ShuffleExchangeExec(expectedPartitioning, child)
         }
       }
       so.withNewChildren(children)
