@@ -455,8 +455,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
         },
         AddBlockData(inputSource), // create an empty trigger
         CheckLastBatch(1),
-        AssertOnQuery("Verify addition of exchange operator") { se =>
-          checkAggregationChain(se, expectShuffling = true, 1)
+        AssertOnQuery("Verify that no exchange is required") { se =>
+          checkAggregationChain(se, expectShuffling = false, 1)
         },
         AddBlockData(inputSource, Seq(2, 3)),
         CheckLastBatch(3),

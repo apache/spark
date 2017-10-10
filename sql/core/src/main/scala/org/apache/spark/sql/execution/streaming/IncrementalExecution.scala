@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistrib
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 
 /**
@@ -131,17 +132,17 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] =
-    Seq(state, EnsureStatefulOpPartitioning) ++ super.preparations
+    Seq(state, EnsureStatefulOpPartitioning(sparkSession.sessionState.conf)) ++ super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
 }
 
-object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
+case class EnsureStatefulOpPartitioning(conf: SQLConf) extends Rule[SparkPlan] {
   // Needs to be transformUp to avoid extra shuffles
   override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
     case so: StatefulOperator =>
-      val numPartitions = plan.sqlContext.sessionState.conf.numShufflePartitions
+      val numPartitions = conf.numShufflePartitions
       val distributions = so.requiredChildDistribution
       val children = so.children.zip(distributions).map { case (child, reqDistribution) =>
         val expectedPartitioning = reqDistribution match {
@@ -151,8 +152,7 @@ object EnsureStatefulOpPartitioning extends Rule[SparkPlan] {
             s"Stateful Operator: $so. Expect AllTuples or ClusteredDistribution but got " +
             s"$reqDistribution.")
         }
-        if (child.outputPartitioning.guarantees(expectedPartitioning) &&
-            child.execute().getNumPartitions == expectedPartitioning.numPartitions) {
+        if (child.outputPartitioning.guarantees(expectedPartitioning)) {
           child
         } else {
           ShuffleExchangeExec(expectedPartitioning, child)
