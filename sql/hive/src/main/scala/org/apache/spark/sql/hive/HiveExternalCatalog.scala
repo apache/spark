@@ -1032,7 +1032,18 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       schema.fields.map(f => (f.name, f.dataType)).toMap
     stats.colStats.foreach { case (colName, colStat) =>
       colStat.toMap(colName, colNameTypeMap(colName)).foreach { case (k, v) =>
-        statsProperties += (columnStatKeyPropName(colName, k) -> v)
+        if (k == ColumnStat.KEY_HISTOGRAM) {
+          // In Hive metastore, the length of value in table properties cannot be larger than 4000,
+          // so we need to split histogram into multiple key-value properties if it's too long.
+          val baseName = columnStatKeyPropName(colName, k)
+          var i = 1
+          for (begin <- 0 until v.length by 4000) {
+            statsProperties += (baseName + i -> v.substring(begin, begin + 4000))
+            i += 1
+          }
+        } else {
+          statsProperties += (columnStatKeyPropName(colName, k) -> v)
+        }
       }
     }
 
@@ -1059,11 +1070,21 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         if (statsProps.contains(columnStatKeyPropName(field.name, ColumnStat.KEY_VERSION))) {
           // If "version" field is defined, then the column stat is defined.
           val keyPrefix = columnStatKeyPropName(field.name, "")
-          val colStatMap = statsProps.filterKeys(_.startsWith(keyPrefix)).map { case (k, v) =>
-            (k.drop(keyPrefix.length), v)
+          val colStatMap = new mutable.HashMap[String, String]
+          val histogramKeyPrefix = keyPrefix + ColumnStat.KEY_HISTOGRAM
+          var histogramValue = ""
+          statsProps.toSeq.sortBy(_._1).foreach { case (k, v) =>
+            if (k.startsWith(histogramKeyPrefix)) {
+              // Need to concatenate histogram string if it has multiple entries.
+              histogramValue += v
+            } else if (k.startsWith(keyPrefix)) {
+              colStatMap += (k.drop(keyPrefix.length) -> v)
+            }
           }
-
-          ColumnStat.fromMap(table, field, colStatMap).foreach {
+          if (histogramValue.nonEmpty) {
+            colStatMap += ColumnStat.KEY_HISTOGRAM -> histogramValue
+          }
+          ColumnStat.fromMap(table, field, colStatMap.toMap).foreach {
             colStat => colStats += field.name -> colStat
           }
         }

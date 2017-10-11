@@ -798,6 +798,32 @@ object SQLConf {
       .doubleConf
       .createWithDefault(0.05)
 
+  val HISTOGRAM_ENABLED =
+    buildConf("spark.sql.statistics.histogram.enabled")
+      .doc("Generates histograms when computing column statistics if enabled. Histograms can " +
+          "provide better estimation accuracy. Note that collecting histograms can take extra " +
+          "cost. For example, collecting column statistics usually takes only one table scan, " +
+          "but generating equi-height histogram would cause an extra table scan.")
+      .booleanConf
+      .createWithDefault(false)
+
+  val HISTOGRAM_BUCKETS_NUM =
+    buildConf("spark.sql.statistics.histogram.buckets")
+        .internal()
+        .doc("The number of buckets in a histogram when generating the histogram.")
+        .intConf
+        .checkValue(num => num > 1, "The number of buckets must be large than 1.")
+        .createWithDefault(254)
+
+  val PERCENTILE_ACCURACY =
+    buildConf("spark.sql.statistics.percentile.accuracy")
+        .internal()
+        .doc("Accuracy of percentile approximation when generating equi-height histograms. " +
+            "Larger value means better accuracy. The relative error can be deduced by " +
+            "1.0 / PERCENTILE_ACCURACY.")
+        .intConf
+        .createWithDefault(10000)
+
   val AUTO_UPDATE_SIZE =
     buildConf("spark.sql.statistics.autoUpdate.size")
       .doc("Enables automatic update for table size once table's data is changed. Note that if " +
@@ -1171,6 +1197,12 @@ class SQLConf extends Serializable with Logging {
   def sessionLocalTimeZone: String = getConf(SQLConf.SESSION_LOCAL_TIMEZONE)
 
   def ndvMaxError: Double = getConf(NDV_MAX_ERROR)
+
+  def histogramEnabled: Boolean = getConf(HISTOGRAM_ENABLED)
+
+  def histogramBucketsNum: Int = getConf(HISTOGRAM_BUCKETS_NUM)
+
+  def percentileAccuracy: Int = getConf(PERCENTILE_ACCURACY)
 
   def cboEnabled: Boolean = getConf(SQLConf.CBO_ENABLED)
 

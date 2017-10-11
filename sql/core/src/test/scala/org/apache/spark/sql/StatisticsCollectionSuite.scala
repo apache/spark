@@ -155,6 +155,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     assert(stats.size == data.head.productArity - 1)
     val df = data.toDF(stats.keys.toSeq :+ "carray" : _*)
     checkColStats(df, stats)
+
+    // test column stats with histograms
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true", SQLConf.HISTOGRAM_BUCKETS_NUM.key -> "2") {
+      checkColStats(df, statsWithEHHs)
+    }
   }
 
   test("column stats collection for null columns") {
