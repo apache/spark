@@ -53,6 +53,38 @@ class CodeFormatterSuite extends SparkFunSuite {
     assert(reducedCode.body === "/*project_c4*/")
   }
 
+  test("removing extra new lines and comments") {
+    val code =
+      """
+        |/*
+        |  * multi
+        |  * line
+        |  * comments
+        |  */
+        |
+        |public function() {
+        |/*comment*/
+        |  /*comment_with_space*/
+        |code_body
+        |//comment
+        |code_body
+        |  //comment_with_space
+        |
+        |code_body
+        |}
+      """.stripMargin
+
+    val reducedCode = CodeFormatter.stripExtraNewLinesAndComments(code)
+    assert(reducedCode ===
+      """
+        |public function() {
+        |code_body
+        |code_body
+        |code_body
+        |}
+      """.stripMargin)
+  }
+
   testCase("basic example") {
     """
       |class A {
