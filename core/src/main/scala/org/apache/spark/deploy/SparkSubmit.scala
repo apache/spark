@@ -366,6 +366,16 @@ object SparkSubmit extends CommandLineUtils with Logging {
       localPyFiles = Option(args.pyFiles).map {
         downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
       }.orNull
+
+      if (clusterManager == STANDALONE || clusterManager == LOCAL) {
+        // Use local files for standalone client mode.
+        args.primaryResource = localPrimaryResource
+        args.jars = localJars
+        args.pyFiles = localPyFiles
+        args.files = Option(args.files).map {
+          downloadFileList(_, targetDir, sparkConf, hadoopConf, secMgr)
+        }.orNull
+      }
     }
 
     // When running in YARN, for some remote resources with scheme:
