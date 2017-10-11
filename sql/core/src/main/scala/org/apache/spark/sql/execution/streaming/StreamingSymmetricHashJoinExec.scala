@@ -215,13 +215,13 @@ case class StreamingSymmetricHashJoinExec(
 
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      condition.left, stateWatermarkPredicates.left)
+      condition.leftSideOnly, stateWatermarkPredicates.left)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      condition.right, stateWatermarkPredicates.right)
+      condition.rightSideOnly, stateWatermarkPredicates.right)
 
     // Filter the joined rows based on the given condition.
-    val joinedFilter = newPredicate(condition.joined.getOrElse(Literal(true)), output).eval _
+    val joinedFilter = newPredicate(condition.bothSides.getOrElse(Literal(true)), output).eval _
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //

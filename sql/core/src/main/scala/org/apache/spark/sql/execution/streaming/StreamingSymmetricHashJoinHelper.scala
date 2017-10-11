@@ -75,15 +75,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * their condition. Any conjuncts after the first nondeterministic one are treated as
    * nondeterministic for purposes of the split.
    *
-   * @param left Deterministic conjuncts which reference only the left side of the join.
-   * @param right Deterministic conjuncts which reference only the right side of the join.
-   * @param joined Conjuncts which are in neither left nor right.
+   * @param leftSideOnly Deterministic conjuncts which reference only the left side of the join.
+   * @param rightSideOnly Deterministic conjuncts which reference only the right side of the join.
+   * @param bothSides Conjuncts which are in neither left nor right.
    * @param full The full join condition.
    */
   case class JoinConditionSplitPredicates(
-    left: Option[Expression],
-    right: Option[Expression],
-    joined: Option[Expression],
+    leftSideOnly: Option[Expression],
+    rightSideOnly: Option[Expression],
+    bothSides: Option[Expression],
     full: Option[Expression]) {}
 
   object JoinConditionSplitPredicates extends PredicateHelper {
