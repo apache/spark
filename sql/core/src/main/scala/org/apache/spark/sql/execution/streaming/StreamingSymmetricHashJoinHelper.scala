@@ -88,7 +88,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
 
   object JoinConditionSplitPredicates extends PredicateHelper {
     def apply(condition: Option[Expression], left: SparkPlan, right: SparkPlan):
-    JoinConditionSplitPredicates = {
+        JoinConditionSplitPredicates = {
       // Split the condition into 3 parts:
       // * Conjuncts that can be applied to the left before storing.
       // * Conjuncts that can be applied to the right before storing.
