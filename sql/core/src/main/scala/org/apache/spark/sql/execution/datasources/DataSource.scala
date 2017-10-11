@@ -163,8 +163,7 @@ case class DataSource(
       // maintain old behavior before SPARK-18510. If userSpecifiedSchema is empty used inferred
       // partitioning
       if (userSpecifiedSchema.isEmpty) {
-        val inferredPartitions = tempFileIndex.partitionSchema
-        inferredPartitions
+        tempFileIndex.partitionSchema
       } else {
         val partitionFields = partitionColumns.map { partitionColumn =>
           userSpecifiedSchema.flatMap(_.find(c => equality(c.name, partitionColumn))).orElse {
@@ -357,7 +356,11 @@ case class DataSource(
         } else {
           tempFileCatalog
         }
-        val dataSchema = userSpecifiedSchema.orElse {
+
+        val partitionSchema = fileCatalog.partitionSchema
+        val dataSchema = userSpecifiedSchema.map { schema =>
+          StructType(schema.filterNot(f => partitionSchema.exists(p => equality(p.name, f.name))))
+        }.orElse {
           format.inferSchema(
             sparkSession,
             caseInsensitiveOptions,
@@ -370,7 +373,7 @@ case class DataSource(
 
         HadoopFsRelation(
           fileCatalog,
-          partitionSchema = fileCatalog.partitionSchema,
+          partitionSchema = partitionSchema,
           dataSchema = dataSchema,
           bucketSpec = None,
           format,

@@ -146,7 +146,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", "bar")
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT intField, pi FROM t"),
@@ -161,14 +161,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           for {
             i <- 1 to 10
             ps <- Seq("foo", "bar")
-          } yield Row(i, 1, i.toString, ps))
+          } yield Row(i, i.toString, 1, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps = 'foo'"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, "foo"))
+          } yield Row(i, i.toString, pi, "foo"))
       }
     }
   }
@@ -240,14 +240,14 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
             i <- 1 to 10
             pi <- Seq(1, 2)
             ps <- Seq("foo", null.asInstanceOf[String])
-          } yield Row(i, pi, i.toString, ps))
+          } yield Row(i, i.toString, pi, ps))
 
         checkAnswer(
           sql("SELECT * FROM t WHERE ps IS NULL"),
           for {
             i <- 1 to 10
             pi <- Seq(1, 2)
-          } yield Row(i, pi, i.toString, null))
+          } yield Row(i, i.toString, pi, null))
       }
     }
   }
