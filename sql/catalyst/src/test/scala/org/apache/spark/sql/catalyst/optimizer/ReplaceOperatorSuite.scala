@@ -32,7 +32,7 @@ class ReplaceOperatorSuite extends PlanTest {
     val batches =
       Batch("Replace Operators", FixedPoint(100),
         ReplaceDistinctWithAggregate,
-        ReplaceExceptWithNotFilter,
+        ReplaceExceptWithFilter,
         ReplaceExceptWithAntiJoin,
         ReplaceIntersectWithSemiJoin,
         ReplaceDeduplicateWithAggregate) :: Nil
@@ -52,7 +52,7 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("replace Except with Not Filter") {
+  test("replace Except with Filter") {
     val attributeA = 'a.int
     val attributeB = 'b.int
 

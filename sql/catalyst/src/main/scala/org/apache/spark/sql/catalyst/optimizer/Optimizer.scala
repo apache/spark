@@ -69,7 +69,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       OptimizeSubqueries) ::
     Batch("Replace Operators", fixedPoint,
       ReplaceIntersectWithSemiJoin,
-      ReplaceExceptWithNotFilter,
+      ReplaceExceptWithFilter,
       ReplaceExceptWithAntiJoin,
       ReplaceDistinctWithAggregate) ::
     Batch("Aggregate", fixedPoint,
@@ -1254,9 +1254,11 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  * Note:
  * 1. We should combine all the [[Filter]] of the right node before flipping it using NOT operator.
  */
-object ReplaceExceptWithNotFilter extends Rule[LogicalPlan] {
+object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
+  import scala.annotation.tailrec
   import scala.language.implicitConversions
+
   implicit def nodeToFilter(node: LogicalPlan): Filter = node.asInstanceOf[Filter]
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -1267,25 +1269,26 @@ object ReplaceExceptWithNotFilter extends Rule[LogicalPlan] {
   }
 
   def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
-    case (left, right: Filter) => child(left).sameResult(child(right))
+    case (left, right: Filter) => nonFilterChild(left).sameResult(nonFilterChild(right))
     case _ => false
   }
 
-  def child(plan: LogicalPlan): LogicalPlan = plan match {
-    case _ : Filter => child(plan.child)
-    case x => x
-  }
+  def nonFilterChild(plan: LogicalPlan): LogicalPlan = plan.find(!_.isInstanceOf[Filter]).get
 
-  def combineFilters(plan: LogicalPlan): LogicalPlan = CombineFilters(plan) match {
-    case result if !result.fastEquals(plan) => combineFilters(result)
-    case result => result
+  def combineFilters(plan: LogicalPlan): LogicalPlan = {
+    @tailrec
+    def fixedPoint(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
+      if (acc.fastEquals(plan)) acc else fixedPoint(acc, CombineFilters(acc))
+    }
+
+    fixedPoint(plan, CombineFilters(plan))
   }
 
   def replaceAttributesIn(condition: Expression, node: LogicalPlan): Expression = {
     val attributeNameMap: Map[String, Attribute] = node.output.map(x => (x.name, x)).toMap
 
-    condition transform { case AttributeReference(name, _, _, _) =>
-      attributeNameMap(name)
+    condition transform { case a : AttributeReference =>
+      attributeNameMap(a.name)
     }
   }
 }
