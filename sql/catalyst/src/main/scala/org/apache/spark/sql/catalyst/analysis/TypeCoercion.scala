@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
 import javax.annotation.Nullable
 
 import scala.annotation.tailrec
@@ -105,11 +104,10 @@ object TypeCoercion {
       Some(StructType(fields1.zip(fields2).map { case (f1, f2) =>
         // Since `t1.sameType(t2)` is true, two StructTypes have the same DataType
         // except `name` (in case of `spark.sql.caseSensitive=false`) and `nullable`.
-        // - Different names: use a lower case name because findTightestCommonType is commutative.
+        // - Different names: use f1.name
         // - Different nullabilities: `nullable` is true iff one of them is nullable.
-        val name = if (f1.name == f2.name) f1.name else f1.name.toLowerCase(Locale.ROOT)
         val dataType = findTightestCommonType(f1.dataType, f2.dataType).get
-        StructField(name, dataType, nullable = f1.nullable || f2.nullable)
+        StructField(f1.name, dataType, nullable = f1.nullable || f2.nullable)
       }))
 
     case _ => None
