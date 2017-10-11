@@ -495,7 +495,7 @@ case class JsonTuple(children: Seq[Expression])
 
 /**
  * Converts an json input string to a [[StructType]] or [[ArrayType]] of [[StructType]]s
- * with the specified schema.
+ * or [[AtomicType]]s with the specified schema.
  */
 // scalastyle:off line.size.limit
 @ExpressionDescription(
@@ -536,26 +536,31 @@ case class JsonToStructs(
       timeZoneId = None)
 
   override def checkInputDataTypes(): TypeCheckResult = schema match {
-    case _: StructType | ArrayType(_: StructType, _) =>
+    case _: StructType | ArrayType(_: StructType | _: AtomicType, _) =>
       super.checkInputDataTypes()
     case _ => TypeCheckResult.TypeCheckFailure(
-      s"Input schema ${schema.simpleString} must be a struct or an array of structs.")
+      s"Input schema ${schema.simpleString} must be a struct or " +
+        s"an array of structs or primitive types.")
   }
 
   @transient
-  lazy val rowSchema = schema match {
+  lazy val rowSchema: DataType = schema match {
     case st: StructType => st
     case ArrayType(st: StructType, _) => st
+    case ArrayType(at: AtomicType, _) => ArrayType(at)
   }
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = schema match {
-    case _: StructType =>
-      (rows: Seq[InternalRow]) => if (rows.length == 1) rows.head else null
-    case ArrayType(_: StructType, _) =>
-      (rows: Seq[InternalRow]) => new GenericArrayData(rows)
-  }
+  lazy val converter = (rows: Seq[Any]) =>
+    (schema, rows) match {
+      case (_: StructType, rows: Seq[InternalRow]) =>
+         if (rows.length == 1) rows.head else null
+      case (ArrayType(_: StructType, _), rows: Seq[InternalRow]) =>
+        new GenericArrayData(rows)
+      case (ArrayType(_: AtomicType, _), rows: Seq[AtomicType]) =>
+        new GenericArrayData(rows)
+    }
 
   @transient
   lazy val parser =
@@ -591,7 +596,7 @@ case class JsonToStructs(
     if (json.toString.trim.isEmpty) return null
 
     try {
-      converter(parser.parse(
+      converter(parser.parseWithArrayOfPrimitiveSupport(
         json.asInstanceOf[UTF8String],
         CreateJacksonParser.utf8String,
         identity[UTF8String]))

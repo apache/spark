@@ -133,16 +133,6 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
       Row(null) :: Nil)
   }
 
-  test("from_json invalid schema") {
-    val df = Seq("""{"a" 1}""").toDS()
-    val schema = ArrayType(StringType)
-    val message = intercept[AnalysisException] {
-      df.select(from_json($"value", schema))
-    }.getMessage
-
-    assert(message.contains(
-      "Input schema array<string> must be a struct or an array of structs."))
-  }
 
   test("from_json array support") {
     val df = Seq("""[{"a": 1, "b": "a"}, {"a": 2}, { }]""").toDS()
@@ -168,6 +158,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       df.select(from_json($"value", "a INT, b STRING", Map[String, String]())),
       Row(Row(1, "haa")) :: Nil)
+  }
+
+  test("SPARK-22228: from_json should support also arrays of primitive types") {
+    val dfInt = Seq("[1]", "[2, 3]").toDS()
+    checkAnswer(
+      dfInt.select(from_json($"value", ArrayType(IntegerType))),
+      Row(Seq(1)) :: Row(Seq(2, 3)) :: Nil)
+
+    val dfString = Seq("""["hello", "world", ""]""").toDS()
+    checkAnswer(
+      dfString.select(from_json($"value", ArrayType(StringType))),
+      Row(Seq("hello", "world", "")):: Nil)
+
+    val dfTimestamp = Seq("""["26/08/2015 18:00"]""").toDS()
+    val schema = ArrayType(TimestampType)
+    val options = Map("timestampFormat" -> "dd/MM/yyyy HH:mm")
+
+    checkAnswer(
+      dfTimestamp.select(from_json($"value", schema, options)),
+      Row(Seq(java.sql.Timestamp.valueOf("2015-08-26 18:00:00.0"))))
+
+    val dfEmpty = Seq("""[]""").toDS()
+    checkAnswer(
+      dfEmpty.select(from_json($"value", ArrayType(StringType))),
+      Row(Nil):: Nil)
   }
 
   test("to_json - struct") {
