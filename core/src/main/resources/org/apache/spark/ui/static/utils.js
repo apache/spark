@@ -57,24 +57,27 @@ function formatLogsCells(execLogs, type) {
     return result;
 }
 
-function getStandAloneAppId() {
+function getStandAloneAppId(cb) {
     var words = document.baseURI.split('/');
     var ind = words.indexOf("proxy");
     if (ind > 0) {
         var appId = words[ind + 1];
-        return appId;
+        cb(appId);
+        return;
     }
     ind = words.indexOf("history");
     if (ind > 0) {
         var appId = words[ind + 1];
-        return appId;
+        cb(appId);
+        return;
     }
     //Looks like Web UI is running in standalone mode
     //Let's get application-id using REST End Point
     $.getJSON(location.origin + "/api/v1/applications", function(response, status, jqXHR) {
         if (response && response.length > 0) {
-            var appId = response[0].id
-            return appId;
+            var appId = response[0].id;
+            cb(appId);
+            return;
         }
     });
 }

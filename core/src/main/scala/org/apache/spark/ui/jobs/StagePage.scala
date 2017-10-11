@@ -206,7 +206,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         }
       }
       val currentTime = System.currentTimeMillis()
-      val (taskTable, taskTableHTML) = try {
+      val taskTable = try {
         val _taskTable = new TaskPagedTable(
           parent.conf,
           UIUtils.prependBaseUri(parent.basePath) +
@@ -225,17 +225,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           desc = taskSortDesc,
           executorsListener = executorsListener
         )
-        (_taskTable, _taskTable.table(page))
+        _taskTable.table(page)
+        _taskTable
       } catch {
         case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-          val errorMessage =
-            <div class="alert alert-error">
-              <p>Error while rendering stage table:</p>
-              <pre>
-                {Utils.exceptionString(e)}
-              </pre>
-            </div>
-          (null, errorMessage)
+          null
       }
 
       val jsForScrollingDownToTaskTable =

@@ -36,7 +36,7 @@ $.extend( $.fn.dataTable.ext.type.order, {
     }
 } );
 
-// This function will only parse the URL under certain formate
+// This function will only parse the URL under certain format
 // e.g. https://axonitered-jt1.red.ygrid.yahoo.com:50509/history/application_1502220952225_59143/stages/stage/?id=0&attempt=0
 function stageEndPoint(appId) {
     var words = document.baseURI.split('/');
@@ -103,10 +103,7 @@ $(document).ready(function () {
         "</div>");
 
     tasksSummary = $("#active-tasks");
-    var app_id = getStandAloneAppId();
-    buildStageDataTables(app_id);
-
-    function buildStageDataTables(appId) {
+    getStandAloneAppId(function (appId) {
 
         var endPoint = stageEndPoint(appId);
         $.getJSON(endPoint, function(response, status, jqXHR) {
@@ -386,7 +383,7 @@ $(document).ready(function () {
                         },
                         {
                             data : function (row, type) {
-                                if (accumulator_table.length > 0) {
+                                if (accumulator_table.length > 0 && row.accumulatorUpdates.length > 0) {
                                     return row.accumulatorUpdates[0].name + ' : ' + row.accumulatorUpdates[0].update;
                                 } else {
                                     return 0;
@@ -467,5 +464,5 @@ $(document).ready(function () {
                 }
             });
         });
-    }
+    });
 });
