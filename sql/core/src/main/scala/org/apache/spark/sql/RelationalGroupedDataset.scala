@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NumericType, StructField, StructType}
+import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
