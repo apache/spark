@@ -162,7 +162,7 @@ trait CodegenSupport extends SparkPlan {
     //    declaration.
     val requireAllOutput = output.forall(parent.usedInputs.contains(_))
     val consumeFunc =
-      if (row == null && outputVars.nonEmpty && requireAllOutput && outputVars.length < 255) {
+      if (row == null && outputVars.nonEmpty && requireAllOutput && isValidParamLength(ctx)) {
         constructDoConsumeFunction(ctx, inputVars)
       } else {
         parent.doConsume(ctx, inputVars, rowVar)
@@ -172,6 +172,25 @@ trait CodegenSupport extends SparkPlan {
        |$evaluated
        |$consumeFunc
      """.stripMargin
+  }
+
+  /**
+   * In Java, a method descriptor is valid only if it represents method parameters with a total
+   * length of 255 or less. `this` contributes one unit and a parameter of type long or double
+   * contributes two units. Besides, for nullable parameters, we also need to pass a boolean
+   * for the null status.
+   */
+  private def isValidParamLength(ctx: CodegenContext): Boolean = {
+    var paramLength = 1 // for `this` parameter.
+    output.foreach { attr =>
+      ctx.javaType(attr.dataType) match {
+        case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !attr.nullable => paramLength += 2
+        case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => paramLength += 3
+        case _ if !attr.nullable => paramLength += 1
+        case _ => paramLength += 2
+      }
+    }
+    paramLength <= 255
   }
 
   /**
@@ -206,12 +225,19 @@ trait CodegenSupport extends SparkPlan {
       attributes: Seq[Attribute],
       variables: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
     val params = variables.zipWithIndex.map { case (ev, i) =>
-      val callingParam = ev.value + ", " + ev.isNull
       val arguName = ctx.freshName(s"expr_$i")
-      val arguIsNull = ctx.freshName(s"exprIsNull_$i")
-      (callingParam,
-        s"${ctx.javaType(attributes(i).dataType)} $arguName, boolean $arguIsNull",
-        ExprCode("", arguIsNull, arguName))
+      val arguType = ctx.javaType(attributes(i).dataType)
+
+      val (callingParam, funcParams, arguIsNull) = if (!attributes(i).nullable) {
+        // When the argument is not nullable, we don't need to pass in `isNull` param for it and
+        // simply give a `false`.
+        val arguIsNull = "false"
+        (ev.value, s"$arguType $arguName", arguIsNull)
+      } else {
+        val arguIsNull = ctx.freshName(s"exprIsNull_$i")
+        (ev.value + ", " + ev.isNull, s"$arguType $arguName, boolean $arguIsNull", arguIsNull)
+      }
+      (callingParam, funcParams, ExprCode("", arguIsNull, arguName))
     }.unzip3
     (params._1.mkString(", "),
       params._2.mkString(", "),
