@@ -90,13 +90,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
     def apply(condition: Option[Expression], left: SparkPlan, right: SparkPlan):
         JoinConditionSplitPredicates = {
       // Split the condition into 3 parts:
-      // * Conjuncts that can be applied to the left before storing.
-      // * Conjuncts that can be applied to the right before storing.
-      // * Conjuncts that must be applied to the full row at join time.
+      // * Conjuncts that can be evaluated on only the left input.
+      // * Conjuncts that can be evaluated on only the right input.
+      // * Conjuncts that require both left and right input.
       //
-      // Note that the third category includes both conjuncts that reference both sides
-      // and all nondeterministic conjuncts. Nondeterministic conjuncts can't be shortcutted
-      // to preserve any stateful semantics they may have.
+      // Note that these splits are applied in order, so the first category will end up containing
+      // conjuncts which depend on neither the left nor right input.
+      //
+      // Note also that nondeterministic conjuncts effectively require both left and right input.
+      // To maintain their semantics, they need to be evaluated exactly once per joined row.
       val (leftCondition, rightCondition, joinedCondition) = {
         if (condition.isEmpty) {
           (None, None, None)
