@@ -772,16 +772,19 @@ class CodegenContext {
       foldFunctions: Seq[String] => String = _.mkString("", ";\n", ";")): String = {
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
+    var length = 0
     for (code <- expressions) {
       // We can't know how many bytecode will be generated, so use the length of source code
       // as metric. A method should not go beyond 8K, otherwise it will not be JITted, should
       // also not be too small, or it will have many function calls (for wide table), see the
       // results in BenchmarkWideTable.
-      if (blockBuilder.length > 1024) {
+      if (length > 1024) {
         blocks += blockBuilder.toString()
         blockBuilder.clear()
+        length = 0
       }
       blockBuilder.append(code)
+      length += CodeFormatter.stripExtraNewLinesAndComments(code).length
     }
     blocks += blockBuilder.toString()
 
