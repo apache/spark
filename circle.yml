@@ -12,8 +12,8 @@ machine:
           echo "Using cached Miniconda install";
       fi
     - ln -s ~/miniconda $(pyenv root)/versions/miniconda3-latest
-    - 'pyenv versions | grep -q miniconda3-latest/envs/python2 || $CONDA_BIN create -y -n python2 python==2.7.11 numpy'
-    - 'pyenv versions | grep -q miniconda3-latest/envs/python3 || $CONDA_BIN create -y -n python3 python==3.4.4 numpy'
+    - 'pyenv versions | grep -q miniconda3-latest/envs/python2 || $CONDA_BIN create -y -n python2 python==2.7.11 numpy | tee -a "$CIRCLE_ARTIFACTS/run-conda.log"'
+    - 'pyenv versions | grep -q miniconda3-latest/envs/python3 || $CONDA_BIN create -y -n python3 python==3.4.4 numpy | tee -a "$CIRCLE_ARTIFACTS/run-conda.log"'
     - pyenv global miniconda3-latest/envs/python2 miniconda3-latest/envs/python3 #pypy-4.0.1
     - pyenv rehash
   environment:
