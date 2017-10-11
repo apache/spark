@@ -1619,21 +1619,23 @@ def to_arrow_type(dt):
         arrow_type = pa.decimal(dt.precision, dt.scale)
     elif type(dt) == StringType:
         arrow_type = pa.string()
+    elif type(dt) == DateType:
+        arrow_type = pa.date32()
+    elif type(dt) == TimestampType:
+        arrow_type = pa.timestamp('us', tz='UTC')
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
 
 
-def _localize_series_timestamps(s):
-    """ Convert a tz-aware timestamp to local tz-naive
-    """
-    return s.dt.tz_convert('tzlocal()').dt.tz_localize(None)
-
-
 def _check_localize_series_timestamps(s):
-    from pandas.types.common import is_datetime64tz_dtype
+    from pandas.types.common import is_datetime64_dtype
     # TODO: handle nested timestamps?
-    return _localize_series_timestamps(s) if is_datetime64tz_dtype(s.dtype) else s
+    if is_datetime64_dtype(s.dtype):
+        # TODO: pyarrow.Column.to_pandas keeps data in UTC but removes timezone
+        return s.dt.tz_localize('UTC').dt.tz_convert('tzlocal()').dt.tz_localize(None)
+    else:
+        return s
 
 
 def _check_localize_dataframe_timestamps(df):
@@ -1641,21 +1643,21 @@ def _check_localize_dataframe_timestamps(df):
     for column, series in df.iteritems():
         # TODO: handle nested timestamps?
         if is_datetime64tz_dtype(series.dtype):
-            df[column] = _localize_series_timestamps(series)
+            df[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
     return df
 
 
-def _convert_series_timestamps(s):
+def _utc_normalize_series_timestamps(s):
     """ Convert a tz-naive timestamp in local tz to UTC normalized
     """
     # TODO: this should be system local tz or SESSION_LOCAL_TIMEZONE?
-    return s.dt.tz_convert("UTC")
+    return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC').values.astype('datetime64[us]')
 
 
-def _check_convert_series_timestamps(s):
+def _check_utc_normalize_series_timestamps(s):
     from pandas.types.common import is_datetime64_dtype
     # TODO: handle nested timestamps?
-    return _convert_series_timestamps(s) if is_datetime64_dtype(s.dtype) else s
+    return _utc_normalize_series_timestamps(s) if is_datetime64_dtype(s.dtype) else s
 
 
 def _test():

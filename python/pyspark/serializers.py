@@ -213,7 +213,7 @@ class ArrowSerializer(FramedSerializer):
 
 
 def _create_batch(series):
-    from pyspark.sql.types import _check_convert_series_timestamps
+    from pyspark.sql.types import _check_utc_normalize_series_timestamps
     import pyarrow as pa
     # Make input conform to [(series1, type1), (series2, type2), ...]
     if not isinstance(series, (list, tuple)) or \
@@ -224,12 +224,12 @@ def _create_batch(series):
     # If a nullable integer series has been promoted to floating point with NaNs, need to cast
     # NOTE: this is not necessary with Arrow >= 0.7
     def cast_series(s, t):
-        if t is None or s.dtype == t.to_pandas_dtype():
+        if t is None or s.dtype == t.to_pandas_dtype() or type(t) == pa.TimestampType:
             return s
         else:
             return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
 
-    arrs = [pa.Array.from_pandas(_check_convert_series_timestamps(cast_series(s, t)),
+    arrs = [pa.Array.from_pandas(_check_utc_normalize_series_timestamps(cast_series(s, t)),
                                  mask=s.isnull(), type=t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 

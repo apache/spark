@@ -3400,6 +3400,43 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_timestamps(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import date, datetime
+        schema = StructType([
+            StructField("idx", LongType(), True),
+            StructField("date", DateType(), True),
+            StructField("timestamp", TimestampType(), True)])
+        # TODO Fails with time before epoch: (0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1))
+        data = [(0, date(1985, 1, 1), datetime(1985, 1, 1, 1, 1, 1)),
+                (1, date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
+                (2, date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3)),
+                (3, date(2104, 4, 4), datetime(2104, 4, 4, 4, 4, 4))]
+
+        df = self.spark.createDataFrame(data, schema=schema)
+
+        # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
+        identity = pandas_udf(lambda t: t, returnType=TimestampType())
+        df = df.withColumn("timestamp_copy", identity(col("timestamp")))
+
+        @pandas_udf(returnType=BooleanType())
+        def check_data(idx, date, timestamp, timestamp_copy):
+            is_equal = timestamp == timestamp_copy
+            if is_equal.all():
+                for i in xrange(len(is_equal)):
+                    # TODO Fails with tz offset: date[i].date() == data[idx[i]][1] and
+                    is_equal[i] = timestamp[i].to_pydatetime() == data[idx[i]][2]
+            return is_equal
+
+        result = df.withColumn("is_equal", check_data(col("idx"), col("date"), col("timestamp"),
+                                                      col("timestamp_copy"))).collect()
+        # Check that collection values are correct
+        self.assertEquals(len(data), len(result))
+        for i in range(len(result)):
+            self.assertEquals(data[i][1], result[i][1])  # "date" col
+            self.assertEquals(data[i][2], result[i][2])  # "timestamp" col
+            self.assertTrue(result[i][4])  # "is_equal" data in udf was as expected
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyApplyTests(ReusedPySparkTestCase):
