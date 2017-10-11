@@ -24,7 +24,7 @@ import org.apache.spark.annotation.Since
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol}
+import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCol, HasInputCols, HasOutputCol, HasOutputCols}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql._
 import org.apache.spark.sql.expressions.UserDefinedFunction
@@ -33,14 +33,15 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 
 /**
  * `Bucketizer` maps a column of continuous features to a column of feature buckets. Since 2.3.0,
- * `Bucketizer` can also map multiple columns at once. Whether it goes to map a column or multiple
- * columns, it depends on which parameter of `inputCol` and `inputCols` is set. When both are set,
- * a log warning will be printed and by default it chooses `inputCol`.
+ * `Bucketizer` can map multiple columns at once by setting the `inputCols` parameter. Note that
+ * when both the `inputCol` and `inputCols` parameters are set, a log warning will be printed and
+ * only `inputCol` will take effect, while `inputCols` will be ignored. The `splits` parameter is
+ * only used for single column usage, and `splitsArray` is for multiple columns.
  */
 @Since("1.4.0")
 final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Model[Bucketizer] with HasHandleInvalid with HasInputCol with HasOutputCol
-    with HasInputCols with DefaultParamsWritable {
+    with HasInputCols with HasOutputCols with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("bucketizer"))
@@ -84,7 +85,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
   /**
    * Param for how to handle invalid entries. Options are 'skip' (filter out rows with
    * invalid values), 'error' (throw an error), or 'keep' (keep invalid values in a special
-   * additional bucket).
+   * additional bucket). Note that in the multiple column case, the invalid handling is applied
+   * to all columns. That said for 'error' it will throw an error if any invalids are found in
+   * any column, for 'skip' it will skip rows with any invalids in any columns, etc.
    * Default: "error"
    * @group param
    */
@@ -115,21 +118,9 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
       "specified will be treated as errors.",
     Bucketizer.checkSplitsArray)
 
-  /**
-   * Param for output column names.
-   * @group param
-   */
-  @Since("2.3.0")
-  final val outputCols: StringArrayParam = new StringArrayParam(this, "outputCols",
-    "output column names")
-
   /** @group getParam */
   @Since("2.3.0")
   def getSplitsArray: Array[Array[Double]] = $(splitsArray)
-
-  /** @group getParam */
-  @Since("2.3.0")
-  final def getOutputCols: Array[String] = $(outputCols)
 
   /** @group setParam */
   @Since("2.3.0")
@@ -148,7 +139,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
    * `inputCols` is set, it will map multiple columns. Otherwise, it just maps a column specified
    * by `inputCol`. A warning will be printed if both are set.
    */
-  private[ml] def isBucketizeMultipleColumns(): Boolean = {
+  private[feature] def isBucketizeMultipleColumns(): Boolean = {
     if (isSet(inputCols) && isSet(inputCol)) {
       logWarning("Both `inputCol` and `inputCols` are set, we ignore `inputCols` and this " +
         "`Bucketizer` only map one column specified by `inputCol`")
@@ -162,7 +153,7 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    transformSchema(dataset.schema)
+    val transformedSchema = transformSchema(dataset.schema)
 
     val (filteredDataset, keepInvalid) = {
       if (getHandleInvalid == Bucketizer.SKIP_INVALID) {
@@ -193,10 +184,10 @@ final class Bucketizer @Since("1.4.0") (@Since("1.4.0") override val uid: String
     val newCols = inputColumns.zipWithIndex.map { case (inputCol, idx) =>
       bucketizers(idx)(filteredDataset(inputCol).cast(DoubleType))
     }
-    val newFields = outputColumns.zipWithIndex.map { case (outputCol, idx) =>
-      prepOutputField(seqOfSplits(idx), outputCol)
+    val metadata = outputColumns.map { col =>
+      transformedSchema(col).metadata
     }
-    filteredDataset.withColumns(outputColumns, newCols, newFields.map(_.metadata))
+    filteredDataset.withColumns(outputColumns, newCols, metadata)
   }
 
   private def prepOutputField(splits: Array[Double], outputCol: String): StructField = {
