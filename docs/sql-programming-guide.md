@@ -461,7 +461,7 @@ name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can al
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
 
-To load a json file you can use:
+To load a JSON file you can use:
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -481,7 +481,7 @@ To load a json file you can use:
 </div>
 </div>
 
-To load a csv file you can use:
+To load a CSV file you can use:
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
@@ -498,6 +498,7 @@ To load a csv file you can use:
 
 <div data-lang="r"  markdown="1">
 {% include_example manual_load_options_csv r/RSparkSQLExample.R %}
+
 </div>
 </div>
 ### Run SQL on files directly
