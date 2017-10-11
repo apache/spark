@@ -1627,7 +1627,7 @@ def to_arrow_type(dt):
 def _localize_series_timestamps(s):
     """ Convert a tz-aware timestamp to local tz-naive
     """
-    return s.dt.tz_localize(None)
+    return s.dt.tz_convert('tzlocal()').dt.tz_localize(None)
 
 
 def _check_localize_series_timestamps(s):
