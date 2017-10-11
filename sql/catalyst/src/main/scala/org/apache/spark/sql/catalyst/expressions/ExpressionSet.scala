@@ -31,8 +31,8 @@ object ExpressionSet {
 
 /**
  * A [[Set]] where membership is determined based on determinacy and a canonical representation of
- * an [[Expression]]
- * (i.e. one that attempts to ignore cosmetic differences).  See [[Canonicalize]] for more details.
+ * an [[Expression]] (i.e. one that attempts to ignore cosmetic differences).
+ * See [[Canonicalize]] for more details.
  *
  * Internally this set uses the canonical representation, but keeps also track of the original
  * expressions to ease debugging.  Since different expressions can share the same canonical
