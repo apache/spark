@@ -52,27 +52,30 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   }
 
   override def afterAll(): Unit = {
-    spark.stop()
-    spark = null
+    if (spark != null) {
+      spark.stop()
+      spark = null
+    }
+    super.afterAll()
   }
 
   test("alternative output committer, merge schema") {
     intercept[RuntimeException] {
-      val stat = writeDataFrame(MarkingFileOutput.COMMITTER, true, true)
+      val stat = writeDataFrame(MarkingFileOutput.COMMITTER, summary = true, check = true)
       logError(s"Created marker file $stat")
     }
   }
 
   test("alternative output committer, no merge schema") {
-    writeDataFrame(MarkingFileOutput.COMMITTER, false, true)
+    writeDataFrame(MarkingFileOutput.COMMITTER, summary = false, check = true)
   }
 
   test("Parquet output committer, merge schema") {
-    writeDataFrame(PARQUET_COMMITTER, true, false)
+    writeDataFrame(PARQUET_COMMITTER, summary = true, check = false)
   }
 
   test("Parquet output committer, no merge schema") {
-    writeDataFrame(PARQUET_COMMITTER, false, false)
+    writeDataFrame(PARQUET_COMMITTER, summary = false, check = false)
   }
 
   /**
