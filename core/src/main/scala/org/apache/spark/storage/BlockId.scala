@@ -104,27 +104,43 @@ object BlockId {
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
+  val TEMP_LOCAL = "temp_local_([A-Fa-f-]+)".r
+  val TEMP_SHUFFLE = "temp_shuffle_([A-Fa-f-]+)".r
   val TEST = "test_(.*)".r
 
-  /** Converts a BlockId "name" String back into a BlockId. */
-  def apply(id: String): BlockId = id match {
-    case RDD(rddId, splitIndex) =>
-      RDDBlockId(rddId.toInt, splitIndex.toInt)
-    case SHUFFLE(shuffleId, mapId, reduceId) =>
-      ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
-      ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
-      ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case BROADCAST(broadcastId, field) =>
-      BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
-    case TASKRESULT(taskId) =>
-      TaskResultBlockId(taskId.toLong)
-    case STREAM(streamId, uniqueId) =>
-      StreamBlockId(streamId.toInt, uniqueId.toLong)
-    case TEST(value) =>
-      TestBlockId(value)
-    case _ =>
-      throw new IllegalStateException("Unrecognized BlockId: " + id)
+  def apply(name: String): BlockId = {
+    guess(name).getOrElse {
+      throw new IllegalStateException("Unrecognized BlockId: " + name)
+    }
+  }
+
+  /** Tries to guess block ID type by [[BlockId.name]]. */
+  private[storage] def guess(name: String): Option[BlockId] = {
+    val blockId = name match {
+      case RDD(rddId, splitIndex) =>
+        RDDBlockId(rddId.toInt, splitIndex.toInt)
+      case SHUFFLE(shuffleId, mapId, reduceId) =>
+        ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+      case SHUFFLE_DATA(shuffleId, mapId, reduceId) =>
+        ShuffleDataBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+      case SHUFFLE_INDEX(shuffleId, mapId, reduceId) =>
+        ShuffleIndexBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
+      case BROADCAST(broadcastId, field) =>
+        BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
+      case TASKRESULT(taskId) =>
+        TaskResultBlockId(taskId.toLong)
+      case STREAM(streamId, uniqueId) =>
+        StreamBlockId(streamId.toInt, uniqueId.toLong)
+      case TEMP_LOCAL(uuid) =>
+        TempShuffleBlockId(UUID.fromString(uuid))
+      case TEMP_SHUFFLE(uuid) =>
+        TempShuffleBlockId(UUID.fromString(uuid))
+      case TEST(value) =>
+        TestBlockId(value)
+      case _ =>
+        null
+    }
+
+    Option(blockId)
   }
 }
