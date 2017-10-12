@@ -44,7 +44,7 @@ class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLCont
   test("ClusteredDistribution generates Exchange with HashPartitioning") {
     testEnsureStatefulOpPartitioning(
       baseDf.queryExecution.sparkPlan,
-      requiredDistribution = keys => ClusteredDistribution(keys),
+      requiredDistribution = keys => ClusteredDistribution(keys, Some(5)),
       expectedPartitioning =
         keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
       expectShuffle = true)
@@ -53,7 +53,7 @@ class EnsureStatefulOpPartitioningSuite extends SparkPlanTest with SharedSQLCont
   test("ClusteredDistribution with coalesce(1) generates Exchange with HashPartitioning") {
     testEnsureStatefulOpPartitioning(
       baseDf.coalesce(1).queryExecution.sparkPlan,
-      requiredDistribution = keys => ClusteredDistribution(keys),
+      requiredDistribution = keys => ClusteredDistribution(keys, Some(5)),
       expectedPartitioning =
         keys => HashPartitioning(keys, spark.sessionState.conf.numShufflePartitions),
       expectShuffle = true)
