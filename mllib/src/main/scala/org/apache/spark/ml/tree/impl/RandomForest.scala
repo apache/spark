@@ -637,9 +637,11 @@ private[spark] object RandomForest extends Logging {
     }
 
     // For each (feature, split), calculate the gain, and select the best (feature, split).
+    val parentImpurityCalc = if (node.stats == null) None else Some(node.stats.impurityCalculator)
     val splitsAndImpurityInfo =
       validFeatureSplits.map { case (featureIndexIdx, featureIndex) =>
-        SplitUtils.chooseSplit(binAggregates, featureIndex, featureIndexIdx, splits)
+        SplitUtils.chooseSplit(binAggregates, featureIndex, featureIndexIdx, splits,
+          parentImpurityCalc)
       }
 
     val (bestSplit, bestSplitStats) =

@@ -18,6 +18,7 @@
 package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.ml.tree.{CategoricalSplit, Split}
+import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 
 /** Utility methods for choosing splits during local & distributed tree training. */
@@ -60,6 +61,9 @@ private[impl] object SplitUtils {
    *
    * @param featureIndex  Global index of feature being split.
    * @param featureIndexIdx Index of feature being split within subset of features for current node.
+   * @param splits Array of array of splits per feature, e.g. splits(i)(j) = jth split for ith
+   *               feature
+   * @param parentCalculator Optional: ImpurityCalculator containing impurity stats for current node
    * @return  (best split, statistics for split)  If no valid split was found, the returned
    *          ImpurityStats instance will be invalid (have member valid = false).
    */
@@ -67,18 +71,23 @@ private[impl] object SplitUtils {
       binAggregates: DTStatsAggregator,
       featureIndex: Int,
       featureIndexIdx: Int,
-      splits: Array[Array[Split]]): (Split, ImpurityStats) = {
+      splits: Array[Array[Split]],
+      parentCalculator: Option[ImpurityCalculator] = None): (Split, ImpurityStats) = {
     // Unordered categorical feature
     val nodeFeatureOffset = binAggregates.getFeatureOffset(featureIndexIdx)
     val numSplits = binAggregates.metadata.numSplits(featureIndex)
+    var parentCalc = parentCalculator
     val (bestFeatureSplitIndex, bestFeatureGainStats) =
       Range(0, numSplits).map { splitIndex =>
         val leftChildStats = binAggregates.getImpurityCalculator(nodeFeatureOffset, splitIndex)
         val rightChildStats = binAggregates.getParentImpurityCalculator()
           .subtract(leftChildStats)
-        val split = splits(featureIndex)(splitIndex).asInstanceOf[CategoricalSplit]
-        val gainAndImpurityStats = ImpurityUtils.calculateImpurityStats(
+        val gainAndImpurityStats = ImpurityUtils.calculateImpurityStats(parentCalc,
           leftChildStats, rightChildStats, binAggregates.metadata)
+        // Compute parent stats once, when considering first split for current feature
+        if (parentCalc.isEmpty) {
+          parentCalc = Some(gainAndImpurityStats.impurityCalculator)
+        }
         (splitIndex, gainAndImpurityStats)
       }.maxBy(_._2.gain)
     (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
@@ -96,23 +105,27 @@ private[impl] object SplitUtils {
       binAggregates: DTStatsAggregator,
       featureIndex: Int,
       featureIndexIdx: Int,
-      splits: Array[Array[Split]]): (Split, ImpurityStats) = {
+      splits: Array[Array[Split]],
+      parentCalculator: Option[ImpurityCalculator] = None): (Split, ImpurityStats) = {
     // For a continuous feature, bins are already sorted for splitting
     // Number of "categories" = number of bins
     val sortedCategories = Range(0, binAggregates.metadata.numBins(featureIndex)).toList
     // Get & return best split info
     val (bestFeatureSplitIndex, bestFeatureGainStats) = orderedSplitHelper(binAggregates,
-      featureIndex, featureIndexIdx, sortedCategories)
+      featureIndex, featureIndexIdx, sortedCategories, parentCalculator)
     (splits(featureIndex)(bestFeatureSplitIndex), bestFeatureGainStats)
   }
 
-
-  /** Computes the index of the best split for an ordered feature. */
+  /**
+   * Computes the index of the best split for an ordered feature.
+   * @param parentCalculator Optional: ImpurityCalculator containing impurity stats for current node
+   */
   private def orderedSplitHelper(
       binAggregates: DTStatsAggregator,
       featureIndex: Int,
       featureIndexIdx: Int,
-      categoriesSortedByCentroid: List[Int]): (Int, ImpurityStats) = {
+      categoriesSortedByCentroid: List[Int],
+      parentCalculator: Option[ImpurityCalculator]): (Int, ImpurityStats) = {
     // Cumulative sum (scanLeft) of bin statistics.
     // Afterwards, binAggregates for a bin is the sum of aggregates for
     // that bin + all preceding bins.
@@ -130,6 +143,7 @@ private[impl] object SplitUtils {
     val lastCategory = categoriesSortedByCentroid.last
 
     // Find best split.
+    var parentCalc = parentCalculator
     Range(0, numSplits).map { splitIndex =>
       val featureValue = categoriesSortedByCentroid(splitIndex)
       val leftChildStats =
@@ -137,22 +151,30 @@ private[impl] object SplitUtils {
       val rightChildStats =
         binAggregates.getImpurityCalculator(nodeFeatureOffset, lastCategory)
       rightChildStats.subtract(leftChildStats)
-      val gainAndImpurityStats = ImpurityUtils.calculateImpurityStats(
+      val gainAndImpurityStats = ImpurityUtils.calculateImpurityStats(parentCalc,
         leftChildStats, rightChildStats, binAggregates.metadata)
+      // Compute parent stats once, when considering first split for current feature
+      if (parentCalc.isEmpty) {
+        parentCalc = Some(gainAndImpurityStats.impurityCalculator)
+      }
       (splitIndex, gainAndImpurityStats)
     }.maxBy(_._2.gain)
   }
 
-  /** Choose the best split for an ordered categorical feature. */
+  /**
+   * Choose the best split for an ordered categorical feature.
+   * @param parentCalculator Optional: ImpurityCalculator containing impurity stats for current node
+   */
   private[impl] def chooseOrderedCategoricalSplit(
       binAggregates: DTStatsAggregator,
       featureIndex: Int,
-      featureIndexIdx: Int): (Split, ImpurityStats) = {
+      featureIndexIdx: Int,
+      parentCalculator: Option[ImpurityCalculator] = None): (Split, ImpurityStats) = {
     // Sort feature categories by label centroid
     val categoriesSortedByCentroid = sortByCentroid(binAggregates, featureIndex, featureIndexIdx)
     // Get index, stats of best split
     val (bestFeatureSplitIndex, bestFeatureGainStats) = orderedSplitHelper(binAggregates,
-      featureIndex, featureIndexIdx, categoriesSortedByCentroid)
+      featureIndex, featureIndexIdx, categoriesSortedByCentroid, parentCalculator)
     // Create result (CategoricalSplit instance)
     val categoriesForSplit =
       categoriesSortedByCentroid.map(_.toDouble).slice(0, bestFeatureSplitIndex + 1)
@@ -165,6 +187,7 @@ private[impl] object SplitUtils {
   /**
    * Choose the best split for a feature at a node.
    *
+   * @param parentCalculator Optional: ImpurityCalculator containing impurity stats for current node
    * @return  (best split, statistics for split)  If no valid split was found, the returned
    *          ImpurityStats will have member stats.valid = false.
    */
@@ -172,17 +195,20 @@ private[impl] object SplitUtils {
       statsAggregator: DTStatsAggregator,
       featureIndex: Int,
       featureIndexIdx: Int,
-      splits: Array[Array[Split]]): (Split, ImpurityStats) = {
+      splits: Array[Array[Split]],
+      parentCalculator: Option[ImpurityCalculator] = None): (Split, ImpurityStats) = {
     val metadata = statsAggregator.metadata
     if (metadata.isCategorical(featureIndex)) {
       if (metadata.isUnordered(featureIndex)) {
         SplitUtils.chooseUnorderedCategoricalSplit(statsAggregator, featureIndex,
-          featureIndexIdx, splits)
+          featureIndexIdx, splits, parentCalculator)
       } else {
-        SplitUtils.chooseOrderedCategoricalSplit(statsAggregator, featureIndex, featureIndexIdx)
+        SplitUtils.chooseOrderedCategoricalSplit(statsAggregator, featureIndex,
+          featureIndexIdx, parentCalculator)
       }
     } else {
-      SplitUtils.chooseContinuousSplit(statsAggregator, featureIndex, featureIndexIdx, splits)
+      SplitUtils.chooseContinuousSplit(statsAggregator, featureIndex, featureIndexIdx, splits,
+        parentCalculator)
     }
 
   }

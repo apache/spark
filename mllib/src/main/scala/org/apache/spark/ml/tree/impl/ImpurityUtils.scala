@@ -23,23 +23,27 @@ import org.apache.spark.mllib.tree.model.ImpurityStats
 /** Helper methods for impurity-related calculations during node split decisions. */
 private[impl] object ImpurityUtils {
 
+
   /**
    * Calculate the impurity statistics for a given (feature, split) based upon left/right
    * aggregates.
    *
+   * @param parentCalc Optional: an ImpurityCalculator containing the impurity stats
+   *                                 of the node currently being split.
    * @param leftImpurityCalculator left node aggregates for this (feature, split)
    * @param rightImpurityCalculator right node aggregate for this (feature, split)
    * @param metadata learning and dataset metadata for DecisionTree
    * @return Impurity statistics for this (feature, split)
    */
   private[impl] def calculateImpurityStats(
+      parentCalc: Option[ImpurityCalculator],
       leftImpurityCalculator: ImpurityCalculator,
       rightImpurityCalculator: ImpurityCalculator,
       metadata: DecisionTreeMetadata): ImpurityStats = {
 
-    val parentImpurityCalculator = leftImpurityCalculator.copy.add(rightImpurityCalculator)
-
-    val impurity = parentImpurityCalculator.calculate()
+    val parentImpurityCalculator
+      = parentCalc.getOrElse(leftImpurityCalculator.copy.add(rightImpurityCalculator))
+    val impurity: Double = parentImpurityCalculator.calculate()
 
     val leftCount = leftImpurityCalculator.count
     val rightCount = rightImpurityCalculator.count
@@ -73,6 +77,7 @@ private[impl] object ImpurityUtils {
       return new ImpurityStats(gain, impurity, parentImpurityCalculator, leftImpurityCalculator,
         rightImpurityCalculator, valid = false)
     }
+
 
     new ImpurityStats(gain, impurity, parentImpurityCalculator,
       leftImpurityCalculator, rightImpurityCalculator)
