@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.io.IOException
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -57,7 +59,14 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
   private def getFileSize(filePath: String): Long = {
     val path = new Path(filePath)
     val fs = path.getFileSystem(hadoopConf)
-    fs.getFileStatus(path).getLen()
+    // getFileStatus may throw IOException like FileNotFoundException. A file format like ORC
+    // may not create a file at all in case of writing empty dataset. Writing task should not fail
+    // due to this StatsTracker.
+    try {
+      fs.getFileStatus(path).getLen()
+    } catch {
+      case _: IOException => 0
+    }
   }
 
 
