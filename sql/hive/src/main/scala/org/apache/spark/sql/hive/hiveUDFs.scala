@@ -48,7 +48,7 @@ private[hive] case class HiveSimpleUDF(
   with Logging
   with UserDefinedExpression {
 
-  override def deterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
+  override def isDeterministic: Boolean = isUDFDeterministic && children.forall(_.deterministic)
 
   override def nullable: Boolean = true
 

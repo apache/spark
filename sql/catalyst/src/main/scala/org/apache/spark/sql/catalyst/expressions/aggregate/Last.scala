@@ -44,7 +44,7 @@ case class Last(child: Expression, ignoreNullsExpr: Expression)
   override def nullable: Boolean = true
 
   // Last is not a deterministic function.
-  override def deterministic: Boolean = false
+  override def isDeterministic: Boolean = false
 
   // Return data type.
   override def dataType: DataType = child.dataType
