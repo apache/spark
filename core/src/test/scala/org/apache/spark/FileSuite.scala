@@ -31,7 +31,7 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.{FileSplit => NewFileSplit, TextInputFormat => NewTextInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
 
-import org.apache.spark.internal.config.{FILTER_OUT_EMPTY_SPLIT, IGNORE_CORRUPT_FILES}
+import org.apache.spark.internal.config.{IGNORE_CORRUPT_FILES, IGNORE_EMPTY_SPLITS}
 import org.apache.spark.rdd.{HadoopRDD, NewHadoopRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -348,9 +348,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test ("allow user to disable the output directory existence checking (old Hadoop API)") {
-    val sf = new SparkConf()
-    sf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
-    sc = new SparkContext(sf)
+    val conf = new SparkConf()
+    conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
+    sc = new SparkContext(conf)
     val randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
     randomRDD.saveAsTextFile(tempDir.getPath + "/output")
     assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
@@ -380,9 +380,9 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test ("allow user to disable the output directory existence checking (new Hadoop API") {
-    val sf = new SparkConf()
-    sf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
-    sc = new SparkContext(sf)
+    val conf = new SparkConf()
+    conf.setAppName("test").setMaster("local").set("spark.hadoop.validateOutputSpecs", "false")
+    sc = new SparkContext(conf)
     val randomRDD = sc.parallelize(
       Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
     randomRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
@@ -510,65 +510,54 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("allow user to filter out empty split (old Hadoop API)") {
-    val sf = new SparkConf()
-    sf.setAppName("test").setMaster("local").set(FILTER_OUT_EMPTY_SPLIT, true)
-    sc = new SparkContext(sf)
+  test("spark.files.ignoreEmptySplits work correctly (old Hadoop API)") {
+    val conf = new SparkConf()
+    conf.setAppName("test").setMaster("local").set(IGNORE_EMPTY_SPLITS, true)
+    sc = new SparkContext(conf)
+
+    def testIgnoreEmptySplits(data: Array[Tuple2[String, String]], numSlices: Int,
+                              outputSuffix: Int, checkPart: String, partitionLength: Int): Unit = {
+      val dataRDD = sc.parallelize(data, numSlices)
+      val output = new File(tempDir, "output" + outputSuffix)
+      dataRDD.saveAsHadoopFile[TextOutputFormat[String, String]](output.getPath)
+      assert(new File(output, checkPart).exists() === true)
+      val hadoopRDD = sc.textFile(new File(output, "part-*").getPath)
+      assert(hadoopRDD.partitions.length === partitionLength)
+    }
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
-    val emptyRDD = sc.parallelize(Array.empty[Tuple2[String, String]], 1)
-    emptyRDD.saveAsHadoopFile[TextOutputFormat[String, String]](tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-00000").exists() === true)
-    val hadoopRDD = sc.textFile(tempDir.getPath + "/output/part-*")
-    assert(hadoopRDD.partitions.length === 0)
+    testIgnoreEmptySplits(Array.empty[Tuple2[String, String]], 1, 0, "part-00000", 0)
 
     // Ensure that if no split is empty, we don't lose any splits
-    val randomRDD = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 2)
-    randomRDD.saveAsHadoopFile[TextOutputFormat[String, String]](tempDir.getPath + "/output1")
-    assert(new File(tempDir.getPath + "/output1/part-00001").exists() === true)
-    val hadoopRDD1 = sc.textFile(tempDir.getPath + "/output1/part-*")
-    assert(hadoopRDD1.partitions.length === 2)
+    testIgnoreEmptySplits(Array(("key1", "a"), ("key2", "a"), ("key3", "b")), 2, 1, "part-00001", 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
-    val randomRDD2 = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a")), 5)
-    randomRDD2.saveAsHadoopFile[TextOutputFormat[String, String]](
-      tempDir.getPath + "/output2")
-    assert(new File(tempDir.getPath + "/output2/part-00004").exists() === true)
-    val hadoopRDD2 = sc.textFile(tempDir.getPath + "/output2/part-*")
-    assert(hadoopRDD2.partitions.length === 2)
+    testIgnoreEmptySplits(Array(("key1", "a"), ("key2", "a")), 5, 2, "part-00004", 2)
   }
 
-  test("allow user to filter out empty split (new Hadoop API)") {
-    val sf = new SparkConf()
-    sf.setAppName("test").setMaster("local").set(FILTER_OUT_EMPTY_SPLIT, true)
-    sc = new SparkContext(sf)
+  test("spark.files.ignoreEmptySplits work correctly (new Hadoop API)") {
+    val conf = new SparkConf()
+    conf.setAppName("test").setMaster("local").set(IGNORE_EMPTY_SPLITS, true)
+    sc = new SparkContext(conf)
+
+    def testIgnoreEmptySplits(data: Array[Tuple2[String, String]], numSlices: Int,
+                              outputSuffix: Int, checkPart: String, partitionLength: Int): Unit = {
+      val dataRDD = sc.parallelize(data, numSlices)
+      val output = new File(tempDir, "output" + outputSuffix)
+      dataRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
+      assert(new File(output, checkPart).exists() === true)
+      val hadoopRDD = sc.textFile(new File(output, "part-r-*").getPath)
+      assert(hadoopRDD.partitions.length === partitionLength)
+    }
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
-    val emptyRDD = sc.parallelize(Array.empty[Tuple2[String, String]], 1)
-    emptyRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
-      tempDir.getPath + "/output")
-    assert(new File(tempDir.getPath + "/output/part-r-00000").exists() === true)
-    val hadoopRDD = sc.textFile(tempDir.getPath + "/output/part-r-*")
-    assert(hadoopRDD.partitions.length === 0)
+    testIgnoreEmptySplits(Array.empty[Tuple2[String, String]], 1, 0, "part-r-00000", 0)
 
     // Ensure that if no split is empty, we don't lose any splits
-    val randomRDD1 = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 2)
-    randomRDD1.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
-      tempDir.getPath + "/output1")
-    assert(new File(tempDir.getPath + "/output1/part-r-00001").exists() === true)
-    val hadoopRDD1 = sc.textFile(tempDir.getPath + "/output1/part-r-*")
-    assert(hadoopRDD1.partitions.length === 2)
+    testIgnoreEmptySplits(Array(("key1", "a"), ("key2", "a"), ("key3", "b")), 2, 1, "part-r-00001",
+      2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
-    val randomRDD2 = sc.parallelize(
-      Array(("key1", "a"), ("key2", "a")), 5)
-    randomRDD2.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](
-      tempDir.getPath + "/output2")
-    assert(new File(tempDir.getPath + "/output2/part-r-00004").exists() === true)
-    val hadoopRDD2 = sc.textFile(tempDir.getPath + "/output2/part-r-*")
-    assert(hadoopRDD2.partitions.length === 2)
+    testIgnoreEmptySplits(Array(("key1", "a"), ("key2", "a")), 5, 2, "part-r-00004", 2)
   }
 }

@@ -35,7 +35,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{FILTER_OUT_EMPTY_SPLIT, IGNORE_CORRUPT_FILES}
+import org.apache.spark.internal.config.{IGNORE_CORRUPT_FILES, IGNORE_EMPTY_SPLITS}
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
@@ -134,6 +134,8 @@ class HadoopRDD[K, V](
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
+  private val ignoreEmptySplits = sparkContext.getConf.get(IGNORE_EMPTY_SPLITS)
+
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
@@ -195,11 +197,11 @@ class HadoopRDD[K, V](
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
-    val inputFormat = getInputFormat(jobConf)
-    val inputSplits = if (sparkContext.getConf.get(FILTER_OUT_EMPTY_SPLIT)) {
-      inputFormat.getSplits(jobConf, minPartitions).filter(_.getLength > 0)
+    val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
+    val inputSplits = if (ignoreEmptySplits) {
+      allInputSplits.filter(_.getLength > 0)
     } else {
-      inputFormat.getSplits(jobConf, minPartitions)
+      allInputSplits
     }
     val array = new Array[Partition](inputSplits.size)
     for (i <- 0 until inputSplits.size) {

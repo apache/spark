@@ -35,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{FILTER_OUT_EMPTY_SPLIT, IGNORE_CORRUPT_FILES}
+import org.apache.spark.internal.config.{IGNORE_CORRUPT_FILES, IGNORE_EMPTY_SPLITS}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
@@ -90,6 +90,8 @@ class NewHadoopRDD[K, V](
 
   private val ignoreCorruptFiles = sparkContext.conf.get(IGNORE_CORRUPT_FILES)
 
+  private val ignoreEmptySplits = sparkContext.getConf.get(IGNORE_EMPTY_SPLITS)
+
   def getConf: Configuration = {
     val conf: Configuration = confBroadcast.value.value
     if (shouldCloneJobConf) {
@@ -122,11 +124,11 @@ class NewHadoopRDD[K, V](
         configurable.setConf(_conf)
       case _ =>
     }
-    val jobContext = new JobContextImpl(_conf, jobId)
-    val rawSplits = if (sparkContext.getConf.get(FILTER_OUT_EMPTY_SPLIT)) {
-      inputFormat.getSplits(jobContext).asScala.filter(_.getLength > 0)
+    val allRowSplits = inputFormat.getSplits(new JobContextImpl(_conf, jobId)).asScala
+    val rawSplits = if (ignoreEmptySplits) {
+      allRowSplits.filter(_.getLength > 0)
     } else {
-      inputFormat.getSplits(jobContext).asScala
+      allRowSplits
     }
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {
