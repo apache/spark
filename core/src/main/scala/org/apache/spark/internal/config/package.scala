@@ -426,4 +426,11 @@ package object config {
     .toSequence
     .createOptional
 
+  private[spark] val MAX_REMOTE_BLOCK_SIZE_TO_MEM =
+    ConfigBuilder("spark.storage.maxRemoteBlockSizeToMem")
+      .doc("Remote block will be fetched to disk when size of block is above this threshold. " +
+        "This is to avoid big block taking too much memory. " +
+        "We can enable this config by setting a specific value(e.g. 200m).")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(Long.MaxValue)
 }

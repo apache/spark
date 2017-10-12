@@ -1091,6 +1091,15 @@ Apart from these, the following properties are also available, and may be useful
     to get the replication level of the block to the initial number.
   </td>
 </tr>
+<tr>
+  <td><code>spark.storage.maxRemoteBlockSizeToMem</code></td>
+  <td>Long.MaxValue</td>
+  <td>
+    Remote blocks will be fetched to disk when size of block is above this threshold.
+    This is to avoid big block taking too much memory.
+    This configuration can be enabled by setting a specific value(e.g. 200m).
+  </td>
+</tr>
 </table>
 
 ### Execution Behavior
