@@ -385,7 +385,7 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 #' @return A SparkDataFrame.
 #' @rdname summarize
 #' @export
-setGeneric("agg", function (x, ...) { standardGeneric("agg") })
+setGeneric("agg", function(x, ...) { standardGeneric("agg") })
 
 #' alias
 #'
@@ -645,7 +645,7 @@ setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 #' @rdname sample
 #' @export
 setGeneric("sample",
-           function(x, withReplacement, fraction, seed) {
+           function(x, withReplacement = FALSE, fraction, seed) {
              standardGeneric("sample")
            })
 
@@ -656,7 +656,7 @@ setGeneric("rollup", function(x, ...) { standardGeneric("rollup") })
 #' @rdname sample
 #' @export
 setGeneric("sample_frac",
-           function(x, withReplacement, fraction, seed) { standardGeneric("sample_frac") })
+           function(x, withReplacement = FALSE, fraction, seed) { standardGeneric("sample_frac") })
 
 #' @rdname sampleBy
 #' @export
@@ -731,7 +731,7 @@ setGeneric("schema", function(x) { standardGeneric("schema") })
 
 #' @rdname select
 #' @export
-setGeneric("select", function(x, col, ...) { standardGeneric("select") } )
+setGeneric("select", function(x, col, ...) { standardGeneric("select") })
 
 #' @rdname selectExpr
 #' @export
