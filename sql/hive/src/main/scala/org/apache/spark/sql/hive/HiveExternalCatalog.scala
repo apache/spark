@@ -1035,10 +1035,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         if (k == ColumnStat.KEY_HISTOGRAM) {
           // In Hive metastore, the length of value in table properties cannot be larger than 4000,
           // so we need to split histogram into multiple key-value properties if it's too long.
+          val maxValueLen = 4000
           val baseName = columnStatKeyPropName(colName, k)
-          var i = 1
-          for (begin <- 0 until v.length by 4000) {
-            statsProperties += (baseName + i -> v.substring(begin, begin + 4000))
+          var i = 0
+          for (begin <- 0 until v.length by maxValueLen) {
+            val end = math.min(v.length, begin + maxValueLen)
+            statsProperties += (s"$baseName-$i" -> v.substring(begin, end))
             i += 1
           }
         } else {
