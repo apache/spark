@@ -43,9 +43,16 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
     originalInstantiatedSparkSession.foreach(ctx => SparkSession.setDefaultSession(ctx))
   }
 
-  var sparkSession: SparkSession = _
+  private def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {
+    QueryTest.checkAnswer(actual, expectedAnswer) match {
+      case Some(errorMessage) => fail(errorMessage)
+      case None =>
+    }
+  }
 
-  def withTypeCoercionMode[T](typeCoercionMode: String)(f: SparkSession => T): T = {
+  private var sparkSession: SparkSession = _
+
+  private def withTypeCoercionMode[T](typeCoercionMode: String)(f: SparkSession => T): T = {
     try {
       val sparkConf = new SparkConf(false)
         .setMaster("local")
@@ -74,24 +81,27 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val data = Seq(str1, str2, str3, str4, str5, str6)
 
-    val q1 = "SELECT c1 from v where c1 > 0"
-    val q2 = "SELECT c1 from v where c1 > 0L"
+    val q1 = "SELECT c1 FROM v WHERE c1 > 0"
+    val q2 = "SELECT c1 FROM v WHERE c1 > 0L"
     val q3 = "SELECT c1 FROM v WHERE c1 = 0"
+    val q4 = "SELECT c1 FROM v WHERE c1 in (0)"
 
     withTypeCoercionMode("hive") { spark =>
       import spark.implicits._
       data.toDF("c1").createOrReplaceTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(str1) :: Row(str2) :: Row(str3) :: Row(str6) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(str1) :: Row(str2) :: Row(str3) :: Row(str6) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Seq(Row(str4)))
+      checkAnswer(spark.sql(q1), Row(str1) :: Row(str2) :: Row(str3) :: Row(str6) :: Nil)
+      checkAnswer(spark.sql(q2), Row(str1) :: Row(str2) :: Row(str3) :: Row(str6) :: Nil)
+      checkAnswer(spark.sql(q3), Row(str4) :: Nil)
+      checkAnswer(spark.sql(q4), Row(str4) :: Nil)
     }
 
     withTypeCoercionMode("legacy") { spark =>
       import spark.implicits._
       data.toDF("c1").createOrReplaceTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(str3) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(str2) :: Row(str3) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(str4) :: Row(str5) :: Row(str6) :: Nil)
+      checkAnswer(spark.sql(q1), Row(str3) :: Nil)
+      checkAnswer(spark.sql(q2), Row(str2) :: Row(str3) :: Nil)
+      checkAnswer(spark.sql(q3), Row(str4) :: Row(str5) :: Row(str6) :: Nil)
+      checkAnswer(spark.sql(q4), Row(str4) :: Nil)
     }
   }
 
@@ -101,52 +111,52 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val data = Seq(v1, v2)
 
-    val q1 = "select c1 from v where c1 > '2017-8-1'"
-    val q2 = "select c1 from v where c1 > '2014'"
-    val q3 = "select c1 from v where c1 > cast('2017-8-1' as date)"
+    val q1 = "SELECT c1 FROM v WHERE c1 > '2017-8-1'"
+    val q2 = "SELECT c1 FROM v WHERE c1 > '2014'"
+    val q3 = "SELECT c1 FROM v WHERE c1 > cast('2017-8-1' as date)"
 
     withTypeCoercionMode("hive") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(v1) :: Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v1) :: Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(spark.sql(q1), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(spark.sql(q2), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(spark.sql(q3), Row(v1) :: Row(v2) :: Nil)
     }
 
     withTypeCoercionMode("legacy") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v1) :: Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(spark.sql(q1), Nil)
+      checkAnswer(spark.sql(q2), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(spark.sql(q3), Row(v1) :: Row(v2) :: Nil)
     }
   }
 
   test("CommonTypeForBinaryComparison: StringType vs TimestampType") {
     val v1 = Timestamp.valueOf("2017-07-21 23:42:12.123")
     val v2 = Timestamp.valueOf("2017-08-21 23:42:12.123")
-    val v3 = Timestamp.valueOf("2017-08-21 23:42:12.0")
+    val v3 = Timestamp.valueOf("2017-08-21 23:42:12")
 
     val data = Seq(v1, v2, v3)
 
-    val q1 = "select c1 from v where c1 > '2017-8-1'"
-    val q2 = "select c1 from v where c1 > '2017-08-21 23:42:12'"
-    val q3 = "select c1 from v where c1 > cast('2017-8-1' as timestamp)"
+    val q1 = "SELECT c1 FROM v WHERE c1 > '2017-8-1'"
+    val q2 = "SELECT c1 FROM v WHERE c1 < '2017-08-21 23:42:12.0'"
+    val q3 = "SELECT c1 FROM v WHERE c1 > cast('2017-8-1' as timestamp)"
 
     withTypeCoercionMode("hive") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(v2) :: Row(v3) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(v2) :: Row(v3) :: Nil)
+      checkAnswer(spark.sql(q1), Row(v2) :: Row(v3) :: Nil)
+      checkAnswer(spark.sql(q2), Row(v1) :: Nil)
+      checkAnswer(spark.sql(q3), Row(v2) :: Row(v3) :: Nil)
     }
 
     withTypeCoercionMode("legacy") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v2) :: Row(v3) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(v2) :: Row(v3) :: Nil)
+      checkAnswer(spark.sql(q1), Nil)
+      checkAnswer(spark.sql(q2), Row(v1) :: Row(v3) :: Nil)
+      checkAnswer(spark.sql(q3), Row(v2) :: Row(v3) :: Nil)
     }
   }
 
@@ -156,21 +166,21 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val data = Seq(v1, v2)
 
-    val q1 = "select c1 from v where c1 > cast('2017-8-1' as date)"
-    val q2 = "select c1 from v where c1 > cast('2017-8-1' as timestamp)"
+    val q1 = "SELECT c1 FROM v WHERE c1 > cast('2017-8-1' as date)"
+    val q2 = "SELECT c1 FROM v WHERE c1 > cast('2017-8-1' as timestamp)"
 
     withTypeCoercionMode("hive") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q1), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q2), Row(v2) :: Nil)
     }
 
     withTypeCoercionMode("legacy") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q1), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q2), Row(v2) :: Nil)
     }
   }
 
@@ -180,18 +190,18 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
 
     val data = Seq(v1, v2)
 
-    val q1 = "select c1 from v where c1 > 1"
-    val q2 = "select c1 from v where c1 > '2017-8-1'"
-    val q3 = "select c1 from v where c1 > '2017-08-01'"
-    val q4 = "select * from v where c1 > cast(cast('2017-08-01' as timestamp) as double)"
+    val q1 = "SELECT c1 FROM v WHERE c1 > 1"
+    val q2 = "SELECT c1 FROM v WHERE c1 > '2017-8-1'"
+    val q3 = "SELECT c1 FROM v WHERE c1 > '2017-08-01'"
+    val q4 = "SELECT c1 FROM v WHERE c1 > cast(cast('2017-08-01' as timestamp) as double)"
 
     withTypeCoercionMode("hive") { spark =>
       import spark.implicits._
       data.toDF("c1").createTempView("v")
-      QueryTest.checkAnswer(spark.sql(q1), Row(v1) :: Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q2), Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(v2) :: Nil)
-      QueryTest.checkAnswer(spark.sql(q4), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q1), Row(v1) :: Row(v2) :: Nil)
+      checkAnswer(spark.sql(q2), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q3), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q4), Row(v2) :: Nil)
     }
 
     withTypeCoercionMode("legacy") { spark =>
@@ -201,8 +211,8 @@ class TypeCoercionModeSuite extends SparkFunSuite with BeforeAndAfterAll {
         spark.sql(q1)
       }
       assert(e1.getMessage.contains("data type mismatch"))
-      QueryTest.checkAnswer(spark.sql(q2), Nil)
-      QueryTest.checkAnswer(spark.sql(q3), Row(v2) :: Nil)
+      checkAnswer(spark.sql(q2), Nil)
+      checkAnswer(spark.sql(q3), Row(v2) :: Nil)
       val e2 = intercept[AnalysisException] {
         spark.sql(q4)
       }
