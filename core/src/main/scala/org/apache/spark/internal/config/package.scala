@@ -270,6 +270,15 @@ package object config {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  private [spark] val FILTER_OUT_EMPTY_SPLIT = ConfigBuilder("spark.files.filterOutEmptySplit")
+    .doc("If set to true, HadoopRDD/NewHadoopRDD will not handle the split which its length is 0." +
+      "Maybe you will read an empty hive table but has many empty files. If set to false, Spark " +
+      "generates many tasks to handle these empty files. Sometimes, users maybe want to use " +
+      "SparkContext#textFile to handle a file stored in hadoop, and they don't want to generate " +
+      "any task when this file is empty, they can set this configuration to true.")
+    .booleanConf
+    .createWithDefault(false)
+
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
       .doc("Regex to decide which Spark configuration properties and environment variables in " +

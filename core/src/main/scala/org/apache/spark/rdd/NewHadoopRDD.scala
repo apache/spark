@@ -21,6 +21,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{Date, Locale}
 
+import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -34,7 +35,7 @@ import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.IGNORE_CORRUPT_FILES
+import org.apache.spark.internal.config.{FILTER_OUT_EMPTY_SPLIT, IGNORE_CORRUPT_FILES}
 import org.apache.spark.rdd.NewHadoopRDD.NewHadoopMapPartitionsWithSplitRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{SerializableConfiguration, ShutdownHookManager}
@@ -122,9 +123,10 @@ class NewHadoopRDD[K, V](
       case _ =>
     }
     val jobContext = new JobContextImpl(_conf, jobId)
-    var rawSplits = inputFormat.getSplits(jobContext).toArray(Array.empty[InputSplit])
-    if (sparkContext.getConf.getBoolean("spark.hadoop.filterOutEmptySplit", false)) {
-      rawSplits = rawSplits.filter(_.getLength>0)
+    val rawSplits = if (sparkContext.getConf.get(FILTER_OUT_EMPTY_SPLIT)) {
+      inputFormat.getSplits(jobContext).asScala.filter(_.getLength > 0)
+    } else {
+      inputFormat.getSplits(jobContext).asScala
     }
     val result = new Array[Partition](rawSplits.size)
     for (i <- 0 until rawSplits.size) {

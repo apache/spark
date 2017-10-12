@@ -1192,6 +1192,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+    <td><code>spark.files.filterOutEmptySplit</code></td>
+    <td>false</td>
+    <td>If set to true, HadoopRDD/NewHadoopRDD will not handle the split which its length is 0. Maybe you will read an empty
+    hive table but has many empty files. If set to false, Spark generates many tasks to handle these empty files.
+    Sometimes, users maybe want to use SparkContext#textFile to handle a file stored in hadoop, and they don't
+    want to generate any task when this file is empty, they can set this configuration to true.</td>
+</tr>
+<tr>
     <td><code>spark.hadoop.cloneConf</code></td>
     <td>false</td>
     <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
@@ -1209,14 +1217,6 @@ Apart from these, the following properties are also available, and may be useful
     previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.
     This setting is ignored for jobs generated through Spark Streaming's StreamingContext, since
     data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
-</tr>
-<tr>
-    <td><code>spark.hadoop.filterOutEmptySplit</code></td>
-    <td>false</td>
-    <td>If set to true, HadoopRDD will not handle the split which its lenghth is 0. Maybe you will read an empty
-    hive table but has many empty files. If set to false, Spark generates many tasks to handle these empty files.
-    Sometimes, users maybe want to use SparkContext#textFile to handle a file stored in hadoop, and they don't 
-    want to generate any task when this file is empty, they can set this configuration to true.</td>
 </tr>
 <tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
