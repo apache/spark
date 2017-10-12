@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SQLExecution}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -111,9 +111,11 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = queryExecution.logical.output
+    // Pick the attributes from analyzed plan, as optimizer may not preserve the output schema
+    // names' case.
+    val allColumns = queryExecution.analyzed.output
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = queryExecution.logical.output.filterNot(partitionSet.contains)
+    val dataColumns = allColumns.filterNot(partitionSet.contains)
 
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
@@ -170,8 +172,13 @@ object FileFormatWriter extends Logging {
         val rdd = if (orderingMatched) {
           queryExecution.toRdd
         } else {
+          // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+          // the physical plan may have different attribute ids due to optimizer removing some
+          // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+          val orderingExpr = requiredOrdering
+            .map(SortOrder(_, Ascending)).map(BindReferences.bindReference(_, allColumns))
           SortExec(
-            requiredOrdering.map(SortOrder(_, Ascending)),
+            orderingExpr,
             global = false,
             child = queryExecution.executedPlan).execute()
         }
