@@ -23,39 +23,43 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.sources.v2.reader._
 
 /**
- * A base class for data source reader holder and defines equals/hashCode methods.
+ * A base class for data source reader holder with customized equals/hashCode methods.
  */
 trait DataSourceReaderHolder {
+
+  /**
+   * The full output of the data source reader, without column pruning.
+   */
   def fullOutput: Seq[AttributeReference]
+
+  /**
+   * The held data source reader.
+   */
   def reader: DataSourceV2Reader
 
+  /**
+   * The metadata of this data source reader that can be used for equality test.
+   */
+  private def metadata: Seq[Any] = {
+    val filters: Any = reader match {
+      case s: SupportsPushDownCatalystFilters => s.pushedCatalystFilters().toSet
+      case s: SupportsPushDownFilters => s.pushedFilters().toSet
+      case _ => Nil
+    }
+    Seq(fullOutput, reader.getClass, reader.readSchema(), filters)
+  }
+
+  def canEqual(other: Any): Boolean
+
   override def equals(other: Any): Boolean = other match {
-    case other: DataSourceV2Relation =>
-      val basicEquals = this.fullOutput == other.fullOutput &&
-        this.reader.getClass == other.reader.getClass &&
-        this.reader.readSchema() == other.reader.readSchema()
-
-      val samePushedFilters = (this.reader, other.reader) match {
-        case (l: SupportsPushDownCatalystFilters, r: SupportsPushDownCatalystFilters) =>
-          l.pushedCatalystFilters().toSeq == r.pushedCatalystFilters().toSeq
-        case (l: SupportsPushDownFilters, r: SupportsPushDownFilters) =>
-          l.pushedFilters().toSeq == r.pushedFilters().toSeq
-        case _ => true
-      }
-
-      basicEquals && samePushedFilters
-
+    case other: DataSourceReaderHolder =>
+      canEqual(other) && metadata.length == other.metadata.length &&
+        metadata.zip(other.metadata).forall { case (l, r) => l == r }
     case _ => false
   }
 
   override def hashCode(): Int = {
-    val state = Seq(fullOutput, reader.getClass, reader.readSchema())
-    val filters: Any = reader match {
-      case s: SupportsPushDownCatalystFilters => s.pushedCatalystFilters().toSeq
-      case s: SupportsPushDownFilters => s.pushedFilters().toSeq
-      case _ => Nil
-    }
-    (state :+ filters).map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
+    metadata.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   lazy val output: Seq[Attribute] = reader.readSchema().map(_.name).map { name =>

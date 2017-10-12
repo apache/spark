@@ -25,6 +25,8 @@ case class DataSourceV2Relation(
     fullOutput: Seq[AttributeReference],
     reader: DataSourceV2Reader) extends LeafNode with DataSourceReaderHolder {
 
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
+
   override def computeStats(): Statistics = reader match {
     case r: SupportsReportStatistics =>
       Statistics(sizeInBytes = r.getStatistics.sizeInBytes().orElse(conf.defaultSizeInBytes))

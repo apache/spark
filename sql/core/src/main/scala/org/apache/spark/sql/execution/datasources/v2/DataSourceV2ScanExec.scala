@@ -36,6 +36,8 @@ case class DataSourceV2ScanExec(
     fullOutput: Seq[AttributeReference],
     @transient reader: DataSourceV2Reader) extends LeafExecNode with DataSourceReaderHolder {
 
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2ScanExec]
+
   override def references: AttributeSet = AttributeSet.empty
 
   override lazy val metrics = Map(
