@@ -1272,14 +1272,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // so that we have a chance to do location refresh
     val blockManagerIds = (0 to maxFailuresBeforeLocationRefresh)
       .map { i => BlockManagerId(s"id-$i", s"host-$i", i + 1) }
-    when(mockBlockManagerMaster.getBlockStatus(mc.any[BlockId], mc.anyBoolean())).thenReturn(
-      blockManagerIds.map(id => id -> BlockStatus.empty).toMap)
+    when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId])).thenReturn(
+      (blockManagerIds, Option(BlockStatus.empty)))
     store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,
       transferService = Option(mockBlockTransferService))
     val block = store.getRemoteBytes("item")
       .asInstanceOf[Option[ByteBuffer]]
     assert(block.isDefined)
-    verify(mockBlockManagerMaster, times(2)).getBlockStatus("item", false)
+    verify(mockBlockManagerMaster, times(2)).getLocationsAndStatus("item")
   }
 
   test("SPARK-17484: block status is properly updated following an exception in put()") {
@@ -1377,7 +1377,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val mockBlockTransferService = new MockBlockTransferService(0)
 
     val blockStatus = Map(
-      BlockManagerId("id-0", s"host-0", 1) -> BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L))
+      BlockManagerId("id-0", "host-0", 1) -> BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L))
+    when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId])).thenReturn(
+      (Seq(BlockManagerId("id-0", "host-0", 1)),
+        Option(BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L))))
     when(mockBlockManagerMaster.getBlockStatus(mc.any[BlockId], mc.anyBoolean())).thenReturn(
       blockStatus)
     store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,
