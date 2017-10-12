@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
@@ -1256,15 +1257,11 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
  */
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
-  import scala.annotation.tailrec
-  import scala.language.implicitConversions
-
-  implicit def nodeToFilter(node: LogicalPlan): Filter = node.asInstanceOf[Filter]
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Except(left, right) if isEligible(left, right) =>
+      val filterCondition = combineFilters(right).asInstanceOf[Filter].condition
       Distinct(
-        Filter(Not(replaceAttributesIn(combineFilters(right).condition, left)), left)
+        Filter(Not(replaceAttributesIn(filterCondition, left)), left)
       )
   }
 

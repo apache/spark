@@ -52,7 +52,7 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("replace Except with Filter") {
+  test("replace Except with Filter while both the nodes are of type Filter") {
     val attributeA = 'a.int
     val attributeB = 'b.int
 
@@ -67,6 +67,23 @@ class ReplaceOperatorSuite extends PlanTest {
       Aggregate(table1.output, table1.output,
         Filter(Not(attributeA >= 2 && attributeB < 1),
           Filter(attributeB === 2, Filter(attributeA === 1, table1)))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while only right node is of type Filter") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Filter(attributeB < 1, Filter(attributeA >= 2, table1))
+
+    val query = Except(table1, table2)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+        Filter(Not(attributeA >= 2 && attributeB < 1), table1)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
