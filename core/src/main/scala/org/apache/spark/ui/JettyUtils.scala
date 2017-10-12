@@ -96,7 +96,9 @@ private[spark] object JettyUtils extends Logging {
             if (xContentTypeOptionsValue.get.equalsIgnoreCase("true")) {
               response.setHeader("X-Content-Type-Options", "nosniff")
             }
-            strictTransportSecurityValue.foreach(response.setHeader("Strict-Transport-Security", _))
+            if (conf.get("spark.ssl.enabled").equalsIgnoreCase("true")) {
+            response.setHeader("Strict-Transport-Security", strictTransportSecurityValue.get)
+            }
             response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_FORBIDDEN)
