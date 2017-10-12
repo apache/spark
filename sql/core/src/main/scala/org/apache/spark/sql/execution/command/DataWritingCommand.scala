@@ -31,13 +31,16 @@ import org.apache.spark.util.SerializableConfiguration
  */
 trait DataWritingCommand extends RunnableCommand {
 
+  /**
+   * The input query plan that produces the data to be written.
+   */
   def query: LogicalPlan
 
   // We make the input `query` an inner child instead of a child in order to hide it from the
-  // optimizer. This is because optimizer may change the output schema names, and we have to keep
-  // the original analyzed plan here so that we can pass the corrected schema to the writer. The
-  // schema of analyzed plan is what user expects(or specifies), so we should respect it when
-  // writing.
+  // optimizer. This is because optimizer may not preserve the output schema names' case, and we
+  // have to keep the original analyzed plan here so that we can pass the corrected schema to the
+  // writer. The schema of analyzed plan is what user expects(or specifies), so we should respect
+  // it when writing.
   override protected def innerChildren: Seq[LogicalPlan] = query :: Nil
 
   override lazy val metrics: Map[String, SQLMetric] = {

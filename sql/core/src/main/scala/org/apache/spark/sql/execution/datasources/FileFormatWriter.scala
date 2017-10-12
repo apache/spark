@@ -117,7 +117,9 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = queryExecution.logical.output
+    // Pick the attributes from analyzed plan, as optimizer may not preserve the output schema
+    // names' case.
+    val allColumns = queryExecution.analyzed.output
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
 
