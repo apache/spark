@@ -335,7 +335,7 @@ $(document).ready(function () {
                             }
                         },
                         {data : "executorLogs", render: formatLogsCells},
-                        {data : "launchTime"},
+                        {data : "launchTime", render: formatDate},
                         {
                             data : function (row, type) {
                                 return type === 'display' ? formatDuration(row.taskMetrics.executorRunTime) : row.taskMetrics.executorRunTime;
@@ -386,7 +386,7 @@ $(document).ready(function () {
                                 if (accumulator_table.length > 0 && row.accumulatorUpdates.length > 0) {
                                     return row.accumulatorUpdates[0].name + ' : ' + row.accumulatorUpdates[0].update;
                                 } else {
-                                    return 0;
+                                    return "";
                                 }
                             }
                         },

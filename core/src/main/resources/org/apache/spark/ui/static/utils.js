@@ -130,3 +130,8 @@ function setDataTableDefaults() {
         pageLength: 20
     });
 }
+
+function formatDate(date) {
+  if (date <= 0) return "-";
+  else return date.split(".")[0].replace("T", " ");
+}
