@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.hive.orc.OrcFileOperator
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -734,16 +735,16 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
   }
 
   private def getConvertMetastoreConfName(format: String): String = format match {
-    case "parquet" => "spark.sql.hive.convertMetastoreParquet"
-    case "orc" => "spark.sql.hive.convertMetastoreOrc"
+    case "parquet" => HiveUtils.CONVERT_METASTORE_PARQUET.key
+    case "orc" => HiveUtils.CONVERT_METASTORE_ORC.key
   }
 
   private def getSparkCompressionConfName(format: String): String = format match {
-    case "parquet" => "spark.sql.parquet.compression.codec"
-    case "orc" => "spark.sql.orc.compression.codec"
+    case "parquet" => SQLConf.PARQUET_COMPRESSION.key
+    case "orc" => SQLConf.ORC_COMPRESSION.key
   }
 
-  private def getTableCompressPropName(format: String): String = {
+  private def getHiveCompressPropName(format: String): String = {
     format.toLowerCase match {
       case "parquet" => "parquet.compression"
       case "orc" => "orc.compress"
@@ -776,7 +777,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       format: String,
       compressionCodec: Option[String]) {
     val tblProperties = compressionCodec match {
-      case Some(prop) => s"TBLPROPERTIES('${getTableCompressPropName(format)}'='$prop')"
+      case Some(prop) => s"TBLPROPERTIES('${getHiveCompressPropName(format)}'='$prop')"
       case _ => ""
     }
     val partitionCreate = if (isPartitioned) "PARTITIONED BY (p int)" else ""
@@ -794,7 +795,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       s"""
          |INSERT OVERWRITE TABLE $tableName
          |$partitionInsert
-         |SELECT * from table_source
+         |SELECT * FROM table_source
        """.stripMargin)
   }
 
