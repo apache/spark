@@ -80,7 +80,7 @@ private[spark] object JettyUtils extends Logging {
     val xFrameOptionsValue =
       allowFramingFrom.map(uri => s"ALLOW-FROM $uri").getOrElse("SAMEORIGIN")
     val xXssProtectionValue = conf.getOption("spark.ui.xXssProtection")
-    val xContentTypeOptionsValue = conf.getOption("spark.ui.xContentType.options")
+    val xContentTypeOptionsValue = conf.getOption("spark.ui.xContentTypeOptions.enabled")
     val strictTransportSecurityValue = conf.getOption("spark.ui.strictTransportSecurity")
 
     new HttpServlet {
@@ -93,7 +93,9 @@ private[spark] object JettyUtils extends Logging {
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
             xXssProtectionValue.foreach(response.setHeader("X-XSS-Protection", _))
-            xContentTypeOptionsValue.foreach(response.setHeader("X-Content-Type-Options", _))
+            if (xContentTypeOptionsValue.get.equalsIgnoreCase("true")) {
+              response.setHeader("X-Content-Type-Options", "nosniff")
+            }
             strictTransportSecurityValue.foreach(response.setHeader("Strict-Transport-Security", _))
             response.getWriter.print(servletParams.extractFn(result))
           } else {

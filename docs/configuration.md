@@ -2016,7 +2016,54 @@ Apart from these, the following properties are also available, and may be useful
     </tr>
 </table>
 
+### HTTP Security Headers
 
+Apache Spark can be configured to include HTTP Headers which aids in preventing Cross Site Scripting (XSS), Cross-Frame Scripting (XFS), MIME-Sniffing and also enforces HTTP Strict Transport Security.
+
+<table class="table">
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr>
+        <td><code>spark.ui.xXssProtection</code></td>
+        <td>None</td>
+        <td>
+            Value for HTTP X-XSS-Protection response header. You can choose appropriate value from below:
+            <ul>
+                <li>  0 (Disables XSS filtering)
+                <li>  1 (Enables XSS filtering. If a cross-site scripting attack is detected, the browser will sanitize the page.)
+                <li>  1; mode=block (Enables XSS filtering. The browser will prevent rendering of the page if an attack is detected.)
+            </ul> 
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ui.allowFramingFrom</code></td>
+        <td>SAMEORIGIN</td>
+        <td>
+            Value for X-Frame-Options HTTP response header
+            <br />You can provide the "website uri" which can only be displayed in a frame on the specified origin. 
+            <br />
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
+        <td>None</td>
+        <td>
+            When value is set to "true", X-Content-Type-Options HTTP response header will be set to "nosniff".
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ui.strictTransportSecurity</code></td>
+        <td>None</td>
+        <td>
+            Value for HTTP Strict Transport Security (HSTS) Response Header. You can choose appropriate value from below:
+            <ul>
+                <li> max-age=&lt;expire-time&gt;
+                <li> max-age=&lt;expire-time&gt;; includeSubDomains
+                <li> max-age=&lt;expire-time&gt;; preload
+            </ul>
+        </td>
+    </tr>
+</table>
+    
 ### Spark SQL
 
 Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
