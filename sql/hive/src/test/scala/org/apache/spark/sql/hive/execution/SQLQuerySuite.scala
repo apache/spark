@@ -2106,4 +2106,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  // This test case is added to prevent regression.
+  test("SPARK-22267 Spark SQL incorrectly reads ORC files when column order is different") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+
+      Seq(1 -> 2).toDF("c1", "c2").write.format("orc").mode("overwrite").save(path)
+      checkAnswer(spark.read.orc(path), Row(1, 2))
+
+      Seq("true", "false").foreach { value =>
+        withTable("t") {
+          withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> value) {
+            sql(s"CREATE EXTERNAL TABLE t(c2 INT, c1 INT) STORED AS ORC LOCATION '$path'")
+            // The correct answer is Row(2, 1). SPARK-22267 should fix this later.
+            checkAnswer(spark.table("t"), if (value == "true") Row(2, 1) else Row(1, 2))
+          }
+        }
+      }
+    }
+  }
 }
