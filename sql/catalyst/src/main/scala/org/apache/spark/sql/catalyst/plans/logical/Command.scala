@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
  * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
  * eagerly executed.
  */
-trait Command extends LogicalPlan {
+trait Command extends LeafNode {
   override def output: Seq[Attribute] = Seq.empty
-  override def children: Seq[LogicalPlan] = Seq.empty
 }
