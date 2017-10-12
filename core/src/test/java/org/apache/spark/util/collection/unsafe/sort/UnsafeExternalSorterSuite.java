@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.UUID;
 
+import org.hamcrest.Matchers;
 import scala.Tuple2$;
 
 import org.junit.After;
@@ -454,5 +455,36 @@ public class UnsafeExternalSorterSuite {
     }
   }
 
+  @Test
+  public void testOOMDuringSpill() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    // we assume that given default configuration,
+    // the size of the data we insert to the sorter (ints)
+    // and assuming we shouldn't spill before pointers array is exhausted
+    // (memory manager is not configured to throw at this point)
+    // - so this loop runs a reasonable number of iterations (<2000).
+    // test indeed completed within <30ms (on a quad i7 laptop).
+    for (int i = 0; sorter.hasSpaceForAnotherRecord(); ++i) {
+      insertNumber(sorter, i);
+    }
+    // we expect the next insert to attempt growing the pointerssArray
+    // first allocation is expected to fail, then a spill is triggered which attempts another allocation
+    // which also fails and we expect to see this OOM here.
+    // the original code messed with a released array within the spill code
+    // and ended up with a failed assertion.
+    // we also expect the location of the OOM to be org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset
+    memoryManager.markconsequentOOM(2);
+    try {
+      insertNumber(sorter, 1024);
+      fail("expected OutOfMmoryError but it seems operation surprisingly succeeded");
+    }
+    // we expect an OutOfMemoryError here, anything else (i.e the original NPE is a failure)
+    catch (OutOfMemoryError oom){
+      String oomStackTrace = Utils.exceptionString(oom);
+      assertThat("expected OutOfMemoryError in org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset",
+              oomStackTrace,
+              Matchers.containsString("org.apache.spark.util.collection.unsafe.sort.UnsafeInMemorySorter.reset"));
+    }
+  }
 }
 
