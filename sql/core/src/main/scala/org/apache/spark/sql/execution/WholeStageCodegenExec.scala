@@ -181,16 +181,15 @@ trait CodegenSupport extends SparkPlan {
    * for the null status.
    */
   private def isValidParamLength(ctx: CodegenContext): Boolean = {
-    var paramLength = 1 // for `this` parameter.
-    output.foreach { attr =>
+    // Start value is 1 for `this`.
+    output.foldLeft(1) { case (curLength, attr) =>
       ctx.javaType(attr.dataType) match {
-        case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !attr.nullable => paramLength += 2
-        case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => paramLength += 3
-        case _ if !attr.nullable => paramLength += 1
-        case _ => paramLength += 2
+        case (ctx.JAVA_LONG | ctx.JAVA_DOUBLE) if !attr.nullable => curLength + 2
+        case ctx.JAVA_LONG | ctx.JAVA_DOUBLE => curLength + 3
+        case _ if !attr.nullable => curLength + 1
+        case _ => curLength + 2
       }
-    }
-    paramLength <= 255
+    } <= 255
   }
 
   /**
