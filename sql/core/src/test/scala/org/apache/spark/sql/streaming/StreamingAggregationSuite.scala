@@ -495,7 +495,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
           AssertOnQuery("Verify addition of exchange operator") { se =>
             checkAggregationChain(
               se,
-              expectShuffling = false,
+              expectShuffling = true,
               spark.sessionState.conf.numShufflePartitions)
           },
           StopStream

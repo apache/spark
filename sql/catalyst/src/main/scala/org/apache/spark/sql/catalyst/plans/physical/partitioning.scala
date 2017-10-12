@@ -223,7 +223,7 @@ case object SinglePartition extends Partitioning {
 
   override def satisfies(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
-    case ClusteredDistribution(_, desiredPartitions) => desiredPartitions.exists(_ == 1)
+    case ClusteredDistribution(_, desiredPartitions) => desiredPartitions.forall(_ == 1)
     case _ => true
   }
 
