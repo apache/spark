@@ -2067,7 +2067,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       .count
   }
 
-  testQuietly("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
+  test("SPARK-19372: Filter can be executed w/o generated code due to JVM code size limit") {
     val N = 400
     val rows = Seq(Row.fromSeq(Seq.fill(N)("string")))
     val schema = StructType(Seq.tabulate(N)(i => StructField(s"_c$i", StringType)))
@@ -2081,10 +2081,8 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     }
 
     withSQLConf(SQLConf.CODEGEN_FALLBACK.key -> "false") {
-      val e = intercept[SparkException] {
-        df.filter(filter).count()
-      }.getMessage
-      assert(e.contains("grows beyond 64 KB"))
+      // SPARK-21720 avoids an exception due to JVM code size limit
+      df.filter(filter).count()
     }
   }
 
