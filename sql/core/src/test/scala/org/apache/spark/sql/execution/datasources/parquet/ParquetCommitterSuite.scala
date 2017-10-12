@@ -31,7 +31,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 
 /**
- * Test logic related to choice of output commtters
+ * Test logic related to choice of output committers.
  */
 class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   with LocalSparkContext {
@@ -52,11 +52,14 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   }
 
   override def afterAll(): Unit = {
-    if (spark != null) {
-      spark.stop()
-      spark = null
+    try {
+      if (spark != null) {
+        spark.stop()
+        spark = null
+      }
+    } finally {
+      super.afterAll()
     }
-    super.afterAll()
   }
 
   test("alternative output committer, merge schema") {
