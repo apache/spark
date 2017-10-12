@@ -501,6 +501,7 @@ To load a CSV file you can use:
 
 </div>
 </div>
+
 ### Run SQL on files directly
 
 Instead of using read API to load a file into DataFrame and query it, you can also query that
