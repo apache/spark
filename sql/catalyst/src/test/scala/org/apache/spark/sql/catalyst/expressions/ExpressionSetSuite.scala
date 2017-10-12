@@ -213,4 +213,39 @@ class ExpressionSetSuite extends SparkFunSuite {
     assert((initialSet ++ setToAddWithSameExpression).size == 2)
     assert((initialSet ++ setToAddWithOutSameExpression).size == 3)
   }
+
+  test("add single element to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+
+    assert((initialSet + (aUpper + 1)).size == 2)
+    assert((initialSet + Rand(0)).size == 3)
+    assert((initialSet + (aUpper + 2)).size == 3)
+  }
+
+  test("remove single element to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+
+    assert((initialSet - (aUpper + 1)).size == 1)
+    assert((initialSet - Rand(0)).size == 2)
+    assert((initialSet - (aUpper + 2)).size == 2)
+  }
+
+  test("add multiple elements to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToAddWithSameDeterministicExpression = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToAddWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet ++ setToAddWithSameDeterministicExpression).size == 3)
+    assert((initialSet ++ setToAddWithOutSameExpression).size == 4)
+  }
+
+  test("remove multiple elements to set with non-deterministic expressions") {
+    val initialSet = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToRemoveWithSameDeterministicExpression = ExpressionSet(aUpper + 1 :: Rand(0) :: Nil)
+    val setToRemoveWithOutSameExpression = ExpressionSet(aUpper + 3 :: aUpper + 4 :: Nil)
+
+    assert((initialSet -- setToRemoveWithSameDeterministicExpression).size == 1)
+    assert((initialSet -- setToRemoveWithOutSameExpression).size == 2)
+  }
+
 }

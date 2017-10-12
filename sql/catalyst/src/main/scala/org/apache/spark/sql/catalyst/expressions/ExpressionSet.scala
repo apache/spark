@@ -90,6 +90,18 @@ class ExpressionSet protected(
     }
   }
 
+  override def --(elems: GenTraversableOnce[Expression]): ExpressionSet = {
+    val elemSet = new mutable.HashSet[Expression]
+    elems.foreach { elem =>
+      if (elem.deterministic) {
+        elemSet.add(elem.canonicalized)
+      }
+    }
+    val newBaseSet = baseSet -- elemSet
+    val newOriginals = originals.clone().filterNot(e => elemSet.contains(e.canonicalized))
+    new ExpressionSet(newBaseSet, newOriginals)
+  }
+
   override def iterator: Iterator[Expression] = originals.iterator
 
   /**
