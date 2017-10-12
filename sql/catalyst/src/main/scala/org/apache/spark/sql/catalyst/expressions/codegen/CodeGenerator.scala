@@ -83,10 +83,10 @@ case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprElimi
  *
  * @param functionName String representing the name of the function
  * @param subclassName Optional value which is empty if the function is added to
- *                     the superclass, otherwise it contains the name of the
+ *                     the outer class, otherwise it contains the name of the
  *                     inner class in which the function has been added.
  * @param subclassInstance Optional value which is empty if the function is added to
- *                         the superclass, otherwise it contains the name of the
+ *                         the outer class, otherwise it contains the name of the
  *                         instance of the inner class in the outer class.
  */
 private[codegen] case class NewFunction(functionName: String, subclassName: Option[String],
