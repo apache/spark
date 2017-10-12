@@ -865,7 +865,7 @@ class CodegenContext {
             addNewFunctionToClass(func, code, subclassName)
             Seq(s"$subclassInstance.$func")
           } else {
-            subclassFunctions
+            subclassFunctions.map(f => s"$subclassInstance.$f")
           }
         }
 
