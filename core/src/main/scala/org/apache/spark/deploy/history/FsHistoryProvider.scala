@@ -19,7 +19,7 @@ package org.apache.spark.deploy.history
 
 import java.io.{File, FileNotFoundException, IOException}
 import java.util.{Date, UUID}
-import java.util.concurrent.{Executors, ExecutorService, Future, TimeUnit}
+import java.util.concurrent._
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
@@ -95,6 +95,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
   // Interval between each cleaner checks for event logs to delete
   private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
+
+  // Timeout for event log replaying
+  private val REPLAY_TIMEOUT = conf.getTimeAsSeconds("spark.history.fs.replay.timeout", "5m")
 
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
@@ -402,10 +405,13 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
           // Wait for all tasks to finish. This makes sure that checkForLogs
           // is not scheduled again while some tasks are already running in
           // the replayExecutor.
-          task.get()
+          task.get(REPLAY_TIMEOUT, TimeUnit.SECONDS)
         } catch {
           case e: InterruptedException =>
             throw e
+          case e: TimeoutException =>
+            task.cancel(true)
+            logWarning("Replay time out while merging application listings", e)
           case e: Exception =>
             logError("Exception while merging application listings", e)
         } finally {
