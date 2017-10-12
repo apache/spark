@@ -77,7 +77,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    *
    * @param leftSideOnly Deterministic conjuncts which reference only the left side of the join.
    * @param rightSideOnly Deterministic conjuncts which reference only the right side of the join.
-   * @param bothSides Conjuncts which are in neither left nor right.
+   * @param bothSides Conjuncts which are nondeterministic, occur after a nondeterministic conjunct,
+   *                  or reference both left and right sides of the join.
    * @param full The full join condition.
    */
   case class JoinConditionSplitPredicates(
@@ -103,19 +104,24 @@ object StreamingSymmetricHashJoinHelper extends Logging {
         if (condition.isEmpty) {
           (None, None, None)
         } else {
-          val (candidates, containingNonDeterministic) =
+          // Span rather than partition, because nondeterministic expressions don't commute
+          // across AND.
+          val (deterministicConjuncts, nonDeterministicConjuncts) =
             splitConjunctivePredicates(condition.get).span(_.deterministic)
 
-          val (leftConjuncts, nonLeftConjuncts) = candidates.partition { cond =>
+          val (leftConjuncts, nonLeftConjuncts) = deterministicConjuncts.partition { cond =>
             cond.references.subsetOf(left.outputSet)
           }
 
-          val (rightConjuncts, remainingConjuncts) = candidates.partition { cond =>
+          val (rightConjuncts, remainingConjuncts) = nonLeftConjuncts.partition { cond =>
             cond.references.subsetOf(right.outputSet)
           }
 
-          (leftConjuncts.reduceOption(And), rightConjuncts.reduceOption(And),
-            (containingNonDeterministic ++ remainingConjuncts).reduceOption(And))
+          (
+            leftConjuncts.reduceOption(And),
+            rightConjuncts.reduceOption(And),
+            (nonDeterministicConjuncts ++ remainingConjuncts).reduceOption(And)
+          )
         }
       }
 
