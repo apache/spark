@@ -607,14 +607,14 @@ object CoalesceExec {
       numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
 
     override def getPartitions: Array[Partition] =
-      Array.tabulate(numPartitions)(i => SimplePartition(i))
+      Array.tabulate(numPartitions)(i => EmptyPartition(i))
 
     override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
       Iterator.empty
     }
   }
 
-  case class SimplePartition(index: Int) extends Partition
+  case class EmptyPartition(index: Int) extends Partition
 }
 
 /**
