@@ -487,8 +487,10 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   protected def mergeApplicationListing(fileStatus: FileStatus): Unit = {
     val eventsFilter: ReplayEventsFilter = { eventString =>
       eventString.startsWith(APPL_START_EVENT_PREFIX) ||
-        eventString.startsWith(APPL_END_EVENT_PREFIX) ||
-        eventString.startsWith(LOG_START_EVENT_PREFIX)
+      eventString.startsWith(APPL_END_EVENT_PREFIX) ||
+      eventString.startsWith(LOG_START_EVENT_PREFIX) ||
+      eventString.startsWith(JOB_START_EVENT_PREFIX) ||
+      eventString.startsWith(JOB_END_EVENT_PREFIX)
     }
 
     val logPath = fileStatus.getPath()
@@ -712,6 +714,10 @@ private[history] object FsHistoryProvider {
 
   private val LOG_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerLogStart\""
 
+  private val JOB_START_EVENT_PREFIX = "{\"Event\":\"SparkListenerJobStart\""
+
+  private val JOB_END_EVENT_PREFIX = "{\"Event\":\"SparkListenerJobEnd\""
+
   /**
    * Current version of the data written to the listing database. When opening an existing
    * db, if the version does not match this value, the FsHistoryProvider will throw away
@@ -746,7 +752,7 @@ private[history] class AttemptInfoWrapper(
     val fileSize: Long) {
 
   def toAppAttemptInfo(): ApplicationAttemptInfo = {
-    ApplicationAttemptInfo(info.attemptId, info.startTime.getTime(),
+    ApplicationAttemptInfo(info.attemptId, info.status, info.startTime.getTime(),
       info.endTime.getTime(), info.lastUpdated.getTime(), info.sparkUser,
       info.completed, info.appSparkVersion)
   }
@@ -794,6 +800,17 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
     attempt.completed = true
   }
 
+  override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+    attempt.jobToStatus(jobStart.jobId) = "Started"
+  }
+
+  override def onJobEnd(jobEnd: SparkListenerJobEnd): Unit = {
+    attempt.jobToStatus(jobEnd.jobId) = jobEnd.jobResult match {
+      case JobSucceeded => "Succeeded"
+      case JobFailed(_) => "Failed"
+    }
+  }
+
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case SparkListenerLogStart(sparkVersion) =>
       attempt.appSparkVersion = sparkVersion
@@ -833,10 +850,12 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
     var sparkUser: String = null
     var completed = false
     var appSparkVersion = ""
+    val jobToStatus = new mutable.HashMap[Int, String]
 
     def toView(): AttemptInfoWrapper = {
       val apiInfo = new v1.ApplicationAttemptInfo(
         attemptId,
+        applicationStatus.get,
         startTime,
         endTime,
         lastUpdated,
@@ -848,6 +867,18 @@ private[history] class AppListingListener(log: FileStatus, clock: Clock) extends
         apiInfo,
         logPath,
         fileSize)
+    }
+
+    def applicationStatus : Option[String] = {
+      if (startTime.getTime == -1) {
+        Some("<Not Started>")
+      } else if (endTime.getTime == -1) {
+        Some("<In Progress>")
+      } else if (jobToStatus.isEmpty || jobToStatus.exists(_._2 != "Succeeded")) {
+        Some("Failed")
+      } else {
+        Some("Succeeded")
+      }
     }
 
   }

@@ -3,6 +3,7 @@
   "name" : "Spark shell",
   "attempts" : [ {
     "attemptId" : "2",
+    "status" : "Succeeded",
     "startTime" : "2015-03-17T23:11:50.242GMT",
     "endTime" : "2015-03-17T23:12:25.177GMT",
     "lastUpdated" : "",
@@ -15,6 +16,7 @@
     "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
+    "status" : "Succeeded",
     "startTime" : "2015-03-16T19:25:10.242GMT",
     "endTime" : "2015-03-16T19:25:45.177GMT",
     "lastUpdated" : "",

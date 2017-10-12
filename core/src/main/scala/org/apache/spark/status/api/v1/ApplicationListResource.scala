@@ -80,6 +80,7 @@ private[spark] object ApplicationsListResource {
       attempts = app.attempts.map { internalAttemptInfo =>
         new ApplicationAttemptInfo(
           attemptId = internalAttemptInfo.attemptId,
+          status = internalAttemptInfo.status,
           startTime = new Date(internalAttemptInfo.startTime),
           endTime = new Date(internalAttemptInfo.endTime),
           duration =

@@ -82,6 +82,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(newAppComplete, true, None,
       SparkListenerApplicationStart(newAppComplete.getName(), Some("new-app-complete"), 1L, "test",
         None),
+      SparkListenerJobStart(0, 1L, Seq()),
+      SparkListenerJobEnd(0, 2L, JobSucceeded),
       SparkListenerApplicationEnd(5L)
       )
 
@@ -91,6 +93,8 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
     writeFile(newAppCompressedComplete, true, None,
       SparkListenerApplicationStart(newAppCompressedComplete.getName(), Some("new-complete-lzf"),
         1L, "test", None),
+      SparkListenerJobStart(0, 1L, Seq()),
+      SparkListenerJobEnd(0, 2L, JobSucceeded),
       SparkListenerApplicationEnd(4L))
 
     // Write an unfinished app, new-style.
@@ -109,23 +113,27 @@ class FsHistoryProviderSuite extends SparkFunSuite with BeforeAndAfter with Matc
       def makeAppInfo(
           id: String,
           name: String,
+          status: String,
           start: Long,
           end: Long,
           lastMod: Long,
           user: String,
           completed: Boolean): ApplicationHistoryInfo = {
         ApplicationHistoryInfo(id, name,
-          List(ApplicationAttemptInfo(None, start, end, lastMod, user, completed, "")))
+          List(ApplicationAttemptInfo(None, status, start, end, lastMod, user, completed, "")))
       }
 
       // For completed files, lastUpdated would be lastModified time.
-      list(0) should be (makeAppInfo("new-app-complete", newAppComplete.getName(), 1L, 5L,
+      list(0) should be (makeAppInfo(
+        "new-app-complete", newAppComplete.getName(), "Succeeded", 1L, 5L,
         newAppComplete.lastModified(), "test", true))
-      list(1) should be (makeAppInfo("new-complete-lzf", newAppCompressedComplete.getName(),
+      list(1) should be (makeAppInfo(
+        "new-complete-lzf", newAppCompressedComplete.getName(), "Succeeded",
         1L, 4L, newAppCompressedComplete.lastModified(), "test", true))
 
       // For Inprogress files, lastUpdated would be current loading time.
-      list(2) should be (makeAppInfo("new-incomplete", newAppIncomplete.getName(), 1L, -1L,
+      list(2) should be (makeAppInfo(
+        "new-incomplete", newAppIncomplete.getName(), "<In Progress>", 1L, -1L,
         clock.getTimeMillis(), "test", false))
 
       // Make sure the UI can be rendered.

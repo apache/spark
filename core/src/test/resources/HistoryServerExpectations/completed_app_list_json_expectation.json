@@ -2,6 +2,7 @@
   "id" : "app-20161116163331-0000",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Succeeded",
     "startTime" : "2016-11-16T22:33:29.916GMT",
     "endTime" : "2016-11-16T22:33:40.587GMT",
     "lastUpdated" : "",
@@ -17,6 +18,7 @@
   "id" : "app-20161115172038-0000",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Succeeded",
     "startTime" : "2016-11-15T23:20:37.079GMT",
     "endTime" : "2016-11-15T23:22:18.874GMT",
     "lastUpdated" : "",
@@ -32,6 +34,7 @@
   "id" : "local-1430917381534",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Succeeded",
     "startTime" : "2015-05-06T13:03:00.893GMT",
     "endTime" : "2015-05-06T13:03:11.398GMT",
     "lastUpdated" : "",
@@ -48,6 +51,7 @@
   "name" : "Spark shell",
   "attempts" : [ {
     "attemptId" : "2",
+    "status" : "Failed",
     "startTime" : "2015-05-06T13:03:00.893GMT",
     "endTime" : "2015-05-06T13:03:00.950GMT",
     "lastUpdated" : "",
@@ -60,6 +64,7 @@
     "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
+    "status" : "Failed",
     "startTime" : "2015-05-06T13:03:00.880GMT",
     "endTime" : "2015-05-06T13:03:00.890GMT",
     "lastUpdated" : "",
@@ -76,6 +81,7 @@
   "name" : "Spark shell",
   "attempts" : [ {
     "attemptId" : "2",
+    "status" : "Succeeded",
     "startTime" : "2015-03-17T23:11:50.242GMT",
     "endTime" : "2015-03-17T23:12:25.177GMT",
     "lastUpdated" : "",
@@ -88,6 +94,7 @@
     "lastUpdatedEpoch" : 0
   }, {
     "attemptId" : "1",
+    "status" : "Succeeded",
     "startTime" : "2015-03-16T19:25:10.242GMT",
     "endTime" : "2015-03-16T19:25:45.177GMT",
     "lastUpdated" : "",
@@ -103,6 +110,7 @@
   "id" : "local-1425081759269",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Succeeded",
     "startTime" : "2015-02-28T00:02:38.277GMT",
     "endTime" : "2015-02-28T00:02:46.912GMT",
     "lastUpdated" : "",
@@ -119,6 +127,7 @@
   "id" : "local-1422981780767",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Failed",
     "startTime" : "2015-02-03T16:42:59.720GMT",
     "endTime" : "2015-02-03T16:43:08.731GMT",
     "lastUpdated" : "",
@@ -134,6 +143,7 @@
   "id" : "local-1422981759269",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Succeeded",
     "startTime" : "2015-02-03T16:42:38.277GMT",
     "endTime" : "2015-02-03T16:42:46.912GMT",
     "lastUpdated" : "",

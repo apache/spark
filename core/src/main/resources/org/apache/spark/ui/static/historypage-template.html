@@ -54,6 +54,11 @@
       </th>
       {{/showCompletedColumns}}
       <th>
+        <span data-toggle="tooltip" data-placement="right" title="The status of this application">
+           Status
+        </span>
+      </th>
+      <th>
         <span data-toggle="tooltip" data-placement="top" title="The Spark user of this application">
           Spark User
         </span>
@@ -83,6 +88,7 @@
       <td>{{endTime}}</td>
       <td><span title="{{durationMillisec}}">{{duration}}</span></td>
       {{/showCompletedColumns}}
+      <td>{{status}}</td>
       <td>{{sparkUser}}</td>
       <td>{{lastUpdated}}</td>
       <td><a href="{{log}}" class="btn btn-info btn-mini">Download</a></td>

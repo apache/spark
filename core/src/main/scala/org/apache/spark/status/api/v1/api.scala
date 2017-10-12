@@ -38,6 +38,7 @@ class ApplicationInfo private[spark](
   allowGetters = true)
 class ApplicationAttemptInfo private[spark](
     val attemptId: Option[String],
+    val status: String,
     val startTime: Date,
     val endTime: Date,
     val lastUpdated: Date,

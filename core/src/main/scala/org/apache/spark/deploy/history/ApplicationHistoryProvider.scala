@@ -26,6 +26,7 @@ import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
     attemptId: Option[String],
+    status: String,
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,

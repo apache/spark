@@ -2,6 +2,7 @@
   "id" : "local-1422981780767",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Failed",
     "startTime" : "2015-02-03T16:42:59.720GMT",
     "endTime" : "2015-02-03T16:43:08.731GMT",
     "lastUpdated" : "",
@@ -17,6 +18,7 @@
   "id" : "local-1422981759269",
   "name" : "Spark shell",
   "attempts" : [ {
+    "status" : "Succeeded",
     "startTime" : "2015-02-03T16:42:38.277GMT",
     "endTime" : "2015-02-03T16:42:46.912GMT",
     "lastUpdated" : "",
