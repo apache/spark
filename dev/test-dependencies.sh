@@ -29,11 +29,7 @@ export LC_ALL=C
 # TODO: This would be much nicer to do in SBT, once SBT supports Maven-style resolution.
 
 # NOTE: These should match those in the release publishing script
-<<<<<<< HEAD
-HADOOP2_MODULE_PROFILES="-Phadoop-cloud -Pkubernetes -Pyarn -Phive"
-=======
-HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pmesos -Pkafka-0-8 -Pyarn -Pflume -Phive"
->>>>>>> origin/master
+HADOOP2_MODULE_PROFILES="-Phadoop-cloud -Pkubernetes -Pyarn -Pflume -Phive"
 MVN="build/mvn"
 HADOOP_PROFILES=(
     hadoop-palantir
