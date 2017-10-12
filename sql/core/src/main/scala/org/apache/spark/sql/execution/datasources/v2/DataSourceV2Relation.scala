@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, Statistics}
-import org.apache.spark.sql.sources.v2.reader.{DataSourceV2Reader, SupportsReportStatistics}
+import org.apache.spark.sql.sources.v2.reader._
 
 case class DataSourceV2Relation(
-    output: Seq[AttributeReference],
-    reader: DataSourceV2Reader) extends LeafNode {
+    fullOutput: Seq[AttributeReference],
+    reader: DataSourceV2Reader) extends LeafNode with DataSourceReaderHolder {
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[DataSourceV2Relation]
 
   override def computeStats(): Statistics = reader match {
     case r: SupportsReportStatistics =>
