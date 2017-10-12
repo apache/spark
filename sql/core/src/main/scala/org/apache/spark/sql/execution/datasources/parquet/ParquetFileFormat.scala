@@ -141,9 +141,9 @@ class ParquetFileFormat
     if (conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
       && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
       // output summary is requested, but the class is not a Parquet Committer
-      logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot"
-        + s" create job summaries."
-        + s" Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
+      logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
+        s" create job summaries. " +
+        s"Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
     }
 
     new OutputWriterFactory {
