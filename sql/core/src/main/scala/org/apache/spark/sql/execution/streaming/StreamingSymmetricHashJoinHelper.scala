@@ -120,7 +120,7 @@ object StreamingSymmetricHashJoinHelper extends Logging {
           (
             leftConjuncts.reduceOption(And),
             rightConjuncts.reduceOption(And),
-            (nonDeterministicConjuncts ++ remainingConjuncts).reduceOption(And)
+            (remainingConjuncts ++ nonDeterministicConjuncts).reduceOption(And)
           )
         }
       }
