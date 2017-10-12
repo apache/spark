@@ -21,6 +21,7 @@ import java.io.ByteArrayInputStream
 import java.util.{Map => JavaMap}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.ListMap
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -833,28 +834,39 @@ class CodegenContext {
         addNewFunctionInternal(name, code, inlineToOuterClass = false)
       }
 
+      // Here we store all the methods which have been added to the outer class.
       val outerClassFunctions = functions
         .filter(_.subclassName.isEmpty)
         .map(_.functionName)
 
+      // Here we handle all the methods which have been added to the nested subclasses and
+      // not to the outer class.
+      // Since they can be many, their direct invocation in the outer class adds many entries
+      // to the outer class' constant pool. This can cause the constant pool to past JVM limit.
+      // To avoid this problem, we group them and we call only the grouping methods in the
+      // outer class.
       val innerClassFunctions = functions
         .filter(_.subclassName.isDefined)
-        .foldLeft(Map.empty[(String, String), Seq[String]]) { case (acc, f) =>
+        .foldLeft(ListMap.empty[(String, String), Seq[String]]) { case (acc, f) =>
           val key = (f.subclassName.get, f.subclassInstance.get)
           acc.updated(key, acc.getOrElse(key, Seq.empty[String]) ++ Seq(f.functionName))
         }
-        .map { case ((subclassName, subclassInstance), subclassFunctions) =>
-          // Adding a new function to each subclass which contains
-          // the invocation of all the ones which have been added to
-          // that subclass
-          val code = s"""
-              |private $returnType $func($argString) {
-              |  ${makeSplitFunction(foldFunctions(subclassFunctions.map(name =>
-                    s"$name(${arguments.map(_._2).mkString(", ")})")))}
-              |}
-            """.stripMargin
-          addNewFunctionToClass(func, code, subclassName)
-          s"$subclassInstance.$func"
+        .flatMap { case ((subclassName, subclassInstance), subclassFunctions) =>
+          if (subclassFunctions.size > CodeGenerator.MERGE_SPLIT_METHODS_THRESHOLD) {
+            // Adding a new function to each subclass which contains
+            // the invocation of all the ones which have been added to
+            // that subclass
+            val code = s"""
+                |private $returnType $func($argString) {
+                |  ${makeSplitFunction(foldFunctions(subclassFunctions.map(name =>
+                      s"$name(${arguments.map(_._2).mkString(", ")})")))}
+                |}
+              """.stripMargin
+            addNewFunctionToClass(func, code, subclassName)
+            Seq(s"$subclassInstance.$func")
+          } else {
+            subclassFunctions
+          }
         }
 
       foldFunctions((outerClassFunctions ++ innerClassFunctions).map(
@@ -1066,6 +1078,8 @@ object CodeGenerator extends Logging {
 
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
   val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
+
+  val MERGE_SPLIT_METHODS_THRESHOLD = 3
 
   /**
    * Compile the Java source code into a Java class, using Janino.
