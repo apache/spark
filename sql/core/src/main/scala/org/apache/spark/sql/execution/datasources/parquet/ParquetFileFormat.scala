@@ -138,10 +138,13 @@ class ParquetFileFormat
       conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
     }
 
-    require(!conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
-      || classOf[ParquetOutputCommitter].isAssignableFrom(committerClass),
-      s"Committer $committerClass is not a ParquetOutputCommitter and cannot create job summaries."
-    + " Set Parquet option " + ParquetOutputFormat.ENABLE_JOB_SUMMARY + " to false.")
+    if (conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+      && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
+      // output summary is requested, but the class is not a Parquet Committer
+      logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot"
+        + s" create job summaries."
+        + s" Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
+    }
 
     new OutputWriterFactory {
       // This OutputWriterFactory instance is deserialized when writing Parquet files on the

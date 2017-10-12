@@ -63,10 +63,7 @@ class ParquetCommitterSuite extends SparkFunSuite with SQLTestUtils
   }
 
   test("alternative output committer, merge schema") {
-    intercept[RuntimeException] {
-      val stat = writeDataFrame(MarkingFileOutput.COMMITTER, summary = true, check = true)
-      logError(s"Created marker file $stat")
-    }
+    writeDataFrame(MarkingFileOutput.COMMITTER, summary = true, check = true)
   }
 
   test("alternative output committer, no merge schema") {
