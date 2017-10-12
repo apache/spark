@@ -101,7 +101,7 @@ object FileFormatWriter extends Logging {
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
-      partitionColumnNames: Seq[String],
+      partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       refreshFunction: (Seq[TablePartitionSpec]) => Unit,
       options: Map[String, String]): Unit = {
@@ -111,18 +111,9 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = queryExecution.executedPlan.output
-    // Get the actual partition columns as attributes after matching them by name with
-    // the given columns names.
-    val partitionColumns = partitionColumnNames.map { col =>
-      val nameEquality = sparkSession.sessionState.conf.resolver
-      allColumns.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new RuntimeException(
-          s"Partition column $col not found in schema ${queryExecution.executedPlan.schema}")
-      }
-    }
+    val allColumns = queryExecution.logical.output
     val partitionSet = AttributeSet(partitionColumns)
-    val dataColumns = allColumns.filterNot(partitionSet.contains)
+    val dataColumns = queryExecution.logical.output.filterNot(partitionSet.contains)
 
     val bucketIdExpression = bucketSpec.map { spec =>
       val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
