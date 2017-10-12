@@ -62,6 +62,10 @@ class IncrementalExecution(
       StreamingDeduplicationStrategy :: Nil
   }
 
+  private val numStateStores = offsetSeqMetadata.conf.get(SQLConf.SHUFFLE_PARTITIONS.key)
+    .map(SQLConf.SHUFFLE_PARTITIONS.valueConverter)
+    .getOrElse(sparkSession.sessionState.conf.numShufflePartitions)
+
   /**
    * See [SPARK-18339]
    * Walk the optimized logical plan and replace CurrentBatchTimestamp
@@ -84,7 +88,11 @@ class IncrementalExecution(
   /** Get the state info of the next stateful operator */
   private def nextStatefulOperationStateInfo(): StatefulOperatorStateInfo = {
     StatefulOperatorStateInfo(
-      checkpointLocation, runId, statefulOperatorId.getAndIncrement(), currentBatchId)
+      checkpointLocation,
+      runId,
+      statefulOperatorId.getAndIncrement(),
+      currentBatchId,
+      numStateStores)
   }
 
   /** Locates save/restore pairs surrounding aggregation. */
@@ -131,33 +139,8 @@ class IncrementalExecution(
     }
   }
 
-  override def preparations: Seq[Rule[SparkPlan]] =
-    Seq(state, EnsureStatefulOpPartitioning(sparkSession.sessionState.conf)) ++ super.preparations
+  override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
 
   /** No need assert supported, as this check has already been done */
   override def assertSupported(): Unit = { }
-}
-
-case class EnsureStatefulOpPartitioning(conf: SQLConf) extends Rule[SparkPlan] {
-  // Needs to be transformUp to avoid extra shuffles
-  override def apply(plan: SparkPlan): SparkPlan = plan transformUp {
-    case so: StatefulOperator =>
-      val numPartitions = conf.numShufflePartitions
-      val distributions = so.requiredChildDistribution
-      val children = so.children.zip(distributions).map { case (child, reqDistribution) =>
-        val expectedPartitioning = reqDistribution match {
-          case AllTuples => SinglePartition
-          case ClusteredDistribution(keys) => HashPartitioning(keys, numPartitions)
-          case _ => throw new AnalysisException("Unexpected distribution expected for " +
-            s"Stateful Operator: $so. Expect AllTuples or ClusteredDistribution but got " +
-            s"$reqDistribution.")
-        }
-        if (child.outputPartitioning.guarantees(expectedPartitioning)) {
-          child
-        } else {
-          ShuffleExchangeExec(expectedPartitioning, child)
-        }
-      }
-      so.withNewChildren(children)
-  }
 }
