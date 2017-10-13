@@ -97,7 +97,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
   private val CLEAN_INTERVAL_S = conf.getTimeAsSeconds("spark.history.fs.cleaner.interval", "1d")
 
   // Timeout for event log replaying
-  private val REPLAY_TIMEOUT = conf.getTimeAsSeconds("spark.history.fs.replay.timeout", "5m")
+  private val REPLAY_TIMEOUT = conf.getTimeAsSeconds("spark.history.fs.replay.timeout", "30m")
 
   // Number of threads used to replay event logs.
   private val NUM_PROCESSING_THREADS = conf.getInt(SPARK_HISTORY_FS_NUM_REPLAY_THREADS,
