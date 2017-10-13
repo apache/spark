@@ -89,11 +89,25 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
   }
 
   test("access cache multiple times") {
-    val df = sparkContext.parallelize(Seq(1, 2, 3), 1).toDF("x").cache
-    df.count
-    val df1 = df.filter("x > 1")
+    val df0 = sparkContext.parallelize(Seq(1, 2, 3), 1).toDF("x").cache
+    df0.count
+    val df1 = df0.filter("x > 1")
     checkAnswer(df1, Seq(Row(2), Row(3)))
-    val df2 = df.filter("x > 2")
+    val df2 = df0.filter("x > 2")
     checkAnswer(df2, Row(3))
+
+    val df10 = sparkContext.parallelize(Seq(3, 4, 5, 6), 1).toDF("x").cache
+    for (_ <- 0 to 2) {
+      val df11 = df10.filter("x > 5")
+      checkAnswer(df11, Row(6))
+    }
+  }
+
+  test("some columns in table cache are not accessed") {
+    val df = sparkContext.parallelize(
+      Seq((1, 1.1), (2, 2.2), (3, 3.3)), 1).toDF("x", "y").cache
+    df.count
+    val df1 = df.filter("y > 2.2")
+    checkAnswer(df1, Row(3, 3.3))
   }
 }
