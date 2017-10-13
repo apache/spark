@@ -515,38 +515,39 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     conf.setAppName("test").setMaster("local").set(IGNORE_EMPTY_SPLITS, true)
     sc = new SparkContext(conf)
 
-    def testIgnoreEmptySplits(data: Array[Tuple2[String, String]], numSlices: Int,
-      outputSuffix: Int, checkPart: String, expectedPartitionNum: Int): Unit = {
-      val dataRDD = sc.parallelize(data, numSlices)
-      val output = new File(tempDir, "output" + outputSuffix)
-      dataRDD.saveAsHadoopFile[TextOutputFormat[String, String]](output.getPath)
-      assert(new File(output, checkPart).exists() === true)
+    def testIgnoreEmptySplits(
+      data: Array[Tuple2[String, String]],
+      actualPartitionNum: Int,
+      expectedPart: String,
+      expectedPartitionNum: Int): Unit = {
+      val output = new File(tempDir, "output")
+      sc.parallelize(data, actualPartitionNum)
+        .saveAsHadoopFile[TextOutputFormat[String, String]](output.getPath)
+      assert(new File(output, expectedPart).exists() === true)
       val hadoopRDD = sc.textFile(new File(output, "part-*").getPath)
       assert(hadoopRDD.partitions.length === expectedPartitionNum)
+      Utils.deleteRecursively(output)
     }
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
       data = Array.empty[Tuple2[String, String]],
-      numSlices = 1,
-      outputSuffix = 0,
-      checkPart = "part-00000",
+      actualPartitionNum = 1,
+      expectedPart = "part-00000",
       expectedPartitionNum = 0)
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
       data = Array(("key1", "a"), ("key2", "a"), ("key3", "b")),
-      numSlices = 2,
-      outputSuffix = 1,
-      checkPart = "part-00001",
+      actualPartitionNum = 2,
+      expectedPart = "part-00001",
       expectedPartitionNum = 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
       data = Array(("key1", "a"), ("key2", "a")),
-      numSlices = 5,
-      outputSuffix = 2,
-      checkPart = "part-00004",
+      actualPartitionNum = 5,
+      expectedPart = "part-00004",
       expectedPartitionNum = 2)
   }
 
@@ -555,41 +556,41 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     conf.setAppName("test").setMaster("local").set(IGNORE_EMPTY_SPLITS, true)
     sc = new SparkContext(conf)
 
-    def testIgnoreEmptySplits(data: Array[Tuple2[String, String]], numSlices: Int,
-      outputSuffix: Int, checkPart: String, expectedPartitionNum: Int): Unit = {
-      val dataRDD = sc.parallelize(data, numSlices)
-      val output = new File(tempDir, "output" + outputSuffix)
-      dataRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
-      assert(new File(output, checkPart).exists() === true)
-
+    def testIgnoreEmptySplits(
+      data: Array[Tuple2[String, String]],
+      actualPartitionNum: Int,
+      expectedPart: String,
+      expectedPartitionNum: Int): Unit = {
+      val output = new File(tempDir, "output")
+      sc.parallelize(data, actualPartitionNum)
+        .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
+      assert(new File(output, expectedPart).exists() === true)
       val hadoopRDD = sc.newAPIHadoopFile(new File(output, "part-r-*").getPath,
         classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
         .asInstanceOf[NewHadoopRDD[_, _]]
       assert(hadoopRDD.partitions.length === expectedPartitionNum)
+      Utils.deleteRecursively(output)
     }
 
     // Ensure that if all of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
       data = Array.empty[Tuple2[String, String]],
-      numSlices = 1,
-      outputSuffix = 0,
-      checkPart = "part-r-00000",
+      actualPartitionNum = 1,
+      expectedPart = "part-r-00000",
       expectedPartitionNum = 0)
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
       data = Array(("1", "a"), ("2", "a"), ("3", "b")),
-      numSlices = 2,
-      outputSuffix = 1,
-      checkPart = "part-r-00001",
+      actualPartitionNum = 2,
+      expectedPart = "part-r-00001",
       expectedPartitionNum = 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
       data = Array(("1", "a"), ("2", "b")),
-      numSlices = 5,
-      outputSuffix = 2,
-      checkPart = "part-r-00004",
+      actualPartitionNum = 5,
+      expectedPart = "part-r-00004",
       expectedPartitionNum = 2)
   }
 }
