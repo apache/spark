@@ -225,7 +225,7 @@ case class StateStoreRestoreExec(
             val key = getKey(row)
             val savedState = store.get(key)
             numOutputRows += 1
-            row +: Option(savedState).toSeq
+            Option(savedState).toSeq :+ row
           }
         }
     }

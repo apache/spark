@@ -307,7 +307,7 @@ case class CatalogTable(
 
     identifier.database.foreach(map.put("Database", _))
     map.put("Table", identifier.table)
-    if (owner.nonEmpty) map.put("Owner", owner)
+    if (owner != null && owner.nonEmpty) map.put("Owner", owner)
     map.put("Created Time", new Date(createTime).toString)
     map.put("Last Access", new Date(lastAccessTime).toString)
     map.put("Created By", "Spark " + createVersion)
@@ -405,6 +405,11 @@ object CatalogTypes {
    * Specifications of a table partition. Mapping column name to column value.
    */
   type TablePartitionSpec = Map[String, String]
+
+  /**
+   * Initialize an empty spec.
+   */
+  lazy val emptyTablePartitionSpec: TablePartitionSpec = Map.empty[String, String]
 }
 
 /**

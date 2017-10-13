@@ -1015,7 +1015,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.5</td>
   <td>
     Amount of storage memory immune to eviction, expressed as a fraction of the size of the
-    region set aside by <code>s​park.memory.fraction</code>. The higher this is, the less
+    region set aside by <code>spark.memory.fraction</code>. The higher this is, the less
     working memory may be available to execution and tasks may spill to disk more often.
     Leaving this at the default value is recommended. For more detail, see
     <a href="tuning.html#memory-management-overview">this description</a>.
@@ -1041,7 +1041,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.useLegacyMode</code></td>
   <td>false</td>
   <td>
-    ​Whether to enable the legacy memory management mode used in Spark 1.5 and before.
+    Whether to enable the legacy memory management mode used in Spark 1.5 and before.
     The legacy mode rigidly partitions the heap space into fixed-size regions,
     potentially leading to excessive spilling if the application was not tuned.
     The following deprecated memory fraction configurations are not read unless this is enabled:
@@ -1115,11 +1115,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     The number of cores to use on each executor.
 
-    In standalone and Mesos coarse-grained modes, setting this
-    parameter allows an application to run multiple executors on the
-    same worker, provided that there are enough cores on that
-    worker. Otherwise, only one executor per application will run on
-    each worker.
+    In standalone and Mesos coarse-grained modes, for more detail, see
+    <a href="spark-standalone.html#Executors Scheduling">this description</a>.
   </td>
 </tr>
 <tr>
