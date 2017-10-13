@@ -22,6 +22,7 @@ import java.io.File
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -187,8 +188,12 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
            |STORED AS orc
            |LOCATION '$uri'""".stripMargin)
       val result = Row("a", "b         ", "c", Seq("d  "))
-      checkAnswer(spark.table("hive_orc"), result)
-      checkAnswer(spark.table("spark_orc"), result)
+      Seq("false", "true").foreach { value =>
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> value) {
+          checkAnswer(spark.table("hive_orc"), result)
+          checkAnswer(spark.table("spark_orc"), result)
+        }
+      }
     } finally {
       hiveClient.runSqlHive("DROP TABLE IF EXISTS hive_orc")
       hiveClient.runSqlHive("DROP TABLE IF EXISTS spark_orc")

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
@@ -435,6 +436,31 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         checkPredicate('a < 1 || 'a > 8, List(9).map(Row(_, null)))
         checkPredicate(!('a > 3), List(1, 3).map(Row(_, null)))
         checkPredicate(!('a > 0 && 'a < 3), List(3, 5, 7, 9).map(Row(_, null)))
+      }
+    }
+  }
+
+  def getHiveFile(path: String): File = {
+    new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
+  }
+
+  test("Verify ORC conversion parameter: CONVERT_METASTORE_ORC with Hive-1.x files") {
+    val singleRowDF = Seq((2415022, "AAAAAAAAOKJNECAA")).toDF("key", "value")
+    Seq("true", "false").foreach { orcConversion =>
+      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> orcConversion) {
+        withTable("dummy_orc") {
+          // Hive 1.x can have virtual columns as follows in ORC files
+          // Type: struct<_col0:int,_col1:string> in hive_1.x_orc
+          spark.sql(
+            s"""
+               |CREATE EXTERNAL TABLE dummy_orc(key INT, value STRING)
+               |STORED AS ORC
+               |LOCATION '${getHiveFile("data/files/hive_1.x_orc/")}'
+             """.stripMargin)
+
+          val df = spark.sql("SELECT key, value FROM dummy_orc LIMIT 1")
+          checkAnswer(df, singleRowDF)
+        }
       }
     }
   }
