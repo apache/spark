@@ -104,7 +104,7 @@ case class InMemoryTableScanExec(
 
     case In(a: AttributeReference, list: Seq[Expression]) if list.forall(_.isInstanceOf[Literal]) =>
       list.map(l => statsFor(a).lowerBound <= l.asInstanceOf[Literal] &&
-        l.asInstanceOf[Literal] <= statsFor(a).upperBound).reduce(_ || _)
+        l.asInstanceOf[Literal] <= statsFor(a).upperBound).contains(true)
   }
 
   val partitionFilters: Seq[Expression] = {
