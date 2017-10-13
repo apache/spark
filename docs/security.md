@@ -186,7 +186,52 @@ configure those ports.
   </tr>
 </table>
 
+### HTTP Security Headers
+
+Apache Spark can be configured to include HTTP Headers which aids in preventing Cross 
+Site Scripting (XSS), Cross-Frame Scripting (XFS), MIME-Sniffing and also enforces HTTP 
+Strict Transport Security.
+
+<table class="table">
+    <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+    <tr>
+        <td><code>spark.ui.xXssProtection</code></td>
+        <td>None</td>
+        <td>
+            Value for HTTP X-XSS-Protection response header. You can choose appropriate value 
+            from below:
+            <br />
+                <br />  0 &nbsp;&nbsp;(Disables XSS filtering)
+                <br />  1 &nbsp;&nbsp;(Enables XSS filtering. If a cross-site scripting attack is detected, 
+                        the browser will sanitize the page.)
+                <br />  1; mode=block &nbsp;&nbsp;(Enables XSS filtering. The browser will prevent rendering 
+                        of the page if an attack is detected.)
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
+        <td>false</td>
+        <td>
+            When value is set to "true", X-Content-Type-Options HTTP response header will be set 
+            to "nosniff".
+        </td>
+    </tr>
+    <tr>
+        <td><code>spark.ui.strictTransportSecurity</code></td>
+        <td>None</td>
+        <td>
+            Value for HTTP Strict Transport Security (HSTS) Response Header. You can choose appropriate 
+            value from below when Spark is SSL/TLS enabled.
+            <br />
+                <br /> max-age=&lt;expire-time&gt;
+                <br /> max-age=&lt;expire-time&gt;; includeSubDomains
+                <br /> max-age=&lt;expire-time&gt;; preload
+        </td>
+    </tr>
+</table>
+    
 
 See the [configuration page](configuration.html) for more details on the security configuration
 parameters, and <a href="{{site.SPARK_GITHUB_URL}}/tree/master/core/src/main/scala/org/apache/spark/SecurityManager.scala">
 <code>org.apache.spark.SecurityManager</code></a> for implementation details about security.
+

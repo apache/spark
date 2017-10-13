@@ -420,7 +420,6 @@ package object config {
       .toSequence
       .createWithDefault(Nil)
 
-
   private[spark] val UI_X_XSS_PROTECTION =
     ConfigBuilder("spark.ui.xXssProtection")
       .doc("Value for HTTP X-XSS-Protection response header")
@@ -430,8 +429,8 @@ package object config {
   private[spark] val UI_X_CONTENT_TYPE_OPTIONS =
     ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
       .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
-      .stringConf
-      .createOptional
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val UI_STRICT_TRANSPORT_SECURITY =
     ConfigBuilder("spark.ui.strictTransportSecurity")
@@ -439,10 +438,11 @@ package object config {
       .stringConf
       .createOptional
   
-  private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
-    .doc("Class names of listeners to add to SparkContext during initialization.")
-    .stringConf
-    .toSequence
-    .createOptional
+  private[spark] val EXTRA_LISTENERS =
+    ConfigBuilder("spark.extraListeners")
+      .doc("Class names of listeners to add to SparkContext during initialization.")
+      .stringConf
+      .toSequence
+      .createOptional
 
 }

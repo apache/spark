@@ -91,7 +91,7 @@ private[spark] object JettyUtils extends Logging {
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
             conf.get(UI_X_XSS_PROTECTION).foreach(response.setHeader("X-XSS-Protection", _))
-            if (conf.get(UI_X_CONTENT_TYPE_OPTIONS.key).equals("true")) {
+            if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
               response.setHeader("X-Content-Type-Options", "nosniff")
             }
             if (request.getScheme == "https") {
