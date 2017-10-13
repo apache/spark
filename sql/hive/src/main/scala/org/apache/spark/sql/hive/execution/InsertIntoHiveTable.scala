@@ -314,6 +314,13 @@ case class InsertIntoHiveTable(
       outputPath = tmpLocation.toString,
       isAppend = false)
 
+    val partitionAttributes = partitionColumnNames.takeRight(numDynamicPartitions).map { name =>
+      query.resolve(name :: Nil, sparkSession.sessionState.analyzer.resolver).getOrElse {
+        throw new AnalysisException(
+          s"Unable to resolve $name given [${query.output.map(_.name).mkString(", ")}]")
+      }.asInstanceOf[Attribute]
+    }
+
     FileFormatWriter.write(
       sparkSession = sparkSession,
       queryExecution = Dataset.ofRows(sparkSession, query).queryExecution,
@@ -321,7 +328,7 @@ case class InsertIntoHiveTable(
       committer = committer,
       outputSpec = FileFormatWriter.OutputSpec(tmpLocation.toString, Map.empty),
       hadoopConf = hadoopConf,
-      partitionColumnNames = partitionColumnNames.takeRight(numDynamicPartitions),
+      partitionColumns = partitionAttributes,
       bucketSpec = None,
       refreshFunction = _ => (),
       options = Map.empty)

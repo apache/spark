@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
 import org.apache.spark.sql.execution.{QueryExecution, SortExec, SQLExecution}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 
@@ -101,7 +101,7 @@ object FileFormatWriter extends Logging {
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
-      partitionColumnNames: Seq[String],
+      partitionColumns: Seq[Attribute],
       bucketSpec: Option[BucketSpec],
       refreshFunction: (Seq[TablePartitionSpec]) => Unit,
       options: Map[String, String]): Unit = {
@@ -111,16 +111,9 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = queryExecution.executedPlan.output
-    // Get the actual partition columns as attributes after matching them by name with
-    // the given columns names.
-    val partitionColumns = partitionColumnNames.map { col =>
-      val nameEquality = sparkSession.sessionState.conf.resolver
-      allColumns.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new RuntimeException(
-          s"Partition column $col not found in schema ${queryExecution.executedPlan.schema}")
-      }
-    }
+    // Pick the attributes from analyzed plan, as optimizer may not preserve the output schema
+    // names' case.
+    val allColumns = queryExecution.analyzed.output
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
 
@@ -179,8 +172,13 @@ object FileFormatWriter extends Logging {
         val rdd = if (orderingMatched) {
           queryExecution.toRdd
         } else {
+          // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+          // the physical plan may have different attribute ids due to optimizer removing some
+          // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+          val orderingExpr = requiredOrdering
+            .map(SortOrder(_, Ascending)).map(BindReferences.bindReference(_, allColumns))
           SortExec(
-            requiredOrdering.map(SortOrder(_, Ascending)),
+            orderingExpr,
             global = false,
             child = queryExecution.executedPlan).execute()
         }
