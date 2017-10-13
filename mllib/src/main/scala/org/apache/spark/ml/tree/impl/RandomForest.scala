@@ -281,11 +281,13 @@ private[spark] object RandomForest extends Logging {
       if (unorderedFeatures.contains(featureIndex)) {
         AggUpdateUtils.updateUnorderedFeature(agg,
           featureValue = treePoint.binnedFeatures(featureIndex), label = treePoint.label,
-          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx, splits = splits)
+          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx, splits = splits,
+          instanceWeight = instanceWeight)
       } else {
         AggUpdateUtils.updateOrderedFeature(agg,
           featureValue = treePoint.binnedFeatures(featureIndex), label = treePoint.label,
-          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx)
+          featureIndex = featureIndex, featureIndexIdx = featureIndexIdx,
+          instanceWeight = instanceWeight)
       }
       featureIndexIdx += 1
     }

@@ -52,7 +52,7 @@ private[impl] object AggUpdateUtils {
       featureIndex: Int,
       featureIndexIdx: Int,
       splits: Array[Array[Split]],
-      instanceWeight: Double = 1.0): Unit = {
+      instanceWeight: Double): Unit = {
     val leftNodeFeatureOffset = agg.getFeatureOffset(featureIndexIdx)
     // Each unordered split has a corresponding bin for impurity stats of data points that fall
     // onto the left side of the split. For each unordered split, update left-side bin if applicable
@@ -75,7 +75,7 @@ private[impl] object AggUpdateUtils {
       label: Double,
       featureIndex: Int,
       featureIndexIdx: Int,
-      instanceWeight: Double = 1.0): Unit = {
+      instanceWeight: Double): Unit = {
     // The bin index of an ordered feature is just the feature value itself
     val binIndex = featureValue
     agg.update(featureIndexIdx, binIndex, label, instanceWeight)

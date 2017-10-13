@@ -51,8 +51,9 @@ private[ml] object LocalDecisionTree {
     = LocalDecisionTreeUtils.rowToColumnStoreDense(input.map(_.datum.binnedFeatures))
     val labels = input.map(_.datum.label)
 
-    // Train classifier if numClasses is between 1 and 32, otherwise fit a regression model
-    // on the dataset
+    // Fit a regression model on the dataset, throwing an error if metadata indicates that
+    // we should train a classifier.
+    // TODO: Add support for training classifiers
     if (metadata.numClasses > 1 && metadata.numClasses <= 32) {
       throw new UnsupportedOperationException("Local training of a decision tree classifier is " +
         "unsupported; currently, only regression is supported")
@@ -137,13 +138,13 @@ private[ml] object LocalDecisionTree {
       from.until(to).foreach { idx =>
         val rowIndex = col.indices(idx)
         AggUpdateUtils.updateUnorderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
-          featureIndex = col.featureIndex, featureIndexIdx, splits)
+          featureIndex = col.featureIndex, featureIndexIdx, splits, instanceWeight = 1.0)
       }
     } else {
       from.until(to).foreach { idx =>
         val rowIndex = col.indices(idx)
         AggUpdateUtils.updateOrderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
-          featureIndex = col.featureIndex, featureIndexIdx)
+          featureIndex = col.featureIndex, featureIndexIdx, instanceWeight = 1.0)
       }
     }
   }
