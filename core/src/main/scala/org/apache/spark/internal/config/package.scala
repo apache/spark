@@ -437,7 +437,7 @@ package object config {
       .doc("Value for HTTP Strict Transport Security Response Header")
       .stringConf
       .createOptional
-  
+
   private[spark] val EXTRA_LISTENERS =
     ConfigBuilder("spark.extraListeners")
       .doc("Class names of listeners to add to SparkContext during initialization.")
