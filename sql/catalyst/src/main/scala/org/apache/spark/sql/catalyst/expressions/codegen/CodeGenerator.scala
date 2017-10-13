@@ -90,7 +90,7 @@ case class SubExprCodes(codes: Seq[String], states: Map[Expression, SubExprElimi
  *                         instance of the inner class in the outer class.
  */
 private[codegen] case class NewFunction(functionName: String, subclassName: Option[String],
-  subclassInstance: Option[String])
+    subclassInstance: Option[String])
 
 /**
  * A context for codegen, tracking a list of objects that could be passed into generated Java
