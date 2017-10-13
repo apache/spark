@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
-import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
+import org.apache.spark.sql.execution.vectorized._
 import org.apache.spark.sql.types.UserDefinedType
 
 
@@ -44,12 +44,28 @@ case class InMemoryTableScanExec(
 
   override val supportCodegen: Boolean = relation.useColumnarBatches
 
+  private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
+    val rowCount = cachedColumnarBatch.numRows
+    val schema = cachedColumnarBatch.schema
+    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, schema)
+    val columnarBatch = new ColumnarBatch(
+      schema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
+    columnarBatch.setNumRows(rowCount)
+
+    for (i <- 0 until cachedColumnarBatch.buffers.length) {
+      ColumnAccessor.decompress(
+        cachedColumnarBatch.buffers(i), columnarBatch.column(i).asInstanceOf[WritableColumnVector],
+        schema.fields(i).dataType, rowCount)
+    }
+    return columnarBatch
+  }
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     if (supportCodegen) {
       val buffers = relation.cachedColumnBuffers
-      // HACK ALERT: This is actually an RDD[CachedBatch].
+      // HACK ALERT: This is actually an RDD[ColumnarBatch].
       // We're taking advantage of Scala's type erasure here to pass these batches along.
-      Seq(buffers.asInstanceOf[RDD[InternalRow]])
+      Seq(buffers.map(createAndDecompressColumn(_)).asInstanceOf[RDD[InternalRow]])
     } else {
       Seq()
     }

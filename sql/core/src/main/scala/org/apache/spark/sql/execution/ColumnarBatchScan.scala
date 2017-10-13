@@ -84,7 +84,6 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.freshName("batch")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
-    val cachedBatchClz = "org.apache.spark.sql.execution.columnar.CachedBatch"
     val cachedBatch = ctx.freshName("cachedBatch")
 
     val idx = ctx.freshName("batchIdx")
@@ -92,37 +91,20 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(colVars.size)(classOf[ColumnVector].getName))
-    val columnAccessorClz = "org.apache.spark.sql.execution.columnar.ColumnAccessor"
-    val writableColumnVectorClz = classOf[WritableColumnVector].getName
-    val dataTypesClz = classOf[DataTypes].getName
     val columnAssigns = colVars.zip(columnVectorClzs).zipWithIndex.map {
       case ((name, columnVectorClz), i) =>
         ctx.addMutableState(columnVectorClz, name, s"$name = null;")
         val index = if (columnIndexes == null) i else columnIndexes(i)
-        s"$name = ($columnVectorClz) $batch.column($index);" + (if (columnIndexes == null) "" else {
-          val dt = output.attrs(i).dataType
-          s"\n$columnAccessorClz$$.MODULE$$.decompress(" +
-            s"$cachedBatch.buffers()[$index], ($writableColumnVectorClz) $name, " +
-            s"$dataTypesClz.$dt, $cachedBatch.numRows());"
-        })
+        s"$name = ($columnVectorClz) $batch.column($index);"
     }
 
-    val assignBatch = if (columnIndexes == null) {
-      s"$batch = ($columnarBatchClz)$input.next();"
-    } else {
-      val inMemoryRelationClz = classOf[InMemoryRelation].getName
-      s"""
-        $cachedBatchClz $cachedBatch = ($cachedBatchClz)$input.next();
-        $batch = $inMemoryRelationClz$$.MODULE$$.createColumn($cachedBatch);
-      """
-    }
     val nextBatch = ctx.freshName("nextBatch")
     val nextBatchFuncName = ctx.addNewFunction(nextBatch,
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
          |  if ($input.hasNext()) {
-         |    $assignBatch
+         |    $batch = ($columnarBatchClz)$input.next();
          |    $numOutputRows.add($batch.numRows());
          |    $idx = 0;
          |    ${columnAssigns.mkString("", "\n", "\n")}

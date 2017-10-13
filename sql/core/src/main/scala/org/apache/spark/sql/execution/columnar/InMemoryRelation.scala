@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
@@ -41,16 +40,6 @@ object InMemoryRelation {
       child: SparkPlan,
       tableName: Option[String]): InMemoryRelation =
     new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
-
-  def createColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
-    val rowCount = cachedColumnarBatch.numRows
-    val schema = cachedColumnarBatch.schema
-    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, schema)
-    val columnarBatch = new ColumnarBatch(
-      schema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
-    columnarBatch.setNumRows(rowCount)
-    return columnarBatch
-  }
 }
 
 
