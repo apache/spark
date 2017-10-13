@@ -462,7 +462,6 @@ names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames lo
 source type can be converted into other types using this syntax.
 
 To load a JSON file you can use:
-
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -482,7 +481,6 @@ To load a JSON file you can use:
 </div>
 
 To load a CSV file you can use several CSV-specific options:
-
 * `sep (default ,)`: sets the single character as a separator for each field and value.
 * `encoding (default UTF-8)`: decodes the CSV files by the given encoding type.
 * `quote (default ")`: sets the single character used for escaping quoted values where the separator can be part of the value. If you would like to turn off quotations, you need to set not null but an empty string. This behaviour is different from com.databricks.spark.csv.
@@ -496,7 +494,7 @@ To load a CSV file you can use several CSV-specific options:
 * `nanValue (default NaN)`: sets the string representation of a non-number" value.
 * `positiveInf (default Inf)`: sets the string representation of a positive infinity value.
 * `negativeInf (default -Inf)`: sets the string representation of a negative infinity value.
-* `dateFormat (default yyyy-MM-dd)`: sets the string that indicates a date format. Custom date formats follow the formats at java.text.SimpleDateFormat. This applies to date type.
+* `dateFormat (default yyyy-MM-dd)`: Custom date formats follow the formats at java.text.SimpleDateFormat. This applies to date type.
 * `timestampFormat (default yyyy-MM-dd'T'HH:mm:ss.SSSXXX)`: sets the string that indicates a timestamp format. Custom date formats follow the formats at java.text.SimpleDateFormat. This applies to timestamp type.
 * `maxColumns (default 20480): defines a hard limit of how many columns a record can have.
 * `maxCharsPerColumn (default -1)`: defines the maximum number of characters allowed for any given value being read. By default, it is -1 meaning unlimited length
