@@ -405,7 +405,7 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     (input1, input2, joined)
   }
 
-  test("left outer early state exclusion") {
+  test("left outer early state exclusion on left") {
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
@@ -436,7 +436,69 @@ class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with
     )
   }
 
-  test("right outer early state exclusion") {
+  test("left outer early state exclusion on right") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    // Use different schemas to ensure the null row is being generated from the correct side.
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    val joined = left.join(
+      right,
+      left("key") === right("key")
+        && left("window") === right("window")
+        && 'rightValue.cast("int") > 7,
+      "left_outer")
+      .select(left("key"), left("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      AddData(leftInput, 3, 4, 5),
+      AddData(rightInput, 1, 2, 3),
+      // The right rows with value <= 7 should never be added to the state.
+      CheckLastBatch(Row(3, 10, 6, "9")),
+      assertNumStateRows(total = 4, updated = 4),
+      // When the watermark advances, we get the outer join rows just as we would if they
+      // were added but didn't match the full join condition.
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
+      CheckLastBatch(),
+      AddData(rightInput, 20),
+      CheckLastBatch(Row(20, 30, 40, "60"), Row(4, 10, 8, null), Row(5, 10, 10, null))
+    )
+  }
+
+  test("right outer early state exclusion on left") {
+    val (leftInput, df1) = setupStream("left", 2)
+    val (rightInput, df2) = setupStream("right", 3)
+    // Use different schemas to ensure the null row is being generated from the correct side.
+    val left = df1.select('key, window('leftTime, "10 second"), 'leftValue)
+    val right = df2.select('key, window('rightTime, "10 second"), 'rightValue.cast("string"))
+
+    val joined = left.join(
+      right,
+      left("key") === right("key")
+        && left("window") === right("window")
+        && 'leftValue > 4,
+      "right_outer")
+      .select(right("key"), right("window.end").cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      AddData(leftInput, 1, 2, 3),
+      AddData(rightInput, 3, 4, 5),
+      // The left rows with value <= 4 should never be added to the state.
+      CheckLastBatch(Row(3, 10, 6, "9")),
+      assertNumStateRows(total = 4, updated = 4),
+      // When the watermark advances, we get the outer join rows just as we would if they
+      // were added but didn't match the full join condition.
+      AddData(leftInput, 20),
+      AddData(rightInput, 21),
+      CheckLastBatch(),
+      AddData(rightInput, 20),
+      CheckLastBatch(Row(20, 30, 40, "60"), Row(4, 10, null, "12"), Row(5, 10, null, "15"))
+    )
+  }
+
+  test("right outer early state exclusion on right") {
     val (leftInput, df1) = setupStream("left", 2)
     val (rightInput, df2) = setupStream("right", 3)
     // Use different schemas to ensure the null row is being generated from the correct side.
