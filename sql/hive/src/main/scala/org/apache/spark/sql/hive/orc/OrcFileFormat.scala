@@ -134,8 +134,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
       // using the given physical schema. Instead, we simply return an empty iterator.
-      val maybePhysicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf))
-      if (maybePhysicalSchema.isEmpty) {
+      val isEmptyFile = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf)).isEmpty
+      if (isEmptyFile) {
         Iterator.empty
       } else {
         OrcRelation.setRequiredColumns(conf, dataSchema, requiredSchema)
@@ -284,10 +284,7 @@ private[orc] object OrcRelation extends HiveInspectors {
         case (field, ordinal) =>
           var ref = oi.getStructFieldRef(field.name)
           if (ref == null) {
-            val maybeIndex = dataSchema.getFieldIndex(field.name)
-            if (maybeIndex.isDefined) {
-              ref = oi.getStructFieldRef("_col" + maybeIndex.get)
-            }
+            ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
           }
           ref -> ordinal
       }.unzip
@@ -300,7 +297,7 @@ private[orc] object OrcRelation extends HiveInspectors {
         val length = fieldRefs.length
         while (i < length) {
           val fieldRef = fieldRefs(i)
-          val fieldValue = if (fieldRef == null) null else oi.getStructFieldData(raw, fieldRefs(i))
+          val fieldValue = if (fieldRef == null) null else oi.getStructFieldData(raw, fieldRef)
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))
           } else {
