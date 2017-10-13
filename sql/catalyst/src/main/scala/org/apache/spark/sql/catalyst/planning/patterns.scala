@@ -205,14 +205,15 @@ object PhysicalAggregation {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
-      // build a set of the distinct aggregate expressions and build a function which can
+      // build a map of the distinct aggregate expressions and build a function which can
       // be used to re-write expressions so that they reference the single copy of the
       // aggregate function which actually gets computed.
-      val aggregateExpressions = resultExpressions.flatMap { expr =>
+      val aggregateExpressionMap = resultExpressions.flatMap { expr =>
         expr.collect {
-          case agg: AggregateExpression => agg
+          case agg: AggregateExpression => (agg.canonicalized, agg.deterministic) -> agg
         }
-      }.distinct
+      }.toMap
+      val aggregateExpressions = aggregateExpressionMap.values.to[Seq]
 
       val namedGroupingExpressions = groupingExpressions.map {
         case ne: NamedExpression => ne -> ne
@@ -235,8 +236,8 @@ object PhysicalAggregation {
         expr.transformDown {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
-            // so replace each aggregate expression by its corresponding attribute in the set:
-            ae.resultAttribute
+            // so replace each aggregate expression by its corresponding attribute in the map:
+            aggregateExpressionMap.get((ae.canonicalized, ae.deterministic)).get.resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
