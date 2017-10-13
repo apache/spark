@@ -92,7 +92,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   private val launcherBackend = new LauncherBackend() {
     override protected def onStopRequest(): Unit = {
-      stopSchedulerBackend
+      stopSchedulerBackend()
       setState(SparkAppHandle.State.KILLED)
     }
   }
@@ -183,7 +183,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     super.start()
 
     if (sc.deployMode == "client") {
-      launcherBackend.connect
+      launcherBackend.connect()
     }
     val startedBefore = IdHelper.startedBefore.getAndSet(true)
 
@@ -587,9 +587,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   }
 
   override def stop() {
-    stopSchedulerBackend
+    stopSchedulerBackend()
     launcherBackend.setState(SparkAppHandle.State.FINISHED)
-    launcherBackend.close
+    launcherBackend.close()
   }
 
   private def stopSchedulerBackend() {
