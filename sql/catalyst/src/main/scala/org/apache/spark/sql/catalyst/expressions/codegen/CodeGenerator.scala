@@ -1079,6 +1079,8 @@ object CodeGenerator extends Logging {
   // This is the value of HugeMethodLimit in the OpenJDK JVM settings
   val DEFAULT_JVM_HUGE_METHOD_LIMIT = 8000
 
+  // This is the threshold over which the methods in a inner class are grouped in a single
+  // method which is going to be called by the outer class instead of the many small ones
   val MERGE_SPLIT_METHODS_THRESHOLD = 3
 
   /**
