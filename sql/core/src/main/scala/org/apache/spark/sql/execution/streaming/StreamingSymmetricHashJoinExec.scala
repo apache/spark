@@ -187,6 +187,7 @@ case class StreamingSymmetricHashJoinExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
+    print(this)
     val stateStoreCoord = sqlContext.sessionState.streamingQueryManager.stateStoreCoordinator
     val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide)
     left.execute().stateStoreAwareZipPartitions(

@@ -23,22 +23,22 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.{LeafExecNode, LocalTableScanExec, SparkPlan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.JoinConditionSplitPredicates
-import org.apache.spark.sql.types.DataTypes
+import org.apache.spark.sql.types._
 
 class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   import org.apache.spark.sql.functions._
 
-  val attributeA = AttributeReference("a", DataTypes.IntegerType)()
-  val attributeB = AttributeReference("b", DataTypes.IntegerType)()
-  val attributeC = AttributeReference("c", DataTypes.IntegerType)()
-  val attributeD = AttributeReference("d", DataTypes.IntegerType)()
-  val colA = new Column(attributeA)
-  val colB = new Column(attributeB)
-  val colC = new Column(attributeC)
-  val colD = new Column(attributeD)
+  val leftAttributeA = AttributeReference("a", IntegerType)()
+  val leftAttributeB = AttributeReference("b", IntegerType)()
+  val rightAttributeC = AttributeReference("c", IntegerType)()
+  val rightAttributeD = AttributeReference("d", IntegerType)()
+  val leftColA = new Column(leftAttributeA)
+  val leftColB = new Column(leftAttributeB)
+  val rightColC = new Column(rightAttributeC)
+  val rightColD = new Column(rightAttributeD)
 
-  val left = new LocalTableScanExec(Seq(attributeA, attributeB), Seq())
-  val right = new LocalTableScanExec(Seq(attributeC, attributeD), Seq())
+  val left = new LocalTableScanExec(Seq(leftAttributeA, leftAttributeB), Seq())
+  val right = new LocalTableScanExec(Seq(rightAttributeC, rightAttributeD), Seq())
 
   test("empty") {
     val split = JoinConditionSplitPredicates(None, left, right)
@@ -61,7 +61,7 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   }
 
   test("only left") {
-    val predicate = (colA > lit(1) && colB > lit(5) && colA < colB).expr
+    val predicate = (leftColA > lit(1) && leftColB > lit(5) && leftColA < leftColB).expr
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.contains(predicate))
@@ -71,7 +71,7 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   }
 
   test("only right") {
-    val predicate = (colC > lit(1) && colD > lit(5) && colD < colC).expr
+    val predicate = (rightColC > lit(1) && rightColD > lit(5) && rightColD < rightColC).expr
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.isEmpty)
@@ -81,12 +81,16 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   }
 
   test("mixed conjuncts") {
-    val predicate = (colA > colB && colC > colD && colA === colC && lit(1) === lit(1)).expr
+    val predicate =
+      (leftColA > leftColB
+        && rightColC > rightColD
+        && leftColA === rightColC
+        && lit(1) === lit(1)).expr
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains((colA > colB && lit(1) === lit(1)).expr))
-    assert(split.rightSideOnly.contains((colC > colD).expr))
-    assert(split.bothSides.contains((colA === colC).expr))
+    assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
+    assert(split.rightSideOnly.contains((rightColC > rightColD).expr))
+    assert(split.bothSides.contains((leftColA === rightColC).expr))
     assert(split.full.contains(predicate))
   }
 
@@ -94,7 +98,11 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
     // All conjuncts after a nondeterministic conjunct shouldn't be split because they don't
     // commute across it.
     val predicate =
-      (rand() > lit(0) && colA > colB && colC > colD && colA === colC && lit(1) === lit(1)).expr
+      (rand() > lit(0)
+        && leftColA > leftColB
+        && rightColC > rightColD
+        && leftColA === rightColC
+        && lit(1) === lit(1)).expr
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
     assert(split.leftSideOnly.isEmpty)
@@ -107,12 +115,16 @@ class StreamingSymmetricHashJoinHelperSuite extends StreamTest {
   test("conjuncts before nondeterministic") {
     val randCol = rand()
     val predicate =
-      (colA > colB && colC > colD && colA === colC && lit(1) === lit(1) && randCol > lit(0)).expr
+      (leftColA > leftColB
+        && rightColC > rightColD
+        && leftColA === rightColC
+        && lit(1) === lit(1)
+        && randCol > lit(0)).expr
     val split = JoinConditionSplitPredicates(Some(predicate), left, right)
 
-    assert(split.leftSideOnly.contains((colA > colB && lit(1) === lit(1)).expr))
-    assert(split.rightSideOnly.contains((colC > colD).expr))
-    assert(split.bothSides.contains((colA === colC && randCol > lit(0)).expr))
+    assert(split.leftSideOnly.contains((leftColA > leftColB && lit(1) === lit(1)).expr))
+    assert(split.rightSideOnly.contains((rightColC > rightColD).expr))
+    assert(split.bothSides.contains((leftColA === rightColC && randCol > lit(0)).expr))
     assert(split.full.contains(predicate))
   }
 }
