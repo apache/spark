@@ -109,7 +109,7 @@ object FileFormatWriter extends Logging {
       outputSpec: OutputSpec,
       hadoopConf: Configuration,
       partitionColumns: Seq[Attribute],
-      bucketSpec: Option[BucketSpec],
+      bucketIdExpression: Option[Expression],
       statsTrackers: Seq[WriteJobStatsTracker],
       options: Map[String, String])
     : Set[String] = {
@@ -121,17 +121,6 @@ object FileFormatWriter extends Logging {
 
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = outputSpec.outputColumns.filterNot(partitionSet.contains)
-
-    val bucketIdExpression = bucketSpec.map { spec =>
-      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
-      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
-      // guarantee the data distribution is same between shuffle and bucketed data source, which
-      // enables us to only shuffle one side when join a bucketed table and a normal one.
-      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
-    }
-    val sortColumns = bucketSpec.toSeq.flatMap {
-      spec => spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
-    }
 
     val caseInsensitiveOptions = CaseInsensitiveMap(options)
 
@@ -156,19 +145,6 @@ object FileFormatWriter extends Logging {
       statsTrackers = statsTrackers
     )
 
-    // We should first sort by partition columns, then bucket id, and finally sorting columns.
-    val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
-    // the sort order doesn't matter
-    val actualOrdering = plan.outputOrdering.map(_.child)
-    val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
-      false
-    } else {
-      requiredOrdering.zip(actualOrdering).forall {
-        case (requiredOrder, childOutputOrder) =>
-          requiredOrder.semanticEquals(childOutputOrder)
-      }
-    }
-
     SQLExecution.checkSQLExecutionId(sparkSession)
 
     // This call shouldn't be put into the `try` block below because it only initializes and
@@ -176,20 +152,7 @@ object FileFormatWriter extends Logging {
     committer.setupJob(job)
 
     try {
-      val rdd = if (orderingMatched) {
-        plan.execute()
-      } else {
-        // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
-        // the physical plan may have different attribute ids due to optimizer removing some
-        // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-        val orderingExpr = requiredOrdering
-          .map(SortOrder(_, Ascending))
-          .map(BindReferences.bindReference(_, outputSpec.outputColumns))
-        SortExec(
-          orderingExpr,
-          global = false,
-          child = plan).execute()
-      }
+      val rdd = plan.execute()
       val ret = new Array[WriteTaskResult](rdd.partitions.length)
       sparkSession.sparkContext.runJob(
         rdd,
@@ -202,7 +165,7 @@ object FileFormatWriter extends Logging {
             committer,
             iterator = iter)
         },
-        0 until rdd.partitions.length,
+        rdd.partitions.indices,
         (index, res: WriteTaskResult) => {
           committer.onTaskCommit(res.commitMsg)
           ret(index) = res
@@ -521,18 +484,18 @@ object FileFormatWriter extends Logging {
       var recordsInFile: Long = 0L
       var fileCounter = 0
       val updatedPartitions = mutable.Set[String]()
-      var currentPartionValues: Option[UnsafeRow] = None
+      var currentPartitionValues: Option[UnsafeRow] = None
       var currentBucketId: Option[Int] = None
 
       for (row <- iter) {
         val nextPartitionValues = if (isPartitioned) Some(getPartitionValues(row)) else None
         val nextBucketId = if (isBucketed) Some(getBucketId(row)) else None
 
-        if (currentPartionValues != nextPartitionValues || currentBucketId != nextBucketId) {
+        if (currentPartitionValues != nextPartitionValues || currentBucketId != nextBucketId) {
           // See a new partition or bucket - write to a new partition dir (or a new bucket file).
-          if (isPartitioned && currentPartionValues != nextPartitionValues) {
-            currentPartionValues = Some(nextPartitionValues.get.copy())
-            statsTrackers.foreach(_.newPartition(currentPartionValues.get))
+          if (isPartitioned && currentPartitionValues != nextPartitionValues) {
+            currentPartitionValues = Some(nextPartitionValues.get.copy())
+            statsTrackers.foreach(_.newPartition(currentPartitionValues.get))
           }
           if (isBucketed) {
             currentBucketId = nextBucketId
@@ -543,7 +506,7 @@ object FileFormatWriter extends Logging {
           fileCounter = 0
 
           releaseResources()
-          newOutputWriter(currentPartionValues, currentBucketId, fileCounter, updatedPartitions)
+          newOutputWriter(currentPartitionValues, currentBucketId, fileCounter, updatedPartitions)
         } else if (desc.maxRecordsPerFile > 0 &&
             recordsInFile >= desc.maxRecordsPerFile) {
           // Exceeded the threshold in terms of the number of records per file.
@@ -554,7 +517,7 @@ object FileFormatWriter extends Logging {
             s"File counter $fileCounter is beyond max value $MAX_FILE_COUNTER")
 
           releaseResources()
-          newOutputWriter(currentPartionValues, currentBucketId, fileCounter, updatedPartitions)
+          newOutputWriter(currentPartitionValues, currentBucketId, fileCounter, updatedPartitions)
         }
         val outputRow = getOutputRow(row)
         currentWriter.write(outputRow)

@@ -83,7 +83,7 @@ private[hive] trait SaveAsHiveFile extends DataWritingCommand {
         FileFormatWriter.OutputSpec(outputLocation, customPartitionLocations, allColumns),
       hadoopConf = hadoopConf,
       partitionColumns = partitionAttributes,
-      bucketSpec = None,
+      bucketIdExpression = None,
       statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
       options = Map.empty)
   }

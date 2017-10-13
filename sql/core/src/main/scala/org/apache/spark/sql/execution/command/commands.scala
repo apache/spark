@@ -23,9 +23,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, SortOrder}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.physical.Distribution
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.execution.metric.SQLMetric
@@ -111,6 +112,10 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   override def output: Seq[Attribute] = cmd.output
 
   override def nodeName: String = "Execute " + cmd.nodeName
+
+  override def requiredChildDistribution: Seq[Distribution] = cmd.requiredDistribution
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = cmd.requiredOrdering
 
   override def executeCollect(): Array[InternalRow] = sideEffectResult.toArray
 

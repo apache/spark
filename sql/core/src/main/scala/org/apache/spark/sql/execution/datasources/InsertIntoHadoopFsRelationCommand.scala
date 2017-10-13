@@ -25,8 +25,10 @@ import org.apache.spark.internal.io.FileCommitProtocol
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, CatalogTablePartition}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeSet, Expression,
+SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
@@ -150,6 +152,10 @@ case class InsertIntoHadoopFsRelationCommand(
         }
       }
 
+      val partitionSet = AttributeSet(partitionColumns)
+      val dataColumns = query.output.filterNot(partitionSet.contains)
+      val bucketIdExpression = getBucketIdExpression(dataColumns)
+
       val updatedPartitionPaths =
         FileFormatWriter.write(
           sparkSession = sparkSession,
@@ -160,7 +166,7 @@ case class InsertIntoHadoopFsRelationCommand(
             qualifiedOutputPath.toString, customPartitionLocations, outputColumns),
           hadoopConf = hadoopConf,
           partitionColumns = partitionColumns,
-          bucketSpec = bucketSpec,
+          bucketIdExpression = bucketIdExpression,
           statsTrackers = Seq(basicWriteJobStatsTracker(hadoopConf)),
           options = options)
 
@@ -182,6 +188,43 @@ case class InsertIntoHadoopFsRelationCommand(
     }
 
     Seq.empty[Row]
+  }
+
+  private def getBucketIdExpression(dataColumns: Seq[Attribute]): Option[Expression] = {
+    bucketSpec.map { spec =>
+      val bucketColumns = spec.bucketColumnNames.map(c => dataColumns.find(_.name == c).get)
+      // Use `HashPartitioning.partitionIdExpression` as our bucket id expression, so that we can
+      // guarantee the data distribution is same between shuffle and bucketed data source, which
+      // enables us to only shuffle one side when join a bucketed table and a normal one.
+      HashPartitioning(bucketColumns, spec.numBuckets).partitionIdExpression
+    }
+  }
+
+  /**
+   * How is `requiredOrdering` determined ?
+   *
+   *     table type   |            requiredOrdering
+   * -----------------+-------------------------------------------------
+   *   normal table   |             partition columns
+   *   bucketed table | (partition columns + bucketId + sort columns)
+   * -----------------+-------------------------------------------------
+   */
+  override def requiredOrdering: Seq[Seq[SortOrder]] = {
+    val sortExpressions = bucketSpec match {
+      case Some(spec) =>
+        val partitionSet = AttributeSet(partitionColumns)
+        val dataColumns = query.output.filterNot(partitionSet.contains)
+        val bucketIdExpression = getBucketIdExpression(dataColumns)
+        val sortColumns = spec.sortColumnNames.map(c => dataColumns.find(_.name == c).get)
+        partitionColumns ++ bucketIdExpression ++ sortColumns
+
+      case _ => partitionColumns
+    }
+    if (sortExpressions.nonEmpty) {
+      Seq(sortExpressions.map(SortOrder(_, Ascending)))
+    } else {
+      Seq.fill(children.size)(Nil)
+    }
   }
 
   /**
