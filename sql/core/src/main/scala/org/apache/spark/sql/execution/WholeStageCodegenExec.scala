@@ -392,12 +392,16 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
     // Check if compiled code has a too large function
     if (maxCodeSize > sqlContext.conf.hugeMethodLimit) {
-      logWarning(s"Found too long generated codes and JIT optimization might not work: " +
-        s"the bytecode size was $maxCodeSize, this value went over the limit " +
+      logInfo(s"Found too long generated codes and JIT optimization might not work: " +
+        s"the bytecode size ($maxCodeSize) is above the limit " +
         s"${sqlContext.conf.hugeMethodLimit}, and the whole-stage codegen was disabled " +
         s"for this plan. To avoid this, you can raise the limit " +
-        s"${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}:\n$treeString")
-      return child.execute()
+        s"`${SQLConf.WHOLESTAGE_HUGE_METHOD_LIMIT.key}`:\n$treeString")
+      child match {
+        // The fallback solution of batch file source scan still uses WholeStageCodegenExec
+        case f: FileSourceScanExec if f.supportsBatch => // do nothing
+        case _ => return child.execute()
+      }
     }
 
     val references = ctx.references.toArray

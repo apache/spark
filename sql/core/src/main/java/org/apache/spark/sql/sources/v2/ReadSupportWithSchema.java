@@ -39,9 +39,8 @@ public interface ReadSupportWithSchema {
    *               physical schema of the underlying storage of this data source reader, e.g.
    *               CSV files, JSON files, etc, while this reader may not read data with full
    *               schema, as column pruning or other optimizations may happen.
-   * @param options the options for this data source reader, which is an immutable case-insensitive
-   *                string-to-string map.
-   * @return a reader that implements the actual read logic.
+   * @param options the options for the returned data source reader, which is an immutable
+   *                case-insensitive string-to-string map.
    */
   DataSourceV2Reader createReader(StructType schema, DataSourceV2Options options);
 }

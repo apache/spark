@@ -461,6 +461,8 @@ name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can al
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
 
+To load a JSON file you can use:
+
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -479,6 +481,26 @@ source type can be converted into other types using this syntax.
 </div>
 </div>
 
+To load a CSV file you can use:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_load_options_csv python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
+
+</div>
+</div>
 ### Run SQL on files directly
 
 Instead of using read API to load a file into DataFrame and query it, you can also query that
@@ -573,7 +595,7 @@ Note that partition information is not gathered by default when creating externa
 
 ### Bucketing, Sorting and Partitioning
 
-For file-based data source, it is also possible to bucket and sort or partition the output. 
+For file-based data source, it is also possible to bucket and sort or partition the output.
 Bucketing and sorting are applicable only to persistent tables:
 
 <div class="codetabs">
@@ -598,7 +620,7 @@ CREATE TABLE users_bucketed_by_name(
   name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
-) USING parquet 
+) USING parquet
 CLUSTERED BY(name) INTO 42 BUCKETS;
 
 {% endhighlight %}
@@ -629,7 +651,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% highlight sql %}
 
 CREATE TABLE users_by_favorite_color(
-  name STRING, 
+  name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
 ) USING csv PARTITIONED BY(favorite_color);
@@ -664,7 +686,7 @@ CREATE TABLE users_bucketed_and_partitioned(
   name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
-) USING parquet 
+) USING parquet
 PARTITIONED BY (favorite_color)
 CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 
@@ -675,7 +697,7 @@ CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 </div>
 
 `partitionBy` creates a directory structure as described in the [Partition Discovery](#partition-discovery) section.
-Thus, it has limited applicability to columns with high cardinality. In contrast 
+Thus, it has limited applicability to columns with high cardinality. In contrast
  `bucketBy` distributes
 data across a fixed number of buckets and can be used when a number of unique values is unbounded.
 
