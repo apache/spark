@@ -41,15 +41,15 @@ object InteractionExample {
       (6, 1, 1, 4, 2, 8, 4)
     )).toDF("id1", "id2", "id3", "id4", "id5", "id6", "id7")
 
-    val assembler1 = new VectorAssembler().
-      setInputCols(Array("id2", "id3", "id4")).
-      setOutputCol("vec1")
+    val assembler1 = new VectorAssembler()
+      .setInputCols(Array("id2", "id3", "id4"))
+      .setOutputCol("vec1")
 
     val assembled1 = assembler1.transform(df)
 
-    val assembler2 = new VectorAssembler().
-      setInputCols(Array("id5", "id6", "id7")).
-      setOutputCol("vec2")
+    val assembler2 = new VectorAssembler()
+      .setInputCols(Array("id5", "id6", "id7"))
+      .setOutputCol("vec2")
 
     val assembled2 = assembler2.transform(assembled1).select("id1", "vec1", "vec2")
 
