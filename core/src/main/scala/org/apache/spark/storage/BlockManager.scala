@@ -211,7 +211,7 @@ private[spark] class BlockManager(
   // Exposed for test
   private[storage] val remoteBlockTempFileManager =
     new BlockManager.RemoteBlockTempFileManager(this)
-  private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_TO_MEM)
+  private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as

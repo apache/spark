@@ -547,13 +547,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.reducer.maxReqSizeShuffleToMem</code></td>
+  <td><code>spark.maxRemoteBlockSizeFetchToMem</code></td>
   <td>Long.MaxValue</td>
   <td>
-    The blocks of a shuffle request will be fetched to disk when size of the request is above
-    this threshold. This is to avoid a giant request takes too much memory. We can enable this
-    config by setting a specific value(e.g. 200m). Note that this config can be enabled only when
-    the shuffle shuffle service is newer than Spark-2.2 or the shuffle service is disabled.
+    The remote block will be fetched to disk when size of the block is above this threshold.
+    This is to avoid a giant request takes too much memory. We can enable this config by setting
+    a specific value(e.g. 200m). Note this configuration will affect both shuffle fetch 
+    and block manager remote block fetch. For users who enabled external shuffle service,
+    this feature can only be worked when external shuffle service is newer than Spark 2.2.
   </td>
 </tr>
 <tr>
@@ -1089,15 +1090,6 @@ Apart from these, the following properties are also available, and may be useful
     Enables proactive block replication for RDD blocks. Cached RDD block replicas lost due to
     executor failures are replenished if there are any existing available replicas. This tries
     to get the replication level of the block to the initial number.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.storage.maxRemoteBlockSizeToMem</code></td>
-  <td>Long.MaxValue</td>
-  <td>
-    Remote blocks will be fetched to disk when size of block is above this threshold.
-    This is to avoid big block taking too much memory.
-    This configuration can be enabled by setting a specific value(e.g. 200m).
   </td>
 </tr>
 </table>

@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage
 
-import java.io.File
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
@@ -1371,7 +1370,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   }
 
   test("fetch remote block to local disk if block size is larger than threshold") {
-    conf.set("spark.storage.maxRemoteBlockSizeToMem", "1000")
+    conf.set(MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM, 1000L)
 
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
     val mockBlockTransferService = new MockBlockTransferService(0)
