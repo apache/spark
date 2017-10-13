@@ -2103,4 +2103,35 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       testData2.select(lit(7), 'a, 'b).orderBy(lit(1), lit(2), lit(3)),
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
+
+  test("SPARK-22226: splitExpressions should not cause \"Code of method grows beyond 64 KB\"") {
+    val colNumber = 10000
+    val input = spark.range(2).rdd.map(_ => Row(1 to colNumber: _*))
+    val df = sqlContext.createDataFrame(input, StructType(
+      (1 to colNumber).map(colIndex => StructField(s"_$colIndex", IntegerType, false))))
+    val newCols = (1 to colNumber).flatMap { colIndex =>
+      Seq(expr(s"if(1000 < _$colIndex, 1000, _$colIndex)"),
+        expr(s"sqrt(_$colIndex)"))
+    }
+    df.select(newCols: _*).collect()
+  }
+
+  test("SPARK-22226: too many splitted expressions should not exceed constant pool limit") {
+    val colNumber = 1000
+    val input = spark.range(2).rdd.map(_ => Row(1 to colNumber: _*))
+    val df = sqlContext.createDataFrame(input, StructType(
+      (1 to colNumber).map(colIndex => StructField(s"_$colIndex", IntegerType, false))))
+
+    val funcs = (1 to colNumber).flatMap { colIndex =>
+      val colName = s"_$colIndex"
+      val tsFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+      Seq(expr(s"unix_timestamp(concat('2017-10-13 10:26:59.', $colName),'$tsFormat')"),
+        expr(s"unix_timestamp(concat('2017-10-13 11:26:59.', $colName),'$tsFormat')"),
+        expr(s"unix_timestamp(concat('2017-10-13 12:26:59.', $colName),'$tsFormat')"),
+        expr(s"unix_timestamp(concat('2017-10-13 13:26:59.', $colName),'$tsFormat')"),
+        expr(s"unix_timestamp(concat('2017-10-13 14:26:59.', $colName),'$tsFormat')"),
+        expr(s"unix_timestamp(concat('2017-10-13 15:26:59.', $colName),'$tsFormat')").as(colName))
+    }
+    df.select(funcs: _*).dropDuplicates((1 to 5).map(colIndex => s"_$colIndex")).collect()
+  }
 }
