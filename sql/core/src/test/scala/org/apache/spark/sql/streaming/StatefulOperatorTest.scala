@@ -43,6 +43,7 @@ trait StatefulOperatorTest {
       expectedPartitioning: Partitioning): Boolean = {
     val operator = sq.asInstanceOf[StreamExecution].lastExecution
       .executedPlan.collect { case p: T => p }
-    operator.head.children.forall(_.outputPartitioning == expectedPartitioning)
+    operator.head.children.forall(
+      _.outputPartitioning.numPartitions == expectedPartitioning.numPartitions)
   }
 }

@@ -248,8 +248,6 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     testStream(aggregated, Update)(
       StartStream(),
       AddData(inputData, 1, 2, 3, 4),
-      AssertOnQuery(sq =>
-        checkChildOutputHashPartitioning[StateStoreRestoreExec](sq, Seq("value"))),
       ExpectFailure[SparkException](),
       StartStream(),
       CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))
@@ -283,6 +281,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+      AssertOnQuery(sq =>
+        checkChildOutputHashPartitioning[StateStoreRestoreExec](sq, Seq("value"))),
 
       // advance clock to 20 seconds, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
