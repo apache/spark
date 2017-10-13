@@ -80,19 +80,15 @@ private[impl] object LocalTreeTests extends Logging {
     val splits = RandomForest.findSplits(input, metadata, seed)
 
     // Bin feature values (convert to TreePoint representation).
-    val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata)
-    // Convert binned training data to an array of BaggedPoints for a single subsample
-    // (a single tree)
-    val baggedInput: Array[BaggedPoint[TreePoint]] = BaggedPoint
-      .convertToBaggedRDD(input = treeInput, subsamplingRate = strategy.subsamplingRate,
-        numSubsamples = 1, withReplacement = false, seed = seed)
-      .collect()
+    val treeInput = TreePoint.convertToTreeRDD(input, splits, metadata).collect()
+    val instanceWeights = Array.fill[Double](treeInput.length)(1.0)
 
     // Create tree root node
     val initialRoot = LearningNode.emptyNode(nodeIndex = 1)
     // TODO: Create rng for feature subsampling (using seed), pass to fitNode
     // Fit tree
-    val rootNode = LocalDecisionTree.fitNode(baggedInput, initialRoot, metadata, splits)
+    val rootNode = LocalDecisionTree.fitNode(treeInput, instanceWeights,
+      initialRoot, metadata, splits)
     finalizeTree(rootNode, strategy.algo, strategy.numClasses, numFeatures, parentUID)
   }
 

@@ -83,9 +83,11 @@ class LocalTreeDataSuite
     val col2 = FeatureVector(featureIndex = catFeatureIdx, featureArity = 3,
       values = Array(0, 0, 2, 1))
 
+    // Get all-1 instance weights
+    val instanceWeights = Array.fill[Double](col1.values.length)(1.0)
     val nodeOffsets = Array((0, numRows))
     val activeNodes = Array(LearningNode.emptyNode(nodeIndex = -1))
-    TrainingInfo(Array(col1, col2), nodeOffsets, activeNodes)
+    TrainingInfo(Array(col1, col2), instanceWeights, nodeOffsets, activeNodes)
   }
 
    // Check that TrainingInfo correctly updates node offsets, sorts column values during update()

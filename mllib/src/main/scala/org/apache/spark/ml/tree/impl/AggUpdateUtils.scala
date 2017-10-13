@@ -33,11 +33,12 @@ private[impl] object AggUpdateUtils {
       col: FeatureVector,
       from: Int,
       to: Int,
+      instanceWeights: Array[Double],
       labels: Array[Double]): Unit = {
     from.until(to).foreach { idx =>
       val rowIndex = col.indices(idx)
       val label = labels(rowIndex)
-      statsAggregator.updateParent(label, instanceWeight = 1)
+      statsAggregator.updateParent(label, instanceWeights(rowIndex))
     }
   }
 

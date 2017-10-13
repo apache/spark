@@ -41,9 +41,10 @@ class TreeSplitUtilsSuite
       splits: Array[Array[Split]]): DTStatsAggregator = {
 
     val statsAggregator = new DTStatsAggregator(metadata, featureSubset = None)
-    AggUpdateUtils.updateParentImpurity(statsAggregator, col, from, to, labels)
-    LocalDecisionTree.updateAggregator(statsAggregator, col, labels, from, to,
-      featureIndexIdx = col.featureIndex, splits = splits)
+    val instanceWeights = Array.fill[Double](col.values.length)(1.0)
+    AggUpdateUtils.updateParentImpurity(statsAggregator, col, from, to, instanceWeights, labels)
+    LocalDecisionTree.updateAggregator(statsAggregator, col, instanceWeights, labels, from, to,
+      col.featureIndex, splits)
     statsAggregator
   }
 

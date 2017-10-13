@@ -32,7 +32,8 @@ private[ml] object LocalDecisionTree {
    * @param splits splits(i) = array of splits for feature i
    */
   private[ml] def fitNode(
-      input: Array[BaggedPoint[TreePoint]],
+      input: Array[TreePoint],
+      instanceWeights: Array[Double],
       node: LearningNode,
       metadata: DecisionTreeMetadata,
       splits: Array[Array[Split]]): Node = {
@@ -48,8 +49,8 @@ private[ml] object LocalDecisionTree {
     // Prepare column store.
     //   Note: rowToColumnStoreDense checks to make sure numRows < Int.MaxValue.
     val colStoreInit: Array[Array[Int]]
-    = LocalDecisionTreeUtils.rowToColumnStoreDense(input.map(_.datum.binnedFeatures))
-    val labels = input.map(_.datum.label)
+    = LocalDecisionTreeUtils.rowToColumnStoreDense(input.map(_.binnedFeatures))
+    val labels = input.map(_.label)
 
     // Fit a regression model on the dataset, throwing an error if metadata indicates that
     // we should train a classifier.
@@ -58,18 +59,18 @@ private[ml] object LocalDecisionTree {
       throw new UnsupportedOperationException("Local training of a decision tree classifier is " +
         "unsupported; currently, only regression is supported")
     } else {
-      // TODO(smurching): Pass an array of instanceWeights extracted from the input BaggedPoints?
-      trainRegressor(node, colStoreInit, labels, metadata, splits)
+      trainRegressor(node, colStoreInit, instanceWeights, labels, metadata, splits)
     }
   }
 
   /**
    * Locally fits a decision tree regressor.
-   * TODO(smurching): Logic for fitting a classifier & regressor seems the same; only difference
-   * is impurity metric. Use the same logic for fitting a classifier?
+   * TODO(smurching): Logic for fitting a classifier & regressor is the same; only difference
+   * is impurity metric. Use the same logic for fitting a classifier.
    *
    * @param rootNode Node to use as root of the tree fit on the passed-in dataset
    * @param colStoreInit Array of columns of training data
+   * @param instanceWeights Array of weights for each training example
    * @param metadata learning and dataset metadata for DecisionTree
    * @param splits splits(i) = Array of possible splits for feature i
    * @return LeafNode or InternalNode representation of rootNode
@@ -77,6 +78,7 @@ private[ml] object LocalDecisionTree {
   private[ml] def trainRegressor(
       rootNode: LearningNode,
       colStoreInit: Array[Array[Int]],
+      instanceWeights: Array[Double],
       labels: Array[Double],
       metadata: DecisionTreeMetadata,
       splits: Array[Array[Split]]): Node = {
@@ -94,7 +96,7 @@ private[ml] object LocalDecisionTree {
 
     // Create a new PartitionInfo describing the status of our partially-trained subtree
     // at each iteration of training
-    var partitionInfo: TrainingInfo = TrainingInfo(colStore,
+    var trainingInfo: TrainingInfo = TrainingInfo(colStore, instanceWeights,
       nodeOffsets = Array[(Int, Int)]((0, numRows)), activeNodes = Array(rootNode))
 
     // Iteratively learn, one level of the tree at a time.
@@ -105,14 +107,14 @@ private[ml] object LocalDecisionTree {
     while (currentLevel < metadata.maxDepth && !doneLearning) {
       // Splits each active node if possible, returning an array of new active nodes
       val activeNodes: Array[LearningNode] =
-        computeBestSplits(partitionInfo, labels, metadata, splits)
+        computeBestSplits(trainingInfo, labels, metadata, splits)
       // Filter active node periphery by impurity.
       val estimatedRemainingActive = activeNodes.count(_.stats.impurity > 0.0)
       // TODO: Check to make sure we split something, and stop otherwise.
       doneLearning = currentLevel + 1 >= metadata.maxDepth || estimatedRemainingActive == 0
       if (!doneLearning) {
-        // Obtain a new partitionInfo instance describing our current training status
-        partitionInfo = partitionInfo.update(splits, activeNodes)
+        // Obtain a new trainingInfo instance describing our current training status
+        trainingInfo = trainingInfo.update(splits, activeNodes)
       }
       currentLevel += 1
     }
@@ -128,6 +130,7 @@ private[ml] object LocalDecisionTree {
   private[impl] def updateAggregator(
       statsAggregator: DTStatsAggregator,
       col: FeatureVector,
+      instanceWeights: Array[Double],
       labels: Array[Double],
       from: Int,
       to: Int,
@@ -138,13 +141,15 @@ private[ml] object LocalDecisionTree {
       from.until(to).foreach { idx =>
         val rowIndex = col.indices(idx)
         AggUpdateUtils.updateUnorderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
-          featureIndex = col.featureIndex, featureIndexIdx, splits, instanceWeight = 1.0)
+          featureIndex = col.featureIndex, featureIndexIdx, splits,
+          instanceWeight = instanceWeights(rowIndex))
       }
     } else {
       from.until(to).foreach { idx =>
         val rowIndex = col.indices(idx)
         AggUpdateUtils.updateOrderedFeature(statsAggregator, col.values(idx), labels(rowIndex),
-          featureIndex = col.featureIndex, featureIndexIdx, instanceWeight = 1.0)
+          featureIndex = col.featureIndex, featureIndexIdx,
+          instanceWeight = instanceWeights(rowIndex))
       }
     }
   }
@@ -152,18 +157,18 @@ private[ml] object LocalDecisionTree {
   /**
    * Find the best splits for all active nodes
    *
-   * @param partitionInfo Contains node offset info for current set of active nodes
+   * @param trainingInfo Contains node offset info for current set of active nodes
    * @return  Array of new active nodes formed by splitting the current set of active nodes.
    */
   private def computeBestSplits(
-      partitionInfo: TrainingInfo,
+      trainingInfo: TrainingInfo,
       labels: Array[Double],
       metadata: DecisionTreeMetadata,
       splits: Array[Array[Split]]) = {
     // For each node, select the best split across all features
-    partitionInfo match {
-      case TrainingInfo(columns: Array[FeatureVector], nodeOffsets: Array[(Int, Int)],
-      activeNodes: Array[LearningNode]) => {
+    trainingInfo match {
+      case TrainingInfo(columns: Array[FeatureVector], instanceWeights: Array[Double],
+      nodeOffsets: Array[(Int, Int)], activeNodes: Array[LearningNode]) => {
         // Filter out leaf nodes from the previous iteration
         val activeNonLeafs = activeNodes.zipWithIndex.filterNot(_._1.isLeaf)
         // Iterate over the active nodes in the current level.
@@ -177,11 +182,12 @@ private[ml] object LocalDecisionTree {
           // store result in statsAggregator
           // NOTE: should we require(columns.length > 0) here? We already check that
           // the input dataset is nonempty in LocalDecisionTreeUtils.rowToColumnStoreDense
-          AggUpdateUtils.updateParentImpurity(statsAggregator, columns(0), from, to, labels)
+          AggUpdateUtils.updateParentImpurity(statsAggregator, columns(0), from, to,
+            instanceWeights, labels)
           // Compute sufficient stats for each feature/bin at the current node
           Range(0, metadata.numFeatures).foreach { featureIndex =>
             val col = columns(featureIndex)
-            updateAggregator(statsAggregator, col, labels, from, to,
+            updateAggregator(statsAggregator, col, instanceWeights, labels, from, to,
               featureIndexIdx = featureIndex, splits)
           }
           val (bestSplit, bestStats) = RandomForest.binsToBestSplit(statsAggregator,

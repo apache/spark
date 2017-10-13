@@ -36,12 +36,15 @@ import org.apache.spark.util.collection.BitSet
  *
  * @param featureArity  For categorical features, this gives the number of categories.
  *                      For continuous features, this should be set to 0.
+ * @param rowIndices Optional: rowIndices(i) is the row index of the ith feature value (values(i))
+ *                   If unspecified, feature values are assumed to be ordered by row (i.e. values(i)
+ *                   is a feature value from the ith row).
  */
 private[impl] class FeatureVector(
     val featureIndex: Int,
     val featureArity: Int,
     val values: Array[Int],
-    val rowIndices: Option[Array[Int]])
+    private val rowIndices: Option[Array[Int]])
   extends Serializable {
   // Associates feature values with training point rows. indices(i) = training point index
   // (row index) of ith feature value
@@ -77,9 +80,9 @@ private[impl] class FeatureVector(
    * according to the split information encoded in instanceBitVector (feature values for rows
    * that split left appear before feature values for rows that split right).
    *
+   * @param numLeftRows Number of rows on the left side of the split
    * @param tempVals Destination buffer for reordered feature values
    * @param tempIndices Destination buffer for row indices corresponding to reordered feature values
-   * @param numLeftRows Number of rows on the left side of the split
    * @param instanceBitVector instanceBitVector(i) = true if the row for the ith feature
    *                          value splits right, false otherwise
    */
@@ -134,8 +137,9 @@ private[impl] class FeatureVector(
 private[impl] object FeatureVector {
   /**
    * Store column values sorted by decision tree node (i.e. all column values for a node occur
-   * in a contiguous subarray). */
-  def apply(
+   * in a contiguous subarray).
+   */
+  private[impl] def apply(
       featureIndex: Int,
       featureArity: Int,
       values: Array[Int]): FeatureVector = {

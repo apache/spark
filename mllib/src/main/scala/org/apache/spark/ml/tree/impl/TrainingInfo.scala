@@ -35,6 +35,7 @@ import org.apache.spark.util.collection.BitSet
  *                 all columns share this first level of sorting.
  *                 Within each node's group, each column is sorted based on feature value;
  *                 this second level of sorting differs across columns.
+ * @param instanceWeights Array of weights for each training example
  * @param nodeOffsets  Offsets into the columns indicating the first level of sorting (by node).
  *                     The rows corresponding to the node activeNodes(i) are in the range
  *                     [nodeOffsets(i)(0), nodeOffsets(i)(1)) .
@@ -43,6 +44,7 @@ import org.apache.spark.util.collection.BitSet
  */
 private[impl] case class TrainingInfo(
     columns: Array[FeatureVector],
+    instanceWeights: Array[Double],
     nodeOffsets: Array[(Int, Int)],
     activeNodes: Array[LearningNode]) extends Serializable {
 
@@ -106,7 +108,7 @@ private[impl] case class TrainingInfo(
       }
       nodeIdx += 1
     }
-    TrainingInfo(columns, newNodeOffsets.toArray, newActiveNodes)
+    TrainingInfo(columns, instanceWeights, newNodeOffsets.toArray, newActiveNodes)
   }
 
 }
@@ -133,7 +135,6 @@ private[impl] object TrainingInfo {
       allSplits: Array[Array[Split]]): BitSet = {
     val bitset = new BitSet(to - from)
     from.until(to).foreach { i =>
-      val idx = col.indices(i)
       if (!split.shouldGoLeft(col.values(i), allSplits(col.featureIndex))) {
         bitset.set(i - from)
       }
