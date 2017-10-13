@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.nio.ByteBuffer
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExpectsInputTypes, Expression}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HLLPPInput, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.types._
 
 /**
@@ -46,16 +47,7 @@ case class ApproxCountDistinctForIntervals(
     relativeSD: Double = 0.05,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0)
-  extends ImperativeAggregate with ExpectsInputTypes {
-
-  def this(child: Expression, endpointsExpression: Expression) = {
-    this(
-      child = child,
-      endpointsExpression = endpointsExpression,
-      relativeSD = 0.05,
-      mutableAggBufferOffset = 0,
-      inputAggBufferOffset = 0)
-  }
+  extends TypedImperativeAggregate[Array[Long]] with ExpectsInputTypes {
 
   def this(child: Expression, endpointsExpression: Expression, relativeSD: Expression) = {
     this(
@@ -114,29 +106,11 @@ case class ApproxCountDistinctForIntervals(
   private lazy val totalNumWords = numWordsPerHllpp * hllppArray.length
 
   /** Allocate enough words to store all registers. */
-  override lazy val aggBufferAttributes: Seq[AttributeReference] = {
-    Seq.tabulate(totalNumWords) { i =>
-      AttributeReference(s"MS[$i]", LongType)()
-    }
+  override def createAggregationBuffer(): Array[Long] = {
+    Array.fill(totalNumWords)(0L)
   }
 
-  override def aggBufferSchema: StructType = StructType.fromAttributes(aggBufferAttributes)
-
-  // Note: although this simply copies aggBufferAttributes, this common code can not be placed
-  // in the superclass because that will lead to initialization ordering issues.
-  override lazy val inputAggBufferAttributes: Seq[AttributeReference] =
-    aggBufferAttributes.map(_.newInstance())
-
-  /** Fill all words with zeros. */
-  override def initialize(buffer: InternalRow): Unit = {
-    var word = 0
-    while (word < totalNumWords) {
-      buffer.setLong(mutableAggBufferOffset + word, 0)
-      word += 1
-    }
-  }
-
-  override def update(buffer: InternalRow, input: InternalRow): Unit = {
+  override def update(buffer: Array[Long], input: InternalRow): Array[Long] = {
     val value = child.eval(input)
     // Ignore empty rows
     if (value != null) {
@@ -153,13 +127,14 @@ case class ApproxCountDistinctForIntervals(
       // endpoints are sorted into ascending order already
       if (endpoints.head > doubleValue || endpoints.last < doubleValue) {
         // ignore if the value is out of the whole range
-        return
+        return buffer
       }
 
       val hllppIndex = findHllppIndex(doubleValue)
       val offset = mutableAggBufferOffset + hllppIndex * numWordsPerHllpp
-      hllppArray(hllppIndex).update(buffer, offset, value, child.dataType)
+      hllppArray(hllppIndex).update(LongArrayInput(buffer), offset, value, child.dataType)
     }
+    buffer
   }
 
   // Find which interval (HyperLogLogPlusPlusHelper) should receive the given value.
@@ -196,17 +171,18 @@ case class ApproxCountDistinctForIntervals(
     }
   }
 
-  override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
+  override def merge(buffer1: Array[Long], buffer2: Array[Long]): Array[Long] = {
     for (i <- hllppArray.indices) {
       hllppArray(i).merge(
-        buffer1 = buffer1,
-        buffer2 = buffer2,
+        buffer1 = LongArrayInput(buffer1),
+        buffer2 = LongArrayInput(buffer2),
         offset1 = mutableAggBufferOffset + i * numWordsPerHllpp,
         offset2 = inputAggBufferOffset + i * numWordsPerHllpp)
     }
+    buffer1
   }
 
-  override def eval(buffer: InternalRow): Any = {
+  override def eval(buffer: Array[Long]): Any = {
     val ndvArray = hllppResults(buffer)
     // If the endpoints contains multiple elements with the same value,
     // we set ndv=1 for intervals between these elements.
@@ -218,10 +194,11 @@ case class ApproxCountDistinctForIntervals(
     new GenericArrayData(ndvArray)
   }
 
-  def hllppResults(buffer: InternalRow): Array[Long] = {
+  def hllppResults(buffer: Array[Long]): Array[Long] = {
     val ndvArray = new Array[Long](hllppArray.length)
     for (i <- ndvArray.indices) {
-      ndvArray(i) = hllppArray(i).query(buffer, mutableAggBufferOffset + i * numWordsPerHllpp)
+      ndvArray(i) = hllppArray(i).query(LongArrayInput(buffer),
+        mutableAggBufferOffset + i * numWordsPerHllpp)
     }
     ndvArray
   }
@@ -239,4 +216,24 @@ case class ApproxCountDistinctForIntervals(
   override def dataType: DataType = ArrayType(LongType)
 
   override def prettyName: String = "approx_count_distinct_for_intervals"
+
+  override def serialize(obj: Array[Long]): Array[Byte] = {
+    val buffer = ByteBuffer.wrap(new Array(4 + obj.length))
+    buffer.putInt(obj.length)
+    obj.foreach(buffer.putLong)
+    buffer.array()
+  }
+
+  override def deserialize(bytes: Array[Byte]): Array[Long] = {
+    val buffer = ByteBuffer.wrap(bytes)
+    val length = buffer.getInt
+    val array = new Array[Long](length)
+    (0 until length).foreach(i => array(i) = buffer.getLong)
+    array
+  }
+
+  private case class LongArrayInput(array: Array[Long]) extends HLLPPInput {
+    override def getLong(offset: Int): Long = array(offset)
+    override def setLong(offset: Int, value: Long): Unit = { array(offset) = value }
+  }
 }
