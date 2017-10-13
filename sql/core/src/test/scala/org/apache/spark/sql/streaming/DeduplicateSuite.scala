@@ -63,7 +63,8 @@ class DeduplicateSuite extends StateStoreMetricsTest
       AddData(inputData, "a" -> 1),
       CheckLastBatch("a" -> 1),
       assertNumStateRows(total = 1, updated = 1),
-      AssertOnQuery(sq => checkChildOutputPartitioning[StreamingDeduplicateExec](sq, Seq("_1"))),
+      AssertOnQuery(sq =>
+        checkChildOutputHashPartitioning[StreamingDeduplicateExec](sq, Seq("_1"))),
       AddData(inputData, "a" -> 2), // Dropped
       CheckLastBatch(),
       assertNumStateRows(total = 1, updated = 0),

@@ -248,7 +248,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     testStream(aggregated, Update)(
       StartStream(),
       AddData(inputData, 1, 2, 3, 4),
-      AssertOnQuery(sq => checkChildOutputPartitioning[StateStoreRestoreExec](sq, Seq("value"))),
+      AssertOnQuery(sq =>
+        checkChildOutputHashPartitioning[StateStoreRestoreExec](sq, Seq("value"))),
       ExpectFailure[SparkException](),
       StartStream(),
       CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))

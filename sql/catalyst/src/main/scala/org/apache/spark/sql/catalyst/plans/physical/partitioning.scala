@@ -248,7 +248,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering, desiredPartitions) =>
       expressions.forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
-        desiredPartitions.forall(_ == numPartitions) // if desiredPartition = true, returns true
+        desiredPartitions.forall(_ == numPartitions) // if desiredPartitions = None, returns true
     case _ => false
   }
 
@@ -295,7 +295,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
       requiredOrdering.take(minSize) == ordering.take(minSize)
     case ClusteredDistribution(requiredClustering, desiredPartitions) =>
       ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
-        desiredPartitions.forall(_ == numPartitions) // if desiredPartition = true, returns true
+        desiredPartitions.forall(_ == numPartitions) // if desiredPartitions = None, returns true
     case _ => false
   }
 

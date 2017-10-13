@@ -25,12 +25,11 @@ trait StatefulOperatorTest {
    * Check that the output partitioning of a child operator of a Stateful operator satisfies the
    * distribution that we expect for our Stateful operator.
    */
-  protected def checkChildOutputPartitioning[T <: StatefulOperator](
+  protected def checkChildOutputHashPartitioning[T <: StatefulOperator](
       sq: StreamingQuery,
-      colNames: Seq[String],
-      numPartitions: Option[Int] = None): Boolean = {
-    val attr = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.analyzed.output
-    val partitions = numPartitions.getOrElse(sq.sparkSession.sessionState.conf.numShufflePartitions)
+      colNames: Seq[String]): Boolean = {
+    val attr = sq.asInstanceOf[StreamExecution].lastExecution.analyzed.output
+    val partitions = sq.sparkSession.sessionState.conf.numShufflePartitions
     val groupingAttr = attr.filter(a => colNames.contains(a.name))
     checkChildOutputPartitioning(sq, HashPartitioning(groupingAttr, partitions))
   }
@@ -42,7 +41,7 @@ trait StatefulOperatorTest {
   protected def checkChildOutputPartitioning[T <: StatefulOperator](
       sq: StreamingQuery,
       expectedPartitioning: Partitioning): Boolean = {
-    val operator = sq.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+    val operator = sq.asInstanceOf[StreamExecution].lastExecution
       .executedPlan.collect { case p: T => p }
     operator.head.children.forall(_.outputPartitioning == expectedPartitioning)
   }

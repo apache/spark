@@ -546,7 +546,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
-      AssertOnQuery(sq => checkChildOutputPartitioning[FlatMapGroupsWithStateExec](
+      AssertOnQuery(sq => checkChildOutputHashPartitioning[FlatMapGroupsWithStateExec](
         sq, Seq("value"))),
       AddData(inputData, "a", "b"),
       CheckLastBatch(("a", "2"), ("b", "1")),

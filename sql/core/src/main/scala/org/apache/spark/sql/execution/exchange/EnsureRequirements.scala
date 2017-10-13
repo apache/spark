@@ -44,6 +44,8 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
 
   /**
    * Given a required distribution, returns a partitioning that satisfies that distribution.
+   * @param requiredDistribution The distribution that is required by the operator
+   * @param numPartitions Used when the distribution doesn't require a specific number of partitions
    */
   private def createPartitioning(
       requiredDistribution: Distribution,
