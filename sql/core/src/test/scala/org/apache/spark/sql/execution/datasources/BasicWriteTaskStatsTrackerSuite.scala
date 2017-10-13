@@ -80,7 +80,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     val missing = new Path(tempDirPath, "missing")
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(missing.toString)
-    assertStats(tracker, 1, 0)
+    assertStats(tracker, 0, 0)
   }
 
   test("Empty filename is forwarded") {
@@ -171,8 +171,9 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
     tracker.newFile(file3.toString)
     write2(file3)
 
-    // the expeected size is file1 + file3
-    assertStats(tracker, 3, len1 + len2)
+    // the expected size is file1 + file3; only two files are reported
+    // as found
+    assertStats(tracker, 2, len1 + len2)
   }
 
   /**
