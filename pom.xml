@@ -154,6 +154,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <commons-beanutils.version>1.9.3</commons-beanutils.version>
+    <commons-logging.version>1.2</commons-logging.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.3</commons.httpclient.version>
     <commons.httpcore.version>4.4.6</commons.httpcore.version>
@@ -510,6 +511,11 @@
         <groupId>commons-beanutils</groupId>
         <artifactId>commons-beanutils</artifactId>
         <version>${commons-beanutils.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>${commons-logging.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-pool</groupId>
