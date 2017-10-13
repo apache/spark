@@ -2104,7 +2104,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       Seq(Row(7, 1, 1), Row(7, 1, 2), Row(7, 2, 1), Row(7, 2, 2), Row(7, 3, 1), Row(7, 3, 2)))
   }
 
-  test("SPARK-22226: splitExpressions should not cause \"Code of method grows beyond 64 KB\"") {
+  test("SPARK-22226: splitExpressions should not generate codes beyond 64KB") {
     val colNumber = 10000
     val input = spark.range(2).rdd.map(_ => Row(1 to colNumber: _*))
     val df = sqlContext.createDataFrame(input, StructType(
