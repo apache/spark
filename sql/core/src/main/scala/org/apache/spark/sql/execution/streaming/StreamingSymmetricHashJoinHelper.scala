@@ -102,11 +102,8 @@ object StreamingSymmetricHashJoinHelper extends Logging {
       // * Conjuncts that can be evaluated on only the right input.
       // * Conjuncts that require both left and right input.
       //
-      // Note that these splits are applied in order, so the first category will end up containing
-      // conjuncts which depend on neither the left nor right input.
-      //
-      // Note also that nondeterministic conjuncts effectively require both left and right input.
-      // To maintain their semantics, they need to be evaluated exactly once per joined row.
+      // Note that we treat nondeterministic conjuncts as though they require both left and right
+      // input. To maintain their semantics, they need to be evaluated exactly once per joined row.
       val (leftCondition, rightCondition, joinedCondition) = {
         if (condition.isEmpty) {
           (None, None, None)
@@ -120,14 +117,15 @@ object StreamingSymmetricHashJoinHelper extends Logging {
             cond.references.subsetOf(left.outputSet)
           }
 
-          val (rightConjuncts, remainingConjuncts) = nonLeftConjuncts.partition { cond =>
+          val (rightConjuncts, nonRightConjuncts) = deterministicConjuncts.partition { cond =>
             cond.references.subsetOf(right.outputSet)
           }
 
           (
             leftConjuncts.reduceOption(And),
             rightConjuncts.reduceOption(And),
-            (remainingConjuncts ++ nonDeterministicConjuncts).reduceOption(And)
+            (nonLeftConjuncts.intersect(nonRightConjuncts) ++ nonDeterministicConjuncts)
+              .reduceOption(And)
           )
         }
       }
