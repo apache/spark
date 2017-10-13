@@ -211,19 +211,12 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
-    // Filter the joined rows based on the given condition.
-    val leftPreJoinFilter =
-      newPredicate(condition.leftSideOnly.getOrElse(Literal(true)), left.output).eval _
-    val rightPreJoinFilter =
-      newPredicate(condition.rightSideOnly.getOrElse(Literal(true)), right.output).eval _
-    val postJoinFilter = newPredicate(condition.bothSides.getOrElse(Literal(true)), output).eval _
-
     val leftSideJoiner = new OneSideHashJoiner(
       LeftSide, left.output, leftKeys, leftInputIter,
-      leftPreJoinFilter, postJoinFilter, stateWatermarkPredicates.left)
+      condition.leftSideOnly, condition.bothSides, stateWatermarkPredicates.left)
     val rightSideJoiner = new OneSideHashJoiner(
       RightSide, right.output, rightKeys, rightInputIter,
-      rightPreJoinFilter, postJoinFilter, stateWatermarkPredicates.right)
+      condition.rightSideOnly, condition.bothSides, stateWatermarkPredicates.right)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -253,6 +246,8 @@ case class StreamingSymmetricHashJoinExec(
     val innerOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
       (leftOutputIter ++ rightOutputIter), onInnerOutputCompletion)
 
+
+    val postJoinFilter = newPredicate(condition.bothSides.getOrElse(Literal(true)), output).eval _
     val outputIter: Iterator[InternalRow] = joinType match {
       case Inner =>
         innerOutputIter
@@ -360,12 +355,12 @@ case class StreamingSymmetricHashJoinExec(
    * @param inputAttributes The input attributes for this side of the join.
    * @param joinKeys The join keys.
    * @param inputIter The iterator of input rows on this side to be joined.
-   * @param preJoinFilter A filter over rows on this side. This filter rejects rows that could
-   *                      never pass the overall join condition no matter what other side row
-   *                      they're joined with.
-   * @param postJoinFilter A filter over joined rows. This filter completes the application of the
-   *                       overall join condition, assuming that preJoinFilter on both sides of the
-   *                       join has already been passed.
+   * @param preJoinFilterExpr A filter over rows on this side. This filter rejects rows that could
+   *                          never pass the overall join condition no matter what other side row
+   *                          they're joined with.
+   * @param postJoinFilterExpr A filter over joined rows. This filter completes the application of
+   *                           the overall join condition, assuming that preJoinFilter on both sides
+   *                           of the join has already been passed.
    * @param stateWatermarkPredicate The state watermark predicate. See
    *                                [[StreamingSymmetricHashJoinExec]] for further description of
    *                                state watermarks.
@@ -375,9 +370,14 @@ case class StreamingSymmetricHashJoinExec(
       inputAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       inputIter: Iterator[InternalRow],
-      preJoinFilter: InternalRow => Boolean,
-      postJoinFilter: InternalRow => Boolean,
+      preJoinFilterExpr: Option[Expression],
+      postJoinFilterExpr: Option[Expression],
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate]) {
+
+    // Filter the joined rows based on the given condition.
+    val preJoinFilter =
+      newPredicate(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
+    val postJoinFilter = newPredicate(postJoinFilterExpr.getOrElse(Literal(true)), output).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
