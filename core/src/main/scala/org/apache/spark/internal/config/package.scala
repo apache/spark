@@ -271,7 +271,7 @@ package object config {
     .createWithDefault(4 * 1024 * 1024)
 
   private[spark] val IGNORE_EMPTY_SPLITS = ConfigBuilder("spark.files.ignoreEmptySplits")
-    .doc("If true, methods like that use HadoopRDD and NewHadoopRDD such as " +
+    .doc("If true, methods that use HadoopRDD and NewHadoopRDD such as " +
       "SparkContext.textFiles will not create a partition for input splits that are empty.")
     .booleanConf
     .createWithDefault(false)

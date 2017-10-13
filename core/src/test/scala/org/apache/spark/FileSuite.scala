@@ -561,7 +561,10 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       val output = new File(tempDir, "output" + outputSuffix)
       dataRDD.saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
       assert(new File(output, checkPart).exists() === true)
-      val hadoopRDD = sc.textFile(new File(output, "part-r-*").getPath)
+
+      val hadoopRDD = sc.newAPIHadoopFile(new File(output, "part-r-*").getPath,
+        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
+        .asInstanceOf[NewHadoopRDD[_, _]]
       assert(hadoopRDD.partitions.length === expectedPartitionNum)
     }
 
@@ -575,7 +578,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
-      data = Array(("key1", "a"), ("key2", "a"), ("key3", "b")),
+      data = Array(("1", "a"), ("2", "a"), ("3", "b")),
       numSlices = 2,
       outputSuffix = 1,
       checkPart = "part-r-00001",
@@ -583,7 +586,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
-      data = Array(("key1", "a"), ("key2", "a")),
+      data = Array(("1", "a"), ("2", "b")),
       numSlices = 5,
       outputSuffix = 2,
       checkPart = "part-r-00004",
