@@ -3110,7 +3110,7 @@ class ArrowTests(ReusedPySparkTestCase):
                ("\n\nWithout:\n%s\n%s" % (df_without, df_without.dtypes)))
         self.assertTrue(df_without.equals(df_with_arrow), msg=msg)
 
-    def createPandasDataFrameFromeData(self):
+    def createPandasDataFrameFromData(self):
         import pandas as pd
         import numpy as np
         data_dict = {}
@@ -3145,7 +3145,7 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertFramesEqual(pdf_arrow, pdf)
 
     def test_pandas_round_trip(self):
-        pdf = self.createPandasDataFrameFromeData()
+        pdf = self.createPandasDataFrameFromData()
         df = self.spark.createDataFrame(self.data, schema=self.schema)
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
@@ -3158,7 +3158,7 @@ class ArrowTests(ReusedPySparkTestCase):
         self.assertTrue(pdf.empty)
 
     def test_createDataFrame_toggle(self):
-        pdf = self.createPandasDataFrameFromeData()
+        pdf = self.createPandasDataFrameFromData()
         self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
         try:
             df_no_arrow = self.spark.createDataFrame(pdf)
