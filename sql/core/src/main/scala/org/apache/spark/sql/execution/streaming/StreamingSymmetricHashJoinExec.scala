@@ -162,7 +162,7 @@ case class StreamingSymmetricHashJoinExec(
   private val hadoopConfBcast = sparkContext.broadcast(
     new SerializableConfiguration(SessionState.newHadoopConf(
       sparkContext.hadoopConfiguration, sqlContext.conf)))
-  
+
   val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
   val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
 
@@ -355,6 +355,20 @@ case class StreamingSymmetricHashJoinExec(
   /**
    * Internal helper class to consume input rows, generate join output rows using other sides
    * buffered state rows, and finally clean up this sides buffered state rows
+   *
+   * @param joinSide The JoinSide - either left or right.
+   * @param inputAttributes The input attributes for this side of the join.
+   * @param joinKeys The join keys.
+   * @param inputIter The iterator of input rows on this side to be joined.
+   * @param preJoinFilter A filter over rows on this side. This filter rejects rows that could
+   *                      never pass the overall join condition no matter what other side row
+   *                      they're joined with.
+   * @param postJoinFilter A filter over joined rows. This filter completes the application of the
+   *                       overall join condition, assuming that preJoinFilter on both sides of the
+   *                       join has already been passed.
+   * @param stateWatermarkPredicate The state watermark predicate. See
+   *                                [[StreamingSymmetricHashJoinExec]] for further description of
+   *                                state watermarks.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
@@ -410,6 +424,10 @@ case class StreamingSymmetricHashJoinExec(
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
+        // If this row fails the pre join filter, that means it can never satisfy the full join
+        // condition no matter what other side row it's matched with. This allows us to avoid
+        // adding it to the state, and generate an outer join row immediately (or do nothing in
+        // the case of inner join).
         if (preJoinFilter(thisRow)) {
           val key = keyGenerator(thisRow)
           val outputIter = otherSideJoiner.joinStateManager.get(key).map { thatRow =>

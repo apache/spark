@@ -82,10 +82,17 @@ object StreamingSymmetricHashJoinHelper extends Logging {
    * @param full The full join condition.
    */
   case class JoinConditionSplitPredicates(
-    leftSideOnly: Option[Expression],
-    rightSideOnly: Option[Expression],
-    bothSides: Option[Expression],
-    full: Option[Expression]) {}
+      leftSideOnly: Option[Expression],
+      rightSideOnly: Option[Expression],
+      bothSides: Option[Expression],
+      full: Option[Expression]) {
+    override def toString(): String = {
+      s"condition = [ leftOnly = ${leftSideOnly.map(_.toString).getOrElse("null")}, " +
+        s"rightOnly = ${rightSideOnly.map(_.toString).getOrElse("null")}, " +
+        s"both = ${bothSides.map(_.toString).getOrElse("null")}, " +
+        s"full = ${full.map(_.toString).getOrElse("null")} ]"
+    }
+  }
 
   object JoinConditionSplitPredicates extends PredicateHelper {
     def apply(condition: Option[Expression], left: SparkPlan, right: SparkPlan):
