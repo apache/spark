@@ -444,5 +444,4 @@ package object config {
       .stringConf
       .toSequence
       .createOptional
-
 }
