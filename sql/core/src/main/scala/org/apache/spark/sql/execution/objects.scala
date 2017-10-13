@@ -394,7 +394,11 @@ case class FlatMapGroupsInRExec(
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
 
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
+    if (groupingAttributes.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(groupingAttributes) :: Nil
+    }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))

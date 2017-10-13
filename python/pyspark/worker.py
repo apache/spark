@@ -31,7 +31,7 @@ from pyspark.taskcontext import TaskContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, PythonEvalType, UTF8Deserializer, PickleSerializer, \
-    BatchedSerializer, ArrowPandasSerializer
+    BatchedSerializer, ArrowStreamPandasSerializer
 from pyspark.sql.types import toArrowType
 from pyspark import shuffle
 
@@ -60,12 +60,9 @@ def read_command(serializer, file):
     return command
 
 
-def chain(f, g, eval_type):
+def chain(f, g):
     """chain two functions together """
-    if eval_type == PythonEvalType.SQL_PANDAS_UDF:
-        return lambda *a, **kwargs: g(f(*a, **kwargs), **kwargs)
-    else:
-        return lambda *a: g(f(*a))
+    return lambda *a: g(f(*a))
 
 
 def wrap_udf(f, return_type):
@@ -80,14 +77,14 @@ def wrap_pandas_udf(f, return_type):
     arrow_return_type = toArrowType(return_type)
 
     def verify_result_length(*a):
-        kwargs = a[-1]
-        result = f(*a[:-1], **kwargs)
-        if len(result) != kwargs["length"]:
+        result = f(*a)
+        if not hasattr(result, "__len__"):
+            raise TypeError("Return type of pandas_udf should be a Pandas.Series")
+        if len(result) != len(a[0]):
             raise RuntimeError("Result vector from pandas_udf was not the required length: "
-                               "expected %d, got %d\nUse input vector length or kwargs['length']"
-                               % (kwargs["length"], len(result)))
-        return result, arrow_return_type
-    return lambda *a: verify_result_length(*a)
+                               "expected %d, got %d" % (len(a[0]), len(result)))
+        return result
+    return lambda *a: (verify_result_length(*a), arrow_return_type)
 
 
 def read_single_udf(pickleSer, infile, eval_type):
@@ -99,11 +96,9 @@ def read_single_udf(pickleSer, infile, eval_type):
         if row_func is None:
             row_func = f
         else:
-            row_func = chain(row_func, f, eval_type)
+            row_func = chain(row_func, f)
     # the last returnType will be the return type of UDF
     if eval_type == PythonEvalType.SQL_PANDAS_UDF:
-        # A pandas_udf will take kwargs as the last argument
-        arg_offsets = arg_offsets + [-1]
         return arg_offsets, wrap_pandas_udf(row_func, return_type)
     else:
         return arg_offsets, wrap_udf(row_func, return_type)
@@ -128,7 +123,7 @@ def read_udfs(pickleSer, infile, eval_type):
     func = lambda _, it: map(mapper, it)
 
     if eval_type == PythonEvalType.SQL_PANDAS_UDF:
-        ser = ArrowPandasSerializer()
+        ser = ArrowStreamPandasSerializer()
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 

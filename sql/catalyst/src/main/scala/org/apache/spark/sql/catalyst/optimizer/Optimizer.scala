@@ -124,8 +124,6 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
       SimplifyCreateMapOps,
       CombineConcats) ++
       extendedOperatorOptimizationRules: _*) ::
-    Batch("Check Cartesian Products", Once,
-      CheckCartesianProducts) ::
     Batch("Join Reorder", Once,
       CostBasedJoinReorder) ::
     Batch("Decimal Optimizations", fixedPoint,
@@ -136,6 +134,9 @@ abstract class Optimizer(sessionCatalog: SessionCatalog)
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation,
       PropagateEmptyRelation) ::
+    // The following batch should be executed after batch "Join Reorder" and "LocalRelation".
+    Batch("Check Cartesian Products", Once,
+      CheckCartesianProducts) ::
     Batch("OptimizeCodegen", Once,
       OptimizeCodegen) ::
     Batch("RewriteSubquery", Once,
@@ -304,13 +305,20 @@ object LimitPushDown extends Rule[LogicalPlan] {
     }
   }
 
-  private def maybePushLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
-    (limitExp, plan.maxRows) match {
-      case (IntegerLiteral(maxRow), Some(childMaxRows)) if maxRow < childMaxRows =>
+  private def maybePushLocalLimit(limitExp: Expression, plan: LogicalPlan): LogicalPlan = {
+    (limitExp, plan.maxRowsPerPartition) match {
+      case (IntegerLiteral(newLimit), Some(childMaxRows)) if newLimit < childMaxRows =>
+        // If the child has a cap on max rows per partition and the cap is larger than
+        // the new limit, put a new LocalLimit there.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
+
       case (_, None) =>
+        // If the child has no cap, put the new LocalLimit.
         LocalLimit(limitExp, stripGlobalLimitIfPresent(plan))
-      case _ => plan
+
+      case _ =>
+        // Otherwise, don't put a new LocalLimit.
+        plan
     }
   }
 
@@ -322,7 +330,7 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // pushdown Limit through it. Once we add UNION DISTINCT, however, we will not be able to
     // pushdown Limit.
     case LocalLimit(exp, Union(children)) =>
-      LocalLimit(exp, Union(children.map(maybePushLimit(exp, _))))
+      LocalLimit(exp, Union(children.map(maybePushLocalLimit(exp, _))))
     // Add extra limits below OUTER JOIN. For LEFT OUTER and FULL OUTER JOIN we push limits to the
     // left and right sides, respectively. For FULL OUTER JOIN, we can only push limits to one side
     // because we need to ensure that rows from the limited side still have an opportunity to match
@@ -334,19 +342,19 @@ object LimitPushDown extends Rule[LogicalPlan] {
     //   - If neither side is limited, limit the side that is estimated to be bigger.
     case LocalLimit(exp, join @ Join(left, right, joinType, _)) =>
       val newJoin = joinType match {
-        case RightOuter => join.copy(right = maybePushLimit(exp, right))
-        case LeftOuter => join.copy(left = maybePushLimit(exp, left))
+        case RightOuter => join.copy(right = maybePushLocalLimit(exp, right))
+        case LeftOuter => join.copy(left = maybePushLocalLimit(exp, left))
         case FullOuter =>
           (left.maxRows, right.maxRows) match {
             case (None, None) =>
               if (left.stats.sizeInBytes >= right.stats.sizeInBytes) {
-                join.copy(left = maybePushLimit(exp, left))
+                join.copy(left = maybePushLocalLimit(exp, left))
               } else {
-                join.copy(right = maybePushLimit(exp, right))
+                join.copy(right = maybePushLocalLimit(exp, right))
               }
             case (Some(_), Some(_)) => join
-            case (Some(_), None) => join.copy(left = maybePushLimit(exp, left))
-            case (None, Some(_)) => join.copy(right = maybePushLimit(exp, right))
+            case (Some(_), None) => join.copy(left = maybePushLocalLimit(exp, left))
+            case (None, Some(_)) => join.copy(right = maybePushLocalLimit(exp, right))
 
           }
         case _ => join
@@ -1089,6 +1097,9 @@ object CombineLimits extends Rule[LogicalPlan] {
  * SELECT * from R, S where R.r = S.s,
  * the join between R and S is not a cartesian product and therefore should be allowed.
  * The predicate R.r = S.s is not recognized as a join condition until the ReorderJoin rule.
+ *
+ * This rule must be run AFTER the batch "LocalRelation", since a join with empty relation should
+ * not be a cartesian product.
  */
 object CheckCartesianProducts extends Rule[LogicalPlan] with PredicateHelper {
   /**

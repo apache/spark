@@ -216,7 +216,7 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-    read(in.readInt, in.readLong, in.readFully)
+    read(() => in.readInt(), () => in.readLong(), in.readFully)
   }
 
   private def read(
@@ -277,7 +277,7 @@ private[joins] class UnsafeHashedRelation(
   }
 
   override def read(kryo: Kryo, in: Input): Unit = Utils.tryOrIOException {
-    read(in.readInt, in.readLong, in.readBytes)
+    read(() => in.readInt(), () => in.readLong(), in.readBytes)
   }
 
   override def getAverageProbesPerLookup: Double = binaryMap.getAverageProbesPerLookup
@@ -766,11 +766,11 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
   }
 
   override def readExternal(in: ObjectInput): Unit = {
-    read(in.readBoolean, in.readLong, in.readFully)
+    read(() => in.readBoolean(), () => in.readLong(), in.readFully)
   }
 
   override def read(kryo: Kryo, in: Input): Unit = {
-    read(in.readBoolean, in.readLong, in.readBytes)
+    read(() => in.readBoolean(), () => in.readLong(), in.readBytes)
   }
 
   /**
