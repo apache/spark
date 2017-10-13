@@ -2051,57 +2051,61 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-18355 Use Spark schema to read ORC table instead of ORC file schema") {
-    val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
+  Seq("orc", "parquet").foreach { format =>
+    test(s"SPARK-18355 Read data from a hive table with a new column - $format") {
+      val client = spark.sharedState.externalCatalog.asInstanceOf[HiveExternalCatalog].client
 
-    Seq("true", "false").foreach { value =>
-      withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> value) {
-        withTempDatabase { db =>
-          client.runSqlHive(
-            s"""
-               |CREATE TABLE $db.t(
-               |  click_id string,
-               |  search_id string,
-               |  uid bigint)
-               |PARTITIONED BY (
-               |  ts string,
-               |  hour string)
-               |STORED AS ORC
-             """.stripMargin)
+      Seq("true", "false").foreach { value =>
+        withSQLConf(
+          HiveUtils.CONVERT_METASTORE_ORC.key -> value,
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> value) {
+          withTempDatabase { db =>
+            client.runSqlHive(
+              s"""
+                 |CREATE TABLE $db.t(
+                 |  click_id string,
+                 |  search_id string,
+                 |  uid bigint)
+                 |PARTITIONED BY (
+                 |  ts string,
+                 |  hour string)
+                 |STORED AS $format
+              """.stripMargin)
 
-          client.runSqlHive(
-            s"""
-               |INSERT INTO TABLE $db.t
-               |PARTITION (ts = '98765', hour = '01')
-               |VALUES (12, 2, 12345)
-             """.stripMargin
-          )
+            client.runSqlHive(
+              s"""
+                 |INSERT INTO TABLE $db.t
+                 |PARTITION (ts = '98765', hour = '01')
+                 |VALUES (12, 2, 12345)
+              """.stripMargin
+            )
 
-          checkAnswer(
-            sql(s"SELECT click_id, search_id, uid, ts, hour FROM $db.t"),
-            Row("12", "2", 12345, "98765", "01"))
+            checkAnswer(
+              sql(s"SELECT click_id, search_id, uid, ts, hour FROM $db.t"),
+              Row("12", "2", 12345, "98765", "01"))
 
-          client.runSqlHive(s"ALTER TABLE $db.t ADD COLUMNS (dummy string)")
+            client.runSqlHive(s"ALTER TABLE $db.t ADD COLUMNS (dummy string)")
 
-          checkAnswer(
-            sql(s"SELECT click_id, search_id FROM $db.t"),
-            Row("12", "2"))
+            checkAnswer(
+              sql(s"SELECT click_id, search_id FROM $db.t"),
+              Row("12", "2"))
 
-          checkAnswer(
-            sql(s"SELECT search_id, click_id FROM $db.t"),
-            Row("2", "12"))
+            checkAnswer(
+              sql(s"SELECT search_id, click_id FROM $db.t"),
+              Row("2", "12"))
 
-          checkAnswer(
-            sql(s"SELECT search_id FROM $db.t"),
-            Row("2"))
+            checkAnswer(
+              sql(s"SELECT search_id FROM $db.t"),
+              Row("2"))
 
-          checkAnswer(
-            sql(s"SELECT dummy, click_id FROM $db.t"),
-            Row(null, "12"))
+            checkAnswer(
+              sql(s"SELECT dummy, click_id FROM $db.t"),
+              Row(null, "12"))
 
-          checkAnswer(
-            sql(s"SELECT click_id, search_id, uid, dummy, ts, hour FROM $db.t"),
-            Row("12", "2", 12345, null, "98765", "01"))
+            checkAnswer(
+              sql(s"SELECT click_id, search_id, uid, dummy, ts, hour FROM $db.t"),
+              Row("12", "2", 12345, null, "98765", "01"))
+          }
         }
       }
     }
