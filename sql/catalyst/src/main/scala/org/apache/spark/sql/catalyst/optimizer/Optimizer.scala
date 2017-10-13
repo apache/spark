@@ -1260,33 +1260,31 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Except(left, right) if isEligible(left, right) =>
       val filterCondition = combineFilters(right).asInstanceOf[Filter].condition
-      Distinct(
-        Filter(Not(replaceAttributesIn(filterCondition, left)), left)
-      )
+
+      val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
+      val transformedCondition = filterCondition transform { case a : AttributeReference =>
+        attributeNameMap(a.name)
+      }
+
+      Distinct(Filter(Not(transformedCondition), left))
   }
 
-  def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
+  private def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
     case (left, right: Filter) => nonFilterChild(left).sameResult(nonFilterChild(right))
     case _ => false
   }
 
-  def nonFilterChild(plan: LogicalPlan): LogicalPlan = plan.find(!_.isInstanceOf[Filter]).get
-
-  def combineFilters(plan: LogicalPlan): LogicalPlan = {
-    @tailrec
-    def fixedPoint(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
-      if (acc.fastEquals(plan)) acc else fixedPoint(acc, CombineFilters(acc))
-    }
-
-    fixedPoint(plan, CombineFilters(plan))
+  private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {
+    throw new IllegalStateException("LogicalPlan with no Local or Logical Relation")
   }
 
-  def replaceAttributesIn(condition: Expression, node: LogicalPlan): Expression = {
-    val attributeNameMap: Map[String, Attribute] = node.output.map(x => (x.name, x)).toMap
-
-    condition transform { case a : AttributeReference =>
-      attributeNameMap(a.name)
+  private def combineFilters(plan: LogicalPlan): LogicalPlan = {
+    @tailrec
+    def iterate(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
+      if (acc.fastEquals(plan)) acc else iterate(acc, CombineFilters(acc))
     }
+
+    iterate(plan, CombineFilters(plan))
   }
 }
 
