@@ -3167,6 +3167,19 @@ class ArrowTests(ReusedPySparkTestCase):
         df_arrow = self.spark.createDataFrame(pdf)
         self.assertEquals(df_no_arrow.collect(), df_arrow.collect())
 
+    def test_createDataFrame_with_schema(self):
+        pdf = self.createPandasDataFrameFromData()
+        df = self.spark.createDataFrame(pdf, schema=self.schema)
+        self.assertEquals(self.schema, df.schema)
+        pdf_arrow = df.toPandas()
+        self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_schema_conversion_roundtrip(self):
+        from pyspark.sql.types import from_arrow_schema, to_arrow_schema
+        arrow_schema = to_arrow_schema(self.schema)
+        schema_rt = from_arrow_schema(arrow_schema)
+        self.assertEquals(self.schema, schema_rt)
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class VectorizedUDFTests(ReusedPySparkTestCase):
