@@ -338,7 +338,7 @@ class StreamingContext(object):
         jdstreams = [d._jdstream for d in dstreams]
         # change the final serializer to sc.serializer
         func = TransformFunction(self._sc,
-                                 lambda t, *rdds: transformFunc(rdds).map(lambda x: x),
+                                 lambda t, *rdds: transformFunc(rdds),
                                  *[d._jrdd_deserializer for d in dstreams])
         jfunc = self._jvm.TransformFunction(func)
         jdstream = self._jssc.transform(jdstreams, jfunc)
