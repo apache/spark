@@ -79,7 +79,7 @@ abstract class Expression extends TreeNode[Expression] {
    * An example would be `SparkPartitionID` that relies on the partition id returned by TaskContext.
    * By default leaf expressions are deterministic as Nil.forall(_.deterministic) returns true.
    */
-  def deterministic: Boolean = children.forall(_.deterministic)
+  lazy val deterministic: Boolean = children.forall(_.deterministic)
 
   def nullable: Boolean
 
@@ -265,7 +265,7 @@ trait NonSQLExpression extends Expression {
  * An expression that is nondeterministic.
  */
 trait Nondeterministic extends Expression {
-  final override def deterministic: Boolean = false
+  final override lazy val deterministic: Boolean = false
   final override def foldable: Boolean = false
 
   @transient

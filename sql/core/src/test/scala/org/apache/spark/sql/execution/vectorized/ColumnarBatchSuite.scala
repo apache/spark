@@ -413,7 +413,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
 
       reference.zipWithIndex.foreach { v =>
         assert(v._1 == column.getLong(v._2), "idx=" + v._2 +
-            " Seed = " + seed + " MemMode=" + memMode)
+          " Seed = " + seed + " MemMode=" + memMode)
         if (memMode == MemoryMode.OFF_HEAP) {
           val addr = column.valuesNativeAddress()
           assert(v._1 == Platform.getLong(null, addr + 8 * v._2))
@@ -1120,7 +1120,7 @@ class ColumnarBatchSuite extends SparkFunSuite {
       }
       batch.close()
     }
-  }}
+    }}
 
   /**
    * This test generates a random schema data, serializes it to column batches and verifies the

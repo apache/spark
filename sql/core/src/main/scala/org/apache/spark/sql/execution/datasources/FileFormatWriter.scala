@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{UnsafeProjection, _}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.execution.{SortExec, SparkPlan, SQLExecution}
+import org.apache.spark.sql.execution.{QueryExecution, SortExec, SQLExecution}
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -101,7 +101,7 @@ object FileFormatWriter extends Logging {
    */
   def write(
       sparkSession: SparkSession,
-      plan: SparkPlan,
+      queryExecution: QueryExecution,
       fileFormat: FileFormat,
       committer: FileCommitProtocol,
       outputSpec: OutputSpec,
@@ -117,7 +117,9 @@ object FileFormatWriter extends Logging {
     job.setOutputValueClass(classOf[InternalRow])
     FileOutputFormat.setOutputPath(job, new Path(outputSpec.outputPath))
 
-    val allColumns = plan.output
+    // Pick the attributes from analyzed plan, as optimizer may not preserve the output schema
+    // names' case.
+    val allColumns = queryExecution.analyzed.output
     val partitionSet = AttributeSet(partitionColumns)
     val dataColumns = allColumns.filterNot(partitionSet.contains)
 
@@ -158,7 +160,7 @@ object FileFormatWriter extends Logging {
     // We should first sort by partition columns, then bucket id, and finally sorting columns.
     val requiredOrdering = partitionColumns ++ bucketIdExpression ++ sortColumns
     // the sort order doesn't matter
-    val actualOrdering = plan.outputOrdering.map(_.child)
+    val actualOrdering = queryExecution.executedPlan.outputOrdering.map(_.child)
     val orderingMatched = if (requiredOrdering.length > actualOrdering.length) {
       false
     } else {
@@ -176,12 +178,17 @@ object FileFormatWriter extends Logging {
 
     try {
       val rdd = if (orderingMatched) {
-        plan.execute()
+        queryExecution.toRdd
       } else {
+        // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
+        // the physical plan may have different attribute ids due to optimizer removing some
+        // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
+        val orderingExpr = requiredOrdering
+          .map(SortOrder(_, Ascending)).map(BindReferences.bindReference(_, allColumns))
         SortExec(
-          requiredOrdering.map(SortOrder(_, Ascending)),
+          orderingExpr,
           global = false,
-          child = plan).execute()
+          child = queryExecution.executedPlan).execute()
       }
       val ret = new Array[WriteTaskResult](rdd.partitions.length)
       sparkSession.sparkContext.runJob(
