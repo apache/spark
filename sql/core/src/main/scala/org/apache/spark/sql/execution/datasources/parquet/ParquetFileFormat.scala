@@ -93,7 +93,7 @@ class ParquetFileFormat
       conf.getClass(
         SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key,
         classOf[ParquetOutputCommitter],
-        classOf[ParquetOutputCommitter])
+        classOf[OutputCommitter])
 
     if (conf.get(SQLConf.PARQUET_OUTPUT_COMMITTER_CLASS.key) == null) {
       logInfo("Using default output committer for Parquet: " +
@@ -105,7 +105,7 @@ class ParquetFileFormat
     conf.setClass(
       SQLConf.OUTPUT_COMMITTER_CLASS.key,
       committerClass,
-      classOf[ParquetOutputCommitter])
+      classOf[OutputCommitter])
 
     // We're not really using `ParquetOutputFormat[Row]` for writing data here, because we override
     // it in `ParquetOutputWriter` to support appending and dynamic partitioning.  The reason why
@@ -147,6 +147,14 @@ class ParquetFileFormat
     // SPARK-15719: Disables writing Parquet summary files by default.
     if (conf.get(ParquetOutputFormat.JOB_SUMMARY_LEVEL) == null) {
       conf.set(ParquetOutputFormat.JOB_SUMMARY_LEVEL, "NONE")
+    }
+
+    if (conf.getBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+      && !classOf[ParquetOutputCommitter].isAssignableFrom(committerClass)) {
+      // output summary is requested, but the class is not a Parquet Committer
+      logWarning(s"Committer $committerClass is not a ParquetOutputCommitter and cannot" +
+        s" create job summaries. " +
+        s"Set Parquet option ${ParquetOutputFormat.ENABLE_JOB_SUMMARY} to false.")
     }
 
     new OutputWriterFactory {
