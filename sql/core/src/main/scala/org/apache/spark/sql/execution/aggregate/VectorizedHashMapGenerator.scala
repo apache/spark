@@ -55,10 +55,10 @@ class VectorizedHashMapGenerator(
           val keyName = ctx.addReferenceMinorObj(key.name)
           key.dataType match {
             case d: DecimalType =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.createDecimalType(
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
                   |${d.precision}, ${d.scale}))""".stripMargin
             case _ =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
           }
         }.mkString("\n").concat(";")
 
@@ -68,10 +68,10 @@ class VectorizedHashMapGenerator(
           val keyName = ctx.addReferenceMinorObj(key.name)
           key.dataType match {
             case d: DecimalType =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.createDecimalType(
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.createDecimalType(
                   |${d.precision}, ${d.scale}))""".stripMargin
             case _ =>
-              s""".add("$keyName", org.apache.spark.sql.types.DataTypes.${key.dataType})"""
+              s""".add($keyName, org.apache.spark.sql.types.DataTypes.${key.dataType})"""
           }
         }.mkString("\n").concat(";")
 
