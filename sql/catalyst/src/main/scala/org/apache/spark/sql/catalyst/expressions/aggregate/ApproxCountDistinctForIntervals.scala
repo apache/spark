@@ -20,6 +20,8 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.nio.ByteBuffer
 import java.util
 
+import com.google.common.primitives.Longs
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
@@ -131,7 +133,7 @@ case class ApproxCountDistinctForIntervals(
       }
 
       val hllppIndex = findHllppIndex(doubleValue)
-      val offset = mutableAggBufferOffset + hllppIndex * numWordsPerHllpp
+      val offset = hllppIndex * numWordsPerHllpp
       hllppArray(hllppIndex).update(LongArrayInput(buffer), offset, value, child.dataType)
     }
     buffer
@@ -176,8 +178,8 @@ case class ApproxCountDistinctForIntervals(
       hllppArray(i).merge(
         buffer1 = LongArrayInput(buffer1),
         buffer2 = LongArrayInput(buffer2),
-        offset1 = mutableAggBufferOffset + i * numWordsPerHllpp,
-        offset2 = inputAggBufferOffset + i * numWordsPerHllpp)
+        offset1 = i * numWordsPerHllpp,
+        offset2 = i * numWordsPerHllpp)
     }
     buffer1
   }
@@ -197,8 +199,7 @@ case class ApproxCountDistinctForIntervals(
   def hllppResults(buffer: Array[Long]): Array[Long] = {
     val ndvArray = new Array[Long](hllppArray.length)
     for (i <- ndvArray.indices) {
-      ndvArray(i) = hllppArray(i).query(LongArrayInput(buffer),
-        mutableAggBufferOffset + i * numWordsPerHllpp)
+      ndvArray(i) = hllppArray(i).query(LongArrayInput(buffer), i * numWordsPerHllpp)
     }
     ndvArray
   }
@@ -218,15 +219,14 @@ case class ApproxCountDistinctForIntervals(
   override def prettyName: String = "approx_count_distinct_for_intervals"
 
   override def serialize(obj: Array[Long]): Array[Byte] = {
-    val buffer = ByteBuffer.wrap(new Array(4 + obj.length))
-    buffer.putInt(obj.length)
+    val buffer = ByteBuffer.wrap(new Array(obj.length * Longs.BYTES))
     obj.foreach(buffer.putLong)
     buffer.array()
   }
 
   override def deserialize(bytes: Array[Byte]): Array[Long] = {
     val buffer = ByteBuffer.wrap(bytes)
-    val length = buffer.getInt
+    val length = bytes.length / Longs.BYTES
     val array = new Array[Long](length)
     (0 until length).foreach(i => array(i) = buffer.getLong)
     array
