@@ -90,7 +90,7 @@ private[sql] class GroupStateImpl[S] private(
     if (timeoutConf != ProcessingTimeTimeout) {
       throw new UnsupportedOperationException(
         "Cannot set timeout duration without enabling processing time timeout in " +
-          "map/flatMapGroupsWithState")
+          "[map/flatMap]GroupsWithState")
     }
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
@@ -102,10 +102,6 @@ private[sql] class GroupStateImpl[S] private(
     setTimeoutDuration(parseDuration(duration))
   }
 
-  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestampMs: Long): Unit = {
     checkTimeoutTimestampAllowed()
     if (timestampMs <= 0) {
@@ -119,39 +115,37 @@ private[sql] class GroupStateImpl[S] private(
     timeoutTimestamp = timestampMs
   }
 
-  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit = {
     checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(parseDuration(additionalDuration) + timestampMs)
   }
 
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestamp: Date): Unit = {
     checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(timestamp.getTime)
   }
 
-  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
-  @throws[IllegalStateException]("when state is either not initialized, or already removed")
-  @throws[UnsupportedOperationException](
-    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestamp: Date, additionalDuration: String): Unit = {
     checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(timestamp.getTime + parseDuration(additionalDuration))
   }
 
-  override def getEventTimeWatermark(): Long = {
+  override def getCurrentWatermarkMs(): Long = {
     if (timeoutConf != EventTimeTimeout) {
       throw new UnsupportedOperationException(
         "Cannot get event time watermark timestamp without enabling event time timeout in " +
-          "map/flatMapGroupsWithState")
+          "[map/flatMap]GroupsWithState")
     }
     eventTimeWatermarkMs
+  }
+
+  override def getCurrentProcessingTimeMs(): Long = {
+    if (timeoutConf != ProcessingTimeTimeout) {
+      throw new UnsupportedOperationException(
+        "Cannot get processing time timestamp without enabling processing time timeout in " +
+          "map/flatMap]GroupsWithState")
+    }
+    batchProcessingTimeMs
   }
 
   override def toString: String = {
