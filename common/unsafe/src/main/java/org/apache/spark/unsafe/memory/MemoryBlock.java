@@ -54,7 +54,7 @@ public abstract class MemoryBlock {
   /**
    * Optional page number; used when this MemoryBlock represents a page allocated by a
    * TaskMemoryManager. This field can be updated using setPageNumber method so that
-   * this can be modified by the TaskMemoryManage, which lives in a different package.
+   * this can be modified by the TaskMemoryManager, which lives in a different package.
    */
   private int pageNumber = NO_PAGE_NUMBER;
 
