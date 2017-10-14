@@ -232,16 +232,16 @@ class ExchangeCoordinator(
       // number of post-shuffle partitions.
       val partitionStartIndices =
         if (mapOutputStatistics.length == 0) {
-          None
+          Array.empty[Int]
         } else {
-          Some(estimatePartitionStartIndices(mapOutputStatistics))
+          estimatePartitionStartIndices(mapOutputStatistics)
         }
 
       var k = 0
       while (k < numExchanges) {
         val exchange = exchanges(k)
         val rdd =
-          exchange.preparePostShuffleRDD(shuffleDependencies(k), partitionStartIndices)
+          exchange.preparePostShuffleRDD(shuffleDependencies(k), Some(partitionStartIndices))
         newPostShuffleRDDs.put(exchange, rdd)
 
         k += 1
