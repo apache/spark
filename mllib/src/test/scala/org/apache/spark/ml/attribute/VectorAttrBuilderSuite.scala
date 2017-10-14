@@ -18,7 +18,8 @@
 package org.apache.spark.ml.attribute
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.VectorUDT
+import org.apache.spark.ml.linalg.{Vectors, VectorUDT}
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.types._
 
 class VectorAttrBuilderSuite extends SparkFunSuite {
@@ -94,5 +95,28 @@ class VectorAttrBuilderSuite extends SparkFunSuite {
     assert(!VectorAttrBuilder.sameAttrProps(attr1, attr3))
     assert(!VectorAttrBuilder.sameAttrProps(attr3, attr4))
     assert(VectorAttrBuilder.sameAttrProps(attr3, attr5))
+  }
+
+  test("isAdjacentAttrs") {
+    val attr1 = NominalAttr(name = Some("col1Attr"), indicesRange = Seq(0))
+    val attr2 = NumericAttr(name = Some("col2Attr"), min = Some(1), indicesRange = Seq(1))
+    val attr3 = NominalAttr(name = Some("col3Attr"), indicesRange = Seq(2, 5))
+    assert(VectorAttrBuilder.isAdjacentAttrs(attr1, attr2))
+    assert(!VectorAttrBuilder.isAdjacentAttrs(attr2, attr1))
+    assert(!VectorAttrBuilder.isAdjacentAttrs(attr1, attr3))
+    assert(VectorAttrBuilder.isAdjacentAttrs(attr2, attr3))
+  }
+
+  test("getAttributeSizes") {
+    val fields = Array(
+      StructField("col1", DoubleType),
+      StructField("col2", new VectorUDT()),
+      StructField("col3", DoubleType),
+      StructField("col4", DoubleType)
+    )
+    val row = Row(1.0d, Vectors.dense(Array(1.0, 2.0)), 0.2d, 0.5d)
+
+    val attributeSizes = VectorAttrBuilder.getAttributeSizes(fields, row)
+    assert(attributeSizes.toSeq === Seq(1, 2, 1, 1))
   }
 }

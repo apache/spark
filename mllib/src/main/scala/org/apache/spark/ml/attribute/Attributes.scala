@@ -200,7 +200,7 @@ case class VectorAttr(
 
       // We can combine two continuous inner attributes if ther have the same properties.
       if (VectorAttrBuilder.sameAttrProps(previousAttr, newAttr) &&
-          VectorAttrBuilder.isContinuousAttrs(previousAttr, newAttr)) {
+          VectorAttrBuilder.isAdjacentAttrs(previousAttr, newAttr)) {
         innerAttrs -= previousAttr
         attrToAdd = previousAttr.withIndicesRange(
           Array(previousAttr.getMinIndex(), newAttr.getMaxIndex()))
@@ -333,15 +333,21 @@ object VectorAttr extends MLAttributeFactory {
  */
 @DeveloperApi
 object VectorAttrBuilder {
-  // Test two attributes have same properties without considering their names and indices.
+  /** Test two attributes have same properties without considering their names and indices. */
   def sameAttrProps(attr1: SimpleAttribute, attr2: SimpleAttribute): Boolean = {
     attr1.withoutIndicesRange.withoutName() == attr2.withoutIndicesRange.withoutName()
   }
 
-  def isContinuousAttrs(prevAttr: SimpleAttribute, nextAttr: SimpleAttribute): Boolean = {
+  /** Whether two attributes are next to each other by their indices. */
+  def isAdjacentAttrs(prevAttr: SimpleAttribute, nextAttr: SimpleAttribute): Boolean = {
     prevAttr.getMaxIndex() == nextAttr.getMinIndex() - 1
   }
 
+  /**
+   * A helper method used to get the attribute sizes for a row based on data types of fields.
+   * Non-vector-typed field counts for 1 and vector-typed field counts for the actual size of
+   * the vector.
+   */
   def getAttributeSizes(fields: Array[StructField], row: Row): Array[Int] = {
     fields.zipWithIndex.map { case (field, idx) =>
       field.dataType match {
@@ -352,7 +358,8 @@ object VectorAttrBuilder {
   }
 
   /**
-   * Given a sequence of `StructField`, a `AttrBuilder` should be able to build a `VectorAttr`.
+   * Given a sequence of `StructField` and attribute sizes for each fields, this method can
+   * build a `VectorAttr`.
    *
    * @param attributeSizes The attribute sizes for each field. For non-vector columns, it is
    *                       always 1. For vector columns, it is the size of vectors.
