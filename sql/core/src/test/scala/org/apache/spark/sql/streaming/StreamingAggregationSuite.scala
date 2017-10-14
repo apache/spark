@@ -44,7 +44,7 @@ object FailureSingleton {
 }
 
 class StreamingAggregationSuite extends StateStoreMetricsTest
-    with BeforeAndAfterAll with Assertions {
+    with BeforeAndAfterAll with Assertions with StatefulOperatorTest {
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -281,6 +281,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
       AddData(inputData, 0L, 5L, 5L, 10L),
       AdvanceManualClock(10 * 1000),
       CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+      AssertOnQuery(sq =>
+        checkChildOutputHashPartitioning[StateStoreRestoreExec](sq, Seq("value"))),
 
       // advance clock to 20 seconds, should retain keys >= 10
       AddData(inputData, 15L, 15L, 20L),
@@ -455,8 +457,8 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
         },
         AddBlockData(inputSource), // create an empty trigger
         CheckLastBatch(1),
-        AssertOnQuery("Verify addition of exchange operator") { se =>
-          checkAggregationChain(se, expectShuffling = true, 1)
+        AssertOnQuery("Verify that no exchange is required") { se =>
+          checkAggregationChain(se, expectShuffling = false, 1)
         },
         AddBlockData(inputSource, Seq(2, 3)),
         CheckLastBatch(3),

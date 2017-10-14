@@ -64,7 +64,7 @@ case class FlatMapGroupsWithStateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
+    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) :: Nil
 
   /** Ordering needed for using GroupingIterator */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
