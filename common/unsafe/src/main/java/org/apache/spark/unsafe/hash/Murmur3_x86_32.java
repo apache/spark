@@ -65,7 +65,15 @@ public final class Murmur3_x86_32 {
   }
 
   public static int hashUnsafeBytesBlock(MemoryBlock base, long offset, int lengthInBytes, int seed) {
-    return hashUnsafeBytes(base.getBaseObject(), offset, lengthInBytes, seed);
+    assert (lengthInBytes >= 0): "lengthInBytes cannot be negative";
+    int lengthAligned = lengthInBytes - lengthInBytes % 4;
+    int h1 = hashBytesByIntBlock(base, offset, lengthAligned, seed);
+    for (int i = lengthAligned; i < lengthInBytes; i++) {
+      int halfWord = base.getByte(offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return fmix(h1, lengthInBytes);
   }
 
   public static int hashUnsafeBytes(Object base, long offset, int lengthInBytes, int seed) {
@@ -94,6 +102,17 @@ public final class Murmur3_x86_32 {
     }
     h1 ^= mixK1(k1);
     return fmix(h1, lengthInBytes);
+  }
+
+  private static int hashBytesByIntBlock(MemoryBlock base, long offset, int lengthInBytes, int seed) {
+    assert (lengthInBytes % 4 == 0);
+    int h1 = seed;
+    for (int i = 0; i < lengthInBytes; i += 4) {
+      int halfWord = base.getInt(offset + i);
+      int k1 = mixK1(halfWord);
+      h1 = mixH1(h1, k1);
+    }
+    return h1;
   }
 
   private static int hashBytesByInt(Object base, long offset, int lengthInBytes, int seed) {
