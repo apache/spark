@@ -564,9 +564,11 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
       for (i <- 0 until actualPartitionNum) {
         assert(new File(output, s"part-r-0000$i").exists() === true)
       }
-      val hadoopRDD = sc.newAPIHadoopFile(new File(output, "part-r-*").getPath,
-        classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
-        .asInstanceOf[NewHadoopRDD[_, _]]
+      val hadoopRDD = sc.newAPIHadoopFile(
+        new File(output, "part-r-*").getPath,
+        classOf[NewTextInputFormat],
+        classOf[LongWritable],
+        classOf[Text]).asInstanceOf[NewHadoopRDD[_, _]]
       assert(hadoopRDD.partitions.length === expectedPartitionNum)
       Utils.deleteRecursively(output)
     }
