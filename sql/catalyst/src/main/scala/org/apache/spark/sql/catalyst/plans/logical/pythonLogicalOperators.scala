@@ -15,30 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.reader;
+package org.apache.spark.sql.catalyst.plans.logical
 
-import java.io.Closeable;
-
-import org.apache.spark.annotation.InterfaceStability;
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 
 /**
- * A data reader returned by {@link ReadTask#createReader()} and is responsible for outputting data
- * for a RDD partition.
- *
- * Note that, Currently the type `T` can only be {@link org.apache.spark.sql.Row} for normal data
- * source readers, or {@link org.apache.spark.sql.catalyst.expressions.UnsafeRow} for data source
- * readers that mix in {@link SupportsScanUnsafeRow}.
+ * FlatMap groups using an udf: pandas.Dataframe -> pandas.DataFrame.
+ * This is used by DataFrame.groupby().apply().
  */
-@InterfaceStability.Evolving
-public interface DataReader<T> extends Closeable {
-
+case class FlatMapGroupsInPandas(
+  groupingAttributes: Seq[Attribute],
+  functionExpr: Expression,
+  output: Seq[Attribute],
+  child: LogicalPlan) extends UnaryNode {
   /**
-   * Proceed to next record, returns false if there is no more records.
+   * This is needed because output attributes are considered `references` when
+   * passed through the constructor.
+   *
+   * Without this, catalyst will complain that output attributes are missing
+   * from the input.
    */
-  boolean next();
-
-  /**
-   * Return the current record. This method should return same value until `next` is called.
-   */
-  T get();
+  override val producedAttributes = AttributeSet(output)
 }

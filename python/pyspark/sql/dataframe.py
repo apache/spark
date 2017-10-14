@@ -1038,8 +1038,8 @@ class DataFrame(object):
         |   mean|               3.5| null|
         | stddev|2.1213203435596424| null|
         |    min|                 2|Alice|
-        |    25%|                 5| null|
-        |    50%|                 5| null|
+        |    25%|                 2| null|
+        |    50%|                 2| null|
         |    75%|                 5| null|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
@@ -1050,7 +1050,7 @@ class DataFrame(object):
         +-------+---+-----+
         |  count|  2|    2|
         |    min|  2|Alice|
-        |    25%|  5| null|
+        |    25%|  2| null|
         |    75%|  5| null|
         |    max|  5|  Bob|
         +-------+---+-----+
@@ -1227,7 +1227,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1248,7 +1248,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def cube(self, *cols):
@@ -1271,7 +1271,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.3)
     def agg(self, *exprs):

@@ -1597,7 +1597,7 @@ register_input_converter(DatetimeConverter())
 register_input_converter(DateConverter())
 
 
-def toArrowType(dt):
+def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
     import pyarrow as pa

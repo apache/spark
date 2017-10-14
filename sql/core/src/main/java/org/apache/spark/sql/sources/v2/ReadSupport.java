@@ -30,9 +30,8 @@ public interface ReadSupport {
   /**
    * Creates a {@link DataSourceV2Reader} to scan the data from this data source.
    *
-   * @param options the options for this data source reader, which is an immutable case-insensitive
-   *                string-to-string map.
-   * @return a reader that implements the actual read logic.
+   * @param options the options for the returned data source reader, which is an immutable
+   *                case-insensitive string-to-string map.
    */
   DataSourceV2Reader createReader(DataSourceV2Options options);
 }
