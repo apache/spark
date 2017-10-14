@@ -516,14 +516,15 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
 
     def testIgnoreEmptySplits(
-      data: Array[Tuple2[String, String]],
-      actualPartitionNum: Int,
-      expectedPart: String,
-      expectedPartitionNum: Int): Unit = {
+        data: Array[Tuple2[String, String]],
+        actualPartitionNum: Int,
+        expectedPartitionNum: Int): Unit = {
       val output = new File(tempDir, "output")
       sc.parallelize(data, actualPartitionNum)
         .saveAsHadoopFile[TextOutputFormat[String, String]](output.getPath)
-      assert(new File(output, expectedPart).exists() === true)
+      for (i <- 0 until actualPartitionNum) {
+        assert(new File(output, s"part-0000$i").exists() === true)
+      }
       val hadoopRDD = sc.textFile(new File(output, "part-*").getPath)
       assert(hadoopRDD.partitions.length === expectedPartitionNum)
       Utils.deleteRecursively(output)
@@ -533,21 +534,18 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     testIgnoreEmptySplits(
       data = Array.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
-      expectedPart = "part-00000",
       expectedPartitionNum = 0)
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
       data = Array(("key1", "a"), ("key2", "a"), ("key3", "b")),
       actualPartitionNum = 2,
-      expectedPart = "part-00001",
       expectedPartitionNum = 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
       data = Array(("key1", "a"), ("key2", "a")),
       actualPartitionNum = 5,
-      expectedPart = "part-00004",
       expectedPartitionNum = 2)
   }
 
@@ -557,14 +555,15 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     sc = new SparkContext(conf)
 
     def testIgnoreEmptySplits(
-      data: Array[Tuple2[String, String]],
-      actualPartitionNum: Int,
-      expectedPart: String,
-      expectedPartitionNum: Int): Unit = {
+        data: Array[Tuple2[String, String]],
+        actualPartitionNum: Int,
+        expectedPartitionNum: Int): Unit = {
       val output = new File(tempDir, "output")
       sc.parallelize(data, actualPartitionNum)
         .saveAsNewAPIHadoopFile[NewTextOutputFormat[String, String]](output.getPath)
-      assert(new File(output, expectedPart).exists() === true)
+      for (i <- 0 until actualPartitionNum) {
+        assert(new File(output, s"part-r-0000$i").exists() === true)
+      }
       val hadoopRDD = sc.newAPIHadoopFile(new File(output, "part-r-*").getPath,
         classOf[NewTextInputFormat], classOf[LongWritable], classOf[Text])
         .asInstanceOf[NewHadoopRDD[_, _]]
@@ -576,21 +575,18 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     testIgnoreEmptySplits(
       data = Array.empty[Tuple2[String, String]],
       actualPartitionNum = 1,
-      expectedPart = "part-r-00000",
       expectedPartitionNum = 0)
 
     // Ensure that if no split is empty, we don't lose any splits
     testIgnoreEmptySplits(
       data = Array(("1", "a"), ("2", "a"), ("3", "b")),
       actualPartitionNum = 2,
-      expectedPart = "part-r-00001",
       expectedPartitionNum = 2)
 
     // Ensure that if part of the splits are empty, we remove the splits correctly
     testIgnoreEmptySplits(
       data = Array(("1", "a"), ("2", "b")),
       actualPartitionNum = 5,
-      expectedPart = "part-r-00004",
       expectedPartitionNum = 2)
   }
 }
