@@ -18,6 +18,7 @@
 package org.apache.spark.ml.attribute
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.{DoubleType, Metadata, MetadataBuilder, StructField}
 
 /**
@@ -97,17 +98,114 @@ object MLAttributes {
    */
   private[ml] def fromStructField(field: StructField, preserveName: Boolean): BaseAttribute = {
     val metadata = field.metadata
-    val mlAttr = AttributeKeys.ML_ATTRV2
-    if (metadata.contains(mlAttr)) {
-      val attr = fromMetadata(metadata.getMetadata(mlAttr))
-      if (preserveName) {
-        attr
-      } else {
-        attr.withName(field.name)
-      }
+    val mlAttrV2 = AttributeKeys.ML_ATTRV2
+    val mlAttr = AttributeKeys.ML_ATTR
+
+    val attr = if (metadata.contains(mlAttrV2)) {
+      fromMetadata(metadata.getMetadata(mlAttrV2))
+    } else if (metadata.contains(mlAttr)) {
+      // For back-compatibility, to read metadata from previous attribute APIs.
+      convertFromV1API(field, metadata.getMetadata(mlAttr))
     } else {
       UnresolvedMLAttribute
     }
+
+    if (preserveName) {
+      attr
+    } else {
+      attr.withName(field.name)
+    }
+  }
+
+  /**
+   * Converts an `Attribute`/`AttributeGroup` to v2 attribute APIs.
+   */
+  private def convertFromV1API(field: StructField, metadata: Metadata): BaseAttribute = {
+    val isVectorField = field.dataType == new VectorUDT
+
+    if (isVectorField) {
+      val attrGroup = AttributeGroup.fromMetadata(metadata, field.name)
+      convertFromV1AttributeGroup(attrGroup)
+    } else {
+      val attr = Attribute.fromMetadata(metadata)
+      convertFromV1Attributes(attr)
+    }
+  }
+
+  /**
+   * Converts `AttributeGroup` to `VectorAttr`.
+   */
+  private def convertFromV1AttributeGroup(attrGroup: AttributeGroup): BaseAttribute = {
+    val numOfAttributes = attrGroup.size
+    if (numOfAttributes != -1) {
+      val vecAttr = VectorAttr(numOfAttributes = numOfAttributes)
+        .withName(attrGroup.name)
+      attrGroup.attributes.map { attrs =>
+        attrs.map(convertFromV1Attributes).map(vecAttr.addAttribute)
+      }
+      vecAttr
+    } else {
+      UnresolvedMLAttribute
+    }
+  }
+
+  /**
+   * Given an attribute from previous attribute APIs, this method converts it to v2 attribute APIs.
+   */
+  private def convertFromV1Attributes(attr: Attribute): SimpleAttribute = {
+    attr match {
+      case nominal: NominalAttribute =>
+        convertFromV1NominalAttribute(nominal)
+      case binary: BinaryAttribute =>
+        convertFromV1BinaryAttribute(binary)
+      case numeric: NumericAttribute =>
+        convertFromV1NumericAttribute(numeric)
+      case _ => throw new IllegalArgumentException(s"Can't convert from unknown attribute $attr")
+    }
+  }
+
+  private def convertFromV1NominalAttribute(nominal: NominalAttribute): NominalAttr = {
+    val name = nominal.name
+    val index = nominal.index
+    val isOrdinal = nominal.isOrdinal
+    val values = if (nominal.values.isDefined) {
+      nominal.values.get
+    } else if (nominal.numValues.isDefined) {
+      (0 until nominal.numValues.get).map(_.toDouble.toString).toArray
+    } else {
+      null
+    }
+    NominalAttr(
+      name = name,
+      indicesRange = index.map(Seq(_)).getOrElse(Seq.empty),
+      isOrdinal = isOrdinal,
+      values = Option(values))
+  }
+
+  private def convertFromV1BinaryAttribute(binary: BinaryAttribute): BinaryAttr = {
+    val name = binary.name
+    val index = binary.index
+    val values = binary.values
+    BinaryAttr(
+      name = name,
+      indicesRange = index.map(Seq(_)).getOrElse(Seq.empty),
+      values = values)
+  }
+
+  private def convertFromV1NumericAttribute(numeric: NumericAttribute): NumericAttr = {
+    val name = numeric.name
+    val index = numeric.index
+    val min = numeric.min
+    val max = numeric.max
+    val std = numeric.std
+    val sparsity = numeric.sparsity
+    NumericAttr(
+      name = name,
+      indicesRange = index.map(Seq(_)).getOrElse(Seq.empty),
+      min = min,
+      max = max,
+      std = std,
+      sparsity = sparsity)
   }
 }
 

@@ -56,6 +56,9 @@ class AttributesSuite extends SparkFunSuite {
     assert(attr1Metadata.getString(TYPE) == Nominal.name &&
       attr1Metadata.getString(NAME) == "col1")
 
+    val structField1 = attr1.toStructField()
+    assert(attr1 == MLAttributes.fromStructField(structField1, preserveName = true))
+
     val attr2 = NominalAttr(name = Some("col2"),
       isOrdinal = Some(true),
       values = Some(Array("small", "large")))
@@ -64,6 +67,10 @@ class AttributesSuite extends SparkFunSuite {
       attr2Metadata.getString(NAME) == "col2" &&
       attr2Metadata.getBoolean(ORDINAL) == true &&
       attr2Metadata.getStringArray(VALUES) === Array("small", "large"))
+
+    val structField2 = attr2.toStructField()
+    assert(attr2 == MLAttributes.fromStructField(structField2, preserveName = true))
+
   }
 
   test("NumericAttr") {
@@ -71,6 +78,9 @@ class AttributesSuite extends SparkFunSuite {
     val attr1Metadata = attr1.toMetadata().getMetadata(ML_ATTRV2)
     assert(attr1Metadata.getString(TYPE) == Numeric.name &&
       attr1Metadata.getString(NAME) == "col1")
+
+    val structField1 = attr1.toStructField()
+    assert(attr1 == MLAttributes.fromStructField(structField1, preserveName = true))
 
     val attr2 = NumericAttr(name = Some("col2"),
       min = Some(1.0),
@@ -84,6 +94,9 @@ class AttributesSuite extends SparkFunSuite {
       attr2Metadata.getDouble(MAX) == 10.0 &&
       attr2Metadata.getDouble(STD) == 2.5 &&
       attr2Metadata.getDouble(SPARSITY) == 0.5)
+
+    val structField2 = attr2.toStructField()
+    assert(attr2 == MLAttributes.fromStructField(structField2, preserveName = true))
   }
 
   test("BinaryAttr") {
@@ -92,11 +105,17 @@ class AttributesSuite extends SparkFunSuite {
     assert(attr1Metadata.getString(TYPE) == Binary.name &&
       attr1Metadata.getString(NAME) === "col1")
 
+    val structField1 = attr1.toStructField()
+    assert(attr1 == MLAttributes.fromStructField(structField1, preserveName = true))
+
     val attr2 = BinaryAttr(name = Some("col2"),
       values = Some(Array("1.0", "2.0")))
     val attr2Metadata = attr2.toMetadata().getMetadata(ML_ATTRV2)
     assert(attr2Metadata.getString(TYPE) == Binary.name &&
       attr2Metadata.getStringArray(VALUES) === Array("1.0", "2.0"))
+
+    val structField2 = attr2.toStructField()
+    assert(attr2 == MLAttributes.fromStructField(structField2, preserveName = true))
   }
 
   test("VectorAttr: metadata") {
@@ -112,6 +131,9 @@ class AttributesSuite extends SparkFunSuite {
       metadataForAttr1.getLongArray(INDICES) === Array(0L))
     assert(metadataForAttr2.getString(TYPE) === Numeric.name &&
       metadataForAttr2.getLongArray(INDICES) === Array(1L, 5L))
+
+    val structField = vecAttr1.toStructField()
+    assert(vecAttr1 == MLAttributes.fromStructField(structField, preserveName = true))
   }
 
   test("VectorAttr: getAttribute") {
