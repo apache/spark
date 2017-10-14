@@ -18,14 +18,17 @@
 package org.apache.spark
 
 // scalastyle:off
+import java.io.File
+
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.AccumulatorContext
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
-private[spark] abstract class SparkFunSuite
+abstract class SparkFunSuite
   extends FunSuite
   with BeforeAndAfterAll
   with Logging {
@@ -38,6 +41,15 @@ private[spark] abstract class SparkFunSuite
     } finally {
       super.afterAll()
     }
+  }
+
+  // helper function
+  protected final def getTestResourceFile(file: String): File = {
+    new File(getClass.getClassLoader.getResource(file).getFile)
+  }
+
+  protected final def getTestResourcePath(file: String): String = {
+    getTestResourceFile(file).getCanonicalPath
   }
 
   /**

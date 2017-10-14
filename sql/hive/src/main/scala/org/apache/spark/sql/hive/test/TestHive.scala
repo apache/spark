@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.net.URI
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
@@ -25,25 +26,22 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.command.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 // SPARK-3729: Test key required to check for initialization errors with config.
@@ -54,10 +52,44 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
+        .set(SQLConf.CODEGEN_FALLBACK.key, "false")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
+        .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set("spark.unsafe.exceptionOnMemoryLeak", "true")))
+
+
+case class TestHiveVersion(hiveClient: HiveClient)
+  extends TestHiveContext(TestHive.sparkContext, hiveClient)
+
+
+private[hive] class TestHiveExternalCatalog(
+    conf: SparkConf,
+    hadoopConf: Configuration,
+    hiveClient: Option[HiveClient] = None)
+  extends HiveExternalCatalog(conf, hadoopConf) with Logging {
+
+  override lazy val client: HiveClient =
+    hiveClient.getOrElse {
+      HiveUtils.newClientForMetadata(conf, hadoopConf)
+    }
+}
+
+
+private[hive] class TestHiveSharedState(
+    sc: SparkContext,
+    hiveClient: Option[HiveClient] = None)
+  extends SharedState(sc) {
+
+  override lazy val externalCatalog: TestHiveExternalCatalog = {
+    new TestHiveExternalCatalog(
+      sc.conf,
+      sc.hadoopConfiguration,
+      hiveClient)
+  }
+}
 
 
 /**
@@ -72,21 +104,26 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(
-    @transient override val sparkSession: TestHiveSparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) {
+    @transient override val sparkSession: TestHiveSparkSession)
+  extends SQLContext(sparkSession) {
 
-  def this(sc: SparkContext) {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
+  /**
+   * If loadTestTables is false, no test tables are loaded. Note that this flag can only be true
+   * when running in the JVM, i.e. it needs to be false when calling from Python.
+   */
+  def this(sc: SparkContext, loadTestTables: Boolean = true) {
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
+  }
+
+  def this(sc: SparkContext, hiveClient: HiveClient) {
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
+      hiveClient,
+      loadTestTables = false))
   }
 
   override def newSession(): TestHiveContext = {
-    new TestHiveContext(sparkSession.newSession(), false)
+    new TestHiveContext(sparkSession.newSession())
   }
-
-  override def sharedState: TestHiveSharedState = sparkSession.sharedState
-
-  override def sessionState: TestHiveSessionState = sparkSession.sessionState
 
   def setCacheTables(c: Boolean): Unit = {
     sparkSession.setCacheTables(c)
@@ -106,42 +143,76 @@ class TestHiveContext(
 
 }
 
-
+/**
+ * A [[SparkSession]] used in [[TestHiveContext]].
+ *
+ * @param sc SparkContext
+ * @param existingSharedState optional [[SharedState]]
+ * @param parentSessionState optional parent [[SessionState]]
+ * @param loadTestTables if true, load the test tables. They can only be loaded when running
+ *                       in the JVM, i.e when calling from Python this flag has to be false.
+ */
 private[hive] class TestHiveSparkSession(
     @transient private val sc: SparkContext,
-    val warehousePath: File,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String],
-    @transient private val existingSharedState: Option[TestHiveSharedState])
+    @transient private val existingSharedState: Option[TestHiveSharedState],
+    @transient private val parentSessionState: Option[SessionState],
+    private val loadTestTables: Boolean)
   extends SparkSession(sc) with Logging { self =>
 
-  def this(sc: SparkContext) {
+  def this(sc: SparkContext, loadTestTables: Boolean) {
     this(
       sc,
-      Utils.createTempDir(namePrefix = "warehouse"),
-      TestHiveContext.makeScratchDir(),
-      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false),
-      None)
+      existingSharedState = None,
+      parentSessionState = None,
+      loadTestTables)
+  }
+
+  def this(sc: SparkContext, hiveClient: HiveClient, loadTestTables: Boolean) {
+    this(
+      sc,
+      existingSharedState = Some(new TestHiveSharedState(sc, Some(hiveClient))),
+      parentSessionState = None,
+      loadTestTables)
+  }
+
+  { // set the metastore temporary configuration
+    val metastoreTempConf = HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false) ++ Map(
+      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
+      // scratch directory used by Hive's metastore client
+      ConfVars.SCRATCHDIR.varname -> TestHiveContext.makeScratchDir().toURI.toString,
+      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+
+    metastoreTempConf.foreach { case (k, v) =>
+      sc.hadoopConfiguration.set(k, v)
+    }
   }
 
   assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
 
-  // TODO: Let's remove TestHiveSharedState and TestHiveSessionState. Otherwise,
-  // we are not really testing the reflection logic based on the setting of
-  // CATALOG_IMPLEMENTATION.
   @transient
   override lazy val sharedState: TestHiveSharedState = {
-    existingSharedState.getOrElse(
-      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf))
+    existingSharedState.getOrElse(new TestHiveSharedState(sc))
   }
 
   @transient
-  override lazy val sessionState: TestHiveSessionState =
-    new TestHiveSessionState(self, warehousePath)
+  override lazy val sessionState: SessionState = {
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
+  }
+
+  lazy val metadataHive: HiveClient = sharedState.externalCatalog.client.newSession()
 
   override def newSession(): TestHiveSparkSession = {
-    new TestHiveSparkSession(
-      sc, warehousePath, scratchDirPath, metastoreTemporaryConf, Some(sharedState))
+    new TestHiveSparkSession(sc, Some(sharedState), None, loadTestTables)
+  }
+
+  override def cloneSession(): SparkSession = {
+    val result = new TestHiveSparkSession(
+      sparkContext,
+      Some(sharedState),
+      Some(sessionState),
+      loadTestTables)
+    result.sessionState // force copy of SessionState
+    result
   }
 
   private var cacheTables: Boolean = false
@@ -153,12 +224,9 @@ private[hive] class TestHiveSparkSession(
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
-  CommandProcessorFactory.clean(sessionState.hiveconf)
-
-  sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", Utils.createTempDir().getCanonicalPath)
+  System.setProperty("test.tmp.dir", Utils.createTempDir().toURI.getPath)
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -179,19 +247,20 @@ private[hive] class TestHiveSparkSession(
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-  } else {
-    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-      File.separator + "resources")
+  def getHiveFile(path: String): File = {
+    new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
   }
 
-  def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
-    hiveDevHome
-      .map(new File(_, stripped))
-      .filter(_.exists)
-      .getOrElse(new File(inRepoTests, stripped))
+  private def quoteHiveFile(path : String) = if (Utils.isWindows) {
+    getHiveFile(path).getPath.replace('\\', '/')
+  } else {
+    getHiveFile(path).getPath
+  }
+
+  def getWarehousePath(): String = {
+    val tempConf = new SQLConf
+    sc.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
+    tempConf.warehousePath
   }
 
   val describedTable = "DESCRIBE (\\w+)".r
@@ -215,167 +284,175 @@ private[hive] class TestHiveSparkSession(
     testTables += (testTable.name -> testTable)
   }
 
-  // The test tables that are defined in the Hive QTestUtil.
-  // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
-  // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
-  @transient
-  val hiveQTestUtilTables = Seq(
-    TestTable("src",
-      "CREATE TABLE src (key INT, value STRING)".cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
-    TestTable("src1",
-      "CREATE TABLE src1 (key INT, value STRING)".cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
-    TestTable("srcpart", () => {
-      sql(
-        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
-      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
-        sql(
-          s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
+  if (loadTestTables) {
+    // The test tables that are defined in the Hive QTestUtil.
+    // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
+    // https://github.com/apache/hive/blob/branch-0.13/data/scripts/q_test_init.sql
+    @transient
+    val hiveQTestUtilTables: Seq[TestTable] = Seq(
+      TestTable("src",
+        "CREATE TABLE src (key INT, value STRING)".cmd,
+        s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}' INTO TABLE src".cmd),
+      TestTable("src1",
+        "CREATE TABLE src1 (key INT, value STRING)".cmd,
+        s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
+      TestTable("srcpart", () => {
+        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)"
+          .cmd.apply()
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+          s"""
+             |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
-           """.stripMargin)
-      }
-    }),
-    TestTable("srcpart1", () => {
-      sql(
-        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
-      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
-        sql(
-          s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
+          """.stripMargin.cmd.apply()
+        }
+      }),
+      TestTable("srcpart1", () => {
+        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)"
+          .cmd.apply()
+        for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
+          s"""
+             |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
-           """.stripMargin)
-      }
-    }),
-    TestTable("src_thrift", () => {
-      import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
-      import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
-      import org.apache.thrift.protocol.TBinaryProtocol
+          """.stripMargin.cmd.apply()
+        }
+      }),
+      TestTable("src_thrift", () => {
+        import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
+        import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
+        import org.apache.thrift.protocol.TBinaryProtocol
 
-      sql(
         s"""
-         |CREATE TABLE src_thrift(fake INT)
-         |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
-         |WITH SERDEPROPERTIES(
-         |  'serialization.class'='org.apache.spark.sql.hive.test.Complex',
-         |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
-         |)
-         |STORED AS
-         |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
-         |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
-        """.stripMargin)
+           |CREATE TABLE src_thrift(fake INT)
+           |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
+           |WITH SERDEPROPERTIES(
+           |  'serialization.class'='org.apache.spark.sql.hive.test.Complex',
+           |  'serialization.format'='${classOf[TBinaryProtocol].getName}'
+           |)
+           |STORED AS
+           |INPUTFORMAT '${classOf[SequenceFileInputFormat[_, _]].getName}'
+           |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
+        """.stripMargin.cmd.apply()
 
-      sql(
-        s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
-    }),
-    TestTable("serdeins",
-      s"""CREATE TABLE serdeins (key INT, value STRING)
-         |ROW FORMAT SERDE '${classOf[LazySimpleSerDe].getCanonicalName}'
-         |WITH SERDEPROPERTIES ('field.delim'='\\t')
-       """.stripMargin.cmd,
-      "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
-    TestTable("episodes",
-      s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
-         |STORED AS avro
-         |TBLPROPERTIES (
-         |  'avro.schema.literal'='{
-         |    "type": "record",
-         |    "name": "episodes",
-         |    "namespace": "testing.hive.avro.serde",
-         |    "fields": [
-         |      {
-         |          "name": "title",
-         |          "type": "string",
-         |          "doc": "episode title"
-         |      },
-         |      {
-         |          "name": "air_date",
-         |          "type": "string",
-         |          "doc": "initial date"
-         |      },
-         |      {
-         |          "name": "doctor",
-         |          "type": "int",
-         |          "doc": "main actor playing the Doctor in episode"
-         |      }
-         |    ]
-         |  }'
-         |)
-       """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
-    ),
-    // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC
-    // PARTITIONING IS NOT YET SUPPORTED
-    TestTable("episodes_part",
-      s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
-         |PARTITIONED BY (doctor_pt INT)
-         |STORED AS avro
-         |TBLPROPERTIES (
-         |  'avro.schema.literal'='{
-         |    "type": "record",
-         |    "name": "episodes",
-         |    "namespace": "testing.hive.avro.serde",
-         |    "fields": [
-         |      {
-         |          "name": "title",
-         |          "type": "string",
-         |          "doc": "episode title"
-         |      },
-         |      {
-         |          "name": "air_date",
-         |          "type": "string",
-         |          "doc": "initial date"
-         |      },
-         |      {
-         |          "name": "doctor",
-         |          "type": "int",
-         |          "doc": "main actor playing the Doctor in episode"
-         |      }
-         |    ]
-         |  }'
-         |)
-       """.stripMargin.cmd,
-      // WORKAROUND: Required to pass schema to SerDe for partitioned tables.
-      // TODO: Pass this automatically from the table to partitions.
-      s"""
-         |ALTER TABLE episodes_part SET SERDEPROPERTIES (
-         |  'avro.schema.literal'='{
-         |    "type": "record",
-         |    "name": "episodes",
-         |    "namespace": "testing.hive.avro.serde",
-         |    "fields": [
-         |      {
-         |          "name": "title",
-         |          "type": "string",
-         |          "doc": "episode title"
-         |      },
-         |      {
-         |          "name": "air_date",
-         |          "type": "string",
-         |          "doc": "initial date"
-         |      },
-         |      {
-         |          "name": "doctor",
-         |          "type": "int",
-         |          "doc": "main actor playing the Doctor in episode"
-         |      }
-         |    ]
-         |  }'
-         |)
-        """.stripMargin.cmd,
-      s"""
-        INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
-        SELECT title, air_date, doctor FROM episodes
-      """.cmd
+        s"""
+           |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/complex.seq")}'
+           |INTO TABLE src_thrift
+        """.stripMargin.cmd.apply()
+      }),
+      TestTable("serdeins",
+        s"""CREATE TABLE serdeins (key INT, value STRING)
+           |ROW FORMAT SERDE '${classOf[LazySimpleSerDe].getCanonicalName}'
+           |WITH SERDEPROPERTIES ('field.delim'='\\t')
+         """.stripMargin.cmd,
+        "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
+      TestTable("episodes",
+        s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
+           |STORED AS avro
+           |TBLPROPERTIES (
+           |  'avro.schema.literal'='{
+           |    "type": "record",
+           |    "name": "episodes",
+           |    "namespace": "testing.hive.avro.serde",
+           |    "fields": [
+           |      {
+           |          "name": "title",
+           |          "type": "string",
+           |          "doc": "episode title"
+           |      },
+           |      {
+           |          "name": "air_date",
+           |          "type": "string",
+           |          "doc": "initial date"
+           |      },
+           |      {
+           |          "name": "doctor",
+           |          "type": "int",
+           |          "doc": "main actor playing the Doctor in episode"
+           |      }
+           |    ]
+           |  }'
+           |)
+         """.stripMargin.cmd,
+        s"""
+           |LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/episodes.avro")}'
+           |INTO TABLE episodes
+         """.stripMargin.cmd
       ),
-    TestTable("src_json",
-      s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
-       """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
-  )
+      // THIS TABLE IS NOT THE SAME AS THE HIVE TEST TABLE episodes_partitioned AS DYNAMIC
+      // PARTITIONING IS NOT YET SUPPORTED
+      TestTable("episodes_part",
+        s"""CREATE TABLE episodes_part (title STRING, air_date STRING, doctor INT)
+           |PARTITIONED BY (doctor_pt INT)
+           |STORED AS avro
+           |TBLPROPERTIES (
+           |  'avro.schema.literal'='{
+           |    "type": "record",
+           |    "name": "episodes",
+           |    "namespace": "testing.hive.avro.serde",
+           |    "fields": [
+           |      {
+           |          "name": "title",
+           |          "type": "string",
+           |          "doc": "episode title"
+           |      },
+           |      {
+           |          "name": "air_date",
+           |          "type": "string",
+           |          "doc": "initial date"
+           |      },
+           |      {
+           |          "name": "doctor",
+           |          "type": "int",
+           |          "doc": "main actor playing the Doctor in episode"
+           |      }
+           |    ]
+           |  }'
+           |)
+         """.stripMargin.cmd,
+        // WORKAROUND: Required to pass schema to SerDe for partitioned tables.
+        // TODO: Pass this automatically from the table to partitions.
+        s"""
+           |ALTER TABLE episodes_part SET SERDEPROPERTIES (
+           |  'avro.schema.literal'='{
+           |    "type": "record",
+           |    "name": "episodes",
+           |    "namespace": "testing.hive.avro.serde",
+           |    "fields": [
+           |      {
+           |          "name": "title",
+           |          "type": "string",
+           |          "doc": "episode title"
+           |      },
+           |      {
+           |          "name": "air_date",
+           |          "type": "string",
+           |          "doc": "initial date"
+           |      },
+           |      {
+           |          "name": "doctor",
+           |          "type": "int",
+           |          "doc": "main actor playing the Doctor in episode"
+           |      }
+           |    ]
+           |  }'
+           |)
+          """.stripMargin.cmd,
+        s"""
+          INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
+          SELECT title, air_date, doctor FROM episodes
+        """.cmd
+        ),
+      TestTable("src_json",
+        s"""CREATE TABLE src_json (json STRING) STORED AS TEXTFILE
+         """.stripMargin.cmd,
+        s"LOAD DATA LOCAL INPATH '${quoteHiveFile("data/files/json.txt")}' INTO TABLE src_json".cmd)
+    )
 
-  hiveQTestUtilTables.foreach(registerTestTable)
+    hiveQTestUtilTables.foreach(registerTestTable)
+  }
 
   private val loadedTables = new collection.mutable.HashSet[String]
+
+  def getLoadedTables: collection.mutable.HashSet[String] = loadedTables
 
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
@@ -384,7 +461,17 @@ private[hive] class TestHiveSparkSession(
       logDebug(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
-      createCmds.foreach(_())
+
+      // test tables are loaded lazily, so they may be loaded in the middle a query execution which
+      // has already set the execution id.
+      if (sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY) == null) {
+        // We don't actually have a `QueryExecution` here, use a fake one instead.
+        SQLExecution.withNewExecutionId(this, new QueryExecution(this, OneRowRelation())) {
+          createCmds.foreach(_())
+        }
+      } else {
+        createCmds.foreach(_())
+      }
 
       if (cacheTables) {
         new SQLContext(self).cacheTable(name)
@@ -412,31 +499,36 @@ private[hive] class TestHiveSparkSession(
         }
       }
 
+      // Clean out the Hive warehouse between each suite
+      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      Utils.deleteRecursively(warehouseDir)
+      warehouseDir.mkdir()
+
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
-      sessionState.catalog.clearTempTables()
-      sessionState.catalog.invalidateCache()
+      sessionState.catalog.reset()
+      metadataHive.reset()
 
-      sessionState.metadataHive.reset()
-
-      FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
-        foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
+      // HDFS root scratch dir requires the write all (733) permission. For each connecting user,
+      // an HDFS scratch dir: ${hive.exec.scratchdir}/<username> is created, with
+      // ${hive.scratch.dir.permission}. To resolve the permission issue, the simplest way is to
+      // delete it. Later, it will be re-created with the right permission.
+      val location = new Path(sc.hadoopConfiguration.get(ConfVars.SCRATCHDIR.varname))
+      val fs = location.getFileSystem(sc.hadoopConfiguration)
+      fs.delete(location, true)
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      sessionState.conf.setConfString("fs.defaultFS", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      sessionState.metadataHive.runSqlHive("RESET")
+      metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
-      sessionState.metadataHive.runSqlHive("set hive.table.parameters.default=")
-      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections=true")
-      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
+      metadataHive.runSqlHive("set hive.table.parameters.default=")
+      metadataHive.runSqlHive("set datanucleus.cache.collections=true")
+      metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-
-      // In case a test changed any of these values, restore all the original ones here.
-      sessionState.setDefaultOverrideConfs()
+      metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
@@ -463,83 +555,22 @@ private[hive] class TestHiveQueryExecution(
 
   override lazy val analyzed: LogicalPlan = {
     val describedTables = logical match {
-      case CacheTableCommand(tbl, _, _) => tbl :: Nil
+      case CacheTableCommand(tbl, _, _) => tbl.table :: Nil
       case _ => Nil
     }
 
     // Make sure any test tables referenced are loaded.
     val referencedTables =
       describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
-    val referencedTestTables = referencedTables.filter(sparkSession.testTables.contains)
+        logical.collect { case UnresolvedRelation(tableIdent) => tableIdent.table }
+    val resolver = sparkSession.sessionState.conf.resolver
+    val referencedTestTables = sparkSession.testTables.keys.filter { testTable =>
+      referencedTables.exists(resolver(_, testTable))
+    }
     logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
     referencedTestTables.foreach(sparkSession.loadTestTable)
     // Proceed with analysis.
     sparkSession.sessionState.analyzer.execute(logical)
-  }
-}
-
-
-private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
-
-  private val removedFunctions =
-    collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
-
-  def unregisterFunction(name: String): Unit = {
-    functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
-  }
-
-  def restore(): Unit = {
-    removedFunctions.foreach {
-      case (name, (info, builder)) => registerFunction(name, info, builder)
-    }
-  }
-}
-
-
-private[hive] class TestHiveSharedState(
-    sc: SparkContext,
-    warehousePath: File,
-    scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String])
-  extends HiveSharedState(sc) {
-
-  override lazy val metadataHive: HiveClient = {
-    TestHiveContext.newClientForMetadata(
-      sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
-  }
-}
-
-
-private[hive] class TestHiveSessionState(
-    sparkSession: TestHiveSparkSession,
-    warehousePath: File)
-  extends HiveSessionState(sparkSession) { self =>
-
-  override lazy val conf: SQLConf = {
-    new SQLConf {
-      clear()
-      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-      override def clear(): Unit = {
-        super.clear()
-        TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
-        setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
-      }
-    }
-  }
-
-  override lazy val functionRegistry: TestHiveFunctionRegistry = {
-    // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
-    // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
-    val fr = new TestHiveFunctionRegistry
-    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
-      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
-    }
-    fr
-  }
-
-  override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
-    new TestHiveQueryExecution(sparkSession, plan)
   }
 }
 
@@ -555,36 +586,10 @@ private[hive] object TestHiveContext {
       SQLConf.SHUFFLE_PARTITIONS.key -> "5"
     )
 
-  /**
-   * Create a [[HiveClient]] used to retrieve metadata from the Hive MetaStore.
-   */
-  def newClientForMetadata(
-      conf: SparkConf,
-      hadoopConf: Configuration,
-      warehousePath: File,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    HiveUtils.newClientForMetadata(
-      conf,
-      hiveConf,
-      hadoopConf,
-      hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
-  }
-
-  /**
-   * Configurations needed to create a [[HiveClient]].
-   */
-  def hiveClientConfigurations(
-      hiveconf: HiveConf,
-      warehousePath: File,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveUtils.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
-      ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
-      ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
-      ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
-      ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
+  def makeWarehouseDir(): File = {
+    val warehouseDir = Utils.createTempDir(namePrefix = "warehouse")
+    warehouseDir.delete()
+    warehouseDir
   }
 
   def makeScratchDir(): File = {
@@ -593,4 +598,19 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
+}
+
+private[sql] class TestHiveSessionStateBuilder(
+    session: SparkSession,
+    state: Option[SessionState])
+  extends HiveSessionStateBuilder(session, state)
+  with WithTestConf {
+
+  override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
+
+  override def createQueryExecution: (LogicalPlan) => QueryExecution = { plan =>
+    new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
+  }
+
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }

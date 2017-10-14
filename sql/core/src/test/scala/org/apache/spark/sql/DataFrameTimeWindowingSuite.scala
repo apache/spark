@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql
 
-import java.util.TimeZone
-
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StringType
@@ -29,14 +28,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   import testImplicits._
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
+  test("simple tumbling window with record at window start") {
+    val df = Seq(
+      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
 
-  override def afterEach(): Unit = {
-    super.beforeEach()
-    TimeZone.setDefault(null)
+    checkAnswer(
+      df.groupBy(window($"time", "10 seconds"))
+        .agg(count("*").as("counts"))
+        .orderBy($"window.start".asc)
+        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
+      Seq(
+        Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1)
+      )
+    )
   }
 
   test("tumbling window groupBy statement") {
@@ -44,6 +48,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
       ("2016-03-27 19:39:34", 1, "a"),
       ("2016-03-27 19:39:56", 2, "a"),
       ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+
     checkAnswer(
       df.groupBy(window($"time", "10 seconds"))
         .agg(count("*").as("counts"))
@@ -69,14 +74,18 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   test("tumbling window with multi-column projection") {
     val df = Seq(
-      ("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+        ("2016-03-27 19:39:34", 1, "a"),
+        ("2016-03-27 19:39:56", 2, "a"),
+        ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "10 seconds"), $"value")
+      .orderBy($"window.start".asc)
+      .select($"window.start".cast("string"), $"window.end".cast("string"), $"value")
+
+    val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
+    assert(expands.isEmpty, "Tumbling windows shouldn't require expand")
 
     checkAnswer(
-      df.select(window($"time", "10 seconds"), $"value")
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast("string"), $"window.end".cast("string"), $"value"),
+      df,
       Seq(
         Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
         Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1),
@@ -114,13 +123,17 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
 
   test("sliding window projection") {
     val df = Seq(
-      ("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+        ("2016-03-27 19:39:34", 1, "a"),
+        ("2016-03-27 19:39:56", 2, "a"),
+        ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+
+    val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
+    assert(expands.nonEmpty, "Sliding windows require expand")
 
     checkAnswer(
-      df.select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
-        .orderBy($"window.start".asc, $"value".desc).select("value"),
+      df,
       // 2016-03-27 19:39:27 UTC -> 4 bins
       // 2016-03-27 19:39:34 UTC -> 3 bins
       // 2016-03-27 19:39:56 UTC -> 3 bins
@@ -245,18 +258,18 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     Seq(
       ("2016-03-27 19:39:34", 1),
       ("2016-03-27 19:39:56", 2),
-      ("2016-03-27 19:39:27", 4)).toDF("time", "value").registerTempTable(tableName)
+      ("2016-03-27 19:39:27", 4)).toDF("time", "value").createOrReplaceTempView(tableName)
     try {
       f(tableName)
     } finally {
-      sqlContext.dropTempTable(tableName)
+      spark.catalog.dropTempView(tableName)
     }
   }
 
   test("time window in SQL with single string expression") {
     withTempTable { table =>
       checkAnswer(
-        sqlContext.sql(s"""select window(time, "10 seconds"), value from $table""")
+        spark.sql(s"""select window(time, "10 seconds"), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(
           Row("2016-03-27 19:39:20", "2016-03-27 19:39:30", 4),
@@ -267,10 +280,10 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     }
   }
 
-  test("time window in SQL with with two expressions") {
+  test("time window in SQL with two expressions") {
     withTempTable { table =>
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           s"""select window(time, "10 seconds", 10000000), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(
@@ -282,10 +295,10 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     }
   }
 
-  test("time window in SQL with with three expressions") {
+  test("time window in SQL with three expressions") {
     withTempTable { table =>
       checkAnswer(
-        sqlContext.sql(
+        spark.sql(
           s"""select window(time, "10 seconds", 10000000, "5 seconds"), value from $table""")
           .select($"window.start".cast(StringType), $"window.end".cast(StringType), $"value"),
         Seq(

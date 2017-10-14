@@ -19,7 +19,9 @@ package org.apache.spark.repl
 
 import java.io.BufferedReader
 
+// scalastyle:off println
 import scala.Predef.{println => _, _}
+// scalastyle:on println
 import scala.tools.nsc.Settings
 import scala.tools.nsc.interpreter.{ILoop, JPrintWriter}
 import scala.tools.nsc.util.stringFromStream
@@ -36,25 +38,37 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def initializeSpark() {
     intp.beQuietDuring {
       processLine("""
+        @transient val spark = if (org.apache.spark.repl.Main.sparkSession != null) {
+            org.apache.spark.repl.Main.sparkSession
+          } else {
+            org.apache.spark.repl.Main.createSparkSession()
+          }
         @transient val sc = {
-          val _sc = org.apache.spark.repl.Main.createSparkContext()
-          _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
+          val _sc = spark.sparkContext
+          if (_sc.getConf.getBoolean("spark.ui.reverseProxy", false)) {
+            val proxyUrl = _sc.getConf.get("spark.ui.reverseProxyUrl", null)
+            if (proxyUrl != null) {
+              println(
+                s"Spark Context Web UI is available at ${proxyUrl}/proxy/${_sc.applicationId}")
+            } else {
+              println(s"Spark Context Web UI is available at Spark Master Public URL")
+            }
+          } else {
+            _sc.uiWebUrl.foreach {
+              webUrl => println(s"Spark context Web UI available at ${webUrl}")
+            }
+          }
           println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
-          _sc
-        }
-        """)
-      processLine("""
-        @transient val spark = {
-          val _session = org.apache.spark.repl.Main.createSparkSession()
           println("Spark session available as 'spark'.")
-          _session
+          _sc
         }
         """)
       processLine("import org.apache.spark.SparkContext._")
       processLine("import spark.implicits._")
       processLine("import spark.sql")
       processLine("import org.apache.spark.sql.functions._")
+      replayCommandStack = Nil // remove above commands from session history.
     }
   }
 
@@ -75,14 +89,8 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo("Type :help for more information.")
   }
 
-  private val blockedCommands = Set("implicits", "javap", "power", "type", "kind", "reset")
-
-  /** Standard commands */
-  lazy val sparkStandardCommands: List[SparkILoop.this.LoopCommand] =
-    standardCommands.filter(cmd => !blockedCommands(cmd.name))
-
   /** Available commands */
-  override def commands: List[LoopCommand] = sparkStandardCommands
+  override def commands: List[LoopCommand] = standardCommands
 
   /**
    * We override `loadFiles` because we need to initialize Spark *before* the REPL
@@ -92,6 +100,12 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   override def loadFiles(settings: Settings): Unit = {
     initializeSpark()
     super.loadFiles(settings)
+  }
+
+  override def resetCommand(line: String): Unit = {
+    super.resetCommand(line)
+    initializeSpark()
+    echo("Note that after :reset, state of SparkSession and SparkContext is unchanged.")
   }
 }
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodeFormatter, CodeGenerator, UnsafeRowWriter}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodeAndComment, CodeFormatter, CodeGenerator, UnsafeRowWriter}
 import org.apache.spark.sql.types._
 
 /**
@@ -36,8 +36,7 @@ abstract class ColumnarIterator extends Iterator[InternalRow] {
  *
  * WARNING: These setter MUST be called in increasing order of ordinals.
  */
-class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(null) {
-
+class MutableUnsafeRow(val writer: UnsafeRowWriter) extends BaseGenericInternalRow {
   override def isNullAt(i: Int): Boolean = writer.isNullAt(i)
   override def setNullAt(i: Int): Unit = writer.setNullAt(i)
 
@@ -55,10 +54,12 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
   override def update(i: Int, v: Any): Unit = throw new UnsupportedOperationException
 
   // all other methods inherited from GenericMutableRow are not need
+  override protected def genericGet(ordinal: Int): Any = throw new UnsupportedOperationException
+  override def numFields: Int = throw new UnsupportedOperationException
 }
 
 /**
- * Generates bytecode for an [[ColumnarIterator]] for columnar cache.
+ * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
 object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 
@@ -126,9 +127,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
       } else {
         val groupedAccessorsItr = initializeAccessors.grouped(numberOfStatementsThreshold)
         val groupedExtractorsItr = extractors.grouped(numberOfStatementsThreshold)
-        var groupedAccessorsLength = 0
-        groupedAccessorsItr.zipWithIndex.map { case (body, i) =>
-          groupedAccessorsLength += 1
+        val accessorNames = groupedAccessorsItr.zipWithIndex.map { case (body, i) =>
           val funcName = s"accessors$i"
           val funcCode = s"""
              |private void $funcName() {
@@ -137,7 +136,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
            """.stripMargin
           ctx.addNewFunction(funcName, funcCode)
         }
-        groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
+        val extractorNames = groupedExtractorsItr.zipWithIndex.map { case (body, i) =>
           val funcName = s"extractors$i"
           val funcCode = s"""
              |private void $funcName() {
@@ -146,11 +145,11 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
            """.stripMargin
           ctx.addNewFunction(funcName, funcCode)
         }
-        ((0 to groupedAccessorsLength - 1).map { i => s"accessors$i();" }.mkString("\n"),
-         (0 to groupedAccessorsLength - 1).map { i => s"extractors$i();" }.mkString("\n"))
+        (accessorNames.map { accessorName => s"$accessorName();" }.mkString("\n"),
+         extractorNames.map { extractorName => s"$extractorName();"}.mkString("\n"))
       }
 
-    val code = s"""
+    val codeBody = s"""
       import java.nio.ByteBuffer;
       import java.nio.ByteOrder;
       import scala.collection.Iterator;
@@ -193,8 +192,6 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           this.columnIndexes = columnIndexes;
         }
 
-        ${ctx.declareAddedFunctions()}
-
         public boolean hasNext() {
           if (currentRow < numRowsInBatch) {
             return true;
@@ -222,10 +219,15 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
           unsafeRow.setTotalSize(bufferHolder.totalSize());
           return unsafeRow;
         }
+
+        ${ctx.declareAddedFunctions()}
       }"""
 
-    logDebug(s"Generated ColumnarIterator: ${CodeFormatter.format(code)}")
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
+    logDebug(s"Generated ColumnarIterator:\n${CodeFormatter.format(code)}")
 
-    CodeGenerator.compile(code).generate(Array.empty).asInstanceOf[ColumnarIterator]
+    val (clazz, _) = CodeGenerator.compile(code)
+    clazz.generate(Array.empty).asInstanceOf[ColumnarIterator]
   }
 }

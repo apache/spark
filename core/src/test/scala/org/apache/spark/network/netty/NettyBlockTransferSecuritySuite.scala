@@ -22,22 +22,23 @@ import java.nio._
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 import com.google.common.io.CharStreams
 import org.mockito.Mockito._
-import org.scalatest.mock.MockitoSugar
-import org.scalatest.ShouldMatchers
+import org.scalatest.Matchers
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
 import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.shuffle.BlockFetchingListener
 import org.apache.spark.storage.{BlockId, ShuffleBlockId}
+import org.apache.spark.util.ThreadUtils
 
-class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with ShouldMatchers {
+class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar with Matchers {
   test("security default off") {
     val conf = new SparkConf()
       .set("spark.app.id", "app-id")
@@ -94,6 +95,20 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     }
   }
 
+  test("security with aes encryption") {
+    val conf = new SparkConf()
+      .set("spark.authenticate", "true")
+      .set("spark.authenticate.secret", "good")
+      .set("spark.app.id", "app-id")
+      .set("spark.network.crypto.enabled", "true")
+      .set("spark.network.crypto.saslFallback", "false")
+    testConnection(conf, conf) match {
+      case Success(_) => // expected
+      case Failure(t) => fail(t)
+    }
+  }
+
+
   /**
    * Creates two servers with different configurations and sees if they can talk.
    * Returns Success() if they can transfer a block, and Failure() if the block transfer was failed
@@ -108,11 +123,13 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
     when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
-    val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", numCores = 1)
+    val exec0 = new NettyBlockTransferService(conf0, securityManager0, "localhost", "localhost", 0,
+      1)
     exec0.init(blockManager)
 
     val securityManager1 = new SecurityManager(conf1)
-    val exec1 = new NettyBlockTransferService(conf1, securityManager1, "localhost", numCores = 1)
+    val exec1 = new NettyBlockTransferService(conf1, securityManager1, "localhost", "localhost", 0,
+      1)
     exec1.init(blockManager)
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {
@@ -148,9 +165,9 @@ class NettyBlockTransferSecuritySuite extends SparkFunSuite with MockitoSugar wi
         override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
           promise.success(data.retain())
         }
-      })
+      }, null)
 
-    Await.ready(promise.future, FiniteDuration(10, TimeUnit.SECONDS))
+    ThreadUtils.awaitReady(promise.future, FiniteDuration(10, TimeUnit.SECONDS))
     promise.future.value.get
   }
 }

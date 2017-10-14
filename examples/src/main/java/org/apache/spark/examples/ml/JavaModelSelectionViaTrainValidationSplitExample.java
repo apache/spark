@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
@@ -29,13 +27,10 @@ import org.apache.spark.ml.tuning.TrainValidationSplitModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Java example demonstrating model selection using TrainValidationSplit.
- *
- * The example is based on {@link org.apache.spark.examples.ml.JavaSimpleParamsExample}
- * using linear regression.
  *
  * Run with
  * {{{
@@ -44,13 +39,13 @@ import org.apache.spark.sql.SQLContext;
  */
 public class JavaModelSelectionViaTrainValidationSplitExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("JavaModelSelectionViaTrainValidationSplitExample");
-    SparkContext sc = new SparkContext(conf);
-    SQLContext jsql = new SQLContext(sc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaModelSelectionViaTrainValidationSplitExample")
+      .getOrCreate();
 
     // $example on$
-    Dataset<Row> data = jsql.read().format("libsvm")
+    Dataset<Row> data = spark.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     // Prepare training and test data.
@@ -75,7 +70,8 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
       .setEstimator(lr)
       .setEvaluator(new RegressionEvaluator())
       .setEstimatorParamMaps(paramGrid)
-      .setTrainRatio(0.8);  // 80% for training and the remaining 20% for validation
+      .setTrainRatio(0.8)  // 80% for training and the remaining 20% for validation
+      .setParallelism(2);  // Evaluate up to 2 parameter settings in parallel
 
     // Run train validation split, and choose the best set of parameters.
     TrainValidationSplitModel model = trainValidationSplit.fit(training);
@@ -87,6 +83,6 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
       .show();
     // $example off$
 
-    sc.stop();
+    spark.stop();
   }
 }

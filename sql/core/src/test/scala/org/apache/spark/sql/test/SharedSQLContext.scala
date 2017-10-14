@@ -17,37 +17,56 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import scala.concurrent.duration._
 
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.concurrent.Eventually
+
+import org.apache.spark.{DebugFilesystem, SparkConf}
+import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
- * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
+ * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils with BeforeAndAfterEach with Eventually {
 
-  protected val sparkConf = new SparkConf()
+  protected def sparkConf = {
+    new SparkConf()
+      .set("spark.hadoop.fs.file.impl", classOf[DebugFilesystem].getName)
+      .set("spark.unsafe.exceptionOnMemoryLeak", "true")
+      .set(SQLConf.CODEGEN_FALLBACK.key, "false")
+  }
 
   /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
+   * The [[TestSparkSession]] to use for all tests in this suite.
    *
    * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
    * mode with the default test configurations.
    */
-  private var _ctx: TestSQLContext = null
+  private var _spark: TestSparkSession = null
+
+  /**
+   * The [[TestSparkSession]] to use for all tests in this suite.
+   */
+  protected implicit def spark: SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected implicit def sqlContext: SQLContext = _ctx
+  protected implicit def sqlContext: SQLContext = _spark.sqlContext
+
+  protected def createSparkSession: TestSparkSession = {
+    new TestSparkSession(sparkConf)
+  }
 
   /**
-   * Initialize the [[TestSQLContext]].
+   * Initialize the [[TestSparkSession]].
    */
   protected override def beforeAll(): Unit = {
-    SQLContext.clearSqlListener()
-    if (_ctx == null) {
-      _ctx = new TestSQLContext(sparkConf)
+    SparkSession.sqlListener.set(null)
+    if (_spark == null) {
+      _spark = createSparkSession
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -57,13 +76,27 @@ trait SharedSQLContext extends SQLTestUtils {
    * Stop the underlying [[org.apache.spark.SparkContext]], if any.
    */
   protected override def afterAll(): Unit = {
-    try {
-      if (_ctx != null) {
-        _ctx.sparkContext.stop()
-        _ctx = null
-      }
-    } finally {
-      super.afterAll()
+    super.afterAll()
+    if (_spark != null) {
+      _spark.sessionState.catalog.reset()
+      _spark.stop()
+      _spark = null
+    }
+  }
+
+  protected override def beforeEach(): Unit = {
+    super.beforeEach()
+    DebugFilesystem.clearOpenStreams()
+  }
+
+  protected override def afterEach(): Unit = {
+    super.afterEach()
+    // Clear all persistent datasets after each test
+    spark.sharedState.cacheManager.clearCache()
+    // files can be closed from other threads, so wait a bit
+    // normally this doesn't take more than 1s
+    eventually(timeout(10.seconds)) {
+      DebugFilesystem.assertNoOpenStreams()
     }
   }
 }

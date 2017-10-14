@@ -17,12 +17,19 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
+import scala.language.existentials
+
+import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.expressions.{Ascending, SortOrder}
+import org.apache.spark.sql.execution.SortExec
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.sql.types.StructType
 
 class JoinSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
@@ -30,14 +37,14 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   def statisticSizeInByte(df: DataFrame): BigInt = {
-    df.queryExecution.optimizedPlan.statistics.sizeInBytes
+    df.queryExecution.optimizedPlan.stats.sizeInBytes
   }
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = sqlContext.sessionState.planner.JoinSelection(join)
+    val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -60,9 +67,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("join operator selection") {
-    sqlContext.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
 
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[SortMergeJoinExec]),
@@ -112,7 +120,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 //  }
 
   test("broadcasted hash join operator selection") {
-    sqlContext.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     Seq(
       ("SELECT * FROM testData join testData2 ON key = a",
@@ -122,11 +130,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData join testData2 ON key = a where key = 2",
         classOf[BroadcastHashJoinExec])
     ).foreach(assertJoin)
-    sql("UNCACHE TABLE testData")
   }
 
   test("broadcasted hash outer join operator selection") {
-    sqlContext.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     sql("CACHE TABLE testData2")
     Seq(
@@ -137,14 +144,13 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[BroadcastHashJoinExec])
     ).foreach(assertJoin)
-    sql("UNCACHE TABLE testData")
   }
 
   test("multiple-key equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = sqlContext.sessionState.planner.JoinSelection(join)
+    val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
@@ -194,6 +200,14 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       Nil)
   }
 
+  test("SPARK-22141: Propagate empty relation before checking Cartesian products") {
+    Seq("inner", "left", "right", "left_outer", "right_outer", "full_outer").foreach { joinType =>
+      val x = testData2.where($"a" === 2 && !($"a" === 2)).as("x")
+      val y = testData2.where($"a" === 1 && !($"a" === 1)).as("y")
+      checkAnswer(x.join(y, Seq.empty, joinType), Nil)
+    }
+  }
+
   test("big inner join, 4 matches per row") {
     val bigData = testData.union(testData).union(testData).union(testData)
     val bigDataX = bigData.as("x")
@@ -204,13 +218,30 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  test("cartisian product join") {
-    checkAnswer(
-      testData3.join(testData3),
-      Row(1, null, 1, null) ::
-        Row(1, null, 2, 2) ::
-        Row(2, 2, 1, null) ::
-        Row(2, 2, 2, 2) :: Nil)
+  test("cartesian product join") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        testData3.join(testData3),
+        Row(1, null, 1, null) ::
+          Row(1, null, 2, 2) ::
+          Row(2, 2, 1, null) ::
+          Row(2, 2, 2, 2) :: Nil)
+      checkAnswer(
+        testData3.as("x").join(testData3.as("y"), $"x.a" > $"y.a"),
+        Row(2, 2, 1, null) :: Nil)
+    }
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val e = intercept[Exception] {
+        checkAnswer(
+          testData3.join(testData3),
+          Row(1, null, 1, null) ::
+            Row(1, null, 2, 2) ::
+            Row(2, 2, 1, null) ::
+            Row(2, 2, 2, 2) :: Nil)
+      }
+      assert(e.getMessage.contains("Detected cartesian product for INNER join " +
+        "between logical plans"))
+    }
   }
 
   test("left outer join") {
@@ -344,11 +375,11 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("`left`")
-    upperCaseData.where('N >= 3).registerTempTable("`right`")
+    upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
+    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
 
-    val left = UnresolvedRelation(TableIdentifier("left"), None)
-    val right = UnresolvedRelation(TableIdentifier("right"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"))
+    val right = UnresolvedRelation(TableIdentifier("right"))
 
     checkAnswer(
       left.join(right, $"left.N" === $"right.N", "full"),
@@ -435,10 +466,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("broadcasted existence join operator selection") {
-    sqlContext.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[BroadcastHashJoinExec]),
@@ -455,23 +486,23 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       ).foreach(assertJoin)
     }
 
-    sql("UNCACHE TABLE testData")
   }
 
   test("cross join with broadcast") {
     sql("CACHE TABLE testData")
 
-    val sizeInByteOfTestData = statisticSizeInByte(sqlContext.table("testData"))
+    val sizeInByteOfTestData = statisticSizeInByte(spark.table("testData"))
 
     // we set the threshold is greater than statistic of the cached table testData
     withSQLConf(
-      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString()) {
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString(),
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
 
-      assert(statisticSizeInByte(sqlContext.table("testData2")) >
-        sqlContext.conf.autoBroadcastJoinThreshold)
+      assert(statisticSizeInByte(spark.table("testData2")) >
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
-      assert(statisticSizeInByte(sqlContext.table("testData")) <
-        sqlContext.conf.autoBroadcastJoinThreshold)
+      assert(statisticSizeInByte(spark.table("testData")) <
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
 
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
@@ -543,7 +574,6 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row("2", 3, 2) :: Nil)
     }
 
-    sql("UNCACHE TABLE testData")
   }
 
   test("left semi join") {
@@ -555,5 +585,276 @@ class JoinSuite extends QueryTest with SharedSQLContext {
         Row(2, 2) ::
         Row(3, 1) ::
         Row(3, 2) :: Nil)
+  }
+
+  test("cross join detection") {
+    testData.createOrReplaceTempView("A")
+    testData.createOrReplaceTempView("B")
+    testData2.createOrReplaceTempView("C")
+    testData3.createOrReplaceTempView("D")
+    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
+    val cartesianQueries = Seq(
+      /** The following should error out since there is no explicit cross join */
+      "SELECT * FROM testData inner join testData2",
+      "SELECT * FROM testData left outer join testData2",
+      "SELECT * FROM testData right outer join testData2",
+      "SELECT * FROM testData full outer join testData2",
+      "SELECT * FROM testData, testData2",
+      "SELECT * FROM testData, testData2 where testData.key = 1 and testData2.a = 22",
+      /** The following should fail because after reordering there are cartesian products */
+      "select * from (A join B on (A.key = B.key)) join D on (A.key=D.a) join C",
+      "select * from ((A join B on (A.key = B.key)) join C) join D on (A.key = D.a)",
+      /** Cartesian product involving C, which is not involved in a CROSS join */
+      "select * from ((A join B on (A.key = B.key)) cross join D) join C on (A.key = D.a)");
+
+     def checkCartesianDetection(query: String): Unit = {
+      val e = intercept[Exception] {
+        checkAnswer(sql(query), Nil);
+      }
+      assert(e.getMessage.contains("Detected cartesian product"))
+    }
+
+    cartesianQueries.foreach(checkCartesianDetection)
+
+    // Check that left_semi, left_anti, existence joins without conditions do not throw
+    // an exception if cross joins are disabled
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      checkAnswer(
+        sql("SELECT * FROM testData3 LEFT SEMI JOIN testData2"),
+        Row(1, null) :: Row (2, 2) :: Nil)
+      checkAnswer(
+        sql("SELECT * FROM testData3 LEFT ANTI JOIN testData2"),
+        Nil)
+      checkAnswer(
+        sql(
+          """
+            |SELECT a FROM testData3
+            |WHERE
+            |  EXISTS (SELECT * FROM testData)
+            |OR
+            |  EXISTS (SELECT * FROM testData2)""".stripMargin),
+        Row(1) :: Row(2) :: Nil)
+      checkAnswer(
+        sql(
+          """
+            |SELECT key FROM testData
+            |WHERE
+            |  key IN (SELECT a FROM testData2)
+            |OR
+            |  key IN (SELECT a FROM testData3)""".stripMargin),
+        Row(1) :: Row(2) :: Row(3) :: Nil)
+    }
+  }
+
+  test("test SortMergeJoin (without spill)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> Int.MaxValue.toString) {
+
+      assertNotSpilled(sparkContext, "inner join") {
+        checkAnswer(
+          sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
+          Row(2, "2", 2, 1) :: Row(2, "2", 2, 2) :: Nil
+        )
+      }
+
+      val expected = new ListBuffer[Row]()
+      expected.append(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2)
+      )
+      for (i <- 4 to 100) {
+        expected.append(Row(i, i.toString, null, null))
+      }
+
+      assertNotSpilled(sparkContext, "left outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData big
+              |LEFT OUTER JOIN
+              |  testData2 small
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+
+      assertNotSpilled(sparkContext, "right outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |RIGHT OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+    }
+  }
+
+  test("test SortMergeJoin (with spill)") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1",
+      "spark.sql.sortMergeJoinExec.buffer.in.memory.threshold" -> "0",
+      "spark.sql.sortMergeJoinExec.buffer.spill.threshold" -> "1") {
+
+      assertSpilled(sparkContext, "inner join") {
+        checkAnswer(
+          sql("SELECT * FROM testData JOIN testData2 ON key = a where key = 2"),
+          Row(2, "2", 2, 1) :: Row(2, "2", 2, 2) :: Nil
+        )
+      }
+
+      val expected = new ListBuffer[Row]()
+      expected.append(
+        Row(1, "1", 1, 1), Row(1, "1", 1, 2),
+        Row(2, "2", 2, 1), Row(2, "2", 2, 2),
+        Row(3, "3", 3, 1), Row(3, "3", 3, 2)
+      )
+      for (i <- 4 to 100) {
+        expected.append(Row(i, i.toString, null, null))
+      }
+
+      assertSpilled(sparkContext, "left outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData big
+              |LEFT OUTER JOIN
+              |  testData2 small
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+
+      assertSpilled(sparkContext, "right outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |RIGHT OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+
+      // FULL OUTER JOIN still does not use [[ExternalAppendOnlyUnsafeRowArray]]
+      // so should not cause any spill
+      assertNotSpilled(sparkContext, "full outer join") {
+        checkAnswer(
+          sql(
+            """
+              |SELECT
+              |  big.key, big.value, small.a, small.b
+              |FROM
+              |  testData2 small
+              |FULL OUTER JOIN
+              |  testData big
+              |ON
+              |  big.key = small.a
+            """.stripMargin),
+          expected
+        )
+      }
+    }
+  }
+
+  test("outer broadcast hash join should not throw NPE") {
+    withTempView("v1", "v2") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+        Seq(2 -> 2).toDF("x", "y").createTempView("v1")
+
+        spark.createDataFrame(
+          Seq(Row(1, "a")).asJava,
+          new StructType().add("i", "int", nullable = false).add("j", "string", nullable = false)
+        ).createTempView("v2")
+
+        checkAnswer(
+          sql("select x, y, i, j from v1 left join v2 on x = i and y < length(j)"),
+          Row(2, 2, null, null)
+        )
+      }
+    }
+  }
+
+  test("test SortMergeJoin output ordering") {
+    val joinQueries = Seq(
+      "SELECT * FROM testData JOIN testData2 ON key = a",
+      "SELECT * FROM testData t1 JOIN " +
+        "testData2 t2 ON t1.key = t2.a JOIN testData3 t3 ON t2.a = t3.a",
+      "SELECT * FROM testData t1 JOIN " +
+        "testData2 t2 ON t1.key = t2.a JOIN " +
+        "testData3 t3 ON t2.a = t3.a JOIN " +
+        "testData t4 ON t1.key = t4.key")
+
+    def assertJoinOrdering(sqlString: String): Unit = {
+      val df = sql(sqlString)
+      val physical = df.queryExecution.sparkPlan
+      val physicalJoins = physical.collect {
+        case j: SortMergeJoinExec => j
+      }
+      val executed = df.queryExecution.executedPlan
+      val executedJoins = executed.collect {
+        case j: SortMergeJoinExec => j
+      }
+      // This only applies to the above tested queries, in which a child SortMergeJoin always
+      // contains the SortOrder required by its parent SortMergeJoin. Thus, SortExec should never
+      // appear as parent of SortMergeJoin.
+      executed.foreach {
+        case s: SortExec => s.foreach {
+          case j: SortMergeJoinExec => fail(
+            s"No extra sort should be added since $j already satisfies the required ordering"
+          )
+          case _ =>
+        }
+        case _ =>
+      }
+      val joinPairs = physicalJoins.zip(executedJoins)
+      val numOfJoins = sqlString.split(" ").count(_.toUpperCase == "JOIN")
+      assert(joinPairs.size == numOfJoins)
+
+      joinPairs.foreach {
+        case(join1, join2) =>
+          val leftKeys = join1.leftKeys
+          val rightKeys = join1.rightKeys
+          val outputOrderingPhysical = join1.outputOrdering
+          val outputOrderingExecuted = join2.outputOrdering
+
+          // outputOrdering should always contain join keys
+          assert(
+            SortOrder.orderingSatisfies(
+              outputOrderingPhysical, leftKeys.map(SortOrder(_, Ascending))))
+          assert(
+            SortOrder.orderingSatisfies(
+              outputOrderingPhysical, rightKeys.map(SortOrder(_, Ascending))))
+          // outputOrdering should be consistent between physical plan and executed plan
+          assert(outputOrderingPhysical == outputOrderingExecuted,
+            s"Operator $join1 did not have the same output ordering in the physical plan as in " +
+            s"the executed plan.")
+      }
+    }
+
+    joinQueries.foreach(assertJoinOrdering)
   }
 }

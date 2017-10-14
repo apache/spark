@@ -18,21 +18,13 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SparkSession, SQLContext}
-import org.apache.spark.sql.internal.{SessionState, SQLConf}
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.internal.{SessionState, SessionStateBuilder, SQLConf, WithTestConf}
 
 /**
- * A special [[SQLContext]] prepared for testing.
+ * A special `SparkSession` prepared for testing.
  */
-private[sql] class TestSQLContext(
-    @transient override val sparkSession: SparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) { self =>
-
-  def this(sc: SparkContext) {
-    this(new TestSparkSession(sc), true)
-  }
-
+private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
   def this(sparkConf: SparkConf) {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
@@ -42,34 +34,19 @@ private[sql] class TestSQLContext(
     this(new SparkConf)
   }
 
+  @transient
+  override lazy val sessionState: SessionState = {
+    new TestSQLSessionStateBuilder(this, None).build()
+  }
+
   // Needed for Java tests
   def loadTestData(): Unit = {
     testData.loadTestData()
   }
 
   private object testData extends SQLTestData {
-    protected override def sqlContext: SQLContext = self
+    protected override def spark: SparkSession = self
   }
-
-}
-
-
-private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
-
-  @transient
-  protected[sql] override lazy val sessionState: SessionState = new SessionState(self) {
-    override lazy val conf: SQLConf = {
-      new SQLConf {
-        clear()
-        override def clear(): Unit = {
-          super.clear()
-          // Make sure we start with the default test configs even after clear
-          TestSQLContext.overrideConfs.foreach { case (key, value) => setConfString(key, value) }
-        }
-      }
-    }
-  }
-
 }
 
 
@@ -82,4 +59,12 @@ private[sql] object TestSQLContext {
     Map(
       // Fewer shuffle partitions to speed up testing.
       SQLConf.SHUFFLE_PARTITIONS.key -> "5")
+}
+
+private[sql] class TestSQLSessionStateBuilder(
+    session: SparkSession,
+    state: Option[SessionState])
+  extends SessionStateBuilder(session, state) with WithTestConf {
+  override def overrideConfs: Map[String, String] = TestSQLContext.overrideConfs
+  override def newBuilder: NewBuilder = new TestSQLSessionStateBuilder(_, _)
 }

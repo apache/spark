@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import scala.annotation.implicitNotFound
 import scala.reflect.ClassTag
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, InterfaceStability}
 import org.apache.spark.sql.types._
 
 
@@ -29,13 +29,13 @@ import org.apache.spark.sql.types._
  * Used to convert a JVM object of type `T` to and from the internal Spark SQL representation.
  *
  * == Scala ==
- * Encoders are generally created automatically through implicits from a `SQLContext`, or can be
+ * Encoders are generally created automatically through implicits from a `SparkSession`, or can be
  * explicitly created by calling static methods on [[Encoders]].
  *
  * {{{
- *   import sqlContext.implicits._
+ *   import spark.implicits._
  *
- *   val ds = Seq(1, 2, 3).toDS() // implicitly provided (sqlContext.implicits.newIntEncoder)
+ *   val ds = Seq(1, 2, 3).toDS() // implicitly provided (spark.implicits.newIntEncoder)
  * }}}
  *
  * == Java ==
@@ -67,15 +67,18 @@ import org.apache.spark.sql.types._
  * @since 1.6.0
  */
 @Experimental
+@InterfaceStability.Evolving
 @implicitNotFound("Unable to find encoder for type stored in a Dataset.  Primitive types " +
   "(Int, String, etc) and Product types (case classes) are supported by importing " +
-  "sqlContext.implicits._  Support for serializing other types will be added in future " +
+  "spark.implicits._  Support for serializing other types will be added in future " +
   "releases.")
 trait Encoder[T] extends Serializable {
 
   /** Returns the schema of encoding this type of object as a Row. */
   def schema: StructType
 
-  /** A ClassTag that can be used to construct and Array to contain a collection of `T`. */
+  /**
+   * A ClassTag that can be used to construct an Array to contain a collection of `T`.
+   */
   def clsTag: ClassTag[T]
 }

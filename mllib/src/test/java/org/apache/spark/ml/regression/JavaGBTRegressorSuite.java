@@ -17,37 +17,21 @@
 
 package org.apache.spark.ml.regression;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.classification.LogisticRegressionSuite;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
-import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
 
-public class JavaGBTRegressorSuite implements Serializable {
-
-  private transient JavaSparkContext sc;
-
-  @Before
-  public void setUp() {
-    sc = new JavaSparkContext("local", "JavaGBTRegressorSuite");
-  }
-
-  @After
-  public void tearDown() {
-    sc.stop();
-    sc = null;
-  }
+public class JavaGBTRegressorSuite extends SharedSparkSession {
 
   @Test
   public void runDT() {
@@ -55,7 +39,7 @@ public class JavaGBTRegressorSuite implements Serializable {
     double A = 2.0;
     double B = -1.5;
 
-    JavaRDD<LabeledPoint> data = sc.parallelize(
+    JavaRDD<LabeledPoint> data = jsc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
@@ -73,7 +57,7 @@ public class JavaGBTRegressorSuite implements Serializable {
       .setMaxIter(3)
       .setStepSize(0.1)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String lossType: GBTRegressor.supportedLossTypes()) {
+    for (String lossType : GBTRegressor.supportedLossTypes()) {
       rf.setLossType(lossType);
     }
     GBTRegressionModel model = rf.fit(dataFrame);

@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.StaticSQLConf.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -56,16 +55,48 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
               "determining the number of reducers is not supported."
           throw new IllegalArgumentException(msg)
         } else {
-          sparkSession.setConf(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
           Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
         }
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((SQLConf.Replaced.MAPREDUCE_JOB_REDUCES, Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        logWarning(
+          s"Property ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} is Hadoop's property, " +
+            s"automatically converted to ${SQLConf.SHUFFLE_PARTITIONS.key} instead.")
+        if (value.toInt < 1) {
+          val msg =
+            s"Setting negative ${SQLConf.Replaced.MAPREDUCE_JOB_REDUCES} for automatically " +
+              "determining the number of reducers is not supported."
+          throw new IllegalArgumentException(msg)
+        } else {
+          sparkSession.conf.set(SQLConf.SHUFFLE_PARTITIONS.key, value)
+          Seq(Row(SQLConf.SHUFFLE_PARTITIONS.key, value))
+        }
+      }
+      (keyValueOutput, runFunc)
+
+    case Some((key @ SetCommand.VariableName(name), Some(value))) =>
+      val runFunc = (sparkSession: SparkSession) => {
+        sparkSession.conf.set(name, value)
+        Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
 
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.setConf(key, value)
+        if (sparkSession.conf.get(CATALOG_IMPLEMENTATION.key).equals("hive") &&
+            key.startsWith("hive.")) {
+          logWarning(s"'SET $key=$value' might not work, since Spark doesn't support changing " +
+            "the Hive config dynamically. Please passing the Hive-specific config by adding the " +
+            s"prefix spark.hadoop (e.g., spark.hadoop.$key) when starting a Spark application. " +
+            "For details, see the link: https://spark.apache.org/docs/latest/configuration.html#" +
+            "dynamically-loading-spark-properties.")
+        }
+        sparkSession.conf.set(key, value)
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
@@ -74,7 +105,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries all key-value pairs that are set in the SQLConf of the sparkSession.
     case None =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.getAllConfs.map { case (k, v) => Row(k, v) }.toSeq
+        sparkSession.conf.getAll.toSeq.sorted.map { case (k, v) => Row(k, v) }
       }
       (keyValueOutput, runFunc)
 
@@ -82,13 +113,14 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // SQLConf of the sparkSession.
     case Some(("-v", None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.sessionState.conf.getAllDefinedConfs.map { case (key, defaultValue, doc) =>
-          Row(key, defaultValue, doc)
+        sparkSession.sessionState.conf.getAllDefinedConfs.sorted.map {
+          case (key, defaultValue, doc) =>
+            Row(key, Option(defaultValue).getOrElse("<undefined>"), doc)
         }
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
-          StructField("default", StringType, nullable = false) ::
+          StructField("value", StringType, nullable = false) ::
           StructField("meaning", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 
@@ -107,10 +139,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Queries a single property.
     case Some((key, None)) =>
       val runFunc = (sparkSession: SparkSession) => {
-        val value =
-          try sparkSession.getConf(key) catch {
-            case _: NoSuchElementException => "<undefined>"
-          }
+        val value = sparkSession.conf.getOption(key).getOrElse("<undefined>")
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)
@@ -120,4 +149,22 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 
   override def run(sparkSession: SparkSession): Seq[Row] = runFunc(sparkSession)
 
+}
+
+object SetCommand {
+  val VariableName = """hivevar:([^=]+)""".r
+}
+
+/**
+ * This command is for resetting SQLConf to the default values. Command that runs
+ * {{{
+ *   reset;
+ * }}}
+ */
+case object ResetCommand extends RunnableCommand with Logging {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sessionState.conf.clear()
+    Seq.empty[Row]
+  }
 }

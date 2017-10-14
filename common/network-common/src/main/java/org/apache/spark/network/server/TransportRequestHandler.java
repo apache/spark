@@ -17,12 +17,12 @@
 
 package org.apache.spark.network.server;
 
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
 import com.google.common.base.Throwables;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +42,7 @@ import org.apache.spark.network.protocol.RpcResponse;
 import org.apache.spark.network.protocol.StreamFailure;
 import org.apache.spark.network.protocol.StreamRequest;
 import org.apache.spark.network.protocol.StreamResponse;
-import org.apache.spark.network.util.NettyUtils;
+import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 
 /**
  * A handler that processes requests from clients and writes chunk data back. Each handler is
@@ -52,7 +52,7 @@ import org.apache.spark.network.util.NettyUtils;
  * The messages should have been processed by the pipeline setup by {@link TransportServer}.
  */
 public class TransportRequestHandler extends MessageHandler<RequestMessage> {
-  private final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportRequestHandler.class);
 
   /** The Netty channel that this handler is associated with. */
   private final Channel channel;
@@ -66,14 +66,19 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** Returns each chunk part of a stream. */
   private final StreamManager streamManager;
 
+  /** The max number of chunks being transferred and not finished yet. */
+  private final long maxChunksBeingTransferred;
+
   public TransportRequestHandler(
       Channel channel,
       TransportClient reverseClient,
-      RpcHandler rpcHandler) {
+      RpcHandler rpcHandler,
+      Long maxChunksBeingTransferred) {
     this.channel = channel;
     this.reverseClient = reverseClient;
     this.rpcHandler = rpcHandler;
     this.streamManager = rpcHandler.getStreamManager();
+    this.maxChunksBeingTransferred = maxChunksBeingTransferred;
   }
 
   @Override
@@ -114,39 +119,63 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   private void processFetchRequest(final ChunkFetchRequest req) {
-    final String client = NettyUtils.getRemoteAddress(channel);
-
-    logger.trace("Received req from {} to fetch block {}", client, req.streamChunkId);
-
+    if (logger.isTraceEnabled()) {
+      logger.trace("Received req from {} to fetch block {}", getRemoteAddress(channel),
+        req.streamChunkId);
+    }
+    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
+    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
+      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
+        chunksBeingTransferred, maxChunksBeingTransferred);
+      channel.close();
+      return;
+    }
     ManagedBuffer buf;
     try {
       streamManager.checkAuthorization(reverseClient, req.streamChunkId.streamId);
       streamManager.registerChannel(channel, req.streamChunkId.streamId);
       buf = streamManager.getChunk(req.streamChunkId.streamId, req.streamChunkId.chunkIndex);
     } catch (Exception e) {
-      logger.error(String.format(
-        "Error opening block %s for request from %s", req.streamChunkId, client), e);
+      logger.error(String.format("Error opening block %s for request from %s",
+        req.streamChunkId, getRemoteAddress(channel)), e);
       respond(new ChunkFetchFailure(req.streamChunkId, Throwables.getStackTraceAsString(e)));
       return;
     }
 
-    respond(new ChunkFetchSuccess(req.streamChunkId, buf));
+    streamManager.chunkBeingSent(req.streamChunkId.streamId);
+    respond(new ChunkFetchSuccess(req.streamChunkId, buf)).addListener(future -> {
+      streamManager.chunkSent(req.streamChunkId.streamId);
+    });
   }
 
   private void processStreamRequest(final StreamRequest req) {
-    final String client = NettyUtils.getRemoteAddress(channel);
+    if (logger.isTraceEnabled()) {
+      logger.trace("Received req from {} to fetch stream {}", getRemoteAddress(channel),
+        req.streamId);
+    }
+
+    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
+    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
+      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
+        chunksBeingTransferred, maxChunksBeingTransferred);
+      channel.close();
+      return;
+    }
     ManagedBuffer buf;
     try {
       buf = streamManager.openStream(req.streamId);
     } catch (Exception e) {
       logger.error(String.format(
-        "Error opening stream %s for request from %s", req.streamId, client), e);
+        "Error opening stream %s for request from %s", req.streamId, getRemoteAddress(channel)), e);
       respond(new StreamFailure(req.streamId, Throwables.getStackTraceAsString(e)));
       return;
     }
 
     if (buf != null) {
-      respond(new StreamResponse(req.streamId, buf.size(), buf));
+      streamManager.streamBeingSent(req.streamId);
+      respond(new StreamResponse(req.streamId, buf.size(), buf)).addListener(future -> {
+        streamManager.streamSent(req.streamId);
+      });
     } else {
       respond(new StreamFailure(req.streamId, String.format(
         "Stream '%s' was not found.", req.streamId)));
@@ -188,21 +217,16 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
    * Responds to a single message with some Encodable object. If a failure occurs while sending,
    * it will be logged and the channel closed.
    */
-  private void respond(final Encodable result) {
-    final String remoteAddress = channel.remoteAddress().toString();
-    channel.writeAndFlush(result).addListener(
-      new ChannelFutureListener() {
-        @Override
-        public void operationComplete(ChannelFuture future) throws Exception {
-          if (future.isSuccess()) {
-            logger.trace(String.format("Sent result %s to client %s", result, remoteAddress));
-          } else {
-            logger.error(String.format("Error sending result %s to %s; closing connection",
-              result, remoteAddress), future.cause());
-            channel.close();
-          }
-        }
+  private ChannelFuture respond(Encodable result) {
+    SocketAddress remoteAddress = channel.remoteAddress();
+    return channel.writeAndFlush(result).addListener(future -> {
+      if (future.isSuccess()) {
+        logger.trace("Sent result {} to client {}", result, remoteAddress);
+      } else {
+        logger.error(String.format("Error sending result %s to %s; closing connection",
+          result, remoteAddress), future.cause());
+        channel.close();
       }
-    );
+    });
   }
 }

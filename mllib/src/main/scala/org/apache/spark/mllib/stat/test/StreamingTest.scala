@@ -19,7 +19,7 @@ package org.apache.spark.mllib.stat.test
 
 import scala.beans.BeanInfo
 
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.api.java.JavaDStream
 import org.apache.spark.streaming.dstream.DStream
@@ -42,20 +42,19 @@ case class BinarySample @Since("1.6.0") (
 }
 
 /**
- * :: Experimental ::
  * Performs online 2-sample significance testing for a stream of (Boolean, Double) pairs. The
  * Boolean identifies which sample each observation comes from, and the Double is the numeric value
  * of the observation.
  *
  * To address novelty affects, the `peacePeriod` specifies a set number of initial
- * [[org.apache.spark.rdd.RDD]] batches of the [[DStream]] to be dropped from significance testing.
+ * [[org.apache.spark.rdd.RDD]] batches of the `DStream` to be dropped from significance testing.
  *
  * The `windowSize` sets the number of batches each significance test is to be performed over. The
  * window is sliding with a stride length of 1 batch. Setting windowSize to 0 will perform
  * cumulative processing, using all batches seen so far.
  *
  * Different tests may be used for assessing statistical significance depending on assumptions
- * satisfied by data. For more details, see [[StreamingTestMethod]]. The `testMethod` specifies
+ * satisfied by data. For more details, see `StreamingTestMethod`. The `testMethod` specifies
  * which test will be used.
  *
  * Use a builder pattern to construct a streaming test in an application, for example:
@@ -67,7 +66,6 @@ case class BinarySample @Since("1.6.0") (
  *     .registerStream(DStream)
  * }}}
  */
-@Experimental
 @Since("1.6.0")
 class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
   private var peacePeriod: Int = 0
@@ -99,7 +97,7 @@ class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
   }
 
   /**
-   * Register a [[DStream]] of values for significance testing.
+   * Register a `DStream` of values for significance testing.
    *
    * @param data stream of BinarySample(key,value) pairs where the key denotes group membership
    *             (true = experiment, false = control) and the value is the numerical metric to
@@ -116,7 +114,7 @@ class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
   }
 
   /**
-   * Register a [[JavaDStream]] of values for significance testing.
+   * Register a `JavaDStream` of values for significance testing.
    *
    * @param data stream of BinarySample(isExperiment,value) pairs where the isExperiment denotes
    *             group (true = experiment, false = control) and the value is the numerical metric
@@ -135,7 +133,7 @@ class StreamingTest @Since("1.6.0") () extends Logging with Serializable {
       if (time.milliseconds > data.slideDuration.milliseconds * peacePeriod) {
         rdd
       } else {
-        data.context.sparkContext.parallelize(Seq())
+        data.context.sparkContext.parallelize(Seq.empty)
       }
     }
   }

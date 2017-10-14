@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import ChiSqSelector
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="ChiSqSelectorExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("ChiSqSelectorExample")\
+        .getOrCreate()
 
     # $example on$
-    df = sqlContext.createDataFrame([
+    df = spark.createDataFrame([
         (7, Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0,),
         (8, Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0,),
         (9, Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0,)], ["id", "features", "clicked"])
@@ -38,7 +39,9 @@ if __name__ == "__main__":
                              outputCol="selectedFeatures", labelCol="clicked")
 
     result = selector.fit(df).transform(df)
+
+    print("ChiSqSelector output with top %d features selected" % selector.getNumTopFeatures())
     result.show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

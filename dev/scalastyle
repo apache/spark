@@ -22,7 +22,10 @@
 ERRORS=$(echo -e "q\n" \
     | build/sbt \
         -Pkinesis-asl \
+        -Pmesos \
+        -Pkafka-0-8 \
         -Pyarn \
+        -Pflume \
         -Phive \
         -Phive-thriftserver \
         scalastyle test:scalastyle \

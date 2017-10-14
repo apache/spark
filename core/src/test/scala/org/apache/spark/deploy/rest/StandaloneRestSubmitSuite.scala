@@ -11,7 +11,7 @@
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
+ * See the License for the specific language governing permissions and
  * limitations under the License.
  */
 
@@ -408,7 +408,7 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   /**
    * Start a [[StandaloneRestServer]] that communicates with the given endpoint.
-   * If `faulty` is true, start an [[FaultyStandaloneRestServer]] instead.
+   * If `faulty` is true, start a [[FaultyStandaloneRestServer]] instead.
    * Return the master URL that corresponds to the address of this server.
    */
   private def startServer(

@@ -24,10 +24,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, Partitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{BroadcastDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.util.TaskCompletionListener
 
 /**
  * Performs an inner hash join of two child relations.  When the output RDD of this operator is
@@ -45,10 +46,9 @@ case class BroadcastHashJoinExec(
     right: SparkPlan)
   extends BinaryExecNode with HashJoin with CodegenSupport {
 
-  override private[sql] lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
-
-  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "avgHashProbe" -> SQLMetrics.createAverageMetric(sparkContext, "avg hash probe"))
 
   override def requiredChildDistribution: Seq[Distribution] = {
     val mode = HashedRelationBroadcastMode(buildKeys)
@@ -62,12 +62,13 @@ case class BroadcastHashJoinExec(
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val avgHashProbe = longMetric("avgHashProbe")
 
     val broadcastRelation = buildPlan.executeBroadcast[HashedRelation]()
     streamedPlan.execute().mapPartitions { streamedIter =>
       val hashed = broadcastRelation.value.asReadOnlyCopy()
       TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
-      join(streamedIter, hashed, numOutputRows)
+      join(streamedIter, hashed, numOutputRows, avgHashProbe)
     }
   }
 
@@ -81,14 +82,32 @@ case class BroadcastHashJoinExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     joinType match {
-      case Inner => codegenInner(ctx, input)
+      case _: InnerLike => codegenInner(ctx, input)
       case LeftOuter | RightOuter => codegenOuter(ctx, input)
       case LeftSemi => codegenSemi(ctx, input)
       case LeftAnti => codegenAnti(ctx, input)
+      case j: ExistenceJoin => codegenExistence(ctx, input)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")
     }
+  }
+
+  /**
+   * Returns the codes used to add a task completion listener to update avg hash probe
+   * at the end of the task.
+   */
+  private def genTaskListener(avgHashProbe: String, relationTerm: String): String = {
+    val listenerClass = classOf[TaskCompletionListener].getName
+    val taskContextClass = classOf[TaskContext].getName
+    s"""
+       | $taskContextClass$$.MODULE$$.get().addTaskCompletionListener(new $listenerClass() {
+       |   @Override
+       |   public void onTaskCompletion($taskContextClass context) {
+       |     $avgHashProbe.set($relationTerm.getAverageProbesPerLookup());
+       |   }
+       | });
+     """.stripMargin
   }
 
   /**
@@ -100,10 +119,16 @@ case class BroadcastHashJoinExec(
     val broadcast = ctx.addReferenceObj("broadcast", broadcastRelation)
     val relationTerm = ctx.freshName("relation")
     val clsName = broadcastRelation.value.getClass.getName
+
+    // At the end of the task, we update the avg hash probe.
+    val avgHashProbe = metricTerm(ctx, "avgHashProbe")
+    val addTaskListener = genTaskListener(avgHashProbe, relationTerm)
+
     ctx.addMutableState(clsName, relationTerm,
       s"""
          | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($relationTerm.estimatedSize());
+         | $addTaskListener
        """.stripMargin)
     (broadcastRelation, relationTerm)
   }
@@ -135,7 +160,7 @@ case class BroadcastHashJoinExec(
     ctx.INPUT_ROW = matched
     buildPlan.output.zipWithIndex.map { case (a, i) =>
       val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-      if (joinType == Inner) {
+      if (joinType.isInstanceOf[InnerLike]) {
         ev
       } else {
         // the variables are needed even there is no matched rows
@@ -161,8 +186,7 @@ case class BroadcastHashJoinExec(
    */
   private def getJoinCondition(
       ctx: CodegenContext,
-      input: Seq[ExprCode],
-      anti: Boolean = false): (String, String, Seq[ExprCode]) = {
+      input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val checkCondition = if (condition.isDefined) {
@@ -173,18 +197,12 @@ case class BroadcastHashJoinExec(
       ctx.currentVars = input ++ buildVars
       val ev =
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = if (!anti) {
-        s"${ev.isNull} || !${ev.value}"
-      } else {
-        s"!${ev.isNull} && ${ev.value}"
-      }
+      val skipRow = s"${ev.isNull} || !${ev.value}"
       s"""
          |$eval
          |${ev.code}
-         |if ($skipRow) continue;
+         |if (!($skipRow))
        """.stripMargin
-    } else if (anti) {
-      "continue;"
     } else {
       ""
     }
@@ -210,10 +228,12 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) continue;
-         |$checkCondition
-         |$numOutput.add(1);
-         |${consume(ctx, resultVars)}
+         |if ($matched != null) {
+         |  $checkCondition {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
+         |}
        """.stripMargin
 
     } else {
@@ -225,12 +245,14 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
-         |while ($matches.hasNext()) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |  $checkCondition
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
+         |if ($matches != null) {
+         |  while ($matches.hasNext()) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |    $checkCondition {
+         |      $numOutput.add(1);
+         |      ${consume(ctx, resultVars)}
+         |    }
+         |  }
          |}
        """.stripMargin
     }
@@ -258,8 +280,8 @@ case class BroadcastHashJoinExec(
       s"""
          |boolean $conditionPassed = true;
          |${eval.trim}
-         |${ev.code}
          |if ($matched != null) {
+         |  ${ev.code}
          |  $conditionPassed = !${ev.isNull} && ${ev.value};
          |}
        """.stripMargin
@@ -303,10 +325,11 @@ case class BroadcastHashJoinExec(
          |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
          |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
-         |  if (!$conditionPassed) continue;
-         |  $found = true;
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
+         |  if ($conditionPassed) {
+         |    $found = true;
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
          |}
        """.stripMargin
     }
@@ -326,10 +349,12 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) continue;
-         |$checkCondition
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
+         |if ($matched != null) {
+         |  $checkCondition {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, input)}
+         |  }
+         |}
        """.stripMargin
     } else {
       val matches = ctx.freshName("matches")
@@ -340,16 +365,19 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
-         |boolean $found = false;
-         |while (!$found && $matches.hasNext()) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |  $checkCondition
-         |  $found = true;
+         |if ($matches != null) {
+         |  boolean $found = false;
+         |  while (!$found && $matches.hasNext()) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |    $checkCondition {
+         |      $found = true;
+         |    }
+         |  }
+         |  if ($found) {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, input)}
+         |  }
          |}
-         |if (!$found) continue;
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
        """.stripMargin
     }
   }
@@ -361,11 +389,13 @@ case class BroadcastHashJoinExec(
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val uniqueKeyCodePath = broadcastRelation.value.keyIsUnique
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input, uniqueKeyCodePath)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (uniqueKeyCodePath) {
+      val found = ctx.freshName("found")
       s"""
+         |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
          |// Check if the key has nulls.
@@ -374,17 +404,22 @@ case class BroadcastHashJoinExec(
          |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |  if ($matched != null) {
          |    // Evaluate the condition.
-         |    $checkCondition
+         |    $checkCondition {
+         |      $found = true;
+         |    }
          |  }
          |}
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
        """.stripMargin
     } else {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
       s"""
+         |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
          |// Check if the key has nulls.
@@ -393,17 +428,81 @@ case class BroadcastHashJoinExec(
          |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
          |  if ($matches != null) {
          |    // Evaluate the condition.
-         |    boolean $found = false;
          |    while (!$found && $matches.hasNext()) {
          |      UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |      $checkCondition
-         |      $found = true;
+         |      $checkCondition {
+         |        $found = true;
+         |      }
          |    }
-         |    if ($found) continue;
+         |  }
+         |}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
+       """.stripMargin
+    }
+  }
+
+  /**
+   * Generates the code for existence join.
+   */
+  private def codegenExistence(ctx: CodegenContext, input: Seq[ExprCode]): String = {
+    val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val existsVar = ctx.freshName("exists")
+
+    val matched = ctx.freshName("matched")
+    val buildVars = genBuildSideVars(ctx, matched)
+    val checkCondition = if (condition.isDefined) {
+      val expr = condition.get
+      // evaluate the variables from build side that used by condition
+      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
+      // filter the output via condition
+      ctx.currentVars = input ++ buildVars
+      val ev =
+        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
+      s"""
+         |$eval
+         |${ev.code}
+         |$existsVar = !${ev.isNull} && ${ev.value};
+       """.stripMargin
+    } else {
+      s"$existsVar = true;"
+    }
+
+    val resultVar = input ++ Seq(ExprCode("", "false", existsVar))
+    if (broadcastRelation.value.keyIsUnique) {
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// find matches from HashedRelation
+         |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
+         |boolean $existsVar = false;
+         |if ($matched != null) {
+         |  $checkCondition
+         |}
+         |$numOutput.add(1);
+         |${consume(ctx, resultVar)}
+       """.stripMargin
+    } else {
+      val matches = ctx.freshName("matches")
+      val iteratorCls = classOf[Iterator[UnsafeRow]].getName
+      s"""
+         |// generate join key for stream side
+         |${keyEv.code}
+         |// find matches from HashRelation
+         |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
+         |boolean $existsVar = false;
+         |if ($matches != null) {
+         |  while (!$existsVar && $matches.hasNext()) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |    $checkCondition
          |  }
          |}
          |$numOutput.add(1);
-         |${consume(ctx, input)}
+         |${consume(ctx, resultVar)}
        """.stripMargin
     }
   }

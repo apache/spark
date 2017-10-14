@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 // ==============================================================================================
 // NOTE: new task end reasons MUST be accompanied with serialization logic in util.JsonProtocol!
@@ -65,7 +65,7 @@ sealed trait TaskFailedReason extends TaskEndReason {
 
 /**
  * :: DeveloperApi ::
- * A [[org.apache.spark.scheduler.ShuffleMapTask]] that completed successfully earlier, but we
+ * A `org.apache.spark.scheduler.ShuffleMapTask` that completed successfully earlier, but we
  * lost the executor before the stage completed. This means Spark needs to reschedule the task
  * to be re-executed on a different executor.
  */
@@ -92,6 +92,16 @@ case class FetchFailed(
     s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapId=$mapId, reduceId=$reduceId, " +
       s"message=\n$message\n)"
   }
+
+  /**
+   * Fetch failures lead to a different failure handling path: (1) we don't abort the stage after
+   * 4 task failures, instead we immediately go back to the stage which generated the map output,
+   * and regenerate the missing data.  (2) we don't count fetch failures for blacklisting, since
+   * presumably its not the fault of the executor where the task ran, but the executor which
+   * stored the data. This is especially important because we might rack up a bunch of
+   * fetch-failures in rapid succession, on all nodes of the cluster, due to one bad node.
+   */
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**
@@ -118,7 +128,7 @@ case class ExceptionFailure(
     fullStackTrace: String,
     private val exceptionWrapper: Option[ThrowableSerializationWrapper],
     accumUpdates: Seq[AccumulableInfo] = Seq.empty,
-    private[spark] var accums: Seq[NewAccumulator[_, _]] = Nil)
+    private[spark] var accums: Seq[AccumulatorV2[_, _]] = Nil)
   extends TaskFailedReason {
 
   /**
@@ -138,7 +148,7 @@ case class ExceptionFailure(
     this(e, accumUpdates, preserveCause = true)
   }
 
-  private[spark] def withAccums(accums: Seq[NewAccumulator[_, _]]): ExceptionFailure = {
+  private[spark] def withAccums(accums: Seq[AccumulatorV2[_, _]]): ExceptionFailure = {
     this.accums = accums
     this
   }
@@ -202,8 +212,9 @@ case object TaskResultLost extends TaskFailedReason {
  * Task was killed intentionally and needs to be rescheduled.
  */
 @DeveloperApi
-case object TaskKilled extends TaskFailedReason {
-  override def toErrorString: String = "TaskKilled (killed intentionally)"
+case class TaskKilled(reason: String) extends TaskFailedReason {
+  override def toErrorString: String = s"TaskKilled ($reason)"
+  override def countTowardsTaskFailures: Boolean = false
 }
 
 /**

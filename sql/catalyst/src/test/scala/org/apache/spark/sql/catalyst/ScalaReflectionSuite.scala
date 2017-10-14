@@ -17,15 +17,13 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.net.URLClassLoader
 import java.sql.{Date, Timestamp}
 
-import scala.reflect.runtime.universe.typeOf
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, SpecificMutableRow}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Literal, SpecificInternalRow}
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.unsafe.types.UTF8String
 
 case class PrimitiveData(
     intField: Int,
@@ -92,7 +90,7 @@ object TestingUDT {
       .add("c", DoubleType, nullable = false)
 
     override def serialize(n: NestedStruct): Any = {
-      val row = new SpecificMutableRow(sqlType.asInstanceOf[StructType].map(_.dataType))
+      val row = new SpecificInternalRow(sqlType.asInstanceOf[StructType].map(_.dataType))
       row.setInt(0, n.a)
       row.setLong(1, n.b)
       row.setDouble(2, n.c)
@@ -277,39 +275,64 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(anyTypes === Seq(classOf[java.lang.Object], classOf[java.lang.Object]))
   }
 
-  private val dataTypeForComplexData = dataTypeFor[ComplexData]
-  private val typeOfComplexData = typeOf[ComplexData]
+  test("SPARK-15062: Get correct serializer for List[_]") {
+    val list = List(1, 2, 3)
+    val serializer = serializerFor[List[Int]](BoundReference(
+      0, ObjectType(list.getClass), nullable = false))
+    assert(serializer.children.size == 2)
+    assert(serializer.children.head.isInstanceOf[Literal])
+    assert(serializer.children.head.asInstanceOf[Literal].value === UTF8String.fromString("value"))
+    assert(serializer.children.last.isInstanceOf[NewInstance])
+    assert(serializer.children.last.asInstanceOf[NewInstance]
+      .cls.isAssignableFrom(classOf[org.apache.spark.sql.catalyst.util.GenericArrayData]))
+  }
 
-  Seq(
-    ("mirror", () => mirror),
-    ("dataTypeFor", () => dataTypeFor[ComplexData]),
-    ("constructorFor", () => deserializerFor[ComplexData]),
-    ("extractorsFor", {
-      val inputObject = BoundReference(0, dataTypeForComplexData, nullable = false)
-      () => serializerFor[ComplexData](inputObject)
-    }),
-    ("getConstructorParameters(cls)", () => getConstructorParameters(classOf[ComplexData])),
-    ("getConstructorParameterNames", () => getConstructorParameterNames(classOf[ComplexData])),
-    ("getClassFromType", () => getClassFromType(typeOfComplexData)),
-    ("schemaFor", () => schemaFor[ComplexData]),
-    ("localTypeOf", () => localTypeOf[ComplexData]),
-    ("getClassNameFromType", () => getClassNameFromType(typeOfComplexData)),
-    ("getParameterTypes", () => getParameterTypes(() => ())),
-    ("getConstructorParameters(tpe)", () => getClassNameFromType(typeOfComplexData))).foreach {
-      case (name, exec) =>
-        test(s"SPARK-13640: thread safety of ${name}") {
-          (0 until 100).foreach { _ =>
-            val loader = new URLClassLoader(Array.empty, Utils.getContextOrSparkClassLoader)
-            (0 until 10).par.foreach { _ =>
-              val cl = Thread.currentThread.getContextClassLoader
-              try {
-                Thread.currentThread.setContextClassLoader(loader)
-                exec()
-              } finally {
-                Thread.currentThread.setContextClassLoader(cl)
-              }
-            }
-          }
-        }
-    }
+  test("SPARK 16792: Get correct deserializer for List[_]") {
+    val listDeserializer = deserializerFor[List[Int]]
+    assert(listDeserializer.dataType == ObjectType(classOf[List[_]]))
+  }
+
+  test("serialize and deserialize arbitrary sequence types") {
+    import scala.collection.immutable.Queue
+    val queueSerializer = serializerFor[Queue[Int]](BoundReference(
+      0, ObjectType(classOf[Queue[Int]]), nullable = false))
+    assert(queueSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val queueDeserializer = deserializerFor[Queue[Int]]
+    assert(queueDeserializer.dataType == ObjectType(classOf[Queue[_]]))
+
+    import scala.collection.mutable.ArrayBuffer
+    val arrayBufferSerializer = serializerFor[ArrayBuffer[Int]](BoundReference(
+      0, ObjectType(classOf[ArrayBuffer[Int]]), nullable = false))
+    assert(arrayBufferSerializer.dataType.head.dataType ==
+      ArrayType(IntegerType, containsNull = false))
+    val arrayBufferDeserializer = deserializerFor[ArrayBuffer[Int]]
+    assert(arrayBufferDeserializer.dataType == ObjectType(classOf[ArrayBuffer[_]]))
+  }
+
+  test("serialize and deserialize arbitrary map types") {
+    val mapSerializer = serializerFor[Map[Int, Int]](BoundReference(
+      0, ObjectType(classOf[Map[Int, Int]]), nullable = false))
+    assert(mapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val mapDeserializer = deserializerFor[Map[Int, Int]]
+    assert(mapDeserializer.dataType == ObjectType(classOf[Map[_, _]]))
+
+    import scala.collection.immutable.HashMap
+    val hashMapSerializer = serializerFor[HashMap[Int, Int]](BoundReference(
+      0, ObjectType(classOf[HashMap[Int, Int]]), nullable = false))
+    assert(hashMapSerializer.dataType.head.dataType ==
+      MapType(IntegerType, IntegerType, valueContainsNull = false))
+    val hashMapDeserializer = deserializerFor[HashMap[Int, Int]]
+    assert(hashMapDeserializer.dataType == ObjectType(classOf[HashMap[_, _]]))
+
+    import scala.collection.mutable.{LinkedHashMap => LHMap}
+    val linkedHashMapSerializer = serializerFor[LHMap[Long, String]](BoundReference(
+      0, ObjectType(classOf[LHMap[Long, String]]), nullable = false))
+    assert(linkedHashMapSerializer.dataType.head.dataType ==
+      MapType(LongType, StringType, valueContainsNull = true))
+    val linkedHashMapDeserializer = deserializerFor[LHMap[Long, String]]
+    assert(linkedHashMapDeserializer.dataType == ObjectType(classOf[LHMap[_, _]]))
+  }
+
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.metrics.sink
 
 import java.net.InetSocketAddress
-import java.util.Properties
+import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
 
 import com.codahale.metrics.MetricRegistry
@@ -59,7 +59,7 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
   }
 
   val pollUnit: TimeUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
-    case Some(s) => TimeUnit.valueOf(s.toUpperCase())
+    case Some(s) => TimeUnit.valueOf(s.toUpperCase(Locale.ROOT))
     case None => TimeUnit.valueOf(GRAPHITE_DEFAULT_UNIT)
   }
 
@@ -67,9 +67,9 @@ private[spark] class GraphiteSink(val property: Properties, val registry: Metric
 
   MetricsSystem.checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
-  val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase) match {
-    case Some("udp") => new GraphiteUDP(new InetSocketAddress(host, port))
-    case Some("tcp") | None => new Graphite(new InetSocketAddress(host, port))
+  val graphite = propertyToOption(GRAPHITE_KEY_PROTOCOL).map(_.toLowerCase(Locale.ROOT)) match {
+    case Some("udp") => new GraphiteUDP(host, port)
+    case Some("tcp") | None => new Graphite(host, port)
     case Some(p) => throw new Exception(s"Invalid Graphite protocol: $p")
   }
 

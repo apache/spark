@@ -326,7 +326,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     return resultSchema;
   }
 
-  private transient final List<Object> convey = new ArrayList<Object>();
+  private final transient List<Object> convey = new ArrayList<Object>();
 
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
@@ -456,7 +456,7 @@ public class SQLOperation extends ExecuteStatementOperation {
   private HiveConf getConfigForOperation() throws HiveSQLException {
     HiveConf sqlOperationConf = getParentSession().getHiveConf();
     if (!getConfOverlay().isEmpty() || shouldRunAsync()) {
-      // clone the partent session config for this query
+      // clone the parent session config for this query
       sqlOperationConf = new HiveConf(sqlOperationConf);
 
       // apply overlay query specific settings, if any

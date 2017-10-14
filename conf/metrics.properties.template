@@ -93,6 +93,7 @@
 #   period    10         Poll period
 #   unit      seconds    Unit of the poll period
 #   ttl       1          TTL of messages sent by Ganglia
+#   dmax      0          Lifetime in seconds of metrics (0 never expired)
 #   mode      multicast  Ganglia network mode ('unicast' or 'multicast')
 
 # org.apache.spark.metrics.sink.JmxSink
@@ -117,12 +118,24 @@
 #   prefix    EMPTY STRING  Prefix to prepend to every metric's name
 #   protocol  tcp           Protocol ("tcp" or "udp") to use
 
+# org.apache.spark.metrics.sink.StatsdSink
+#   Name:     Default:      Description:
+#   host      127.0.0.1     Hostname or IP of StatsD server
+#   port      8125          Port of StatsD server
+#   period    10            Poll period
+#   unit      seconds       Units of poll period
+#   prefix    EMPTY STRING  Prefix to prepend to metric name
+
 ## Examples
 # Enable JmxSink for all instances by class name
 #*.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
 
 # Enable ConsoleSink for all instances by class name
 #*.sink.console.class=org.apache.spark.metrics.sink.ConsoleSink
+
+# Enable StatsdSink for all instances by class name
+#*.sink.statsd.class=org.apache.spark.metrics.sink.StatsdSink
+#*.sink.statsd.prefix=spark
 
 # Polling period for the ConsoleSink
 #*.sink.console.period=10

@@ -20,32 +20,15 @@ package org.apache.spark.ml.feature;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
-public class JavaTokenizerSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaTokenizerSuite");
-    jsql = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
+public class JavaTokenizerSuite extends SharedSparkSession {
 
   @Test
   public void regexTokenizer() {
@@ -59,10 +42,10 @@ public class JavaTokenizerSuite {
 
 
     JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Arrays.asList(
-      new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
-      new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
+      new TokenizerTestData("Test of tok.", new String[]{"Test", "tok."}),
+      new TokenizerTestData("Te,st.  punct", new String[]{"Te,st.", "punct"})
     ));
-    Dataset<Row> dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
+    Dataset<Row> dataset = spark.createDataFrame(rdd, TokenizerTestData.class);
 
     List<Row> pairs = myRegExTokenizer.transform(dataset)
       .select("tokens", "wantedTokens")

@@ -28,9 +28,10 @@ import scala.util.control.NonFatal
 import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.AccumulatorParam.{ListAccumulatorParam, StringAccumulatorParam}
+import org.apache.spark.AccumulatorParam.StringAccumulatorParam
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -69,7 +70,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     // serialize and de-serialize it, to simulate sending accumulator to executor.
     val acc2 = ser.deserialize[LongAccumulator](ser.serialize(acc))
     // value is reset on the executors
-    assert(acc2.localValue == 0)
+    assert(acc2.value == 0)
     assert(!acc2.isAtDriverSide)
 
     acc2.add(10)
@@ -99,7 +100,9 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val acc: Accumulator[Int] = sc.accumulator(0)
 
     val d = sc.parallelize(1 to 20)
-    an [Exception] should be thrownBy {d.foreach{x => acc.value = x}}
+    intercept[SparkException] {
+      d.foreach(x => acc.value = x)
+    }
   }
 
   test ("add value to collection accumulators") {
@@ -170,7 +173,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
       d.foreach {
         x => acc.localValue ++= x
       }
-      acc.value should be ( (0 to maxI).toSet)
+      acc.value should be ((0 to maxI).toSet)
       resetSparkContext()
     }
   }
@@ -207,7 +210,7 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     assert(ref.get.isEmpty)
 
     // Getting a garbage collected accum should throw error
-    intercept[IllegalAccessError] {
+    intercept[IllegalStateException] {
       AccumulatorContext.get(accId)
     }
 
@@ -234,28 +237,13 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
     acc.merge("kindness")
     assert(acc.value === "kindness")
   }
-
-  test("list accumulator param") {
-    val acc = new Accumulator(Seq.empty[Int], new ListAccumulatorParam[Int], Some("numbers"))
-    assert(acc.value === Seq.empty[Int])
-    acc.add(Seq(1, 2))
-    assert(acc.value === Seq(1, 2))
-    acc += Seq(3, 4)
-    assert(acc.value === Seq(1, 2, 3, 4))
-    acc ++= Seq(5, 6)
-    assert(acc.value === Seq(1, 2, 3, 4, 5, 6))
-    acc.merge(Seq(7, 8))
-    assert(acc.value === Seq(1, 2, 3, 4, 5, 6, 7, 8))
-    acc.setValue(Seq(9, 10))
-    assert(acc.value === Seq(9, 10))
-  }
 }
 
 private[spark] object AccumulatorSuite {
   import InternalAccumulator._
 
   /**
-   * Create a long accumulator and register it to [[AccumulatorContext]].
+   * Create a long accumulator and register it to `AccumulatorContext`.
    */
   def createLongAccum(
       name: String,
@@ -270,10 +258,10 @@ private[spark] object AccumulatorSuite {
   }
 
   /**
-   * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
+   * Make an `AccumulableInfo` out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
-  def makeInfo(a: NewAccumulator[_, _]): AccumulableInfo = a.toInfo(Some(a.localValue), None)
+  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
 
   /**
    * Run one or more Spark jobs and verify that in at least one job the peak execution memory

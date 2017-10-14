@@ -18,22 +18,22 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.evaluation.{RankingMetrics, RegressionMetrics}
 import org.apache.spark.mllib.recommendation.{ALS, Rating}
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object RankingMetricsExample {
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("RankingMetricsExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession
+      .builder
+      .appName("RankingMetricsExample")
+      .getOrCreate()
+    import spark.implicits._
     // $example on$
     // Read in the ratings data
-    val ratings = sc.textFile("data/mllib/sample_movielens_data.txt").map { line =>
+    val ratings = spark.read.textFile("data/mllib/sample_movielens_data.txt").rdd.map { line =>
       val fields = line.split("::")
       Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble - 2.5)
     }.cache()

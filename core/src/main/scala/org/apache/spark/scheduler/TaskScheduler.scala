@@ -17,9 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.NewAccumulator
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.AccumulatorV2
 
 /**
  * Low-level task scheduler interface, currently implemented exclusively by
@@ -54,6 +54,13 @@ private[spark] trait TaskScheduler {
   // Cancel a stage.
   def cancelTasks(stageId: Int, interruptThread: Boolean): Unit
 
+  /**
+   * Kills a task attempt.
+   *
+   * @return Whether the task was successfully killed.
+   */
+  def killTaskAttempt(taskId: Long, interruptThread: Boolean, reason: String): Boolean
+
   // Set the DAG scheduler for upcalls. This is guaranteed to be set before submitTasks is called.
   def setDAGScheduler(dagScheduler: DAGScheduler): Unit
 
@@ -67,7 +74,7 @@ private[spark] trait TaskScheduler {
    */
   def executorHeartbeatReceived(
       execId: String,
-      accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])],
+      accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
       blockManagerId: BlockManagerId): Boolean
 
   /**
@@ -81,6 +88,11 @@ private[spark] trait TaskScheduler {
    * Process a lost executor
    */
   def executorLost(executorId: String, reason: ExecutorLossReason): Unit
+
+  /**
+   * Process a removed worker
+   */
+  def workerRemoved(workerId: String, host: String, message: String): Unit
 
   /**
    * Get an application's attempt ID associated with the job.

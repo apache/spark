@@ -52,7 +52,7 @@ private[netty] case class RemoteProcessConnectionError(cause: Throwable, remoteA
   extends InboxMessage
 
 /**
- * A inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
+ * An inbox that stores messages for an [[RpcEndpoint]] and posts messages to it thread-safely.
  */
 private[netty] class Inbox(
     val endpointRef: NettyRpcEndpointRef,
@@ -205,7 +205,12 @@ private[netty] class Inbox(
     try action catch {
       case NonFatal(e) =>
         try endpoint.onError(e) catch {
-          case NonFatal(ee) => logError(s"Ignoring error", ee)
+          case NonFatal(ee) =>
+            if (stopped) {
+              logDebug("Ignoring error", ee)
+            } else {
+              logError("Ignoring error", ee)
+            }
         }
     }
   }

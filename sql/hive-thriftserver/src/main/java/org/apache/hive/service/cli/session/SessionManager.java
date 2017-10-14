@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -35,7 +34,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.ql.hooks.HookUtils;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.SessionHandle;
@@ -50,7 +48,7 @@ import org.apache.hive.service.server.ThreadFactoryWithGarbageCleanup;
  */
 public class SessionManager extends CompositeService {
 
-  private static final Log LOG = LogFactory.getLog(CompositeService.class);
+  private static final Log LOG = LogFactory.getLog(SessionManager.class);
   public static final String HIVERCFILE = ".hiverc";
   private HiveConf hiveConf;
   private final Map<SessionHandle, HiveSession> handleToSession =
@@ -151,7 +149,7 @@ public class SessionManager extends CompositeService {
   }
 
   private void startTimeoutChecker() {
-    final long interval = Math.max(checkInterval, 3000l);  // minimum 3 seconds
+    final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
     Runnable timeoutChecker = new Runnable() {
       @Override
       public void run() {
@@ -226,7 +224,9 @@ public class SessionManager extends CompositeService {
    * The username passed to this method is the effective username.
    * If withImpersonation is true (==doAs true) we wrap all the calls in HiveSession
    * within a UGI.doAs, where UGI corresponds to the effective user.
-   * @see org.apache.hive.service.cli.thrift.ThriftCLIService#getUserName()
+   *
+   * Please see {@code org.apache.hive.service.cli.thrift.ThriftCLIService.getUserName()} for
+   * more details.
    *
    * @param protocol
    * @param username
@@ -268,17 +268,6 @@ public class SessionManager extends CompositeService {
     if (isOperationLogEnabled) {
       session.setOperationLogSessionDir(operationLogRootDir);
     }
-    try {
-      executeSessionHooks(session);
-    } catch (Exception e) {
-      try {
-        session.close();
-      } catch (Throwable t) {
-        LOG.warn("Error closing session", t);
-      }
-      session = null;
-      throw new HiveSQLException("Failed to execute session hooks", e);
-    }
     handleToSession.put(session.getSessionHandle(), session);
     return session.getSessionHandle();
   }
@@ -288,28 +277,7 @@ public class SessionManager extends CompositeService {
     if (session == null) {
       throw new HiveSQLException("Session does not exist!");
     }
-    try {
-      session.close();
-    } finally {
-      // Shutdown HiveServer2 if it has been deregistered from ZooKeeper and has no active sessions
-      if (!(hiveServer2 == null) && (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_SUPPORT_DYNAMIC_SERVICE_DISCOVERY))
-          && (!hiveServer2.isRegisteredWithZooKeeper())) {
-        // Asynchronously shutdown this instance of HiveServer2,
-        // if there are no active client sessions
-        if (getOpenSessionCount() == 0) {
-          LOG.info("This instance of HiveServer2 has been removed from the list of server "
-              + "instances available for dynamic service discovery. "
-              + "The last client session has ended - will shutdown now.");
-          Thread shutdownThread = new Thread() {
-            @Override
-            public void run() {
-              hiveServer2.stop();
-            }
-          };
-          shutdownThread.start();
-        }
-      }
-    }
+    session.close();
   }
 
   public HiveSession getSession(SessionHandle sessionHandle) throws HiveSQLException {
@@ -380,15 +348,6 @@ public class SessionManager extends CompositeService {
 
   public static void clearProxyUserName() {
     threadLocalProxyUserName.remove();
-  }
-
-  // execute session hooks
-  private void executeSessionHooks(HiveSession session) throws Exception {
-    List<HiveSessionHook> sessionHooks = HookUtils.getHooks(hiveConf,
-        HiveConf.ConfVars.HIVE_SERVER2_SESSION_HOOK, HiveSessionHook.class);
-    for (HiveSessionHook sessionHook : sessionHooks) {
-      sessionHook.run(new HiveSessionHookContextImpl(session));
-    }
   }
 
   public Future<?> submitBackgroundOperation(Runnable r) {

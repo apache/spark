@@ -152,7 +152,7 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     // one should acquire the write lock. The second thread should block until the winner of the
     // write race releases its lock.
     val winningFuture: Future[Boolean] =
-      Await.ready(Future.firstCompletedOf(Seq(lock1Future, lock2Future)), 1.seconds)
+      ThreadUtils.awaitReady(Future.firstCompletedOf(Seq(lock1Future, lock2Future)), 1.seconds)
     assert(winningFuture.value.get.get)
     val winningTID = blockInfoManager.get("block").get.writerTask
     assert(winningTID === 1 || winningTID === 2)
@@ -208,16 +208,14 @@ class BlockInfoManagerSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("cannot call lockForWriting while already holding a write lock") {
+  test("cannot grab a writer lock while already holding a write lock") {
     withTaskId(0) {
       assert(blockInfoManager.lockNewBlockForWriting("block", newBlockInfo()))
       blockInfoManager.unlock("block")
     }
     withTaskId(1) {
       assert(blockInfoManager.lockForWriting("block").isDefined)
-      intercept[IllegalStateException] {
-        blockInfoManager.lockForWriting("block")
-      }
+      assert(blockInfoManager.lockForWriting("block", false).isEmpty)
       blockInfoManager.assertBlockIsLockedForWriting("block")
     }
   }

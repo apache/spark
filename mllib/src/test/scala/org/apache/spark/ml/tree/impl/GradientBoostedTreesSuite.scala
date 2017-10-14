@@ -19,7 +19,7 @@ package org.apache.spark.ml.tree.impl
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.mllib.tree.{GradientBoostedTreesSuite => OldGBTSuite}
 import org.apache.spark.mllib.tree.configuration.{BoostingStrategy, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -32,13 +32,15 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
  */
 class GradientBoostedTreesSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
+  import testImplicits._
+
   test("runWithValidation stops early and performs better on a validation dataset") {
     // Set numIterations large enough so that it stops early.
     val numIterations = 20
-    val trainRdd = sc.parallelize(OldGBTSuite.trainData, 2)
-    val validateRdd = sc.parallelize(OldGBTSuite.validateData, 2)
-    val trainDF = sqlContext.createDataFrame(trainRdd)
-    val validateDF = sqlContext.createDataFrame(validateRdd)
+    val trainRdd = sc.parallelize(OldGBTSuite.trainData, 2).map(_.asML)
+    val validateRdd = sc.parallelize(OldGBTSuite.validateData, 2).map(_.asML)
+    val trainDF = trainRdd.toDF()
+    val validateDF = validateRdd.toDF()
 
     val algos = Array(Regression, Regression, Classification)
     val losses = Array(SquaredError, AbsoluteError, LogLoss)

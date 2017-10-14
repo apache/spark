@@ -50,7 +50,8 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
       ("s1", "s2"),
       ("abc", "世界"),
       ("你好", "世界"),
-      ("你好123", "你好122")
+      ("你好123", "你好122"),
+      ("", "")
     )
     // scalastyle:on
 
@@ -62,7 +63,9 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
 
      def compareBinary(x: Array[Byte], y: Array[Byte]): Int = {
       for (i <- 0 until x.length; if i < y.length) {
-        val res = x(i).compare(y(i))
+        val v1 = x(i) & 0xff
+        val v2 = y(i) & 0xff
+        val res = v1 - v2
         if (res != 0) return res
       }
       x.length - y.length
@@ -77,6 +80,19 @@ class PrefixComparatorsSuite extends SparkFunSuite with PropertyChecks {
         (prefixComparisonResult == 0) ||
         (prefixComparisonResult < 0 && compareBinary(x, y) < 0) ||
         (prefixComparisonResult > 0 && compareBinary(x, y) > 0))
+    }
+
+    val binaryRegressionTests = Seq(
+      (Array[Byte](1), Array[Byte](-1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, -1)),
+      (Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, -1)),
+      (Array[Byte](1), Array[Byte](1, 1, 1, 1)),
+      (Array[Byte](1, 1, 1, 1, 1), Array[Byte](1, 1, 1, 1, 1, 1, 1, 1, 1)),
+      (Array[Byte](-1), Array[Byte](-1, -1, -1, -1)),
+      (Array[Byte](-1, -1, -1, -1, -1), Array[Byte](-1, -1, -1, -1, -1, -1, -1, -1, -1))
+    )
+    binaryRegressionTests.foreach { case (b1, b2) =>
+      testPrefixComparison(b1, b2)
     }
 
     // scalastyle:off

@@ -25,7 +25,7 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.attribute.AttributeGroup
 import org.apache.spark.ml.clustering.{KMeans, KMeansModel}
-import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 
@@ -42,6 +42,8 @@ private[r] class KMeansWrapper private (
   lazy val k: Int = kMeansModel.getK
 
   lazy val cluster: DataFrame = kMeansModel.summary.cluster
+
+  lazy val clusterSize: Int = kMeansModel.clusterCenters.size
 
   def fitted(method: String): DataFrame = {
     if (method == "centers") {
@@ -65,28 +67,41 @@ private[r] object KMeansWrapper extends MLReadable[KMeansWrapper] {
 
   def fit(
       data: DataFrame,
-      k: Double,
-      maxIter: Double,
+      formula: String,
+      k: Int,
+      maxIter: Int,
       initMode: String,
-      columns: Array[String]): KMeansWrapper = {
+      seed: String,
+      initSteps: Int,
+      tol: Double): KMeansWrapper = {
 
-    val assembler = new VectorAssembler()
-      .setInputCols(columns)
-      .setOutputCol("features")
+    val rFormula = new RFormula()
+      .setFormula(formula)
+      .setFeaturesCol("features")
+    RWrapperUtils.checkDataColumns(rFormula, data)
+    val rFormulaModel = rFormula.fit(data)
+
+    // get feature names from output schema
+    val schema = rFormulaModel.transform(data).schema
+    val featureAttrs = AttributeGroup.fromStructField(schema(rFormulaModel.getFeaturesCol))
+      .attributes.get
+    val features = featureAttrs.map(_.name.get)
 
     val kMeans = new KMeans()
-      .setK(k.toInt)
-      .setMaxIter(maxIter.toInt)
+      .setK(k)
+      .setMaxIter(maxIter)
       .setInitMode(initMode)
+      .setFeaturesCol(rFormula.getFeaturesCol)
+      .setInitSteps(initSteps)
+      .setTol(tol)
+
+    if (seed != null && seed.length > 0) kMeans.setSeed(seed.toInt)
 
     val pipeline = new Pipeline()
-      .setStages(Array(assembler, kMeans))
+      .setStages(Array(rFormulaModel, kMeans))
       .fit(data)
 
     val kMeansModel: KMeansModel = pipeline.stages(1).asInstanceOf[KMeansModel]
-    val attrs = AttributeGroup.fromStructField(
-      kMeansModel.summary.predictions.schema(kMeansModel.getFeaturesCol))
-    val features: Array[String] = attrs.attributes.get.map(_.name.get)
     val size: Array[Long] = kMeansModel.summary.clusterSizes
 
     new KMeansWrapper(pipeline, features, size)

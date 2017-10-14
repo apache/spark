@@ -36,4 +36,14 @@
               files="src/test/java/org/apache/spark/sql/hive/test/Complex.java"/>
     <suppress checks="LineLength"
               files="src/main/java/org/apache/spark/examples/JavaLogQuery.java"/>
+    <suppress checks="LineLength"
+              files="src/main/java/org/apache/hive/service/*"/>
+    <suppress checks="MethodName"
+              files="src/main/java/org/apache/hive/service/auth/PasswdAuthenticationProvider.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/OutputMode.java"/>
+    <suppress checks="MethodName"
+              files="sql/catalyst/src/main/java/org/apache/spark/sql/streaming/GroupStateTimeout.java"/>
+    <suppress checks="MethodName"
+              files="sql/core/src/main/java/org/apache/spark/sql/streaming/Trigger.java"/>
 </suppressions>

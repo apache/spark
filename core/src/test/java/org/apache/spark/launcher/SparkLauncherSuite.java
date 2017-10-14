@@ -26,6 +26,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.bridge.SLF4JBridgeHandler;
 import static org.junit.Assert.*;
+import static org.junit.Assume.*;
+
+import org.apache.spark.internal.config.package$;
+import org.apache.spark.util.Utils;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.
@@ -40,10 +44,10 @@ public class SparkLauncherSuite {
   private static final Logger LOG = LoggerFactory.getLogger(SparkLauncherSuite.class);
   private static final NamedThreadFactory TF = new NamedThreadFactory("SparkLauncherSuite-%d");
 
+  private final SparkLauncher launcher = new SparkLauncher();
+
   @Test
   public void testSparkArgumentHandling() throws Exception {
-    SparkLauncher launcher = new SparkLauncher()
-      .setSparkHome(System.getProperty("spark.test.home"));
     SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
 
     launcher.addSparkArg(opts.HELP);
@@ -83,18 +87,27 @@ public class SparkLauncherSuite {
     launcher.setConf("spark.foo", "foo");
     launcher.addSparkArg(opts.CONF, "spark.foo=bar");
     assertEquals("bar", launcher.builder.conf.get("spark.foo"));
+
+    launcher.setConf(SparkLauncher.PYSPARK_DRIVER_PYTHON, "python3.4");
+    launcher.setConf(SparkLauncher.PYSPARK_PYTHON, "python3.5");
+    assertEquals("python3.4", launcher.builder.conf.get(
+      package$.MODULE$.PYSPARK_DRIVER_PYTHON().key()));
+    assertEquals("python3.5", launcher.builder.conf.get(package$.MODULE$.PYSPARK_PYTHON().key()));
   }
 
   @Test
   public void testChildProcLauncher() throws Exception {
+    // This test is failed on Windows due to the failure of initiating executors
+    // by the path length limitation. See SPARK-18718.
+    assumeTrue(!Utils.isWindows());
+
     SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
     Map<String, String> env = new HashMap<>();
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1");
 
-    SparkLauncher launcher = new SparkLauncher(env)
-      .setSparkHome(System.getProperty("spark.test.home"))
+    launcher
       .setMaster("local")
-      .setAppResource("spark-internal")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
       .addSparkArg(opts.CONF,
         String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
@@ -102,11 +115,11 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .addSparkArg(opts.CLASS, "ShouldBeOverriddenBelow")
       .setMainClass(SparkLauncherTestApp.class.getName())
+      .redirectError()
       .addAppArgs("proc");
     final Process app = launcher.launch();
 
-    new OutputRedirector(app.getInputStream(), TF);
-    new OutputRedirector(app.getErrorStream(), TF);
+    new OutputRedirector(app.getInputStream(), getClass().getName() + ".child", TF);
     assertEquals(0, app.waitFor());
   }
 

@@ -20,10 +20,10 @@ import java.util.{Arrays, Date, List => JList}
 import javax.ws.rs.{GET, Produces, QueryParam}
 import javax.ws.rs.core.MediaType
 
-import org.apache.spark.executor.{InputMetrics => InternalInputMetrics, OutputMetrics => InternalOutputMetrics, ShuffleReadMetrics => InternalShuffleReadMetrics, ShuffleWriteMetrics => InternalShuffleWriteMetrics, TaskMetrics => InternalTaskMetrics}
 import org.apache.spark.scheduler.{AccumulableInfo => InternalAccumulableInfo, StageInfo}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.{StageUIData, TaskUIData}
+import org.apache.spark.ui.jobs.UIData.{InputMetricsUIData => InternalInputMetrics, OutputMetricsUIData => InternalOutputMetrics, ShuffleReadMetricsUIData => InternalShuffleReadMetrics, ShuffleWriteMetricsUIData => InternalShuffleWriteMetrics, TaskMetricsUIData => InternalTaskMetrics}
 import org.apache.spark.util.Distribution
 
 @Produces(Array(MediaType.APPLICATION_JSON))
@@ -47,6 +47,7 @@ private[v1] class AllStagesResource(ui: SparkUI) {
         listener.stageIdToData.get((stageInfo.stageId, stageInfo.attemptId))
       }
     } yield {
+      stageUiData.lastUpdateTime = ui.lastUpdateTime
       AllStagesResource.stageUiToStageData(status, stageInfo, stageUiData, includeDetails = false)
     }
   }
@@ -69,7 +70,8 @@ private[v1] object AllStagesResource {
       }
 
     val taskData = if (includeDetails) {
-      Some(stageUiData.taskData.map { case (k, v) => k -> convertTaskData(v) } )
+      Some(stageUiData.taskData.map { case (k, v) =>
+        k -> convertTaskData(v, stageUiData.lastUpdateTime) })
     } else {
       None
     }
@@ -101,6 +103,7 @@ private[v1] object AllStagesResource {
       numCompleteTasks = stageUiData.numCompleteTasks,
       numFailedTasks = stageUiData.numFailedTasks,
       executorRunTime = stageUiData.executorRunTime,
+      executorCpuTime = stageUiData.executorCpuTime,
       submissionTime = stageInfo.submissionTime.map(new Date(_)),
       firstTaskLaunchedTime,
       completionTime = stageInfo.completionTime.map(new Date(_)),
@@ -135,14 +138,16 @@ private[v1] object AllStagesResource {
     }
   }
 
-  def convertTaskData(uiData: TaskUIData): TaskData = {
+  def convertTaskData(uiData: TaskUIData, lastUpdateTime: Option[Long]): TaskData = {
     new TaskData(
       taskId = uiData.taskInfo.taskId,
       index = uiData.taskInfo.index,
       attempt = uiData.taskInfo.attemptNumber,
       launchTime = new Date(uiData.taskInfo.launchTime),
+      duration = uiData.taskDuration(lastUpdateTime),
       executorId = uiData.taskInfo.executorId,
       host = uiData.taskInfo.host,
+      status = uiData.taskInfo.status,
       taskLocality = uiData.taskInfo.taskLocality.toString(),
       speculative = uiData.taskInfo.speculative,
       accumulatorUpdates = uiData.taskInfo.accumulables.map { convertAccumulableInfo },
@@ -197,6 +202,7 @@ private[v1] object AllStagesResource {
           readBytes = submetricQuantiles(_.totalBytesRead),
           readRecords = submetricQuantiles(_.recordsRead),
           remoteBytesRead = submetricQuantiles(_.remoteBytesRead),
+          remoteBytesReadToDisk = submetricQuantiles(_.remoteBytesReadToDisk),
           remoteBlocksFetched = submetricQuantiles(_.remoteBlocksFetched),
           localBlocksFetched = submetricQuantiles(_.localBlocksFetched),
           totalBlocksFetched = submetricQuantiles(_.totalBlocksFetched),
@@ -220,7 +226,9 @@ private[v1] object AllStagesResource {
     new TaskMetricDistributions(
       quantiles = quantiles,
       executorDeserializeTime = metricQuantiles(_.executorDeserializeTime),
+      executorDeserializeCpuTime = metricQuantiles(_.executorDeserializeCpuTime),
       executorRunTime = metricQuantiles(_.executorRunTime),
+      executorCpuTime = metricQuantiles(_.executorCpuTime),
       resultSize = metricQuantiles(_.resultSize),
       jvmGcTime = metricQuantiles(_.jvmGCTime),
       resultSerializationTime = metricQuantiles(_.resultSerializationTime),
@@ -241,7 +249,9 @@ private[v1] object AllStagesResource {
   def convertUiTaskMetrics(internal: InternalTaskMetrics): TaskMetrics = {
     new TaskMetrics(
       executorDeserializeTime = internal.executorDeserializeTime,
+      executorDeserializeCpuTime = internal.executorDeserializeCpuTime,
       executorRunTime = internal.executorRunTime,
+      executorCpuTime = internal.executorCpuTime,
       resultSize = internal.resultSize,
       jvmGcTime = internal.jvmGCTime,
       resultSerializationTime = internal.resultSerializationTime,
@@ -274,6 +284,7 @@ private[v1] object AllStagesResource {
       localBlocksFetched = internal.localBlocksFetched,
       fetchWaitTime = internal.fetchWaitTime,
       remoteBytesRead = internal.remoteBytesRead,
+      remoteBytesReadToDisk = internal.remoteBytesReadToDisk,
       localBytesRead = internal.localBytesRead,
       recordsRead = internal.recordsRead
     )

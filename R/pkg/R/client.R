@@ -19,7 +19,7 @@
 
 # Creates a SparkR client connection object
 # if one doesn't already exist
-connectBackend <- function(hostname, port, timeout = 6000) {
+connectBackend <- function(hostname, port, timeout) {
   if (exists(".sparkRcon", envir = .sparkREnv)) {
     if (isOpen(.sparkREnv[[".sparkRCon"]])) {
       cat("SparkRBackend client connection already exists\n")
@@ -38,7 +38,7 @@ determineSparkSubmitBin <- function() {
   if (.Platform$OS.type == "unix") {
     sparkSubmitBinName <- "spark-submit"
   } else {
-    sparkSubmitBinName <- "spark-submit.cmd"
+    sparkSubmitBinName <- "spark-submit2.cmd"
   }
   sparkSubmitBinName
 }
@@ -69,5 +69,5 @@ launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   }
   combinedArgs <- generateSparkSubmitArgs(args, sparkHome, jars, sparkSubmitOpts, packages)
   cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
-  invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
+  invisible(launchScript(sparkSubmitBin, combinedArgs))
 }

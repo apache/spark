@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
 import org.scalatest.Matchers._
 
 import org.apache.spark.sql.catalyst.expressions.NamedExpression
@@ -29,13 +31,16 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private lazy val booleanData = {
-    sqlContext.createDataFrame(sparkContext.parallelize(
+    spark.createDataFrame(sparkContext.parallelize(
       Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
       Row(true, true) :: Nil),
       StructType(Seq(StructField("a", BooleanType), StructField("b", BooleanType))))
   }
+
+  private lazy val nullData = Seq(
+    (Some(1), Some(1)), (Some(1), Some(2)), (Some(1), None), (None, None)).toDF("a", "b")
 
   test("column names with space") {
     val df = Seq((1, "a")).toDF("name with space", "name.with.dot")
@@ -118,66 +123,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     val origCol = $"a".as("b", metadata.build())
     val newCol = origCol.as("c")
     assert(newCol.expr.asInstanceOf[NamedExpression].metadata.getString("key") === "value")
-  }
-
-  test("single explode") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    checkAnswer(
-      df.select(explode('intList)),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
-  }
-
-  test("explode and other columns") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-
-    checkAnswer(
-      df.select($"a", explode('intList)),
-      Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, 3) :: Nil)
-
-    checkAnswer(
-      df.select($"*", explode('intList)),
-      Row(1, Seq(1, 2, 3), 1) ::
-      Row(1, Seq(1, 2, 3), 2) ::
-      Row(1, Seq(1, 2, 3), 3) :: Nil)
-  }
-
-  test("aliased explode") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-
-    checkAnswer(
-      df.select(explode('intList).as('int)).select('int),
-      Row(1) :: Row(2) :: Row(3) :: Nil)
-
-    checkAnswer(
-      df.select(explode('intList).as('int)).select(sum('int)),
-      Row(6) :: Nil)
-  }
-
-  test("explode on map") {
-    val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
-
-    checkAnswer(
-      df.select(explode('map)),
-      Row("a", "b"))
-  }
-
-  test("explode on map with aliases") {
-    val df = Seq((1, Map("a" -> "b"))).toDF("a", "map")
-
-    checkAnswer(
-      df.select(explode('map).as("key1" :: "value1" :: Nil)).select("key1", "value1"),
-      Row("a", "b"))
-  }
-
-  test("self join explode") {
-    val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
-    val exploded = df.select(explode('intList).as('i))
-
-    checkAnswer(
-      exploded.join(exploded, exploded("i") === exploded("i")).agg(count("*")),
-      Row(3) :: Nil)
   }
 
   test("collect on column produced by a binary operator") {
@@ -287,7 +232,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("isNaN") {
-    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+    val testData = spark.createDataFrame(sparkContext.parallelize(
       Row(Double.NaN, Float.NaN) ::
       Row(math.log(-1), math.log(-3).toFloat) ::
       Row(null, null) ::
@@ -308,7 +253,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("nanvl") {
-    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+    val testData = spark.createDataFrame(sparkContext.parallelize(
       Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
       StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
         StructField("c", DoubleType), StructField("d", DoubleType),
@@ -321,7 +266,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         nanvl($"b", $"e"), nanvl($"e", $"f")),
       Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
     )
-    testData.registerTempTable("t")
+    testData.createOrReplaceTempView("t")
     checkAnswer(
       sql(
         "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
@@ -342,23 +287,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
 
   test("<=>") {
     checkAnswer(
-      testData2.filter($"a" === 1),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == 1))
-
-    checkAnswer(
-      testData2.filter($"a" === $"b"),
-      testData2.collect().toSeq.filter(r => r.getInt(0) == r.getInt(1)))
-  }
-
-  test("=!=") {
-    val nullData = sqlContext.createDataFrame(sparkContext.parallelize(
-      Row(1, 1) ::
-      Row(1, 2) ::
-      Row(1, null) ::
-      Row(null, null) :: Nil),
-      StructType(Seq(StructField("a", IntegerType), StructField("b", IntegerType))))
-
-    checkAnswer(
       nullData.filter($"b" <=> 1),
       Row(1, 1) :: Nil)
 
@@ -370,7 +298,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       nullData.filter($"a" <=> $"b"),
       Row(1, 1) :: Row(null, null) :: Nil)
 
-    val nullData2 = sqlContext.createDataFrame(sparkContext.parallelize(
+    val nullData2 = spark.createDataFrame(sparkContext.parallelize(
         Row("abc") ::
         Row(null)  ::
         Row("xyz") :: Nil),
@@ -379,7 +307,18 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       nullData2.filter($"a" <=> null),
       Row(null) :: Nil)
+  }
 
+  test("=!=") {
+    checkAnswer(
+      nullData.filter($"b" =!= 1),
+      Row(1, 2) :: Nil)
+
+    checkAnswer(nullData.filter($"b" =!= null), Nil)
+
+    checkAnswer(
+      nullData.filter($"a" =!= $"b"),
+      Row(1, 2) :: Nil)
   }
 
   test(">") {
@@ -566,18 +505,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       Row("ab", "cde"))
   }
 
-  test("monotonicallyIncreasingId") {
+  test("monotonically_increasing_id") {
     // Make sure we have 2 partitions, each with 2 records.
     val df = sparkContext.parallelize(Seq[Int](), 2).mapPartitions { _ =>
       Iterator(Tuple1(1), Tuple1(2))
     }.toDF("a")
     checkAnswer(
-      df.select(monotonicallyIncreasingId()),
-      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
-    )
-    checkAnswer(
-      df.select(expr("monotonically_increasing_id()")),
-      Row(0L) :: Row(1L) :: Row((1L << 33) + 0L) :: Row((1L << 33) + 1L) :: Nil
+      df.select(monotonically_increasing_id(), expr("monotonically_increasing_id()")),
+      Row(0L, 0L) ::
+        Row(1L, 1L) ::
+        Row((1L << 33) + 0L, (1L << 33) + 0L) ::
+        Row((1L << 33) + 1L, (1L << 33) + 1L) :: Nil
     )
   }
 
@@ -592,15 +530,136 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("input_file_name") {
+  test("input_file_name, input_file_block_start, input_file_block_length - more than one source") {
+    withTempView("tempView1") {
+      withTable("tab1", "tab2") {
+        val data = sparkContext.parallelize(0 to 9).toDF("id")
+        data.write.saveAsTable("tab1")
+        data.write.saveAsTable("tab2")
+        data.createOrReplaceTempView("tempView1")
+        Seq("input_file_name", "input_file_block_start", "input_file_block_length").foreach { f =>
+          val e = intercept[AnalysisException] {
+            sql(s"SELECT *, $f() FROM tab1 JOIN tab2 ON tab1.id = tab2.id")
+          }.getMessage
+          assert(e.contains(s"'$f' does not support more than one source"))
+        }
+
+        def checkResult(
+            fromClause: String,
+            exceptionExpected: Boolean,
+            numExpectedRows: Int = 0): Unit = {
+          val stmt = s"SELECT *, input_file_name() FROM ($fromClause)"
+          if (exceptionExpected) {
+            val e = intercept[AnalysisException](sql(stmt)).getMessage
+            assert(e.contains("'input_file_name' does not support more than one source"))
+          } else {
+            assert(sql(stmt).count() == numExpectedRows)
+          }
+        }
+
+        checkResult(
+          "SELECT * FROM tab1 UNION ALL SELECT * FROM tab2 UNION ALL SELECT * FROM tab2",
+          exceptionExpected = false,
+          numExpectedRows = 30)
+
+        checkResult(
+          "(SELECT * FROM tempView1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2",
+          exceptionExpected = false,
+          numExpectedRows = 20)
+
+        checkResult(
+          "(SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tempView1",
+          exceptionExpected = false,
+          numExpectedRows = 20)
+
+        checkResult(
+          "(SELECT * FROM tempView1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2",
+          exceptionExpected = true)
+
+        checkResult(
+          "(SELECT * FROM tab1 NATURAL JOIN tab2) UNION ALL SELECT * FROM tab2",
+          exceptionExpected = true)
+
+        checkResult(
+          "(SELECT * FROM tab1 UNION ALL SELECT * FROM tab2) NATURAL JOIN tab2",
+          exceptionExpected = true)
+      }
+    }
+  }
+
+  test("input_file_name, input_file_block_start, input_file_block_length - FileScanRDD") {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(input_file_name())
-        .head.getString(0)
-      assert(answer.contains(dir.getCanonicalPath))
 
-      checkAnswer(data.select(input_file_name()).limit(1), Row(""))
+      // Test the 3 expressions when reading from files
+      val q = spark.read.parquet(dir.getCanonicalPath).select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
+    }
+  }
+
+  test("input_file_name, input_file_block_start, input_file_block_length - HadoopRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
+      data.write.text(dir.getCanonicalPath)
+      val df = spark.sparkContext.textFile(dir.getCanonicalPath).toDF()
+
+      // Test the 3 expressions when reading from files
+      val q = df.select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
+    }
+  }
+
+  test("input_file_name, input_file_block_start, input_file_block_length - NewHadoopRDD") {
+    withTempPath { dir =>
+      val data = sparkContext.parallelize((0 to 10).map(_.toString)).toDF()
+      data.write.text(dir.getCanonicalPath)
+      val rdd = spark.sparkContext.newAPIHadoopFile(
+        dir.getCanonicalPath,
+        classOf[NewTextInputFormat],
+        classOf[LongWritable],
+        classOf[Text])
+      val df = rdd.map(pair => pair._2.toString).toDF()
+
+      // Test the 3 expressions when reading from files
+      val q = df.select(
+        input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()"))
+      val firstRow = q.head()
+      assert(firstRow.getString(0).contains(dir.toURI.getPath))
+      assert(firstRow.getLong(1) == 0)
+      assert(firstRow.getLong(2) > 0)
+
+      // Now read directly from the original RDD without going through any files to make sure
+      // we are returning empty string, -1, and -1.
+      checkAnswer(
+        data.select(
+          input_file_name(), expr("input_file_block_start()"), expr("input_file_block_length()")
+        ).limit(1),
+        Row("", -1L, -1L))
     }
   }
 
@@ -708,4 +767,17 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       testData2.collect().toSeq.map(r => Row(r.getInt(0) ^ r.getInt(1) ^ 39)))
   }
 
+  test("typedLit") {
+    val df = Seq(Tuple1(0)).toDF("a")
+    // Only check the types `lit` cannot handle
+    checkAnswer(
+      df.select(typedLit(Seq(1, 2, 3))),
+      Row(Seq(1, 2, 3)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(Map("a" -> 1, "b" -> 2))),
+      Row(Map("a" -> 1, "b" -> 2)) :: Nil)
+    checkAnswer(
+      df.select(typedLit(("a", 2, 1.0))),
+      Row(Row("a", 2, 1.0)) :: Nil)
+  }
 }

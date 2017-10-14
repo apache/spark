@@ -20,17 +20,17 @@ package org.apache.spark.rdd
 import java.util.concurrent.Semaphore
 
 import scala.concurrent._
-import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
 
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Timeouts
+import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.util.ThreadUtils
 
-class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Timeouts {
+class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with TimeLimits {
 
   @transient private var sc: SparkContext = _
 
@@ -65,9 +65,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   test("foreachAsync") {
     zeroPartRdd.foreachAsync(i => Unit).get()
 
-    val accum = sc.accumulator(0)
+    val accum = sc.longAccumulator
     sc.parallelize(1 to 1000, 3).foreachAsync { i =>
-      accum += 1
+      accum.add(1)
     }.get()
     assert(accum.value === 1000)
   }
@@ -75,9 +75,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
   test("foreachPartitionAsync") {
     zeroPartRdd.foreachPartitionAsync(iter => Unit).get()
 
-    val accum = sc.accumulator(0)
+    val accum = sc.longAccumulator
     sc.parallelize(1 to 1000, 9).foreachPartitionAsync { iter =>
-      accum += 1
+      accum.add(1)
     }.get()
     assert(accum.value === 9)
   }
@@ -130,10 +130,10 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
         info("Should not have reached this code path (onComplete matching Failure)")
         throw new Exception("Task should succeed")
     }
-    f.onSuccess { case a: Any =>
+    f.foreach { a =>
       sem.release()
     }
-    f.onFailure { case t =>
+    f.failed.foreach { t =>
       info("Should not have reached this code path (onFailure)")
       throw new Exception("Task should succeed")
     }
@@ -164,11 +164,11 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
       case scala.util.Failure(e) =>
         sem.release()
     }
-    f.onSuccess { case a: Any =>
+    f.foreach { a =>
       info("Should not have reached this code path (onSuccess)")
       throw new Exception("Task should fail")
     }
-    f.onFailure { case t =>
+    f.failed.foreach { t =>
       sem.release()
     }
     intercept[SparkException] {
@@ -199,10 +199,9 @@ class AsyncRDDActionsSuite extends SparkFunSuite with BeforeAndAfterAll with Tim
     val f = sc.parallelize(1 to 100, 4)
               .mapPartitions(itr => { Thread.sleep(20); itr })
               .countAsync()
-    val e = intercept[SparkException] {
+    intercept[TimeoutException] {
       ThreadUtils.awaitResult(f, Duration(20, "milliseconds"))
     }
-    assert(e.getCause.isInstanceOf[TimeoutException])
   }
 
   private def testAsyncAction[R](action: RDD[Int] => FutureAction[R]): Unit = {

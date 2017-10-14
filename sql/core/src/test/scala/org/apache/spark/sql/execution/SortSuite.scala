@@ -54,6 +54,17 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
       sortAnswers = false)
   }
 
+  test("sorting all nulls") {
+    checkThatPlansAgree(
+      (1 to 100).map(v => Tuple1(v)).toDF().selectExpr("NULL as a"),
+      (child: SparkPlan) =>
+        GlobalLimitExec(10, SortExec('a.asc :: Nil, global = true, child = child)),
+      (child: SparkPlan) =>
+        GlobalLimitExec(10, ReferenceSort('a.asc :: Nil, global = true, child)),
+      sortAnswers = false
+    )
+  }
+
   test("sort followed by limit") {
     checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
@@ -90,12 +101,13 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
   for (
     dataType <- DataTypeTestUtils.atomicTypes ++ Set(NullType);
     nullable <- Seq(true, false);
-    sortOrder <- Seq('a.asc :: Nil, 'a.desc :: Nil);
+    sortOrder <-
+      Seq('a.asc :: Nil, 'a.asc_nullsLast :: Nil, 'a.desc :: Nil, 'a.desc_nullsFirst :: Nil);
     randomDataGenerator <- RandomDataGenerator.forType(dataType, nullable)
   ) {
     test(s"sorting on $dataType with nullable=$nullable, sortOrder=$sortOrder") {
       val inputData = Seq.fill(1000)(randomDataGenerator())
-      val inputDf = sqlContext.createDataFrame(
+      val inputDf = spark.createDataFrame(
         sparkContext.parallelize(Random.shuffle(inputData).map(v => Row(v))),
         StructType(StructField("a", dataType, nullable = true) :: Nil)
       )

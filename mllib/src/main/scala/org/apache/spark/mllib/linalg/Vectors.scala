@@ -22,6 +22,7 @@ import java.util
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+import scala.language.implicitConversions
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.json4s.DefaultFormats
@@ -33,14 +34,13 @@ import org.apache.spark.annotation.{AlphaComponent, Since}
 import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
- * Note: Users should not implement this interface.
+ * @note Users should not implement this interface.
  */
 @SQLUserDefinedType(udt = classOf[VectorUDT])
 @Since("1.0.0")
@@ -77,7 +77,7 @@ sealed trait Vector extends Serializable {
 
   /**
    * Returns a hash code value for the vector. The hash code is based on its size and its first 128
-   * nonzero entries, using a hash algorithm similar to [[java.util.Arrays.hashCode]].
+   * nonzero entries, using a hash algorithm similar to `java.util.Arrays.hashCode`.
    */
   override def hashCode(): Int = {
     // This is a reference implementation. It calls return in foreachActive, which is slow.
@@ -103,14 +103,14 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
    * @param i index
    */
   @Since("1.1.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -132,7 +132,9 @@ sealed trait Vector extends Serializable {
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
-   * regardless of its value.  Note that inactive entries have value 0.
+   * regardless of its value.
+   *
+   * @note Inactive entries have value 0.
    */
   @Since("1.4.0")
   def numActives: Int
@@ -147,7 +149,21 @@ sealed trait Vector extends Serializable {
    * Converts this vector to a sparse vector with all explicit zeros removed.
    */
   @Since("1.4.0")
-  def toSparse: SparseVector
+  def toSparse: SparseVector = toSparseWithSize(numNonzeros)
+
+  /**
+   * Converts this vector to a sparse vector with all explicit zeros removed when the size is known.
+   * This method is used to avoid re-computing the number of non-zero elements when it is
+   * already known. This method should only be called after computing the number of non-zero
+   * elements via [[numNonzeros]]. e.g.
+   * {{{
+   *   val nnz = numNonzeros
+   *   val sv = toSparse(nnz)
+   * }}}
+   *
+   * If `nnz` is under-specified, a [[java.lang.ArrayIndexOutOfBoundsException]] is thrown.
+   */
+  private[linalg] def toSparseWithSize(nnz: Int): SparseVector
 
   /**
    * Converts this vector to a dense vector.
@@ -163,7 +179,7 @@ sealed trait Vector extends Serializable {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
     if (1.5 * (nnz + 1.0) < size) {
-      toSparse
+      toSparseWithSize(nnz)
     } else {
       toDense
     }
@@ -186,7 +202,8 @@ sealed trait Vector extends Serializable {
    * Convert this vector to the new mllib-local representation.
    * This does NOT copy the data; it copies references.
    */
-  private[spark] def asML: newlinalg.Vector
+  @Since("2.0.0")
+  def asML: newlinalg.Vector
 }
 
 /**
@@ -213,18 +230,18 @@ class VectorUDT extends UserDefinedType[Vector] {
   override def serialize(obj: Vector): InternalRow = {
     obj match {
       case SparseVector(size, indices, values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 0)
         row.setInt(1, size)
-        row.update(2, new GenericArrayData(indices.map(_.asInstanceOf[Any])))
-        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
+        row.update(2, UnsafeArrayData.fromPrimitiveArray(indices))
+        row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
       case DenseVector(values) =>
-        val row = new GenericMutableRow(4)
+        val row = new GenericInternalRow(4)
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, new GenericArrayData(values.map(_.asInstanceOf[Any])))
+        row.update(3, UnsafeArrayData.fromPrimitiveArray(values))
         row
     }
   }
@@ -270,7 +287,7 @@ class VectorUDT extends UserDefinedType[Vector] {
 /**
  * Factory methods for [[org.apache.spark.mllib.linalg.Vector]].
  * We don't use the name `Vector` because Scala imports
- * [[scala.collection.immutable.Vector]] by default.
+ * `scala.collection.immutable.Vector` by default.
  */
 @Since("1.0.0")
 object Vectors {
@@ -348,7 +365,7 @@ object Vectors {
   }
 
   /**
-   * Parses a string resulted from [[Vector.toString]] into a [[Vector]].
+   * Parses a string resulted from `Vector.toString` into a [[Vector]].
    */
   @Since("1.1.0")
   def parse(s: String): Vector = {
@@ -581,8 +598,11 @@ object Vectors {
   /** Max number of nonzero entries used in computing hash code. */
   private[linalg] val MAX_HASH_NNZ = 128
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(v: newlinalg.Vector): Vector = v match {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(v: newlinalg.Vector): Vector = v match {
     case dv: newlinalg.DenseVector =>
       DenseVector.fromML(dv)
     case sv: newlinalg.SparseVector =>
@@ -606,7 +626,7 @@ class DenseVector @Since("1.0.0") (
   @Since("1.0.0")
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   @Since("1.0.0")
   override def apply(i: Int): Double = values(i)
@@ -663,9 +683,7 @@ class DenseVector @Since("1.0.0") (
     nnz
   }
 
-  @Since("1.4.0")
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  private[linalg] override def toSparseWithSize(nnz: Int): SparseVector = {
     val ii = new Array[Int](nnz)
     val vv = new Array[Double](nnz)
     var k = 0
@@ -704,7 +722,8 @@ class DenseVector @Since("1.0.0") (
     compact(render(jValue))
   }
 
-  private[spark] override def asML: newlinalg.DenseVector = {
+  @Since("2.0.0")
+  override def asML: newlinalg.DenseVector = {
     new newlinalg.DenseVector(values)
   }
 }
@@ -716,14 +735,17 @@ object DenseVector {
   @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(v: newlinalg.DenseVector): DenseVector = {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(v: newlinalg.DenseVector): DenseVector = {
     new DenseVector(v.values)
   }
 }
 
 /**
- * A sparse vector represented by an index array and an value array.
+ * A sparse vector represented by an index array and a value array.
  *
  * @param size size of the vector.
  * @param indices index array, assume to be strictly increasing.
@@ -762,7 +784,7 @@ class SparseVector @Since("1.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   @Since("1.6.0")
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
@@ -812,9 +834,7 @@ class SparseVector @Since("1.0.0") (
     nnz
   }
 
-  @Since("1.4.0")
-  override def toSparse: SparseVector = {
-    val nnz = numNonzeros
+  private[linalg] override def toSparseWithSize(nnz: Int): SparseVector = {
     if (nnz == numActives) {
       this
     } else {
@@ -836,6 +856,8 @@ class SparseVector @Since("1.0.0") (
   override def argmax: Int = {
     if (size == 0) {
       -1
+    } else if (numActives == 0) {
+      0
     } else {
       // Find the max active entry.
       var maxIdx = indices(0)
@@ -911,7 +933,8 @@ class SparseVector @Since("1.0.0") (
     compact(render(jValue))
   }
 
-  private[spark] override def asML: newlinalg.SparseVector = {
+  @Since("2.0.0")
+  override def asML: newlinalg.SparseVector = {
     new newlinalg.SparseVector(size, indices, values)
   }
 }
@@ -922,8 +945,32 @@ object SparseVector {
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(v: newlinalg.SparseVector): SparseVector = {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(v: newlinalg.SparseVector): SparseVector = {
     new SparseVector(v.size, v.indices, v.values)
   }
+}
+
+/**
+ * Implicit methods available in Scala for converting [[org.apache.spark.mllib.linalg.Vector]] to
+ * [[org.apache.spark.ml.linalg.Vector]] and vice versa.
+ */
+private[spark] object VectorImplicits {
+
+  implicit def mllibVectorToMLVector(v: Vector): newlinalg.Vector = v.asML
+
+  implicit def mllibDenseVectorToMLDenseVector(v: DenseVector): newlinalg.DenseVector = v.asML
+
+  implicit def mllibSparseVectorToMLSparseVector(v: SparseVector): newlinalg.SparseVector = v.asML
+
+  implicit def mlVectorToMLlibVector(v: newlinalg.Vector): Vector = Vectors.fromML(v)
+
+  implicit def mlDenseVectorToMLlibDenseVector(v: newlinalg.DenseVector): DenseVector =
+    Vectors.fromML(v).asInstanceOf[DenseVector]
+
+  implicit def mlSparseVectorToMLlibSparseVector(v: newlinalg.SparseVector): SparseVector =
+    Vectors.fromML(v).asInstanceOf[SparseVector]
 }

@@ -5,6 +5,8 @@ title: Spark Streaming + Flume Integration Guide
 
 [Apache Flume](https://flume.apache.org/) is a distributed, reliable, and available service for efficiently collecting, aggregating, and moving large amounts of log data. Here we explain how to configure Flume and Spark Streaming to receive data from Flume. There are two approaches to this.
 
+**Note: Flume support is deprecated as of Spark 2.3.0.**
+
 ## Approach 1: Flume-style Push-based Approach
 Flume is designed to push data between Flume agents. In this approach, Spark Streaming essentially sets up a receiver that acts an Avro agent for Flume, to which Flume can push the data. Here are the configuration steps.
 
@@ -44,8 +46,7 @@ configuring Flume agents.
 
 		val flumeStream = FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port])
 
-	See the [API docs](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumeEventCount.scala).
+	See the [API docs](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.flume.*;
@@ -53,8 +54,7 @@ configuring Flume agents.
 		JavaReceiverInputDStream<SparkFlumeEvent> flumeStream =
         	FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port]);
 
-	See the [API docs](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaFlumeEventCount.java).
+	See the [API docs](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html).
 	</div>
 	<div data-lang="python" markdown="1">
 		from pyspark.streaming.flume import FlumeUtils
@@ -62,8 +62,7 @@ configuring Flume agents.
 		flumeStream = FlumeUtils.createStream(streamingContext, [chosen machine's hostname], [chosen port])
 
 	By default, the Python API will decode Flume event body as UTF8 encoded strings. You can specify your custom decoding function to decode the body byte arrays in Flume events to any arbitrary data type. 
-	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.flume.FlumeUtils)
-	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/flume_wordcount.py).
+	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.flume.FlumeUtils).
 	</div>
 	</div>
 
@@ -115,11 +114,11 @@ Configuring Flume on the chosen machine requires the following two steps.
 		artifactId = scala-library
 		version = {{site.SCALA_VERSION}}
 
-	(iii) *Commons Lang 3 JAR*: Download the Commons Lang 3 JAR. It can be found with the following artifact detail (or, [direct link](http://search.maven.org/remotecontent?filepath=org/apache/commons/commons-lang3/3.3.2/commons-lang3-3.3.2.jar)).
+	(iii) *Commons Lang 3 JAR*: Download the Commons Lang 3 JAR. It can be found with the following artifact detail (or, [direct link](http://search.maven.org/remotecontent?filepath=org/apache/commons/commons-lang3/3.5/commons-lang3-3.5.jar)).
 
 		groupId = org.apache.commons
 		artifactId = commons-lang3
-		version = 3.3.2
+		version = 3.5
 
 2. **Configuration file**: On that machine, configure Flume agent to send data to an Avro sink by having the following in the configuration file.
 
@@ -161,8 +160,6 @@ configuring Flume agents.
 	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.flume.FlumeUtils).
 	</div>
 	</div>
-
-	See the Scala example [FlumePollingEventCount]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/FlumePollingEventCount.scala).
 
 	Note that each input DStream can be configured to receive data from multiple sinks.
 

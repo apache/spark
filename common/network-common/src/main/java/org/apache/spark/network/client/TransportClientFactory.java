@@ -26,6 +26,7 @@ import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.codahale.metrics.MetricSet;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.collect.Lists;
@@ -42,10 +43,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
-import org.apache.spark.network.util.IOMode;
-import org.apache.spark.network.util.JavaUtils;
-import org.apache.spark.network.util.NettyUtils;
-import org.apache.spark.network.util.TransportConf;
+import org.apache.spark.network.util.*;
 
 /**
  * Factory for creating {@link TransportClient}s by using createClient.
@@ -73,7 +71,7 @@ public class TransportClientFactory implements Closeable {
     }
   }
 
-  private final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
+  private static final Logger logger = LoggerFactory.getLogger(TransportClientFactory.class);
 
   private final TransportContext context;
   private final TransportConf conf;
@@ -87,6 +85,7 @@ public class TransportClientFactory implements Closeable {
   private final Class<? extends Channel> socketChannelClass;
   private EventLoopGroup workerGroup;
   private PooledByteBufAllocator pooledAllocator;
+  private final NettyMemoryMetrics metrics;
 
   public TransportClientFactory(
       TransportContext context,
@@ -100,10 +99,18 @@ public class TransportClientFactory implements Closeable {
 
     IOMode ioMode = IOMode.valueOf(conf.ioMode());
     this.socketChannelClass = NettyUtils.getClientChannelClass(ioMode);
-    // TODO: Make thread pool name configurable.
-    this.workerGroup = NettyUtils.createEventLoop(ioMode, conf.clientThreads(), "shuffle-client");
+    this.workerGroup = NettyUtils.createEventLoop(
+        ioMode,
+        conf.clientThreads(),
+        conf.getModuleName() + "-client");
     this.pooledAllocator = NettyUtils.createPooledByteBufAllocator(
       conf.preferDirectBufs(), false /* allowCache */, conf.clientThreads());
+    this.metrics = new NettyMemoryMetrics(
+      this.pooledAllocator, conf.getModuleName() + "-client", conf);
+  }
+
+  public MetricSet getAllMetrics() {
+    return metrics;
   }
 
   /**
@@ -120,7 +127,8 @@ public class TransportClientFactory implements Closeable {
    *
    * Concurrency: This method is safe to call from multiple threads.
    */
-  public TransportClient createClient(String remoteHost, int remotePort) throws IOException {
+  public TransportClient createClient(String remoteHost, int remotePort)
+      throws IOException, InterruptedException {
     // Get connection from the connection pool first.
     // If it is not found or not active, create a new one.
     // Use unresolved address here to avoid DNS resolution each time we creates a client.
@@ -188,14 +196,15 @@ public class TransportClientFactory implements Closeable {
    * As with {@link #createClient(String, int)}, this method is blocking.
    */
   public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
-      throws IOException {
+      throws IOException, InterruptedException {
     final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
     return createClient(address);
   }
 
   /** Create a completely new {@link TransportClient} to the remote address. */
-  private TransportClient createClient(InetSocketAddress address) throws IOException {
-    logger.debug("Creating new connection to " + address);
+  private TransportClient createClient(InetSocketAddress address)
+      throws IOException, InterruptedException {
+    logger.debug("Creating new connection to {}", address);
 
     Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(workerGroup)
@@ -205,6 +214,14 @@ public class TransportClientFactory implements Closeable {
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
       .option(ChannelOption.ALLOCATOR, pooledAllocator);
+
+    if (conf.receiveBuf() > 0) {
+      bootstrap.option(ChannelOption.SO_RCVBUF, conf.receiveBuf());
+    }
+
+    if (conf.sendBuf() > 0) {
+      bootstrap.option(ChannelOption.SO_SNDBUF, conf.sendBuf());
+    }
 
     final AtomicReference<TransportClient> clientRef = new AtomicReference<>();
     final AtomicReference<Channel> channelRef = new AtomicReference<>();
@@ -221,7 +238,7 @@ public class TransportClientFactory implements Closeable {
     // Connect to the remote server
     long preConnect = System.nanoTime();
     ChannelFuture cf = bootstrap.connect(address);
-    if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
+    if (!cf.await(conf.connectionTimeoutMs())) {
       throw new IOException(
         String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {

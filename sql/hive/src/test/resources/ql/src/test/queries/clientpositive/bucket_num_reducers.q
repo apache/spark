@@ -1,6 +1,6 @@
 set hive.enforce.bucketing = true;
 set hive.exec.mode.local.auto=false;
-set mapred.reduce.tasks = 10;
+set mapreduce.job.reduces = 10;
 
 -- This test sets number of mapred tasks to 10 for a database with 50 buckets, 
 -- and uses a post-hook to confirm that 10 tasks were created

@@ -26,6 +26,7 @@ import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 // $example off$
 
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 object LinearRegressionWithSGDExample {
 
   def main(args: Array[String]): Unit = {

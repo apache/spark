@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Set;
 
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.ql.exec.FunctionInfo;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
@@ -103,7 +102,7 @@ public class GetFunctionsOperation extends MetadataOperation {
             .getFunctionNames(CLIServiceUtils.patternToRegex(functionName));
         for (String functionName : functionNames) {
           FunctionInfo functionInfo = FunctionRegistry.getFunctionInfo(functionName);
-          Object rowData[] = new Object[] {
+          Object[] rowData = new Object[] {
               null, // FUNCTION_CAT
               null, // FUNCTION_SCHEM
               functionInfo.getDisplayName(), // FUNCTION_NAME

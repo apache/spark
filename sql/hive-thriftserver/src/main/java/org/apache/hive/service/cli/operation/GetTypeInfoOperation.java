@@ -35,7 +35,7 @@ import org.apache.hive.service.cli.session.HiveSession;
  */
 public class GetTypeInfoOperation extends MetadataOperation {
 
-  private final static TableSchema RESULT_SET_SCHEMA = new TableSchema()
+  private static final TableSchema RESULT_SET_SCHEMA = new TableSchema()
   .addPrimitiveColumn("TYPE_NAME", Type.STRING_TYPE,
       "Type name")
   .addPrimitiveColumn("DATA_TYPE", Type.INT_TYPE,

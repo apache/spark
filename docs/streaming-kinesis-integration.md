@@ -24,41 +24,58 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	For Python applications, you will have to add this above library and its dependencies when deploying your application. See the *Deploying* subsection below.
 	**Note that by linking to this library, you will include [ASL](https://aws.amazon.com/asl/)-licensed code in your application.**
 
-2. **Programming:** In the streaming application code, import `KinesisUtils` and create the input DStream of byte array as follows:
+2. **Programming:** In the streaming application code, import `KinesisInputDStream` and create the input DStream of byte array as follows:
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
-		import org.apache.spark.streaming.Duration
-		import org.apache.spark.streaming.kinesis._
-		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+            import org.apache.spark.storage.StorageLevel
+            import org.apache.spark.streaming.kinesis.KinesisInputDStream
+            import org.apache.spark.streaming.{Seconds, StreamingContext}
+            import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 
-		val kinesisStream = KinesisUtils.createStream(
-			streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
-			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
+            val kinesisStream = KinesisInputDStream.builder
+                .streamingContext(streamingContext)
+                .endpointUrl([endpoint URL])
+                .regionName([region name])
+                .streamName([streamName])
+                .initialPositionInStream([initial position])
+                .checkpointAppName([Kinesis app name])
+                .checkpointInterval([checkpoint interval])
+                .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+                .build()
 
-	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$)
+	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisInputDStream)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/scala/org/apache/spark/examples/streaming/KinesisWordCountASL.scala). Refer to the [Running the Example](#running-the-example) subsection for instructions on how to run the example.
 
 	</div>
 	<div data-lang="java" markdown="1">
-		import org.apache.spark.streaming.Duration;
-		import org.apache.spark.streaming.kinesis.*;
-		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
+            import org.apache.spark.storage.StorageLevel
+            import org.apache.spark.streaming.kinesis.KinesisInputDStream
+            import org.apache.spark.streaming.Seconds
+            import org.apache.spark.streaming.StreamingContext
+            import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 
-		JavaReceiverInputDStream<byte[]> kinesisStream = KinesisUtils.createStream(
-			streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
-			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2);
+            KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder
+                .streamingContext(streamingContext)
+                .endpointUrl([endpoint URL])
+                .regionName([region name])
+                .streamName([streamName])
+                .initialPositionInStream([initial position])
+                .checkpointAppName([Kinesis app name])
+                .checkpointInterval([checkpoint interval])
+                .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+                .build();
 
 	See the [API docs](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/java/org/apache/spark/examples/streaming/JavaKinesisWordCountASL.java). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
 
 	</div>
 	<div data-lang="python" markdown="1">
-		from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
+            from pyspark.streaming.kinesis import KinesisUtils, InitialPositionInStream
 
-		kinesisStream = KinesisUtils.createStream(
-			streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
-			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
+            kinesisStream = KinesisUtils.createStream(
+                streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
+                [region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
 
 	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kinesis.KinesisUtils)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
@@ -70,27 +87,40 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
+                import org.apache.spark.storage.StorageLevel
+                import org.apache.spark.streaming.kinesis.KinesisInputDStream
+                import org.apache.spark.streaming.{Seconds, StreamingContext}
+                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 
-		import org.apache.spark.streaming.Duration
-		import org.apache.spark.streaming.kinesis._
-		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
-
-		val kinesisStream = KinesisUtils.createStream[T](
-			streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
-			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2,
-			[message handler])
+                val kinesisStream = KinesisInputDStream.builder
+                    .streamingContext(streamingContext)
+                    .endpointUrl([endpoint URL])
+                    .regionName([region name])
+                    .streamName([streamName])
+                    .initialPositionInStream([initial position])
+                    .checkpointAppName([Kinesis app name])
+                    .checkpointInterval([checkpoint interval])
+                    .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+                    .buildWithMessageHandler([message handler])
 
 	</div>
 	<div data-lang="java" markdown="1">
+                import org.apache.spark.storage.StorageLevel
+                import org.apache.spark.streaming.kinesis.KinesisInputDStream
+                import org.apache.spark.streaming.Seconds
+                import org.apache.spark.streaming.StreamingContext
+                import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
 
-		import org.apache.spark.streaming.Duration;
-		import org.apache.spark.streaming.kinesis.*;
-		import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream;
-
-		JavaReceiverInputDStream<T> kinesisStream = KinesisUtils.createStream(
-			streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
-			[region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2,
-			[message handler], [class T]);
+                KinesisInputDStream<byte[]> kinesisStream = KinesisInputDStream.builder
+                    .streamingContext(streamingContext)
+                    .endpointUrl([endpoint URL])
+                    .regionName([region name])
+                    .streamName([streamName])
+                    .initialPositionInStream([initial position])
+                    .checkpointAppName([Kinesis app name])
+                    .checkpointInterval([checkpoint interval])
+                    .storageLevel(StorageLevel.MEMORY_AND_DISK_2)
+                    .buildWithMessageHandler([message handler]);
 
 	</div>
 	</div>
@@ -111,7 +141,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 
 	- `[checkpoint interval]`: The interval (e.g., Duration(2000) = 2 seconds) at which the Kinesis Client Library saves its position in the stream.  For starters, set it to the same as the batch interval of the streaming application.
 
-	- `[initial position]`: Can be either `InitialPositionInStream.TRIM_HORIZON` or `InitialPositionInStream.LATEST` (see Kinesis Checkpointing section and Amazon Kinesis API documentation for more details).
+	- `[initial position]`: Can be either `InitialPositionInStream.TRIM_HORIZON` or `InitialPositionInStream.LATEST` (see [`Kinesis Checkpointing`](#kinesis-checkpointing) section and [`Amazon Kinesis API documentation`](http://docs.aws.amazon.com/streams/latest/dev/developing-consumers-with-sdk.html) for more details).
 
 	- `[message handler]`: A function that takes a Kinesis `Record` and outputs generic `T`.
 
@@ -128,14 +158,6 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 	Alternatively, you can also download the JAR of the Maven artifact `spark-streaming-kinesis-asl-assembly` from the
 	[Maven repository](http://search.maven.org/#search|ga|1|a%3A%22spark-streaming-kinesis-asl-assembly_{{site.SCALA_BINARY_VERSION}}%22%20AND%20v%3A%22{{site.SPARK_VERSION_SHORT}}%22) and add it to `spark-submit` with `--jars`.
 
-	*Points to remember at runtime:*
-
-	- Kinesis data processing is ordered per partition and occurs at-least once per message.
-
-	- Multiple applications can read from the same Kinesis stream.  Kinesis will maintain the application-specific shard and checkpoint info in DynamoDB.
-
-	- A single Kinesis stream shard is processed by one input DStream at a time.
-
 	<p style="text-align: center;">
   		<img src="img/streaming-kinesis-arch.png"
        		title="Spark Streaming Kinesis Architecture"
@@ -144,6 +166,14 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
         />
 	  	<!-- Images are downsized intentionally to improve quality on retina displays -->
 	</p>
+
+	*Points to remember at runtime:*
+
+	- Kinesis data processing is ordered per partition and occurs at-least once per message.
+
+	- Multiple applications can read from the same Kinesis stream.  Kinesis will maintain the application-specific shard and checkpoint info in DynamoDB.
+
+	- A single Kinesis stream shard is processed by one input DStream at a time.
 
 	- A single Kinesis input DStream can read from multiple shards of a Kinesis stream by creating multiple KinesisRecordProcessor threads.
 
@@ -166,26 +196,23 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 #### Running the Example
 To run the example,
 
-- Download Spark source and follow the [instructions](building-spark.html) to build Spark with profile *-Pkinesis-asl*.
-
-        mvn -Pkinesis-asl -DskipTests clean package
-
+- Download a Spark binary from the [download site](http://spark.apache.org/downloads.html).
 
 - Set up Kinesis stream (see earlier section) within AWS. Note the name of the Kinesis stream and the endpoint URL corresponding to the region where the stream was created.
 
-- Set up the environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_KEY with your AWS credentials.
+- Set up the environment variables `AWS_ACCESS_KEY_ID` and `AWS_SECRET_KEY` with your AWS credentials.
 
 - In the Spark root directory, run the example as
 
 	<div class="codetabs">
 	<div data-lang="scala" markdown="1">
 
-        bin/run-example streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.KinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="java" markdown="1">
 
-        bin/run-example streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
+        bin/run-example --packages org.apache.spark:spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}}:{{site.SPARK_VERSION_SHORT}} streaming.JavaKinesisWordCountASL [Kinesis app name] [Kinesis stream name] [endpoint URL]
 
 	</div>
 	<div data-lang="python" markdown="1">
@@ -216,6 +243,10 @@ de-aggregate records during consumption.
 
 - Checkpointing too frequently will cause excess load on the AWS checkpoint storage layer and may lead to AWS throttling.  The provided example handles this throttling with a random-backoff-retry strategy.
 
-- If no Kinesis checkpoint info exists when the input DStream starts, it will start either from the oldest record available (InitialPositionInStream.TRIM_HORIZON) or from the latest tip (InitialPositionInStream.LATEST).  This is configurable.
-- InitialPositionInStream.LATEST could lead to missed records if data is added to the stream while no input DStreams are running (and no checkpoint info is being stored).
-- InitialPositionInStream.TRIM_HORIZON may lead to duplicate processing of records where the impact is dependent on checkpoint frequency and processing idempotency.
+- If no Kinesis checkpoint info exists when the input DStream starts, it will start either from the oldest record available (`InitialPositionInStream.TRIM_HORIZON`) or from the latest tip (`InitialPositionInStream.LATEST`).  This is configurable.
+  - `InitialPositionInStream.LATEST` could lead to missed records if data is added to the stream while no input DStreams are running (and no checkpoint info is being stored).
+  - `InitialPositionInStream.TRIM_HORIZON` may lead to duplicate processing of records where the impact is dependent on checkpoint frequency and processing idempotency.
+
+#### Kinesis retry configuration
+ - `spark.streaming.kinesis.retry.waitTime` : Wait time between Kinesis retries as a duration string. When reading from Amazon Kinesis, users may hit `ProvisionedThroughputExceededException`'s, when consuming faster than 5 transactions/second or, exceeding the maximum read rate of 2 MB/second. This configuration can be tweaked to increase the sleep between fetches when a fetch fails to reduce these exceptions. Default is "100ms".
+ - `spark.streaming.kinesis.retry.maxAttempts` : Max number of retries for Kinesis fetches. This config can also be used to tackle the Kinesis `ProvisionedThroughputExceededException`'s in scenarios mentioned above. It can be increased to have more number of retries for Kinesis reads. Default is 3.

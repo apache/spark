@@ -20,14 +20,14 @@ package org.apache.spark.ml.classification
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.shared.HasRawPredictionCol
 import org.apache.spark.ml.util.{MetadataUtils, SchemaUtils}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * (private[spark]) Params for classification.
@@ -50,7 +50,7 @@ private[spark] trait ClassifierParams
  * Single-label binary or multiclass classification.
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam E  Concrete Estimator type
  * @tparam M  Concrete Model type
  */
@@ -71,19 +71,19 @@ abstract class Classifier[
    * and put it in an RDD with strong types.
    *
    * @param dataset  DataFrame with columns for labels ([[org.apache.spark.sql.types.NumericType]])
-   *                 and features ([[Vector]]). Labels are cast to [[DoubleType]].
+   *                 and features (`Vector`).
    * @param numClasses  Number of classes label can take.  Labels must be integers in the range
    *                    [0, numClasses).
-   * @throws SparkException  if any label is not an integer >= 0
+   * @note Throws `SparkException` if any label is a non-integer or is negative
    */
   protected def extractLabeledPoints(dataset: Dataset[_], numClasses: Int): RDD[LabeledPoint] = {
     require(numClasses > 0, s"Classifier (in extractLabeledPoints) found numClasses =" +
       s" $numClasses, but requires numClasses > 0.")
-    dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+    dataset.select(col($(labelCol)), col($(featuresCol))).rdd.map {
       case Row(label: Double, features: Vector) =>
         require(label % 1 == 0 && label >= 0 && label < numClasses, s"Classifier was given" +
           s" dataset with invalid label $label.  Labels must be integers in range" +
-          s" [0, 1, ..., $numClasses), where numClasses=$numClasses.")
+          s" [0, $numClasses).")
         LabeledPoint(label, features)
     }
   }
@@ -94,7 +94,7 @@ abstract class Classifier[
    * by finding the maximum label value.
    *
    * Label validation (ensuring all labels are integers >= 0) needs to be handled elsewhere,
-   * such as in [[extractLabeledPoints()]].
+   * such as in `extractLabeledPoints()`.
    *
    * @param dataset  Dataset which contains a column [[labelCol]]
    * @param maxNumClasses  Maximum number of classes allowed when inferred from data.  If numClasses
@@ -134,7 +134,7 @@ abstract class Classifier[
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
- * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam FeaturesType  Type of input features.  E.g., `Vector`
  * @tparam M  Concrete Model type
  */
 @DeveloperApi
@@ -150,8 +150,8 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   /**
    * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
    * parameters:
-   *  - predicted labels as [[predictionCol]] of type [[Double]]
-   *  - raw predictions (confidences) as [[rawPredictionCol]] of type [[Vector]].
+   *  - predicted labels as [[predictionCol]] of type `Double`
+   *  - raw predictions (confidences) as [[rawPredictionCol]] of type `Vector`.
    *
    * @param dataset input dataset
    * @return transformed dataset
@@ -192,10 +192,10 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
 
   /**
    * Predict label for the given features.
-   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   * This internal method is used to implement `transform()` and output [[predictionCol]].
    *
    * This default implementation for classification predicts the index of the maximum value
-   * from [[predictRaw()]].
+   * from `predictRaw()`.
    */
   override protected def predict(features: FeaturesType): Double = {
     raw2prediction(predictRaw(features))
@@ -205,7 +205,7 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
    * Raw prediction for each possible label.
    * The meaning of a "raw" prediction may vary between algorithms, but it intuitively gives
    * a measure of confidence in each possible label (where larger = more confident).
-   * This internal method is used to implement [[transform()]] and output [[rawPredictionCol]].
+   * This internal method is used to implement `transform()` and output [[rawPredictionCol]].
    *
    * @return  vector where element i is the raw prediction for label i.
    *          This raw prediction may be any real number, where a larger value indicates greater

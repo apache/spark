@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
@@ -37,18 +39,22 @@ trait HashJoin {
 
   override def output: Seq[Attribute] = {
     joinType match {
-      case Inner =>
+      case _: InnerLike =>
         left.output ++ right.output
       case LeftOuter =>
         left.output ++ right.output.map(_.withNullability(true))
       case RightOuter =>
         left.output.map(_.withNullability(true)) ++ right.output
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case x =>
         throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
     }
   }
+
+  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
@@ -58,45 +64,16 @@ trait HashJoin {
   protected lazy val (buildKeys, streamedKeys) = {
     require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
       "Join keys from two sides should have same types")
-    val lkeys = rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
-    val rkeys = rewriteKeyExpr(rightKeys).map(BindReferences.bindReference(_, right.output))
+    val lkeys = HashJoin.rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
+    val rkeys = HashJoin.rewriteKeyExpr(rightKeys)
+      .map(BindReferences.bindReference(_, right.output))
     buildSide match {
       case BuildLeft => (lkeys, rkeys)
       case BuildRight => (rkeys, lkeys)
     }
   }
 
-  /**
-   * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
-   *
-   * If not, returns the original expressions.
-   */
-  private def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
-    var keyExpr: Expression = null
-    var width = 0
-    keys.foreach { e =>
-      e.dataType match {
-        case dt: IntegralType if dt.defaultSize <= 8 - width =>
-          if (width == 0) {
-            if (e.dataType != LongType) {
-              keyExpr = Cast(e, LongType)
-            } else {
-              keyExpr = e
-            }
-            width = dt.defaultSize
-          } else {
-            val bits = dt.defaultSize * 8
-            keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
-              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
-            width -= bits
-          }
-        // TODO: support BooleanType, DateType and TimestampType
-        case other =>
-          return keys
-      }
-    }
-    keyExpr :: Nil
-  }
+
 
   protected def buildSideKeyGenerator(): Projection =
     UnsafeProjection.create(buildKeys)
@@ -105,20 +82,19 @@ trait HashJoin {
     UnsafeProjection.create(streamedKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
-    newPredicate(condition.get, streamedPlan.output ++ buildPlan.output)
+    newPredicate(condition.get, streamedPlan.output ++ buildPlan.output).eval _
   } else {
     (r: InternalRow) => true
   }
 
-  protected def createResultProjection(): (InternalRow) => InternalRow = {
-    if (joinType == LeftSemi) {
+  protected def createResultProjection(): (InternalRow) => InternalRow = joinType match {
+    case LeftExistence(_) =>
       UnsafeProjection.create(output, output)
-    } else {
+    case _ =>
       // Always put the stream side on left to simplify implementation
       // both of left and right side could be null
       UnsafeProjection.create(
         output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
-    }
   }
 
   private def innerJoin(
@@ -184,6 +160,23 @@ trait HashJoin {
     }
   }
 
+  private def existenceJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val result = new GenericInternalRow(Array[Any](null))
+    val joinedRow = new JoinedRow
+    streamIter.map { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      })
+      result.setBoolean(0, exists)
+      joinedRow(current, result)
+    }
+  }
+
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
@@ -201,10 +194,11 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: SQLMetric,
+      avgHashProbe: SQLMetric): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
-      case Inner =>
+      case _: InnerLike =>
         innerJoin(streamedIter, hashed)
       case LeftOuter | RightOuter =>
         outerJoin(streamedIter, hashed)
@@ -212,15 +206,49 @@ trait HashJoin {
         semiJoin(streamedIter, hashed)
       case LeftAnti =>
         antiJoin(streamedIter, hashed)
+      case j: ExistenceJoin =>
+        existenceJoin(streamedIter, hashed)
       case x =>
         throw new IllegalArgumentException(
           s"BroadcastHashJoin should not take $x as the JoinType")
     }
+
+    // At the end of the task, we update the avg hash probe.
+    TaskContext.get().addTaskCompletionListener(_ =>
+      avgHashProbe.set(hashed.getAverageProbesPerLookup))
 
     val resultProj = createResultProjection
     joinedIter.map { r =>
       numOutputRows += 1
       resultProj(r)
     }
+  }
+}
+
+object HashJoin {
+  /**
+   * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+   *
+   * If not, returns the original expressions.
+   */
+  private[joins] def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+    assert(keys.nonEmpty)
+    // TODO: support BooleanType, DateType and TimestampType
+    if (keys.exists(!_.dataType.isInstanceOf[IntegralType])
+      || keys.map(_.dataType.defaultSize).sum > 8) {
+      return keys
+    }
+
+    var keyExpr: Expression = if (keys.head.dataType != LongType) {
+      Cast(keys.head, LongType)
+    } else {
+      keys.head
+    }
+    keys.tail.foreach { e =>
+      val bits = e.dataType.defaultSize * 8
+      keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
+        BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
+    }
+    keyExpr :: Nil
   }
 }

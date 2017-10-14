@@ -60,15 +60,15 @@ object Statistics {
    * Compute the correlation matrix for the input RDD of Vectors using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * Note that for Spearman, a rank correlation, we need to create an RDD[Double] for each column
-   * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
-   * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
-   * avoid recomputing the common lineage.
-   *
    * @param X an RDD[Vector] for which the correlation matrix is to be computed.
    * @param method String specifying the method to use for computing correlation.
    *               Supported: `pearson` (default), `spearman`
    * @return Correlation matrix comparing columns in X.
+   *
+   * @note For Spearman, a rank correlation, we need to create an RDD[Double] for each column
+   * and sort it in order to retrieve the ranks and then join the columns back into an RDD[Vector],
+   * which is fairly costly. Cache the input RDD before calling corr with `method = "spearman"` to
+   * avoid recomputing the common lineage.
    */
   @Since("1.1.0")
   def corr(X: RDD[Vector], method: String): Matrix = Correlations.corrMatrix(X, method)
@@ -77,18 +77,18 @@ object Statistics {
    * Compute the Pearson correlation for the input RDDs.
    * Returns NaN if either vector has 0 variance.
    *
-   * Note: the two input RDDs need to have the same number of partitions and the same number of
-   * elements in each partition.
-   *
    * @param x RDD[Double] of the same cardinality as y.
    * @param y RDD[Double] of the same cardinality as x.
    * @return A Double containing the Pearson correlation between the two input RDD[Double]s
+   *
+   * @note The two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
    */
   @Since("1.1.0")
   def corr(x: RDD[Double], y: RDD[Double]): Double = Correlations.corr(x, y)
 
   /**
-   * Java-friendly version of [[corr()]]
+   * Java-friendly version of `corr()`
    */
   @Since("1.4.1")
   def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double]): Double =
@@ -98,21 +98,21 @@ object Statistics {
    * Compute the correlation for the input RDDs using the specified method.
    * Methods currently supported: `pearson` (default), `spearman`.
    *
-   * Note: the two input RDDs need to have the same number of partitions and the same number of
-   * elements in each partition.
-   *
    * @param x RDD[Double] of the same cardinality as y.
    * @param y RDD[Double] of the same cardinality as x.
    * @param method String specifying the method to use for computing correlation.
    *               Supported: `pearson` (default), `spearman`
    * @return A Double containing the correlation between the two input RDD[Double]s using the
    *         specified method.
+   *
+   * @note The two input RDDs need to have the same number of partitions and the same number of
+   * elements in each partition.
    */
   @Since("1.1.0")
   def corr(x: RDD[Double], y: RDD[Double], method: String): Double = Correlations.corr(x, y, method)
 
   /**
-   * Java-friendly version of [[corr()]]
+   * Java-friendly version of `corr()`
    */
   @Since("1.4.1")
   def corr(x: JavaRDD[java.lang.Double], y: JavaRDD[java.lang.Double], method: String): Double =
@@ -122,15 +122,15 @@ object Statistics {
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the
    * expected distribution.
    *
-   * Note: the two input Vectors need to have the same size.
-   *       `observed` cannot contain negative values.
-   *       `expected` cannot contain nonpositive values.
-   *
    * @param observed Vector containing the observed categorical counts/relative frequencies.
    * @param expected Vector containing the expected categorical counts/relative frequencies.
    *                 `expected` is rescaled if the `expected` sum differs from the `observed` sum.
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
+   *
+   * @note The two input Vectors need to have the same size.
+   * `observed` cannot contain negative values.
+   * `expected` cannot contain nonpositive values.
    */
   @Since("1.1.0")
   def chiSqTest(observed: Vector, expected: Vector): ChiSqTestResult = {
@@ -141,11 +141,11 @@ object Statistics {
    * Conduct Pearson's chi-squared goodness of fit test of the observed data against the uniform
    * distribution, with each category having an expected frequency of `1 / observed.size`.
    *
-   * Note: `observed` cannot contain negative values.
-   *
    * @param observed Vector containing the observed categorical counts/relative frequencies.
    * @return ChiSquaredTest object containing the test statistic, degrees of freedom, p-value,
    *         the method used, and the null hypothesis.
+   *
+   * @note `observed` cannot contain negative values.
    */
   @Since("1.1.0")
   def chiSqTest(observed: Vector): ChiSqTestResult = ChiSqTest.chiSquared(observed)
@@ -176,7 +176,9 @@ object Statistics {
     ChiSqTest.chiSquaredFeatures(data)
   }
 
-  /** Java-friendly version of [[chiSqTest()]] */
+  /**
+   * Java-friendly version of `chiSqTest()`
+   */
   @Since("1.5.0")
   def chiSqTest(data: JavaRDD[LabeledPoint]): Array[ChiSqTestResult] = chiSqTest(data.rdd)
 
@@ -186,7 +188,8 @@ object Statistics {
    * distribution of the sample data and the theoretical distribution we can provide a test for the
    * the null hypothesis that the sample data comes from that theoretical distribution.
    * For more information on KS Test:
-   * @see [[https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test]]
+   * @see <a href="https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test">
+   * Kolmogorov-Smirnov test (Wikipedia)</a>
    *
    * @param data an `RDD[Double]` containing the sample of data to test
    * @param cdf a `Double => Double` function to calculate the theoretical CDF at a given value
@@ -217,7 +220,9 @@ object Statistics {
     KolmogorovSmirnovTest.testOneSample(data, distName, params: _*)
   }
 
-  /** Java-friendly version of [[kolmogorovSmirnovTest()]] */
+  /**
+   * Java-friendly version of `kolmogorovSmirnovTest()`
+   */
   @Since("1.5.0")
   @varargs
   def kolmogorovSmirnovTest(

@@ -1,7 +1,7 @@
 ---
 layout: global
-title: Feature Extraction and Transformation - spark.mllib
-displayTitle: Feature Extraction and Transformation - spark.mllib
+title: Feature Extraction and Transformation - RDD-based API
+displayTitle: Feature Extraction and Transformation - RDD-based API
 ---
 
 * Table of contents
@@ -9,6 +9,9 @@ displayTitle: Feature Extraction and Transformation - spark.mllib
 
 
 ## TF-IDF
+
+**Note** We recommend using the DataFrame-based API, which is detailed in the [ML user guide on 
+TF-IDF](ml-features.html#tf-idf).
 
 [Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
@@ -145,7 +148,7 @@ against features with very large variances exerting an overly large influence du
 following parameters in the constructor:
 
 * `withMean` False by default. Centers the data with mean before scaling. It will build a dense
-output, so this does not work on sparse input and will raise an exception.
+output, so take care when applying to sparse input.
 * `withStd` True by default. Scales the data to unit standard deviation.
 
 We provide a [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.StandardScaler) method in
@@ -222,17 +225,22 @@ features for use in model construction. It reduces the size of the feature space
 both speed and statistical learning behavior.
 
 [`ChiSqSelector`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) implements
-Chi-Squared feature selection. It operates on labeled data with categorical features.
-`ChiSqSelector` orders features based on a Chi-Squared test of independence from the class,
-and then filters (selects) the top features which the class label depends on the most.
-This is akin to yielding the features with the most predictive power.
+Chi-Squared feature selection. It operates on labeled data with categorical features. ChiSqSelector uses the
+[Chi-Squared test of independence](https://en.wikipedia.org/wiki/Chi-squared_test) to decide which
+features to choose. It supports five selection methods: `numTopFeatures`, `percentile`, `fpr`, `fdr`, `fwe`:
+
+* `numTopFeatures` chooses a fixed number of top features according to a chi-squared test. This is akin to yielding the features with the most predictive power.
+* `percentile` is similar to `numTopFeatures` but chooses a fraction of all features instead of a fixed number.
+* `fpr` chooses all features whose p-values are below a threshold, thus controlling the false positive rate of selection.
+* `fdr` uses the [Benjamini-Hochberg procedure](https://en.wikipedia.org/wiki/False_discovery_rate#Benjamini.E2.80.93Hochberg_procedure) to choose all features whose false discovery rate is below a threshold.
+* `fwe` chooses all features whose p-values are below a threshold. The threshold is scaled by 1/numFeatures, thus controlling the family-wise error rate of selection.
+
+By default, the selection method is `numTopFeatures`, with the default number of top features set to 50.
+The user can choose a selection method using `setSelectorType`.
 
 The number of features to select can be tuned using a held-out validation set.
 
 ### Model Fitting
-
-`ChiSqSelector` takes a `numTopFeatures` parameter specifying the number of top features that
-the selector will select.
 
 The [`fit`](api/scala/index.html#org.apache.spark.mllib.feature.ChiSqSelector) method takes
 an input of `RDD[LabeledPoint]` with categorical features, learns the summary statistics, and then
@@ -330,7 +338,7 @@ Details you can read at [dimensionality reduction](mllib-dimensionality-reductio
 
 The following code demonstrates how to compute principal components on a `Vector`
 and use them to project the vectors into a low-dimensional space while keeping associated labels
-for calculation a [Linear Regression]((mllib-linear-methods.html))
+for calculation a [Linear Regression](mllib-linear-methods.html)
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

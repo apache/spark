@@ -42,7 +42,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
       .add("a", IntegerType, nullable = false)
       .add("b", IntegerType, nullable = false)
     val inputData = Seq.fill(10000)(Row(rand.nextInt(), rand.nextInt()))
-    sqlContext.createDataFrame(sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
+    spark.createDataFrame(sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
   }
 
   /**
@@ -59,7 +59,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
       checkThatPlansAgree(
         generateRandomInputData(),
         input =>
-          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, None, input)),
+          noOpFilter(TakeOrderedAndProjectExec(limit, sortOrder, input.output, input)),
         input =>
           GlobalLimitExec(limit,
             LocalLimitExec(limit,
@@ -74,7 +74,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
         generateRandomInputData(),
         input =>
           noOpFilter(
-            TakeOrderedAndProjectExec(limit, sortOrder, Some(Seq(input.output.last)), input)),
+            TakeOrderedAndProjectExec(limit, sortOrder, Seq(input.output.last), input)),
         input =>
           GlobalLimitExec(limit,
             LocalLimitExec(limit,

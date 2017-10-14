@@ -19,6 +19,7 @@ package org.apache.spark.examples.mllib;
 
 // $example on$
 import java.util.HashMap;
+import java.util.Map;
 
 import scala.Tuple2;
 
@@ -26,8 +27,6 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.tree.RandomForest;
 import org.apache.spark.mllib.tree.model.RandomForestModel;
@@ -50,7 +49,7 @@ public class JavaRandomForestClassificationExample {
     // Train a RandomForest model.
     // Empty categoricalFeaturesInfo indicates all features are continuous.
     Integer numClasses = 2;
-    HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
+    Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     Integer numTrees = 3; // Use more in practice.
     String featureSubsetStrategy = "auto"; // Let the algorithm choose.
     String impurity = "gini";
@@ -58,25 +57,15 @@ public class JavaRandomForestClassificationExample {
     Integer maxBins = 32;
     Integer seed = 12345;
 
-    final RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
+    RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
       categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
       seed);
 
     // Evaluate model on test instances and compute test error
     JavaPairRDD<Double, Double> predictionAndLabel =
-      testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-        @Override
-        public Tuple2<Double, Double> call(LabeledPoint p) {
-          return new Tuple2<>(model.predict(p.features()), p.label());
-        }
-      });
-    Double testErr =
-      1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-        @Override
-        public Boolean call(Tuple2<Double, Double> pl) {
-          return !pl._1().equals(pl._2());
-        }
-      }).count() / testData.count();
+      testData.mapToPair(p -> new Tuple2<>(model.predict(p.features()), p.label()));
+    double testErr =
+      predictionAndLabel.filter(pl -> !pl._1().equals(pl._2())).count() / (double) testData.count();
     System.out.println("Test Error: " + testErr);
     System.out.println("Learned classification forest model:\n" + model.toDebugString());
 

@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
+import org.apache.spark.sql.execution.LeafExecNode
 import org.apache.spark.sql.execution.datasources.DataSource
 
 object StreamingRelation {
@@ -39,19 +44,50 @@ case class StreamingRelation(dataSource: DataSource, sourceName: String, output:
   extends LeafNode {
   override def isStreaming: Boolean = true
   override def toString: String = sourceName
+
+  // There's no sensible value here. On the execution path, this relation will be
+  // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
+  // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
+  // value.
+  override def computeStats(): Statistics = Statistics(
+    sizeInBytes = BigInt(dataSource.sparkSession.sessionState.conf.defaultSizeInBytes)
+  )
 }
 
 /**
  * Used to link a streaming [[Source]] of data into a
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].
  */
-case class StreamingExecutionRelation(source: Source, output: Seq[Attribute]) extends LeafNode {
+case class StreamingExecutionRelation(
+    source: Source,
+    output: Seq[Attribute])(session: SparkSession)
+  extends LeafNode {
+
   override def isStreaming: Boolean = true
   override def toString: String = source.toString
+
+  // There's no sensible value here. On the execution path, this relation will be
+  // swapped out with microbatches. But some dataframe operations (in particular explain) do lead
+  // to this node surviving analysis. So we satisfy the LeafNode contract with the session default
+  // value.
+  override def computeStats(): Statistics = Statistics(
+    sizeInBytes = BigInt(session.sessionState.conf.defaultSizeInBytes)
+  )
+}
+
+/**
+ * A dummy physical plan for [[StreamingRelation]] to support
+ * [[org.apache.spark.sql.Dataset.explain]]
+ */
+case class StreamingRelationExec(sourceName: String, output: Seq[Attribute]) extends LeafExecNode {
+  override def toString: String = sourceName
+  override protected def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException("StreamingRelationExec cannot be executed")
+  }
 }
 
 object StreamingExecutionRelation {
-  def apply(source: Source): StreamingExecutionRelation = {
-    StreamingExecutionRelation(source, source.schema.toAttributes)
+  def apply(source: Source, session: SparkSession): StreamingExecutionRelation = {
+    StreamingExecutionRelation(source, source.schema.toAttributes)(session)
   }
 }

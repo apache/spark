@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.ml.util.MLReader
 
 /**
- * This is the Scala stub of SparkR ml.load. It will dispatch the call to corresponding
+ * This is the Scala stub of SparkR read.ml. It will dispatch the call to corresponding
  * model wrapper loading function according the class name extracted from rMetadata of the path.
  */
 private[r] object RWrappers extends MLReader[Object] {
@@ -44,8 +44,38 @@ private[r] object RWrappers extends MLReader[Object] {
         GeneralizedLinearRegressionWrapper.load(path)
       case "org.apache.spark.ml.r.KMeansWrapper" =>
         KMeansWrapper.load(path)
+      case "org.apache.spark.ml.r.MultilayerPerceptronClassifierWrapper" =>
+        MultilayerPerceptronClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.LDAWrapper" =>
+        LDAWrapper.load(path)
+      case "org.apache.spark.ml.r.IsotonicRegressionWrapper" =>
+        IsotonicRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.GaussianMixtureWrapper" =>
+        GaussianMixtureWrapper.load(path)
+      case "org.apache.spark.ml.r.ALSWrapper" =>
+        ALSWrapper.load(path)
+      case "org.apache.spark.ml.r.LogisticRegressionWrapper" =>
+        LogisticRegressionWrapper.load(path)
+      case "org.apache.spark.ml.r.RandomForestRegressorWrapper" =>
+        RandomForestRegressorWrapper.load(path)
+      case "org.apache.spark.ml.r.RandomForestClassifierWrapper" =>
+        RandomForestClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.DecisionTreeRegressorWrapper" =>
+        DecisionTreeRegressorWrapper.load(path)
+      case "org.apache.spark.ml.r.DecisionTreeClassifierWrapper" =>
+        DecisionTreeClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.GBTRegressorWrapper" =>
+        GBTRegressorWrapper.load(path)
+      case "org.apache.spark.ml.r.GBTClassifierWrapper" =>
+        GBTClassifierWrapper.load(path)
+      case "org.apache.spark.ml.r.BisectingKMeansWrapper" =>
+        BisectingKMeansWrapper.load(path)
+      case "org.apache.spark.ml.r.LinearSVCWrapper" =>
+        LinearSVCWrapper.load(path)
+      case "org.apache.spark.ml.r.FPGrowthWrapper" =>
+        FPGrowthWrapper.load(path)
       case _ =>
-        throw new SparkException(s"SparkR ml.load does not support load $className")
+        throw new SparkException(s"SparkR read.ml does not support load $className")
     }
   }
 }

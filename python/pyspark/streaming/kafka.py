@@ -55,6 +55,8 @@ class KafkaUtils(object):
         :param keyDecoder:  A function used to decode key (default is utf8_decoder)
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A DStream object
+
+        .. note:: Deprecated in 2.3.0
         """
         if kafkaParams is None:
             kafkaParams = dict()
@@ -77,8 +79,6 @@ class KafkaUtils(object):
                            keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
                            messageHandler=None):
         """
-        .. note:: Experimental
-
         Create an input stream that directly pulls messages from a Kafka Broker and specific offset.
 
         This is not a receiver based Kafka input stream, it directly pulls the message from Kafka
@@ -103,6 +103,9 @@ class KafkaUtils(object):
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
                                meta using messageHandler (default is None).
         :return: A DStream object
+
+        .. note:: Experimental
+        .. note:: Deprecated in 2.3.0
         """
         if fromOffsets is None:
             fromOffsets = dict()
@@ -142,9 +145,7 @@ class KafkaUtils(object):
                   keyDecoder=utf8_decoder, valueDecoder=utf8_decoder,
                   messageHandler=None):
         """
-        .. note:: Experimental
-
-        Create a RDD from Kafka using offset ranges for each topic and partition.
+        Create an RDD from Kafka using offset ranges for each topic and partition.
 
         :param sc:  SparkContext object
         :param kafkaParams: Additional params for Kafka
@@ -155,7 +156,10 @@ class KafkaUtils(object):
         :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :param messageHandler: A function used to convert KafkaMessageAndMetadata. You can assess
                                meta using messageHandler (default is None).
-        :return: A RDD object
+        :return: An RDD object
+
+        .. note:: Experimental
+        .. note:: Deprecated in 2.3.0
         """
         if leaders is None:
             leaders = dict()
@@ -208,13 +212,13 @@ ________________________________________________________________________________
   1. Include the Kafka library and its dependencies with in the
      spark-submit command as
 
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8:%s ...
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-0-8-assembly, Version = %s.
      Then, include the jar in the spark-submit command as
 
-     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
+     $ bin/spark-submit --jars <spark-streaming-kafka-0-8-assembly.jar> ...
 
 ________________________________________________________________________________________________
 
@@ -224,11 +228,13 @@ ________________________________________________________________________________
 class OffsetRange(object):
     """
     Represents a range of offsets from a single Kafka TopicAndPartition.
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, topic, partition, fromOffset, untilOffset):
         """
-        Create a OffsetRange to represent  range of offsets
+        Create an OffsetRange to represent range of offsets
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         :param fromOffset: Inclusive starting offset.
@@ -262,7 +268,9 @@ class OffsetRange(object):
 
 class TopicAndPartition(object):
     """
-    Represents a specific top and partition for Kafka.
+    Represents a specific topic and partition for Kafka.
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, topic, partition):
@@ -287,10 +295,15 @@ class TopicAndPartition(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __hash__(self):
+        return (self._topic, self._partition).__hash__()
+
 
 class Broker(object):
     """
     Represent the host and port info for a Kafka broker.
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, host, port):
@@ -309,6 +322,8 @@ class Broker(object):
 class KafkaRDD(RDD):
     """
     A Python wrapper of KafkaRDD, to provide additional information on normal RDD.
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, jrdd, ctx, jrdd_deserializer):
@@ -329,6 +344,8 @@ class KafkaRDD(RDD):
 class KafkaDStream(DStream):
     """
     A Python wrapper of KafkaDStream
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, jdstream, ssc, jrdd_deserializer):
@@ -365,6 +382,8 @@ class KafkaDStream(DStream):
 class KafkaTransformedDStream(TransformedDStream):
     """
     Kafka specific wrapper of TransformedDStream to transform on Kafka RDD.
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, prev, func):
@@ -385,6 +404,8 @@ class KafkaTransformedDStream(TransformedDStream):
 class KafkaMessageAndMetadata(object):
     """
     Kafka message and metadata information. Including topic, partition, offset and message
+
+    .. note:: Deprecated in 2.3.0
     """
 
     def __init__(self, topic, partition, offset, key, message):

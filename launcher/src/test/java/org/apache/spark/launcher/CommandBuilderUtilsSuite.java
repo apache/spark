@@ -99,12 +99,12 @@ public class CommandBuilderUtilsSuite {
     assertEquals(10, javaMajorVersion("10"));
   }
 
-  private void testOpt(String opts, List<String> expected) {
+  private static void testOpt(String opts, List<String> expected) {
     assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
         expected, parseOptionString(opts));
   }
 
-  private void testInvalidOpt(String opts) {
+  private static void testInvalidOpt(String opts) {
     try {
       parseOptionString(opts);
       fail("Expected exception for invalid option string.");
