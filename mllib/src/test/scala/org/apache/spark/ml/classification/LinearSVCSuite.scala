@@ -23,9 +23,8 @@ import breeze.linalg.{DenseVector => BDV}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.classification.LinearSVCSuite._
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
-import org.apache.spark.ml.optim.aggregator.{HingeAggregator, SquaredHingeAggregator}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
@@ -39,11 +38,12 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   import testImplicits._
 
   private val nPoints = 50
-  @transient var smallBinaryDataset: Dataset[_] = _
+  @transient var smallTrainingDataset: Dataset[_] = _
   @transient var smallValidationDataset: Dataset[_] = _
   @transient var binaryDataset: Dataset[_] = _
 
-  @transient var smallSparseBinaryDataset: Dataset[_] = _
+  // equivalent with smallTrainingDataset but in sparse Vectors.
+  @transient var smallSparseTrainingDataset: Dataset[_] = _
   @transient var smallSparseValidationDataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
@@ -53,16 +53,15 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val A = 0.01
     val B = -1.5
     val C = 1.0
-    smallBinaryDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42).toDF()
+    smallTrainingDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 42).toDF()
     smallValidationDataset = generateSVMInput(A, Array[Double](B, C), nPoints, 17).toDF()
     binaryDataset = generateSVMInput(1.0, Array[Double](1.0, 2.0, 3.0, 4.0), 10000, 42).toDF()
 
     // Dataset for testing SparseVector
     val toSparse: Vector => SparseVector = _.asInstanceOf[DenseVector].toSparse
     val sparse = udf(toSparse)
-    smallSparseBinaryDataset = smallBinaryDataset.withColumn("features", sparse('features))
+    smallSparseTrainingDataset = smallTrainingDataset.withColumn("features", sparse('features))
     smallSparseValidationDataset = smallValidationDataset.withColumn("features", sparse('features))
-
   }
 
   /**
@@ -76,26 +75,28 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("Linear SVC binary classification") {
-    LinearSVC.supportedOptimizers.foreach { opt =>
-      Array("hinge", "squared_hinge").foreach { loss =>
+    LinearSVC.supportedSolvers.foreach { opt =>
+      LinearSVC.supportedLoss.foreach { loss =>
         val svm = new LinearSVC().setLoss(loss).setSolver(opt)
-        val model = svm.fit(smallBinaryDataset)
+        val model = svm.fit(smallTrainingDataset)
         assert(model.transform(smallValidationDataset)
           .where("prediction=label").count() > nPoints * 0.8)
-        val sparseModel = svm.fit(smallSparseBinaryDataset)
-        checkModels(model, sparseModel)
+        val sparseModel = svm.fit(smallSparseTrainingDataset)
+        checkModelsEqual(model, sparseModel)
       }
     }
   }
 
   test("Linear SVC binary classification with regularization") {
-    LinearSVC.supportedOptimizers.foreach { opt =>
-      val svm = new LinearSVC().setSolver(opt).setMaxIter(10)
-      val model = svm.setRegParam(0.1).fit(smallBinaryDataset)
-      assert(model.transform(smallValidationDataset)
-        .where("prediction=label").count() > nPoints * 0.8)
-      val sparseModel = svm.fit(smallSparseBinaryDataset)
-      checkModels(model, sparseModel)
+    LinearSVC.supportedSolvers.foreach { opt =>
+      LinearSVC.supportedLoss.foreach { loss =>
+        val svm = new LinearSVC().setSolver(opt).setLoss(loss).setMaxIter(10)
+        val model = svm.setRegParam(0.1).fit(smallTrainingDataset)
+        assert(model.transform(smallValidationDataset)
+          .where("prediction=label").count() > nPoints * 0.8)
+        val sparseModel = svm.fit(smallSparseTrainingDataset)
+        checkModelsEqual(model, sparseModel)
+      }
     }
   }
 
@@ -119,10 +120,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     assert(lsvc.getFeaturesCol === "features")
     assert(lsvc.getPredictionCol === "prediction")
     assert(lsvc.getRawPredictionCol === "rawPrediction")
-    assert(lsvc.getSolver === "l-bfgs")
-    assert(lsvc.getLoss === "squared_hinge")
-    val model = lsvc.setMaxIter(5).fit(smallBinaryDataset)
-    model.transform(smallBinaryDataset)
+    assert(lsvc.getSolver === LinearSVC.LBFGS)
+    assert(lsvc.getLoss === LinearSVC.SQUARED_HINGE)
+    val model = lsvc.setMaxIter(5).fit(smallTrainingDataset)
+    model.transform(smallTrainingDataset)
       .select("label", "prediction", "rawPrediction")
       .collect()
     assert(model.getThreshold === 0.0)
@@ -178,27 +179,12 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
 
   test("linear svc doesn't fit intercept when fitIntercept is off") {
     val lsvc = new LinearSVC().setFitIntercept(false).setMaxIter(5)
-    val model = lsvc.fit(smallBinaryDataset)
+    val model = lsvc.fit(smallTrainingDataset)
     assert(model.intercept === 0.0)
 
     val lsvc2 = new LinearSVC().setFitIntercept(true).setMaxIter(5)
-    val model2 = lsvc2.fit(smallBinaryDataset)
+    val model2 = lsvc2.fit(smallTrainingDataset)
     assert(model2.intercept !== 0.0)
-  }
-
-  test("sparse coefficients in HingeAggregator") {
-    val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
-    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
-    val agg = new HingeAggregator(bcFeaturesStd, true)(bcCoefficients)
-    val thrown = withClue("LinearSVCAggregator cannot handle sparse coefficients") {
-      intercept[IllegalArgumentException] {
-        agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
-      }
-    }
-    assert(thrown.getMessage.contains("coefficients only supports dense"))
-
-    bcCoefficients.destroy(blocking = false)
-    bcFeaturesStd.destroy(blocking = false)
   }
 
   test("linearSVC with sample weights") {
@@ -206,10 +192,10 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(m1.coefficients ~== m2.coefficients absTol 0.07)
       assert(m1.intercept ~== m2.intercept absTol 0.05)
     }
-    LinearSVC.supportedOptimizers.foreach { opt =>
+    LinearSVC.supportedSolvers.foreach { opt =>
       val estimator = new LinearSVC().setRegParam(0.02).setTol(0.01).setSolver(opt)
         .setLoss("hinge")
-      val dataset = smallBinaryDataset
+      val dataset = smallTrainingDataset
       MLTestingUtils.testArbitrarilyScaledWeights[LinearSVCModel, LinearSVC](
         dataset.as[LabeledPoint], estimator, modelEquals)
       MLTestingUtils.testOutliersWithSmallWeights[LinearSVCModel, LinearSVC](
@@ -315,7 +301,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setRegParam(2.0 / 10 / size) // set regParam = 2.0 / datasize / c
       .setMaxIter(200)
       .setTol(1e-4)
-    val model = linearSVC.fit(smallBinaryDataset)
+    val model = linearSVC.fit(smallTrainingDataset)
 
     val linearSVC2 = new LinearSVC()
       .setLoss("squared_hinge")
@@ -323,7 +309,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setRegParam(2.0 / 10 / size) // set regParam = 2.0 / datasize / c
       .setMaxIter(200)
       .setTol(1e-4)
-    val model2 = linearSVC2.fit(smallBinaryDataset)
+    val model2 = linearSVC2.fit(smallTrainingDataset)
 
     assert(model.coefficients ~== model2.coefficients relTol 1E-3)
     assert(model.intercept ~== model2.intercept relTol 1E-3)
@@ -337,7 +323,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setMaxIter(200)
       .setTol(1e-4)
         .setFitIntercept(false)
-    val model = linearSVC.fit(smallBinaryDataset)
+    val model = linearSVC.fit(smallTrainingDataset)
 
     val linearSVC2 = new LinearSVC()
       .setLoss("hinge")
@@ -346,7 +332,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       .setMaxIter(200)
       .setTol(1e-4)
       .setFitIntercept(false)
-    val model2 = linearSVC2.fit(smallBinaryDataset)
+    val model2 = linearSVC2.fit(smallTrainingDataset)
     assert(model.coefficients ~== model2.coefficients relTol 2E-2)
     assert(model.intercept === 0)
     assert(model2.intercept === 0)
@@ -359,7 +345,7 @@ class LinearSVCSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
       assert(model.numFeatures === model2.numFeatures)
     }
     val svm = new LinearSVC()
-    testEstimatorAndModelReadWrite(svm, smallBinaryDataset, LinearSVCSuite.allParamSettings,
+    testEstimatorAndModelReadWrite(svm, smallTrainingDataset, LinearSVCSuite.allParamSettings,
       LinearSVCSuite.allParamSettings, checkModelData)
   }
 }
@@ -377,7 +363,7 @@ object LinearSVCSuite {
     "rawPredictionCol" -> "myRawPredict",
     "aggregationDepth" -> 3,
     "solver" -> "owlqn",
-    "loss" -> "squared_hinge"
+    "loss" -> "hinge"
   )
 
   // Generate noisy input of the form Y = signum(x.dot(weights) + intercept + noise)
@@ -397,7 +383,7 @@ object LinearSVCSuite {
     y.zip(x).map(p => LabeledPoint(p._1, Vectors.dense(p._2)))
   }
 
-  def checkModels(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {
+  def checkModelsEqual(model1: LinearSVCModel, model2: LinearSVCModel): Unit = {
     assert(model1.intercept == model2.intercept)
     assert(model1.coefficients.equals(model2.coefficients))
   }

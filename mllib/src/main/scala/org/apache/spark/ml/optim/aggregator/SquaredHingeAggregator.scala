@@ -79,15 +79,16 @@ private[ml] class SquaredHingeAggregator(
       // Our loss function with {0, 1} labels is (max(0, 1 - (2y - 1) (f_w(x))))^2
       // Therefore the gradient is 2 * ((2y - 1) f_w(x) - 1) * (2y - 1) * x
       val labelScaled = 2 * label - 1.0
-      val loss = if (1.0 > labelScaled * dotProduct) {
-        val hingeLoss = 1.0 - labelScaled * dotProduct
+      val scaledDoctProduct = labelScaled * dotProduct
+      val loss = if (1.0 > scaledDoctProduct) {
+        val hingeLoss = 1.0 - scaledDoctProduct
         hingeLoss * hingeLoss * weight
       } else {
         0.0
       }
 
-      if (1.0 > labelScaled * dotProduct) {
-        val gradientScale = (labelScaled * dotProduct - 1) * labelScaled * 2 * weight
+      if (1.0 > scaledDoctProduct) {
+        val gradientScale = (scaledDoctProduct - 1) * labelScaled * 2 * weight
         features.foreachActive { (index, value) =>
           if (localFeaturesStd(index) != 0.0 && value != 0.0) {
             localGradientSumArray(index) += value * gradientScale / localFeaturesStd(index)
@@ -96,7 +97,7 @@ private[ml] class SquaredHingeAggregator(
         if (fitIntercept) {
           localGradientSumArray(localGradientSumArray.length - 1) += gradientScale
         }
-      }
+      } // else gradient will not be updated.
 
       lossSum += loss
       weightSum += weight

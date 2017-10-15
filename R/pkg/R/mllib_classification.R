@@ -58,8 +58,9 @@ setClass("NaiveBayesModel", representation(jobj = "jobj"))
 #' @param regParam The regularization parameter. Only supports L2 regularization currently.
 #' @param maxIter Maximum iteration number.
 #' @param tol Convergence tolerance of iterations.
-#' @param solver solver parameter, supported options: "owlqn" or "l-bfgs". Default is "l-bfgs"
-#' @param loss loss function, supported options: "hinge" and "squared_hinge". Default is "squared_hinge"
+#' @param solver Optimization solver, supported options: "owlqn" or "l-bfgs". Default is "l-bfgs"
+#' @param loss Loss function, supported options: "hinge" and "squared_hinge". Default is
+#              "squared_hinge"
 #' @param standardization Whether to standardize the training features before fitting the model.
 #'                        The coefficients of models will be always returned on the original scale,
 #'                        so it will be transparent for users. Note that with/without

@@ -162,4 +162,19 @@ class SquaredHingeAggregatorSuite extends SparkFunSuite with MLlibTestSparkConte
     assert(aggConstantFeatureBinary.gradient(1) == aggConstantFeatureBinaryFiltered.gradient(0))
   }
 
+  test("sparse coefficients in SquaredHingeAggregator") {
+    val bcCoefficients = spark.sparkContext.broadcast(Vectors.sparse(2, Array(0), Array(1.0)))
+    val bcFeaturesStd = spark.sparkContext.broadcast(Array(1.0))
+    val agg = new SquaredHingeAggregator(bcFeaturesStd, true)(bcCoefficients)
+    val thrown = withClue("SquaredHingeAggregator cannot handle sparse coefficients") {
+      intercept[IllegalArgumentException] {
+        agg.add(Instance(1.0, 1.0, Vectors.dense(1.0)))
+      }
+    }
+    assert(thrown.getMessage.contains("coefficients only supports dense"))
+
+    bcCoefficients.destroy(blocking = false)
+    bcFeaturesStd.destroy(blocking = false)
+  }
+
 }

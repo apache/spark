@@ -192,7 +192,7 @@ class LinearSVC @Since("2.2.0") (
    */
   @Since("2.3.0")
   def setLoss(value: String): this.type = set(loss, value)
-  setDefault(loss -> "squared_hinge")
+  setDefault(loss -> SQUARED_HINGE)
 
   /**
    * Set solver for LinearSVC. Supported options: "l-bfgs" and "owlqn" (case insensitve).
@@ -202,14 +202,13 @@ class LinearSVC @Since("2.2.0") (
    * (default: "owlqn")
    * @group setParam
    */
-  @Since("2.2.0")
+  @Since("2.3.0")
   def setSolver(value: String): this.type = {
-    val lowercaseValue = value.toLowerCase(Locale.ROOT)
-    require(supportedOptimizers.contains(lowercaseValue),
-      s"Solver $value was not supported. Supported options: l-bfgs, owlqn")
-    set(solver, lowercaseValue)
+    require(supportedSolvers.contains(value.toLowerCase(Locale.ROOT)), s"Solver $value was" +
+      s" not supported. Supported options: ${supportedSolvers.mkString(", ")}")
+    set(solver, value)
   }
-  setDefault(solver -> "l-bfgs")
+  setDefault(solver -> LBFGS)
 
   @Since("2.2.0")
   override def copy(extra: ParamMap): LinearSVC = defaultCopy(extra)
@@ -278,16 +277,16 @@ class LinearSVC @Since("2.2.0") (
       }
 
       val costFun = $(loss) match {
-        case "hinge" =>
+        case HINGE =>
           val getAggregatorFunc = new HingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
           new RDDLossFunction(instances, getAggregatorFunc, regularization,
             $(aggregationDepth))
-        case "squared_hinge" =>
+        case SQUARED_HINGE =>
           val getAggregatorFunc = new SquaredHingeAggregator(bcFeaturesStd, $(fitIntercept))(_)
           new RDDLossFunction(instances, getAggregatorFunc, regularization,
             $(aggregationDepth))
         case unexpected => throw new SparkException(
-          s"unexpected lossFunction in LinearSVCAggregator: $unexpected")
+          s"unexpected loss Function in LinearSVC: $unexpected")
       }
 
       val optimizer = $(solver).toLowerCase(Locale.ROOT) match {
@@ -295,7 +294,7 @@ class LinearSVC @Since("2.2.0") (
         case OWLQN =>
           def regParamL1Fun = (index: Int) => 0D
           new BreezeOWLQN[Int, BDV[Double]]($(maxIter), 10, regParamL1Fun, $(tol))
-        case _ => throw new SparkException ("unexpected optimizer: " + $(solver))
+        case _ => throw new SparkException ("unexpected solver: " + $(solver))
       }
 
       val initialCoefWithIntercept = Vectors.zeros(numFeaturesPlusIntercept)
@@ -356,12 +355,20 @@ object LinearSVC extends DefaultParamsReadable[LinearSVC] {
   private[classification] val OWLQN: String = "owlqn".toLowerCase(Locale.ROOT)
 
   /* Set of optimizers that LinearSVC supports */
-  private[classification] val supportedOptimizers = Array(LBFGS, OWLQN)
+  private[classification] val supportedSolvers = Array(LBFGS, OWLQN)
+
+  /** String name for Hinge Loss. */
+  private[classification] val HINGE: String = "hinge".toLowerCase(Locale.ROOT)
+
+  /** String name for Squared Hinge Loss. */
+  private[classification] val SQUARED_HINGE: String = "squared_hinge".toLowerCase(Locale.ROOT)
+
+  /* Set of loss function that LinearSVC supports */
+  private[classification] val supportedLoss = Array(HINGE, SQUARED_HINGE)
 
   @Since("2.2.0")
   override def load(path: String): LinearSVC = super.load(path)
 
-  private[classification] val supportedLoss = Array("hinge", "squared_hinge")
 }
 
 /**
