@@ -480,49 +480,6 @@ To load a JSON file you can use:
 </div>
 </div>
 
-To load a CSV file you can use several CSV-specific options:
-* `sep (default ,)`: sets the single character as a separator for each field and value.
-* `encoding (default UTF-8)`: decodes the CSV files by the given encoding type.
-* `quote (default ")`: sets the single character used for escaping quoted values where the separator can be part of the value. If you would like to turn off quotations, you need to set not null but an empty string. This behaviour is different from com.databricks.spark.csv.
-* `escape (default \)`: sets the single character used for escaping quotes inside an already quoted value.
-* `comment (default empty string)`: sets the single character used for skipping lines beginning with this character. By default, it is disabled.
-* `header (default false)`: uses the first line as names of columns.
-* `inferSchema (default false)`: infers the input schema automatically from data. It requires one extra pass over the data.
-* `ignoreLeadingWhiteSpace (default false)`: a flag indicating whether or not leading whitespaces from values being read should be skipped.
-* `ignoreTrailingWhiteSpace (default false)`: a flag indicating whether or not trailing whitespaces from values being read should be skipped.
-* `nullValue (default empty string)`: sets the string representation of a null value.
-* `nanValue (default NaN)`: sets the string representation of a non-number" value.
-* `positiveInf (default Inf)`: sets the string representation of a positive infinity value.
-* `negativeInf (default -Inf)`: sets the string representation of a negative infinity value.
-* `dateFormat (default yyyy-MM-dd)`: Custom date formats follow the formats at java.text.SimpleDateFormat. This applies to date type.
-* `timestampFormat (default yyyy-MM-dd'T'HH:mm:ss.SSSXXX)`: sets the string that indicates a timestamp format. Custom date formats follow the formats at java.text.SimpleDateFormat. This applies to timestamp type.
-* `maxColumns (default 20480): defines a hard limit of how many columns a record can have.
-* `maxCharsPerColumn (default -1)`: defines the maximum number of characters allowed for any given value being read. By default, it is -1 meaning unlimited length
-* `mode (default PERMISSIVE)`: allows a mode for dealing with corrupt records during parsing. It supports the following case-insensitive modes.
-  * `PERMISSIVE`: sets other fields to null when it meets a corrupted record, and puts the malformed string into a field configured by columnNameOfCorruptRecord. To keep corrupt records, an user can set a string type field named columnNameOfCorruptRecord in an user-defined schema. If a schema does not have the field, it drops corrupt records during parsing. When a length of parsed CSV tokens is shorter than an expected length of a schema, it sets null for extra fields.
-  * `DROPMALFORMED`: ignores the whole corrupted records.
-  * `FAILFAST`: throws an exception when it meets corrupted records.
-* `columnNameOfCorruptRecord (default is the value specified in spark.sql.columnNameOfCorruptRecord)`: allows renaming the new field having malformed string created by PERMISSIVE mode. This overrides spark.sql.columnNameOfCorruptRecord.
-* `multiLine (default false)`: parse one record, which may span multiple lines.
-<div class="codetabs">
-<div data-lang="scala"  markdown="1">
-{% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
-</div>
-
-<div data-lang="java"  markdown="1">
-{% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
-</div>
-
-<div data-lang="python"  markdown="1">
-{% include_example manual_load_options_csv python/sql/datasource.py %}
-</div>
-
-<div data-lang="r"  markdown="1">
-{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
-
-</div>
-</div>
-
 ### Run SQL on files directly
 
 Instead of using read API to load a file into DataFrame and query it, you can also query that
@@ -1089,6 +1046,31 @@ SELECT * FROM jsonTable
 
 </div>
 
+</div>
+
+## CSV Datasets
+You can read CSV Files using Spark builtin csv Data Source with specific options like reading the header into column names or inferring schema. 
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+All the available options are defined <a href="http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.DataFrameReader@csv(paths:String*):org.apache.spark.sql.DataFrame" target="_blank">here</a>
+{% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+All the available options are defined <a href="http://spark.apache.org/docs/latest/api/java/org/apache/spark/sql/DataFrameReader.html#csv-scala.collection.Seq-" target="_blank">here</a>
+{% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+All the available options are defined <a href="https://spark.apache.org/docs/latest/api/python/pyspark.sql.html#pyspark.sql.DataFrameReader.csv" target="_blank">here</a>
+{% include_example manual_load_options_csv python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+All the available options are defined <a href="http://spark.apache.org/docs/latest/api/R/index.html" target="_blank">here</a>
+{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
+</div>
 </div>
 
 ## Hive Tables
