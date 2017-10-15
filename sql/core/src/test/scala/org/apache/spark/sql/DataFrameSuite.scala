@@ -2105,7 +2105,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-22271: mean overflows and returns null for some decimal variables") {
-    val d: BigDecimal = BigDecimal(0.034567890)
+    val d = 0.034567890
     val df = Seq(d, d, d, d, d, d, d, d, d, d).toDF("DecimalCol")
     val result = df.select('DecimalCol cast DecimalType(38, 33))
         .select(col("DecimalCol")).describe()
