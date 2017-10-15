@@ -41,7 +41,9 @@ case class RunningCount(count: Long)
 
 case class Result(key: Long, count: Int)
 
-class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAfterAll {
+class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest
+    with BeforeAndAfterAll
+    with StatefulOperatorTest {
 
   import testImplicits._
   import GroupStateImpl._
@@ -544,6 +546,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       AddData(inputData, "a"),
       CheckLastBatch(("a", "1")),
       assertNumStateRows(total = 1, updated = 1),
+      AssertOnQuery(sq => checkChildOutputHashPartitioning[FlatMapGroupsWithStateExec](
+        sq, Seq("value"))),
       AddData(inputData, "a", "b"),
       CheckLastBatch(("a", "2"), ("b", "1")),
       assertNumStateRows(total = 2, updated = 2),

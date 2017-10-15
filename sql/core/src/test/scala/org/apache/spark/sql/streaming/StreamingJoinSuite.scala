@@ -330,7 +330,7 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       val queryId = UUID.randomUUID
       val opId = 0
       val path = Utils.createDirectory(tempDir.getAbsolutePath, Random.nextString(10)).toString
-      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L)
+      val stateInfo = StatefulOperatorStateInfo(path, queryId, opId, 0L, 5)
 
       implicit val sqlContext = spark.sqlContext
       val coordinatorRef = sqlContext.streams.stateStoreCoordinator
