@@ -204,11 +204,15 @@ case class ApproxCountDistinctForIntervals(
     ndvArray
   }
 
-  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewMutableAggBufferOffset(newMutableAggBufferOffset: Int)
+    : ApproxCountDistinctForIntervals = {
     copy(mutableAggBufferOffset = newMutableAggBufferOffset)
+  }
 
-  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int): ImperativeAggregate =
+  override def withNewInputAggBufferOffset(newInputAggBufferOffset: Int)
+    : ApproxCountDistinctForIntervals = {
     copy(inputAggBufferOffset = newInputAggBufferOffset)
+  }
 
   override def children: Seq[Expression] = Seq(child, endpointsExpression)
 
