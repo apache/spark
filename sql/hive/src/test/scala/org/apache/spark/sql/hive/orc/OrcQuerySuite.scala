@@ -599,7 +599,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val requestedSchema = StructType(Nil)
       val conf = new Configuration()
       val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
+      OrcFileFormat.setRequiredColumns(conf, physicalSchema, requestedSchema)
       val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
       assert(maybeOrcReader.isDefined)
       val orcRecordReader = new SparkOrcNewRecordReader(
