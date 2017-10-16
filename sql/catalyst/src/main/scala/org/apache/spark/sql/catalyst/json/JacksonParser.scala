@@ -33,7 +33,8 @@ import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 /**
- * Constructs a parser for a given schema that translates a json string to an [[InternalRow]].
+ * Constructs a parser for a given schema that translates a json string to a [[Seq]]
+ * of [[InternalRow]]s or [[AtomicType]]s.
  */
 private[sql] class JacksonParser(
     schema: DataType,
@@ -51,8 +52,8 @@ private[sql] class JacksonParser(
 
   // `ValueConverter`s for the root schema for all fields in the schema
   private val rootConverter = schema match {
-    case s: StructType => makeRootConverter(s)
-    case a: ArrayType => makeRootConverter(a)
+    case s: StructType => makeRootConverter(s) // For struct or array of struct.
+    case a: ArrayType => makeRootConverter(a) // For array of primitive types.
   }
 
   private val factory = new JsonFactory()
@@ -99,15 +100,15 @@ private[sql] class JacksonParser(
    * previous one which allows to handle array of primitive types.
    */
   private def makeRootConverter(at: ArrayType): JsonParser => Seq[Any] = {
+    val elementConverter = makeConverter(at.elementType)
     (parser: JsonParser) => parseJsonToken[Seq[Any]](parser, at) {
       case START_ARRAY =>
-        val array = convertArray(parser, makeConverter(at.elementType))
+        val array = convertArray(parser, elementConverter)
         if (array.numElements() == 0) {
           Nil
         } else {
           array.toArray(at.elementType).toSeq
         }
-      case _ => Nil
     }
   }
 
