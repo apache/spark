@@ -884,7 +884,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = compressCodecs) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect table-level take effect
+          // Expect table-level take effect
           assert(tableCompressionCodec.get == realCompressionCodec)
       }
 
@@ -896,7 +896,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = compressCodecs) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect table-level take effect
+          // Expect table-level take effect
           assert(tableCompressionCodec.get == realCompressionCodec)
       }
     }
@@ -917,7 +917,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect session-level take effect
+          // Expect session-level take effect
           assert(sessionCompressionCodec == realCompressionCodec)
       }
 
@@ -929,7 +929,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect session-level take effect
+          // Expect session-level take effect
           assert(sessionCompressionCodec == realCompressionCodec)
       }
     }
@@ -953,7 +953,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = compressCodecs) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect table-level take effect
+          // Expect table-level take effect
           assert(tableCompressionCodec.get == realCompressionCodec)
       }
 
@@ -965,7 +965,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = compressCodecs) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect session-level take effect
+          // Expect session-level take effect
           assert(sessionCompressionCodec == realCompressionCodec)
       }
     }
@@ -986,7 +986,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect session-level take effect
+          // Expect session-level take effect
           assert(sessionCompressionCodec == realCompressionCodec)
       }
 
@@ -998,7 +998,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
         compressionCodecs = compressCodecs,
         tableCompressionCodecs = List(null)) {
         case (tableCompressionCodec, sessionCompressionCodec, realCompressionCodec) =>
-          // expect session-level take effect
+          // Expect session-level take effect
           assert(sessionCompressionCodec == realCompressionCodec)
       }
     }
