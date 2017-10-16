@@ -36,7 +36,7 @@ private[spark] class KubernetesExternalShuffleServiceSuite extends SparkFunSuite
       SparkTransportConf.fromSparkConf(SPARK_CONF, "shuffle"),
       new SecurityManager(SPARK_CONF),
       false,
-      SPARK_CONF.get(config.SHUFFLE_REGISTRATION_TIMEOUT))
+      SPARK_CONF.get(org.apache.spark.internal.config.SHUFFLE_REGISTRATION_TIMEOUT))
 
     shuffleService.start()
     shuffleClient.init("newapp")
