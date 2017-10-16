@@ -16,6 +16,7 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, TaskSet, TaskSetManager}
 import org.apache.spark.util.Utils
