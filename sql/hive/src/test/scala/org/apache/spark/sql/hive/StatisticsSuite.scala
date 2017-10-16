@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.common.StatsSetupConst
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
