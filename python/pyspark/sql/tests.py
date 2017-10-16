@@ -3383,6 +3383,15 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         res = df.select(f(col('id')))
         self.assertEquals(df.collect(), res.collect())
 
+    def test_vectorized_udf_unsupported_types(self):
+        from pyspark.sql.functions import pandas_udf, col
+        schema = StructType([StructField("dt", DateType(), True)])
+        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
+        f = pandas_udf(lambda x: x, DateType())
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
+                df.select(f(col('dt'))).collect()
+
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
 class GroupbyApplyTests(ReusedPySparkTestCase):
@@ -3560,6 +3569,16 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
                     pandas_udf(lambda x: x, StructType([StructField("d", DoubleType())])))
             with self.assertRaisesRegexp(ValueError, 'returnType'):
                 df.groupby('id').apply(pandas_grouped_udf(lambda x: x, DoubleType()))
+
+    def test_unsupported_types(self):
+        from pyspark.sql.functions import pandas_grouped_udf, col
+        schema = StructType(
+            [StructField("id", LongType(), True), StructField("dt", DateType(), True)])
+        df = self.spark.createDataFrame([(1, datetime.date(1970, 1, 1),)], schema=schema)
+        f = pandas_grouped_udf(lambda x: x, df.schema)
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
+                df.groupby('id').apply(f).collect()
 
 
 if __name__ == "__main__":
