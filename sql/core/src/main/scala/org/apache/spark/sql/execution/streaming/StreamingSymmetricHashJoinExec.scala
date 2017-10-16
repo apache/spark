@@ -377,7 +377,8 @@ case class StreamingSymmetricHashJoinExec(
     // Filter the joined rows based on the given condition.
     val preJoinFilter =
       newPredicate(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
-    val postJoinFilter = newPredicate(postJoinFilterExpr.getOrElse(Literal(true)), output).eval _
+    val postJoinFilter =
+      newPredicate(postJoinFilterExpr.getOrElse(Literal(true)), left.output ++ right.output).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
