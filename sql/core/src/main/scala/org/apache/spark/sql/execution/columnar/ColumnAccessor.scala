@@ -63,9 +63,6 @@ private[columnar] abstract class BasicColumnAccessor[JvmType](
   }
 
   protected def underlyingBuffer = buffer
-
-  def getByteBuffer: ByteBuffer =
-    buffer.duplicate.order(ByteOrder.nativeOrder())
 }
 
 private[columnar] class NullColumnAccessor(buffer: ByteBuffer)

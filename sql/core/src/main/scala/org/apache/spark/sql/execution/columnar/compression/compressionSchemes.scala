@@ -452,31 +452,10 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
 
   class Decoder[T <: AtomicType](buffer: ByteBuffer, columnType: NativeColumnType[T])
       extends compression.Decoder[T] {
-    val elementNum = ByteBufferHelper.getInt(buffer)
-    private val dictionary: Array[Any] = new Array[Any](elementNum)
-    private var intDictionary: Array[Int] = null
-    private var longDictionary: Array[Long] = null
 
-    columnType.dataType match {
-      case _: IntegerType =>
-        intDictionary = new Array[Int](elementNum)
-        for (i <- 0 until elementNum) {
-          val v = columnType.extract(buffer).asInstanceOf[Int]
-          intDictionary(i) = v
-          dictionary(i) = v
-        }
-      case _: LongType =>
-        longDictionary = new Array[Long](elementNum)
-        for (i <- 0 until elementNum) {
-          val v = columnType.extract(buffer).asInstanceOf[Long]
-          longDictionary(i) = v
-          dictionary(i) = v
-        }
-      case _: StringType =>
-        for (i <- 0 until elementNum) {
-          val v = columnType.extract(buffer).asInstanceOf[Any]
-          dictionary(i) = v
-        }
+    private val dictionary: Array[Any] = {
+      val elementNum = ByteBufferHelper.getInt(buffer)
+      Array.fill[Any](elementNum)(columnType.extract(buffer).asInstanceOf[Any])
     }
 
     override def next(row: InternalRow, ordinal: Int): Unit = {
@@ -495,6 +474,8 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
       columnType.dataType match {
         case _: IntegerType =>
           val dictionaryIds = columnVector.reserveDictionaryIds(capacity)
+          val intDictionary = dictionary.map(_.asInstanceOf[Int])
+
           columnVector.setDictionary(new ColumnDictionary(intDictionary))
           while (pos < capacity) {
             if (pos != nextNullIndex) {
@@ -508,6 +489,8 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
           }
         case _: LongType =>
           val dictionaryIds = columnVector.reserveDictionaryIds(capacity)
+          val longDictionary = dictionary.map(_.asInstanceOf[Long])
+
           columnVector.setDictionary(new ColumnDictionary(longDictionary))
           while (pos < capacity) {
             if (pos != nextNullIndex) {
