@@ -19,6 +19,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.functions import PythonUdfType
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -239,7 +240,7 @@ class GroupedData(object):
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or not udf.vectorized or not udf.grouped:
+           or udf.pythonUdfType != PythonUdfType.PANDAS_GROUPED_UDF:
             raise ValueError("The argument to apply must be a pandas_grouped_udf")
         if not isinstance(udf.returnType, StructType):
             raise ValueError("The returnType of the pandas_grouped_udf must be a StructType")
