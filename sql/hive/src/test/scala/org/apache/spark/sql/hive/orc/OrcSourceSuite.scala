@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.orc
 
 import java.io.File
+import java.util.Locale
 
 import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
@@ -151,7 +152,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   test("SPARK-18433: Improve DataSource option keys to be more case-insensitive") {
     val conf = sqlContext.sessionState.conf
-    assert(new OrcOptions(Map("Orc.Compress" -> "NONE"), conf).compressionCodec == "NONE")
+    val option = new OrcOptions(Map(COMPRESS.getAttribute.toUpperCase(Locale.ROOT) -> "NONE"), conf)
+    assert(option.compressionCodec == "NONE")
   }
 
   test("SPARK-19459/SPARK-18220: read char/varchar column written by Hive") {
