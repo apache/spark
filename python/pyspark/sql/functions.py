@@ -2039,8 +2039,11 @@ def _wrap_function(sc, func, returnType):
 
 
 class PythonUdfType(object):
+    # row-based UDFs
     NORMAL_UDF = 0
+    # single-row vectorized UDFs
     PANDAS_UDF = 1
+    # grouped vectorized UDFs
     PANDAS_GROUPED_UDF = 2
 
 
@@ -2152,7 +2155,7 @@ def _create_udf(f, returnType, pythonUdfType):
         udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
         return udf_obj._wrapped()
 
-    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf and @pandas_grouped_udf
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType

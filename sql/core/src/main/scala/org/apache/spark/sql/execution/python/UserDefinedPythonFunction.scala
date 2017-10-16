@@ -23,8 +23,11 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.types.DataType
 
 private[spark] object PythonUdfType {
+  // row-based UDFs
   val NORMAL_UDF = 0
+  // single-row vectorized UDFs
   val PANDAS_UDF = 1
+  // grouped vectorized UDFs
   val PANDAS_GROUPED_UDF = 2
 }
 
