@@ -552,15 +552,12 @@ case class JsonToStructs(
 
   // This converts parsed rows to the desired output by the given schema.
   @transient
-  lazy val converter = (rows: Seq[Any]) =>
-    (schema, rows) match {
-      case (_: StructType, rows: Seq[InternalRow]) =>
-         if (rows.length == 1) rows.head else null
-      case (ArrayType(_: StructType, _), rows: Seq[InternalRow]) =>
-        new GenericArrayData(rows)
-      case (ArrayType(_: AtomicType, _), rows: Seq[AtomicType]) =>
-        new GenericArrayData(rows)
-    }
+  lazy val converter = schema match {
+    case _: StructType =>
+      (rows: Seq[Any]) => if (rows.length == 1) rows.head else null
+    case ArrayType(_: StructType| _: AtomicType, _) =>
+      (rows: Seq[Any]) => new GenericArrayData(rows)
+  }
 
   @transient
   lazy val parser =
