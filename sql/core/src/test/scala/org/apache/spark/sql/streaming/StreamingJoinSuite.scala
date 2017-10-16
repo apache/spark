@@ -365,6 +365,24 @@ class StreamingInnerJoinSuite extends StreamTest with StateStoreMetricsTest with
       }
     }
   }
+
+  test("join between three streams") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+    val input3 = MemoryStream[Int]
+
+    val df1 = input1.toDF.select('value as "leftKey", ('value * 2) as "leftValue")
+    val df2 = input2.toDF.select('value as "middleKey", ('value * 3) as "middleValue")
+    val df3 = input3.toDF.select('value as "rightKey", ('value * 5) as "rightValue")
+
+    val joined = df1.join(df2, expr("leftKey = middleKey")).join(df3, expr("rightKey = middleKey"))
+
+    testStream(joined)(
+      AddData(input1, 1, 5),
+      AddData(input2, 1, 5, 10),
+      AddData(input3, 5, 10),
+      CheckLastBatch((5, 10, 5, 15, 5, 25)))
+  }
 }
 
 class StreamingOuterJoinSuite extends StreamTest with StateStoreMetricsTest with BeforeAndAfter {
