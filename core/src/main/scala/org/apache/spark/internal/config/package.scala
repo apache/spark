@@ -270,11 +270,12 @@ package object config {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
-  private[spark] val IGNORE_EMPTY_SPLITS = ConfigBuilder("spark.files.ignoreEmptySplits")
-    .doc("If true, methods that use HadoopRDD and NewHadoopRDD such as " +
-      "SparkContext.textFiles will not create a partition for input splits that are empty.")
-    .booleanConf
-    .createWithDefault(false)
+  private[spark] val HADOOP_RDD_IGNORE_EMPTY_SPLITS =
+    ConfigBuilder("spark.hadoopRDD.ignoreEmptySplits")
+      .internal()
+      .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
+      .booleanConf
+      .createWithDefault(false)
 
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
