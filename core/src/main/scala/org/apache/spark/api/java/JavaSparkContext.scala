@@ -705,6 +705,14 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
+   * Replace the set of channels Conda uses with the given set of URLs.
+   * These are the only channels used going forward for all conda operations.
+   */
+  def setCondaChannels(urls: java.util.List[String]): Unit = {
+    sc.setCondaChannels(urls.asScala)
+  }
+
+  /**
    * Returns the Hadoop configuration used for the Hadoop code (e.g. file systems) we reuse.
    *
    * @note As it will be reused in all Hadoop RDDs, it's better not to modify it unless you

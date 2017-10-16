@@ -17,8 +17,10 @@
 package org.apache.spark.api.conda
 
 import java.io.File
+import java.net.URI
 import java.nio.file.Path
 import java.util.{Map => JMap}
+import javax.ws.rs.core.UriBuilder
 
 import scala.collection.mutable
 
@@ -40,7 +42,7 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
   import CondaEnvironment._
 
   private[this] val packages = mutable.Buffer(bootstrapPackages: _*)
-  private[this] val channels = bootstrapChannels.toBuffer
+  private[this] val channels = bootstrapChannels.iterator.map(AuthenticatedChannel.apply).toBuffer
 
   val condaEnvDir: Path = rootPath.resolve("envs").resolve(envName)
 
@@ -58,7 +60,12 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
   }
 
   def addChannel(url: String): Unit = {
-    channels += url
+    channels += AuthenticatedChannel(url)
+  }
+
+  def setChannels(urls: Seq[String]): Unit = {
+    channels.clear()
+    channels ++= urls.iterator.map(AuthenticatedChannel.apply)
   }
 
   def installPackages(packages: Seq[String]): Unit = {
@@ -66,7 +73,7 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
       List("install", "-n", envName, "-y")
         ::: "--" :: packages.toList,
       description = s"install dependencies in conda env $condaEnvDir",
-      channels = channels.toList
+      channels = channels.iterator.map(_.url).toList
     )
 
     this.packages ++= packages
@@ -92,8 +99,74 @@ final class CondaEnvironment(val manager: CondaEnvironmentManager,
 }
 
 object CondaEnvironment {
-  case class CondaSetupInstructions(packages: Seq[String], channels: Seq[String]) {
-    require(channels.nonEmpty)
+  private[this] case class ChannelWithCreds(unauthenticatedChannel: UnauthenticatedChannel,
+                                            userInfo: Option[String])
+
+  private[this] case class ChannelsWithCreds(unauthenticatedChannels: Seq[UnauthenticatedChannel],
+                                             userInfos: Map[UnauthenticatedChannel, String])
+
+  /** A channel URI that might have credentials set. */
+  private[CondaEnvironment] case class AuthenticatedChannel(url: String) extends AnyVal {
+    def split(): ChannelWithCreds = {
+      val uri = UriBuilder.fromUri(url).build()
+      ChannelWithCreds(
+        UnauthenticatedChannel(UriBuilder.fromUri(uri).userInfo(null).build()),
+        Option(uri.getUserInfo))
+    }
+  }
+
+  /** A channel that definitely does not have credentials set. */
+  private[CondaEnvironment] case class UnauthenticatedChannel(uri: URI) {
+    require(uri.getUserInfo == null)
+  }
+
+  private[this] def authenticateChannels(channels: Seq[UnauthenticatedChannel],
+                                         userInfos: Map[UnauthenticatedChannel, String])
+      : Seq[AuthenticatedChannel] = {
+    channels.map { channel =>
+      val authenticatedUrl = userInfos.get(channel)
+        .map(userInfo => UriBuilder.fromUri(channel.uri).userInfo(userInfo).build().toString)
+        .getOrElse(channel.uri.toString)
+      AuthenticatedChannel(authenticatedUrl)
+    }
+  }
+
+  /**
+   * Helper method that strips and separates credentials from the given [[AuthenticatedChannel]]s.
+   */
+  private[this] def unauthenticateChannels(channels: Seq[AuthenticatedChannel])
+      : ChannelsWithCreds = {
+    val creds = Map.newBuilder[UnauthenticatedChannel, String]
+    val unauthenticatedChannels = channels.map { channel =>
+      val ChannelWithCreds(unauthed, userInfo) = channel.split()
+      userInfo.foreach(creds += unauthed -> _)
+      unauthed
+    }
+    ChannelsWithCreds(unauthenticatedChannels, creds.result())
+  }
+
+  /**
+   * Channel credentials are separated from the channels in order for an executor to be re-usable
+   * when only the credentials differ.
+   * Note that only the first parameter list is used by implementations of toString, equals etc.
+   */
+  case class CondaSetupInstructions(
+         packages: Seq[String], unauthenticatedChannels: Seq[UnauthenticatedChannel])
+        (userInfos: Map[UnauthenticatedChannel, String]) {
+    require(unauthenticatedChannels.nonEmpty)
     require(packages.nonEmpty)
+
+    /**
+     * Channels with authentication applied.
+     */
+    def channels: Seq[String] = authenticateChannels(unauthenticatedChannels, userInfos).map(_.url)
+  }
+
+  object CondaSetupInstructions {
+    def apply(packages: Seq[String], channels: Seq[AuthenticatedChannel])
+        : CondaSetupInstructions = {
+      val ChannelsWithCreds(unauthed, userInfos) = unauthenticateChannels(channels)
+      CondaSetupInstructions(packages, unauthed)(userInfos)
+    }
   }
 }

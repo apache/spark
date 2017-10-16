@@ -1875,6 +1875,10 @@ class SparkContext(config: SparkConf) extends Logging {
     condaEnvironmentOrFail().addChannel(url)
   }
 
+  def setCondaChannels(urls: Seq[String]): Unit = {
+    condaEnvironmentOrFail().setChannels(urls)
+  }
+
   private[spark] def buildCondaInstructions(): Option[CondaSetupInstructions] = {
     condaEnvironment().map(_.buildSetupInstructions)
   }
