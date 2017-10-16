@@ -36,7 +36,7 @@ import org.apache.spark.util.Utils
  * Constructs a parser for a given schema that translates a json string to a [[Seq]]
  * of [[InternalRow]]s or [[AtomicType]]s.
  */
-private[sql] class JacksonParser(
+class JacksonParser private (
     schema: DataType,
     val options: JSONOptions) extends Logging {
 

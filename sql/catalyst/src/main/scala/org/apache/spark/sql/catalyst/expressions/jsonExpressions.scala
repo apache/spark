@@ -543,13 +543,6 @@ case class JsonToStructs(
         s"an array of structs or primitive types.")
   }
 
-  @transient
-  lazy val rowSchema: DataType = schema match {
-    case st: StructType => st
-    case ArrayType(st: StructType, _) => st
-    case ArrayType(at: AtomicType, _) => ArrayType(at)
-  }
-
   // This converts parsed rows to the desired output by the given schema.
   @transient
   lazy val converter = schema match {
@@ -560,10 +553,15 @@ case class JsonToStructs(
   }
 
   @transient
-  lazy val parser =
-    new JacksonParser(
-      rowSchema,
-      new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get))
+  lazy val jsonOptions = new JSONOptions(options + ("mode" -> FailFastMode.name), timeZoneId.get)
+
+  @transient
+  lazy val parser: JacksonParser = schema match {
+    case st: StructType => new JacksonParser(st, jsonOptions)
+    case ArrayType(st: StructType, _) => new JacksonParser(st, jsonOptions)
+    case ArrayType(at: AtomicType, _) => new JacksonParser(ArrayType(at), jsonOptions)
+  }
+
 
   override def dataType: DataType = schema
 
