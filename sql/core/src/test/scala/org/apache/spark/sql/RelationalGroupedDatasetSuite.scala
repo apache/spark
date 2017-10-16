@@ -23,7 +23,7 @@ class RelationalGroupedDatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("Check RelationalGroupedDataset toString: Single data") {
-    val kvDataset = (1 to 3).toDF("id").as[SingleData].groupBy("id")
+    val kvDataset = (1 to 3).toDF("id").groupBy("id")
     val expected = "RelationalGroupedDataset: [" +
       "groupingBy: [id: int], df: [id: int], type: GroupByType]"
     val actual = kvDataset.toString
@@ -32,7 +32,7 @@ class RelationalGroupedDatasetSuite extends QueryTest with SharedSQLContext {
 
   test("Check RelationalGroupedDataset toString: over length schema ") {
     val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
-      .toDF("id", "val1", "val2").as[TripleData].groupBy("id")
+      .toDF("id", "val1", "val2").groupBy("id")
     val expected = "RelationalGroupedDataset:" +
       " [groupingBy: [id: int]," +
       " df: [id: int, val1: string ... 1 more field]," +
