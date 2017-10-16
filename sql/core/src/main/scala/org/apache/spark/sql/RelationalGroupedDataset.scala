@@ -468,21 +468,16 @@ class RelationalGroupedDataset protected[sql](
   }
 
   override def toString: String = {
-    try {
-      val builder = new StringBuilder
-      builder.append("RelationalGroupedDataset: [key: [")
-      val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
-        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
-      }
-      builder.append(kFields.take(2).mkString(", "))
-      if (kFields.length > 2) {
-        builder.append(" ... " + (kFields.length - 2) + " more field(s)")
-      }
-      builder.append(s"], value: ${df.toString}, $groupType]").toString()
-    } catch {
-      case NonFatal(e) =>
-        s"Invalid tree; ${e.getMessage}:\n${df.queryExecution}"
+    val builder = new StringBuilder
+    builder.append("RelationalGroupedDataset: [groupingBy: [")
+    val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
     }
+    builder.append(kFields.take(2).mkString(", "))
+    if (kFields.length > 2) {
+      builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+    }
+    builder.append(s"], df: ${df.toString}, type: $groupType]").toString()
   }
 }
 

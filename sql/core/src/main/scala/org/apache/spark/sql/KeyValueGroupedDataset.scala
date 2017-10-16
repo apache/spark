@@ -566,28 +566,23 @@ class KeyValueGroupedDataset[K, V] private[sql](
   }
 
   override def toString: String = {
-    try {
-      val builder = new StringBuilder
-      val kFields = kExprEnc.schema.map {
-        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
-      }
-      val vFields = vExprEnc.schema.map {
-        case f => s"${f.name}: ${f.dataType.simpleString(2)}"
-      }
-      builder.append("KeyValueGroupedDataset: [key: [")
-      builder.append(kFields.take(2).mkString(", "))
-      if (kFields.length > 2) {
-        builder.append(" ... " + (kFields.length - 2) + " more field(s)")
-      }
-      builder.append("], value: [")
-      builder.append(vFields.take(2).mkString(", "))
-      if (vFields.length > 2) {
-        builder.append(" ... " + (vFields.length - 2) + " more field(s)")
-      }
-      builder.append("]]").toString()
-    } catch {
-      case NonFatal(e) =>
-        s"Invalid tree; ${e.getMessage}:\n$queryExecution"
+    val builder = new StringBuilder
+    val kFields = kExprEnc.schema.map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
     }
+    val vFields = vExprEnc.schema.map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    builder.append("KeyValueGroupedDataset: [key: [")
+    builder.append(kFields.take(2).mkString(", "))
+    if (kFields.length > 2) {
+      builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+    }
+    builder.append("], value: [")
+    builder.append(vFields.take(2).mkString(", "))
+    if (vFields.length > 2) {
+      builder.append(" ... " + (vFields.length - 2) + " more field(s)")
+    }
+    builder.append("]]").toString()
   }
 }

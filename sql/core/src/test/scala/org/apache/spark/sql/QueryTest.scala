@@ -41,7 +41,7 @@ abstract class QueryTest extends PlanTest {
   def checkString(expected: String, actual: String): Unit = {
     if (expected != actual) {
       fail(
-        "KeyValueGroupedDataset.toString() gives wrong result:\n\n" + sideBySide(
+        "The actual string gives wrong result:\n\n" + sideBySide(
           "== Expected ==\n" + expected,
           "== Actual ==\n" + actual
         ).mkString("\n")
