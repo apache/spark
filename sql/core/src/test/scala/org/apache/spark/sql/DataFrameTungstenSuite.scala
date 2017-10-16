@@ -103,11 +103,10 @@ class DataFrameTungstenSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("some columns in table cache are not accessed") {
-    val df = sparkContext.parallelize(
-      Seq((1, 1.1), (2, 2.2), (3, 3.3)), 1).toDF("x", "y").cache
+  test("access only some column of the all of columns") {
+    val df = spark.range(1, 10).map(i => (i, (i + 1).toDouble)).toDF("l", "d")
+    df.cache
     df.count
-    val df1 = df.filter("y > 2.2")
-    checkAnswer(df1, Row(3, 3.3))
+    assert(df.filter("d < 3").count == 1)
   }
 }

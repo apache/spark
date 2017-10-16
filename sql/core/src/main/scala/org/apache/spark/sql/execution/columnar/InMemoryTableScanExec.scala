@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
 import org.apache.spark.sql.execution.vectorized._
-import org.apache.spark.sql.types.UserDefinedType
+import org.apache.spark.sql.types.{StructType, UserDefinedType}
 
 
 case class InMemoryTableScanExec(
@@ -46,18 +46,18 @@ case class InMemoryTableScanExec(
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
-    val schema = cachedColumnarBatch.schema
+    val originalSchema = cachedColumnarBatch.schema.toArray
+    val schema = new StructType(columnIndices.map(i => originalSchema(i)))
     val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, schema)
     val columnarBatch = new ColumnarBatch(
       schema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
     columnarBatch.setNumRows(rowCount)
 
-    for (i <- 0 until cachedColumnarBatch.buffers.length) {
-      val index = if (columnIndices == null || columnIndices.length == 0) i
-        else columnIndices(i)
+    for (i <- 0 until attributes.length) {
+      val index = if (columnIndices.length == 0) i else columnIndices(i)
       ColumnAccessor.decompress(
-        cachedColumnarBatch.buffers(i),
-        columnarBatch.column(index).asInstanceOf[WritableColumnVector],
+        cachedColumnarBatch.buffers(index),
+        columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         schema.fields(i).dataType, rowCount)
     }
     return columnarBatch
