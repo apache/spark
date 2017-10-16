@@ -102,8 +102,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   // hadoop token manager used by some sub-classes (e.g. Mesos)
   def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] = None
 
-  // Hadoop delegation tokens to be sent to the executors.
-  val hadoopDelegationCreds: Option[Array[Byte]] = getHadoopDelegationCreds()
+  // Hadoop delegation tokens to be sent to the executors, can be updated as necessary.
+  var currentHadoopDelegationTokens: Option[Array[Byte]] = getHadoopDelegationCreds()
 
   class DriverEndpoint(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
     extends ThreadSafeRpcEndpoint with Logging {
@@ -161,9 +161,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         }
 
       case UpdateDelegationTokens(tokens) =>
-        executorDataMap.values.foreach {
-          ed => ed.executorEndpoint.send(UpdateDelegationTokens(tokens))
-        }
+        // Update the driver's delegation tokens in case new executors are added later.
+        currentHadoopDelegationTokens = Some(tokens)
+        executorDataMap.values.foreach { ed =>
+          ed.executorEndpoint.send(UpdateDelegationTokens(tokens)) }
     }
 
     override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -241,7 +242,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
         val reply = SparkAppConfig(
           sparkProperties,
           SparkEnv.get.securityManager.getIOEncryptionKey(),
-          hadoopDelegationCreds)
+          currentHadoopDelegationTokens)
         context.reply(reply)
     }
 

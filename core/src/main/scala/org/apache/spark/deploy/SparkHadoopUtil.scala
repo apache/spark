@@ -136,16 +136,18 @@ class SparkHadoopUtil extends Logging {
     if (!new File(keytabFilename).exists()) {
       throw new SparkException(s"Keytab file: ${keytabFilename} does not exist")
     } else {
-      logInfo("Attempting to login to Kerberos" +
-        s" using principal: ${principalName} and keytab: ${keytabFilename}")
+      logInfo("Attempting to login to Kerberos " +
+        s"using principal: ${principalName} and keytab: ${keytabFilename}")
       UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
     }
   }
 
+  /**
+   * Add or overwrite current user's credentials with serialized delegation tokens,
+   * also confirms correct hadoop configuration is set.
+   */
   def addDelegationTokens(tokens: Array[Byte], sparkConf: SparkConf) {
-    val hadoopConf = newConfiguration(sparkConf)
-    hadoopConf.set("hadoop.security.authentication", "Token")
-    UserGroupInformation.setConfiguration(hadoopConf)
+    UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
     addCurrentUserCredentials(deserialize(tokens))
   }
 

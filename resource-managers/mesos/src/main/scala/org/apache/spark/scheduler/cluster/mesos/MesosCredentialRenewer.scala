@@ -29,6 +29,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDelegationTokens
 import org.apache.spark.util.ThreadUtils
@@ -45,18 +46,24 @@ class MesosCredentialRenewer(
 
   @volatile private var timeOfNextRenewal = nextRenewal
 
-  private val principal = conf.get("spark.yarn.principal")
+  private val principal = conf.get(config.PRINCIPAL).orNull
 
   private val (secretFile, mode) = getSecretFile(conf)
 
   private def getSecretFile(conf: SparkConf): (String, String) = {
-    val keytab64 = conf.get("spark.yarn.keytab", null)
-    val tgt64 = System.getenv("KRB5CCNAME")
-    require(keytab64 != null || tgt64 != null, "keytab or tgt required")
-    require(keytab64 == null || tgt64 == null, "keytab and tgt cannot be used at the same time")
-    val mode = if (keytab64 != null) "keytab" else "tgt"
-    val secretFile = if (keytab64 != null) keytab64 else tgt64
-    logInfo(s"Logging in as $principal with mode $mode to retrieve HDFS delegation tokens")
+    val keytab = conf.get(config.KEYTAB).orNull
+    val tgt = conf.getenv("KRB5CCNAME")
+    require(keytab != null || tgt != null, "A keytab or TGT required.")
+    // if both Keytab and TGT are detected we use the Keytab.
+    val (secretFile, mode) = if (keytab != null && tgt != null) {
+      logWarning(s"Keytab and TGT were detected, using keytab, unset $keytab to use TGT")
+      (keytab, "keytab")
+    } else {
+      val m = if (keytab != null) "keytab" else "tgt"
+      val sf = if (keytab != null) keytab else tgt
+      (sf, m)
+    }
+    logInfo(s"Logging in as $principal with mode $mode to retrieve Hadoop delegation tokens")
     logDebug(s"secretFile is $secretFile")
     (secretFile, mode)
   }
@@ -93,7 +100,7 @@ class MesosCredentialRenewer(
   }
 
   private def getRenewedDelegationTokens(conf: SparkConf): Array[Byte] = {
-    logInfo(s"Attempting to login with ${conf.get("spark.yarn.principal", null)}")
+    logInfo(s"Attempting to login with ${conf.get(config.PRINCIPAL).orNull}")
     // Get new delegation tokens by logging in with a new UGI
     // inspired by AMCredentialRenewer.scala:L174
     val ugi = if (mode == "keytab") {

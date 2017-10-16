@@ -124,8 +124,6 @@ private[spark] class CoarseGrainedExecutorBackend(
         }
       }.start()
 
-    // This message is only sent by Mesos Drivers, and is not expected from other
-    // SchedulerBackends at this time
     case UpdateDelegationTokens(tokens) =>
       SparkHadoopUtil.get.addDelegationTokens(tokens, env.conf)
   }
@@ -224,9 +222,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
         SparkHadoopUtil.get.startCredentialUpdater(driverConf)
       }
 
-      cfg.hadoopDelegationCreds.foreach { hadoopCreds =>
-        val creds = SparkHadoopUtil.get.deserialize(hadoopCreds)
-        SparkHadoopUtil.get.addCurrentUserCredentials(creds)
+      cfg.hadoopDelegationCreds.foreach { tokens =>
+        SparkHadoopUtil.get.addDelegationTokens(tokens, driverConf)
       }
 
       val env = SparkEnv.createExecutorEnv(

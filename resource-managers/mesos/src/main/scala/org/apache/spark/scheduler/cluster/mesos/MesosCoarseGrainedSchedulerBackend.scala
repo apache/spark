@@ -62,7 +62,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   override def hadoopDelegationTokenManager: Option[HadoopDelegationTokenManager] =
     Some(new HadoopDelegationTokenManager(sc.conf, sc.hadoopConfiguration))
 
-  private val principal = conf.get("spark.yarn.principal", null)
+  private val principal = conf.get(config.PRINCIPAL).orNull
 
   // Blacklist a slave after this many failures
   private val MAX_SLAVE_FAILURES = 2
@@ -200,12 +200,13 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
     // check that the credentials are defined, even though it's likely that auth would have failed
     // already if you've made it this far
-    if (principal != null && hadoopDelegationCreds.isDefined) {
+    if (principal != null && currentHadoopDelegationTokens.isDefined) {
       logDebug(s"Principal found ($principal) starting token renewer")
       val credentialRenewerThread = new Thread {
         setName("MesosCredentialRenewer")
         override def run(): Unit = {
-          val rt = MesosCredentialRenewer.getTokenRenewalTime(hadoopDelegationCreds.get, conf)
+          val rt = MesosCredentialRenewer.getTokenRenewalTime(
+            currentHadoopDelegationTokens.get, conf)
           val credentialRenewer =
             new MesosCredentialRenewer(
               conf,
