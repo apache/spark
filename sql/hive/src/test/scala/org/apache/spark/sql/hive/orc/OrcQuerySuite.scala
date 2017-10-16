@@ -177,8 +177,8 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-16610: Respect orc.compress option when compression is unset") {
-    // Respect `orc.compress`.
+  test("SPARK-16610: Respect orc.compress (i.e., OrcConf.COMPRESS) when compression is unset") {
+    // Respect `orc.compress` (i.e., OrcConf.COMPRESS).
     withTempPath { file =>
       spark.range(0, 10).write
         .option(COMPRESS.getAttribute, "ZLIB")
