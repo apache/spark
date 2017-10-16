@@ -2132,35 +2132,15 @@ class UserDefinedFunction(object):
         return wrapper
 
 
-def _create_udf(f, returnType, pythonUdfType):
-
-    def _udf(f, returnType=StringType(), pythonUdfType=pythonUdfType):
-        if pythonUdfType == PythonUdfType.PANDAS_UDF:
-            import inspect
-            argspec = inspect.getargspec(f)
-            if len(argspec.args) == 0 and argspec.varargs is None:
-                raise ValueError(
-                    "0-arg pandas_udfs are not supported. "
-                    "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
-                )
-        elif pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF:
-            import inspect
-            argspec = inspect.getargspec(f)
-            if len(argspec.args) != 1 and argspec.varargs is None:
-                raise ValueError("Only 1-arg pandas_grouped_udfs are supported.")
-
-        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
-        return udf_obj._wrapped()
-
-    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+def _resolve_decorator(create_udf, f, returnType):
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf, @pandas_grouped_udf
     if f is None or isinstance(f, (str, DataType)):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
-        return functools.partial(
-            _udf, returnType=return_type, pythonUdfType=pythonUdfType)
+        return functools.partial(create_udf, returnType=return_type)
     else:
-        return _udf(f=f, returnType=returnType, pythonUdfType=pythonUdfType)
+        return create_udf(f=f, returnType=returnType)
 
 
 @since(1.3)
@@ -2194,7 +2174,11 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
+    def _create_udf(f, returnType):
+        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
+        return udf_obj._wrapped()
+
+    return _resolve_decorator(_create_udf, f, returnType)
 
 
 @since(2.3)
@@ -2235,7 +2219,19 @@ def pandas_udf(f=None, returnType=StringType()):
 
     .. note:: The user-defined function must be deterministic.
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
+    def _create_udf(f, returnType):
+        import inspect
+        argspec = inspect.getargspec(f)
+        if len(argspec.args) == 0 and argspec.varargs is None:
+            raise ValueError(
+                "0-arg pandas_udfs are not supported. "
+                "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
+            )
+
+        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
+        return udf_obj._wrapped()
+
+    return _resolve_decorator(_create_udf, f, returnType)
 
 
 @since(2.3)
@@ -2280,7 +2276,66 @@ def pandas_grouped_udf(f=None, returnType=StructType()):
 
     .. note:: The user-defined function must be deterministic.
     """
-    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_GROUPED_UDF)
+    def _create_udf(f, returnType):
+        import inspect
+        argspec = inspect.getargspec(f)
+        if len(argspec.args) != 1:
+            raise ValueError("Only 1-arg pandas_grouped_udfs are supported.")
+
+        # create a dummy udf object as a placeholder.
+        _udf_obj = UserDefinedFunction(
+            f, returnType, pythonUdfType=PythonUdfType.PANDAS_GROUPED_UDF)
+
+        # It is possible for a callable instance without __name__ attribute or/and
+        # __module__ attribute to be wrapped here. For example, functools.partial. In this case,
+        # we should avoid wrapping the attributes from the wrapped function to the wrapper
+        # function. So, we take out these attribute names from the default names to set and
+        # then manually assign it after being wrapped.
+        assignments = tuple(
+            a for a in functools.WRAPPER_ASSIGNMENTS if a != '__name__' and a != '__module__')
+
+        @functools.wraps(_udf_obj.func, assigned=assignments)
+        def wrapper(df):
+
+            func = _udf_obj.func
+            returnType = _udf_obj.returnType
+
+            # The python executors expects the function to use pd.Series as input and output
+            # So we to create a wrapper function that turns that to a pd.DataFrame before passing
+            # down to the user function, then turn the result pd.DataFrame back into pd.Series
+            columns = df.columns
+
+            def wrapped(*cols):
+                from pyspark.sql.types import to_arrow_type
+                import pandas as pd
+                result = func(pd.concat(cols, axis=1, keys=columns))
+                if not isinstance(result, pd.DataFrame):
+                    raise TypeError("Return type of the user-defined function should be "
+                                    "Pandas.DataFrame, but is {}".format(type(result)))
+                if not len(result.columns) == len(returnType):
+                    raise RuntimeError(
+                        "Number of columns of the returned Pandas.DataFrame "
+                        "doesn't match specified schema. "
+                        "Expected: {} Actual: {}".format(len(returnType), len(result.columns)))
+                arrow_return_types = (to_arrow_type(field.dataType) for field in returnType)
+                return [(result[result.columns[i]], arrow_type)
+                        for i, arrow_type in enumerate(arrow_return_types)]
+
+            udf_obj = UserDefinedFunction(
+                wrapped, returnType, name=_udf_obj._name, pythonUdfType=_udf_obj.pythonUdfType)
+            return udf_obj(*[df[col] for col in df.columns])
+
+        wrapper.__name__ = _udf_obj._name
+        wrapper.__module__ = (_udf_obj.func.__module__ if hasattr(_udf_obj.func, '__module__')
+                              else _udf_obj.func.__class__.__module__)
+
+        wrapper.func = _udf_obj.func
+        wrapper.returnType = _udf_obj.returnType
+        wrapper.pythonUdfType = _udf_obj.pythonUdfType
+
+        return wrapper
+
+    return _resolve_decorator(_create_udf, f, returnType)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']

@@ -3516,7 +3516,7 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
             with self.assertRaisesRegexp(Exception, 'Invalid.*type'):
                 df.groupby('id').apply(foo).sort('id').toPandas()
 
-    def test_zero_or_more_than_1_parameters(self):
+    def test_invalid_parameters(self):
         from pyspark.sql.functions import pandas_grouped_udf
         error_str = 'Only 1-arg pandas_grouped_udfs are supported.'
         with QuietTest(self.sc):
@@ -3541,6 +3541,17 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
                 @pandas_grouped_udf("one long")
                 def zero_with_type(pdf, x):
                     return pdf
+
+            with self.assertRaisesRegexp(ValueError, error_str):
+                pandas_grouped_udf(lambda *args: args[0], 'one long')
+            with self.assertRaisesRegexp(ValueError, error_str):
+                @pandas_grouped_udf
+                def zero_no_type(*args):
+                    return args[0]
+            with self.assertRaisesRegexp(ValueError, error_str):
+                @pandas_grouped_udf("one long")
+                def zero_with_type(*args):
+                    return args[0]
 
     def test_wrong_args(self):
         from pyspark.sql.functions import udf, pandas_udf, pandas_grouped_udf, sum

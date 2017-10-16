@@ -103,7 +103,7 @@ def read_single_udf(pickleSer, infile, eval_type):
     if eval_type == PythonEvalType.SQL_PANDAS_UDF:
         return arg_offsets, wrap_pandas_udf(row_func, return_type)
     elif eval_type == PythonEvalType.SQL_PANDAS_GROUPED_UDF:
-        # a groupby apply udf has already been wrapped under apply()
+        # a groupby apply udf has already been wrapped
         return arg_offsets, row_func
     else:
         return arg_offsets, wrap_udf(row_func, return_type)
