@@ -183,6 +183,16 @@ class JsonFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       dfEmpty.select(from_json($"value", ArrayType(StringType))),
       Row(Nil):: Nil)
+
+    val dfBadType = Seq("[1]", "[2, 3]", """["a string"]""").toDS()
+    checkAnswer(
+      dfBadType.select(from_json($"value", ArrayType(IntegerType))),
+      Row(Seq(1)) :: Row(Seq(2, 3)) :: Row(null) :: Nil)
+
+    val dfInvalidJson = Seq("[invalid]").toDS()
+    checkAnswer(
+      dfInvalidJson.select(from_json($"value", ArrayType(StringType))),
+      Row(null) :: Nil)
   }
 
   test("to_json - struct") {
