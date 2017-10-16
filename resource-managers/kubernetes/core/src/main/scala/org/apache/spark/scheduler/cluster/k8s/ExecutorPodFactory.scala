@@ -16,9 +16,8 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder, VolumeBuilder, VolumeMountBuilder}
 import scala.collection.JavaConverters._
-
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.{ConfigurationUtils, InitContainerResourceStagingServerSecretPlugin, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
@@ -46,7 +45,7 @@ private[spark] class ExecutorPodFactoryImpl(
     mountSmallFilesBootstrap: Option[MountSmallFilesBootstrap],
     executorInitContainerBootstrap: Option[SparkPodInitContainerBootstrap],
     executorMountInitContainerSecretPlugin: Option[InitContainerResourceStagingServerSecretPlugin],
-    shuffleManager: Option[KubernetesExternalShuffleManager])
+    executorLocalDirVolumeProvider: ExecutorLocalDirVolumeProvider)
   extends ExecutorPodFactory {
 
   import ExecutorPodFactoryImpl._
@@ -175,9 +174,8 @@ private[spark] class ExecutorPodFactoryImpl(
           .withContainerPort(port._2)
           .build()
       })
-    val shuffleVolumesWithMounts =
-        shuffleManager.map(_.getExecutorShuffleDirVolumesWithMounts)
-            .getOrElse(Seq.empty)
+    val shuffleVolumesWithMounts = executorLocalDirVolumeProvider
+        .getExecutorLocalDirVolumesWithMounts
 
     val executorContainer = new ContainerBuilder()
       .withName(s"executor")
@@ -262,6 +260,7 @@ private[spark] class ExecutorPodFactoryImpl(
     val executorPodWithNodeAffinity =
         nodeAffinityExecutorPodModifier.addNodeAffinityAnnotationIfUseful(
             executorPodWithInitContainer, nodeToLocalTaskCount)
+
     new PodBuilder(executorPodWithNodeAffinity)
       .editSpec()
         .addToContainers(initBootstrappedExecutorContainer)

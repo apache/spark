@@ -157,12 +157,6 @@ package object config extends Logging {
       .stringConf
       .createOptional
 
-  private[spark] val KUBERNETES_SHUFFLE_DIR =
-    ConfigBuilder("spark.kubernetes.shuffle.dir")
-      .doc("Path to the shared shuffle directories.")
-      .stringConf
-      .createOptional
-
   private[spark] val KUBERNETES_SHUFFLE_APISERVER_URI =
     ConfigBuilder("spark.kubernetes.shuffle.apiServer.url")
       .doc("URL to the Kubernetes API server that the shuffle service will monitor for Spark pods.")

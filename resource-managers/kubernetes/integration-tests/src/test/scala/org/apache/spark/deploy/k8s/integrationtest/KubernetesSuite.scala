@@ -150,6 +150,7 @@ private[spark] class KubernetesSuite extends SparkFunSuite with BeforeAndAfter {
 
     sparkConf.setJars(Seq(CONTAINER_LOCAL_HELPER_JAR_PATH))
     sparkConf.set("spark.dynamicAllocation.enabled", "true")
+    sparkConf.set("spark.local.dir", "/tmp")
     sparkConf.set("spark.shuffle.service.enabled", "true")
     sparkConf.set("spark.kubernetes.shuffle.labels", "app=spark-shuffle-service")
     sparkConf.set("spark.kubernetes.shuffle.namespace", kubernetesTestComponents.namespace)

@@ -224,7 +224,7 @@ Below is an example submission:
       local:///opt/spark/examples/src/main/python/pi.py 100
 ```
 
-## Dynamic Executor Scaling
+## Dynamic Allocation in Kubernetes
 
 Spark on Kubernetes supports Dynamic Allocation with cluster mode. This mode requires running
 an external shuffle service. This is typically a [daemonset](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
@@ -247,6 +247,7 @@ the command may then look like the following:
       --class org.apache.spark.examples.GroupByTest \
       --master k8s://<k8s-master>:<port> \
       --kubernetes-namespace default \
+      --conf spark.local.dir=/tmp/spark-local
       --conf spark.app.name=group-by-test \
       --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:latest \
       --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:latest \
@@ -255,6 +256,14 @@ the command may then look like the following:
       --conf spark.kubernetes.shuffle.namespace=default \
       --conf spark.kubernetes.shuffle.labels="app=spark-shuffle-service,spark-version=2.2.0" \
       local:///opt/spark/examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar 10 400000 2
+
+The external shuffle service has to mount directories that can be shared with the executor pods. The provided example
+YAML spec mounts a hostPath volume to the external shuffle service pods, but these hostPath volumes must also be mounted
+into the executors. When using the external shuffle service, the directories specified in the `spark.local.dir`
+configuration are mounted as hostPath volumes into all of the executor containers. To ensure that one does not
+accidentally mount the incorrect hostPath volumes, the value of `spark.local.dir` must be specified in your
+application's configuration when using Kubernetes, even though it defaults to the JVM's temporary directory when using
+other cluster managers.
 
 ## Advanced
 

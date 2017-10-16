@@ -16,21 +16,18 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder, VolumeBuilder, VolumeMountBuilder}
+import io.fabric8.kubernetes.client.KubernetesClient
+import org.mockito.{AdditionalAnswers, Mock, Mockito, MockitoAnnotations}
+import org.mockito.Matchers.any
+import org.mockito.Mockito._
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Pod, VolumeBuilder, VolumeMountBuilder, _}
-import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.commons.io.FilenameUtils
-import org.mockito.{AdditionalAnswers, MockitoAnnotations}
-import org.mockito.Matchers.{any, eq => mockitoEq}
-import org.mockito.Mockito._
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
-
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.k8s.{constants, PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
+import org.apache.spark.deploy.k8s.{PodWithDetachedInitContainer, SparkPodInitContainerBootstrap}
 import org.apache.spark.deploy.k8s.config._
+import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.deploy.k8s.submit.{MountSecretsBootstrapImpl, MountSmallFilesBootstrap, MountSmallFilesBootstrapImpl}
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
@@ -52,7 +49,12 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .endStatus()
     .build()
   private var baseConf: SparkConf = _
-  private val nodeAffinityExecutorPodModifier = mock(classOf[NodeAffinityExecutorPodModifier])
+
+  @Mock
+  private var nodeAffinityExecutorPodModifier: NodeAffinityExecutorPodModifier = _
+
+  @Mock
+  private var executorLocalDirVolumeProvider: ExecutorLocalDirVolumeProvider = _
 
   before {
     MockitoAnnotations.initMocks(this)
@@ -60,15 +62,12 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
       .set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, executorPrefix)
       .set(EXECUTOR_DOCKER_IMAGE, executorImage)
-  }
-  private var kubernetesClient: KubernetesClient = _
-
-  override def beforeEach(cmap: org.scalatest.ConfigMap) {
-    reset(nodeAffinityExecutorPodModifier)
     when(nodeAffinityExecutorPodModifier.addNodeAffinityAnnotationIfUseful(
       any(classOf[Pod]),
       any(classOf[Map[String, Int]]))).thenAnswer(AdditionalAnswers.returnsFirstArg())
+    when(executorLocalDirVolumeProvider.getExecutorLocalDirVolumesWithMounts).thenReturn(Seq.empty)
   }
+  private var kubernetesClient: KubernetesClient = _
 
   test("basic executor pod has reasonable defaults") {
     val factory = new ExecutorPodFactoryImpl(
@@ -78,7 +77,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       None,
-      None)
+      executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -112,7 +111,13 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       "loremipsumdolorsitametvimatelitrefficiendisuscipianturvixlegeresple")
 
     val factory = new ExecutorPodFactoryImpl(
-      conf, nodeAffinityExecutorPodModifier, None, None, None, None, None)
+        conf,
+        nodeAffinityExecutorPodModifier,
+        None,
+        None,
+        None,
+        None,
+        executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -133,7 +138,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       None,
       None,
-      None)
+      executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -167,7 +172,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       None,
       Some(initContainerBootstrap),
       None,
-      None)
+      executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -175,53 +180,37 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       .addNodeAffinityAnnotationIfUseful(any(classOf[Pod]), any(classOf[Map[String, Int]]))
 
     assert(executor.getMetadata.getAnnotations.size() === 1)
-    assert(executor.getMetadata.getAnnotations.containsKey(constants.INIT_CONTAINER_ANNOTATION))
+    assert(executor.getMetadata.getAnnotations.containsKey(INIT_CONTAINER_ANNOTATION))
     checkOwnerReferences(executor, driverPodUid)
   }
 
-  test("the shuffle-service adds a volume mount") {
-    val conf = baseConf.clone()
-    conf.set(KUBERNETES_SHUFFLE_LABELS, "label=value")
-    conf.set(KUBERNETES_SHUFFLE_NAMESPACE, "default")
-    conf.set(KUBERNETES_SHUFFLE_DIR, "/tmp")
-
-    val shuffleManager = mock(classOf[KubernetesExternalShuffleManager])
-    when(shuffleManager.getExecutorShuffleDirVolumesWithMounts).thenReturn({
-      val shuffleDirs = Seq("/tmp")
-      shuffleDirs.zipWithIndex.map { case (shuffleDir, shuffleDirIndex) =>
-        val volumeName = s"$shuffleDirIndex-${FilenameUtils.getBaseName(shuffleDir)}"
-        val volume = new VolumeBuilder()
-          .withName(volumeName)
-          .withNewHostPath(shuffleDir)
-          .build()
-        val volumeMount = new VolumeMountBuilder()
-          .withName(volumeName)
-          .withMountPath(shuffleDir)
-          .build()
-        (volume, volumeMount)
-      }
-    })
-
+  test("The local dir volume provider's returned volumes and volume mounts should be added.") {
+    Mockito.reset(executorLocalDirVolumeProvider)
+    val localDirVolume = new VolumeBuilder()
+        .withName("local-dir")
+        .withNewEmptyDir().endEmptyDir()
+        .build()
+    val localDirVolumeMount = new VolumeMountBuilder()
+        .withName("local-dir")
+        .withMountPath("/tmp")
+        .build()
+    when(executorLocalDirVolumeProvider.getExecutorLocalDirVolumesWithMounts)
+        .thenReturn(Seq((localDirVolume, localDirVolumeMount)))
     val factory = new ExecutorPodFactoryImpl(
-      conf,
+      baseConf,
       nodeAffinityExecutorPodModifier,
       None,
       None,
       None,
       None,
-      Some(shuffleManager))
+      executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
-
-    verify(nodeAffinityExecutorPodModifier, times(1))
-      .addNodeAffinityAnnotationIfUseful(any(classOf[Pod]), any(classOf[Map[String, Int]]))
-
+    assert(executor.getSpec.getVolumes.size === 1)
+    assert(executor.getSpec.getVolumes.contains(localDirVolume))
     assert(executor.getSpec.getContainers.size() === 1)
-    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.size() === 1)
-    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0).getName === "0-tmp")
-    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.get(0)
-      .getMountPath === "/tmp")
-    checkOwnerReferences(executor, driverPodUid)
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.size === 1)
+    assert(executor.getSpec.getContainers.get(0).getVolumeMounts.contains(localDirVolumeMount))
   }
 
   test("Small-files add a secret & secret volume mount to the container") {
@@ -235,7 +224,7 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
       Some(smallFiles),
       None,
       None,
-      None)
+      executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)](), driverPod, Map[String, Int]())
 
@@ -262,7 +251,13 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
     conf.set(org.apache.spark.internal.config.EXECUTOR_CLASS_PATH, "bar=baz")
 
     val factory = new ExecutorPodFactoryImpl(
-      conf, nodeAffinityExecutorPodModifier, None, None, None, None, None)
+        conf,
+        nodeAffinityExecutorPodModifier,
+        None,
+        None,
+        None,
+        None,
+        executorLocalDirVolumeProvider)
     val executor = factory.createExecutorPod(
       "1", "dummy", "dummy", Seq[(String, String)]("qux" -> "quux"), driverPod, Map[String, Int]())
 
@@ -286,14 +281,14 @@ class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with Bef
   // Check that the expected environment variables are present.
   private def checkEnv(executor: Pod, additionalEnvVars: Map[String, String]): Unit = {
     val defaultEnvs = Map(
-      constants.ENV_EXECUTOR_ID -> "1",
-      constants.ENV_DRIVER_URL -> "dummy",
-      constants.ENV_EXECUTOR_CORES -> "1",
-      constants.ENV_EXECUTOR_MEMORY -> "1g",
-      constants.ENV_APPLICATION_ID -> "dummy",
-      constants.ENV_MOUNTED_CLASSPATH -> "/var/spark-data/spark-jars/*",
-      constants.ENV_EXECUTOR_POD_IP -> null,
-      constants.ENV_EXECUTOR_PORT -> "10000") ++ additionalEnvVars
+      ENV_EXECUTOR_ID -> "1",
+      ENV_DRIVER_URL -> "dummy",
+      ENV_EXECUTOR_CORES -> "1",
+      ENV_EXECUTOR_MEMORY -> "1g",
+      ENV_APPLICATION_ID -> "dummy",
+      ENV_MOUNTED_CLASSPATH -> "/var/spark-data/spark-jars/*",
+      ENV_EXECUTOR_POD_IP -> null,
+      ENV_EXECUTOR_PORT -> "10000") ++ additionalEnvVars
 
     assert(executor.getSpec.getContainers.size() === 1)
     assert(executor.getSpec.getContainers.get(0).getEnv().size() === defaultEnvs.size)
