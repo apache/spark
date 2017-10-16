@@ -65,7 +65,8 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Filter(Not(attributeA >= 2 && attributeB < 1),
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)),
           Filter(attributeB === 2, Filter(attributeA === 1, table1)))).analyze
 
     comparePlans(optimized, correctAnswer)
@@ -83,7 +84,8 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val correctAnswer =
       Aggregate(table1.output, table1.output,
-        Filter(Not(attributeA >= 2 && attributeB < 1), table1)).analyze
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)), table1)).analyze
 
     comparePlans(optimized, correctAnswer)
   }
