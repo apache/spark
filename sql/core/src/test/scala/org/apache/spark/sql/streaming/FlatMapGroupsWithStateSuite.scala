@@ -312,7 +312,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       GroupStateImpl.createForBatch(timeoutConf)
     }
 
-    // Tests for getCurrentWatermarkMs in streaming queries
+    // Tests for getCurrentProcessingTimeMs in streaming queries
     assertWrongTimeoutError { streamingState(NoTimeout, 1000).getCurrentProcessingTimeMs() }
     assertWrongTimeoutError { streamingState(EventTimeTimeout, 1000).getCurrentProcessingTimeMs() }
     assert(streamingState(ProcessingTimeTimeout, 1000).getCurrentProcessingTimeMs() === 1000)
