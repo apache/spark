@@ -20,6 +20,7 @@ package org.apache.spark.internal.io
 import java.util.{Date, UUID}
 
 import scala.collection.mutable
+import scala.util.Try
 
 import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.Path
@@ -48,6 +49,16 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
   @transient private var committer: OutputCommitter = _
 
   /**
+   * Checks whether there are files to be committed to a valid output location.
+   *
+   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
+   * it is necessary to check whether a valid output path is specified.
+   * [[HadoopMapReduceCommitProtocol#path]] need not be a valid [[org.apache.hadoop.fs.Path]] for
+   * committers not writing to distributed file systems.
+   */
+  private val hasValidPath = Try { new Path(path) }.isSuccess
+
+  /**
    * Tracks files staged by this task for absolute output paths. These outputs are not managed by
    * the Hadoop OutputCommitter, so we must move these to their final locations on job commit.
    *
@@ -59,15 +70,6 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
    * The staging directory for all files committed with absolute output paths.
    */
   private def absPathStagingDir: Path = new Path(path, "_temporary-" + jobId)
-
-  /**
-   * Checks whether there are files to be committed to an absolute output location.
-   *
-   * As committing and aborting a job occurs on driver, where `addedAbsPathFiles` is always null,
-   * it is necessary to check whether the output path is specified. Output path may not be required
-   * for committers not writing to distributed file systems.
-   */
-  private def hasAbsPathFiles: Boolean = path != null
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.newInstance()
@@ -142,7 +144,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
     val filesToMove = taskCommits.map(_.obj.asInstanceOf[Map[String, String]])
       .foldLeft(Map[String, String]())(_ ++ _)
     logDebug(s"Committing files staged for absolute locations $filesToMove")
-    if (hasAbsPathFiles) {
+    if (hasValidPath) {
       val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
       for ((src, dst) <- filesToMove) {
         fs.rename(new Path(src), new Path(dst))
@@ -153,7 +155,7 @@ class HadoopMapReduceCommitProtocol(jobId: String, path: String)
 
   override def abortJob(jobContext: JobContext): Unit = {
     committer.abortJob(jobContext, JobStatus.State.FAILED)
-    if (hasAbsPathFiles) {
+    if (hasValidPath) {
       val fs = absPathStagingDir.getFileSystem(jobContext.getConfiguration)
       fs.delete(absPathStagingDir, true)
     }
