@@ -21,7 +21,6 @@ import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
-import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.broadcast.Broadcast
@@ -469,7 +468,7 @@ class RelationalGroupedDataset protected[sql](
 
   override def toString: String = {
     val builder = new StringBuilder
-    builder.append("RelationalGroupedDataset: [groupingBy: [")
+    builder.append("RelationalGroupedDataset: [group by: [")
     val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
       case f => s"${f.name}: ${f.dataType.simpleString(2)}"
     }
@@ -477,7 +476,7 @@ class RelationalGroupedDataset protected[sql](
     if (kFields.length > 2) {
       builder.append(" ... " + (kFields.length - 2) + " more field(s)")
     }
-    builder.append(s"], df: ${df.toString}, type: $groupType]").toString()
+    builder.append(s"], value: ${df.toString}, type: $groupType]").toString()
   }
 }
 

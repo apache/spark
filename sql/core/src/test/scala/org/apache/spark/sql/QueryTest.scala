@@ -36,20 +36,6 @@ abstract class QueryTest extends PlanTest {
   Locale.setDefault(Locale.US)
 
   /**
-   * Makes sure the answer matches the expected result
-   */
-  def checkString(expected: String, actual: String): Unit = {
-    if (expected != actual) {
-      fail(
-        "The actual string gives wrong result:\n\n" + sideBySide(
-          "== Expected ==\n" + expected,
-          "== Actual ==\n" + actual
-        ).mkString("\n")
-      )
-    }
-  }
-
-  /**
    * Runs the plan and makes sure the answer contains all of the keywords.
    */
   def checkKeywordsExist(df: DataFrame, keywords: String*): Unit = {
@@ -378,7 +364,3 @@ class QueryTestSuite extends QueryTest with test.SharedSQLContext {
     }
   }
 }
-
-case class SingleData(id: Int)
-case class DoubleData(id: Int, val1: String)
-case class TripleData(id: Int, val1: String, val2: Long)
