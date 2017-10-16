@@ -43,7 +43,13 @@ case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
-    storeVersion: Long)
+    storeVersion: Long,
+    numPartitions: Int) {
+  override def toString(): String = {
+    s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
+      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
+  }
+}
 
 /**
  * An operator that reads or writes state from the [[StateStore]].
@@ -133,26 +139,9 @@ trait WatermarkSupport extends UnaryExecNode {
 
   /** Generate an expression that matches data older than the watermark */
   lazy val watermarkExpression: Option[Expression] = {
-    val optionalWatermarkAttribute =
-      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey))
-
-    optionalWatermarkAttribute.map { watermarkAttribute =>
-      // If we are evicting based on a window, use the end of the window.  Otherwise just
-      // use the attribute itself.
-      val evictionExpression =
-        if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
-          LessThanOrEqual(
-            GetStructField(watermarkAttribute, 1),
-            Literal(eventTimeWatermark.get * 1000))
-        } else {
-          LessThanOrEqual(
-            watermarkAttribute,
-            Literal(eventTimeWatermark.get * 1000))
-        }
-
-      logInfo(s"Filtering state store on: $evictionExpression")
-      evictionExpression
-    }
+    WatermarkSupport.watermarkExpression(
+      child.output.find(_.metadata.contains(EventTimeWatermark.delayKey)),
+      eventTimeWatermark)
   }
 
   /** Predicate based on keys that matches data older than the watermark */
@@ -176,6 +165,31 @@ trait WatermarkSupport extends UnaryExecNode {
         }
       }
     }
+  }
+}
+
+object WatermarkSupport {
+
+  /** Generate an expression on given attributes that matches data older than the watermark */
+  def watermarkExpression(
+      optionalWatermarkExpression: Option[Expression],
+      optionalWatermarkMs: Option[Long]): Option[Expression] = {
+    if (optionalWatermarkExpression.isEmpty || optionalWatermarkMs.isEmpty) return None
+
+    val watermarkAttribute = optionalWatermarkExpression.get
+    // If we are evicting based on a window, use the end of the window.  Otherwise just
+    // use the attribute itself.
+    val evictionExpression =
+      if (watermarkAttribute.dataType.isInstanceOf[StructType]) {
+        LessThanOrEqual(
+          GetStructField(watermarkAttribute, 1),
+          Literal(optionalWatermarkMs.get * 1000))
+      } else {
+        LessThanOrEqual(
+          watermarkAttribute,
+          Literal(optionalWatermarkMs.get * 1000))
+      }
+    Some(evictionExpression)
   }
 }
 
@@ -212,7 +226,7 @@ case class StateStoreRestoreExec(
             val key = getKey(row)
             val savedState = store.get(key)
             numOutputRows += 1
-            row +: Option(savedState).toSeq
+            Option(savedState).toSeq :+ row
           }
         }
     }
@@ -226,7 +240,7 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions) :: Nil
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 }
@@ -373,7 +387,7 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions) :: Nil
+      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
 }
@@ -388,7 +402,7 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions) :: Nil
+    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver

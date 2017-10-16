@@ -98,6 +98,11 @@ abstract class LogicalPlan
   def maxRows: Option[Long] = None
 
   /**
+   * Returns the maximum number of rows this plan may compute on each partition.
+   */
+  def maxRowsPerPartition: Option[Long] = maxRows
+
+  /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it still contains any unresolved placeholders. Implementations of LogicalPlan
    * can override this (e.g.

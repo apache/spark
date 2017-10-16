@@ -37,6 +37,7 @@ from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
 from pyspark.sql.readwriter import DataFrameWriter
 from pyspark.sql.streaming import DataStreamWriter
+from pyspark.sql.types import IntegralType
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -1037,9 +1038,9 @@ class DataFrame(object):
         |   mean|               3.5| null|
         | stddev|2.1213203435596424| null|
         |    min|                 2|Alice|
-        |    25%|               5.0| null|
-        |    50%|               5.0| null|
-        |    75%|               5.0| null|
+        |    25%|                 2| null|
+        |    50%|                 2| null|
+        |    75%|                 5| null|
         |    max|                 5|  Bob|
         +-------+------------------+-----+
 
@@ -1049,8 +1050,8 @@ class DataFrame(object):
         +-------+---+-----+
         |  count|  2|    2|
         |    min|  2|Alice|
-        |    25%|5.0| null|
-        |    75%|5.0| null|
+        |    25%|  2| null|
+        |    75%|  5| null|
         |    max|  5|  Bob|
         +-------+---+-----+
 
@@ -1226,7 +1227,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.groupBy(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def rollup(self, *cols):
@@ -1247,7 +1248,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.rollup(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.4)
     def cube(self, *cols):
@@ -1270,7 +1271,7 @@ class DataFrame(object):
         """
         jgd = self._jdf.cube(self._jcols(*cols))
         from pyspark.sql.group import GroupedData
-        return GroupedData(jgd, self.sql_ctx)
+        return GroupedData(jgd, self)
 
     @since(1.3)
     def agg(self, *exprs):
@@ -1877,7 +1878,7 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
-        if self.sql_ctx.getConf("spark.sql.execution.arrow.enable", "false").lower() == "true":
+        if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
                 import pyarrow
                 tables = self._collectAsArrow()
@@ -1888,16 +1889,22 @@ class DataFrame(object):
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
                 msg = "note: pyarrow must be installed and available on calling Python process " \
-                      "if using spark.sql.execution.arrow.enable=true"
+                      "if using spark.sql.execution.arrow.enabled=true"
                 raise ImportError("%s\n%s" % (e.message, msg))
         else:
+            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
+
             dtype = {}
             for field in self.schema:
                 pandas_type = _to_corrected_pandas_type(field.dataType)
-                if pandas_type is not None:
+                # SPARK-21766: if an integer field is nullable and has null values, it can be
+                # inferred by pandas as float column. Once we convert the column with NaN back
+                # to integer type e.g., np.int16, we will hit exception. So we use the inferred
+                # float type, not the corrected type from the schema in this case.
+                if pandas_type is not None and \
+                    not(isinstance(field.dataType, IntegralType) and field.nullable and
+                        pdf[field.name].isnull().any()):
                     dtype[field.name] = pandas_type
-
-            pdf = pd.DataFrame.from_records(self.collect(), columns=self.columns)
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)

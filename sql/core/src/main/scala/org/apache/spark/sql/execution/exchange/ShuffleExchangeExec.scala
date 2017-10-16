@@ -30,12 +30,13 @@ import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.MutablePair
 
 /**
  * Performs a shuffle that will result in the desired `newPartitioning`.
  */
-case class ShuffleExchange(
+case class ShuffleExchangeExec(
     var newPartitioning: Partitioning,
     child: SparkPlan,
     @transient coordinator: Option[ExchangeCoordinator]) extends Exchange {
@@ -84,7 +85,7 @@ case class ShuffleExchange(
    */
   private[exchange] def prepareShuffleDependency()
     : ShuffleDependency[Int, InternalRow, InternalRow] = {
-    ShuffleExchange.prepareShuffleDependency(
+    ShuffleExchangeExec.prepareShuffleDependency(
       child.execute(), child.output, newPartitioning, serializer)
   }
 
@@ -129,9 +130,9 @@ case class ShuffleExchange(
   }
 }
 
-object ShuffleExchange {
-  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchange = {
-    ShuffleExchange(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
+object ShuffleExchangeExec {
+  def apply(newPartitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
+    ShuffleExchangeExec(newPartitioning, child, coordinator = Option.empty[ExchangeCoordinator])
   }
 
   /**
@@ -218,7 +219,11 @@ object ShuffleExchange {
           iter.map(row => mutablePair.update(row.copy(), null))
         }
         implicit val ordering = new LazilyGeneratedOrdering(sortingExpressions, outputAttributes)
-        new RangePartitioner(numPartitions, rddForSampling, ascending = true)
+        new RangePartitioner(
+          numPartitions,
+          rddForSampling,
+          ascending = true,
+          samplePointsPerPartitionHint = SQLConf.get.rangeExchangeSampleSizePerPartition)
       case SinglePartition =>
         new Partitioner {
           override def numPartitions: Int = 1

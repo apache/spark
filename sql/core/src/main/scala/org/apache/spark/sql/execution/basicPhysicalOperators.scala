@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.{InterruptibleIterator, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -201,11 +201,14 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       ev
     }
 
+    // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
     s"""
-       |$generated
-       |$nullChecks
-       |$numOutput.add(1);
-       |${consume(ctx, resultVars)}
+       |do {
+       |  $generated
+       |  $nullChecks
+       |  $numOutput.add(1);
+       |  ${consume(ctx, resultVars)}
+       |} while(false);
      """.stripMargin
   }
 
@@ -264,6 +267,10 @@ case class SampleExec(
     }
   }
 
+  // Mark this as empty. This plan doesn't need to evaluate any inputs and can defer the evaluation
+  // to the parent operator.
+  override def usedInputs: AttributeSet = AttributeSet.empty
+
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
   }
@@ -316,9 +323,10 @@ case class SampleExec(
          """.stripMargin.trim)
 
       s"""
-         | if ($sampler.sample() == 0) continue;
-         | $numOutput.add(1);
-         | ${consume(ctx, input)}
+         | if ($sampler.sample() != 0) {
+         |   $numOutput.add(1);
+         |   ${consume(ctx, input)}
+         | }
        """.stripMargin.trim
     }
   }
@@ -546,6 +554,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
 /**
  * Physical plan for unioning two plans, without a distinct. This is UNION ALL in SQL.
+ *
+ * If we change how this is implemented physically, we'd need to update
+ * [[org.apache.spark.sql.catalyst.plans.logical.Union.maxRowsPerPartition]].
  */
 case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan {
   override def output: Seq[Attribute] =
@@ -579,8 +590,31 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    child.execute().coalesce(numPartitions, shuffle = false)
+    if (numPartitions == 1 && child.execute().getNumPartitions < 1) {
+      // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
+      // `SinglePartition`.
+      new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
+    } else {
+      child.execute().coalesce(numPartitions, shuffle = false)
+    }
   }
+}
+
+object CoalesceExec {
+  /** A simple RDD with no data, but with the given number of partitions. */
+  class EmptyRDDWithPartitions(
+      @transient private val sc: SparkContext,
+      numPartitions: Int) extends RDD[InternalRow](sc, Nil) {
+
+    override def getPartitions: Array[Partition] =
+      Array.tabulate(numPartitions)(i => EmptyPartition(i))
+
+    override def compute(split: Partition, context: TaskContext): Iterator[InternalRow] = {
+      Iterator.empty
+    }
+  }
+
+  case class EmptyPartition(index: Int) extends Partition
 }
 
 /**

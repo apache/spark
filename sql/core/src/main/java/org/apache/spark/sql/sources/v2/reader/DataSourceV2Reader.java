@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.StructType;
  * {@link org.apache.spark.sql.sources.v2.ReadSupportWithSchema#createReader(
  * StructType, org.apache.spark.sql.sources.v2.DataSourceV2Options)}.
  * It can mix in various query optimization interfaces to speed up the data scan. The actual scan
- * logic should be delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
+ * logic is delegated to {@link ReadTask}s that are returned by {@link #createReadTasks()}.
  *
  * There are mainly 3 kinds of query optimizations:
  *   1. Operators push-down. E.g., filter push-down, required columns push-down(aka column
