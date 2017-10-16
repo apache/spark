@@ -658,7 +658,7 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       val objHashAggPlans = aggPlan.collect {
         case objHashAgg: ObjectHashAggregateExec => objHashAgg
       }
-      assert(objHashAggPlans.length > 0)
+      assert(objHashAggPlans.nonEmpty)
 
       val exchangePlans = aggPlan.collect {
         case shuffle: ShuffleExchangeExec => shuffle
