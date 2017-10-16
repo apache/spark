@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
@@ -1240,51 +1239,6 @@ object ReplaceIntersectWithSemiJoin extends Rule[LogicalPlan] {
       assert(left.output.size == right.output.size)
       val joinCond = left.output.zip(right.output).map { case (l, r) => EqualNullSafe(l, r) }
       Distinct(Join(left, right, LeftSemi, joinCond.reduceLeftOption(And)))
-  }
-}
-
-/**
- * If one or both of the datasets in the logical [[Except]] operator are purely transformed using
- * [[Filter]], this rule will replace logical [[Except]] operator with a [[Filter]] operator by
- * flipping the filter condition of the right child.
- * {{{
- *   SELECT a1, a2 FROM Tab1 WHERE a2 = 12 EXCEPT SELECT a1, a2 FROM Tab1 WHERE a1 = 5
- *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 WHERE a2 = 12 AND a1 <> 5
- * }}}
- *
- * Note:
- * 1. We should combine all the [[Filter]] of the right node before flipping it using NOT operator.
- */
-object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Except(left, right) if isEligible(left, right) =>
-      val filterCondition = combineFilters(right).asInstanceOf[Filter].condition
-
-      val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
-      val transformedCondition = filterCondition transform { case a : AttributeReference =>
-        attributeNameMap(a.name)
-      }
-
-      Distinct(Filter(Not(transformedCondition), left))
-  }
-
-  private def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
-    case (left, right: Filter) => nonFilterChild(left).sameResult(nonFilterChild(right))
-    case _ => false
-  }
-
-  private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {
-    throw new IllegalStateException("LogicalPlan with no Local or Logical Relation")
-  }
-
-  private def combineFilters(plan: LogicalPlan): LogicalPlan = {
-    @tailrec
-    def iterate(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
-      if (acc.fastEquals(plan)) acc else iterate(acc, CombineFilters(acc))
-    }
-
-    iterate(plan, CombineFilters(plan))
   }
 }
 
