@@ -130,12 +130,12 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.9.1-palantir3</parquet.version>
     <feign.version>8.18.0</feign.version>
-    <okhttp3.version>3.8.0</okhttp3.version>
+    <okhttp3.version>3.9.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.13.0</okio.version>
-    <retrofit.version>2.2.0</retrofit.version>
+    <retrofit.version>2.3.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
-    <jetty.version>9.4.6.v20170531</jetty.version>
+    <jetty.version>9.4.7.v20170914</jetty.version>
     <orc.version>1.4.0</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
