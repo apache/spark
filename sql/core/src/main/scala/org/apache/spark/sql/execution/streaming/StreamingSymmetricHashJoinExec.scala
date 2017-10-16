@@ -288,9 +288,10 @@ case class StreamingSymmetricHashJoinExec(
       case _ => throwBadJoinTypeException()
     }
 
+    val outputProjection = UnsafeProjection.create(left.output ++ right.output, output)
     val outputIterWithMetrics = outputIter.map { row =>
       numOutputRows += 1
-      row
+      outputProjection(row)
     }
 
     // Function to remove old state after all the input has been consumed and output generated
