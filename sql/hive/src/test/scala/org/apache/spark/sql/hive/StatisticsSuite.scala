@@ -946,9 +946,7 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
             sql(s"CREATE TABLE $format (key STRING, value STRING) STORED AS $format")
             sql(s"INSERT INTO TABLE $format SELECT * FROM src")
 
-            val hasHiveStats = !isConverted
-            checkTableStats(format, hasSizeInBytes = hasHiveStats, expectedRowCounts = None)
-
+            checkTableStats(format, hasSizeInBytes = !isConverted, expectedRowCounts = None)
             sql(s"ANALYZE TABLE $format COMPUTE STATISTICS")
             checkTableStats(format, hasSizeInBytes = true, expectedRowCounts = Some(500))
           }
