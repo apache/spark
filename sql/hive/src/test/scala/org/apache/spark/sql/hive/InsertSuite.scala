@@ -825,6 +825,7 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter
       tableCompressionCodecs.foreach { tableCompression =>
         compressionCodecs.foreach { sessionCompressionCodec =>
           withSQLConf(getSparkCompressionConfName(format) -> sessionCompressionCodec) {
+            // 'tableCompression = null' means no table-level compression
             val compression = if (tableCompression == null) None else Some(tableCompression)
             checkCompressionCodecForTable(format, isPartitioned, compression) {
               case realCompressionCodec => assertion(compression,
