@@ -70,12 +70,12 @@ class DataFrame(object):
     .. versionadded:: 1.3
     """
 
-    def __init__(self, jdf, sql_ctx, schema=None):
+    def __init__(self, jdf, sql_ctx):
         self._jdf = jdf
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx and sql_ctx._sc
         self.is_cached = False
-        self._schema = schema  # initialized lazily if None
+        self._schema = None  # initialized lazily
         self._lazy_rdd = None
 
     @property

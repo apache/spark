@@ -3174,6 +3174,13 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf_arrow = df.toPandas()
         self.assertFramesEqual(pdf_arrow, pdf)
 
+    def test_createDataFrame_with_incorrect_schema(self):
+        pdf = self.createPandasDataFrameFromData()
+        wrong_schema = StructType([field for field in reversed(self.schema)])
+        with QuietTest(self.sc):
+            with self.assertRaisesRegexp(ValueError, ".*schema.*not.*match"):
+                self.spark.createDataFrame(pdf, schema=wrong_schema)
+
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)

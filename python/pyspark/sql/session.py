@@ -415,10 +415,10 @@ class SparkSession(object):
         data = [schema.toInternal(row) for row in data]
         return self._sc.parallelize(data), schema
 
-    def _createFromPandasWithArrow(self, df, schema):
+    def _createFromPandasWithArrow(self, pdf, schema):
         """
-        Create a DataFrame from a given pandas.DataFrame by slicing the into partitions, converting
-        to Arrow data, then reading into the JVM to parallelsize. If a schema is passed in, the
+        Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
+        to Arrow data, then reading into the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
         import os
@@ -428,11 +428,11 @@ class SparkSession(object):
         import pyarrow as pa
 
         # Slice the DataFrame into batches
-        step = -(-len(df) // self.sparkContext.defaultParallelism)  # round int up
-        df_slices = (df[start:start + step] for start in xrange(0, len(df), step))
+        step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
+        pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
         arrow_schema = to_arrow_schema(schema) if schema is not None else None
-        batches = [pa.RecordBatch.from_pandas(df_slice, schema=arrow_schema, preserve_index=False)
-                   for df_slice in df_slices]
+        batches = [pa.RecordBatch.from_pandas(pdf_slice, schema=arrow_schema, preserve_index=False)
+                   for pdf_slice in pdf_slices]
 
         # write batches to temp file, read by JVM (borrowed from context.parallelize)
         tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
@@ -446,11 +446,20 @@ class SparkSession(object):
             # readRDDFromFile eagerily reads the file so we can delete right after.
             os.unlink(tempFile.name)
 
-        # Create the Spark DataFrame, there will be at least 1 batch
-        schema = from_arrow_schema(batches[0].schema)
+        # Verify schema, there will be at least 1 batch from pandas.DataFrame
+        schema_from_arrow = from_arrow_schema(batches[0].schema)
+        if schema is not None and schema != schema_from_arrow:
+            raise ValueError("Supplied schema does not match result from Arrow\nsupplied: " +
+                             "%s\n!=\nfrom Arrow: %s" % (str(schema), str(schema_from_arrow)))
+        else:
+            schema = schema_from_arrow
+
+        # Create the Spark DataFrame directly from the Arrow data and schema
         jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
             jrdd, schema.json(), self._wrapped._jsqlContext)
-        return DataFrame(jdf, self._wrapped, schema)
+        df = DataFrame(jdf, self._wrapped)
+        df._schema = schema
+        return df
 
     @since(2.0)
     @ignore_unicode_prefix
@@ -583,7 +592,9 @@ class SparkSession(object):
             rdd, schema = self._createFromLocal(map(prepare, data), schema)
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
         jdf = self._jsparkSession.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
-        return DataFrame(jdf, self._wrapped, schema)
+        df = DataFrame(jdf, self._wrapped)
+        df._schema = schema
+        return df
 
     @ignore_unicode_prefix
     @since(2.0)

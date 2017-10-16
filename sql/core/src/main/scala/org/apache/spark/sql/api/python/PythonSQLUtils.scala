@@ -42,9 +42,9 @@ private[sql] object PythonSQLUtils {
    * @return The converted [[DataFrame]].
    */
   def arrowPayloadToDataFrame(
-       payloadRDD: JavaRDD[Array[Byte]],
-       schemaString: String,
-       sqlContext: SQLContext): DataFrame = {
+      payloadRDD: JavaRDD[Array[Byte]],
+      schemaString: String,
+      sqlContext: SQLContext): DataFrame = {
     ArrowConverters.toDataFrame(payloadRDD, schemaString, sqlContext)
   }
 }
