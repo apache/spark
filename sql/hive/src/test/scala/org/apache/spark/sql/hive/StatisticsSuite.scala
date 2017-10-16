@@ -938,15 +938,15 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
 
   test("test statistics of LogicalRelation converted from Hive serde tables") {
     Seq("orc", "parquet").foreach { format =>
-      Seq("true", "false").foreach { isConverted =>
+      Seq(true, false).foreach { isConverted =>
         withSQLConf(
-          HiveUtils.CONVERT_METASTORE_ORC.key -> isConverted,
-          HiveUtils.CONVERT_METASTORE_PARQUET.key -> isConverted) {
+          HiveUtils.CONVERT_METASTORE_ORC.key -> s"$isConverted",
+          HiveUtils.CONVERT_METASTORE_PARQUET.key -> s"$isConverted") {
           withTable(format) {
             sql(s"CREATE TABLE $format (key STRING, value STRING) STORED AS $format")
             sql(s"INSERT INTO TABLE $format SELECT * FROM src")
 
-            val hasHiveStats = !isConverted.toBoolean
+            val hasHiveStats = !isConverted
             checkTableStats(format, hasSizeInBytes = hasHiveStats, expectedRowCounts = None)
 
             sql(s"ANALYZE TABLE $format COMPUTE STATISTICS")
