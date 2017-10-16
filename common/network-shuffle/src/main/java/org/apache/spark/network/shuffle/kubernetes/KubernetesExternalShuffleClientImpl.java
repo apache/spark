@@ -49,8 +49,9 @@ public class KubernetesExternalShuffleClientImpl
   public KubernetesExternalShuffleClientImpl(
       TransportConf conf,
       SecretKeyHolder secretKeyHolder,
-      boolean saslEnabled) {
-    super(conf, secretKeyHolder, saslEnabled);
+      boolean saslEnabled,
+      long registrationTimeoutMs) {
+    super(conf, secretKeyHolder, saslEnabled, registrationTimeoutMs);
   }
 
   @Override

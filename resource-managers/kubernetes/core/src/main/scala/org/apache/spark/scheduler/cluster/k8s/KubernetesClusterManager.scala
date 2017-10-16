@@ -117,7 +117,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       val kubernetesExternalShuffleClient = new KubernetesExternalShuffleClientImpl(
         SparkTransportConf.fromSparkConf(sparkConf, "shuffle"),
         sc.env.securityManager,
-        sc.env.securityManager.isAuthenticationEnabled())
+        sc.env.securityManager.isAuthenticationEnabled(),
+        sparkConf.get(org.apache.spark.internal.config.SHUFFLE_REGISTRATION_TIMEOUT))
       Some(new KubernetesExternalShuffleManagerImpl(
         sparkConf,
         kubernetesClient,
