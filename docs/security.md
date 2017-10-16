@@ -201,11 +201,11 @@ Strict Transport Security.
     Value for HTTP X-XSS-Protection response header. You can choose appropriate value 
     from below:
     <ul>
-      <li> 0 </li> (Disables XSS filtering) 
-      <li> 1 </li> (Enables XSS filtering. If a cross-site scripting attack is detected, 
-        the browser will sanitize the page.)
-      <li> 1; mode=block </li> (Enables XSS filtering. The browser will prevent rendering 
-        of the page if an attack is detected.)
+      <li><code>0</code> (Disables XSS filtering)</li> 
+      <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected, 
+        the browser will sanitize the page.)</li>
+      <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering 
+        of the page if an attack is detected.)</li>
     </ul>
   </td>
 </tr>
@@ -222,11 +222,11 @@ Strict Transport Security.
   <td>None</td>
   <td>
     Value for HTTP Strict Transport Security (HSTS) Response Header. You can choose appropriate 
-    value from below when Spark is SSL/TLS enabled.
+    value from below and set <code>expire-time</code> accordingly, when Spark is SSL/TLS enabled.
     <ul>
-      <li> max-age=&lt;expire-time&gt; </li>
-      <li> max-age=&lt;expire-time&gt;; includeSubDomains </li>
-      <li> max-age=&lt;expire-time&gt;; preload </li>
+      <li><code>max-age=&lt;expire-time&gt;</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; includeSubDomains</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; preload</code></li>
     </ul>
   </td>
 </tr>
