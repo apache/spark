@@ -359,7 +359,11 @@ class JacksonParser private (
   }
 
   /**
-   * Parse the JSON input to the set of [[InternalRow]]s.
+   * Parse the JSON input to the set of [[InternalRow]]s. This function can be safely
+   * used when a [[StructType]] is passed as schema. This means that it can parse JSON
+   * objects and array of JSON objects.
+   * If you need to support array of primitive types too (ie. when the schema is a
+   * [[ArrayType]]), then use [[parseWithArrayOfPrimitiveSupport]] instead.
    *
    * @param recordLiteral an optional function that will be used to generate
    *   the corrupt record text instead of record.toString
@@ -379,8 +383,8 @@ class JacksonParser private (
 
   /**
    * Parse the JSON input. This function can return a set of [[InternalRow]]s
-   * if a [[StructType]] is defined as schema, otherwise it returns a set of
-   * objects.
+   * if a [[StructType]] is defined as schema, meanwhile it returns a set of
+   * objects if an [[ArrayType]] is defined as schema.
    *
    * @param recordLiteral an optional function that will be used to generate
    *   the corrupt record text instead of record.toString
