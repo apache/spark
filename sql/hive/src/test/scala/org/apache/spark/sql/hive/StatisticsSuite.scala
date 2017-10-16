@@ -24,12 +24,11 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.hadoop.hive.common.StatsSetupConst
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, HiveTableRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, EquiHeightHistogram}
+import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, EquiHeightBucket, EquiHeightHistogram}
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, StringUtils}
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.LogicalRelation
@@ -1098,6 +1097,17 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
   test("serde/deser of histograms exceeding 4000 length") {
     import testImplicits._
 
+    def checkBucketsOrder(buckets: Seq[EquiHeightBucket]): Unit = {
+      for (i <- buckets.indices) {
+        val b = buckets(i)
+        assert(b.lo <= b.hi)
+        if (i > 0) {
+          val pre = buckets(i - 1)
+          assert(pre.hi <= b.lo)
+        }
+      }
+    }
+
     val startTimestamp = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
     val df = (1 to 1000)
       .map(i => (i, DateTimeUtils.toJavaTimestamp(startTimestamp + i)))
@@ -1128,7 +1138,9 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
         val intHistogram = cs("cint").histogram.get.asInstanceOf[EquiHeightHistogram]
         val tsHistogram = cs("ctimestamp").histogram.get.asInstanceOf[EquiHeightHistogram]
         assert(intHistogram.ehBuckets.length == spark.sessionState.conf.histogramBucketsNum)
+        checkBucketsOrder(intHistogram.ehBuckets)
         assert(tsHistogram.ehBuckets.length == spark.sessionState.conf.histogramBucketsNum)
+        checkBucketsOrder(tsHistogram.ehBuckets)
       }
     }
   }

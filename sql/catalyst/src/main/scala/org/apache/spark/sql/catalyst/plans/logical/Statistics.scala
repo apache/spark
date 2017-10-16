@@ -157,6 +157,7 @@ object ColumnStat extends Logging {
   private val KEY_AVG_LEN = "avgLen"
   private val KEY_MAX_LEN = "maxLen"
   val KEY_HISTOGRAM = "histogram"
+  val KEY_HISTOGRAM_SEPARATOR = "-"
 
   /** Returns true iff the we support gathering column statistics on column of the given type. */
   def supportsType(dataType: DataType): Boolean = dataType match {

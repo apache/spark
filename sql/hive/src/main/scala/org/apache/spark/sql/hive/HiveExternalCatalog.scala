@@ -1040,7 +1040,8 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           var i = 0
           for (begin <- 0 until v.length by maxValueLen) {
             val end = math.min(v.length, begin + maxValueLen)
-            statsProperties += (s"$baseName-$i" -> v.substring(begin, end))
+            statsProperties +=
+              (baseName + ColumnStat.KEY_HISTOGRAM_SEPARATOR + i -> v.substring(begin, end))
             i += 1
           }
         } else {
@@ -1063,6 +1064,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     } else {
 
       val colStats = new mutable.HashMap[String, ColumnStat]
+      val sortedStatsProps = statsProps.toSeq.sortBy { case (k, v) =>
+        val items = k.split(ColumnStat.KEY_HISTOGRAM_SEPARATOR)
+        if (items.length == 2) {
+          // Histogram may have multiple properties, so they need to be sorted by name and number.
+          (items(0), items(1).toInt)
+        } else {
+          // For other stats properties, only sort by name.
+          (k, 0)
+        }
+      }
 
       // For each column, recover its column stats. Note that this is currently a O(n^2) operation,
       // but given the number of columns it usually not enormous, this is probably OK as a start.
@@ -1075,7 +1086,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           val colStatMap = new mutable.HashMap[String, String]
           val histogramKeyPrefix = keyPrefix + ColumnStat.KEY_HISTOGRAM
           var histogramValue = ""
-          statsProps.toSeq.sortBy(_._1).foreach { case (k, v) =>
+          sortedStatsProps.foreach { case (k, v) =>
             if (k.startsWith(histogramKeyPrefix)) {
               // Need to concatenate histogram string if it has multiple entries.
               histogramValue += v
