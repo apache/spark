@@ -39,7 +39,7 @@ case class InMemoryTableScanExec(
   override def vectorTypes: Option[Seq[String]] =
     Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
 
-  override val columnIndexes =
+  val columnIndices =
     attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
 
   override val supportCodegen: Boolean = relation.useColumnarBatches
@@ -53,8 +53,11 @@ case class InMemoryTableScanExec(
     columnarBatch.setNumRows(rowCount)
 
     for (i <- 0 until cachedColumnarBatch.buffers.length) {
+      val index = if (columnIndices == null || columnIndices.length == 0) i
+        else columnIndices(i)
       ColumnAccessor.decompress(
-        cachedColumnarBatch.buffers(i), columnarBatch.column(i).asInstanceOf[WritableColumnVector],
+        cachedColumnarBatch.buffers(i),
+        columnarBatch.column(index).asInstanceOf[WritableColumnVector],
         schema.fields(i).dataType, rowCount)
     }
     return columnarBatch
