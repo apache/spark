@@ -22,6 +22,7 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
+import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -180,7 +181,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     // Respect `orc.compress`.
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "ZLIB")
+        .option(COMPRESS.getAttribute, "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -191,7 +192,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "ZLIB")
-        .option("orc.compress", "SNAPPY")
+        .option(COMPRESS.getAttribute, "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression

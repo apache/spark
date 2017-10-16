@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
+import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.{QueryTest, Row}
@@ -205,8 +206,8 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     // `compression` -> `orc.compression` -> `spark.sql.orc.compression.codec`
     withSQLConf(SQLConf.ORC_COMPRESSION.key -> "uncompressed") {
       assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == "NONE")
-      val map1 = Map("orc.compress" -> "zlib")
-      val map2 = Map("orc.compress" -> "zlib", "compression" -> "lzo")
+      val map1 = Map(COMPRESS.getAttribute -> "zlib")
+      val map2 = Map(COMPRESS.getAttribute -> "zlib", "compression" -> "lzo")
       assert(new OrcOptions(map1, conf).compressionCodec == "ZLIB")
       assert(new OrcOptions(map2, conf).compressionCodec == "LZO")
     }
