@@ -371,7 +371,9 @@ class JacksonParser private (
     parseWithArrayOfPrimitiveSupport(record, createParser, recordLiteral) match {
       case rows: Seq[InternalRow] => rows
       case _: Seq[_] => throw BadRecordException(() => recordLiteral(record), () => None,
-        new RuntimeException("Conversion of array of primitive data is not yet supported here."))
+        new RuntimeException("`parse` is only used to parse the JSON input to a set of " +
+          "`InternalRow`s. It can parse JSON obejcts and array of JSON objects. Use " +
+          "`parseWithArrayOfPrimitiveSupport` when parsing array of primitive data is needed."))
     }
   }
 
