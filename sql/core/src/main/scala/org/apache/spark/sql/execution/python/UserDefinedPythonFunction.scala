@@ -29,10 +29,11 @@ case class UserDefinedPythonFunction(
     name: String,
     func: PythonFunction,
     dataType: DataType,
-    vectorized: Boolean) {
+    vectorized: Boolean,
+    grouped: Boolean) {
 
   def builder(e: Seq[Expression]): PythonUDF = {
-    PythonUDF(name, func, dataType, e, vectorized)
+    PythonUDF(name, func, dataType, e, vectorized, grouped)
   }
 
   /** Returns a [[Column]] that will evaluate to calling this UDF with the given input. */

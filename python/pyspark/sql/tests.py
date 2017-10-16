@@ -3410,10 +3410,10 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
             .withColumn("v", explode(col('vs'))).drop('vs')
 
     def test_simple(self):
-        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.functions import pandas_grouped_udf
         df = self.data
 
-        foo_udf = pandas_udf(
+        foo_udf = pandas_grouped_udf(
             lambda pdf: pdf.assign(v1=pdf.v * pdf.id * 1.0, v2=pdf.v + pdf.id),
             StructType(
                 [StructField('id', LongType()),
@@ -3426,10 +3426,10 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_decorator(self):
-        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.functions import pandas_grouped_udf
         df = self.data
 
-        @pandas_udf(StructType(
+        @pandas_grouped_udf(StructType(
             [StructField('id', LongType()),
              StructField('v', IntegerType()),
              StructField('v1', DoubleType()),
@@ -3442,10 +3442,10 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_coerce(self):
-        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.functions import pandas_grouped_udf
         df = self.data
 
-        foo = pandas_udf(
+        foo = pandas_grouped_udf(
             lambda pdf: pdf,
             StructType([StructField('id', LongType()), StructField('v', DoubleType())]))
 
@@ -3455,10 +3455,10 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_complex_groupby(self):
-        from pyspark.sql.functions import pandas_udf, col
+        from pyspark.sql.functions import pandas_grouped_udf, col
         df = self.data
 
-        @pandas_udf(StructType(
+        @pandas_grouped_udf(StructType(
             [StructField('id', LongType()),
              StructField('v', IntegerType()),
              StructField('norm', DoubleType())]))
@@ -3474,10 +3474,10 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_empty_groupby(self):
-        from pyspark.sql.functions import pandas_udf, col
+        from pyspark.sql.functions import pandas_grouped_udf, col
         df = self.data
 
-        @pandas_udf(StructType(
+        @pandas_grouped_udf(StructType(
             [StructField('id', LongType()),
              StructField('v', IntegerType()),
              StructField('norm', DoubleType())]))
@@ -3493,10 +3493,10 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
         self.assertFramesEqual(expected, result)
 
     def test_wrong_return_type(self):
-        from pyspark.sql.functions import pandas_udf
+        from pyspark.sql.functions import pandas_grouped_udf
         df = self.data
 
-        foo = pandas_udf(
+        foo = pandas_grouped_udf(
             lambda pdf: pdf,
             StructType([StructField('id', LongType()), StructField('v', StringType())]))
 
@@ -3505,20 +3505,23 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
                 df.groupby('id').apply(foo).sort('id').toPandas()
 
     def test_wrong_args(self):
-        from pyspark.sql.functions import udf, pandas_udf, sum
+        from pyspark.sql.functions import udf, pandas_udf, pandas_grouped_udf, sum
         df = self.data
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'pandas_udf'):
+            with self.assertRaisesRegexp(ValueError, 'pandas_grouped_udf'):
                 df.groupby('id').apply(lambda x: x)
-            with self.assertRaisesRegexp(ValueError, 'pandas_udf'):
+            with self.assertRaisesRegexp(ValueError, 'pandas_grouped_udf'):
                 df.groupby('id').apply(udf(lambda x: x, DoubleType()))
-            with self.assertRaisesRegexp(ValueError, 'pandas_udf'):
+            with self.assertRaisesRegexp(ValueError, 'pandas_grouped_udf'):
                 df.groupby('id').apply(sum(df.v))
-            with self.assertRaisesRegexp(ValueError, 'pandas_udf'):
+            with self.assertRaisesRegexp(ValueError, 'pandas_grouped_udf'):
                 df.groupby('id').apply(df.v + 1)
+            with self.assertRaisesRegexp(ValueError, 'pandas_grouped_udf'):
+                df.groupby('id').apply(
+                    pandas_udf(lambda x: x, StructType([StructField("d", DoubleType())])))
             with self.assertRaisesRegexp(ValueError, 'returnType'):
-                df.groupby('id').apply(pandas_udf(lambda x: x, DoubleType()))
+                df.groupby('id').apply(pandas_grouped_udf(lambda x: x, DoubleType()))
 
 
 if __name__ == "__main__":
