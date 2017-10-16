@@ -2135,15 +2135,20 @@ class UserDefinedFunction(object):
 def _create_udf(f, returnType, pythonUdfType):
 
     def _udf(f, returnType=StringType(), pythonUdfType=pythonUdfType):
-        if pythonUdfType == PythonUdfType.PANDAS_UDF \
-           or pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF:
+        if pythonUdfType == PythonUdfType.PANDAS_UDF:
             import inspect
             argspec = inspect.getargspec(f)
             if len(argspec.args) == 0 and argspec.varargs is None:
                 raise ValueError(
-                    "0-arg pandas_udfs/pandas_grouped_udfs are not supported. "
+                    "0-arg pandas_udfs are not supported. "
                     "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
                 )
+        elif pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF:
+            import inspect
+            argspec = inspect.getargspec(f)
+            if len(argspec.args) != 1 and argspec.varargs is None:
+                raise ValueError("Only 1-arg pandas_grouped_udfs are supported.")
+
         udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
         return udf_obj._wrapped()
 
