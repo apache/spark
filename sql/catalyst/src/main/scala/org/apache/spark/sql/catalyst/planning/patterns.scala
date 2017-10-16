@@ -207,9 +207,10 @@ object PhysicalAggregation {
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a map of the distinct aggregate expressions and build a function which can
       // be used to re-write expressions so that they reference the single copy of the
-      // aggregate function which actually gets computed. Note that aggregate expressions
-      // should always be deterministic, so we can use its canonicalized expression as its
-      // identity in the map.
+      // aggregate function which actually gets computed. Note that identical non-deterministic
+      // aggregate expressions, e.g., FIRST_VALUE, should return the same value within the same
+      // projection, so we use the aggregate expression's canonicalized expression as its key
+      // in the map.
       val aggregateExpressionMap = resultExpressions.flatMap { expr =>
         expr.collect {
           case agg: AggregateExpression => agg.canonicalized -> agg
