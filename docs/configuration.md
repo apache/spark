@@ -2013,6 +2013,7 @@ Apart from these, the following properties are also available, and may be useful
     </tr>
 </table>
 
+
 ### Spark SQL
 
 Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
