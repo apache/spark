@@ -98,9 +98,6 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>assembly</module>
-    <module>external/flume</module>
-    <module>external/flume-sink</module>
-    <module>external/flume-assembly</module>
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
@@ -108,6 +105,7 @@
     <module>external/kafka-0-10-assembly</module>
     <module>external/kafka-0-10-sql</module>
     <module>dists/hadoop-palantir</module>
+    <!-- See additional modules enabled by profiles below -->
   </modules>
 
   <properties>
@@ -132,12 +130,12 @@
     <derby.version>10.12.1.1</derby.version>
     <parquet.version>1.9.1-palantir3</parquet.version>
     <feign.version>8.18.0</feign.version>
-    <okhttp3.version>3.8.0</okhttp3.version>
+    <okhttp3.version>3.9.0</okhttp3.version>
     <okhttp.version>2.7.5</okhttp.version>
     <okio.version>1.13.0</okio.version>
-    <retrofit.version>2.2.0</retrofit.version>
+    <retrofit.version>2.3.0</retrofit.version>
     <bouncycastle.version>1.54</bouncycastle.version>
-    <jetty.version>9.4.6.v20170531</jetty.version>
+    <jetty.version>9.4.7.v20170914</jetty.version>
     <orc.version>1.4.0</orc.version>
     <orc.classifier>nohive</orc.classifier>
     <javaxservlet.version>3.1.0</javaxservlet.version>
@@ -156,6 +154,7 @@
     <!-- the producer is used in tests -->
     <aws.kinesis.producer.version>0.10.2</aws.kinesis.producer.version>
     <commons-beanutils.version>1.9.3</commons-beanutils.version>
+    <commons-logging.version>1.2</commons-logging.version>
     <!--  org.apache.httpcomponents/httpclient-->
     <commons.httpclient.version>4.5.3</commons.httpclient.version>
     <commons.httpcore.version>4.4.6</commons.httpcore.version>
@@ -193,7 +192,10 @@
     <antlr.version>3.4</antlr.version>
     <jpam.version>1.1</jpam.version>
     <selenium.version>2.52.0</selenium.version>
-    <paranamer.version>2.6</paranamer.version>
+    <!--
+    Managed up from older version from Avro; sync with jackson-module-paranamer dependency version
+    -->
+    <paranamer.version>2.8</paranamer.version>
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.0.0</commons-crypto.version>
     <arrow.version>0.4.0</arrow.version>
@@ -511,6 +513,11 @@
         <version>${commons-beanutils.version}</version>
       </dependency>
       <dependency>
+        <groupId>commons-logging</groupId>
+        <artifactId>commons-logging</artifactId>
+        <version>${commons-logging.version}</version>
+      </dependency>
+      <dependency>
         <groupId>commons-pool</groupId>
         <artifactId>commons-pool</artifactId>
         <version>${commons-pool.version}</version>
@@ -791,11 +798,6 @@
             <artifactId>guava</artifactId>
           </exclusion>
         </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>com.fasterxml.jackson.module</groupId>
-        <artifactId>jackson-module-paranamer</artifactId>
-        <version>${fasterxml.jackson.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.module</groupId>
@@ -2756,6 +2758,7 @@
         <artifactId>maven-checkstyle-plugin</artifactId>
         <version>2.17</version>
         <configuration>
+          <failOnViolation>false</failOnViolation>
           <includeTestSourceDirectory>true</includeTestSourceDirectory>
           <sourceDirectories>${basedir}/src/main/java,${basedir}/src/main/scala</sourceDirectories>
           <testSourceDirectory>${basedir}/src/test/java</testSourceDirectory>
@@ -2850,6 +2853,15 @@
           <scope>compile</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <profile>
+      <id>flume</id>
+      <modules>
+        <module>external/flume</module>
+        <module>external/flume-sink</module>
+        <module>external/flume-assembly</module>
+      </modules>
     </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->

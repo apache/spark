@@ -520,6 +520,22 @@ class StreamingAggregationSuite extends StateStoreMetricsTest
     }
   }
 
+  test("SPARK-22230: last should change with new batches") {
+    val input = MemoryStream[Int]
+
+    val aggregated = input.toDF().agg(last('value))
+    testStream(aggregated, OutputMode.Complete())(
+      AddData(input, 1, 2, 3),
+      CheckLastBatch(3),
+      AddData(input, 4, 5, 6),
+      CheckLastBatch(6),
+      AddData(input),
+      CheckLastBatch(6),
+      AddData(input, 0),
+      CheckLastBatch(0)
+    )
+  }
+
   /** Add blocks of data to the `BlockRDDBackedSource`. */
   case class AddBlockData(source: BlockRDDBackedSource, data: Seq[Int]*) extends AddData {
     override def addData(query: Option[StreamExecution]): (Source, Offset) = {

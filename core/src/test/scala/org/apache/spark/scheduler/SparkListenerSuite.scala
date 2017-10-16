@@ -27,7 +27,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.internal.config.LISTENER_BUS_EVENT_QUEUE_CAPACITY
+import org.apache.spark.internal.config._
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
@@ -446,13 +446,13 @@ class SparkListenerSuite extends SparkFunSuite with LocalSparkContext with Match
       classOf[FirehoseListenerThatAcceptsSparkConf],
       classOf[BasicJobCounter])
     val conf = new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.extraListeners", listeners.map(_.getName).mkString(","))
+      .set(EXTRA_LISTENERS, listeners.map(_.getName))
     sc = new SparkContext(conf)
     sc.listenerBus.listeners.asScala.count(_.isInstanceOf[BasicJobCounter]) should be (1)
     sc.listenerBus.listeners.asScala
       .count(_.isInstanceOf[ListenerThatAcceptsSparkConf]) should be (1)
     sc.listenerBus.listeners.asScala
-        .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
+      .count(_.isInstanceOf[FirehoseListenerThatAcceptsSparkConf]) should be (1)
   }
 
   test("add and remove listeners to/from LiveListenerBus queues") {

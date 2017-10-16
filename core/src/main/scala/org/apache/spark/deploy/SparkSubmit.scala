@@ -609,6 +609,11 @@ object SparkSubmit extends CommandLineUtils with Logging {
       }
     }
 
+    // In case of shells, spark.ui.showConsoleProgress can be true by default or by user.
+    if (isShell(args.primaryResource) && !sparkConf.contains(UI_SHOW_CONSOLE_PROGRESS)) {
+      sysProps(UI_SHOW_CONSOLE_PROGRESS.key) = "true"
+    }
+
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // In Kubernetes cluster mode, the jar will be uploaded by the client separately.

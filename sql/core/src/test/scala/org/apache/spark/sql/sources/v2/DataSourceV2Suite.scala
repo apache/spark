@@ -129,6 +129,8 @@ class AdvancedDataSourceV2 extends DataSourceV2 with ReadSupport {
       Array.empty
     }
 
+    override def pushedFilters(): Array[Filter] = filters
+
     override def readSchema(): StructType = {
       requiredSchema
     }

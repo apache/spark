@@ -44,11 +44,8 @@ object BuildCommons {
     "catalyst", "sql", "hive", "hive-thriftserver", "sql-kafka-0-10"
   ).map(ProjectRef(buildLocation, _))
 
-  val streamingProjects@Seq(
-    streaming, streamingFlumeSink, streamingFlume, streamingKafka010
-  ) = Seq(
-    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka-0-10"
-  ).map(ProjectRef(buildLocation, _))
+  val streamingProjects@Seq(streaming, streamingKafka010) =
+    Seq("streaming", "streaming-kafka-0-10").map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore, _*
@@ -57,10 +54,16 @@ object BuildCommons {
     "tags", "sketch", "kvstore"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
-  val optionallyEnabledProjects@Seq(mesos, yarn, sparkGangliaLgpl,
-    streamingKinesisAsl, dockerIntegrationTests, hadoopCloud, kubernetes, _*) =
-    Seq("mesos", "yarn", "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl", "docker-integration-tests",
-      "hadoop-cloud", "kubernetes", "kubernetes-integration-tests",
+  val optionallyEnabledProjects@Seq(mesos, yarn,
+    streamingFlumeSink, streamingFlume,
+    streamingKafka, sparkGangliaLgpl, streamingKinesisAsl,
+    dockerIntegrationTests, hadoopCloud,
+    kubernetes, _*) =
+    Seq("mesos", "yarn",
+      "streaming-flume-sink", "streaming-flume",
+      "streaming-kafka-0-8", "ganglia-lgpl", "streaming-kinesis-asl",
+      "docker-integration-tests", "hadoop-cloud",
+      "kubernetes", "kubernetes-integration-tests",
       "kubernetes-integration-tests-spark-jobs", "kubernetes-integration-tests-spark-jobs-helpers",
       "kubernetes-docker-minimal-bundle"
     ).map(ProjectRef(buildLocation, _))
