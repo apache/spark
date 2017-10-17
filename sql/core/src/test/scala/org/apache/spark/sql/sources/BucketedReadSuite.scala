@@ -629,4 +629,29 @@ abstract class BucketedReadSuite extends QueryTest with SQLTestUtils {
         df1.groupBy("j").agg(max("k")))
     }
   }
+
+  test("SPARK-21707 read user need fields when the condition of filter is nondeterministic") {
+    withTable("bucketed_table") {
+      df1.write
+        .format("parquet")
+        .partitionBy("i")
+        .bucketBy(8, "j", "k")
+        .saveAsTable("bucketed_table")
+
+      val table = spark.table("bucketed_table").select($"i", $"j", $"k")
+      assert(table.queryExecution.sparkPlan.inputSet.toSeq.length == 3)
+
+      // the condition of filter is nondeterministic and no fields.
+      val table1 = spark.table("bucketed_table").where(rand(10) <= 0.5).select($"i")
+      assert(table1.queryExecution.sparkPlan.inputSet.toSeq.length == 1)
+      assert(table1.queryExecution.sparkPlan.inputSet != table.queryExecution.sparkPlan.inputSet)
+
+      // the condition of filter is nondeterministic and one fields.
+      val table2 = spark.table("bucketed_table")
+        .where(rand(10) <= 0.5 && $"j" > 1)
+        .select($"i")
+      assert(table2.queryExecution.sparkPlan.inputSet.toSeq.length == 2)
+      assert(table2.queryExecution.sparkPlan.inputSet != table.queryExecution.sparkPlan.inputSet)
+    }
+  }
 }
