@@ -461,7 +461,6 @@ name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can al
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
 
-To load a JSON file you can use:
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
