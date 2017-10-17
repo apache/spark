@@ -429,4 +429,19 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(agg_without_cache, agg_with_cache)
     }
   }
+
+  test("SPARK-22249: IN should work also with cached DataFrame") {
+    val df = spark.range(10).cache()
+    // with an empty list
+    assert(df.filter($"id".isin()).count() == 0)
+    // with a non-empty list
+    assert(df.filter($"id".isin(2)).count() == 1)
+    assert(df.filter($"id".isin(2, 3)).count() == 2)
+    df.unpersist()
+    val dfNulls = spark.range(10).selectExpr("null as id").cache()
+    // with null as value for the attribute
+    assert(dfNulls.filter($"id".isin()).count() == 0)
+    assert(dfNulls.filter($"id".isin(2, 3)).count() == 0)
+    dfNulls.unpersist()
+  }
 }
