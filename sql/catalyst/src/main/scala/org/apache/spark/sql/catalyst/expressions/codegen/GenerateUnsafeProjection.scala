@@ -81,7 +81,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       isTopLevel: Boolean = false): String = {
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
-    ctx.addMutableState(rowWriterClass, rowWriter,
+    val rowWriterAccessor = ctx.addMutableState(rowWriterClass, rowWriter,
       s"$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
 
     val resetWriter = if (isTopLevel) {
@@ -93,10 +93,10 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         // need to clear it out every time.
         ""
       } else {
-        s"$rowWriter.zeroOutNullBytes();"
+        s"$rowWriterAccessor.zeroOutNullBytes();"
       }
     } else {
-      s"$rowWriter.reset();"
+      s"$rowWriterAccessor.reset();"
     }
 
     val writeFields = inputs.zip(inputTypes).zipWithIndex.map {
@@ -181,7 +181,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       bufferHolder: String): String = {
     val arrayWriterClass = classOf[UnsafeArrayWriter].getName
     val arrayWriter = ctx.freshName("arrayWriter")
-    ctx.addMutableState(arrayWriterClass, arrayWriter,
+    val arrayWriterAccessor = ctx.addMutableState(arrayWriterClass, arrayWriter,
       s"$arrayWriter = new $arrayWriterClass();")
     val numElements = ctx.freshName("numElements")
     val index = ctx.freshName("index")
@@ -206,29 +206,32 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         s"""
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeStructToBuffer(ctx, element, t.map(_.dataType), bufferHolder)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $arrayWriterAccessor.setOffsetAndSize($index,
+            $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case a @ ArrayType(et, _) =>
         s"""
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeArrayToBuffer(ctx, element, et, bufferHolder)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $arrayWriterAccessor.setOffsetAndSize($index,
+            $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case m @ MapType(kt, vt, _) =>
         s"""
           final int $tmpCursor = $bufferHolder.cursor;
           ${writeMapToBuffer(ctx, element, kt, vt, bufferHolder)}
-          $arrayWriter.setOffsetAndSize($index, $tmpCursor, $bufferHolder.cursor - $tmpCursor);
+          $arrayWriterAccessor.setOffsetAndSize($index,
+            $tmpCursor, $bufferHolder.cursor - $tmpCursor);
         """
 
       case t: DecimalType =>
-        s"$arrayWriter.write($index, $element, ${t.precision}, ${t.scale});"
+        s"$arrayWriterAccessor.write($index, $element, ${t.precision}, ${t.scale});"
 
       case NullType => ""
 
-      case _ => s"$arrayWriter.write($index, $element);"
+      case _ => s"$arrayWriterAccessor.write($index, $element);"
     }
 
     val primitiveTypeName = if (ctx.isPrimitiveType(jt)) ctx.primitiveTypeName(et) else ""
@@ -237,11 +240,11 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
       } else {
         final int $numElements = $input.numElements();
-        $arrayWriter.initialize($bufferHolder, $numElements, $elementOrOffsetSize);
+        $arrayWriterAccessor.initialize($bufferHolder, $numElements, $elementOrOffsetSize);
 
         for (int $index = 0; $index < $numElements; $index++) {
           if ($input.isNullAt($index)) {
-            $arrayWriter.setNull$primitiveTypeName($index);
+            $arrayWriterAccessor.setNull$primitiveTypeName($index);
           } else {
             final $jt $element = ${ctx.getValue(input, et, index)};
             $writeElement
@@ -316,29 +319,31 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     }
 
     val result = ctx.freshName("result")
-    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+    val resultAccessor = ctx.addMutableState("UnsafeRow",
+      result, s"$result = new UnsafeRow(${expressions.length});")
 
     val holder = ctx.freshName("holder")
     val holderClass = classOf[BufferHolder].getName
-    ctx.addMutableState(holderClass, holder,
-      s"$holder = new $holderClass($result, ${numVarLenFields * 32});")
+    val holderAccessor = ctx.addMutableState(holderClass, holder,
+      s"$holder = new $holderClass($resultAccessor, ${numVarLenFields * 32});")
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""
     } else {
-      s"$holder.reset();"
+      s"$holderAccessor.reset();"
     }
     val updateRowSize = if (numVarLenFields == 0) {
       ""
     } else {
-      s"$result.setTotalSize($holder.totalSize());"
+      s"$resultAccessor.setTotalSize($holderAccessor.totalSize());"
     }
 
     // Evaluate all the subexpression.
     val evalSubexpr = ctx.subexprFunctions.mkString("\n")
 
     val writeExpressions =
-      writeExpressionsToBuffer(ctx, ctx.INPUT_ROW, exprEvals, exprTypes, holder, isTopLevel = true)
+      writeExpressionsToBuffer(ctx,
+        ctx.INPUT_ROW, exprEvals, exprTypes, holderAccessor, isTopLevel = true)
 
     val code =
       s"""
@@ -347,7 +352,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         $writeExpressions
         $updateRowSize
       """
-    ExprCode(code, "false", result)
+    ExprCode(code, "false", resultAccessor)
   }
 
   protected def canonicalize(in: Seq[Expression]): Seq[Expression] =

@@ -49,7 +49,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
     // These expressions could be split into multiple functions
-    ctx.addMutableState("Object[]", values, s"$values = null;")
+    val valuesAccessor = ctx.addMutableState("Object[]", values, s"$values = null;")
 
     val rowClass = classOf[GenericInternalRow].getName
 
@@ -58,17 +58,17 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       s"""
         if (!$tmp.isNullAt($i)) {
           ${converter.code}
-          $values[$i] = ${converter.value};
+          $valuesAccessor[$i] = ${converter.value};
         }
       """
     }
     val allFields = ctx.splitExpressions(tmp, fieldWriters)
     val code = s"""
       final InternalRow $tmp = $input;
-      $values = new Object[${schema.length}];
+      $valuesAccessor = new Object[${schema.length}];
       $allFields
-      final InternalRow $output = new $rowClass($values);
-      $values = null;
+      final InternalRow $output = new $rowClass($valuesAccessor);
+      $valuesAccessor = null;
     """
 
     ExprCode(code, "false", output)

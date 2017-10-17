@@ -118,21 +118,23 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
       dataType: DataType,
       baseFuncName: String): (String, String, String) = {
     val globalIsNull = ctx.freshName("isNull")
-    ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
+    val globalIsNullAccessor =
+      ctx.addMutableState("boolean", globalIsNull, s"$globalIsNull = false;")
     val globalValue = ctx.freshName("value")
-    ctx.addMutableState(ctx.javaType(dataType), globalValue,
+    val globalValueAccessor =
+      ctx.addMutableState(ctx.javaType(dataType), globalValue,
       s"$globalValue = ${ctx.defaultValue(dataType)};")
     val funcName = ctx.freshName(baseFuncName)
     val funcBody =
       s"""
          |private void $funcName(InternalRow ${ctx.INPUT_ROW}) {
          |  ${ev.code.trim}
-         |  $globalIsNull = ${ev.isNull};
-         |  $globalValue = ${ev.value};
+         |  $globalIsNullAccessor = ${ev.isNull};
+         |  $globalValueAccessor = ${ev.value};
          |}
          """.stripMargin
     val fullFuncName = ctx.addNewFunction(funcName, funcBody)
-    (fullFuncName, globalIsNull, globalValue)
+    (fullFuncName, globalIsNullAccessor, globalValueAccessor)
   }
 
   override def toString: String = s"if ($predicate) $trueValue else $falseValue"

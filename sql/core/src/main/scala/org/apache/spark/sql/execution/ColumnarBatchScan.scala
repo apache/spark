@@ -73,27 +73,29 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
   override protected def doProduce(ctx: CodegenContext): String = {
     val input = ctx.freshName("input")
     // PhysicalRDD always just has one input
-    ctx.addMutableState("scala.collection.Iterator", input, s"$input = inputs[0];")
+    val inputAccessor = ctx.addMutableState("scala.collection.Iterator", input,
+      s"$input = inputs[0];")
 
     // metrics
     val numOutputRows = metricTerm(ctx, "numOutputRows")
     val scanTimeMetric = metricTerm(ctx, "scanTime")
     val scanTimeTotalNs = ctx.freshName("scanTime")
-    ctx.addMutableState("long", scanTimeTotalNs, s"$scanTimeTotalNs = 0;")
+    val scanTimeTotalNsAccessor = ctx.addMutableState("long", scanTimeTotalNs,
+      s"$scanTimeTotalNs = 0;")
 
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.freshName("batch")
-    ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
+    val batchAccessor = ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
 
     val idx = ctx.freshName("batchIdx")
-    ctx.addMutableState("int", idx, s"$idx = 0;")
+    val idxAccessor = ctx.addMutableState("int", idx, s"$idx = 0;")
     val colVars = output.indices.map(i => ctx.freshName("colInstance" + i))
     val columnVectorClzs = vectorTypes.getOrElse(
       Seq.fill(colVars.size)(classOf[ColumnVector].getName))
-    val columnAssigns = colVars.zip(columnVectorClzs).zipWithIndex.map {
+    val columnNameAssigns = colVars.zip(columnVectorClzs).zipWithIndex.map {
       case ((name, columnVectorClz), i) =>
-        ctx.addMutableState(columnVectorClz, name, s"$name = null;")
-        s"$name = ($columnVectorClz) $batch.column($i);"
+        val nameAccessor = ctx.addMutableState(columnVectorClz, name, s"$name = null;")
+        (nameAccessor, s"$nameAccessor = ($columnVectorClz) $batchAccessor.column($i);")
     }
 
     val nextBatch = ctx.freshName("nextBatch")
@@ -101,46 +103,46 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
       s"""
          |private void $nextBatch() throws java.io.IOException {
          |  long getBatchStart = System.nanoTime();
-         |  if ($input.hasNext()) {
-         |    $batch = ($columnarBatchClz)$input.next();
-         |    $numOutputRows.add($batch.numRows());
-         |    $idx = 0;
-         |    ${columnAssigns.mkString("", "\n", "\n")}
+         |  if ($inputAccessor.hasNext()) {
+         |    $batchAccessor = ($columnarBatchClz)$inputAccessor.next();
+         |    $numOutputRows.add($batchAccessor.numRows());
+         |    $idxAccessor = 0;
+         |    ${columnNameAssigns.map(_._2).mkString("", "\n", "\n")}
          |  }
-         |  $scanTimeTotalNs += System.nanoTime() - getBatchStart;
+         |  $scanTimeTotalNsAccessor += System.nanoTime() - getBatchStart;
          |}""".stripMargin)
 
     ctx.currentVars = null
     val rowidx = ctx.freshName("rowIdx")
-    val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
+    val columnsBatchInput = (output zip columnNameAssigns.map(_._1)).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
     }
     val localIdx = ctx.freshName("localIdx")
     val localEnd = ctx.freshName("localEnd")
     val numRows = ctx.freshName("numRows")
     val shouldStop = if (isShouldStopRequired) {
-      s"if (shouldStop()) { $idx = $rowidx + 1; return; }"
+      s"if (shouldStop()) { $idxAccessor = $rowidx + 1; return; }"
     } else {
       "// shouldStop check is eliminated"
     }
     s"""
-       |if ($batch == null) {
+       |if ($batchAccessor == null) {
        |  $nextBatchFuncName();
        |}
-       |while ($batch != null) {
-       |  int $numRows = $batch.numRows();
-       |  int $localEnd = $numRows - $idx;
+       |while ($batchAccessor != null) {
+       |  int $numRows = $batchAccessor.numRows();
+       |  int $localEnd = $numRows - $idxAccessor;
        |  for (int $localIdx = 0; $localIdx < $localEnd; $localIdx++) {
-       |    int $rowidx = $idx + $localIdx;
+       |    int $rowidx = $idxAccessor + $localIdx;
        |    ${consume(ctx, columnsBatchInput).trim}
        |    $shouldStop
        |  }
-       |  $idx = $numRows;
-       |  $batch = null;
+       |  $idxAccessor = $numRows;
+       |  $batchAccessor = null;
        |  $nextBatchFuncName();
        |}
-       |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
-       |$scanTimeTotalNs = 0;
+       |$scanTimeMetric.add($scanTimeTotalNsAccessor / (1000 * 1000));
+       |$scanTimeTotalNsAccessor = 0;
      """.stripMargin
   }
 

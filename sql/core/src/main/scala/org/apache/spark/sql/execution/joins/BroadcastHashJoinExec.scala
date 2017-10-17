@@ -124,13 +124,13 @@ case class BroadcastHashJoinExec(
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
     val addTaskListener = genTaskListener(avgHashProbe, relationTerm)
 
-    ctx.addMutableState(clsName, relationTerm,
+    val relationTermAccessor = ctx.addMutableState(clsName, relationTerm,
       s"""
          | $relationTerm = (($clsName) $broadcast.value()).asReadOnlyCopy();
          | incPeakExecutionMemory($relationTerm.estimatedSize());
          | $addTaskListener
        """.stripMargin)
-    (broadcastRelation, relationTerm)
+    (broadcastRelation, relationTermAccessor)
   }
 
   /**

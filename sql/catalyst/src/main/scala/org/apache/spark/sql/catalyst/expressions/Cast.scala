@@ -801,12 +801,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToByteCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
+      val wrapperAccessor = ctx.addMutableState("UTF8String.IntWrapper", wrapper,
         s"$wrapper = new UTF8String.IntWrapper();")
       (c, evPrim, evNull) =>
         s"""
-          if ($c.toByte($wrapper)) {
-            $evPrim = (byte) $wrapper.value;
+          if ($c.toByte($wrapperAccessor)) {
+            $evPrim = (byte) $wrapperAccessor.value;
           } else {
             $evNull = true;
           }
@@ -828,12 +828,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
+      val wrapperAccessor = ctx.addMutableState("UTF8String.IntWrapper", wrapper,
         s"$wrapper = new UTF8String.IntWrapper();")
       (c, evPrim, evNull) =>
         s"""
-          if ($c.toShort($wrapper)) {
-            $evPrim = (short) $wrapper.value;
+          if ($c.toShort($wrapperAccessor)) {
+            $evPrim = (short) $wrapperAccessor.value;
           } else {
             $evNull = true;
           }
@@ -853,12 +853,12 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToIntCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.IntWrapper", wrapper,
+      val wrapperAccessor = ctx.addMutableState("UTF8String.IntWrapper", wrapper,
         s"$wrapper = new UTF8String.IntWrapper();")
       (c, evPrim, evNull) =>
         s"""
-          if ($c.toInt($wrapper)) {
-            $evPrim = $wrapper.value;
+          if ($c.toInt($wrapperAccessor)) {
+            $evPrim = $wrapperAccessor.value;
           } else {
             $evNull = true;
           }
@@ -878,13 +878,13 @@ case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String
   private[this] def castToLongCode(from: DataType, ctx: CodegenContext): CastFunction = from match {
     case StringType =>
       val wrapper = ctx.freshName("wrapper")
-      ctx.addMutableState("UTF8String.LongWrapper", wrapper,
+      val wrapperAccessor = ctx.addMutableState("UTF8String.LongWrapper", wrapper,
         s"$wrapper = new UTF8String.LongWrapper();")
 
       (c, evPrim, evNull) =>
         s"""
-          if ($c.toLong($wrapper)) {
-            $evPrim = $wrapper.value;
+          if ($c.toLong($wrapperAccessor)) {
+            $evPrim = $wrapperAccessor.value;
           } else {
             $evNull = true;
           }
