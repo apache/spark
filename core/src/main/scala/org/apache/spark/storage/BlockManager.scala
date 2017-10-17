@@ -664,14 +664,13 @@ private[spark] class BlockManager(
     var runningFailureCount = 0
     var totalFailureCount = 0
 
-    // Because all the remote blocks are registered in driver, so it is not necessary to ask
+    // Because all the remote blocks are registered in driver, it is not necessary to ask
     // all the slave executors to get block status.
-    val locationAndStatus = master.getLocationsAndStatus(blockId)
-
-    val blockSize = locationAndStatus._2.map { status =>
-      // Disk size and mem size cannot co-exist, so it's ok to sum them together to get block size.
-      status.diskSize + status.memSize
+    val locationsAndStatus = master.getLocationsAndStatus(blockId)
+    val blockSize = locationsAndStatus.map { b =>
+      b.status.diskSize.max(b.status.memSize)
     }.getOrElse(0L)
+    val blockLocations = locationsAndStatus.map(_.locations).getOrElse(Seq.empty)
 
     // If the block size is above the threshold, we should pass our FileManger to
     // BlockTransferService, which will leverage it to spill the block; if not, then passed-in
@@ -682,7 +681,7 @@ private[spark] class BlockManager(
       null
     }
 
-    val locations = sortLocations(locationAndStatus._1)
+    val locations = sortLocations(blockLocations)
     val maxFetchFailures = locations.size
     var locationIterator = locations.iterator
     while (locationIterator.hasNext) {
@@ -713,7 +712,7 @@ private[spark] class BlockManager(
           // take a significant amount of time. To get rid of these stale entries
           // we refresh the block locations after a certain number of fetch failures
           if (runningFailureCount >= maxFailuresBeforeLocationRefresh) {
-            locationIterator = sortLocations(master.getLocationsAndStatus(blockId)._1).iterator
+            locationIterator = sortLocations(master.getLocations(blockId)).iterator
             logDebug(s"Refreshed locations from the driver " +
               s"after ${runningFailureCount} fetch failures.")
             runningFailureCount = 0

@@ -425,11 +425,15 @@ class BlockManagerMasterEndpoint(
     if (blockLocations.containsKey(blockId)) blockLocations.get(blockId).toSeq else Seq.empty
   }
 
-  private def getLocationsAndStatus(
-      blockId: BlockId): (Seq[BlockManagerId], Option[BlockStatus]) = {
+  private def getLocationsAndStatus(blockId: BlockId): Option[BlockLocationsAndStatus] = {
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId => blockManagerInfo(bmId).getStatus(blockId) }
-    (locations, status)
+
+    if (locations.nonEmpty && status.isDefined) {
+      Some(BlockLocationsAndStatus(locations, status.get))
+    } else {
+      None
+    }
   }
 
   private def getLocationsMultipleBlockIds(

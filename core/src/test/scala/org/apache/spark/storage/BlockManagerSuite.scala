@@ -51,7 +51,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.security.{CryptoStreamUtils, EncryptionFunSuite}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer, SerializerManager}
 import org.apache.spark.shuffle.sort.SortShuffleManager
-import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
 
@@ -508,10 +508,11 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val bmId1 = BlockManagerId("id1", localHost, 1)
     val bmId2 = BlockManagerId("id2", localHost, 2)
     val bmId3 = BlockManagerId("id3", otherHost, 3)
+    when(bmMaster.getLocations(mc.any[BlockId])).thenReturn(Seq(bmId1, bmId2, bmId3))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
-    val locations = blockManager invokePrivate sortLocations(Seq(bmId1, bmId2, bmId3))
+    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost))
   }
 
@@ -527,13 +528,14 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val bmId3 = BlockManagerId("id3", otherHost, 3, Some(otherRack))
     val bmId4 = BlockManagerId("id4", otherHost, 4, Some(otherRack))
     val bmId5 = BlockManagerId("id5", otherHost, 5, Some(localRack))
+    when(bmMaster.getLocations(mc.any[BlockId]))
+      .thenReturn(Seq(bmId1, bmId2, bmId5, bmId3, bmId4))
 
     val blockManager = makeBlockManager(128, "exec", bmMaster)
     blockManager.blockManagerId =
       BlockManagerId(SparkContext.DRIVER_IDENTIFIER, localHost, 1, Some(localRack))
     val sortLocations = PrivateMethod[Seq[BlockManagerId]]('sortLocations)
-    val locations = blockManager invokePrivate sortLocations(
-      Seq(bmId1, bmId2, bmId5, bmId3, bmId4))
+    val locations = blockManager invokePrivate sortLocations(bmMaster.getLocations("test"))
     assert(locations.map(_.host) === Seq(localHost, localHost, otherHost, otherHost, otherHost))
     assert(locations.flatMap(_.topologyInfo)
       === Seq(localRack, localRack, localRack, otherRack, otherRack))
@@ -1272,13 +1274,17 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     val blockManagerIds = (0 to maxFailuresBeforeLocationRefresh)
       .map { i => BlockManagerId(s"id-$i", s"host-$i", i + 1) }
     when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId])).thenReturn(
-      (blockManagerIds, Option(BlockStatus.empty)))
+      Option(BlockLocationsAndStatus(blockManagerIds, BlockStatus.empty)))
+    when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(
+      blockManagerIds)
+
     store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,
       transferService = Option(mockBlockTransferService))
     val block = store.getRemoteBytes("item")
       .asInstanceOf[Option[ByteBuffer]]
     assert(block.isDefined)
-    verify(mockBlockManagerMaster, times(2)).getLocationsAndStatus("item")
+    verify(mockBlockManagerMaster, times(1)).getLocationsAndStatus("item")
+    verify(mockBlockManagerMaster, times(1)).getLocations("item")
   }
 
   test("SPARK-17484: block status is properly updated following an exception in put()") {
@@ -1374,14 +1380,13 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
 
     val mockBlockManagerMaster = mock(classOf[BlockManagerMaster])
     val mockBlockTransferService = new MockBlockTransferService(0)
+    val blockLocations = Seq(BlockManagerId("id-0", "host-0", 1))
+    val blockStatus = BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L)
 
-    val blockStatus = Map(
-      BlockManagerId("id-0", "host-0", 1) -> BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L))
     when(mockBlockManagerMaster.getLocationsAndStatus(mc.any[BlockId])).thenReturn(
-      (Seq(BlockManagerId("id-0", "host-0", 1)),
-        Option(BlockStatus(StorageLevel.DISK_ONLY, 0L, 2000L))))
-    when(mockBlockManagerMaster.getBlockStatus(mc.any[BlockId], mc.anyBoolean())).thenReturn(
-      blockStatus)
+      Option(BlockLocationsAndStatus(blockLocations, blockStatus)))
+    when(mockBlockManagerMaster.getLocations(mc.any[BlockId])).thenReturn(blockLocations)
+
     store = makeBlockManager(8000, "executor1", mockBlockManagerMaster,
       transferService = Option(mockBlockTransferService))
     val block = store.getRemoteBytes("item")
