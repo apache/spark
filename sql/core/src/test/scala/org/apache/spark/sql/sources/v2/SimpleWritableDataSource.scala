@@ -125,23 +125,24 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
     val internal = options.get("internal").isPresent
     val conf = SparkContext.getActive.get.hadoopConfiguration
     val fs = path.getFileSystem(conf)
-    if (fs.exists(path)) {
-      if (mode == SaveMode.ErrorIfExists) {
+
+    if (mode == SaveMode.ErrorIfExists) {
+      if (fs.exists(path)) {
         throw new RuntimeException("data already exists.")
       }
-
-      if (mode == SaveMode.Ignore) {
-        Optional.empty()
-      } else if (mode == SaveMode.Overwrite) {
-        fs.delete(path, true)
-        Optional.of(createWriter(path, conf, internal))
-      } else {
-        assert(mode == SaveMode.Append)
-        Optional.of(createWriter(path, conf, internal))
-      }
-    } else {
-      Optional.of(createWriter(path, conf, internal))
     }
+    if (mode == SaveMode.Ignore) {
+      if (fs.exists(path)) {
+        return Optional.empty()
+      }
+    }
+    if (mode == SaveMode.Overwrite) {
+      if (fs.exists(path)) {
+        fs.delete(path, true)
+      }
+    }
+
+    Optional.of(createWriter(path, conf, internal))
   }
 
   private def createWriter(
