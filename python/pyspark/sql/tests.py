@@ -3425,7 +3425,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
         def check_data(idx, date, timestamp, timestamp_copy):
             is_equal = timestamp == timestamp_copy
             if is_equal.all():
-                for i in xrange(len(is_equal)):
+                for i in range(len(is_equal)):
                     is_equal[i] = date[i].date() == data[idx[i]][1] \
                         and timestamp[i].to_pydatetime() == data[idx[i]][2]
             return is_equal
