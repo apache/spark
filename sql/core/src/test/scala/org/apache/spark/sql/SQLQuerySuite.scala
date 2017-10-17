@@ -2691,4 +2691,16 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     checkAnswer(df, Row(1, 3, 4) :: Row(2, 3, 4) :: Row(3, 3, 4) :: Nil)
   }
+
+  test("Non-deterministic aggregate functions should not be deduplicated") {
+    val query = "SELECT a, first_value(b), first_value(b) + 1 FROM testData2 GROUP BY a"
+    val df = sql(query)
+    val physical = df.queryExecution.sparkPlan
+    val aggregates = physical.collect {
+      case agg : HashAggregateExec => agg
+    }
+    aggregates.foreach { agg =>
+      assert (agg.aggregateExpressions.size == 2)
+    }
+  }
 }

@@ -205,18 +205,15 @@ object PhysicalAggregation {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
-      // build a map of the distinct aggregate expressions and build a function which can
-      // be used to re-write expressions so that they reference the single copy of the
-      // aggregate function which actually gets computed. Note that identical non-deterministic
-      // aggregate expressions, e.g., FIRST_VALUE, should return the same value within the same
-      // projection, so we use the aggregate expression's canonicalized expression as its key
-      // in the map.
-      val aggregateExpressionMap = resultExpressions.flatMap { expr =>
+      // build a set of semantically distinct aggregate expressions and re-write expressions so
+      // that they reference the single copy of the aggregate function which actually gets computed.
+      val equivalentAggregateExpressions = new EquivalentExpressions
+      val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
-          case agg: AggregateExpression => agg.canonicalized -> agg
+          case agg: AggregateExpression
+            if (!equivalentAggregateExpressions.addExpr(agg)) => agg
         }
-      }.toMap
-      val aggregateExpressions = aggregateExpressionMap.values.to[Seq]
+      }
 
       val namedGroupingExpressions = groupingExpressions.map {
         case ne: NamedExpression => ne -> ne
@@ -239,8 +236,16 @@ object PhysicalAggregation {
         expr.transformDown {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
-            // so replace each aggregate expression by its corresponding attribute in the map:
-            aggregateExpressionMap.get(ae.canonicalized).get.resultAttribute
+            // so replace each aggregate expression by its corresponding attribute in the set.
+            // Note that non-deterministic aggregate expressions should not be deduplicated and
+            // should be handled differently.
+            val newAe = if (ae.deterministic) {
+              equivalentAggregateExpressions.getEquivalentExprs(ae)
+                .head.asInstanceOf[AggregateExpression]
+            } else {
+              ae
+            }
+            newAe.resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
