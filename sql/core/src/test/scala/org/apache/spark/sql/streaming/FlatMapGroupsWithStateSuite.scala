@@ -75,13 +75,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     // === Tests for state in streaming queries ===
     // Updating empty state
-    state = GroupStateImpl.createForStreaming(None, 1, 1, NoTimeout, hasTimedOut = false)
+    state = GroupStateImpl.createForStreaming(
+      None, 1, 1, NoTimeout, hasTimedOut = false, watermarkPresent = false)
     testState(None)
     state.update("")
     testState(Some(""), shouldBeUpdated = true)
 
     // Updating exiting state
-    state = GroupStateImpl.createForStreaming(Some("2"), 1, 1, NoTimeout, hasTimedOut = false)
+    state = GroupStateImpl.createForStreaming(
+      Some("2"), 1, 1, NoTimeout, hasTimedOut = false, watermarkPresent = false)
     testState(Some("2"))
     state.update("3")
     testState(Some("3"), shouldBeUpdated = true)
@@ -102,8 +104,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   test("GroupState - setTimeout - with NoTimeout") {
     for (initValue <- Seq(None, Some(5))) {
       val states = Seq(
-        GroupStateImpl.createForStreaming(initValue, 1000, 1000, NoTimeout, hasTimedOut = false),
-        GroupStateImpl.createForBatch(NoTimeout)
+        GroupStateImpl.createForStreaming(
+          initValue, 1000, 1000, NoTimeout, hasTimedOut = false, watermarkPresent = false),
+        GroupStateImpl.createForBatch(NoTimeout, watermarkPresent = false)
       )
       for (state <- states) {
         // for streaming queries
@@ -120,7 +123,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   test("GroupState - setTimeout - with ProcessingTimeTimeout") {
     // for streaming queries
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
-      None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
+      None, 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false, watermarkPresent = false)
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     state.setTimeoutDuration(500)
     assert(state.getTimeoutTimestamp === 1500) // can be set without initializing state
@@ -141,7 +144,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
 
     // for batch queries
-    state = GroupStateImpl.createForBatch(ProcessingTimeTimeout).asInstanceOf[GroupStateImpl[Int]]
+    state = GroupStateImpl.createForBatch(
+      ProcessingTimeTimeout, watermarkPresent = false).asInstanceOf[GroupStateImpl[Int]]
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     state.setTimeoutDuration(500)
     testTimeoutTimestampNotAllowed[UnsupportedOperationException](state)
@@ -158,7 +162,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
   test("GroupState - setTimeout - with EventTimeTimeout") {
     var state: GroupStateImpl[Int] = GroupStateImpl.createForStreaming(
-      None, 1000, 1000, EventTimeTimeout, false)
+      None, 1000, 1000, EventTimeTimeout, false, watermarkPresent = true)
 
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
@@ -180,7 +184,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
 
     // for batch queries
-    state = GroupStateImpl.createForBatch(EventTimeTimeout).asInstanceOf[GroupStateImpl[Int]]
+    state = GroupStateImpl.createForBatch(EventTimeTimeout, watermarkPresent = false)
+      .asInstanceOf[GroupStateImpl[Int]]
     assert(state.getTimeoutTimestamp === NO_TIMESTAMP)
     testTimeoutDurationNotAllowed[UnsupportedOperationException](state)
     state.setTimeoutTimestamp(5000)
@@ -207,7 +212,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
 
     state = GroupStateImpl.createForStreaming(
-      Some(5), 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false)
+      Some(5), 1000, 1000, ProcessingTimeTimeout, hasTimedOut = false, watermarkPresent = false)
     testIllegalTimeout {
       state.setTimeoutDuration(-1000)
     }
@@ -225,7 +230,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     }
 
     state = GroupStateImpl.createForStreaming(
-      Some(5), 1000, 1000, EventTimeTimeout, hasTimedOut = false)
+      Some(5), 1000, 1000, EventTimeTimeout, hasTimedOut = false, watermarkPresent = false)
     testIllegalTimeout {
       state.setTimeoutTimestamp(-10000)
     }
@@ -257,83 +262,91 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
       // for streaming queries
       for (initState <- Seq(None, Some(5))) {
         val state1 = GroupStateImpl.createForStreaming(
-          initState, 1000, 1000, timeoutConf, hasTimedOut = false)
+          initState, 1000, 1000, timeoutConf, hasTimedOut = false, watermarkPresent = false)
         assert(state1.hasTimedOut === false)
 
         val state2 = GroupStateImpl.createForStreaming(
-          initState, 1000, 1000, timeoutConf, hasTimedOut = true)
+          initState, 1000, 1000, timeoutConf, hasTimedOut = true, watermarkPresent = false)
         assert(state2.hasTimedOut === true)
       }
 
       // for batch queries
-      assert(GroupStateImpl.createForBatch(timeoutConf).hasTimedOut === false)
+      assert(
+        GroupStateImpl.createForBatch(timeoutConf, watermarkPresent = false).hasTimedOut === false)
     }
   }
 
   test("GroupState - getCurrentWatermarkMs") {
+    def streamingState(timeoutConf: GroupStateTimeout, watermark: Option[Long]): GroupState[Int] = {
+      GroupStateImpl.createForStreaming(
+        None, 1000, watermark.getOrElse(-1), timeoutConf,
+        hasTimedOut = false, watermark.nonEmpty)
+    }
+
+    def batchState(timeoutConf: GroupStateTimeout, watermarkPresent: Boolean): GroupState[Any] = {
+      GroupStateImpl.createForBatch(timeoutConf, watermarkPresent)
+    }
+
     def assertWrongTimeoutError(test: => Unit): Unit = {
       val e = intercept[UnsupportedOperationException] { test }
       assert(e.getMessage.contains(
-        "Cannot get event time watermark timestamp without enabling event time timeout"))
+        "Cannot get event time watermark timestamp without enabling setting watermark"))
     }
 
-    def streamingState(timeoutConf: GroupStateTimeout, watermark: Long): GroupState[Int] = {
-      GroupStateImpl.createForStreaming(None, 1000, watermark, timeoutConf, hasTimedOut = false)
+    for (timeoutConf <- Seq(NoTimeout, EventTimeTimeout, ProcessingTimeTimeout)) {
+      // Tests for getCurrentWatermarkMs in streaming queries
+      assertWrongTimeoutError { streamingState(timeoutConf, None).getCurrentWatermarkMs() }
+      assert(streamingState(timeoutConf, Some(1000)).getCurrentWatermarkMs() === 1000)
+      assert(streamingState(timeoutConf, Some(2000)).getCurrentWatermarkMs() === 2000)
+
+      // Tests for getCurrentWatermarkMs in batch queries
+      assertWrongTimeoutError {
+        batchState(timeoutConf, watermarkPresent = false).getCurrentWatermarkMs()
+      }
+      assert(batchState(timeoutConf, watermarkPresent = true).getCurrentWatermarkMs() === -1)
     }
-
-    def batchState(timeoutConf: GroupStateTimeout): GroupState[Any] = {
-      GroupStateImpl.createForBatch(timeoutConf)
-    }
-
-    // Tests for getCurrentWatermarkMs in streaming queries
-    assertWrongTimeoutError { streamingState(NoTimeout, 1000).getCurrentWatermarkMs() }
-    assertWrongTimeoutError { streamingState(ProcessingTimeTimeout, 1000).getCurrentWatermarkMs() }
-    assert(streamingState(EventTimeTimeout, 1000).getCurrentWatermarkMs() === 1000)
-    assert(streamingState(EventTimeTimeout, 2000).getCurrentWatermarkMs() === 2000)
-
-    // Tests for getCurrentWatermarkMs in batch queries
-    assertWrongTimeoutError { batchState(NoTimeout).getCurrentWatermarkMs() }
-    assertWrongTimeoutError { batchState(ProcessingTimeTimeout).getCurrentWatermarkMs() }
-    assert(batchState(EventTimeTimeout).getCurrentWatermarkMs() === -1)
   }
 
   test("GroupState - getCurrentProcessingTimeMs") {
-    def assertWrongTimeoutError(test: => Unit): Unit = {
-      val e = intercept[UnsupportedOperationException] { test }
-      assert(e.getMessage.contains(
-        "Cannot get processing time timestamp without enabling processing time timeout"))
+    def streamingState(
+        timeoutConf: GroupStateTimeout,
+        procTime: Long,
+        watermarkPresent: Boolean): GroupState[Int] = {
+      GroupStateImpl.createForStreaming(
+        None, procTime, -1, timeoutConf, hasTimedOut = false, watermarkPresent = false)
     }
 
-    def streamingState(timeoutConf: GroupStateTimeout, procTime: Long): GroupState[Int] = {
-      GroupStateImpl.createForStreaming(None, procTime, -1, timeoutConf, hasTimedOut = false)
+    def batchState(timeoutConf: GroupStateTimeout, watermarkPresent: Boolean): GroupState[Any] = {
+      GroupStateImpl.createForBatch(timeoutConf, watermarkPresent)
     }
 
-    def batchState(timeoutConf: GroupStateTimeout): GroupState[Any] = {
-      GroupStateImpl.createForBatch(timeoutConf)
+    for (timeoutConf <- Seq(NoTimeout, EventTimeTimeout, ProcessingTimeTimeout)) {
+      for (watermarkPresent <- Seq(false, true)) {
+        // Tests for getCurrentProcessingTimeMs in streaming queries
+        assert(streamingState(timeoutConf, NO_TIMESTAMP, watermarkPresent)
+            .getCurrentProcessingTimeMs() === -1)
+        assert(streamingState(timeoutConf, 1000, watermarkPresent)
+          .getCurrentProcessingTimeMs() === 1000)
+        assert(streamingState(timeoutConf, 2000, watermarkPresent)
+          .getCurrentProcessingTimeMs() === 2000)
+
+        // Tests for getCurrentProcessingTimeMs in batch queries
+        assert(batchState(timeoutConf, watermarkPresent).getCurrentProcessingTimeMs() === -1)
+      }
     }
-
-    // Tests for getCurrentProcessingTimeMs in streaming queries
-    assertWrongTimeoutError { streamingState(NoTimeout, 1000).getCurrentProcessingTimeMs() }
-    assertWrongTimeoutError { streamingState(EventTimeTimeout, 1000).getCurrentProcessingTimeMs() }
-    assert(streamingState(ProcessingTimeTimeout, 1000).getCurrentProcessingTimeMs() === 1000)
-    assert(streamingState(ProcessingTimeTimeout, 2000).getCurrentProcessingTimeMs() === 2000)
-
-    // Tests for getCurrentWatermarkMs in batch queries
-    assertWrongTimeoutError { batchState(NoTimeout).getCurrentProcessingTimeMs() }
-    assertWrongTimeoutError { batchState(EventTimeTimeout).getCurrentProcessingTimeMs() }
-    assert(batchState(ProcessingTimeTimeout).getCurrentProcessingTimeMs() === -1)
   }
+
 
   test("GroupState - primitive type") {
     var intState = GroupStateImpl.createForStreaming[Int](
-      None, 1000, 1000, NoTimeout, hasTimedOut = false)
+      None, 1000, 1000, NoTimeout, hasTimedOut = false, watermarkPresent = false)
     intercept[NoSuchElementException] {
       intState.get
     }
     assert(intState.getOption === None)
 
     intState = GroupStateImpl.createForStreaming[Int](
-      Some(10), 1000, 1000, NoTimeout, hasTimedOut = false)
+      Some(10), 1000, 1000, NoTimeout, hasTimedOut = false, watermarkPresent = false)
     assert(intState.get == 10)
     intState.update(0)
     assert(intState.get == 0)

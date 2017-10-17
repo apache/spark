@@ -43,7 +43,8 @@ private[sql] class GroupStateImpl[S] private(
     batchProcessingTimeMs: Long,
     eventTimeWatermarkMs: Long,
     timeoutConf: GroupStateTimeout,
-    override val hasTimedOut: Boolean) extends GroupState[S] {
+    override val hasTimedOut: Boolean,
+    watermarkPresent: Boolean) extends GroupState[S] {
 
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
@@ -131,20 +132,15 @@ private[sql] class GroupStateImpl[S] private(
   }
 
   override def getCurrentWatermarkMs(): Long = {
-    if (timeoutConf != EventTimeTimeout) {
+    if (!watermarkPresent) {
       throw new UnsupportedOperationException(
-        "Cannot get event time watermark timestamp without enabling event time timeout in " +
+        "Cannot get event time watermark timestamp without enabling setting watermark before " +
           "[map|flatMap]GroupsWithState")
     }
     eventTimeWatermarkMs
   }
 
   override def getCurrentProcessingTimeMs(): Long = {
-    if (timeoutConf != ProcessingTimeTimeout) {
-      throw new UnsupportedOperationException(
-        "Cannot get processing time timestamp without enabling processing time timeout in " +
-          "[map|flatMap]GroupsWithState")
-    }
     batchProcessingTimeMs
   }
 
@@ -205,17 +201,22 @@ private[sql] object GroupStateImpl {
       batchProcessingTimeMs: Long,
       eventTimeWatermarkMs: Long,
       timeoutConf: GroupStateTimeout,
-      hasTimedOut: Boolean): GroupStateImpl[S] = {
+      hasTimedOut: Boolean,
+      watermarkPresent: Boolean): GroupStateImpl[S] = {
     new GroupStateImpl[S](
-      optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs, timeoutConf, hasTimedOut)
+      optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs,
+      timeoutConf, hasTimedOut, watermarkPresent)
   }
 
-  def createForBatch(timeoutConf: GroupStateTimeout): GroupStateImpl[Any] = {
+  def createForBatch(
+      timeoutConf: GroupStateTimeout,
+      watermarkPresent: Boolean): GroupStateImpl[Any] = {
     new GroupStateImpl[Any](
       optionalValue = None,
       batchProcessingTimeMs = NO_TIMESTAMP,
       eventTimeWatermarkMs = NO_TIMESTAMP,
       timeoutConf,
-      hasTimedOut = false)
+      hasTimedOut = false,
+      watermarkPresent)
   }
 }

@@ -309,23 +309,18 @@ trait GroupState[S] extends LogicalGroupState[S] {
   /**
    * Get the current event time watermark as milliseconds in epoch time.
    *
-   * @note [[GroupStateTimeout Event time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
-   * @note This method returns -1 when calling inside a batch query.
+   * @note In a streaming query, this can be called only when watermark is enabled. In a batch
+   *       query, this method always returns -1.
    */
   @throws[UnsupportedOperationException](
-    "if event time timeout has not been enabled in [map|flatMap]GroupsWithState")
+    "if watermark has not been set before in [map|flatMap]GroupsWithState")
   def getCurrentWatermarkMs(): Long
 
 
   /**
    * Get the current event time watermark.
    *
-   * @note [[GroupStateTimeout Processing time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
    * @note This method returns -1 when calling inside a batch query.
    */
-  @throws[UnsupportedOperationException](
-    "if processing time timeout has not been enabled in [map|flatMap]GroupsWithState")
   def getCurrentProcessingTimeMs(): Long
 }
