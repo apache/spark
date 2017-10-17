@@ -64,6 +64,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   private val MAX_SLAVE_FAILURES = 2
 
   private val maxCoresOption = conf.getOption("spark.cores.max").map(_.toInt)
+  private val maxMemOption = conf.getOption("spark.mem.max").map(Utils.memoryStringToMb)
 
   private val executorCoresOption = conf.getOption("spark.executor.cores").map(_.toInt)
 
@@ -75,6 +76,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     // Set maxCores to a multiple of smallest executor we can launch
     cores - (cores % minCoresPerExecutor)
   }
+
+  private val maxMem = maxMemOption.getOrElse(Int.MaxValue)
 
   private val useFetcherCache = conf.getBoolean("spark.mesos.fetcherCache.enable", false)
 
@@ -95,8 +98,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
 
   // Cores we have acquired with each Mesos task ID
   private val coresByTaskId = new mutable.HashMap[String, Int]
+  private val memByTaskId = new mutable.HashMap[String, Int]
   private val gpusByTaskId = new mutable.HashMap[String, Int]
   private var totalCoresAcquired = 0
+  private var totalMemAcquired = 0
   private var totalGpusAcquired = 0
 
   // The amount of time to wait for locality scheduling
@@ -148,6 +153,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   // Reject offers when we reached the maximum number of cores for this framework
   private val rejectOfferDurationForReachedMaxCores =
     getRejectOfferDurationForReachedMaxCores(sc.conf)
+
+  // Reject offers when we reached the maximum amount of memory for this framework
+  private val rejectOfferDurationForReachedMaxMem =
+    getRejectOfferDurationForReachedMaxMem(sc.conf)
 
   // A client for talking to the external shuffle service
   private val mesosExternalShuffleClient: Option[MesosExternalShuffleClient] = {
@@ -398,6 +407,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           offer,
           Some("reached spark.cores.max"),
           Some(rejectOfferDurationForReachedMaxCores))
+      } else if (totalMemAcquired >= maxMem) {
+        // Reject an offer for a configurable amount of time to avoid starving other frameworks
+        declineOffer(driver,
+          offer,
+          Some("reached spark.mem.max"),
+          Some(rejectOfferDurationForReachedMaxMem))
       } else {
         declineOffer(
           driver,
@@ -462,7 +477,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           tasks(offer.getId) ::= taskBuilder.build()
           remainingResources(offerId) = resourcesLeft.asJava
           totalCoresAcquired += taskCPUs
+          totalMemAcquired += taskMemory
           coresByTaskId(taskId) = taskCPUs
+          memByTaskId(taskId) = taskMemory
           if (taskGPUs > 0) {
             totalGpusAcquired += taskGPUs
             gpusByTaskId(taskId) = taskGPUs
@@ -511,6 +528,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpus <= offerCPUs &&
       cpus + totalCoresAcquired <= maxCores &&
       mem <= offerMem &&
+      mem + totalMemAcquired <= maxMem &&
       numExecutors < executorLimit &&
       slaves.get(slaveId).map(_.taskFailures).getOrElse(0) < MAX_SLAVE_FAILURES &&
       meetsPortRequirements &&
@@ -583,6 +601,11 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
         for (cores <- coresByTaskId.get(taskId)) {
           totalCoresAcquired -= cores
           coresByTaskId -= taskId
+        }
+        // Also remove the memory we have remembered for this task, if it's in the hashmap
+        for (mem <- memByTaskId.get(taskId)) {
+          totalMemAcquired -= mem
+          memByTaskId -= taskId
         }
         // Also remove the gpus we have remembered for this task, if it's in the hashmap
         for (gpus <- gpusByTaskId.get(taskId)) {
