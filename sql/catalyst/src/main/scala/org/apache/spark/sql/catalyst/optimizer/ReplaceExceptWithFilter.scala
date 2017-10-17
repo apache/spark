@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
  * flipping the filter condition of the right child.
  * {{{
  *   SELECT a1, a2 FROM Tab1 WHERE a2 = 12 EXCEPT SELECT a1, a2 FROM Tab1 WHERE a1 = 5
- *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 WHERE a2 = 12 AND a1 <> 5
+ *   ==>  SELECT DISTINCT a1, a2 FROM Tab1 WHERE a2 = 12 AND (a1 is null OR a1 <> 5)
  * }}}
  *
  * Note:
