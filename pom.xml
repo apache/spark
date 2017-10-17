@@ -139,6 +139,7 @@
     <ivy.version>2.4.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <codahale.metrics.version>3.1.5</codahale.metrics.version>
+    <prometheus.version>0.0.23</prometheus.version>
     <avro.version>1.7.7</avro.version>
     <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
     <jets3t.version>0.9.3</jets3t.version>
@@ -616,6 +617,21 @@
         <groupId>io.dropwizard.metrics</groupId>
         <artifactId>metrics-graphite</artifactId>
         <version>${codahale.metrics.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.prometheus</groupId>
+        <artifactId>simpleclient</artifactId>
+        <version>${prometheus.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.prometheus</groupId>
+        <artifactId>simpleclient_dropwizard</artifactId>
+        <version>${prometheus.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.prometheus</groupId>
+        <artifactId>simpleclient_pushgateway</artifactId>
+        <version>${prometheus.version}</version>
       </dependency>
       <dependency>
         <groupId>com.fasterxml.jackson.core</groupId>
@@ -1372,9 +1388,9 @@
       <dependency>
         <groupId>${hive.group}</groupId>
         <artifactId>hive-exec</artifactId>
-<!--
-        <classifier>core</classifier>
--->
+        <!--
+                <classifier>core</classifier>
+        -->
         <version>${hive.version}</version>
         <scope>${hive.deps.scope}</scope>
         <exclusions>
@@ -2305,7 +2321,7 @@
             <execution>
               <id>default-cli</id>
               <goals>
-                 <goal>build-classpath</goal>
+                <goal>build-classpath</goal>
               </goals>
               <configuration>
                 <!-- This includes dependencies with 'runtime' and 'compile' scopes;

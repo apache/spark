@@ -172,6 +172,15 @@
 # Unit of the polling period for the Slf4jSink
 #*.sink.slf4j.unit=minutes
 
+# Enable Prometheus for all instances by class name
+#*.sink.prometheus.class=org.apache.spark.metrics.sink.PrometheusSink
+
+#Prometheus host
+#*.sink.prometheus.pushgateway-address-protocol=<prometheus pushgateway protocol> - defaults to http
+#*.sink.prometheus.pushgateway-address=<prometheus pushgateway address> - defaults to 127.0.0.1:9091
+#*.sink.prometheus.unit=< unit> - defaults to seconds (TimeUnit.SECONDS)
+#*.sink.prometheus.period=<period> - defaults to 10
+
 # Enable JvmSource for instance master, worker, driver and executor
 #master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
