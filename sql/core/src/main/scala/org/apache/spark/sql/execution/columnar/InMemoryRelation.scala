@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
-import org.apache.spark.sql.execution.{SparkPlan, WholeStageCodegenExec}
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.LongAccumulator
 
@@ -64,23 +63,6 @@ case class InMemoryRelation(
     val batchStats: LongAccumulator = child.sqlContext.sparkContext.longAccumulator)
   extends logical.LeafNode with MultiInstanceRelation {
 
-  /**
-   * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
-   * If false, get data from UnsafeRow build from ColumnVector
-   */
-  private[columnar] val useColumnarBatches: Boolean = {
-    // In the initial implementation, for ease of review
-    // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    val schema = StructType.fromAttributes(child.output)
-    schema.fields.find(f => f.dataType match {
-      case BooleanType | ByteType | ShortType | IntegerType | LongType |
-            FloatType | DoubleType => false
-      case _ => true
-    }).isEmpty &&
-      !WholeStageCodegenExec.isTooManyFields(conf, child.schema) &&
-      children.find(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema)).isEmpty
-  }
-
   override protected def innerChildren: Seq[SparkPlan] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
@@ -105,7 +87,6 @@ case class InMemoryRelation(
 
   private def buildBuffers(): Unit = {
     val output = child.output
-    val useColumnarBatch = useColumnarBatches
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
         def next(): CachedBatch = {

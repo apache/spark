@@ -23,9 +23,9 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning}
-import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode}
+import org.apache.spark.sql.execution.{ColumnarBatchScan, LeafExecNode, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.vectorized._
-import org.apache.spark.sql.types.{StructType, UserDefinedType}
+import org.apache.spark.sql.types._
 
 
 case class InMemoryTableScanExec(
@@ -39,7 +39,22 @@ case class InMemoryTableScanExec(
   override def vectorTypes: Option[Seq[String]] =
     Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
 
-  override val supportCodegen: Boolean = relation.useColumnarBatches
+  /**
+   * If true, get data from ColumnVector in ColumnarBatch, which are generally faster.
+   * If false, get data from UnsafeRow build from ColumnVector
+   */
+  override val supportCodegen: Boolean = {
+    // In the initial implementation, for ease of review
+    // support only primitive data types and # of fields is less than wholeStageMaxNumFields
+    val schema = StructType.fromAttributes(relation.output)
+    schema.fields.find(f => f.dataType match {
+      case BooleanType | ByteType | ShortType | IntegerType | LongType |
+           FloatType | DoubleType => false
+      case _ => true
+    }).isEmpty &&
+      !WholeStageCodegenExec.isTooManyFields(conf, relation.schema) &&
+      children.find(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema)).isEmpty
+  }
 
   private val columnIndices =
     attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
@@ -56,13 +71,12 @@ case class InMemoryTableScanExec(
     columnarBatch.setNumRows(rowCount)
 
     for (i <- 0 until attributes.length) {
-      val index = if (columnIndices.length == 0) i else columnIndices(i)
       ColumnAccessor.decompress(
-        cachedColumnarBatch.buffers(index),
+        cachedColumnarBatch.buffers(columnIndices(i)),
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
         columnarBatchSchema.fields(i).dataType, rowCount)
     }
-    return columnarBatch
+    columnarBatch
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
