@@ -148,10 +148,12 @@ class AttributeGroup private (
 
   /** Converts to ML metadata with some existing metadata. */
   def toMetadata(existingMetadata: Metadata): Metadata = {
-    new MetadataBuilder()
+    val bldr = new MetadataBuilder()
       .withMetadata(existingMetadata)
-      .putMetadata(AttributeKeys.ML_ATTR, toMetadataImpl)
-      .build()
+    if(attributes.isDefined || numAttributes.isDefined) {
+        bldr.putMetadata(AttributeKeys.ML_ATTR, toMetadataImpl)
+    }
+    bldr.build()
   }
 
   /** Converts to ML metadata */
