@@ -137,9 +137,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       }
     }
     if (mode == SaveMode.Overwrite) {
-      if (fs.exists(path)) {
-        fs.delete(path, true)
-      }
+      fs.delete(path, true)
     }
 
     Optional.of(createWriter(path, conf, internal))
