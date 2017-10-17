@@ -143,7 +143,7 @@ private[sql] class GroupStateImpl[S] private(
     if (timeoutConf != ProcessingTimeTimeout) {
       throw new UnsupportedOperationException(
         "Cannot get processing time timestamp without enabling processing time timeout in " +
-          "map|flatMap]GroupsWithState")
+          "[map|flatMap]GroupsWithState")
     }
     batchProcessingTimeMs
   }
@@ -190,7 +190,7 @@ private[sql] class GroupStateImpl[S] private(
     if (timeoutConf != EventTimeTimeout) {
       throw new UnsupportedOperationException(
         "Cannot set timeout timestamp without enabling event time timeout in " +
-          "map|flatMapGroupsWithState")
+          "[map|flatMapGroupsWithState")
     }
   }
 }
