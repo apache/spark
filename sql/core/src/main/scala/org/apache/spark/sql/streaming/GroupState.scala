@@ -309,8 +309,8 @@ trait GroupState[S] extends LogicalGroupState[S] {
   /**
    * Get the current event time watermark as milliseconds in epoch time.
    *
-   * @note In a streaming query, this can be called only when watermark is enabled. In a batch
-   *       query, this method always returns -1.
+   * @note In a streaming query, this can be called only when watermark is set before calling
+   *       `[map/flatmap]GroupsWithState`. In a batch query, this method always returns -1.
    */
   @throws[UnsupportedOperationException](
     "if watermark has not been set before in [map|flatMap]GroupsWithState")

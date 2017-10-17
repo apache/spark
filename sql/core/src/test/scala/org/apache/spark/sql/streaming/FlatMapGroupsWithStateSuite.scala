@@ -21,6 +21,7 @@ import java.sql.Date
 import java.util.concurrent.ConcurrentHashMap
 
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
@@ -46,6 +47,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   import testImplicits._
   import GroupStateImpl._
   import GroupStateTimeout._
+  import FlatMapGroupsWithStateSuite._
 
   override def afterAll(): Unit = {
     super.afterAll()
@@ -369,7 +371,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     testStateUpdateWithData(
       testName + "no update",
-      stateUpdates = state => { /* do nothing */ },
+      stateUpdates = state => {
+        assert(state.getCurrentProcessingTimeMs() === currentBatchTimestamp)
+        intercept[Exception] { state.getCurrentWatermarkMs() } // watermark not specified
+        /* no updates */
+      },
       timeoutConf = GroupStateTimeout.NoTimeout,
       priorState = priorState,
       expectedState = priorState)    // should not change
@@ -407,7 +413,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
         testStateUpdateWithData(
           s"$timeoutConf - $testName - no update",
-          stateUpdates = state => { /* do nothing */ },
+          stateUpdates = state => {
+            assert(state.getCurrentProcessingTimeMs() === currentBatchTimestamp)
+            intercept[Exception] { state.getCurrentWatermarkMs() } // watermark not specified
+            /* no updates */
+          },
           timeoutConf = timeoutConf,
           priorState = priorState,
           priorTimeoutTimestamp = priorTimeoutTimestamp,
@@ -531,7 +541,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
 
     testStateUpdateWithTimeout(
       s"$timeoutConf - should timeout - no update/remove",
-      stateUpdates = state => { /* do nothing */ },
+      stateUpdates = state => {
+        assert(state.getCurrentProcessingTimeMs() === currentBatchTimestamp)
+        intercept[Exception] { state.getCurrentWatermarkMs() } // watermark not specified
+        /* no updates */
+      },
       timeoutConf = timeoutConf,
       priorTimeoutTimestamp = beforeTimeoutThreshold,
       expectedState = preTimeoutState,                          // state should not change
@@ -590,6 +604,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count if state is defined, otherwise does not return anything
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
 
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
@@ -710,6 +726,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   test("flatMapGroupsWithState - batch") {
     // Function that returns running count only if its even, otherwise does not return
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() == -1 }
+      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
+
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
       Iterator((key, values.size))
     }
@@ -723,6 +742,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
+
       if (state.hasTimedOut) {
         state.remove()
         Iterator((key, "-1"))
@@ -776,10 +798,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   test("flatMapGroupsWithState - streaming with event time timeout + watermark") {
     // Function to maintain the max event time
     // Returns the max event time in the state, or -1 if the state was removed by timeout
-    val stateFunc = (
-        key: String,
-        values: Iterator[(String, Long)],
-        state: GroupState[Long]) => {
+    val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
+
       val timeoutDelay = 5
       if (key != "a") {
         Iterator.empty
@@ -823,6 +845,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     // Function to maintain running count up to 2, and then remove the count
     // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
 
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
@@ -865,7 +889,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     // - no initial state
     // - timeouts operations work, does not throw any error [SPARK-20792]
     // - works with primitive state type
+    // - can get processing time
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[Int]) => {
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() == -1 }
+      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
+
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
       state.setTimeoutTimestamp(0, "1 hour")
       state.update(10)
@@ -1152,5 +1180,25 @@ object FlatMapGroupsWithStateSuite {
     override def version: Long = 0
     override def metrics: StateStoreMetrics = new StateStoreMetrics(map.size, 0, Map.empty)
     override def hasCommitted: Boolean = true
+  }
+
+  def assertCanGetProcessingTime(predicate: => Boolean): Unit = {
+    if (!predicate) throw new TestFailedException("Could not get processing time", 20)
+  }
+
+  def assertCanGetWatermark(predicate: => Boolean): Unit = {
+    if (!predicate) throw new TestFailedException("Could not get processing time", 20)
+  }
+
+  def assertCannotGetWatermark(func: => Unit): Unit = {
+    try {
+      func
+    } catch {
+      case u: UnsupportedOperationException =>
+        return
+      case _ =>
+        throw new TestFailedException("Unexpected exception when trying to get watermark", 20)
+    }
+    throw new TestFailedException("Could get watermark when not expected", 20)
   }
 }
