@@ -41,12 +41,12 @@ case class InMemoryTableScanExec(
 
   override val supportCodegen: Boolean = relation.useColumnarBatches
 
-  val columnIndices =
+  private val columnIndices =
     attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
 
-  val relationSchema = relation.schema.toArray
+  private val relationSchema = relation.schema.toArray
 
-  val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
+  private lazy val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
