@@ -347,6 +347,9 @@ case class NewInstance(
 
     ev.isNull = resultIsNull
 
+    val valueAccessor = ctx.addMutableState(javaType, ev.value,
+      s"${ev.value} = ${ctx.defaultValue(javaType)};")
+
     val constructorCall = outer.map { gen =>
       s"${gen.value}.new ${cls.getSimpleName}($argString)"
     }.getOrElse {
@@ -356,9 +359,9 @@ case class NewInstance(
     val code = s"""
       $argCode
       ${outer.map(_.code).getOrElse("")}
-      final $javaType ${ev.value} = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $constructorCall;
+      $valueAccessor = ${ev.isNull} ? ${ctx.defaultValue(javaType)} : $constructorCall;
     """
-    ev.copy(code = code)
+    ev.copy(code = code, value = valueAccessor)
   }
 
   override def toString: String = s"newInstance($cls)"
@@ -545,6 +548,7 @@ case class MapObjects private(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val elementJavaType = ctx.javaType(loopVarDataType)
+    val loopIsNullAccessor = ctx.addMutableState("boolean", loopIsNull, "", inline = true)
     val loopValueAccessor = ctx.addMutableState(elementJavaType, loopValue, "", inline = true)
     val genInputData = inputData.genCode(ctx)
     val genFunction = lambdaFunction.genCode(ctx)
@@ -616,7 +620,6 @@ case class MapObjects private(
     }
 
     val loopNullCheck = if (loopIsNull != "false") {
-      val loopIsNullAccessor = ctx.addMutableState("boolean", loopIsNull, "", inline = true)
       inputDataType match {
         case _: ArrayType => s"$loopIsNullAccessor = ${genInputData.value}.isNullAt($loopIndex);"
         case _ => s"$loopIsNullAccessor = $loopValueAccessor == null;"
@@ -779,10 +782,13 @@ case class CatalystToExternalMap private(
 
     val mapType = inputDataType(inputData.dataType).asInstanceOf[MapType]
     val keyElementJavaType = ctx.javaType(mapType.keyType)
-    val keyLoopValueAccessor = ctx.addMutableState(keyElementJavaType, keyLoopValue, "")
+    val keyLoopValueAccessor = ctx.addMutableState(keyElementJavaType, keyLoopValue, "",
+      inline = true)
     val genKeyFunction = keyLambdaFunction.genCode(ctx)
     val valueElementJavaType = ctx.javaType(mapType.valueType)
-    val valueLoopValueAccessor = ctx.addMutableState(valueElementJavaType, valueLoopValue, "")
+    val valueLoopValueAccessor = ctx.addMutableState(valueElementJavaType, valueLoopValue, "",
+      inline = true)
+    val valueLoopIsNullAccessor = ctx.addMutableState("boolean", valueLoopIsNull, "", inline = true)
     val genValueFunction = valueLambdaFunction.genCode(ctx)
     val genInputData = inputData.genCode(ctx)
     val dataLength = ctx.freshName("dataLength")
@@ -815,7 +821,6 @@ case class CatalystToExternalMap private(
     val genValueFunctionValue = genFunctionValue(valueLambdaFunction, genValueFunction)
 
     val valueLoopNullCheck = if (valueLoopIsNull != "false") {
-      val valueLoopIsNullAccessor = ctx.addMutableState("boolean", valueLoopIsNull, "")
       s"$valueLoopIsNullAccessor = $valueArray.isNullAt($loopIndex);"
     } else {
       ""
@@ -1224,19 +1229,19 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
         val fieldGen = fieldValue.genCode(ctx)
         s"""
            ${fieldGen.code}
-           ${javaBeanInstanceAccessor}.$setterMethod(${fieldGen.value});
+           $javaBeanInstanceAccessor.$setterMethod(${fieldGen.value});
          """
     }
     val initializeCode = ctx.splitExpressions(ctx.INPUT_ROW, initialize.toSeq)
 
     val code = s"""
       ${instanceGen.code}
-      ${javaBeanInstanceAccessor} = ${instanceGen.value};
+      $javaBeanInstanceAccessor = ${instanceGen.value};
       if (!${instanceGen.isNull}) {
         $initializeCode
       }
      """
-    ev.copy(code = code, isNull = instanceGen.isNull, value = instanceGen.value)
+    ev.copy(code = code, isNull = instanceGen.isNull, value = javaBeanInstanceAccessor)
   }
 }
 
