@@ -434,7 +434,7 @@ class SparkContext(config: SparkConf) extends Logging {
     _statusTracker = new SparkStatusTracker(this)
 
     _progressBar =
-      if (_conf.getBoolean("spark.ui.showConsoleProgress", true) && !log.isInfoEnabled) {
+      if (_conf.get(UI_SHOW_CONSOLE_PROGRESS) && !log.isInfoEnabled) {
         Some(new ConsoleProgressBar(this))
       } else {
         None
@@ -2344,41 +2344,13 @@ class SparkContext(config: SparkConf) extends Logging {
    * (e.g. after the web UI and event logging listeners have been registered).
    */
   private def setupAndStartListenerBus(): Unit = {
-    // Use reflection to instantiate listeners specified via `spark.extraListeners`
     try {
-      val listenerClassNames: Seq[String] =
-        conf.get("spark.extraListeners", "").split(',').map(_.trim).filter(_ != "")
-      for (className <- listenerClassNames) {
-        // Use reflection to find the right constructor
-        val constructors = {
-          val listenerClass = Utils.classForName(className)
-          listenerClass
-              .getConstructors
-              .asInstanceOf[Array[Constructor[_ <: SparkListenerInterface]]]
+      conf.get(EXTRA_LISTENERS).foreach { classNames =>
+        val listeners = Utils.loadExtensions(classOf[SparkListenerInterface], classNames, conf)
+        listeners.foreach { listener =>
+          listenerBus.addToSharedQueue(listener)
+          logInfo(s"Registered listener ${listener.getClass().getName()}")
         }
-        val constructorTakingSparkConf = constructors.find { c =>
-          c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
-        }
-        lazy val zeroArgumentConstructor = constructors.find { c =>
-          c.getParameterTypes.isEmpty
-        }
-        val listener: SparkListenerInterface = {
-          if (constructorTakingSparkConf.isDefined) {
-            constructorTakingSparkConf.get.newInstance(conf)
-          } else if (zeroArgumentConstructor.isDefined) {
-            zeroArgumentConstructor.get.newInstance()
-          } else {
-            throw new SparkException(
-              s"$className did not have a zero-argument constructor or a" +
-                " single-argument constructor that accepts SparkConf. Note: if the class is" +
-                " defined inside of another Scala class, then its constructors may accept an" +
-                " implicit parameter that references the enclosing class; in this case, you must" +
-                " define the listener as a top-level class in order to prevent this extra" +
-                " parameter from breaking Spark's ability to find a valid constructor.")
-          }
-        }
-        listenerBus.addToSharedQueue(listener)
-        logInfo(s"Registered listener $className")
       }
     } catch {
       case e: Exception =>
