@@ -1646,6 +1646,7 @@ def _check_series_convert_timestamps_internal(s):
     from pandas.types.common import is_datetime64_dtype
     # TODO: handle nested timestamps?
     if is_datetime64_dtype(s.dtype):
+        # NOTE: convert to 'us' with astype here, unit is ignored in `from_pandas` see ARROW-1680
         return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC').values.astype('datetime64[us]')
     else:
         return s
