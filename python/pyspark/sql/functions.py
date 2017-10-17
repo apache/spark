@@ -2041,7 +2041,7 @@ def _wrap_function(sc, func, returnType):
 class PythonUdfType(object):
     # row-based UDFs
     NORMAL_UDF = 0
-    # single-row vectorized UDFs
+    # scalar vectorized UDFs
     PANDAS_UDF = 1
     # grouped vectorized UDFs
     PANDAS_GROUPED_UDF = 2
