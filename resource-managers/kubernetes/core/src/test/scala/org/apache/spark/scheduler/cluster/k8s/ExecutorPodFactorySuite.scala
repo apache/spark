@@ -18,20 +18,14 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{Pod, VolumeBuilder, VolumeMountBuilder, _}
+import io.fabric8.kubernetes.api.model.{Pod, _}
 import io.fabric8.kubernetes.client.KubernetesClient
-import org.apache.commons.io.FilenameUtils
-import org.mockito.{AdditionalAnswers, MockitoAnnotations}
-import org.mockito.Matchers.{any, eq => mockitoEq}
-import org.mockito.Mockito._
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
+import org.mockito.MockitoAnnotations
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants
-import org.apache.spark.scheduler.cluster.k8s.ExecutorPodFactoryImpl
 
 class ExecutorPodFactorySuite extends SparkFunSuite with BeforeAndAfter with BeforeAndAfterEach {
   private val driverPodName: String = "driver-pod"

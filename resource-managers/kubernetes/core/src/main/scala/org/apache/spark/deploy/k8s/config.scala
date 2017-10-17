@@ -31,12 +31,6 @@ package object config extends Logging {
       .stringConf
       .createWithDefault("default")
 
-  private[spark] val DRIVER_DOCKER_IMAGE =
-    ConfigBuilder("spark.kubernetes.driver.docker.image")
-      .doc("Docker image to use for the driver. Specify this using the standard Docker tag format.")
-      .stringConf
-      .createWithDefault(s"spark-driver:$sparkVersion")
-
   private[spark] val EXECUTOR_DOCKER_IMAGE =
     ConfigBuilder("spark.kubernetes.executor.docker.image")
       .doc("Docker image to use for the executors. Specify this using the standard Docker tag" +
@@ -81,22 +75,8 @@ package object config extends Logging {
       .bytesConf(ByteUnit.MiB)
       .createOptional
 
-  private[spark] val KUBERNETES_DRIVER_MEMORY_OVERHEAD =
-    ConfigBuilder("spark.kubernetes.driver.memoryOverhead")
-      .doc("The amount of off-heap memory (in megabytes) to be allocated for the driver and the" +
-        " driver submission server. This is memory that accounts for things like VM overheads," +
-        " interned strings, other native overheads, etc. This tends to grow with the driver's" +
-        " memory size (typically 6-10%).")
-      .bytesConf(ByteUnit.MiB)
-      .createOptional
-
-  private[spark] val KUBERNETES_DRIVER_LABEL_PREFIX = "spark.kubernetes.driver.label."
-  private[spark] val KUBERNETES_DRIVER_ANNOTATION_PREFIX = "spark.kubernetes.driver.annotation."
   private[spark] val KUBERNETES_EXECUTOR_LABEL_PREFIX = "spark.kubernetes.executor.label."
   private[spark] val KUBERNETES_EXECUTOR_ANNOTATION_PREFIX = "spark.kubernetes.executor.annotation."
-  private[spark] val KUBERNETES_DRIVER_ENV_KEY = "spark.kubernetes.driverEnv."
-  private[spark] val KUBERNETES_DRIVER_SECRETS_PREFIX = "spark.kubernetes.driver.secrets."
-  private[spark] val KUBERNETES_EXECUTOR_SECRETS_PREFIX = "spark.kubernetes.executor.secrets."
 
   private[spark] val KUBERNETES_DRIVER_POD_NAME =
     ConfigBuilder("spark.kubernetes.driver.pod.name")

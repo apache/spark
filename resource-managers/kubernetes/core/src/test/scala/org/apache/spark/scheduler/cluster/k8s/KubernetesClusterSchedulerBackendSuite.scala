@@ -27,7 +27,7 @@ import io.fabric8.kubernetes.client.Watcher.Action
 import io.fabric8.kubernetes.client.dsl.{FilterWatchListDeletable, MixedOperation, NonNamespaceOperation, PodResource}
 import org.mockito.{AdditionalAnswers, ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.Matchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{mock => _, _}
+import org.mockito.Mockito.{doNothing, never, times, verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatest.mock.MockitoSugar._
 
@@ -74,7 +74,7 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     .build()
 
   private type PODS = MixedOperation[Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
-  private type LABELLED_PODS = FilterWatchListDeletable[
+  private type LABELED_PODS = FilterWatchListDeletable[
       Pod, PodList, java.lang.Boolean, Watch, Watcher[Pod]]
   private type IN_NAMESPACE_PODS = NonNamespaceOperation[
       Pod, PodList, DoneablePod, PodResource[Pod, DoneablePod]]
@@ -104,7 +104,7 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
   private var podOperations: PODS = _
 
   @Mock
-  private var podsWithLabelOperations: LABELLED_PODS = _
+  private var podsWithLabelOperations: LABELED_PODS = _
 
   @Mock
   private var podsInNamespace: IN_NAMESPACE_PODS = _

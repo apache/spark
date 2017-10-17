@@ -48,7 +48,7 @@ private[spark] object SparkKubernetesClientFactory {
       .map(new File(_))
       .orElse(maybeServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
-    OptionRequirements.requireNandDefined(
+    ConfigurationUtils.requireNandDefined(
         oauthTokenFile,
         oauthTokenValue,
         s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a" +

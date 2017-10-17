@@ -21,13 +21,12 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.k8s.{ConfigurationUtils, SparkKubernetesClientFactory}
+import org.apache.spark.deploy.k8s.SparkKubernetesClientFactory
 import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.ThreadUtils
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 

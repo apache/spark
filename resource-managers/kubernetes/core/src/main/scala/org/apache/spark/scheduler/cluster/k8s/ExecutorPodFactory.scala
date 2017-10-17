@@ -18,8 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import scala.collection.JavaConverters._
 
-import io.fabric8.kubernetes.api.model.{ContainerBuilder, ContainerPortBuilder, EnvVar, EnvVarBuilder, EnvVarSourceBuilder, Pod, PodBuilder, QuantityBuilder}
-import org.apache.commons.io.FilenameUtils
+import io.fabric8.kubernetes.api.model._
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.ConfigurationUtils
@@ -48,7 +47,7 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
       org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
   private val executorJarsDownloadDir = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
 
-  private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs (
+  private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
       sparkConf,
       KUBERNETES_EXECUTOR_LABEL_PREFIX,
       "executor label")

@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.k8s
 
-import org.apache.spark.{SparkConf, SparkException}
-import org.apache.spark.internal.Logging
+import org.apache.spark.SparkConf
 
-private[spark] object ConfigurationUtils extends Logging {
+private[spark] object ConfigurationUtils {
   def parsePrefixedKeyValuePairs(
       sparkConf: SparkConf,
       prefix: String,
@@ -33,5 +32,25 @@ private[spark] object ConfigurationUtils extends Logging {
             s" values $values")
     }
     fromPrefix.toMap
+  }
+
+  def requireBothOrNeitherDefined(
+    opt1: Option[_],
+    opt2: Option[_],
+    errMessageWhenFirstIsMissing: String,
+    errMessageWhenSecondIsMissing: String): Unit = {
+    requireSecondIfFirstIsDefined(opt1, opt2, errMessageWhenSecondIsMissing)
+    requireSecondIfFirstIsDefined(opt2, opt1, errMessageWhenFirstIsMissing)
+  }
+
+  def requireSecondIfFirstIsDefined(
+    opt1: Option[_], opt2: Option[_], errMessageWhenSecondIsMissing: String): Unit = {
+    opt1.foreach { _ =>
+      require(opt2.isDefined, errMessageWhenSecondIsMissing)
+    }
+  }
+
+  def requireNandDefined(opt1: Option[_], opt2: Option[_], errMessage: String): Unit = {
+    opt1.foreach { _ => require(opt2.isEmpty, errMessage) }
   }
 }
