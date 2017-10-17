@@ -169,8 +169,10 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 
 /**
  * Optimize IN predicates:
- * 1. Removes literal repetitions.
- * 2. Replaces [[In (value, seq[Literal])]] with optimized version
+ * 1. Converts the predicate to [[If (IsNull(value), null, false)]]
+ *    when the list is empty
+ * 2. Removes literal repetitions.
+ * 3. Replaces [[In (value, seq[Literal])]] with optimized version
  *    [[InSet (value, HashSet[Literal])]] which is much faster.
  */
 object OptimizeIn extends Rule[LogicalPlan] {
