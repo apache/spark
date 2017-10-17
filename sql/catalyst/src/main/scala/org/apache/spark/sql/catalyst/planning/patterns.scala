@@ -207,9 +207,11 @@ object PhysicalAggregation {
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
       // build a set of semantically distinct aggregate expressions and re-write expressions so
       // that they reference the single copy of the aggregate function which actually gets computed.
+      // Non-deterministic aggregate expressions are not deduplicated.
       val equivalentAggregateExpressions = new EquivalentExpressions
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
+          // addExpr() always returns false for non-deterministic expressions and do not add them.
           case agg: AggregateExpression
             if (!equivalentAggregateExpressions.addExpr(agg)) => agg
         }
@@ -236,16 +238,9 @@ object PhysicalAggregation {
         expr.transformDown {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
-            // so replace each aggregate expression by its corresponding attribute in the set.
-            // Note that non-deterministic aggregate expressions should not be deduplicated and
-            // should be handled differently.
-            val newAe = if (ae.deterministic) {
-              equivalentAggregateExpressions.getEquivalentExprs(ae)
-                .head.asInstanceOf[AggregateExpression]
-            } else {
-              ae
-            }
-            newAe.resultAttribute
+            // so replace each aggregate expression by its corresponding attribute in the set:
+            equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
+              .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding
