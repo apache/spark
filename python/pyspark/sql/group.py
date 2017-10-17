@@ -19,7 +19,7 @@ from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.sql.column import Column, _to_seq, _to_java_column, _create_column_from_literal
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.functions import PythonUdfType
+from pyspark.sql.functions import PythonUdfType, UserDefinedFunction
 from pyspark.sql.types import *
 
 __all__ = ["GroupedData"]
@@ -207,18 +207,18 @@ class GroupedData(object):
         to the user-function and the returned `pandas.DataFrame`s are combined as a
         :class:`DataFrame`.
         The returned `pandas.DataFrame` can be of arbitrary length and its schema must match the
-        returnType of the pandas grouped udf.
+        returnType of the pandas udf.
 
         This function does not support partial aggregation, and requires shuffling all the data in
         the :class:`DataFrame`.
 
-        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_grouped_udf`
+        :param udf: A function object returned by :meth:`pyspark.sql.functions.pandas_udf`
 
-        >>> from pyspark.sql.functions import pandas_grouped_udf
+        >>> from pyspark.sql.functions import pandas_udf
         >>> df = spark.createDataFrame(
         ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
         ...     ("id", "v"))
-        >>> @pandas_grouped_udf(returnType=df.schema)
+        >>> @pandas_udf(returnType=df.schema)
         ... def normalize(pdf):
         ...     v = pdf.v
         ...     return pdf.assign(v=(v - v.mean()) / v.std())
@@ -233,17 +233,18 @@ class GroupedData(object):
         |  2| 1.1094003924504583|
         +---+-------------------+
 
-        .. seealso:: :meth:`pyspark.sql.functions.pandas_grouped_udf`
+        .. seealso:: :meth:`pyspark.sql.functions.pandas_udf`
 
         """
-        from pyspark.sql.functions import pandas_grouped_udf
+        import inspect
 
         # Columns are special because hasattr always return True
         if isinstance(udf, Column) or not hasattr(udf, 'func') \
-           or udf.pythonUdfType != PythonUdfType.PANDAS_GROUPED_UDF:
-            raise ValueError("The argument to apply must be a pandas_grouped_udf")
+           or udf.pythonUdfType != PythonUdfType.PANDAS_UDF \
+           or len(inspect.getargspec(udf.func).args) != 1:
+            raise ValueError("The argument to apply must be a 1-arg pandas_udf")
         if not isinstance(udf.returnType, StructType):
-            raise ValueError("The returnType of the pandas_grouped_udf must be a StructType")
+            raise ValueError("The returnType of the pandas_udf must be a StructType")
 
         df = self._df
         func = udf.func
@@ -270,8 +271,9 @@ class GroupedData(object):
             return [(result[result.columns[i]], arrow_type)
                     for i, arrow_type in enumerate(arrow_return_types)]
 
-        wrapped_udf_obj = pandas_grouped_udf(wrapped, returnType)
-        udf_column = wrapped_udf_obj(*[df[col] for col in df.columns])
+        udf_obj = UserDefinedFunction(
+            wrapped, returnType, name=udf.__name__, pythonUdfType=PythonUdfType.PANDAS_GROUPED_UDF)
+        udf_column = udf_obj(*[df[col] for col in df.columns])
         jdf = self._jgd.flatMapGroupsInPandas(udf_column._jc.expr())
         return DataFrame(jdf, self.sql_ctx)
 
