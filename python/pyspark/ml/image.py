@@ -25,7 +25,7 @@ import numpy as np
 
 undefinedImageType = "Undefined"
 
-ImageFields = ["origin", "height", "width", "nChannels", "mode", "data"]
+imageFields = ["origin", "height", "width", "nChannels", "mode", "data"]
 
 ocvTypes = {
     undefinedImageType: -1,
@@ -38,21 +38,22 @@ ocvTypes = {
     "CV_64F": 6, "CV_64FC1": 6, "CV_64FC2": 14, "CV_64FC3": 22, "CV_64FC4": 30
 }
 
-ImageSchema = StructType([
-    StructField(ImageFields[0], StringType(),  True),
-    StructField(ImageFields[1], IntegerType(), False),
-    StructField(ImageFields[2], IntegerType(), False),
-    StructField(ImageFields[3], IntegerType(), False),
+# DataFrame with a single column of images named "image" (nullable)
+imageSchema = StructType(StructField("image", StructType([
+    StructField(imageFields[0], StringType(),  True),
+    StructField(imageFields[1], IntegerType(), False),
+    StructField(imageFields[2], IntegerType(), False),
+    StructField(imageFields[3], IntegerType(), False),
     # OpenCV-compatible type: CV_8UC3 in most cases
-    StructField(ImageFields[4], StringType(), False),
+    StructField(imageFields[4], StringType(), False),
     # bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField(ImageFields[5], BinaryType(), False)])
+    StructField(imageFields[5], BinaryType(), False)]), True))
 
 
 # TODO: generalize to other datatypes and number of channels
 def toNDArray(image):
     """
-    Converts an image to a one-dimensional array
+    Converts an image to a one-dimensional array.
 
     :param image (object): The image to be converted
     :rtype array: The image as a one-dimensional array
@@ -61,15 +62,18 @@ def toNDArray(image):
     """
     height = image.height
     width = image.width
-    return np.asarray(image.data, dtype=np.uint8) \
-             .reshape((height, width, 3))[:, :, (2, 1, 0)]
+    nChannels = image.nChannels
+    return np.ndarray(
+        shape=(height, width, nChannels),
+        dtype=np.uint8,
+        buffer=image.data,
+        strides=(width * nChannels, nChannels, 1))
 
 
 # TODO: generalize to other datatypes and number of channels
-def toImage(array, origin="", mode="CV_8UC3"):
+def toImage(array, origin="", mode=ocvTypes["CV_8UC3"]):
     """
-
-    Converts a one-dimensional array to a two-dimensional image
+    Converts a one-dimensional array to a two-dimensional image.
 
     :param array (array): The array to convert to image
     :param origin (str): Path to the image
@@ -79,14 +83,14 @@ def toImage(array, origin="", mode="CV_8UC3"):
 
     .. versionadded:: 2.3.0
     """
-    data = bytearray(array.astype(dtype=np.uint8)[:, :, (2, 1, 0)].ravel())
+    data = bytearray(array.astype(dtype=np.uint8).ravel())
     height = array.shape[0]
     width = array.shape[1]
     nChannels = array.shape[2]
     # Creating new Row with _create_row(), because Row(name = value, ... )
-    # orders fields by name, which conflicts with expected ImageSchema order
+    # orders fields by name, which conflicts with expected schema order
     # when the new DataFrame is created by UDF
-    return _create_row(ImageFields,
+    return _create_row(imageFields,
                        [origin, height, width, nChannels, mode, data])
 
 
@@ -94,13 +98,14 @@ def readImages(path, recursive=False, numPartitions=0,
                dropImageFailures=False, sampleRatio=1.0):
     """
     Reads the directory of images from the local or remote source.
+
     :param path (str): Path to the image directory
     :param recursive (bool): Recursive search flag
     :param numPartitions (int): Number of DataFrame partitions
     :param dropImageFailures (bool): Drop the files that are not valid images
     :param sampleRatio (double): Fraction of the images loaded
     :rtype DataFrame: DataFrame with a single column of "images",
-           see imageSchema for details
+           see ImageSchema for details
 
     Examples:
 

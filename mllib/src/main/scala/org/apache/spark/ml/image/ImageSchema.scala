@@ -33,6 +33,8 @@ object ImageSchema {
 
   val undefinedImageType = "Undefined"
 
+  val imageFields = Array("origin", "height", "width", "nChannels", "mode", "data")
+
   val ocvTypes = Map(
     undefinedImageType -> -1,
     "CV_8U" -> 0, "CV_8UC1" -> 0, "CV_8UC2" -> 8, "CV_8UC3" -> 16, "CV_8UC4" -> 24,
@@ -47,18 +49,20 @@ object ImageSchema {
   /**
    * Schema for the image column: Row(String, Int, Int, Int, Array[Byte])
    */
-  val columnSchema = StructType(
-    StructField("origin", StringType, true) ::
-    StructField("height", IntegerType, false) ::
-    StructField("width", IntegerType, false) ::
-    StructField("nChannels", IntegerType, false) ::
+  private val columnSchema = StructType(
+    StructField(imageFields(0), StringType, true) ::
+    StructField(imageFields(1), IntegerType, false) ::
+    StructField(imageFields(2), IntegerType, false) ::
+    StructField(imageFields(3), IntegerType, false) ::
     // OpenCV-compatible type: CV_8UC3 in most cases
-    StructField("mode", StringType, false) ::
+    StructField(imageFields(4), IntegerType, false) ::
     // Bytes in OpenCV-compatible order: row-wise BGR in most cases
-    StructField("data", BinaryType, false) :: Nil)
+    StructField(imageFields(5), BinaryType, false) :: Nil)
 
-  // DataFrame with a single column of images named "image" (nullable)
-  private val imageDFSchema = StructType(StructField("image", columnSchema, true) :: Nil)
+  /**
+   * DataFrame with a single column of images named "image" (nullable)
+   */
+  val imageSchema = StructType(StructField("image", columnSchema, true) :: Nil)
 
   /**
    * :: Experimental ::
@@ -94,11 +98,11 @@ object ImageSchema {
 
   /**
    * :: Experimental ::
-   * Gets the OpenCV representation
+   * Gets the OpenCV representation as an int
    *
-   * @return The OpenCV representation
+   * @return The OpenCV representation as an int
    */
-  def getMode(row: Row): String = row.getString(4)
+  def getMode(row: Row): Int = row.getInt(4)
 
   /**
    * :: Experimental ::
@@ -126,7 +130,7 @@ object ImageSchema {
    * @return Row with the default values
    */
   private def invalidImageRow(origin: String): Row =
-    Row(Row(origin, -1, -1, -1, undefinedImageType, Array.ofDim[Byte](0)))
+    Row(Row(origin, -1, -1, -1, ocvTypes(undefinedImageType), Array.ofDim[Byte](0)))
 
   /**
    * Convert the compressed image (jpeg, png, etc.) into OpenCV
@@ -149,11 +153,11 @@ object ImageSchema {
       val height = img.getHeight
       val width = img.getWidth
       val (nChannels, mode) = if (isGray) {
-        (1, "CV_8UC1")
+        (1, ocvTypes("CV_8UC1"))
       } else if (hasAlpha) {
-        (4, "CV_8UC4")
+        (4, ocvTypes("CV_8UC4"))
       } else {
-        (3, "CV_8UC3")
+        (3, ocvTypes("CV_8UC3"))
       }
 
       val imageSize = height * width * nChannels
@@ -230,25 +234,22 @@ object ImageSchema {
         None
       }
 
-    val result =
-      try {
-        val streams = session.sparkContext.binaryFiles(path, partitions)
-          .repartition(partitions)
+    try {
+      val streams = session.sparkContext.binaryFiles(path, partitions)
+        .repartition(partitions)
 
-        val convert = (stream: (String, PortableDataStream)) =>
-          decode(stream._1, stream._2.toArray())
-        val images = if (dropImageFailures) {
-          streams.flatMap { convert(_) }
-        } else {
-          streams.map { stream => convert(stream).getOrElse(invalidImageRow(stream._1)) }
-        }
-        session.createDataFrame(images, imageDFSchema)
-      } finally {
-        // return Hadoop flags to the original values
-        RecursiveFlag.setRecursiveFlag(oldRecursiveFlag, session)
-        SamplePathFilter.unsetPathFilter(oldPathFilter, session)
+      val convert = (stream: (String, PortableDataStream)) =>
+        decode(stream._1, stream._2.toArray())
+      val images = if (dropImageFailures) {
+        streams.flatMap { convert(_) }
+      } else {
+        streams.map { stream => convert(stream).getOrElse(invalidImageRow(stream._1)) }
       }
-
-    result
+      session.createDataFrame(images, imageSchema)
+    } finally {
+      // return Hadoop flags to the original values
+      RecursiveFlag.setRecursiveFlag(oldRecursiveFlag, session)
+      SamplePathFilter.unsetPathFilter(oldPathFilter, session)
+    }
   }
 }

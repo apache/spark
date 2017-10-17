@@ -85,9 +85,10 @@ private object SamplePathFilter {
    * @param spark Existing Spark session
    * @return Returns the previous HDFS path filter
    */
-  def setPathFilter(value: Option[Class[_]],
-                    sampleRatio: Double,
-                    spark: SparkSession): Option[Class[_]] = {
+  def setPathFilter(
+      value: Option[Class[_]],
+      sampleRatio: Double,
+      spark: SparkSession): Option[Class[_]] = {
     val flagName = FileInputFormat.PATHFILTER_CLASS
     val hadoopConf = spark.sparkContext.hadoopConfiguration
     val old = Option(hadoopConf.getClass(flagName, null))

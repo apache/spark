@@ -28,8 +28,6 @@ import org.apache.spark.sql.types._
 
 class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
   // Single column of images named "image"
-  private val imageDFSchema =
-    StructType(StructField("image", ImageSchema.columnSchema, true) :: Nil)
   private lazy val imagePath =
     Thread.currentThread().getContextClassLoader.getResource("test-data/images").getPath
 
@@ -39,13 +37,13 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
     val height = 1
     val nChannels = 3
     val data = Array[Byte](0, 0, 0)
-    val mode = "CV_8UC3"
+    val mode = ocvTypes("CV_8UC3")
 
     // Internal Row corresponds to image StructType
     val rows = Seq(Row(Row(origin, height, width, nChannels, mode, data)),
       Row(Row(null, height, width, nChannels, mode, data)))
     val rdd = sc.makeRDD(rows)
-    val df = spark.createDataFrame(rdd, imageDFSchema)
+    val df = spark.createDataFrame(rdd, ImageSchema.imageSchema)
 
     assert(df.count === 2, "incorrect image count")
     assert(ImageSchema.isImageColumn(df, "image"), "data do not fit ImageSchema")
@@ -86,7 +84,7 @@ class ImageSchemaSuite extends SparkFunSuite with MLlibTestSparkContext {
         val bytes20 = getData(row).slice(0, 20)
 
         val (expectedMode, expectedBytes) = firstBytes20(filename)
-        assert(expectedMode === mode, "mode of the image is not read correctly")
+        assert(ocvTypes(expectedMode) === mode, "mode of the image is not read correctly")
         assert(Arrays.equals(expectedBytes, bytes20), "incorrect numeric value for flattened image")
       }
     }
