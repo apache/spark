@@ -49,11 +49,9 @@ object InMemoryRelation {
  * @param numRows The total number of rows in this batch
  * @param buffers The buffers for serialized columns
  * @param stats The stat of columns
- * @param schema The schema of columns
  */
 private[columnar]
-case class CachedBatch(
-  numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow, schema: StructType)
+case class CachedBatch(numRows: Int, buffers: Array[Array[Byte]], stats: InternalRow)
 
 case class InMemoryRelation(
     output: Seq[Attribute],
@@ -147,8 +145,7 @@ case class InMemoryRelation(
             columnBuilders.flatMap(_.columnStats.collectedStatistics))
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
-          }, stats,
-          if (useColumnarBatch) StructType.fromAttributes(output) else null)
+          }, stats)
         }
 
         def hasNext: Boolean = rowIterator.hasNext

@@ -39,18 +39,20 @@ case class InMemoryTableScanExec(
   override def vectorTypes: Option[Seq[String]] =
     Option(Seq.fill(attributes.length)(classOf[OnHeapColumnVector].getName))
 
+  override val supportCodegen: Boolean = relation.useColumnarBatches
+
   val columnIndices =
     attributes.map(a => relation.output.map(o => o.exprId).indexOf(a.exprId)).toArray
 
-  override val supportCodegen: Boolean = relation.useColumnarBatches
+  val relationSchema = relation.schema.toArray
+
+  val columnarBatchSchema = new StructType(columnIndices.map(i => relationSchema(i)))
 
   private def createAndDecompressColumn(cachedColumnarBatch: CachedBatch): ColumnarBatch = {
     val rowCount = cachedColumnarBatch.numRows
-    val originalSchema = cachedColumnarBatch.schema.toArray
-    val schema = new StructType(columnIndices.map(i => originalSchema(i)))
-    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, schema)
+    val columnVectors = OnHeapColumnVector.allocateColumns(rowCount, columnarBatchSchema)
     val columnarBatch = new ColumnarBatch(
-      schema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
+      columnarBatchSchema, columnVectors.asInstanceOf[Array[ColumnVector]], rowCount)
     columnarBatch.setNumRows(rowCount)
 
     for (i <- 0 until attributes.length) {
@@ -58,7 +60,7 @@ case class InMemoryTableScanExec(
       ColumnAccessor.decompress(
         cachedColumnarBatch.buffers(index),
         columnarBatch.column(i).asInstanceOf[WritableColumnVector],
-        schema.fields(i).dataType, rowCount)
+        columnarBatchSchema.fields(i).dataType, rowCount)
     }
     return columnarBatch
   }

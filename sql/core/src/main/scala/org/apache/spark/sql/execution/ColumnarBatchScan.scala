@@ -19,10 +19,9 @@ package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector, WritableColumnVector}
-import org.apache.spark.sql.types.{DataType, DataTypes}
+import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.types.DataType
 
 
 /**
@@ -82,7 +81,6 @@ private[sql] trait ColumnarBatchScan extends CodegenSupport {
     val columnarBatchClz = classOf[ColumnarBatch].getName
     val batch = ctx.freshName("batch")
     ctx.addMutableState(columnarBatchClz, batch, s"$batch = null;")
-    val cachedBatch = ctx.freshName("cachedBatch")
 
     val idx = ctx.freshName("batchIdx")
     ctx.addMutableState("int", idx, s"$idx = 0;")
