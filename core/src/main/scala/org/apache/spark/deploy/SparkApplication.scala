@@ -36,7 +36,7 @@ private[spark] trait SparkApplication {
  * Configuration is propagated to the application via system properties, so running multiple
  * of these in the same JVM may lead to undefined behavior due to configuration leaks.
  */
-private [deploy] class JavaMainApplication(klass: Class[_]) extends SparkApplication {
+private[deploy] class JavaMainApplication(klass: Class[_]) extends SparkApplication {
 
   override def start(args: Array[String], conf: SparkConf): Unit = {
     val mainMethod = klass.getMethod("main", new Array[String](0).getClass)
