@@ -137,7 +137,7 @@ object ExtractPythonUDFs extends Rule[SparkPlan] with PredicateHelper {
           udf.references.subsetOf(child.outputSet)
         }
         if (validUdfs.nonEmpty) {
-          if (validUdfs.find(_.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF).isDefined) {
+          if (validUdfs.exists(_.pythonUdfType == PythonUdfType.PANDAS_GROUPED_UDF)) {
             throw new IllegalArgumentException("Can not use grouped vectorized UDFs")
           }
 
