@@ -468,7 +468,7 @@ class RelationalGroupedDataset protected[sql](
 
   override def toString: String = {
     val builder = new StringBuilder
-    builder.append("RelationalGroupedDataset: [group by: [")
+    builder.append("RelationalGroupedDataset: [grouping expressions: [")
     val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
       case f => s"${f.name}: ${f.dataType.simpleString(2)}"
     }
@@ -493,7 +493,7 @@ private[sql] object RelationalGroupedDataset {
    * The Grouping Type
    */
   private[sql] trait GroupType {
-    override def toString: String = getClass.getSimpleName.replace("$", "")
+    override def toString: String = getClass.getSimpleName.stripSuffix("$").stripSuffix("Type")
   }
 
   /**

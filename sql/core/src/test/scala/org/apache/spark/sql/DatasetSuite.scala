@@ -1345,7 +1345,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("Check RelationalGroupedDataset toString: Single data") {
     val kvDataset = (1 to 3).toDF("id").groupBy("id")
     val expected = "RelationalGroupedDataset: [" +
-      "group by: [id: int], value: [id: int], type: GroupByType]"
+      "grouping expressions: [id: int], value: [id: int], type: GroupBy]"
     val actual = kvDataset.toString
     assert(expected === actual)
   }
@@ -1354,9 +1354,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
       .toDF("id", "val1", "val2").groupBy("id")
     val expected = "RelationalGroupedDataset:" +
-      " [group by: [id: int]," +
+      " [grouping expressions: [id: int]," +
       " value: [id: int, val1: string ... 1 more field]," +
-      " type: GroupByType]"
+      " type: GroupBy]"
     val actual = kvDataset.toString
     assert(expected === actual)
   }
