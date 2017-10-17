@@ -24,6 +24,8 @@ should give you a list of pods and configmaps (if any) respectively.
 * You must have a spark distribution with Kubernetes support. This may be obtained from the
 [release tarball](https://github.com/apache-spark-on-k8s/spark/releases) or by
 [building Spark with Kubernetes support](../resource-managers/kubernetes/README.md#building-spark-with-kubernetes-support).
+* You must have [Kubernetes DNS](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) configured in
+your cluster.
 
 ## Driver & Executor Images
 
@@ -59,7 +61,7 @@ to the registry.
 For example, if the registry host is `registry-host` and the registry is listening on port 5000:
 
     cd $SPARK_HOME
-    docker build -t registry-host:5000/spark-base:latest -f dockerfiles/driver/spark-base .
+    docker build -t registry-host:5000/spark-base:latest -f dockerfiles/spark-base/Dockerfile .
     docker build -t registry-host:5000/spark-driver:latest -f dockerfiles/driver/Dockerfile .
     docker build -t registry-host:5000/spark-executor:latest -f dockerfiles/executor/Dockerfile .
     docker build -t registry-host:5000/spark-init:latest -f dockerfiles/init-container/Dockerfile .
@@ -222,7 +224,7 @@ Below is an example submission:
       local:///opt/spark/examples/src/main/python/pi.py 100
 ```
 
-## Dynamic Executor Scaling
+## Dynamic Allocation in Kubernetes
 
 Spark on Kubernetes supports Dynamic Allocation with cluster mode. This mode requires running
 an external shuffle service. This is typically a [daemonset](https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/)
@@ -245,6 +247,7 @@ the command may then look like the following:
       --class org.apache.spark.examples.GroupByTest \
       --master k8s://<k8s-master>:<port> \
       --kubernetes-namespace default \
+      --conf spark.local.dir=/tmp/spark-local
       --conf spark.app.name=group-by-test \
       --conf spark.kubernetes.driver.docker.image=kubespark/spark-driver:latest \
       --conf spark.kubernetes.executor.docker.image=kubespark/spark-executor:latest \
@@ -253,6 +256,14 @@ the command may then look like the following:
       --conf spark.kubernetes.shuffle.namespace=default \
       --conf spark.kubernetes.shuffle.labels="app=spark-shuffle-service,spark-version=2.2.0" \
       local:///opt/spark/examples/jars/spark-examples_2.11-2.2.0-k8s-0.3.0.jar 10 400000 2
+
+The external shuffle service has to mount directories that can be shared with the executor pods. The provided example
+YAML spec mounts a hostPath volume to the external shuffle service pods, but these hostPath volumes must also be mounted
+into the executors. When using the external shuffle service, the directories specified in the `spark.local.dir`
+configuration are mounted as hostPath volumes into all of the executor containers. To ensure that one does not
+accidentally mount the incorrect hostPath volumes, the value of `spark.local.dir` must be specified in your
+application's configuration when using Kubernetes, even though it defaults to the JVM's temporary directory when using
+other cluster managers.
 
 ## Advanced
 
@@ -607,48 +618,6 @@ from the other deployment modes. See the [configuration page](configuration.html
   </td>
 </tr>
 <tr>
-  <td><code>spark.kubernetes.driver.labels</code></td>
-  <td>(none)</td>
-  <td>
-    <i>Deprecated.</i> Use <code>spark.kubernetes.driver.label.<labelKey></code> instead which supports <code>=</code>
-    and <code>,</code> characters in label values.
-    Custom labels that will be added to the driver pod. This should be a comma-separated list of label key-value pairs,
-    where each label is in the format <code>key=value</code>. Note that Spark also adds its own labels to the driver pod
-    for bookkeeping purposes.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.driver.annotations</code></td>
-  <td>(none)</td>
-  <td>
-    <i>Deprecated.</i> Use <code>spark.kubernetes.driver.annotation.<annotationKey></code> instead which supports
-    <code>=</code> and <code>,</code> characters in annotation values.
-    Custom annotations that will be added to the driver pod. This should be a comma-separated list of label key-value
-    pairs, where each annotation is in the format <code>key=value</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.executor.labels</code></td>
-  <td>(none)</td>
-  <td>
-    <i>Deprecated.</i> Use <code>spark.kubernetes.executor.label.<labelKey></code> instead which supports
-    <code>=</code> and <code>,</code> characters in label values.
-    Custom labels that will be added to the executor pods. This should be a comma-separated list of label key-value
-    pairs, where each label is in the format <code>key=value</code>. Note that Spark also adds its own labels to the
-    executor pods for bookkeeping purposes.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.executor.annotations</code></td>
-  <td>(none)</td>
-  <td>
-    <i>Deprecated.</i> Use <code>spark.kubernetes.executor.annotation.<annotationKey></code> instead which supports
-    <code>=</code> and <code>,</code> characters in annotation values.
-    Custom annotations that will be added to the executor pods. This should be a comma-separated list of annotation
-    key-value pairs, where each annotation is in the format <code>key=value</code>.
-  </td>
-</tr>
-<tr>
   <td><code>spark.kubernetes.driver.pod.name</code></td>
   <td>(none)</td>
   <td>
@@ -798,6 +767,22 @@ from the other deployment modes. See the [configuration page](configuration.html
   <td>
     Add the environment variable specified by <code>EnvironmentVariableName</code> to
     the Driver process. The user can specify multiple of these to set multiple environment variables.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.driver.secrets.[SecretName]</code></td>
+  <td>(none)</td>
+  <td>
+    Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
+    in the driver Pod. The user can specify multiple instances of this for multiple secrets.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.secrets.[SecretName]</code></td>
+  <td>(none)</td>
+  <td>
+    Mounts the Kubernetes secret named <code>SecretName</code> onto the path specified by the value
+    in the executor Pods. The user can specify multiple instances of this for multiple secrets.
   </td>
 </tr>
 </table>

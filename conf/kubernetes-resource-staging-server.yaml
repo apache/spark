@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1beta1
 kind: Deployment
 metadata:
   name: spark-resource-staging-server
@@ -32,14 +32,14 @@ spec:
             name: spark-resource-staging-server-config
       containers:
         - name: spark-resource-staging-server
-          image: kubespark/spark-resource-staging-server:v2.2.0-kubernetes-0.3.0
+          image: kubespark/spark-resource-staging-server:v2.2.0-kubernetes-0.4.0
           resources:
             requests:
               cpu: 100m
               memory: 256Mi
             limits:
               cpu: 100m
-              memory: 256Mi
+              memory: 1Gi
           volumeMounts:
             - name: resource-staging-server-properties
               mountPath: '/etc/spark-resource-staging-server'

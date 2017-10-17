@@ -32,16 +32,16 @@ spec:
       volumes:
         - name: temp-volume
           hostPath:
-            path: '/var/tmp' # change this path according to your cluster configuration.
+            path: '/tmp/spark-local' # change this path according to your cluster configuration.
       containers:
         - name: shuffle
           # This is an official image that is built
           # from the dockerfiles/shuffle directory
           # in the spark distribution.
-          image: kubespark/spark-shuffle:v2.2.0-kubernetes-0.3.0
+          image: kubespark/spark-shuffle:v2.2.0-kubernetes-0.4.0
           imagePullPolicy: IfNotPresent
           volumeMounts:
-            - mountPath: '/tmp'
+            - mountPath: '/tmp/spark-local'
               name: temp-volume
               # more volumes can be mounted here.
               # The spark job must be configured to use these
