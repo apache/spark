@@ -1052,22 +1052,22 @@ You can read CSV Files using Spark builtin csv Data Source with specific options
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-All the available options are defined <a href="http://spark.apache.org/docs/latest/api/scala/index.html#org.apache.spark.sql.DataFrameReader@csv(paths:String*):org.apache.spark.sql.DataFrame" target="_blank">here</a>
+All the available options are defined <a href="/api/scala/index.html#org.apache.spark.sql.DataFrameReader@csv(paths:String*):org.apache.spark.sql.DataFrame" target="_blank">here</a>
 {% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
 
 <div data-lang="java"  markdown="1">
-All the available options are defined <a href="http://spark.apache.org/docs/latest/api/java/org/apache/spark/sql/DataFrameReader.html#csv-scala.collection.Seq-" target="_blank">here</a>
+All the available options are defined <a href="/api/java/org/apache/spark/sql/DataFrameReader.html#csv-scala.collection.Seq-" target="_blank">here</a>
 {% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
 
 <div data-lang="python"  markdown="1">
-All the available options are defined <a href="https://spark.apache.org/docs/latest/api/python/pyspark.sql.html#pyspark.sql.DataFrameReader.csv" target="_blank">here</a>
+All the available options are defined <a href="/api/python/pyspark.sql.html#pyspark.sql.DataFrameReader.csv" target="_blank">here</a>
 {% include_example manual_load_options_csv python/sql/datasource.py %}
 </div>
 
 <div data-lang="r"  markdown="1">
-All the available options are defined <a href="http://spark.apache.org/docs/latest/api/R/index.html" target="_blank">here</a>
+All the available options are defined <a href="/api/R/index.html" target="_blank">here</a>
 {% include_example manual_load_options_csv r/RSparkSQLExample.R %}
 </div>
 </div>
