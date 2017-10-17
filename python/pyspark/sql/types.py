@@ -1622,23 +1622,16 @@ def to_arrow_type(dt):
     elif type(dt) == DateType:
         arrow_type = pa.date32()
     elif type(dt) == TimestampType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
 
 
-def _check_localize_series_timestamps(s):
-    from pandas.types.common import is_datetime64_dtype
-    # TODO: handle nested timestamps?
-    if is_datetime64_dtype(s.dtype):
-        # TODO: pyarrow.Column.to_pandas keeps data in UTC but removes timezone
-        return s.dt.tz_localize('UTC').dt.tz_convert('tzlocal()').dt.tz_localize(None)
-    else:
-        return s
-
-
-def _check_localize_dataframe_timestamps(df):
+def _check_dataframe_localize_timestamps(df):
+    """ Convert timezone aware timestamps to timezone-naive in local time
+    """
     from pandas.types.common import is_datetime64tz_dtype
     for column, series in df.iteritems():
         # TODO: handle nested timestamps?
@@ -1647,17 +1640,15 @@ def _check_localize_dataframe_timestamps(df):
     return df
 
 
-def _utc_normalize_series_timestamps(s):
-    """ Convert a tz-naive timestamp in local tz to UTC normalized
+def _check_series_convert_timestamps_internal(s):
+    """ Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
     """
-    # TODO: this should be system local tz or SESSION_LOCAL_TIMEZONE?
-    return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC').values.astype('datetime64[us]')
-
-
-def _check_utc_normalize_series_timestamps(s):
     from pandas.types.common import is_datetime64_dtype
     # TODO: handle nested timestamps?
-    return _utc_normalize_series_timestamps(s) if is_datetime64_dtype(s.dtype) else s
+    if is_datetime64_dtype(s.dtype):
+        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC').values.astype('datetime64[us]')
+    else:
+        return s
 
 
 def _test():

@@ -3090,6 +3090,7 @@ class ArrowTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
 
         # Synchronize default timezone between Python and Java
+        cls.tz_prev = os.environ.get("TZ", None)  # save current tz if set
         tz = "America/Los_Angeles"
         os.environ["TZ"] = tz
         time.tzset()
@@ -3112,6 +3113,8 @@ class ArrowTests(ReusedPySparkTestCase):
     @classmethod
     def tearDownClass(cls):
         del os.environ["TZ"]
+        if cls.tz_prev is not None:
+            os.environ["TZ"] = cls.tz_prev
         time.tzset()
         ReusedPySparkTestCase.tearDownClass()
         cls.spark.stop()
@@ -3407,8 +3410,7 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             StructField("idx", LongType(), True),
             StructField("date", DateType(), True),
             StructField("timestamp", TimestampType(), True)])
-        # TODO Fails with time before epoch: (0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1))
-        data = [(0, date(1985, 1, 1), datetime(1985, 1, 1, 1, 1, 1)),
+        data = [(0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
                 (1, date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
                 (2, date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3)),
                 (3, date(2104, 4, 4), datetime(2104, 4, 4, 4, 4, 4))]
@@ -3424,8 +3426,8 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
             is_equal = timestamp == timestamp_copy
             if is_equal.all():
                 for i in xrange(len(is_equal)):
-                    # TODO Fails with tz offset: date[i].date() == data[idx[i]][1] and
-                    is_equal[i] = timestamp[i].to_pydatetime() == data[idx[i]][2]
+                    is_equal[i] = date[i].date() == data[idx[i]][1] \
+                        and timestamp[i].to_pydatetime() == data[idx[i]][2]
             return is_equal
 
         result = df.withColumn("is_equal", check_data(col("idx"), col("date"), col("timestamp"),
