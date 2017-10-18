@@ -40,7 +40,7 @@ import org.apache.spark.internal.io._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{SerializableConfiguration, SerializableJobConf, Utils}
-import org.apache.spark.util.collection.CompactBuffer
+import org.apache.spark.util.collection.{CompactBuffer, OpenHashMap}
 import org.apache.spark.util.random.StratifiedSamplingUtils
 
 /**
@@ -171,6 +171,56 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val cleanedSeqOp = self.context.clean(seqOp)
     combineByKeyWithClassTag[U]((v: V) => cleanedSeqOp(createZero(), v),
       cleanedSeqOp, combOp, partitioner)
+  }
+
+  /**
+   * Aggregate the values of each key, using given combine functions and a neutral "zero value".
+   * This function can return a different result type, U, than the type of the values in this RDD,
+   * V. Thus, we need one operation for merging a V into a U and one operation for merging two U's,
+   * as in scala.TraversableOnce. The former operation is used for merging values within a
+   * partition, and the latter is used for merging values between partitions. To avoid memory
+   * allocation, both of these functions are allowed to modify and return their first argument
+   * instead of creating a new U. This method is different from the ordinary "aggregateByKey"
+   * method, it directly returns a map to the driver, rather than a rdd. This will also perform
+   * the merging locally on each mapper before sending results to a reducer, similarly to a
+   * "combiner" in MapReduce.
+   */
+  def aggregateByKeyLocally[U: ClassTag](zeroValue: U)
+      (seqOp: (U, V) => U, combOp: (U, U) => U): Iterator[(K, U)] = self.withScope {
+    if (keyClass.isArray) {
+      throw new SparkException("aggregateByKeyLocally() does not support array keys")
+    }
+
+    // Serialize the zero value to a byte array so that we can get a new clone of it on each key
+    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
+    val zeroArray = new Array[Byte](zeroBuffer.limit)
+    zeroBuffer.get(zeroArray)
+
+    lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
+    val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
+
+    val cleanedSeqOp = self.context.clean(seqOp)
+    val cleanedCombop = self.context.clean(combOp)
+
+    val reducePartition = (iter: Iterator[(K, V)]) => {
+      val map = new OpenHashMap[K, U]
+      iter.foreach { pair =>
+        val old = map(pair._1)
+        map.update(pair._1,
+          if (old == null) cleanedSeqOp(createZero(), pair._2) else cleanedSeqOp(old, pair._2))
+      }
+      Iterator(map)
+    } : Iterator[OpenHashMap[K, U]]
+
+    val mergeMaps = (m1: OpenHashMap[K, U], m2: OpenHashMap[K, U]) => {
+      m2.foreach { pair =>
+        val old = m1(pair._1)
+        m1.update(pair._1, if (old == null) pair._2 else cleanedCombop(old, pair._2))
+      }
+      m1
+    } : OpenHashMap[K, U]
+
+    self.mapPartitions(reducePartition).reduce(mergeMaps).toIterator
   }
 
   /**
