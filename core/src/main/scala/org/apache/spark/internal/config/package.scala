@@ -41,6 +41,29 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val EVENT_LOG_COMPRESS =
+    ConfigBuilder("spark.eventLog.compress")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_BLOCK_UPDATES =
+    ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_TESTING =
+    ConfigBuilder("spark.eventLog.testing")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_OUTPUT_BUFFER_SIZE = ConfigBuilder("spark.eventLog.buffer.kb")
+    .bytesConf(ByteUnit.KiB)
+    .createWithDefaultString("100k")
+
+  private[spark] val EVENT_LOG_OVERWRITE =
+    ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -270,6 +293,13 @@ package object config {
     .longConf
     .createWithDefault(4 * 1024 * 1024)
 
+  private[spark] val HADOOP_RDD_IGNORE_EMPTY_SPLITS =
+    ConfigBuilder("spark.hadoopRDD.ignoreEmptySplits")
+      .internal()
+      .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
       .doc("Regex to decide which Spark configuration properties and environment variables in " +
@@ -350,13 +380,15 @@ package object config {
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
 
-  private[spark] val REDUCER_MAX_REQ_SIZE_SHUFFLE_TO_MEM =
-    ConfigBuilder("spark.reducer.maxReqSizeShuffleToMem")
-      .doc("The blocks of a shuffle request will be fetched to disk when size of the request is " +
+  private[spark] val MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM =
+    ConfigBuilder("spark.maxRemoteBlockSizeFetchToMem")
+      .doc("Remote block will be fetched to disk when size of the block is " +
         "above this threshold. This is to avoid a giant request takes too much memory. We can " +
-        "enable this config by setting a specific value(e.g. 200m). Note that this config can " +
-        "be enabled only when the shuffle shuffle service is newer than Spark-2.2 or the shuffle" +
-        " service is disabled.")
+        "enable this config by setting a specific value(e.g. 200m). Note this configuration will " +
+        "affect both shuffle fetch and block manager remote block fetch. For users who " +
+        "enabled external shuffle service, this feature can only be worked when external shuffle" +
+        " service is newer than Spark 2.2.")
+      .withAlternative("spark.reducer.maxReqSizeShuffleToMem")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(Long.MaxValue)
 
@@ -438,10 +470,9 @@ package object config {
       .stringConf
       .createOptional
 
-  private[spark] val EXTRA_LISTENERS =
-    ConfigBuilder("spark.extraListeners")
-      .doc("Class names of listeners to add to SparkContext during initialization.")
-      .stringConf
-      .toSequence
-      .createOptional
+  private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
+    .doc("Class names of listeners to add to SparkContext during initialization.")
+    .stringConf
+    .toSequence
+    .createOptional
 }

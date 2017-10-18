@@ -2646,6 +2646,44 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("SPARK-21247: Allow case-insensitive type equality in Set operation") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
+      sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+
+      withTable("t", "S") {
+        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
+        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
+        Seq(("c", "C"), ("C", "c"), ("c.f", "C.F"), ("C.F", "c.f")).foreach {
+          case (left, right) =>
+            checkAnswer(sql(s"SELECT * FROM t, S WHERE t.$left = S.$right"), Seq.empty)
+        }
+      }
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val m1 = intercept[AnalysisException] {
+        sql("SELECT struct(1 a) UNION ALL (SELECT struct(2 A))")
+      }.message
+      assert(m1.contains("Union can only be performed on tables with the compatible column types"))
+
+      val m2 = intercept[AnalysisException] {
+        sql("SELECT struct(1 a) EXCEPT (SELECT struct(2 A))")
+      }.message
+      assert(m2.contains("Except can only be performed on tables with the compatible column types"))
+
+      withTable("t", "S") {
+        sql("CREATE TABLE t(c struct<f:int>) USING parquet")
+        sql("CREATE TABLE S(C struct<F:int>) USING parquet")
+        checkAnswer(sql("SELECT * FROM t, S WHERE t.c.f = S.C.F"), Seq.empty)
+        val m = intercept[AnalysisException] {
+          sql("SELECT * FROM t, S WHERE c = C")
+        }.message
+        assert(m.contains("cannot resolve '(t.`c` = S.`C`)' due to data type mismatch"))
+      }
+    }
+  }
+
   test("SPARK-21335: support un-aliased subquery") {
     withTempView("v") {
       Seq(1 -> "a").toDF("i", "j").createOrReplaceTempView("v")

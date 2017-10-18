@@ -61,10 +61,14 @@ case class FlatMapGroupsWithStateExec(
 
   private val isTimeoutEnabled = timeoutConf != NoTimeout
   val stateManager = new FlatMapGroupsWithState_StateManager(stateEncoder, isTimeoutEnabled)
+  val watermarkPresent = child.output.exists {
+    case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
+    case _ => false
+  }
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes) :: Nil
+    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) :: Nil
 
   /** Ordering needed for using GroupingIterator */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] =
@@ -190,7 +194,8 @@ case class FlatMapGroupsWithStateExec(
         batchTimestampMs.getOrElse(NO_TIMESTAMP),
         eventTimeWatermark.getOrElse(NO_TIMESTAMP),
         timeoutConf,
-        hasTimedOut)
+        hasTimedOut,
+        watermarkPresent)
 
       // Call function, get the returned objects and convert them to rows
       val mappedIterator = func(keyObj, valueObjIter, groupState).map { obj =>

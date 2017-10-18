@@ -1341,7 +1341,68 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(1).toDS().map(_ => ("", TestForTypeAlias.seqOfTupleTypeAlias)),
       ("", Seq((1, 1), (2, 2))))
   }
+
+  test("Check RelationalGroupedDataset toString: Single data") {
+    val kvDataset = (1 to 3).toDF("id").groupBy("id")
+    val expected = "RelationalGroupedDataset: [" +
+      "grouping expressions: [id: int], value: [id: int], type: GroupBy]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check RelationalGroupedDataset toString: over length schema ") {
+    val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
+      .toDF("id", "val1", "val2").groupBy("id")
+    val expected = "RelationalGroupedDataset:" +
+      " [grouping expressions: [id: int]," +
+      " value: [id: int, val1: string ... 1 more field]," +
+      " type: GroupBy]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+
+  test("Check KeyValueGroupedDataset toString: Single data") {
+    val kvDataset = (1 to 3).toDF("id").as[SingleData].groupByKey(identity)
+    val expected = "KeyValueGroupedDataset: [key: [id: int], value: [id: int]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check KeyValueGroupedDataset toString: Unnamed KV-pair") {
+    val kvDataset = (1 to 3).map(x => (x, x.toString))
+      .toDF("id", "val1").as[DoubleData].groupByKey(x => (x.id, x.val1))
+    val expected = "KeyValueGroupedDataset:" +
+      " [key: [_1: int, _2: string]," +
+      " value: [id: int, val1: string]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check KeyValueGroupedDataset toString: Named KV-pair") {
+    val kvDataset = (1 to 3).map( x => (x, x.toString))
+      .toDF("id", "val1").as[DoubleData].groupByKey(x => DoubleData(x.id, x.val1))
+    val expected = "KeyValueGroupedDataset:" +
+      " [key: [id: int, val1: string]," +
+      " value: [id: int, val1: string]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
+
+  test("Check KeyValueGroupedDataset toString: over length schema ") {
+    val kvDataset = (1 to 3).map( x => (x, x.toString, x.toLong))
+      .toDF("id", "val1", "val2").as[TripleData].groupByKey(identity)
+    val expected = "KeyValueGroupedDataset:" +
+      " [key: [id: int, val1: string ... 1 more field(s)]," +
+      " value: [id: int, val1: string ... 1 more field(s)]]"
+    val actual = kvDataset.toString
+    assert(expected === actual)
+  }
 }
+
+case class SingleData(id: Int)
+case class DoubleData(id: Int, val1: String)
+case class TripleData(id: Int, val1: String, val2: Long)
 
 case class WithImmutableMap(id: String, map_test: scala.collection.immutable.Map[Long, String])
 case class WithMap(id: String, map_test: scala.collection.Map[Long, String])
