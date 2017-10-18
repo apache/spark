@@ -41,6 +41,10 @@ private[spark] abstract class LiveEntity {
     store.write(doUpdate())
   }
 
+  /**
+   * Returns an updated view of entity data, to be stored in the status store, reflecting the
+   * latest information collected by the listener.
+   */
   protected def doUpdate(): Any
 
 }
