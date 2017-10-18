@@ -490,7 +490,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     A comma-separated list that, if set, the contents of the secret referenced
     by spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
-    set to the provided environment variable in the driver's process.
+    set to the provided environment variable in the driver's process. Example:
+    
+    <pre>ENVKEY1,ENVKEY2</pre>
   </td>
   </tr>
   <tr>
@@ -501,7 +503,9 @@ See the [configuration page](configuration.html) for information on Spark config
     spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
     written to the provided file. Paths are relative to the container's work
     directory.  Absolute paths must already exist.  Consult the Mesos Secret
-    protobuf for more information.
+    protobuf for more information. Example:
+    
+    <pre>filename1,filename2</pre>
   </td>
 </tr>
 <tr>
@@ -509,7 +513,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(none)</code></td>
   <td>
     A comma-separated list of secret references. Consult the Mesos Secret
-    protobuf for more information.
+    protobuf for more information. Example:
+    
+    <pre>secretname1,secretname2</pre>
   </td>
 </tr>
 <tr>
@@ -517,7 +523,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(none)</code></td>
   <td>
     A comma-separated list of secret values. Consult the Mesos Secret
-    protobuf for more information.
+    protobuf for more information. Example:
+    
+    <pre>secretvalue1,secretvalue2</pre>
   </td>
 </tr>
 
@@ -527,7 +535,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     A comma-separated list that, if set, the contents of the secret referenced
     by spark.mesos.executor.secret.names or spark.mesos.executor.secret.values will be
-    set to the provided environment variable in the executor's process.
+    set to the provided environment variable in the executor's process. Example:
+    
+    <pre>ENVKEY1,ENVKEY2</pre>
   </td>
   </tr>
   <tr>
@@ -538,7 +548,9 @@ See the [configuration page](configuration.html) for information on Spark config
     spark.mesos.executor.secret.names or spark.mesos.executor.secret.values will be
     written to the provided file. Paths are relative to the container's work
     directory.  Absolute paths must already exist.  Consult the Mesos Secret
-    protobuf for more information.
+    protobuf for more information. Example:
+    
+    <pre>filename1,filename2</pre>
   </td>
 </tr>
 <tr>
@@ -546,7 +558,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(none)</code></td>
   <td>
     A comma-separated list of secret references. Consult the Mesos Secret
-    protobuf for more information.
+    protobuf for more information. Example:
+    
+    <pre>secretname1,secretname2</pre>
   </td>
 </tr>
 <tr>
@@ -554,7 +568,9 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>(none)</code></td>
   <td>
     A comma-separated list of secret values. Consult the Mesos Secret
-    protobuf for more information.
+    protobuf for more information. Example:
+    
+    <pre>secretvalue1,secretvalue2</pre>
   </td>
 </tr>
 

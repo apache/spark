@@ -126,7 +126,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     .toList
   }
 
-  def buildContainerInfo(conf: SparkConf, secretConfig: MesosSecretConfig):
+  def buildContainerInfo(conf: SparkConf):
   ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
@@ -175,32 +175,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
       containerInfo.addNetworkInfos(info)
     }
 
-    getSecretVolume(conf, secretConfig).foreach { volume =>
-      if (volume.getSource.getSecret.getReference.isInitialized) {
-        logInfo(s"Setting reference secret ${volume.getSource.getSecret.getReference.getName}" +
-          s"on file ${volume.getContainerPath}")
-      } else {
-        logInfo(s"Setting secret on file name=${volume.getContainerPath}")
-      }
-      containerInfo.addVolumes(volume)
-    }
-
     containerInfo
-  }
-
-  def addSecretEnvVar(
-      envBuilder: Environment.Builder,
-      conf: SparkConf,
-      secretConfig: MesosSecretConfig): Unit = {
-    getSecretEnvVar(conf, secretConfig).foreach { variable =>
-      if (variable.getSecret.getReference.isInitialized) {
-        logInfo(s"Setting reference secret ${variable.getSecret.getReference.getName}" +
-          s"on file ${variable.getName}")
-      } else {
-        logInfo(s"Setting secret on environment variable name=${variable.getName}")
-      }
-      envBuilder.addVariables(variable)
-    }
   }
 
   private def getSecrets(conf: SparkConf, secretConfig: MesosSecretConfig):
@@ -243,7 +218,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     false
   }
 
-  private def getSecretVolume(conf: SparkConf, secretConfig: MesosSecretConfig): List[Volume] = {
+  def getSecretVolume(conf: SparkConf, secretConfig: MesosSecretConfig): List[Volume] = {
     val secrets = getSecrets(conf, secretConfig)
     val secretPaths: Seq[String] =
       conf.get(secretConfig.SECRET_FILENAMES).getOrElse(Nil)
@@ -267,7 +242,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     }.toList
   }
 
-  private def getSecretEnvVar(conf: SparkConf, secretConfig: MesosSecretConfig):
+  def getSecretEnvVar(conf: SparkConf, secretConfig: MesosSecretConfig):
   List[Variable] = {
     val secrets = getSecrets(conf, secretConfig)
     val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEYS).getOrElse(Nil)

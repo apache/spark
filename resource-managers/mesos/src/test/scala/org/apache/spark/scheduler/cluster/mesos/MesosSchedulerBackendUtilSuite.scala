@@ -28,7 +28,7 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
     conf.set("spark.mesos.executor.docker.image", "test")
 
     val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(
-      conf, config.executorSecretConfig)
+      conf)
     val params = containerInfo.getDocker.getParametersList
 
     assert(params.size() == 0)
@@ -40,7 +40,7 @@ class MesosSchedulerBackendUtilSuite extends SparkFunSuite {
     conf.set("spark.mesos.executor.docker.image", "test")
 
     val containerInfo = MesosSchedulerBackendUtil.buildContainerInfo(
-      conf, config.executorSecretConfig)
+      conf)
     val params = containerInfo.getDocker.getParametersList
     assert(params.size() == 3)
     assert(params.get(0).getKey == "a")
