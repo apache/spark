@@ -424,13 +424,13 @@ package object config {
     ConfigBuilder("spark.ui.xXssProtection")
       .doc("Value for HTTP X-XSS-Protection response header")
       .stringConf
-      .createOptional
+      .createWithDefaultString("1; mode=block")
 
   private[spark] val UI_X_CONTENT_TYPE_OPTIONS =
     ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
       .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val UI_STRICT_TRANSPORT_SECURITY =
     ConfigBuilder("spark.ui.strictTransportSecurity")

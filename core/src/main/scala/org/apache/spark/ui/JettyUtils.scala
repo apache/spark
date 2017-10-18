@@ -90,7 +90,7 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
-            conf.get(UI_X_XSS_PROTECTION).foreach(response.setHeader("X-XSS-Protection", _))
+            response.setHeader("X-XSS-Protection", conf.get(UI_X_XSS_PROTECTION))
             if (conf.get(UI_X_CONTENT_TYPE_OPTIONS)) {
               response.setHeader("X-Content-Type-Options", "nosniff")
             }

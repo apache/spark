@@ -196,7 +196,7 @@ Strict Transport Security.
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.ui.xXssProtection</code></td>
-  <td>None</td>
+  <td><code>1; mode=block</code></td>
   <td>
     Value for HTTP X-XSS-Protection response header. You can choose appropriate value 
     from below:
@@ -211,10 +211,10 @@ Strict Transport Security.
 </tr>
 <tr>
   <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
-  <td>false</td>
+  <td><code>true</code></td>
   <td>
     When value is set to "true", X-Content-Type-Options HTTP response header will be set 
-    to "nosniff".
+    to "nosniff". Set "false" to disable.
   </td>
   </tr>
 <tr>
