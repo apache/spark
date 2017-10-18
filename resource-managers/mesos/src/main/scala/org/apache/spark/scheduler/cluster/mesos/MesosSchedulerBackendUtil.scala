@@ -178,8 +178,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
     containerInfo
   }
 
-  private def getSecrets(conf: SparkConf, secretConfig: MesosSecretConfig):
-  Seq[Secret] = {
+  private def getSecrets(conf: SparkConf, secretConfig: MesosSecretConfig): Seq[Secret] = {
     def createValueSecret(data: String): Secret = {
       Secret.newBuilder()
         .setType(Secret.Type.VALUE)
