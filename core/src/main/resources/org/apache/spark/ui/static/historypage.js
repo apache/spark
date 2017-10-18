@@ -37,11 +37,6 @@ function makeIdNumeric(id) {
   return resl;
 }
 
-function formatDate(date) {
-  if (date <= 0) return "-";
-  else return date.split(".")[0].replace("T", " ");
-}
-
 function getParameterByName(name, searchString) {
   var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
   results = regex.exec(searchString);

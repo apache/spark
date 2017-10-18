@@ -62,8 +62,16 @@ class ExecutorStageSummary private[spark](
     val outputBytes : Long,
     val shuffleRead : Long,
     val shuffleWrite : Long,
+    val shuffleWriteRecords : Long,
     val memoryBytesSpilled : Long,
-    val diskBytesSpilled : Long)
+    val diskBytesSpilled : Long,
+    val killedTasks: Int,
+    val blacklisted: Int,
+    val inputRecords : Long,
+    val outputRecords : Long,
+    val shuffleReadRecords : Long,
+    val host : String,
+    val executorLogs: Map[String, String])
 
 class ExecutorSummary private[spark](
     val id: String,
@@ -180,20 +188,25 @@ class TaskData private[spark](
     val attempt: Int,
     val launchTime: Date,
     val duration: Option[Long] = None,
+    val gettingResultTime: Double,
+    val schedulerDelay: Double,
     val executorId: String,
     val host: String,
     val status: String,
     val taskLocality: String,
+    val taskState: String,
     val speculative: Boolean,
     val accumulatorUpdates: Seq[AccumulableInfo],
     val errorMessage: Option[String] = None,
-    val taskMetrics: Option[TaskMetrics] = None)
+    val taskMetrics: Option[TaskMetrics] = None,
+    val executorLogs: Map[String, String])
 
 class TaskMetrics private[spark](
     val executorDeserializeTime: Long,
     val executorDeserializeCpuTime: Long,
     val executorRunTime: Long,
     val executorCpuTime: Long,
+    val peakExecutionMemory: Long,
     val resultSize: Long,
     val jvmGcTime: Long,
     val resultSerializationTime: Long,
