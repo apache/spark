@@ -90,6 +90,70 @@ class ReplaceOperatorSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("replace Except with Filter while both the nodes are of type Project") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Project(Seq(attributeA, attributeB), table1)
+    val table3 = Project(Seq(attributeA, attributeB),
+      Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Project(Seq(attributeA, attributeB),
+        Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA >= 2 && attributeB < 1)), table1))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while only right node is of type Project") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
+    val table3 = Project(Seq(attributeA),
+      Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Aggregate(table1.output, table1.output,
+          Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+            (attributeA >= 2 && attributeB < 1)),
+            Filter(attributeB === 2, Filter(attributeA === 1, table1)))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("replace Except with Filter while left node is Project and right node is Filter") {
+    val attributeA = 'a.int
+    val attributeB = 'b.int
+
+    val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
+    val table2 = Project(Seq(attributeA, attributeB),
+      Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
+    val table3 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
+
+    val query = Except(table2, table3)
+    val optimized = Optimize.execute(query.analyze)
+
+    val correctAnswer =
+      Project(Seq(attributeA, attributeB),
+        Aggregate(table1.output, table1.output,
+          Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+            (attributeA === 1 && attributeB === 2)),
+            Filter(attributeB < 1, Filter(attributeA >= 2, table1))))).analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("replace Except with Left-anti Join") {
     val table1 = LocalRelation('a.int, 'b.int)
     val table2 = LocalRelation('c.int, 'd.int)

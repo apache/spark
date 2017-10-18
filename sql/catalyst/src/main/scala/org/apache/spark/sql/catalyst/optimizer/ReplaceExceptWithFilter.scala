@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.optimizer
 import scala.annotation.tailrec
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Not}
-import org.apache.spark.sql.catalyst.plans.logical.{Distinct, Except, Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
 
@@ -41,28 +41,42 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Except(left, right) if isEligible(left, right) =>
-      val filterCondition = InferFiltersFromConstraints(combineFilters(right)
-      ).asInstanceOf[Filter].condition
 
-      val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
-      val transformedCondition = filterCondition transform { case a : AttributeReference =>
-        attributeNameMap(a.name)
-      }
+    case Except(left: Project, right) if isEligible(left.child, skipProject(right)) =>
+      Project(left.projectList,
+        Distinct(Filter(Not(transformCondition(left.child, skipProject(right))), left.child)))
 
-      Distinct(Filter(Not(transformedCondition), left))
+    case Except(left, right) if isEligible(left, skipProject(right)) =>
+      Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
   }
 
-  private def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
+  private def transformCondition(left: LogicalPlan, right: LogicalPlan) = {
+    val filterCondition = InferFiltersFromConstraints(combineFilters(right)
+    ).asInstanceOf[Filter].condition
+
+    val attributeNameMap: Map[String, Attribute] = left.output.map(x => (x.name, x)).toMap
+    val transformedCondition = filterCondition transform { case a : AttributeReference =>
+      attributeNameMap(a.name)
+    }
+
+    transformedCondition
+  }
+
+  private def isEligible(left: LogicalPlan, right: LogicalPlan) = (left, right) match {
     case (left, right: Filter) => nonFilterChild(left).sameResult(nonFilterChild(right))
     case _ => false
+  }
+
+  private def skipProject(plan: LogicalPlan) = plan match {
+    case p: Project => p.child
+    case p => p
   }
 
   private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {
     throw new IllegalStateException("Leaf node is expected")
   }
 
-  private def combineFilters(plan: LogicalPlan): LogicalPlan = {
+  private def combineFilters(plan: LogicalPlan) = {
     @tailrec
     def iterate(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
       if (acc.fastEquals(plan)) acc else iterate(acc, CombineFilters(acc))
