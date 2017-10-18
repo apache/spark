@@ -204,7 +204,6 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
 
   override def children: Seq[Expression] = value +: list
   lazy val inSetConvertible = list.forall(_.isInstanceOf[Literal])
-  lazy val isListEmpty = list.isEmpty
   private lazy val ordering = TypeUtils.getInterpretedOrdering(value.dataType)
 
   override def nullable: Boolean = children.exists(_.nullable)
