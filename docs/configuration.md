@@ -748,9 +748,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.eventLog.buffer.kb</code></td>
-  <td>100</td>
+  <td>100k</td>
   <td>
-    Buffer size to use when writing to output streams.Buffer size in KB.
+    Buffer size in KB to use when writing to output streams.
   </td>
 </tr>
 <tr>
