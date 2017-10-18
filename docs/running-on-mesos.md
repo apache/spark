@@ -503,7 +503,9 @@ See the [configuration page](configuration.html) for information on Spark config
     spark.mesos.driver.secret.names or spark.mesos.driver.secret.values will be
     written to the provided file. Paths are relative to the container's work
     directory.  Absolute paths must already exist.  Consult the Mesos Secret
-    protobuf for more information. Example:
+    protobuf for more information. Note: File-based secrets require a custom
+    <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+    module</a>. Example:
     
     <pre>filename1,filename2</pre>
   </td>
@@ -548,7 +550,9 @@ See the [configuration page](configuration.html) for information on Spark config
     spark.mesos.executor.secret.names or spark.mesos.executor.secret.values will be
     written to the provided file. Paths are relative to the container's work
     directory.  Absolute paths must already exist.  Consult the Mesos Secret
-    protobuf for more information. Example:
+    protobuf for more information. Note: File-based secrets require a custom
+    <a href="http://mesos.apache.org/documentation/latest/secrets/">SecretResolver
+    module</a>. Example:
     
     <pre>filename1,filename2</pre>
   </td>

@@ -127,7 +127,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   def buildContainerInfo(conf: SparkConf):
-  ContainerInfo.Builder = {
+    ContainerInfo.Builder = {
     val containerType = if (conf.contains("spark.mesos.executor.docker.image") &&
       conf.get("spark.mesos.containerizer", "docker") == "docker") {
       ContainerInfo.Type.DOCKER
@@ -242,7 +242,7 @@ private[mesos] object MesosSchedulerBackendUtil extends Logging {
   }
 
   def getSecretEnvVar(conf: SparkConf, secretConfig: MesosSecretConfig):
-  List[Variable] = {
+    List[Variable] = {
     val secrets = getSecrets(conf, secretConfig)
     val secretEnvKeys = conf.get(secretConfig.SECRET_ENVKEYS).getOrElse(Nil)
     if (illegalSecretInput(secretEnvKeys, secrets)) {
