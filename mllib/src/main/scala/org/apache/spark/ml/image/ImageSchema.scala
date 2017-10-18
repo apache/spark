@@ -47,9 +47,9 @@ object ImageSchema {
   )
 
   /**
-   * Schema for the image column: Row(String, Int, Int, Int, Array[Byte])
+   * Schema for the image column: Row(String, Int, Int, Int, Int, Array[Byte])
    */
-  private val columnSchema = StructType(
+  val columnSchema = StructType(
     StructField(imageFields(0), StringType, true) ::
     StructField(imageFields(1), IntegerType, false) ::
     StructField(imageFields(2), IntegerType, false) ::
@@ -227,8 +227,9 @@ object ImageSchema {
       }
 
     val oldRecursiveFlag = RecursiveFlag.setRecursiveFlag(Some(recursive.toString), session)
+    val sampleImages = sampleRatio < 1
     val oldPathFilter: Option[Class[_]] =
-      if (sampleRatio < 1) {
+      if (sampleImages) {
         SamplePathFilter.setPathFilter(Some(classOf[SamplePathFilter]), sampleRatio, session)
       } else {
         None
@@ -249,7 +250,9 @@ object ImageSchema {
     } finally {
       // return Hadoop flags to the original values
       RecursiveFlag.setRecursiveFlag(oldRecursiveFlag, session)
-      SamplePathFilter.unsetPathFilter(oldPathFilter, session)
+      if (sampleImages) {
+        SamplePathFilter.unsetPathFilter(oldPathFilter, session)
+      }
     }
   }
 }
