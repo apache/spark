@@ -1669,6 +1669,16 @@ def from_arrow_schema(arrow_schema):
          for field in arrow_schema])
 
 
+def _cast_pandas_series_type(series, arrow_type):
+    """ Cast a pandas.Series to the given arrow_type
+    """
+    to_pandas_dtype = arrow_type.to_pandas_dtype()
+    if series.dtype == to_pandas_dtype:
+        return series
+    else:
+        return series.fillna(0).astype(to_pandas_dtype, copy=False)
+
+
 def _test():
     import doctest
     from pyspark.context import SparkContext

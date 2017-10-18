@@ -422,23 +422,45 @@ class SparkSession(object):
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
         from pyspark.serializers import ArrowSerializer
-        from pyspark.sql.types import from_arrow_schema, to_arrow_schema
+        from pyspark.sql.types import from_arrow_schema, to_arrow_type, _cast_pandas_series_type
         import pyarrow as pa
 
         # Slice the DataFrame into batches
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
-        arrow_schema = to_arrow_schema(schema) if schema is not None else None
-        batches = [pa.RecordBatch.from_pandas(pdf_slice, schema=arrow_schema, preserve_index=False)
-                   for pdf_slice in pdf_slices]
 
-        # Verify schema, there will be at least 1 batch from pandas.DataFrame
-        schema_from_arrow = from_arrow_schema(batches[0].schema)
-        if schema is not None and schema != schema_from_arrow:
-            raise ValueError("Supplied schema does not match result from Arrow\nsupplied: " +
-                             "%s\n!=\nfrom Arrow: %s" % (str(schema), str(schema_from_arrow)))
+        if schema is None:
+            batches = [pa.RecordBatch.from_pandas(pdf_slice, preserve_index=False)
+                       for pdf_slice in pdf_slices]
+            schema = from_arrow_schema(batches[0].schema)  # there is at least 1 batch after slicing
         else:
-            schema = schema_from_arrow
+            batches = []
+            for i, pdf_slice in enumerate(pdf_slices):
+
+                # convert to series to pyarrow.Arrays to use mask when creating Arrow batches
+                arrs = []
+                names = []
+                for c, (_, series) in enumerate(pdf_slice.iteritems()):
+                    field = schema[c]
+                    names.append(field.name)
+                    t = to_arrow_type(field.dataType)
+                    try:
+                        # NOTE: casting is not necessary with Arrow >= 0.7
+                        arrs.append(pa.Array.from_pandas(_cast_pandas_series_type(series, t),
+                                                         mask=series.isnull(), type=t))
+                    except ValueError as e:
+                        warnings.warn("Arrow will not be used in createDataFrame: %s" % str(e))
+                        return None
+                batches.append(pa.RecordBatch.from_arrays(arrs, names))
+
+                # Verify schema of first batch, return None if not equal and fallback without Arrow
+                if i == 0:
+                    schema_from_arrow = from_arrow_schema(batches[i].schema)
+                    if schema != schema_from_arrow:
+                        warnings.warn("Arrow will not be used in createDataFrame.\n" +
+                                      "Supplied schema: %s\n!=\nArrow schema: %s"
+                                      % (str(schema), str(schema_from_arrow)))
+                        return None
 
         # Create the Spark DataFrame directly from the Arrow data and schema
         jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
@@ -546,11 +568,13 @@ class SparkSession(object):
         if has_pandas and isinstance(data, pandas.DataFrame):
             if self.conf.get("spark.sql.execution.arrow.enabled", "false").lower() == "true" \
                     and len(data) > 0:
-                return self._createFromPandasWithArrow(data, schema)
-            else:
-                if schema is None:
-                    schema = [str(x) for x in data.columns]
-                data = [r.tolist() for r in data.to_records(index=False)]
+                df = self._createFromPandasWithArrow(data, schema)
+                # Fallback to create DataFrame without arrow if return None
+                if df is not None:
+                    return df
+            if schema is None:
+                schema = [str(x) for x in data.columns]
+            data = [r.tolist() for r in data.to_records(index=False)]
 
         if isinstance(schema, StructType):
             verify_func = _make_type_verifier(schema) if verifySchema else lambda _: True

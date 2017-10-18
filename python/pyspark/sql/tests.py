@@ -3178,7 +3178,7 @@ class ArrowTests(ReusedPySparkTestCase):
         pdf = self.createPandasDataFrameFromData()
         wrong_schema = StructType([field for field in reversed(self.schema)])
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, ".*schema.*not.*match"):
+            with self.assertRaisesRegexp(TypeError, ".*field.*can.not.accept.*type"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
     def test_schema_conversion_roundtrip(self):
