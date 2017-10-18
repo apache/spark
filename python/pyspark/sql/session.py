@@ -418,11 +418,9 @@ class SparkSession(object):
     def _createFromPandasWithArrow(self, pdf, schema):
         """
         Create a DataFrame from a given pandas.DataFrame by slicing it into partitions, converting
-        to Arrow data, then reading into the JVM to parallelize. If a schema is passed in, the
+        to Arrow data, then sending to the JVM to parallelize. If a schema is passed in, the
         data types will be used to coerce the data in Pandas to Arrow conversion.
         """
-        import os
-        from tempfile import NamedTemporaryFile
         from pyspark.serializers import ArrowSerializer
         from pyspark.sql.types import from_arrow_schema, to_arrow_schema
         import pyarrow as pa
@@ -434,18 +432,6 @@ class SparkSession(object):
         batches = [pa.RecordBatch.from_pandas(pdf_slice, schema=arrow_schema, preserve_index=False)
                    for pdf_slice in pdf_slices]
 
-        # write batches to temp file, read by JVM (borrowed from context.parallelize)
-        tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
-        try:
-            serializer = ArrowSerializer()
-            serializer.dump_stream(batches, tempFile)
-            tempFile.close()
-            readRDDFromFile = self._jvm.PythonRDD.readRDDFromFile
-            jrdd = readRDDFromFile(self._jsc, tempFile.name, len(batches))
-        finally:
-            # readRDDFromFile eagerily reads the file so we can delete right after.
-            os.unlink(tempFile.name)
-
         # Verify schema, there will be at least 1 batch from pandas.DataFrame
         schema_from_arrow = from_arrow_schema(batches[0].schema)
         if schema is not None and schema != schema_from_arrow:
@@ -455,6 +441,7 @@ class SparkSession(object):
             schema = schema_from_arrow
 
         # Create the Spark DataFrame directly from the Arrow data and schema
+        jrdd = self._sc._serialize_to_jvm(batches, len(batches), ArrowSerializer())
         jdf = self._jvm.PythonSQLUtils.arrowPayloadToDataFrame(
             jrdd, schema.json(), self._wrapped._jsqlContext)
         df = DataFrame(jdf, self._wrapped)
