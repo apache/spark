@@ -19,35 +19,46 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Dataset, Row, SparkSession}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
-import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.command.RunnableCommand
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.sources.v2.writer._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.Utils
 
-case class WriteToDataSourceV2Command(writer: DataSourceV2Writer, query: LogicalPlan)
-  extends RunnableCommand {
+/**
+ * The logical plan for writing data into data source v2.
+ */
+case class WriteToDataSourceV2(writer: DataSourceV2Writer, query: LogicalPlan) extends LogicalPlan {
+  override def children: Seq[LogicalPlan] = Seq(query)
+  override def output: Seq[Attribute] = Nil
+}
 
-  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
+/**
+ * The physical plan for writing data into data source v2.
+ */
+case class WriteToDataSourceV2Exec(writer: DataSourceV2Writer, query: SparkPlan) extends SparkPlan {
+  override def children: Seq[SparkPlan] = Seq(query)
+  override def output: Seq[Attribute] = Nil
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
+  override protected def doExecute(): RDD[InternalRow] = {
     val writeTask = writer match {
       case w: SupportsWriteInternalRow => w.createInternalRowWriterFactory()
       case _ => new RowToInternalRowDataWriterFactory(writer.createWriterFactory(), query.schema)
     }
 
-    val rdd = Dataset.ofRows(sparkSession, query).queryExecution.toRdd
+    val rdd = query.execute()
     val messages = new Array[WriterCommitMessage](rdd.partitions.length)
 
     logInfo(s"Start processing data source writer: $writer. " +
       s"The input RDD has ${messages.length} partitions.")
 
     try {
-      sparkSession.sparkContext.runJob(
+      sparkContext.runJob(
         rdd,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
           DataWritingSparkTask.run(writeTask, context, iter),
@@ -73,7 +84,7 @@ case class WriteToDataSourceV2Command(writer: DataSourceV2Writer, query: Logical
         throw new SparkException("Writing job aborted.", cause)
     }
 
-    Nil
+    sparkContext.emptyRDD
   }
 }
 

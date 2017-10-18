@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2Command
+import org.apache.spark.sql.execution.datasources.v2.WriteToDataSourceV2
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.sources.v2.{DataSourceV2, DataSourceV2Options, WriteSupport}
 import org.apache.spark.sql.types.StructType
@@ -241,7 +241,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           val writer = ds.createWriter(df.logicalPlan.schema, mode, options)
           if (writer.isPresent) {
             runCommand(df.sparkSession, "save") {
-              WriteToDataSourceV2Command(writer.get(), df.logicalPlan)
+              WriteToDataSourceV2(writer.get(), df.logicalPlan)
             }
           }
 
