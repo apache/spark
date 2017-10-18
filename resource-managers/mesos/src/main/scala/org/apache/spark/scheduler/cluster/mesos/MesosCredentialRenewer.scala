@@ -35,14 +35,22 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.UpdateDel
 import org.apache.spark.util.ThreadUtils
 
 
+/**
+ * The MesosCredentialRenewer will update the Hadoop credentials for Spark drivers accessing
+ * secured services using Kerberos authentication. It is modeled after the YARN AMCredential
+ * renewer, and simiarly will renew the Credentials when 75% of the renewal interval has passed.
+ * The principal difference is that instead of writing the new credentials to HDFS and
+ * incrementing the timestamp of the file, the new credentials (called Tokens when they are
+ * serialized) are broadcast to all running executors. On the executor side, when new Tokens are
+ * recieved they overwrite the current credentials.
+ */
 class MesosCredentialRenewer(
     conf: SparkConf,
     tokenManager: HadoopDelegationTokenManager,
     nextRenewal: Long,
-    de: RpcEndpointRef) extends Logging {
+    driverEndpoint: RpcEndpointRef) extends Logging {
   private val credentialRenewerThread =
-    Executors.newSingleThreadScheduledExecutor(
-      ThreadUtils.namedThreadFactory("Credential Refresh Thread"))
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Renewal Thread")
 
   @volatile private var timeOfNextRenewal = nextRenewal
 
@@ -137,7 +145,7 @@ class MesosCredentialRenewer(
   private def broadcastDelegationTokens(tokens: Array[Byte]): Unit = {
     // send token to existing executors
     logInfo("Sending new tokens to all executors")
-    de.send(UpdateDelegationTokens(tokens))
+    driverEndpoint.send(UpdateDelegationTokens(tokens))
   }
 }
 

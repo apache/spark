@@ -59,8 +59,7 @@ private[yarn] class AMCredentialRenewer(
   private var lastCredentialsFileSuffix = 0
 
   private val credentialRenewer =
-    Executors.newSingleThreadScheduledExecutor(
-      ThreadUtils.namedThreadFactory("Credential Refresh Thread"))
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("Credential Refresh Thread")
 
   private val hadoopUtil = YarnSparkHadoopUtil.get
 
