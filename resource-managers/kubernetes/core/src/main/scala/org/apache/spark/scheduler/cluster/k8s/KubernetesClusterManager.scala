@@ -41,25 +41,25 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val sparkConf = sc.getConf
 
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
-        KUBERNETES_MASTER_INTERNAL_URL,
-        Some(sparkConf.get(KUBERNETES_NAMESPACE)),
-        APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
-        sparkConf,
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
-        Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
+      KUBERNETES_MASTER_INTERNAL_URL,
+      Some(sparkConf.get(KUBERNETES_NAMESPACE)),
+      APISERVER_AUTH_DRIVER_MOUNTED_CONF_PREFIX,
+      sparkConf,
+      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_TOKEN_PATH)),
+      Some(new File(Config.KUBERNETES_SERVICE_ACCOUNT_CA_CRT_PATH)))
 
     val executorPodFactory = new ExecutorPodFactoryImpl(sparkConf)
     val allocatorExecutor = ThreadUtils
-        .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
+      .newDaemonSingleThreadScheduledExecutor("kubernetes-pod-allocator")
     val requestExecutorsService = ThreadUtils.newDaemonCachedThreadPool(
-        "kubernetes-executor-requests")
+      "kubernetes-executor-requests")
     new KubernetesClusterSchedulerBackend(
-        scheduler.asInstanceOf[TaskSchedulerImpl],
-        sc.env.rpcEnv,
-        executorPodFactory,
-        kubernetesClient,
-        allocatorExecutor,
-        requestExecutorsService)
+      scheduler.asInstanceOf[TaskSchedulerImpl],
+      sc.env.rpcEnv,
+      executorPodFactory,
+      kubernetesClient,
+      allocatorExecutor,
+      requestExecutorsService)
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

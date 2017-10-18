@@ -49,38 +49,38 @@ private[spark] object SparkKubernetesClientFactory {
       .orElse(maybeServiceAccountToken)
     val oauthTokenValue = sparkConf.getOption(oauthTokenConf)
     ConfigurationUtils.requireNandDefined(
-        oauthTokenFile,
-        oauthTokenValue,
-        s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a" +
-            s" value $oauthTokenConf.")
+      oauthTokenFile,
+      oauthTokenValue,
+      s"Cannot specify OAuth token through both a file $oauthTokenFileConf and a" +
+        s" value $oauthTokenConf.")
 
     val caCertFile = sparkConf
-        .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
-        .orElse(maybeServiceAccountCaCert.map(_.getAbsolutePath))
+      .getOption(s"$kubernetesAuthConfPrefix.$CA_CERT_FILE_CONF_SUFFIX")
+      .orElse(maybeServiceAccountCaCert.map(_.getAbsolutePath))
     val clientKeyFile = sparkConf
-        .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
+      .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_KEY_FILE_CONF_SUFFIX")
     val clientCertFile = sparkConf
-        .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
+      .getOption(s"$kubernetesAuthConfPrefix.$CLIENT_CERT_FILE_CONF_SUFFIX")
     val dispatcher = new Dispatcher(
-        ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
+      ThreadUtils.newDaemonCachedThreadPool("kubernetes-dispatcher"))
     val config = new ConfigBuilder()
-        .withApiVersion("v1")
-        .withMasterUrl(master)
-        .withWebsocketPingInterval(0)
-        .withOption(oauthTokenValue) {
-          (token, configBuilder) => configBuilder.withOauthToken(token)
-        }.withOption(oauthTokenFile) {
-          (file, configBuilder) =>
-              configBuilder.withOauthToken(Files.toString(file, Charsets.UTF_8))
-        }.withOption(caCertFile) {
-          (file, configBuilder) => configBuilder.withCaCertFile(file)
-        }.withOption(clientKeyFile) {
-          (file, configBuilder) => configBuilder.withClientKeyFile(file)
-        }.withOption(clientCertFile) {
-          (file, configBuilder) => configBuilder.withClientCertFile(file)
-        }.withOption(namespace) {
-          (ns, configBuilder) => configBuilder.withNamespace(ns)
-        }.build()
+      .withApiVersion("v1")
+      .withMasterUrl(master)
+      .withWebsocketPingInterval(0)
+      .withOption(oauthTokenValue) {
+        (token, configBuilder) => configBuilder.withOauthToken(token)
+      }.withOption(oauthTokenFile) {
+        (file, configBuilder) =>
+            configBuilder.withOauthToken(Files.toString(file, Charsets.UTF_8))
+      }.withOption(caCertFile) {
+        (file, configBuilder) => configBuilder.withCaCertFile(file)
+      }.withOption(clientKeyFile) {
+        (file, configBuilder) => configBuilder.withClientKeyFile(file)
+      }.withOption(clientCertFile) {
+        (file, configBuilder) => configBuilder.withClientCertFile(file)
+      }.withOption(namespace) {
+        (ns, configBuilder) => configBuilder.withNamespace(ns)
+      }.build()
     val baseHttpClient = HttpClientUtils.createHttpClient(config)
     val httpClientWithCustomDispatcher = baseHttpClient.newBuilder()
       .dispatcher(dispatcher)

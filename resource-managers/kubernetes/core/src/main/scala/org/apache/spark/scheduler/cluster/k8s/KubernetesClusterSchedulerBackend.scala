@@ -65,7 +65,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     .getOrElse(
       throw new SparkException("Must specify the driver pod name"))
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
-      requestExecutorsService)
+    requestExecutorsService)
 
   private val driverPod = try {
     kubernetesClient.pods()
@@ -89,9 +89,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
   protected var totalExpectedExecutors = new AtomicInteger(0)
 
   private val driverUrl = RpcEndpointAddress(
-      conf.get("spark.driver.host"),
-      conf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
-      CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
+    conf.get("spark.driver.host"),
+    conf.getInt("spark.driver.port", DEFAULT_DRIVER_PORT),
+    CoarseGrainedSchedulerBackend.ENDPOINT_NAME).toString
 
   private val initialExecutors = getInitialTargetExecutorNumber()
 
@@ -121,7 +121,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
         } else {
           val nodeToLocalTaskCount = getNodesWithLocalTaskCounts
           for (i <- 0 until math.min(
-              totalExpectedExecutors.get - runningExecutorsToPods.size, podAllocationSize)) {
+            totalExpectedExecutors.get - runningExecutorsToPods.size, podAllocationSize)) {
             val (executorId, pod) = allocateNewExecutorPod(nodeToLocalTaskCount)
             runningExecutorsToPods.put(executorId, pod)
             runningPodsToExecutors.put(pod.getMetadata.getName, executorId)
@@ -202,13 +202,13 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def start(): Unit = {
     super.start()
     executorWatchResource.set(
-        kubernetesClient
-            .pods()
-            .withLabel(SPARK_APP_ID_LABEL, applicationId())
-            .watch(new ExecutorPodsWatcher()))
+      kubernetesClient
+        .pods()
+        .withLabel(SPARK_APP_ID_LABEL, applicationId())
+        .watch(new ExecutorPodsWatcher()))
 
     allocatorExecutor.scheduleWithFixedDelay(
-        allocatorRunnable, 0L, podAllocationInterval, TimeUnit.SECONDS)
+      allocatorRunnable, 0L, podAllocationInterval, TimeUnit.SECONDS)
 
     if (!Utils.isDynamicAllocationEnabled(conf)) {
       doRequestTotalExecutors(initialExecutors)
@@ -281,12 +281,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def allocateNewExecutorPod(nodeToLocalTaskCount: Map[String, Int]): (String, Pod) = {
     val executorId = EXECUTOR_ID_COUNTER.incrementAndGet().toString
     val executorPod = executorPodFactory.createExecutorPod(
-        executorId,
-        applicationId(),
-        driverUrl,
-        conf.getExecutorEnv,
-        driverPod,
-        nodeToLocalTaskCount)
+      executorId,
+      applicationId(),
+      driverUrl,
+      conf.getExecutorEnv,
+      driverPod,
+      nodeToLocalTaskCount)
     try {
       (executorId, kubernetesClient.pods.create(executorPod))
     } catch {

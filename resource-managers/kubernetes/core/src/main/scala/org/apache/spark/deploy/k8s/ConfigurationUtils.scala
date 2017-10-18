@@ -35,16 +35,18 @@ private[spark] object ConfigurationUtils {
   }
 
   def requireBothOrNeitherDefined(
-    opt1: Option[_],
-    opt2: Option[_],
-    errMessageWhenFirstIsMissing: String,
-    errMessageWhenSecondIsMissing: String): Unit = {
+      opt1: Option[_],
+      opt2: Option[_],
+      errMessageWhenFirstIsMissing: String,
+      errMessageWhenSecondIsMissing: String): Unit = {
     requireSecondIfFirstIsDefined(opt1, opt2, errMessageWhenSecondIsMissing)
     requireSecondIfFirstIsDefined(opt2, opt1, errMessageWhenFirstIsMissing)
   }
 
   def requireSecondIfFirstIsDefined(
-    opt1: Option[_], opt2: Option[_], errMessageWhenSecondIsMissing: String): Unit = {
+      opt1: Option[_],
+      opt2: Option[_],
+      errMessageWhenSecondIsMissing: String): Unit = {
     opt1.foreach { _ =>
       require(opt2.isDefined, errMessageWhenSecondIsMissing)
     }

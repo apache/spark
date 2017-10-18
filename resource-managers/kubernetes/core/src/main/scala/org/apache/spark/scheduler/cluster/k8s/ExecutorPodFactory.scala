@@ -26,8 +26,10 @@ import org.apache.spark.deploy.k8s.config._
 import org.apache.spark.deploy.k8s.constants._
 import org.apache.spark.util.Utils
 
-// Configures executor pods. Construct one of these with a SparkConf to set up properties that are
-// common across all executors. Then, pass in dynamic parameters into createExecutorPod.
+/**
+ * Configures executor pods. Construct one of these with a SparkConf to set up properties that are
+ * common across all executors. Then, pass in dynamic parameters into createExecutorPod.
+ */
 private[spark] trait ExecutorPodFactory {
   def createExecutorPod(
       executorId: String,
@@ -44,52 +46,52 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
   import ExecutorPodFactoryImpl._
 
   private val executorExtraClasspath = sparkConf.get(
-      org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
+    org.apache.spark.internal.config.EXECUTOR_CLASS_PATH)
   private val executorJarsDownloadDir = sparkConf.get(INIT_CONTAINER_JARS_DOWNLOAD_LOCATION)
 
   private val executorLabels = ConfigurationUtils.parsePrefixedKeyValuePairs(
-      sparkConf,
-      KUBERNETES_EXECUTOR_LABEL_PREFIX,
-      "executor label")
+    sparkConf,
+    KUBERNETES_EXECUTOR_LABEL_PREFIX,
+    "executor label")
   require(
-      !executorLabels.contains(SPARK_APP_ID_LABEL),
-      s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is reserved for Spark.")
+    !executorLabels.contains(SPARK_APP_ID_LABEL),
+    s"Custom executor labels cannot contain $SPARK_APP_ID_LABEL as it is reserved for Spark.")
   require(
-      !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
-      s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
-        s" Spark.")
+    !executorLabels.contains(SPARK_EXECUTOR_ID_LABEL),
+    s"Custom executor labels cannot contain $SPARK_EXECUTOR_ID_LABEL as it is reserved for" +
+      s" Spark.")
 
   private val executorAnnotations =
-      ConfigurationUtils.parsePrefixedKeyValuePairs (
-          sparkConf,
-          KUBERNETES_EXECUTOR_ANNOTATION_PREFIX,
-          "executor annotation")
+    ConfigurationUtils.parsePrefixedKeyValuePairs(
+      sparkConf,
+      KUBERNETES_EXECUTOR_ANNOTATION_PREFIX,
+      "executor annotation")
   private val nodeSelector =
-      ConfigurationUtils.parsePrefixedKeyValuePairs(
-          sparkConf,
-          KUBERNETES_NODE_SELECTOR_PREFIX,
-          "node selector")
+    ConfigurationUtils.parsePrefixedKeyValuePairs(
+      sparkConf,
+      KUBERNETES_NODE_SELECTOR_PREFIX,
+      "node selector")
 
   private val executorDockerImage = sparkConf.get(EXECUTOR_DOCKER_IMAGE)
   private val dockerImagePullPolicy = sparkConf.get(DOCKER_IMAGE_PULL_POLICY)
   private val executorPort = sparkConf.getInt("spark.executor.port", DEFAULT_STATIC_PORT)
   private val blockmanagerPort = sparkConf
-      .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
+    .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
   private val kubernetesDriverPodName = sparkConf
-      .get(KUBERNETES_DRIVER_POD_NAME)
-      .getOrElse(throw new SparkException("Must specify the driver pod name"))
+    .get(KUBERNETES_DRIVER_POD_NAME)
+    .getOrElse(throw new SparkException("Must specify the driver pod name"))
 
   private val executorPodNamePrefix = sparkConf.get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
 
   private val executorMemoryMiB = sparkConf.get(org.apache.spark.internal.config.EXECUTOR_MEMORY)
   private val executorMemoryString = sparkConf.get(
-      org.apache.spark.internal.config.EXECUTOR_MEMORY.key,
-      org.apache.spark.internal.config.EXECUTOR_MEMORY.defaultValueString)
+    org.apache.spark.internal.config.EXECUTOR_MEMORY.key,
+    org.apache.spark.internal.config.EXECUTOR_MEMORY.defaultValueString)
 
   private val memoryOverheadMiB = sparkConf
-      .get(KUBERNETES_EXECUTOR_MEMORY_OVERHEAD)
-      .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toInt,
-        MEMORY_OVERHEAD_MIN_MIB))
+    .get(KUBERNETES_EXECUTOR_MEMORY_OVERHEAD)
+    .getOrElse(math.max((MEMORY_OVERHEAD_FACTOR * executorMemoryMiB).toInt,
+      MEMORY_OVERHEAD_MIN_MIB))
   private val executorMemoryWithOverhead = executorMemoryMiB + memoryOverheadMiB
 
   private val executorCores = sparkConf.getDouble("spark.executor.cores", 1d)
@@ -109,10 +111,10 @@ private[spark] class ExecutorPodFactoryImpl(sparkConf: SparkConf)
     // executorId and applicationId
     val hostname = name.substring(Math.max(0, name.length - 63))
     val resolvedExecutorLabels = Map(
-        SPARK_EXECUTOR_ID_LABEL -> executorId,
-        SPARK_APP_ID_LABEL -> applicationId,
-        SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++
-        executorLabels
+      SPARK_EXECUTOR_ID_LABEL -> executorId,
+      SPARK_APP_ID_LABEL -> applicationId,
+      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE) ++
+      executorLabels
     val executorMemoryQuantity = new QuantityBuilder(false)
       .withAmount(s"${executorMemoryMiB}Mi")
       .build()
