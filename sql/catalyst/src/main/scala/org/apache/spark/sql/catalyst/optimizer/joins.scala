@@ -155,7 +155,9 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
 
 /**
  * A rule that uses propagated constraints to infer join conditions. The optimization is applicable
- * only to CROSS joins.
+ * only to CROSS joins. For other join types, adding inferred join conditions would potentially
+ * shuffle children as child node's partitioning won't satisfy the JOIN node's requirements
+ * which otherwise could have.
  *
  * For instance, if there is a CROSS join, where the left relation has 'a = 1' and the right
  * relation has 'b = 1', then the rule infers 'a = b' as a join predicate.
