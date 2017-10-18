@@ -292,7 +292,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     def assertWrongTimeoutError(test: => Unit): Unit = {
       val e = intercept[UnsupportedOperationException] { test }
       assert(e.getMessage.contains(
-        "Cannot get event time watermark timestamp without enabling setting watermark"))
+        "Cannot get event time watermark timestamp without setting watermark"))
     }
 
     for (timeoutConf <- Seq(NoTimeout, EventTimeTimeout, ProcessingTimeTimeout)) {
@@ -333,7 +333,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
           .getCurrentProcessingTimeMs() === 2000)
 
         // Tests for getCurrentProcessingTimeMs in batch queries
-        assert(batchState(timeoutConf, watermarkPresent).getCurrentProcessingTimeMs() === -1)
+        val currentTime = System.currentTimeMillis()
+        assert(batchState(timeoutConf, watermarkPresent).getCurrentProcessingTimeMs >= currentTime)
       }
     }
   }
@@ -726,7 +727,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
   test("flatMapGroupsWithState - batch") {
     // Function that returns running count only if its even, otherwise does not return
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() == -1 }
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() > 0 }
       assertCannotGetWatermark { state.getCurrentWatermarkMs() }
 
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")
@@ -891,7 +892,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest with BeforeAndAf
     // - works with primitive state type
     // - can get processing time
     val stateFunc = (key: String, values: Iterator[String], state: GroupState[Int]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() == -1 }
+      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() > 0 }
       assertCannotGetWatermark { state.getCurrentWatermarkMs() }
 
       if (state.exists) throw new IllegalArgumentException("state.exists should be false")

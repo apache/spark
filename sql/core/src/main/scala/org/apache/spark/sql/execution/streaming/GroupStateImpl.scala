@@ -134,7 +134,7 @@ private[sql] class GroupStateImpl[S] private(
   override def getCurrentWatermarkMs(): Long = {
     if (!watermarkPresent) {
       throw new UnsupportedOperationException(
-        "Cannot get event time watermark timestamp without enabling setting watermark before " +
+        "Cannot get event time watermark timestamp without setting watermark before " +
           "[map|flatMap]GroupsWithState")
     }
     eventTimeWatermarkMs
@@ -213,7 +213,7 @@ private[sql] object GroupStateImpl {
       watermarkPresent: Boolean): GroupStateImpl[Any] = {
     new GroupStateImpl[Any](
       optionalValue = None,
-      batchProcessingTimeMs = NO_TIMESTAMP,
+      batchProcessingTimeMs = System.currentTimeMillis,
       eventTimeWatermarkMs = NO_TIMESTAMP,
       timeoutConf,
       hasTimedOut = false,

@@ -213,7 +213,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
 
   /**
    * Whether the function has been called because the key has timed out.
-   * @note This can return true only when timeouts are enabled in `[map/flatmap]GroupsWithState`.
+   * @note This can return true only when timeouts are enabled in `[map/flatMap]GroupsWithState`.
    */
   def hasTimedOut: Boolean
 
@@ -222,7 +222,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * Set the timeout duration in ms for this key.
    *
    * @note [[GroupStateTimeout Processing time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
+   *       `[map/flatMap]GroupsWithState` for calling this method.
    * @note This method has no effect when used in a batch query.
    */
   @throws[IllegalArgumentException]("if 'durationMs' is not positive")
@@ -235,7 +235,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * Set the timeout duration for this key as a string. For example, "1 hour", "2 days", etc.
    *
    * @note [[GroupStateTimeout Processing time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
+   *       `[map/flatMap]GroupsWithState` for calling this method.
    * @note This method has no effect when used in a batch query.
    */
   @throws[IllegalArgumentException]("if 'duration' is not a valid duration")
@@ -249,7 +249,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * This timestamp cannot be older than the current watermark.
    *
    * @note [[GroupStateTimeout Event time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
+   *       `[map/flatMap]GroupsWithState` for calling this method.
    * @note This method has no effect when used in a batch query.
    */
   @throws[IllegalArgumentException](
@@ -266,7 +266,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * current watermark.
    *
    * @note [[GroupStateTimeout Event time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
+   *       `[map/flatMap]GroupsWithState` for calling this method.
    * @note This method has no side effect when used in a batch query.
    */
   @throws[IllegalArgumentException](
@@ -282,7 +282,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * This timestamp cannot be older than the current watermark.
    *
    * @note [[GroupStateTimeout Event time timeout]] must be enabled in
-   *       `[map/flatmap]GroupsWithState` for calling this method.
+   *       `[map/flatMap]GroupsWithState` for calling this method.
    * @note This method has no side effect when used in a batch query.
    */
   @throws[UnsupportedOperationException](
@@ -297,7 +297,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * current watermark.
    *
    * @note [[GroupStateTimeout Event time timeout]] must be enabled in
-   *      `[map/flatmap]GroupsWithState` for calling this method.
+   *      `[map/flatMap]GroupsWithState` for calling this method.
    * @note This method has no side effect when used in a batch query.
    */
   @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
@@ -310,7 +310,7 @@ trait GroupState[S] extends LogicalGroupState[S] {
    * Get the current event time watermark as milliseconds in epoch time.
    *
    * @note In a streaming query, this can be called only when watermark is set before calling
-   *       `[map/flatmap]GroupsWithState`. In a batch query, this method always returns -1.
+   *       `[map/flatMap]GroupsWithState`. In a batch query, this method always returns -1.
    */
   @throws[UnsupportedOperationException](
     "if watermark has not been set before in [map|flatMap]GroupsWithState")
@@ -318,9 +318,9 @@ trait GroupState[S] extends LogicalGroupState[S] {
 
 
   /**
-   * Get the current event time watermark.
-   *
-   * @note This method returns -1 when calling inside a batch query.
+   * Get the current processing time as milliseconds in epoch time.
+   * @note In a streaming query, this will return a constant value throughout the duration of a
+   *       trigger, even if the trigger is re-executed.
    */
   def getCurrentProcessingTimeMs(): Long
 }
