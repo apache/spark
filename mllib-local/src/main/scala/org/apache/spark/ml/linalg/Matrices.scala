@@ -476,6 +476,10 @@ class DenseMatrix @Since("2.0.0") (
 @Since("2.0.0")
 object DenseMatrix {
 
+  @Since("2.3.0")
+  private[ml] def unapply(dm: DenseMatrix): Option[(Int, Int, Array[Double], Boolean)] =
+    Some((dm.numRows, dm.numCols, dm.values, dm.isTransposed))
+
   /**
    * Generate a `DenseMatrix` consisting of zeros.
    * @param numRows number of rows of the matrix
@@ -826,6 +830,11 @@ class SparseMatrix @Since("2.0.0") (
  */
 @Since("2.0.0")
 object SparseMatrix {
+
+  @Since("2.3.0")
+  private[ml] def unapply(
+       sm: SparseMatrix): Option[(Int, Int, Array[Int], Array[Int], Array[Double], Boolean)] =
+    Some((sm.numRows, sm.numCols, sm.colPtrs, sm.rowIndices, sm.values, sm.isTransposed))
 
   /**
    * Generate a `SparseMatrix` from Coordinate List (COO) format. Input must be an array of

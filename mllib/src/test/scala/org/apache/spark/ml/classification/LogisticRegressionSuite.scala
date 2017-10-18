@@ -2769,6 +2769,20 @@ class LogisticRegressionSuite
       LogisticRegressionSuite.allParamSettings, checkModelData)
   }
 
+  test("read/write with BoundsOnCoefficients") {
+    def checkModelData(model: LogisticRegressionModel, model2: LogisticRegressionModel): Unit = {
+      assert(model.getLowerBoundsOnCoefficients === model2.getLowerBoundsOnCoefficients)
+      assert(model.getUpperBoundsOnCoefficients === model2.getUpperBoundsOnCoefficients)
+    }
+    val numFeatures = smallBinaryDataset.select("features").head().getAs[Vector](0).size
+    val lowerBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ / 1000.0).toArray)
+    val upperBounds = new DenseMatrix(1, numFeatures, (1 to numFeatures).map(_ * 1000.0).toArray)
+    val lr = new LogisticRegression()
+      .setLowerBoundsOnCoefficients(lowerBounds)
+      .setUpperBoundsOnCoefficients(upperBounds)
+    testEstimatorAndModelReadWrite(lr, smallBinaryDataset, Map.empty, Map.empty, checkModelData)
+  }
+
   test("should support all NumericType labels and weights, and not support other types") {
     val lr = new LogisticRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LogisticRegressionModel, LogisticRegression](
