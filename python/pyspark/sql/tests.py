@@ -3181,6 +3181,11 @@ class ArrowTests(ReusedPySparkTestCase):
             with self.assertRaisesRegexp(TypeError, ".*field.*can.not.accept.*type"):
                 self.spark.createDataFrame(pdf, schema=wrong_schema)
 
+    def test_createDataFrame_with_names(self):
+        pdf = self.createPandasDataFrameFromData()
+        df = self.spark.createDataFrame(pdf, schema=list('abcde'))
+        self.assertEquals(df.schema.fieldNames(), list('abcde'))
+
     def test_schema_conversion_roundtrip(self):
         from pyspark.sql.types import from_arrow_schema, to_arrow_schema
         arrow_schema = to_arrow_schema(self.schema)

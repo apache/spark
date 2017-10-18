@@ -429,10 +429,22 @@ class SparkSession(object):
         step = -(-len(pdf) // self.sparkContext.defaultParallelism)  # round int up
         pdf_slices = (pdf[start:start + step] for start in xrange(0, len(pdf), step))
 
-        if schema is None:
+        if schema is None or isinstance(schema, list):
             batches = [pa.RecordBatch.from_pandas(pdf_slice, preserve_index=False)
                        for pdf_slice in pdf_slices]
-            schema = from_arrow_schema(batches[0].schema)  # there is at least 1 batch after slicing
+
+            # There will be at least 1 batch after slicing the pandas.DataFrame
+            schema_from_arrow = from_arrow_schema(batches[0].schema)
+
+            # If passed schema as a list of names then rename fields
+            if isinstance(schema, list):
+                fields = []
+                for i, field in enumerate(schema_from_arrow):
+                    field.name = schema[i]
+                    fields.append(field)
+                schema = StructType(fields)
+            else:
+                schema = schema_from_arrow
         else:
             batches = []
             for i, pdf_slice in enumerate(pdf_slices):
