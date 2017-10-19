@@ -28,7 +28,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
   def roundtrip(dt: DataType): Unit = {
     dt match {
       case schema: StructType =>
-        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, None)) === schema)
+        assert(ArrowUtils.fromArrowSchema(ArrowUtils.toArrowSchema(schema, null)) === schema)
       case _ =>
         roundtrip(new StructType().add("value", dt))
     }
@@ -56,7 +56,7 @@ class ArrowUtilsSuite extends SparkFunSuite {
 
     def roundtripWithTz(timeZoneId: String): Unit = {
       val schema = new StructType().add("value", TimestampType)
-      val arrowSchema = ArrowUtils.toArrowSchema(schema, Option(timeZoneId))
+      val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)
       val fieldType = arrowSchema.findField("value").getType.asInstanceOf[ArrowType.Timestamp]
       assert(fieldType.getTimezone() === timeZoneId)
       assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)

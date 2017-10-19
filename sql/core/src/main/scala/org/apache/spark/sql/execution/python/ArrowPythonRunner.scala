@@ -44,7 +44,7 @@ class ArrowPythonRunner(
     evalType: Int,
     argOffsets: Array[Array[Int]],
     schema: StructType,
-    timeZoneId: Option[String])
+    timeZoneId: String)
   extends BasePythonRunner[Iterator[InternalRow], ColumnarBatch](
     funcs, bufferSize, reuseWorker, evalType, argOffsets) {
 

@@ -888,7 +888,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
       val df = data.toDF("timestamp")
 
-      collectAndValidate(df, json, "timestampData.json", Option("America/Los_Angeles"))
+      collectAndValidate(df, json, "timestampData.json", "America/Los_Angeles")
     }
   }
 
@@ -1728,7 +1728,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
     val schema = StructType(Seq(StructField("int", IntegerType, nullable = true)))
 
     val ctx = TaskContext.empty()
-    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, None, ctx)
+    val payloadIter = ArrowConverters.toPayloadIterator(inputRows.toIterator, schema, 0, null, ctx)
     val outputRowIter = ArrowConverters.fromPayloadIterator(payloadIter, ctx)
 
     assert(schema.equals(outputRowIter.schema))
@@ -1748,7 +1748,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
 
   /** Test that a converted DataFrame to Arrow record batch equals batch read from JSON file */
   private def collectAndValidate(
-      df: DataFrame, json: String, file: String, timeZoneId: Option[String] = None): Unit = {
+      df: DataFrame, json: String, file: String, timeZoneId: String = null): Unit = {
     // NOTE: coalesce to single partition because can only load 1 batch in validator
     val arrowPayload = df.coalesce(1).toArrowPayload.collect().head
     val tempFile = new File(tempDataPath, file)
@@ -1760,7 +1760,7 @@ class ArrowConvertersSuite extends SharedSQLContext with BeforeAndAfterAll {
       sparkSchema: StructType,
       arrowPayload: ArrowPayload,
       jsonFile: File,
-      timeZoneId: Option[String] = None): Unit = {
+      timeZoneId: String = null): Unit = {
     val allocator = new RootAllocator(Long.MaxValue)
     val jsonReader = new JsonFileReader(jsonFile, allocator)
 

@@ -74,7 +74,7 @@ private[sql] object ArrowConverters {
       rowIter: Iterator[InternalRow],
       schema: StructType,
       maxRecordsPerBatch: Int,
-      timeZoneId: Option[String],
+      timeZoneId: String,
       context: TaskContext): Iterator[ArrowPayload] = {
 
     val arrowSchema = ArrowUtils.toArrowSchema(schema, timeZoneId)

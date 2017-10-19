@@ -32,7 +32,7 @@ object ArrowUtils {
   // todo: support more types.
 
   /** Maps data type from Spark to Arrow. NOTE: timeZoneId required for TimestampTypes */
-  def toArrowType(dt: DataType, timeZoneId: Option[String]): ArrowType = dt match {
+  def toArrowType(dt: DataType, timeZoneId: String): ArrowType = dt match {
     case BooleanType => ArrowType.Bool.INSTANCE
     case ByteType => new ArrowType.Int(8, true)
     case ShortType => new ArrowType.Int(8 * 2, true)
@@ -45,10 +45,10 @@ object ArrowUtils {
     case DecimalType.Fixed(precision, scale) => new ArrowType.Decimal(precision, scale)
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
-      timeZoneId match {
-        case Some(id) => new ArrowType.Timestamp(TimeUnit.MICROSECOND, id)
-        case None =>
-          throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+      if (timeZoneId == null) {
+        throw new UnsupportedOperationException("TimestampType must supply timeZoneId parameter")
+      } else {
+        new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
     case _ => throw new UnsupportedOperationException(s"Unsupported data type: ${dt.simpleString}")
   }
@@ -73,7 +73,7 @@ object ArrowUtils {
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */
   def toArrowField(
-      name: String, dt: DataType, nullable: Boolean, timeZoneId: Option[String]): Field = {
+      name: String, dt: DataType, nullable: Boolean, timeZoneId: String): Field = {
     dt match {
       case ArrayType(elementType, containsNull) =>
         val fieldType = new FieldType(nullable, ArrowType.List.INSTANCE, null)
@@ -108,7 +108,7 @@ object ArrowUtils {
   }
 
   /** Maps schema from Spark to Arrow. NOTE: timeZoneId required for TimestampType in StructType */
-  def toArrowSchema(schema: StructType, timeZoneId: Option[String]): Schema = {
+  def toArrowSchema(schema: StructType, timeZoneId: String): Schema = {
     new Schema(schema.map { field =>
       toArrowField(field.name, field.dataType, field.nullable, timeZoneId)
     }.asJava)
