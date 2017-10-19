@@ -28,8 +28,11 @@ import org.apache.spark.sql.types.IntegerType
 
 class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   val attribute = attr("key")
+  val hgmkey = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(1.0, 2.0, 2),
+    EquiHeightBucket(3.0, 4.0, 2), EquiHeightBucket(5.0, 6.0, 2),
+    EquiHeightBucket(7.0, 8.0, 2), EquiHeightBucket(9.0, 10.0, 2)))
   val colStat = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
-    nullCount = 0, avgLen = 4, maxLen = 4, histogram = None)
+    nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmkey))
 
   val plan = StatsTestPlan(
     outputList = Seq(attribute),
@@ -111,20 +114,23 @@ class BasicStatsEstimationSuite extends PlanTest with StatsEstimationTestBase {
   }
 
   test("estimate statistics when the conf changes") {
+    val hgmc1 = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(1.0, 2.0, 2),
+      EquiHeightBucket(3.0, 4.0, 2), EquiHeightBucket(5.0, 6.0, 2),
+      EquiHeightBucket(7.0, 8.0, 2), EquiHeightBucket(9.0, 10.0, 2)))
     val expectedDefaultStats =
       Statistics(
         sizeInBytes = 40,
         rowCount = Some(10),
         attributeStats = AttributeMap(Seq(
           AttributeReference("c1", IntegerType)() -> ColumnStat(10, Some(1), Some(10), 0, 4, 4,
-            histogram = None))))
+            histogram = Some(hgmc1)))))
     val expectedCboStats =
       Statistics(
         sizeInBytes = 4,
         rowCount = Some(1),
         attributeStats = AttributeMap(Seq(
           AttributeReference("c1", IntegerType)() -> ColumnStat(1, Some(5), Some(5), 0, 4, 4,
-            histogram = None))))
+            histogram = Some(hgmc1)))))
 
     val plan = DummyLogicalPlan(defaultStats = expectedDefaultStats, cboStats = expectedCboStats)
     checkStats(

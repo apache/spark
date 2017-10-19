@@ -28,10 +28,14 @@ import org.apache.spark.sql.types._
 class ProjectEstimationSuite extends StatsEstimationTestBase {
 
   test("project with alias") {
+    val hgmkey1 = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(2.0, 2.0, 1)))
+    val hgmkey2 = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(10.0, 10.0, 1),
+      EquiHeightBucket(10.0, 10.0, 1)))
     val (ar1, colStat1) = (attr("key1"), ColumnStat(distinctCount = 2, min = Some(1),
-      max = Some(2), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None))
+      max = Some(2), nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmkey1)))
     val (ar2, colStat2) = (attr("key2"), ColumnStat(distinctCount = 1, min = Some(10),
-      max = Some(10), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None))
+      max = Some(10), nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmkey2)))
 
     val child = StatsTestPlan(
       outputList = Seq(ar1, ar2),
@@ -70,36 +74,63 @@ class ProjectEstimationSuite extends StatsEstimationTestBase {
     val t1 = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-08 00:00:01"))
     val t2 = DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2016-05-09 00:00:02"))
 
+    val hgmcbool = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(0.0, 0.0, 1),
+      EquiHeightBucket(1.0, 1.0, 1)))
+    val hgmcbyte = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(2.0, 2.0, 1)))
+    val hgmcshort = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(3.0, 3.0, 1)))
+    val hgmcint = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(4.0, 4.0, 1)))
+    val hgmclong = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(5.0, 5.0, 1)))
+    val hgmcdouble = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(6.0, 6.0, 1)))
+    val hgmcfloat = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(7.0, 7.0, 1)))
+    val hgmcdecimal = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(1.0, 1.0, 1),
+      EquiHeightBucket(8.0, 8.0, 1)))
+    val hgmcdate = EquiHeightHistogram(1.0, Seq(EquiHeightBucket(d1.toDouble, d1.toDouble, 1),
+      EquiHeightBucket(d2.toDouble, d2.toDouble, 1)))
+    val hgmctimestamp = EquiHeightHistogram(1.0, Seq(
+      EquiHeightBucket(t1.toDouble, t1.toDouble, 1),
+      EquiHeightBucket(t2.toDouble, t2.toDouble, 1)))
+
     val columnInfo: AttributeMap[ColumnStat] = AttributeMap(Seq(
       AttributeReference("cbool", BooleanType)() -> ColumnStat(distinctCount = 2,
         min = Some(false), max = Some(true), nullCount = 0, avgLen = 1, maxLen = 1,
-        histogram = None),
+        histogram = Some(hgmcbool)),
       AttributeReference("cbyte", ByteType)() -> ColumnStat(distinctCount = 2,
         min = Some(1.toByte), max = Some(2.toByte), nullCount = 0, avgLen = 1, maxLen = 1,
-        histogram = None),
+        histogram = Some(hgmcbyte)),
       AttributeReference("cshort", ShortType)() -> ColumnStat(distinctCount = 2,
         min = Some(1.toShort), max = Some(3.toShort), nullCount = 0, avgLen = 2, maxLen = 2,
-        histogram = None),
+        histogram = Some(hgmcshort)),
       AttributeReference("cint", IntegerType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1), max = Some(4), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
+        min = Some(1), max = Some(4), nullCount = 0, avgLen = 4, maxLen = 4, histogram =
+          Some(hgmcint)),
       AttributeReference("clong", LongType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1L), max = Some(5L), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None),
+        min = Some(1L), max = Some(5L), nullCount = 0, avgLen = 8, maxLen = 8, histogram =
+          Some(hgmclong)),
       AttributeReference("cdouble", DoubleType)() -> ColumnStat(distinctCount = 2,
-        min = Some(1.0), max = Some(6.0), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None),
+        min = Some(1.0), max = Some(6.0), nullCount = 0, avgLen = 8, maxLen = 8, histogram =
+          Some(hgmcdouble)),
       AttributeReference("cfloat", FloatType)() -> ColumnStat(distinctCount = 2,
         min = Some(1.0f), max = Some(7.0f), nullCount = 0, avgLen = 4, maxLen = 4,
-        histogram = None),
+        histogram = Some(hgmcfloat)),
       AttributeReference("cdecimal", DecimalType.SYSTEM_DEFAULT)() -> ColumnStat(distinctCount = 2,
         min = Some(dec1), max = Some(dec2), nullCount = 0, avgLen = 16, maxLen = 16,
-        histogram = None),
+        histogram = Some(hgmcdecimal)),
       AttributeReference("cstring", StringType)() -> ColumnStat(distinctCount = 2,
         min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3, histogram = None),
       AttributeReference("cbinary", BinaryType)() -> ColumnStat(distinctCount = 2,
         min = None, max = None, nullCount = 0, avgLen = 3, maxLen = 3, histogram = None),
       AttributeReference("cdate", DateType)() -> ColumnStat(distinctCount = 2,
-        min = Some(d1), max = Some(d2), nullCount = 0, avgLen = 4, maxLen = 4, histogram = None),
+        min = Some(d1), max = Some(d2), nullCount = 0, avgLen = 4, maxLen = 4, histogram =
+          Some(hgmcdate)),
       AttributeReference("ctimestamp", TimestampType)() -> ColumnStat(distinctCount = 2,
-        min = Some(t1), max = Some(t2), nullCount = 0, avgLen = 8, maxLen = 8, histogram = None)
+        min = Some(t1), max = Some(t2), nullCount = 0, avgLen = 8, maxLen = 8, histogram =
+          Some(hgmctimestamp))
     ))
     val columnSizes: Map[Attribute, Long] = columnInfo.map(kv => (kv._1, getColSize(kv._1, kv._2)))
     val child = StatsTestPlan(

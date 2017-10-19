@@ -343,23 +343,23 @@ case class FilterEstimation(plan: Filter) extends Logging {
           if (colStat.histogram.isEmpty) return Some(1.0 / BigDecimal(ndv))
 
           // We traverse histogram bins to locate the literal value
-          val hgmBins = colStat.histogram.get.asInstanceOf[NumericEquiHeightHgm].bins
+          val hgmBins = colStat.histogram.get.asInstanceOf[EquiHeightHistogram].ehBuckets
           val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
           // find the interval where this datum locates
           var lowerId, higherId = -1
           for (i <- hgmBins.indices) {
             // if datum > upperBound, just move to next bin
-            if (datum <= hgmBins(i).upperBound && lowerId < 0) lowerId = i
+            if (datum <= hgmBins(i).hi && lowerId < 0) lowerId = i
             if (higherId < 0) {
-              if ((datum < hgmBins(i).upperBound || i == hgmBins.length - 1) ||
-                ((datum == hgmBins(i).upperBound) && (datum < hgmBins(i + 1).upperBound))) {
+              if ((datum < hgmBins(i).hi || i == hgmBins.length - 1) ||
+                ((datum == hgmBins(i).hi) && (datum < hgmBins(i + 1).hi))) {
                 higherId = i
               }
             }
           }
           assert(lowerId <= higherId)
-          val lowerBinNdv = hgmBins(lowerId).binNdv
-          val higherBinNdv = hgmBins(higherId).binNdv
+          val lowerBinNdv = hgmBins(lowerId).ndv
+          val higherBinNdv = hgmBins(higherId).ndv
           // assume uniform distribution in each bucket
           val percent = if (lowerId == higherId) {
             (1.0 / hgmBins.length) / math.max(lowerBinNdv, 1)
@@ -544,7 +544,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
             }
         }
       } else {
-        val numericHistogram = colStat.histogram.get.asInstanceOf[NumericEquiHeightHgm]
+        val numericHistogram = colStat.histogram.get.asInstanceOf[EquiHeightHistogram]
         val datum = EstimationUtils.toDecimal(literal.value, literal.dataType).toDouble
         val maxDouble = EstimationUtils.toDecimal(colStat.max.get, literal.dataType).toDouble
         val minDouble = EstimationUtils.toDecimal(colStat.min.get, literal.dataType).toDouble
@@ -591,7 +591,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
 
   def computePercentForNumericEquiHeightHgm(
       op: BinaryComparison,
-      histogram: NumericEquiHeightHgm,
+      histogram: EquiHeightHistogram,
       max: Double,
       min: Double,
       datumNumber: Double): Double = {

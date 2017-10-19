@@ -37,19 +37,17 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   // column cint has values: 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
   // Hence, distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
   val attrInt = AttributeReference("cint", IntegerType)()
-  val hgmInt = NumericEquiHeightHgm(Array(NumericEquiHeightBin(1.0, 2.0, 2),
-    NumericEquiHeightBin(3.0, 4.0, 2), NumericEquiHeightBin(5.0, 6.0, 2),
-    NumericEquiHeightBin(7.0, 8.0, 2), NumericEquiHeightBin(9.0, 10.0, 2)),
-    BigDecimal(2))
+  val hgmInt = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(1.0, 2.0, 2),
+    EquiHeightBucket(3.0, 4.0, 2), EquiHeightBucket(5.0, 6.0, 2),
+    EquiHeightBucket(7.0, 8.0, 2), EquiHeightBucket(9.0, 10.0, 2)))
   val colStatInt = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt))
 
   // column cbool has only 2 distinct values in 10 rows
   val attrBool = AttributeReference("cbool", BooleanType)()
-  val hgmBool = NumericEquiHeightHgm(Array(NumericEquiHeightBin(0.0, 0.0, 1),
-    NumericEquiHeightBin(0.0, 0.0, 1), NumericEquiHeightBin(0.0, 1.0, 2),
-    NumericEquiHeightBin(1.0, 1.0, 1), NumericEquiHeightBin(1.0, 1.0, 1)),
-    BigDecimal(2))
+  val hgmBool = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(0.0, 0.0, 1),
+    EquiHeightBucket(0.0, 0.0, 1), EquiHeightBucket(0.0, 1.0, 2),
+    EquiHeightBucket(1.0, 1.0, 1), EquiHeightBucket(1.0, 1.0, 1)))
   val colStatBool = ColumnStat(distinctCount = 2, min = Some(false), max = Some(true),
     nullCount = 0, avgLen = 1, maxLen = 1, histogram = Some(hgmBool))
 
@@ -57,18 +55,17 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val dMin = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-01"))
   val dMax = DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-10"))
   val attrDate = AttributeReference("cdate", DateType)()
-  val hgmDate = NumericEquiHeightHgm(Array(
-    NumericEquiHeightBin(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-01")).toDouble,
+  val hgmDate = EquiHeightHistogram(2.0, Seq(
+    EquiHeightBucket(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-01")).toDouble,
       DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-02")).toDouble, 2),
-    NumericEquiHeightBin(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-03")).toDouble,
+    EquiHeightBucket(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-03")).toDouble,
       DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-04")).toDouble, 2),
-    NumericEquiHeightBin(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-05")).toDouble,
+    EquiHeightBucket(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-05")).toDouble,
       DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-06")).toDouble, 2),
-    NumericEquiHeightBin(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-07")).toDouble,
+    EquiHeightBucket(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-07")).toDouble,
       DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-08")).toDouble, 2),
-    NumericEquiHeightBin(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-09")).toDouble,
-      DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-10")).toDouble, 2)),
-    BigDecimal(2))
+    EquiHeightBucket(DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-09")).toDouble,
+      DateTimeUtils.fromJavaDate(Date.valueOf("2017-01-10")).toDouble, 2)))
   val colStatDate = ColumnStat(distinctCount = 10, min = Some(dMin), max = Some(dMax),
     nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmDate))
 
@@ -76,25 +73,23 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   val decMin = Decimal("0.200000000000000000")
   val decMax = Decimal("0.800000000000000000")
   val attrDecimal = AttributeReference("cdecimal", DecimalType(18, 18))()
-  val hgmDecimal = NumericEquiHeightHgm(Array(
-    NumericEquiHeightBin(Decimal("0.200000000000000000").toDouble,
+  val hgmDecimal = EquiHeightHistogram(1.0, Seq(
+    EquiHeightBucket(Decimal("0.200000000000000000").toDouble,
       Decimal("0.200000000000000000").toDouble, 1),
-    NumericEquiHeightBin(Decimal("0.400000000000000000").toDouble,
+    EquiHeightBucket(Decimal("0.400000000000000000").toDouble,
       Decimal("0.400000000000000000").toDouble, 1),
-    NumericEquiHeightBin(Decimal("0.600000000000000000").toDouble,
+    EquiHeightBucket(Decimal("0.600000000000000000").toDouble,
       Decimal("0.600000000000000000").toDouble, 1),
-    NumericEquiHeightBin(Decimal("0.800000000000000000").toDouble,
-      Decimal("0.800000000000000000").toDouble, 1)),
-    BigDecimal(1))
+    EquiHeightBucket(Decimal("0.800000000000000000").toDouble,
+      Decimal("0.800000000000000000").toDouble, 1)))
   val colStatDecimal = ColumnStat(distinctCount = 4, min = Some(decMin), max = Some(decMax),
     nullCount = 0, avgLen = 8, maxLen = 8, histogram = Some(hgmDecimal))
 
   // column cdouble has 10 double values: 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0
   val attrDouble = AttributeReference("cdouble", DoubleType)()
-  val hgmDouble = NumericEquiHeightHgm(Array(NumericEquiHeightBin(1.0, 2.0, 2),
-    NumericEquiHeightBin(3.0, 4.0, 2), NumericEquiHeightBin(5.0, 6.0, 2),
-    NumericEquiHeightBin(7.0, 8.0, 2), NumericEquiHeightBin(9.0, 10.0, 2)),
-    BigDecimal(2))
+  val hgmDouble = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(1.0, 2.0, 2),
+    EquiHeightBucket(3.0, 4.0, 2), EquiHeightBucket(5.0, 6.0, 2),
+    EquiHeightBucket(7.0, 8.0, 2), EquiHeightBucket(9.0, 10.0, 2)))
   val colStatDouble = ColumnStat(distinctCount = 10, min = Some(1.0), max = Some(10.0),
     nullCount = 0, avgLen = 8, maxLen = 8, histogram = Some(hgmDouble))
 
@@ -108,10 +103,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   // Hence, distinctCount:10, min:7, max:16, nullCount:0, avgLen:4, maxLen:4
   // This column is created to test "cint < cint2
   val attrInt2 = AttributeReference("cint2", IntegerType)()
-  val hgmInt2 = NumericEquiHeightHgm(Array(NumericEquiHeightBin(7.0, 8.0, 2),
-    NumericEquiHeightBin(9.0, 10.0, 2), NumericEquiHeightBin(11.0, 12.0, 2),
-    NumericEquiHeightBin(13.0, 14.0, 2), NumericEquiHeightBin(15.0, 16.0, 2)),
-    BigDecimal(2))
+  val hgmInt2 = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(7.0, 8.0, 2),
+    EquiHeightBucket(9.0, 10.0, 2), EquiHeightBucket(11.0, 12.0, 2),
+    EquiHeightBucket(13.0, 14.0, 2), EquiHeightBucket(15.0, 16.0, 2)))
   val colStatInt2 = ColumnStat(distinctCount = 10, min = Some(7), max = Some(16),
     nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt2))
 
@@ -119,10 +113,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   // Hence, distinctCount:10, min:30, max:39, nullCount:0, avgLen:4, maxLen:4
   // This column is created to test "cint = cint3 without overlap at all.
   val attrInt3 = AttributeReference("cint3", IntegerType)()
-  val hgmInt3 = NumericEquiHeightHgm(Array(NumericEquiHeightBin(30.0, 31.0, 2),
-    NumericEquiHeightBin(32.0, 33.0, 2), NumericEquiHeightBin(34.0, 35.0, 2),
-    NumericEquiHeightBin(36.0, 37.0, 2), NumericEquiHeightBin(38.0, 39.0, 2)),
-    BigDecimal(2))
+  val hgmInt3 = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(30.0, 31.0, 2),
+    EquiHeightBucket(32.0, 33.0, 2), EquiHeightBucket(34.0, 35.0, 2),
+    EquiHeightBucket(36.0, 37.0, 2), EquiHeightBucket(38.0, 39.0, 2)))
   val colStatInt3 = ColumnStat(distinctCount = 10, min = Some(30), max = Some(39),
     nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt3))
 
@@ -130,10 +123,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   // distinctCount:10, min:1, max:10, nullCount:0, avgLen:4, maxLen:4
   // This column is created to test complete overlap
   val attrInt4 = AttributeReference("cint4", IntegerType)()
-  val hgmInt4 = NumericEquiHeightHgm(Array(NumericEquiHeightBin(1.0, 2.0, 2),
-    NumericEquiHeightBin(3.0, 4.0, 2), NumericEquiHeightBin(5.0, 6.0, 2),
-    NumericEquiHeightBin(7.0, 8.0, 2), NumericEquiHeightBin(9.0, 10.0, 2)),
-    BigDecimal(2))
+  val hgmInt4 = EquiHeightHistogram(2.0, Seq(EquiHeightBucket(1.0, 2.0, 2),
+    EquiHeightBucket(3.0, 4.0, 2), EquiHeightBucket(5.0, 6.0, 2),
+    EquiHeightBucket(7.0, 8.0, 2), EquiHeightBucket(9.0, 10.0, 2)))
   val colStatInt4 = ColumnStat(distinctCount = 10, min = Some(1), max = Some(10),
     nullCount = 0, avgLen = 4, maxLen = 4, histogram = Some(hgmInt4))
 
@@ -509,10 +501,9 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
   // This is a limitation test. We should remove it after the limitation is removed.
   test("don't estimate IsNull or IsNotNull if the child is a non-leaf node") {
     val attrIntLargerRange = AttributeReference("c1", IntegerType)()
-    val hgmIntLargerRange = NumericEquiHeightHgm(Array(NumericEquiHeightBin(1.0, 4.0, 4),
-      NumericEquiHeightBin(5.0, 8.0, 4), NumericEquiHeightBin(9.0, 12.0, 4),
-      NumericEquiHeightBin(13.0, 16.0, 4), NumericEquiHeightBin(17.0, 20.0, 4)),
-      BigDecimal(4))
+    val hgmIntLargerRange = EquiHeightHistogram(4.0, Seq(EquiHeightBucket(1.0, 4.0, 4),
+      EquiHeightBucket(5.0, 8.0, 4), EquiHeightBucket(9.0, 12.0, 4),
+      EquiHeightBucket(13.0, 16.0, 4), EquiHeightBucket(17.0, 20.0, 4)))
     val colStatIntLargerRange = ColumnStat(distinctCount = 20, min = Some(1), max = Some(20),
       nullCount = 10, avgLen = 4, maxLen = 4, histogram = Some(hgmIntLargerRange))
     val smallerTable = childStatsTestPlan(Seq(attrInt), 10L)
