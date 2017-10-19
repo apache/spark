@@ -1632,7 +1632,7 @@ def to_arrow_type(dt):
 def _check_dataframe_localize_timestamps(df):
     """ Convert timezone aware timestamps to timezone-naive in local time
     """
-    from pandas.types.common import is_datetime64tz_dtype
+    from pandas.api.types import is_datetime64tz_dtype
     for column, series in df.iteritems():
         # TODO: handle nested timestamps?
         if is_datetime64tz_dtype(series.dtype):
@@ -1643,7 +1643,7 @@ def _check_dataframe_localize_timestamps(df):
 def _check_series_convert_timestamps_internal(s):
     """ Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
     """
-    from pandas.types.common import is_datetime64_dtype
+    from pandas.api.types import is_datetime64_dtype
     # TODO: handle nested timestamps?
     if is_datetime64_dtype(s.dtype):
         # NOTE: convert to 'us' with astype here, unit is ignored in `from_pandas` see ARROW-1680
