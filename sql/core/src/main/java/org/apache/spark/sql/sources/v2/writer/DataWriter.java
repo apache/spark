@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources.v2.writer;
 import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * A data writer returned by {@link DataWriterFactory#createWriter(int, int, int)} and is
+ * A data writer returned by {@link DataWriterFactory#createWriter(int, int)} and is
  * responsible for writing data for an input RDD partition.
  *
  * One Spark task has one exclusive data writer, so there is no thread-safe concern.
@@ -29,12 +29,12 @@ import org.apache.spark.annotation.InterfaceStability;
  * the {@link #write(Object)}, {@link #abort()} is called afterwards and the remaining records will
  * not be processed. If all records are successfully written, {@link #commit()} is called.
  *
- * If this data writer successes(all records are successfully written and {@link #commit()}
- * successes), a {@link WriterCommitMessage} will be sent to the driver side and pass to
+ * If this data writer succeeds(all records are successfully written and {@link #commit()}
+ * succeeds), a {@link WriterCommitMessage} will be sent to the driver side and pass to
  * {@link DataSourceV2Writer#commit(WriterCommitMessage[])} with commit messages from other data
  * writers. If this data writer fails(one record fails to write or {@link #commit()} fails), an
  * exception will be sent to the driver side, and Spark will retry this writing task for some times,
- * each time {@link DataWriterFactory#createWriter(int, int, int)} gets a different `attemptNumber`,
+ * each time {@link DataWriterFactory#createWriter(int, int)} gets a different `attemptNumber`,
  * and finally call {@link DataSourceV2Writer#abort(WriterCommitMessage[])} if all retry fail.
  *
  * Besides the retry mechanism, Spark may launch speculative tasks if the existing writing task
@@ -68,7 +68,7 @@ public interface DataWriter<T> {
    * {@link DataSourceV2Writer#commit(WriterCommitMessage[])}.
    *
    * The written data should only be visible to data source readers after
-   * {@link DataSourceV2Writer#commit(WriterCommitMessage[])} successes, which means this method
+   * {@link DataSourceV2Writer#commit(WriterCommitMessage[])} succeeds, which means this method
    * should still "hide" the written data and ask the {@link DataSourceV2Writer} at driver side to
    * do the final commitment via {@link WriterCommitMessage}.
    *

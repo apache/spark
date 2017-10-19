@@ -35,10 +35,16 @@ public interface DataWriterFactory<T> extends Serializable {
   /**
    * Returns a data writer to do the actual writing work.
    *
-   * @param stageId The id of the Spark stage that runs the returned writer.
-   * @param partitionId The id of the RDD partition that the returned writer will process.
-   * @param attemptNumber The attempt number of the Spark task that runs the returned writer, which
-   *                      is usually 0 if the task is not a retried task or a speculative task.
+   * @param partitionId A unique id of the RDD partition that the returned writer will process.
+   *                    Usually Spark processes many RDD partitions at the same time,
+   *                    implementations should use the partition id to distinguish writers for
+   *                    different partitions.
+   * @param attemptNumber Spark may launch multiple tasks with the same task id. For example, a task
+   *                      failed, Spark launches a new task wth the same task id but different
+   *                      attempt number. Or a task is too slow, Spark launches new tasks wth the
+   *                      same task id but different attempt number, which means there are multiple
+   *                      tasks with the same task id running at the same time. Implementations can
+   *                      use this attempt number to distinguish writers of different task attempts.
    */
-  DataWriter<T> createWriter(int stageId, int partitionId, int attemptNumber);
+  DataWriter<T> createWriter(int partitionId, int attemptNumber);
 }

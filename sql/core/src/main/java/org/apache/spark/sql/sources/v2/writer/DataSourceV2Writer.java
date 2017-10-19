@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.StructType;
 
 /**
  * A data source writer that is returned by
- * {@link WriteSupport#createWriter(StructType, SaveMode, DataSourceV2Options)}.
+ * {@link WriteSupport#createWriter(String, StructType, SaveMode, DataSourceV2Options)}.
  * It can mix in various writing optimization interfaces to speed up the data saving. The actual
  * writing logic is delegated to {@link DataWriter}.
  *
@@ -63,7 +63,7 @@ public interface DataSourceV2Writer {
    * successful data writers and are produced by {@link DataWriter#commit()}. If this method
    * fails(throw exception), this writing job is considered to be failed, and
    * {@link #abort(WriterCommitMessage[])} will be called. The written data should only be visible
-   * to data source readers if this method successes.
+   * to data source readers if this method succeeds.
    *
    * Note that, one partition may have multiple committed data writers because of speculative tasks.
    * Spark will pick the first successful one and get its commit message. Implementations should be

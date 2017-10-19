@@ -93,8 +93,7 @@ object DataWritingSparkTask extends Logging {
       writeTask: DataWriterFactory[InternalRow],
       context: TaskContext,
       iter: Iterator[InternalRow]): WriterCommitMessage = {
-    val dataWriter =
-      writeTask.createWriter(context.stageId(), context.partitionId(), context.attemptNumber())
+    val dataWriter = writeTask.createWriter(context.partitionId(), context.attemptNumber())
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
@@ -116,12 +115,9 @@ class RowToInternalRowDataWriterFactory(
     rowWriterFactory: DataWriterFactory[Row],
     schema: StructType) extends DataWriterFactory[InternalRow] {
 
-  override def createWriter(
-      stageId: Int,
-      partitionId: Int,
-      attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
     new RowToInternalRowDataWriter(
-      rowWriterFactory.createWriter(stageId, partitionId, attemptNumber),
+      rowWriterFactory.createWriter(partitionId, attemptNumber),
       RowEncoder.apply(schema).resolveAndBind())
   }
 }

@@ -63,12 +63,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
     }
   }
 
-  class Writer(path: String, conf: Configuration) extends DataSourceV2Writer {
-    // We can't get the real spark job id here, so we use a timestamp and random UUID to simulate
-    // a unique job id.
-    protected val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US).format(new Date()) +
-      "-" + UUID.randomUUID()
-
+  class Writer(jobId: String, path: String, conf: Configuration) extends DataSourceV2Writer {
     override def createWriterFactory(): DataWriterFactory[Row] = {
       new SimpleCSVDataWriterFactory(path, jobId, new SerializableConfiguration(conf))
     }
@@ -96,8 +91,8 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
     }
   }
 
-  class InternalRowWriter(path: String, conf: Configuration)
-    extends Writer(path, conf) with SupportsWriteInternalRow {
+  class InternalRowWriter(jobId: String, path: String, conf: Configuration)
+    extends Writer(jobId, path, conf) with SupportsWriteInternalRow {
 
     override def createWriterFactory(): DataWriterFactory[Row] = {
       throw new IllegalArgumentException("not expected!")
@@ -115,6 +110,7 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
   }
 
   override def createWriter(
+      jobId: String,
       schema: StructType,
       mode: SaveMode,
       options: DataSourceV2Options): Optional[DataSourceV2Writer] = {
@@ -140,13 +136,17 @@ class SimpleWritableDataSource extends DataSourceV2 with ReadSupport with WriteS
       fs.delete(path, true)
     }
 
-    Optional.of(createWriter(path, conf, internal))
+    Optional.of(createWriter(jobId, path, conf, internal))
   }
 
   private def createWriter(
-      path: Path, conf: Configuration, internal: Boolean): DataSourceV2Writer = {
+      jobId: String, path: Path, conf: Configuration, internal: Boolean): DataSourceV2Writer = {
     val pathStr = path.toUri.toString
-    if (internal) new InternalRowWriter(pathStr, conf) else new Writer(pathStr, conf)
+    if (internal) {
+      new InternalRowWriter(jobId, pathStr, conf)
+    } else {
+      new Writer(jobId, pathStr, conf)
+    }
   }
 }
 
@@ -185,7 +185,7 @@ class SimpleCSVReadTask(path: String, conf: SerializableConfiguration)
 class SimpleCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[Row] {
 
-  override def createWriter(stageId: Int, partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
+  override def createWriter(partitionId: Int, attemptNumber: Int): DataWriter[Row] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)
@@ -218,8 +218,7 @@ class SimpleCSVDataWriter(fs: FileSystem, file: Path) extends DataWriter[Row] {
 class InternalRowCSVDataWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
   extends DataWriterFactory[InternalRow] {
 
-  override def createWriter(
-      stageId: Int, partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
+  override def createWriter(partitionId: Int, attemptNumber: Int): DataWriter[InternalRow] = {
     val jobPath = new Path(new Path(path, "_temporary"), jobId)
     val filePath = new Path(jobPath, s"$jobId-$partitionId-$attemptNumber")
     val fs = filePath.getFileSystem(conf.value)

@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql
 
-import java.util.{Locale, Properties}
+import java.text.SimpleDateFormat
+import java.util.{Date, Locale, Properties, UUID}
 
 import scala.collection.JavaConverters._
 
@@ -238,7 +239,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       cls.newInstance() match {
         case ds: WriteSupport =>
           val options = new DataSourceV2Options(extraOptions.asJava)
-          val writer = ds.createWriter(df.logicalPlan.schema, mode, options)
+          // Using a timestamp and a random UUID to distinguish different writing jobs. This is good
+          // enough as there won't be tons of writing jobs created at the same second.
+          val jobId = new SimpleDateFormat("yyyyMMddHHmmss", Locale.US)
+            .format(new Date()) + "-" + UUID.randomUUID()
+          val writer = ds.createWriter(jobId, df.logicalPlan.schema, mode, options)
           if (writer.isPresent) {
             runCommand(df.sparkSession, "save") {
               WriteToDataSourceV2(writer.get(), df.logicalPlan)
