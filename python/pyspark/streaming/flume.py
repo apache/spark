@@ -56,6 +56,7 @@ class FlumeUtils(object):
 
         .. note:: Deprecated in 2.3.0
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         helper = FlumeUtils._get_helper(ssc._sc)
         jstream = helper.createStream(ssc._jssc, hostname, port, jlevel, enableDecompression)
@@ -84,6 +85,7 @@ class FlumeUtils(object):
 
         .. note:: Deprecated in 2.3.0
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         hosts = []
         ports = []

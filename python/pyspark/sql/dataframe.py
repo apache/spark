@@ -130,6 +130,8 @@ class DataFrame(object):
 
         .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
         """
+        warnings.warn(
+            "Deprecated in 2.0, use createOrReplaceTempView instead.", DeprecationWarning)
         self._jdf.createOrReplaceTempView(name)
 
     @since(2.0)
@@ -1308,6 +1310,7 @@ class DataFrame(object):
 
         .. note:: Deprecated in 2.0, use :func:`union` instead.
         """
+        warnings.warn("Deprecated in 2.0, use union instead.", DeprecationWarning)
         return self.union(other)
 
     @since(2.3)

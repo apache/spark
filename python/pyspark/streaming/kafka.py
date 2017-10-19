@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from py4j.protocol import Py4JJavaError
 
 from pyspark.rdd import RDD
@@ -58,6 +60,7 @@ class KafkaUtils(object):
 
         .. note:: Deprecated in 2.3.0
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         if kafkaParams is None:
             kafkaParams = dict()
         kafkaParams.update({
@@ -107,6 +110,7 @@ class KafkaUtils(object):
         .. note:: Experimental
         .. note:: Deprecated in 2.3.0
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         if fromOffsets is None:
             fromOffsets = dict()
         if not isinstance(topics, list):
@@ -161,6 +165,7 @@ class KafkaUtils(object):
         .. note:: Experimental
         .. note:: Deprecated in 2.3.0
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         if leaders is None:
             leaders = dict()
         if not isinstance(kafkaParams, dict):
@@ -240,6 +245,7 @@ class OffsetRange(object):
         :param fromOffset: Inclusive starting offset.
         :param untilOffset: Exclusive ending offset.
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         self.topic = topic
         self.partition = partition
         self.fromOffset = fromOffset
@@ -279,6 +285,7 @@ class TopicAndPartition(object):
         :param topic: Kafka topic name.
         :param partition: Kafka partition id.
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         self._topic = topic
         self._partition = partition
 
@@ -312,6 +319,7 @@ class Broker(object):
         :param host: Broker's hostname.
         :param port: Broker's port.
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         self._host = host
         self._port = port
 
@@ -327,6 +335,7 @@ class KafkaRDD(RDD):
     """
 
     def __init__(self, jrdd, ctx, jrdd_deserializer):
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         RDD.__init__(self, jrdd, ctx, jrdd_deserializer)
 
     def offsetRanges(self):
@@ -349,6 +358,7 @@ class KafkaDStream(DStream):
     """
 
     def __init__(self, jdstream, ssc, jrdd_deserializer):
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         DStream.__init__(self, jdstream, ssc, jrdd_deserializer)
 
     def foreachRDD(self, func):
@@ -387,6 +397,7 @@ class KafkaTransformedDStream(TransformedDStream):
     """
 
     def __init__(self, prev, func):
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         TransformedDStream.__init__(self, prev, func)
 
     @property
@@ -419,6 +430,7 @@ class KafkaMessageAndMetadata(object):
         :param message: actual message payload of this Kafka message, the return data is
                         undecoded bytearray.
         """
+        warnings.warn("Deprecated in 2.3.0.", DeprecationWarning)
         self.topic = topic
         self.partition = partition
         self.offset = offset
