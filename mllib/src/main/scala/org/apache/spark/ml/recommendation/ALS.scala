@@ -1670,8 +1670,10 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           // Stacking factors(vectors) in matrices to speed up the computation,
           // when the number of factors and the rank is large enough.
           val doStack = srcPtrs(j + 1) - srcPtrs(j) > threshold && rank > threshold
-          val srcFactorBuffer = mutable.ArrayBuilder.make[Double]
-          val bBuffer = mutable.ArrayBuilder.make[Double]
+          val srcFactorBuffer = new Array[Double]((srcPtrs(j + 1) - srcPtrs(j)) * rank)
+          val bBuffer = new Array[Double](srcPtrs(j + 1) - srcPtrs(j))
+          var srcIndex = 0
+          var bIndex = 0
           while (i < srcPtrs(j + 1)) {
             val encoded = srcEncodedIndices(i)
             val blockId = srcEncoder.blockId(encoded)
@@ -1691,10 +1693,12 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             } else {
               numExplicits += 1
               if (doStack) {
-                bBuffer += rating
+                bBuffer(bIndex) = rating
+                bIndex += 1
                 var ii = 0
-                while(ii < srcFactor.length) {
-                  srcFactorBuffer += srcFactor(ii)
+                while(ii < rank) {
+                  srcFactorBuffer(srcIndex) = srcFactor(ii)
+                  srcIndex += 1
                   ii += 1
                 }
               } else {
@@ -1704,7 +1708,7 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
             i += 1
           }
           if (!implicitPrefs && doStack) {
-            ls.addStack(srcFactorBuffer.result(), bBuffer.result(), numExplicits)
+            ls.addStack(srcFactorBuffer, bBuffer, numExplicits)
           }
           // Weight lambda by the number of explicit ratings based on the ALS-WR paper.
           dstFactors(j) = solver.solve(ls, numExplicits * regParam)
