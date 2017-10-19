@@ -50,7 +50,6 @@ imageSchema = StructType(StructField("image", StructType([
     StructField(imageFields[5], BinaryType(), False)]), True))
 
 
-# TODO: generalize to other datatypes and number of channels
 def toNDArray(image):
     """
     Converts an image to a one-dimensional array.
@@ -70,7 +69,6 @@ def toNDArray(image):
         strides=(width * nChannels, nChannels, 1))
 
 
-# TODO: generalize to other datatypes and number of channels
 def toImage(array, origin="", mode=ocvTypes["CV_8UC3"]):
     """
     Converts a one-dimensional array to a two-dimensional image.
