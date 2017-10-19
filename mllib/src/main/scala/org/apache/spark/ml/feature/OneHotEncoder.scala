@@ -102,7 +102,7 @@ class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) e
 
     val outputAttrGroup = if (outputAttrGroupFromSchema.size < 0) {
       OneHotEncoderCommon.getOutputAttrGroupFromData(
-        dataset, $(dropLast), inputColName, outputColName)
+        dataset, $(dropLast), Seq(inputColName), Seq(outputColName))(0)
     } else {
       outputAttrGroupFromSchema
     }

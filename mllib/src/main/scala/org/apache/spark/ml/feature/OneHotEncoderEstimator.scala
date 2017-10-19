@@ -127,19 +127,29 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
   @Since("2.3.0")
   override def fit(dataset: Dataset[_]): OneHotEncoderModel = {
     val transformedSchema = transformSchema(dataset.schema)
+    val categorySizes = new Array[Int]($(outputCols).length)
 
-    val categorySizes = $(outputCols).zipWithIndex.map { case (outputColName, idx) =>
-      val outputAttrGroupFromSchema = AttributeGroup.fromStructField(
-        transformedSchema(outputColName))
-
-      val outputAttrGroup = if (outputAttrGroupFromSchema.size < 0) {
-        OneHotEncoderCommon.getOutputAttrGroupFromData(
-          dataset, $(dropLast), $(inputCols)(idx), outputColName)
+    val columnToScanIndices = $(outputCols).zipWithIndex.flatMap { case (outputColName, idx) =>
+      val numOfAttrs = AttributeGroup.fromStructField(
+        transformedSchema(outputColName)).size
+      if (numOfAttrs < 0) {
+        Some(idx)
       } else {
-        outputAttrGroupFromSchema
+        categorySizes(idx) = numOfAttrs
+        None
       }
+    }
 
-      outputAttrGroup.size
+    // Some input columns don't have attributes or their attributes don't have necessary info.
+    // We need to scan the data to get the number of values for each column.
+    if (columnToScanIndices.length > 0) {
+      val inputColNames = columnToScanIndices.map($(inputCols)(_))
+      val outputColNames = columnToScanIndices.map($(outputCols)(_))
+      val attrGroups = OneHotEncoderCommon.getOutputAttrGroupFromData(
+        dataset, $(dropLast), inputColNames, outputColNames)
+      attrGroups.zip(columnToScanIndices).foreach { case (attrGroup, idx) =>
+        categorySizes(idx) = attrGroup.size
+      }
     }
 
     val model = new OneHotEncoderModel(uid, categorySizes).setParent(this)
@@ -408,23 +418,38 @@ private[feature] object OneHotEncoderCommon {
   def getOutputAttrGroupFromData(
       dataset: Dataset[_],
       dropLast: Boolean,
-      inputColName: String,
-      outputColName: String): AttributeGroup = {
-    val numAttrs = dataset.select(col(inputColName).cast(DoubleType)).rdd.map(_.getDouble(0))
-      .treeAggregate(0.0)(
-        (m, x) => {
-          assert(x <= Int.MaxValue,
-            s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x")
-          assert(x >= 0.0 && x == x.toInt,
-            s"Values from column $inputColName must be indices, but got $x.")
-          math.max(m, x)
-        },
-        (m0, m1) => {
-          math.max(m0, m1)
-        }
-      ).toInt + 1
+      inputColNames: Seq[String],
+      outputColNames: Seq[String]): Seq[AttributeGroup] = {
+    // The RDD approach has advantage of early-stop if any values are invalid. It seems that
+    // DataFrame ops don't have equivalent functions.
+    val columns = inputColNames.map { inputColName =>
+      col(inputColName).cast(DoubleType)
+    }
+    val numOfColumns = columns.length
 
-    createAttrGroupForAttrNames(outputColName, dropLast, numAttrs)
+    val numAttrsArray = dataset.select(columns: _*).rdd.map { row =>
+      val array = new Array[Double](numOfColumns)
+      (0 until numOfColumns).foreach(idx => array(idx) = row.getDouble(idx))
+      array
+    }.treeAggregate(new Array[Double](numOfColumns))(
+      (maxValues, curValues) => {
+        (0 until numOfColumns).map { idx =>
+          val x = curValues(idx)
+          assert(x <= Int.MaxValue,
+            s"OneHotEncoder only supports up to ${Int.MaxValue} indices, but got $x.")
+          assert(x >= 0.0 && x == x.toInt,
+            s"Values from column ${inputColNames(idx)} must be indices, but got $x.")
+          math.max(maxValues(idx), x)
+        }.toArray
+      },
+      (m0, m1) => {
+        (0 until numOfColumns).map(idx => math.max(m0(idx), m1(idx))).toArray
+      }
+    ).map(_.toInt + 1)
+
+    outputColNames.zip(numAttrsArray).map { case (outputColName, numAttrs) =>
+      createAttrGroupForAttrNames(outputColName, dropLast, numAttrs)
+    }
   }
 
   /** Creates an `AttributeGroup` with the required number of `BinaryAttribute`. */
