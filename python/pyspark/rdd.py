@@ -127,7 +127,7 @@ def _load_from_socket(port, serializer):
         af, socktype, proto, canonname, sa = res
         sock = socket.socket(af, socktype, proto)
         try:
-            sock.settimeout(3)
+            sock.settimeout(15)
             sock.connect(sa)
         except socket.error:
             sock.close()
