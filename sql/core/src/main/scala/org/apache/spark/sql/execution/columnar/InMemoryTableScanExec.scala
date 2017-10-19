@@ -51,9 +51,7 @@ case class InMemoryTableScanExec(
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => false
       case _ => true
-    }).isEmpty &&
-      !WholeStageCodegenExec.isTooManyFields(conf, relation.schema) &&
-      children.find(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema)).isEmpty
+    }).isEmpty && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
   }
 
   private val columnIndices =
