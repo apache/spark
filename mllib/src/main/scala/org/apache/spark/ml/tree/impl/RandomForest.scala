@@ -561,7 +561,6 @@ private[spark] object RandomForest extends Logging {
           binsToBestSplit(aggStats, splits, featuresForNode, nodes(nodeIndex))
         (nodeIndex, (split, stats))
     }.collectAsMap()
-    nodeToFeaturesBc.destroy(blocking = false)
 
     timer.stop("chooseSplits")
 
