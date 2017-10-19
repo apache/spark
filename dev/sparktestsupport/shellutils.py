@@ -21,13 +21,8 @@ import shutil
 import subprocess
 import sys
 
-
-if sys.version_info >= (2, 7):
-    subprocess_check_output = subprocess.check_output
-    subprocess_check_call = subprocess.check_call
-else:
-    print("[error] Python versions prior to 2.7 are not supported.")
-    sys.exit(-1)
+subprocess_check_output = subprocess.check_output
+subprocess_check_call = subprocess.check_call
 
 
 def exit_from_command_with_retcode(cmd, retcode):
