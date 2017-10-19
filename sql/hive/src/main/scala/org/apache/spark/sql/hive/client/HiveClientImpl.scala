@@ -111,12 +111,6 @@ private[hive] class HiveClientImpl(
     if (clientLoader.isolationOn) {
       // Switch to the initClassLoader.
       Thread.currentThread().setContextClassLoader(initClassLoader)
-      // Set up kerberos credentials for UserGroupInformation.loginUser within current class loader
-      if (sparkConf.contains("spark.yarn.principal") && sparkConf.contains("spark.yarn.keytab")) {
-        val principal = sparkConf.get("spark.yarn.principal")
-        val keytab = sparkConf.get("spark.yarn.keytab")
-        SparkHadoopUtil.get.loginUserFromKeytab(principal, keytab)
-      }
       try {
         newState()
       } finally {
