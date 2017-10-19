@@ -50,6 +50,8 @@ class RecordingManagedBuffer(underlyingBuffer: NioManagedBuffer) extends Managed
     callsToRelease += 1
     underlyingBuffer.release()
   }
+
+  override def isDirect: Boolean = underlyingBuffer.isDirect
 }
 
 class BlockStoreShuffleReaderSuite extends SparkFunSuite with LocalSparkContext {

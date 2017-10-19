@@ -81,6 +81,11 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public boolean isDirect() {
+    return underlying.isDirect();
+  }
+
+  @Override
   public int hashCode() {
     return underlying.hashCode();
   }

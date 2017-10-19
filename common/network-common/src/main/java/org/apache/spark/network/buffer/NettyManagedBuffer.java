@@ -68,6 +68,11 @@ public class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
+  public boolean isDirect() {
+    return buf.isDirect();
+  }
+
+  @Override
   public String toString() {
     return Objects.toStringHelper(this)
       .add("buf", buf)

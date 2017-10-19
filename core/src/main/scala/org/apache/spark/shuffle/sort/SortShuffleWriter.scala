@@ -53,6 +53,9 @@ private[spark] class SortShuffleWriter[K, V, C](
       require(dep.aggregator.isDefined, "Map-side combine without Aggregator specified!")
       new ExternalSorter[K, V, C](
         context, dep.aggregator, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
+    } else if (dep.keyOrdering.isDefined) {
+      new ExternalSorter[K, V, C](
+        context, aggregator = None, Some(dep.partitioner), dep.keyOrdering, dep.serializer)
     } else {
       // In this case we pass neither an aggregator nor an ordering to the sorter, because we don't
       // care whether the keys get sorted in each partition; that will be done on the reduce side
