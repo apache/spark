@@ -38,8 +38,9 @@ import org.apache.spark.rpc._
 import org.apache.spark.scheduler.{ExecutorExited, LiveListenerBus, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.{RegisterExecutor, RemoveExecutor}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
+import org.apache.spark.util.ThreadUtils
 
-private[spark] class KubernetesClusterSchedulerBackendSuite
+class KubernetesClusterSchedulerBackendSuite
     extends SparkFunSuite with BeforeAndAfter {
 
   private val APP_ID = "test-spark-app"
@@ -121,6 +122,9 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
   @Mock
   private var executorPodsWatch: Watch = _
 
+  @Mock
+  private var successFuture: Future[Boolean] = _
+
   private var sparkConf: SparkConf = _
   private var executorPodsWatcherArgument: ArgumentCaptor[Watcher[Pod]] = _
   private var allocatorRunnable: ArgumentCaptor[Runnable] = _
@@ -169,9 +173,15 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     when(rpcEnv.setupEndpoint(
       mockitoEq(CoarseGrainedSchedulerBackend.ENDPOINT_NAME), driverEndpoint.capture()))
       .thenReturn(driverEndpointRef)
+
+    // Used by the CoarseGrainedSchedulerBackend when making RPC calls.
     when(driverEndpointRef.ask[Boolean]
       (any(classOf[Any]))
-      (any())).thenReturn(mock[Future[Boolean]])
+      (any())).thenReturn(successFuture)
+    when(successFuture.failed).thenReturn(Future[Throwable] {
+      // emulate behavior of the Future.failed method.
+      throw new NoSuchElementException()
+    }(ThreadUtils.sameThread))
   }
 
   test("Basic lifecycle expectations when starting and stopping the scheduler.") {
@@ -239,13 +249,14 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     verify(podOperations).create(SECOND_EXECUTOR_POD)
   }
 
-  test("Deleting executors and then running an allocator pass after finding the loss reason" +
-      " should only delete the pod once.") {
+  test("Scaled down executors should be cleaned up") {
     sparkConf
       .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
       .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
     val scheduler = newSchedulerBackend()
     scheduler.start()
+
+    // The scheduler backend spins up one executor pod.
     requestExecutorRunnable.getValue.run()
     when(podOperations.create(any(classOf[Pod])))
       .thenAnswer(AdditionalAnswers.returnsFirstArg())
@@ -258,6 +269,8 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     when(taskSchedulerImpl.resourceOffers(any())).thenReturn(Seq.empty)
     driverEndpoint.getValue.receiveAndReply(mock[RpcCallContext])
       .apply(registerFirstExecutorMessage)
+
+    // Request that there are 0 executors and trigger deletion from driver.
     scheduler.doRequestTotalExecutors(0)
     requestExecutorRunnable.getAllValues.asScala.last.run()
     scheduler.doKillExecutors(Seq("1"))
@@ -268,6 +281,9 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     val exitedPod = exitPod(FIRST_EXECUTOR_POD, 0)
     executorPodsWatcherArgument.getValue.eventReceived(Action.DELETED, exitedPod)
     allocatorRunnable.getValue.run()
+
+    // No more deletion attempts of the executors.
+    // This is graceful termination and should not be detected as a failure.
     verify(podOperations, times(1)).delete(FIRST_EXECUTOR_POD)
     verify(driverEndpointRef, times(1)).ask[Boolean](
       RemoveExecutor("1", ExecutorExited(
@@ -277,10 +293,11 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
           s" explicit termination request.")))
   }
 
-  test("Executors that disconnect from application errors are noted as exits caused by app.") {
+  test("Executors that fail should not be deleted.") {
     sparkConf
       .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
       .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
+
     val scheduler = newSchedulerBackend()
     scheduler.start()
     expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
@@ -298,6 +315,7 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     executorPodsWatcherArgument.getValue.eventReceived(
       Action.ERROR, exitPod(FIRST_EXECUTOR_POD, 1))
 
+    // A replacement executor should be created but the error pod should persist.
     expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     scheduler.doRequestTotalExecutors(1)
     requestExecutorRunnable.getValue.run()
@@ -311,11 +329,11 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     verify(podOperations, never()).delete(FIRST_EXECUTOR_POD)
   }
 
-  test("Executors should only try to get the loss reason a number of times before giving up and" +
-    " removing the executor.") {
+  test("Executors disconnected due to unknown reasons are deleted and replaced.") {
     sparkConf
       .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 1)
       .set(org.apache.spark.internal.config.EXECUTOR_INSTANCES, 1)
+
     val scheduler = newSchedulerBackend()
     scheduler.start()
     expectPodCreationWithId(1, FIRST_EXECUTOR_POD)
@@ -329,11 +347,13 @@ private[spark] class KubernetesClusterSchedulerBackendSuite
     when(taskSchedulerImpl.resourceOffers(any())).thenReturn(Seq.empty)
     driverEndpoint.getValue.receiveAndReply(mock[RpcCallContext])
       .apply(registerFirstExecutorMessage)
+
     driverEndpoint.getValue.onDisconnected(executorEndpointRef.address)
     1 to KubernetesClusterSchedulerBackend.MAX_EXECUTOR_LOST_REASON_CHECKS foreach { _ =>
       allocatorRunnable.getValue.run()
       verify(podOperations, never()).delete(FIRST_EXECUTOR_POD)
     }
+
     expectPodCreationWithId(2, SECOND_EXECUTOR_POD)
     allocatorRunnable.getValue.run()
     verify(podOperations).delete(FIRST_EXECUTOR_POD)

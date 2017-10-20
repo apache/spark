@@ -390,16 +390,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
           s"Container in pod " + pod.getMetadata.getName +
             " exited from explicit termination request.")
       } else {
-        val containerExitReason = containerExitStatus match {
-          case VMEM_EXCEEDED_EXIT_CODE | PMEM_EXCEEDED_EXIT_CODE =>
-            memLimitExceededLogMessage(pod.getStatus.getReason)
-          case _ =>
-            // Here we can't be sure that that exit was caused by the application but this seems
-            // to be the right default since we know the pod was not explicitly deleted by
-            // the user.
-            s"Pod ${pod.getMetadata.getName}'s executor container exited with exit status" +
-              s" code $containerExitStatus."
-        }
+        val containerExitReason = s"Pod ${pod.getMetadata.getName}'s executor container " +
+          s"exited with exit status code $containerExitStatus."
         ExecutorExited(containerExitStatus, exitCausedByApp = true, containerExitReason)
       }
       podsWithKnownExitReasons.put(pod.getMetadata.getName, exitReason)
@@ -441,16 +433,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
 }
 
 private object KubernetesClusterSchedulerBackend {
-  private val VMEM_EXCEEDED_EXIT_CODE = -103
-  private val PMEM_EXCEEDED_EXIT_CODE = -104
-  private val UNKNOWN_EXIT_CODE = -111
+  private val UNKNOWN_EXIT_CODE = -1
   // Number of times we are allowed check for the loss reason for an executor before we give up
   // and assume the executor failed for good, and attribute it to a framework fault.
   val MAX_EXECUTOR_LOST_REASON_CHECKS = 10
-
-  def memLimitExceededLogMessage(diagnostics: String): String = {
-    s"Pod/Container killed for exceeding memory limits. $diagnostics" +
-      " Consider boosting spark executor memory overhead."
-  }
 }
 
