@@ -15,20 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.v2
+package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import java.io.Serializable;
 
-object DataSourceV2Strategy extends Strategy {
-  override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case DataSourceV2Relation(output, reader) =>
-      DataSourceV2ScanExec(output, reader) :: Nil
+import org.apache.spark.annotation.InterfaceStability;
 
-    case WriteToDataSourceV2(writer, query) =>
-      WriteToDataSourceV2Exec(writer, planLater(query)) :: Nil
-
-    case _ => Nil
-  }
-}
+/**
+ * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
+ * as the input parameter of {@link DataSourceV2Writer#commit(WriterCommitMessage[])}.
+ *
+ * This is an empty interface, data sources should define their own message class and use it in
+ * their {@link DataWriter#commit()} and {@link DataSourceV2Writer#commit(WriterCommitMessage[])}
+ * implementations.
+ */
+@InterfaceStability.Evolving
+public interface WriterCommitMessage extends Serializable {}
