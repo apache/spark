@@ -56,9 +56,7 @@ private[security] class HBaseDelegationTokenProvider
     None
   }
 
-  override def delegationTokensRequired(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Boolean = {
+  override def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     hbaseConf(hadoopConf).get("hbase.security.authentication") == "kerberos"
   }
 

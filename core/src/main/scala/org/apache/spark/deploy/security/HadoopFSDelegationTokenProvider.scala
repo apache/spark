@@ -69,9 +69,7 @@ private[deploy] class HadoopFSDelegationTokenProvider(fileSystems: Configuration
     nextRenewalDate
   }
 
-  override def delegationTokensRequired(
-      sparkConf: SparkConf,
-      hadoopConf: Configuration): Boolean = {
+  def delegationTokensRequired(hadoopConf: Configuration): Boolean = {
     UserGroupInformation.isSecurityEnabled
   }
 

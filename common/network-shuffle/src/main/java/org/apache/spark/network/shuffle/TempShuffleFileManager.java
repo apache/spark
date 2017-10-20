@@ -15,19 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.sources.v2.writer;
+package org.apache.spark.network.shuffle;
 
-import java.io.Serializable;
-
-import org.apache.spark.annotation.InterfaceStability;
+import java.io.File;
 
 /**
- * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
- * as the input parameter of {@link DataSourceV2Writer#commit(WriterCommitMessage[])}.
- *
- * This is an empty interface, data sources should define their own message class and use it in
- * their {@link DataWriter#commit()} and {@link DataSourceV2Writer#commit(WriterCommitMessage[])}
- * implementations.
+ * A manager to create temp shuffle block files to reduce the memory usage and also clean temp
+ * files when they won't be used any more.
  */
-@InterfaceStability.Evolving
-public interface WriterCommitMessage extends Serializable {}
+public interface TempShuffleFileManager {
+
+  /** Create a temp shuffle block file. */
+  File createTempShuffleFile();
+
+  /**
+   * Register a temp shuffle file to clean up when it won't be used any more. Return whether the
+   * file is registered successfully. If `false`, the caller should clean up the file by itself.
+   */
+  boolean registerTempShuffleFileToClean(File file);
+}

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Expression, GenericInternalRow, JoinedRow, Literal, NamedExpression, PreciseTimestampConversion, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark._
 import org.apache.spark.sql.catalyst.plans.physical._
@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution.{BinaryExecNode, SparkPlan}
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.types.{LongType, TimestampType}
 import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 
@@ -114,8 +115,7 @@ import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
  * @param leftKeys  Expression to generate key rows for joining from left input
  * @param rightKeys Expression to generate key rows for joining from right input
  * @param joinType  Type of join (inner, left outer, etc.)
- * @param condition Conditions to filter rows, split by left, right, and joined. See
- *                  [[JoinConditionSplitPredicates]]
+ * @param condition Optional, additional condition to filter output of the equi-join
  * @param stateInfo Version information required to read join state (buffered rows)
  * @param eventTimeWatermark Watermark of input event, same for both sides
  * @param stateWatermarkPredicates Predicates for removal of state, see
@@ -127,7 +127,7 @@ case class StreamingSymmetricHashJoinExec(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     joinType: JoinType,
-    condition: JoinConditionSplitPredicates,
+    condition: Option[Expression],
     stateInfo: Option[StatefulOperatorStateInfo],
     eventTimeWatermark: Option[Long],
     stateWatermarkPredicates: JoinStateWatermarkPredicates,
@@ -141,10 +141,8 @@ case class StreamingSymmetricHashJoinExec(
       condition: Option[Expression],
       left: SparkPlan,
       right: SparkPlan) = {
-
     this(
-      leftKeys, rightKeys, joinType, JoinConditionSplitPredicates(condition, left, right),
-      stateInfo = None, eventTimeWatermark = None,
+      leftKeys, rightKeys, joinType, condition, stateInfo = None, eventTimeWatermark = None,
       stateWatermarkPredicates = JoinStateWatermarkPredicates(), left, right)
   }
 
@@ -162,9 +160,6 @@ case class StreamingSymmetricHashJoinExec(
   private val hadoopConfBcast = sparkContext.broadcast(
     new SerializableConfiguration(SessionState.newHadoopConf(
       sparkContext.hadoopConfiguration, sqlContext.conf)))
-
-  val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
-  val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
 
   override def requiredChildDistribution: Seq[Distribution] =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
@@ -211,15 +206,10 @@ case class StreamingSymmetricHashJoinExec(
     val updateStartTimeNs = System.nanoTime
     val joinedRow = new JoinedRow
 
-
-    val postJoinFilter =
-      newPredicate(condition.bothSides.getOrElse(Literal(true)), left.output ++ right.output).eval _
     val leftSideJoiner = new OneSideHashJoiner(
-      LeftSide, left.output, leftKeys, leftInputIter,
-      condition.leftSideOnly, postJoinFilter, stateWatermarkPredicates.left)
+      LeftSide, left.output, leftKeys, leftInputIter, stateWatermarkPredicates.left)
     val rightSideJoiner = new OneSideHashJoiner(
-      RightSide, right.output, rightKeys, rightInputIter,
-      condition.rightSideOnly, postJoinFilter, stateWatermarkPredicates.right)
+      RightSide, right.output, rightKeys, rightInputIter, stateWatermarkPredicates.right)
 
     //  Join one side input using the other side's buffered/state rows. Here is how it is done.
     //
@@ -231,11 +221,14 @@ case class StreamingSymmetricHashJoinExec(
     //    matching new left input with new right input, since the new left input has become stored
     //    by that point. This tiny asymmetry is necessary to avoid duplication.
     val leftOutputIter = leftSideJoiner.storeAndJoinWithOtherSide(rightSideJoiner) {
-      (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(input).withRight(matched)
+      (input: UnsafeRow, matched: UnsafeRow) => joinedRow.withLeft(input).withRight(matched)
     }
     val rightOutputIter = rightSideJoiner.storeAndJoinWithOtherSide(leftSideJoiner) {
-      (input: InternalRow, matched: InternalRow) => joinedRow.withLeft(matched).withRight(input)
+      (input: UnsafeRow, matched: UnsafeRow) => joinedRow.withLeft(matched).withRight(input)
     }
+
+    // Filter the joined rows based on the given condition.
+    val outputFilterFunction = newPredicate(condition.getOrElse(Literal(true)), output).eval _
 
     // We need to save the time that the inner join output iterator completes, since outer join
     // output counts as both update and removal time.
@@ -243,16 +236,28 @@ case class StreamingSymmetricHashJoinExec(
     def onInnerOutputCompletion = {
       innerOutputCompletionTimeNs = System.nanoTime
     }
-    // This is the iterator which produces the inner join rows. For outer joins, this will be
-    // prepended to a second iterator producing outer join rows; for inner joins, this is the full
-    // output.
-    val innerOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
-      (leftOutputIter ++ rightOutputIter), onInnerOutputCompletion)
+    val filteredInnerOutputIter = CompletionIterator[InternalRow, Iterator[InternalRow]](
+      (leftOutputIter ++ rightOutputIter).filter(outputFilterFunction), onInnerOutputCompletion)
 
+    def matchesWithRightSideState(leftKeyValue: UnsafeRowPair) = {
+      rightSideJoiner.get(leftKeyValue.key).exists(
+        rightValue => {
+          outputFilterFunction(
+            joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
+        })
+    }
+
+    def matchesWithLeftSideState(rightKeyValue: UnsafeRowPair) = {
+      leftSideJoiner.get(rightKeyValue.key).exists(
+        leftValue => {
+          outputFilterFunction(
+            joinedRow.withLeft(leftValue).withRight(rightKeyValue.value))
+        })
+    }
 
     val outputIter: Iterator[InternalRow] = joinType match {
       case Inner =>
-        innerOutputIter
+        filteredInnerOutputIter
       case LeftOuter =>
         // We generate the outer join input by:
         // * Getting an iterator over the rows that have aged out on the left side. These rows are
@@ -263,37 +268,28 @@ case class StreamingSymmetricHashJoinExec(
         //   we know we can join with null, since there was never (including this batch) a match
         //   within the watermark period. If it does, there must have been a match at some point, so
         //   we know we can't join with null.
-        def matchesWithRightSideState(leftKeyValue: UnsafeRowPair) = {
-          rightSideJoiner.get(leftKeyValue.key).exists { rightValue =>
-            postJoinFilter(joinedRow.withLeft(leftKeyValue.value).withRight(rightValue))
-          }
-        }
+        val nullRight = new GenericInternalRow(right.output.map(_.withNullability(true)).length)
         val removedRowIter = leftSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter
           .filterNot(pair => matchesWithRightSideState(pair))
           .map(pair => joinedRow.withLeft(pair.value).withRight(nullRight))
 
-        innerOutputIter ++ outerOutputIter
+        filteredInnerOutputIter ++ outerOutputIter
       case RightOuter =>
         // See comments for left outer case.
-        def matchesWithLeftSideState(rightKeyValue: UnsafeRowPair) = {
-          leftSideJoiner.get(rightKeyValue.key).exists { leftValue =>
-            postJoinFilter(joinedRow.withLeft(leftValue).withRight(rightKeyValue.value))
-          }
-        }
+        val nullLeft = new GenericInternalRow(left.output.map(_.withNullability(true)).length)
         val removedRowIter = rightSideJoiner.removeOldState()
         val outerOutputIter = removedRowIter
           .filterNot(pair => matchesWithLeftSideState(pair))
           .map(pair => joinedRow.withLeft(nullLeft).withRight(pair.value))
 
-        innerOutputIter ++ outerOutputIter
+        filteredInnerOutputIter ++ outerOutputIter
       case _ => throwBadJoinTypeException()
     }
 
-    val outputProjection = UnsafeProjection.create(left.output ++ right.output, output)
     val outputIterWithMetrics = outputIter.map { row =>
       numOutputRows += 1
-      outputProjection(row)
+      row
     }
 
     // Function to remove old state after all the input has been consumed and output generated
@@ -353,35 +349,13 @@ case class StreamingSymmetricHashJoinExec(
   /**
    * Internal helper class to consume input rows, generate join output rows using other sides
    * buffered state rows, and finally clean up this sides buffered state rows
-   *
-   * @param joinSide The JoinSide - either left or right.
-   * @param inputAttributes The input attributes for this side of the join.
-   * @param joinKeys The join keys.
-   * @param inputIter The iterator of input rows on this side to be joined.
-   * @param preJoinFilterExpr A filter over rows on this side. This filter rejects rows that could
-   *                          never pass the overall join condition no matter what other side row
-   *                          they're joined with.
-   * @param postJoinFilter A filter over joined rows. This filter completes the application of
-   *                       the overall join condition, assuming that preJoinFilter on both sides
-   *                       of the join has already been passed.
-   *                       Passed as a function rather than expression to avoid creating the
-   *                       predicate twice; we also need this filter later on in the parent exec.
-   * @param stateWatermarkPredicate The state watermark predicate. See
-   *                                [[StreamingSymmetricHashJoinExec]] for further description of
-   *                                state watermarks.
    */
   private class OneSideHashJoiner(
       joinSide: JoinSide,
       inputAttributes: Seq[Attribute],
       joinKeys: Seq[Expression],
       inputIter: Iterator[InternalRow],
-      preJoinFilterExpr: Option[Expression],
-      postJoinFilter: (InternalRow) => Boolean,
       stateWatermarkPredicate: Option[JoinStateWatermarkPredicate]) {
-
-    // Filter the joined rows based on the given condition.
-    val preJoinFilter =
-      newPredicate(preJoinFilterExpr.getOrElse(Literal(true)), inputAttributes).eval _
 
     private val joinStateManager = new SymmetricHashJoinStateManager(
       joinSide, inputAttributes, joinKeys, stateInfo, storeConf, hadoopConfBcast.value.value)
@@ -414,8 +388,8 @@ case class StreamingSymmetricHashJoinExec(
      */
     def storeAndJoinWithOtherSide(
         otherSideJoiner: OneSideHashJoiner)(
-        generateJoinedRow: (InternalRow, InternalRow) => JoinedRow):
-    Iterator[InternalRow] = {
+        generateJoinedRow: (UnsafeRow, UnsafeRow) => JoinedRow): Iterator[InternalRow] = {
+
       val watermarkAttribute = inputAttributes.find(_.metadata.contains(delayKey))
       val nonLateRows =
         WatermarkSupport.watermarkExpression(watermarkAttribute, eventTimeWatermark) match {
@@ -428,31 +402,17 @@ case class StreamingSymmetricHashJoinExec(
 
       nonLateRows.flatMap { row =>
         val thisRow = row.asInstanceOf[UnsafeRow]
-        // If this row fails the pre join filter, that means it can never satisfy the full join
-        // condition no matter what other side row it's matched with. This allows us to avoid
-        // adding it to the state, and generate an outer join row immediately (or do nothing in
-        // the case of inner join).
-        if (preJoinFilter(thisRow)) {
-          val key = keyGenerator(thisRow)
-          val outputIter = otherSideJoiner.joinStateManager.get(key).map { thatRow =>
-            generateJoinedRow(thisRow, thatRow)
-          }.filter(postJoinFilter)
-          val shouldAddToState = // add only if both removal predicates do not match
-            !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
-          if (shouldAddToState) {
-            joinStateManager.append(key, thisRow)
-            updatedStateRowsCount += 1
-          }
-          outputIter
-        } else {
-          joinSide match {
-            case LeftSide if joinType == LeftOuter =>
-              Iterator(generateJoinedRow(thisRow, nullRight))
-            case RightSide if joinType == RightOuter =>
-              Iterator(generateJoinedRow(thisRow, nullLeft))
-            case _ => Iterator()
-          }
+        val key = keyGenerator(thisRow)
+        val outputIter = otherSideJoiner.joinStateManager.get(key).map { thatRow =>
+          generateJoinedRow(thisRow, thatRow)
         }
+        val shouldAddToState = // add only if both removal predicates do not match
+          !stateKeyWatermarkPredicateFunc(key) && !stateValueWatermarkPredicateFunc(thisRow)
+        if (shouldAddToState) {
+          joinStateManager.append(key, thisRow)
+          updatedStateRowsCount += 1
+        }
+        outputIter
       }
     }
 

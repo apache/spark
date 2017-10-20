@@ -394,10 +394,7 @@ private[spark] class Client(
     if (credentials != null) {
       // Add credentials to current user's UGI, so that following operations don't need to use the
       // Kerberos tgt to get delegations again in the client side.
-      val currentUser = UserGroupInformation.getCurrentUser()
-      if (SparkHadoopUtil.get.isProxyUser(currentUser)) {
-        currentUser.addCredentials(credentials)
-      }
+      UserGroupInformation.getCurrentUser.addCredentials(credentials)
       logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
     }
 

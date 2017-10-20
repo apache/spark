@@ -205,17 +205,14 @@ object PhysicalAggregation {
     case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
       // A single aggregate expression might appear multiple times in resultExpressions.
       // In order to avoid evaluating an individual aggregate function multiple times, we'll
-      // build a set of semantically distinct aggregate expressions and re-write expressions so
-      // that they reference the single copy of the aggregate function which actually gets computed.
-      // Non-deterministic aggregate expressions are not deduplicated.
-      val equivalentAggregateExpressions = new EquivalentExpressions
+      // build a set of the distinct aggregate expressions and build a function which can
+      // be used to re-write expressions so that they reference the single copy of the
+      // aggregate function which actually gets computed.
       val aggregateExpressions = resultExpressions.flatMap { expr =>
         expr.collect {
-          // addExpr() always returns false for non-deterministic expressions and do not add them.
-          case agg: AggregateExpression
-            if (!equivalentAggregateExpressions.addExpr(agg)) => agg
+          case agg: AggregateExpression => agg
         }
-      }
+      }.distinct
 
       val namedGroupingExpressions = groupingExpressions.map {
         case ne: NamedExpression => ne -> ne
@@ -239,8 +236,7 @@ object PhysicalAggregation {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
             // so replace each aggregate expression by its corresponding attribute in the set:
-            equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
-              .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
+            ae.resultAttribute
           case expression =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key
             // columns, we need to replace grouping key expressions with their corresponding

@@ -43,11 +43,10 @@ case class StatefulOperatorStateInfo(
     checkpointLocation: String,
     queryRunId: UUID,
     operatorId: Long,
-    storeVersion: Long,
-    numPartitions: Int) {
+    storeVersion: Long) {
   override def toString(): String = {
     s"state info [ checkpoint = $checkpointLocation, runId = $queryRunId, " +
-      s"opId = $operatorId, ver = $storeVersion, numPartitions = $numPartitions]"
+      s"opId = $operatorId, ver = $storeVersion]"
   }
 }
 
@@ -240,7 +239,7 @@ case class StateStoreRestoreExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyExpressions) :: Nil
     }
   }
 }
@@ -387,7 +386,7 @@ case class StateStoreSaveExec(
     if (keyExpressions.isEmpty) {
       AllTuples :: Nil
     } else {
-      ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+      ClusteredDistribution(keyExpressions) :: Nil
     }
   }
 }
@@ -402,7 +401,7 @@ case class StreamingDeduplicateExec(
 
   /** Distribute by grouping attributes */
   override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
+    ClusteredDistribution(keyExpressions) :: Nil
 
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver

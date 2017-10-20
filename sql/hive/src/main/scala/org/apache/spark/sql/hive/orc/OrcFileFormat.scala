@@ -32,7 +32,6 @@ import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.{JobConf, OutputFormat => MapRedOutputFormat, RecordWriter, Reporter}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat, FileSplit}
-import org.apache.orc.OrcConf.COMPRESS
 
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.SparkSession
@@ -73,7 +72,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
     val configuration = job.getConfiguration
 
-    configuration.set(COMPRESS.getAttribute, orcOptions.compressionCodec)
+    configuration.set(OrcRelation.ORC_COMPRESSION, orcOptions.compressionCodec)
     configuration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
@@ -94,8 +93,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
 
       override def getFileExtension(context: TaskAttemptContext): String = {
         val compressionExtension: String = {
-          val name = context.getConfiguration.get(COMPRESS.getAttribute)
-          OrcFileFormat.extensionsForCompressionCodecNames.getOrElse(name, "")
+          val name = context.getConfiguration.get(OrcRelation.ORC_COMPRESSION)
+          OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
         }
 
         compressionExtension + ".orc"
@@ -121,7 +120,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
       OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
-        hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, f.toKryo)
+        hadoopConf.set(OrcRelation.SARG_PUSHDOWN, f.toKryo)
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
     }
@@ -135,11 +134,12 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
       // SPARK-8501: Empty ORC files always have an empty schema stored in their footer. In this
       // case, `OrcFileOperator.readSchema` returns `None`, and we can't read the underlying file
       // using the given physical schema. Instead, we simply return an empty iterator.
-      val isEmptyFile = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf)).isEmpty
-      if (isEmptyFile) {
+      val maybePhysicalSchema = OrcFileOperator.readSchema(Seq(file.filePath), Some(conf))
+      if (maybePhysicalSchema.isEmpty) {
         Iterator.empty
       } else {
-        OrcFileFormat.setRequiredColumns(conf, dataSchema, requiredSchema)
+        val physicalSchema = maybePhysicalSchema.get
+        OrcRelation.setRequiredColumns(conf, physicalSchema, requiredSchema)
 
         val orcRecordReader = {
           val job = Job.getInstance(conf)
@@ -161,9 +161,8 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
         Option(TaskContext.get()).foreach(_.addTaskCompletionListener(_ => recordsIterator.close()))
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
-        OrcFileFormat.unwrapOrcStructs(
+        OrcRelation.unwrapOrcStructs(
           conf,
-          dataSchema,
           requiredSchema,
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
           recordsIterator)
@@ -256,7 +255,10 @@ private[orc] class OrcOutputWriter(
   }
 }
 
-private[orc] object OrcFileFormat extends HiveInspectors {
+private[orc] object OrcRelation extends HiveInspectors {
+  // The references of Hive's classes will be minimized.
+  val ORC_COMPRESSION = "orc.compress"
+
   // This constant duplicates `OrcInputFormat.SARG_PUSHDOWN`, which is unfortunately not public.
   private[orc] val SARG_PUSHDOWN = "sarg.pushdown"
 
@@ -270,32 +272,25 @@ private[orc] object OrcFileFormat extends HiveInspectors {
   def unwrapOrcStructs(
       conf: Configuration,
       dataSchema: StructType,
-      requiredSchema: StructType,
       maybeStructOI: Option[StructObjectInspector],
       iterator: Iterator[Writable]): Iterator[InternalRow] = {
     val deserializer = new OrcSerde
-    val mutableRow = new SpecificInternalRow(requiredSchema.map(_.dataType))
-    val unsafeProjection = UnsafeProjection.create(requiredSchema)
+    val mutableRow = new SpecificInternalRow(dataSchema.map(_.dataType))
+    val unsafeProjection = UnsafeProjection.create(dataSchema)
 
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
-      val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
-        case (field, ordinal) =>
-          var ref = oi.getStructFieldRef(field.name)
-          if (ref == null) {
-            ref = oi.getStructFieldRef("_col" + dataSchema.fieldIndex(field.name))
-          }
-          ref -> ordinal
+      val (fieldRefs, fieldOrdinals) = dataSchema.zipWithIndex.map {
+        case (field, ordinal) => oi.getStructFieldRef(field.name) -> ordinal
       }.unzip
 
-      val unwrappers = fieldRefs.map(r => if (r == null) null else unwrapperFor(r))
+      val unwrappers = fieldRefs.map(unwrapperFor)
 
       iterator.map { value =>
         val raw = deserializer.deserialize(value)
         var i = 0
         val length = fieldRefs.length
         while (i < length) {
-          val fieldRef = fieldRefs(i)
-          val fieldValue = if (fieldRef == null) null else oi.getStructFieldData(raw, fieldRef)
+          val fieldValue = oi.getStructFieldData(raw, fieldRefs(i))
           if (fieldValue == null) {
             mutableRow.setNullAt(fieldOrdinals(i))
           } else {
@@ -311,8 +306,8 @@ private[orc] object OrcFileFormat extends HiveInspectors {
   }
 
   def setRequiredColumns(
-      conf: Configuration, dataSchema: StructType, requestedSchema: StructType): Unit = {
-    val ids = requestedSchema.map(a => dataSchema.fieldIndex(a.name): Integer)
+      conf: Configuration, physicalSchema: StructType, requestedSchema: StructType): Unit = {
+    val ids = requestedSchema.map(a => physicalSchema.fieldIndex(a.name): Integer)
     val (sortedIDs, sortedNames) = ids.zip(requestedSchema.fieldNames).sorted.unzip
     HiveShim.appendReadColumns(conf, sortedIDs, sortedNames)
   }

@@ -22,7 +22,6 @@ import java.sql.Timestamp
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.io.orc.{OrcStruct, SparkOrcNewRecordReader}
-import org.apache.orc.OrcConf.COMPRESS
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -177,11 +176,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-16610: Respect orc.compress (i.e., OrcConf.COMPRESS) when compression is unset") {
-    // Respect `orc.compress` (i.e., OrcConf.COMPRESS).
+  test("SPARK-16610: Respect orc.compress option when compression is unset") {
+    // Respect `orc.compress`.
     withTempPath { file =>
       spark.range(0, 10).write
-        .option(COMPRESS.getAttribute, "ZLIB")
+        .option("orc.compress", "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -192,7 +191,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     withTempPath { file =>
       spark.range(0, 10).write
         .option("compression", "ZLIB")
-        .option(COMPRESS.getAttribute, "SNAPPY")
+        .option("orc.compress", "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -599,7 +598,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       val requestedSchema = StructType(Nil)
       val conf = new Configuration()
       val physicalSchema = OrcFileOperator.readSchema(Seq(path), Some(conf)).get
-      OrcFileFormat.setRequiredColumns(conf, physicalSchema, requestedSchema)
+      OrcRelation.setRequiredColumns(conf, physicalSchema, requestedSchema)
       val maybeOrcReader = OrcFileOperator.getFileReader(path, Some(conf))
       assert(maybeOrcReader.isDefined)
       val orcRecordReader = new SparkOrcNewRecordReader(

@@ -76,7 +76,7 @@ case class CallMethodViaReflection(children: Seq[Expression])
     }
   }
 
-  override lazy val deterministic: Boolean = false
+  override def deterministic: Boolean = false
   override def nullable: Boolean = true
   override val dataType: DataType = StringType
 

@@ -58,7 +58,7 @@ public class OneForOneBlockFetcher {
   private final BlockFetchingListener listener;
   private final ChunkReceivedCallback chunkCallback;
   private final TransportConf transportConf;
-  private final TempFileManager tempFileManager;
+  private final TempShuffleFileManager tempShuffleFileManager;
 
   private StreamHandle streamHandle = null;
 
@@ -79,14 +79,14 @@ public class OneForOneBlockFetcher {
       String[] blockIds,
       BlockFetchingListener listener,
       TransportConf transportConf,
-      TempFileManager tempFileManager) {
+      TempShuffleFileManager tempShuffleFileManager) {
     this.client = client;
     this.openMessage = new OpenBlocks(appId, execId, blockIds);
     this.blockIds = blockIds;
     this.listener = listener;
     this.chunkCallback = new ChunkCallback();
     this.transportConf = transportConf;
-    this.tempFileManager = tempFileManager;
+    this.tempShuffleFileManager = tempShuffleFileManager;
   }
 
   /** Callback invoked on receipt of each chunk. We equate a single chunk to a single block. */
@@ -125,7 +125,7 @@ public class OneForOneBlockFetcher {
           // Immediately request all chunks -- we expect that the total size of the request is
           // reasonable due to higher level chunking in [[ShuffleBlockFetcherIterator]].
           for (int i = 0; i < streamHandle.numChunks; i++) {
-            if (tempFileManager != null) {
+            if (tempShuffleFileManager != null) {
               client.stream(OneForOneStreamManager.genStreamChunkId(streamHandle.streamId, i),
                 new DownloadCallback(i));
             } else {
@@ -164,7 +164,7 @@ public class OneForOneBlockFetcher {
     private int chunkIndex;
 
     DownloadCallback(int chunkIndex) throws IOException {
-      this.targetFile = tempFileManager.createTempFile();
+      this.targetFile = tempShuffleFileManager.createTempShuffleFile();
       this.channel = Channels.newChannel(Files.newOutputStream(targetFile.toPath()));
       this.chunkIndex = chunkIndex;
     }
@@ -180,7 +180,7 @@ public class OneForOneBlockFetcher {
       ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0,
         targetFile.length());
       listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
-      if (!tempFileManager.registerTempFileToClean(targetFile)) {
+      if (!tempShuffleFileManager.registerTempShuffleFileToClean(targetFile)) {
         targetFile.delete();
       }
     }

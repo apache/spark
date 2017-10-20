@@ -61,17 +61,13 @@ class SparkHadoopUtil extends Logging {
    * do a FileSystem.closeAllForUGI in order to avoid leaking Filesystems
    */
   def runAsSparkUser(func: () => Unit) {
-    createSparkUser().doAs(new PrivilegedExceptionAction[Unit] {
-      def run: Unit = func()
-    })
-  }
-
-  def createSparkUser(): UserGroupInformation = {
     val user = Utils.getCurrentUserName()
-    logDebug("creating UGI for user: " + user)
+    logDebug("running as user: " + user)
     val ugi = UserGroupInformation.createRemoteUser(user)
     transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
-    ugi
+    ugi.doAs(new PrivilegedExceptionAction[Unit] {
+      def run: Unit = func()
+    })
   }
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
@@ -421,11 +417,6 @@ class SparkHadoopUtil extends Logging {
     creds.readTokenStorageStream(new DataInputStream(tokensBuf))
     creds
   }
-
-  def isProxyUser(ugi: UserGroupInformation): Boolean = {
-    ugi.getAuthenticationMethod() == UserGroupInformation.AuthenticationMethod.PROXY
-  }
-
 }
 
 object SparkHadoopUtil {

@@ -43,8 +43,7 @@ private[sql] class GroupStateImpl[S] private(
     batchProcessingTimeMs: Long,
     eventTimeWatermarkMs: Long,
     timeoutConf: GroupStateTimeout,
-    override val hasTimedOut: Boolean,
-    watermarkPresent: Boolean) extends GroupState[S] {
+    override val hasTimedOut: Boolean) extends GroupState[S] {
 
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
@@ -91,7 +90,7 @@ private[sql] class GroupStateImpl[S] private(
     if (timeoutConf != ProcessingTimeTimeout) {
       throw new UnsupportedOperationException(
         "Cannot set timeout duration without enabling processing time timeout in " +
-          "[map|flatMap]GroupsWithState")
+          "map/flatMapGroupsWithState")
     }
     if (durationMs <= 0) {
       throw new IllegalArgumentException("Timeout duration must be positive")
@@ -103,6 +102,10 @@ private[sql] class GroupStateImpl[S] private(
     setTimeoutDuration(parseDuration(duration))
   }
 
+  @throws[IllegalArgumentException]("if 'timestampMs' is not positive")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestampMs: Long): Unit = {
     checkTimeoutTimestampAllowed()
     if (timestampMs <= 0) {
@@ -116,32 +119,30 @@ private[sql] class GroupStateImpl[S] private(
     timeoutTimestamp = timestampMs
   }
 
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestampMs: Long, additionalDuration: String): Unit = {
     checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(parseDuration(additionalDuration) + timestampMs)
   }
 
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestamp: Date): Unit = {
     checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(timestamp.getTime)
   }
 
+  @throws[IllegalArgumentException]("if 'additionalDuration' is invalid")
+  @throws[IllegalStateException]("when state is either not initialized, or already removed")
+  @throws[UnsupportedOperationException](
+    "if 'timeout' has not been enabled in [map|flatMap]GroupsWithState in a streaming query")
   override def setTimeoutTimestamp(timestamp: Date, additionalDuration: String): Unit = {
     checkTimeoutTimestampAllowed()
     setTimeoutTimestamp(timestamp.getTime + parseDuration(additionalDuration))
-  }
-
-  override def getCurrentWatermarkMs(): Long = {
-    if (!watermarkPresent) {
-      throw new UnsupportedOperationException(
-        "Cannot get event time watermark timestamp without setting watermark before " +
-          "[map|flatMap]GroupsWithState")
-    }
-    eventTimeWatermarkMs
-  }
-
-  override def getCurrentProcessingTimeMs(): Long = {
-    batchProcessingTimeMs
   }
 
   override def toString: String = {
@@ -186,7 +187,7 @@ private[sql] class GroupStateImpl[S] private(
     if (timeoutConf != EventTimeTimeout) {
       throw new UnsupportedOperationException(
         "Cannot set timeout timestamp without enabling event time timeout in " +
-          "[map|flatMapGroupsWithState")
+          "map/flatMapGroupsWithState")
     }
   }
 }
@@ -201,22 +202,17 @@ private[sql] object GroupStateImpl {
       batchProcessingTimeMs: Long,
       eventTimeWatermarkMs: Long,
       timeoutConf: GroupStateTimeout,
-      hasTimedOut: Boolean,
-      watermarkPresent: Boolean): GroupStateImpl[S] = {
+      hasTimedOut: Boolean): GroupStateImpl[S] = {
     new GroupStateImpl[S](
-      optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs,
-      timeoutConf, hasTimedOut, watermarkPresent)
+      optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs, timeoutConf, hasTimedOut)
   }
 
-  def createForBatch(
-      timeoutConf: GroupStateTimeout,
-      watermarkPresent: Boolean): GroupStateImpl[Any] = {
+  def createForBatch(timeoutConf: GroupStateTimeout): GroupStateImpl[Any] = {
     new GroupStateImpl[Any](
       optionalValue = None,
-      batchProcessingTimeMs = System.currentTimeMillis,
+      batchProcessingTimeMs = NO_TIMESTAMP,
       eventTimeWatermarkMs = NO_TIMESTAMP,
       timeoutConf,
-      hasTimedOut = false,
-      watermarkPresent)
+      hasTimedOut = false)
   }
 }

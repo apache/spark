@@ -115,7 +115,7 @@ private[spark] class HadoopDelegationTokenManager(
       hadoopConf: Configuration,
       creds: Credentials): Long = {
     delegationTokenProviders.values.flatMap { provider =>
-      if (provider.delegationTokensRequired(sparkConf, hadoopConf)) {
+      if (provider.delegationTokensRequired(hadoopConf)) {
         provider.obtainDelegationTokens(hadoopConf, sparkConf, creds)
       } else {
         logDebug(s"Service ${provider.serviceName} does not require a token." +

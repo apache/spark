@@ -26,7 +26,6 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -81,11 +80,7 @@ abstract class DataType extends AbstractDataType {
    * (`StructField.nullable`, `ArrayType.containsNull`, and `MapType.valueContainsNull`).
    */
   private[spark] def sameType(other: DataType): Boolean =
-    if (SQLConf.get.caseSensitiveAnalysis) {
-      DataType.equalsIgnoreNullability(this, other)
-    } else {
-      DataType.equalsIgnoreCaseAndNullability(this, other)
-    }
+    DataType.equalsIgnoreNullability(this, other)
 
   /**
    * Returns the same data type but set all nullability fields are true

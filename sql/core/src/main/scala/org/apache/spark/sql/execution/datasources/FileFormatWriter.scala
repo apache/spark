@@ -180,13 +180,8 @@ object FileFormatWriter extends Logging {
       val rdd = if (orderingMatched) {
         queryExecution.toRdd
       } else {
-        // SPARK-21165: the `requiredOrdering` is based on the attributes from analyzed plan, and
-        // the physical plan may have different attribute ids due to optimizer removing some
-        // aliases. Here we bind the expression ahead to avoid potential attribute ids mismatch.
-        val orderingExpr = requiredOrdering
-          .map(SortOrder(_, Ascending)).map(BindReferences.bindReference(_, allColumns))
         SortExec(
-          orderingExpr,
+          requiredOrdering.map(SortOrder(_, Ascending)),
           global = false,
           child = queryExecution.executedPlan).execute()
       }
