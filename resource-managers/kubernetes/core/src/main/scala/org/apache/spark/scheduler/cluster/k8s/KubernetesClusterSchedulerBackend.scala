@@ -62,8 +62,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private val kubernetesDriverPodName = conf
     .get(KUBERNETES_DRIVER_POD_NAME)
-    .getOrElse(
-      throw new SparkException("Must specify the driver pod name"))
+    .getOrElse(throw new SparkException("Must specify the driver pod name"))
   private implicit val requestExecutorContext = ExecutionContext.fromExecutorService(
     requestExecutorsService)
 
@@ -86,7 +85,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
 
   private val executorWatchResource = new AtomicReference[Closeable]
-  protected var totalExpectedExecutors = new AtomicInteger(0)
+  protected val totalExpectedExecutors = new AtomicInteger(0)
 
   private val driverUrl = RpcEndpointAddress(
     conf.get("spark.driver.host"),
