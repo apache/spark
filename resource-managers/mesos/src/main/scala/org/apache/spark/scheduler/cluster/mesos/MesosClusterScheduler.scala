@@ -556,7 +556,8 @@ private[spark] class MesosClusterScheduler(
 
   private class ResourceOffer(
       val offer: Offer,
-      var remainingResources: JList[Resource]) {
+      var remainingResources: JList[Resource],
+      var attributes: JList[Attribute]) {
     override def toString(): String = {
       s"Offer id: ${offer.getId}, resources: ${remainingResources}"
     }
@@ -601,10 +602,12 @@ private[spark] class MesosClusterScheduler(
     for (submission <- candidates) {
       val driverCpu = submission.cores
       val driverMem = submission.mem
-      logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem")
+      val constraints = parseConstraintString(submission.conf.get("spark.mesos.driver.constraints", ""))
+      logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem, constraints: $constraints")
       val offerOption = currentOffers.find { offer =>
         getResource(offer.remainingResources, "cpus") >= driverCpu &&
-        getResource(offer.remainingResources, "mem") >= driverMem
+        getResource(offer.remainingResources, "mem") >= driverMem &&
+        matchesAttributeRequirements(constraints, toAttributeMap(offer.attributes))
       }
       if (offerOption.isEmpty) {
         logDebug(s"Unable to find offer to launch driver id: ${submission.submissionId}, " +
@@ -652,7 +655,7 @@ private[spark] class MesosClusterScheduler(
     val currentTime = new Date()
 
     val currentOffers = offers.asScala.map {
-      offer => new ResourceOffer(offer, offer.getResourcesList)
+      offer => new ResourceOffer(offer, offer.getResourcesList, offer.getAttributesList)
     }.toList
 
     stateLock.synchronized {

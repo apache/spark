@@ -19,6 +19,8 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.Collections
 
+import org.apache.mesos.protobuf.ByteString
+
 import scala.collection.JavaConverters._
 
 import org.apache.mesos.Protos._
@@ -31,6 +33,14 @@ import org.mockito.Mockito._
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 
 object Utils {
+  def createTextAttribute(name: String, value: String): Attribute = {
+    Attribute.newBuilder()
+      .setName(name)
+      .setType(Value.Type.TEXT)
+      .setText(Value.Text.newBuilder().setValue(value))
+      .build()
+  }
+
 
   val TEST_FRAMEWORK_ID = FrameworkID.newBuilder()
     .setValue("test-framework-id")
@@ -48,7 +58,8 @@ object Utils {
       mem: Int,
       cpus: Int,
       ports: Option[(Long, Long)] = None,
-      gpus: Int = 0): Offer = {
+      gpus: Int = 0,
+      attributes: List[Attribute] = List.empty): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -76,6 +87,7 @@ object Utils {
         .setValue("f1"))
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId))
       .setHostname(s"host${slaveId}")
+      .addAllAttributes(attributes.asJava)
       .build()
   }
 

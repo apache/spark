@@ -254,6 +254,32 @@ class MesosClusterSchedulerSuite extends SparkFunSuite with LocalSparkContext wi
     assert(networkInfos.get(0).getLabels.getLabels(1).getValue == "val2")
   }
 
+  test("declines offers that violate driver constraints") {
+    setScheduler()
+
+    val mem = 1000
+    val cpu = 1
+    val s2Attributes = List(Utils.createTextAttribute("c", "u"))
+
+    val response = scheduler.submitDriver(
+      new MesosDriverDescription("d1", "jar", mem, cpu, true,
+        command,
+        Map("spark.mesos.executor.home" -> "test",
+          "spark.app.name" -> "test",
+          "spark.mesos.driver.constraints" -> "c:v"),
+        "s1",
+        new Date()))
+
+    assert(response.success)
+
+    val offer1 = Utils.createOffer("o1", "s1", mem, cpu, None, 0)
+    val offer2 = Utils.createOffer("o2", "s2", mem, cpu, None, 0, s2Attributes)
+    scheduler.resourceOffers(driver, List(offer1, offer2).asJava)
+
+    Utils.verifyTaskNotLaunched(driver, "o1")
+    Utils.verifyTaskNotLaunched(driver, "o2")
+  }
+
   test("supports spark.mesos.driver.labels") {
     setScheduler()
 
