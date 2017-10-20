@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.HyperLogLogPlusPlus.InternalRowInput
-import org.apache.spark.sql.catalyst.util.{HLLPPInput, HyperLogLogPlusPlusHelper}
+import org.apache.spark.sql.catalyst.util.HyperLogLogPlusPlusHelper
 import org.apache.spark.sql.types._
 
 // scalastyle:off
@@ -114,7 +113,7 @@ case class HyperLogLogPlusPlus(
   override def update(buffer: InternalRow, input: InternalRow): Unit = {
     val v = child.eval(input)
     if (v != null) {
-      hllppHelper.update(InternalRowInput(buffer), mutableAggBufferOffset, v, child.dataType)
+      hllppHelper.update(buffer, mutableAggBufferOffset, v, child.dataType)
     }
   }
 
@@ -122,7 +121,7 @@ case class HyperLogLogPlusPlus(
    * Merge the HLL++ buffers.
    */
   override def merge(buffer1: InternalRow, buffer2: InternalRow): Unit = {
-    hllppHelper.merge(buffer1 = InternalRowInput(buffer1), buffer2 = InternalRowInput(buffer2),
+    hllppHelper.merge(buffer1 = buffer1, buffer2 = buffer2,
       offset1 = mutableAggBufferOffset, offset2 = inputAggBufferOffset)
   }
 
@@ -130,7 +129,7 @@ case class HyperLogLogPlusPlus(
    * Compute the HyperLogLog estimate.
    */
   override def eval(buffer: InternalRow): Any = {
-    hllppHelper.query(InternalRowInput(buffer), mutableAggBufferOffset)
+    hllppHelper.query(buffer, mutableAggBufferOffset)
   }
 }
 
@@ -140,10 +139,5 @@ object HyperLogLogPlusPlus {
     case Literal(dec: Decimal, _) => dec.toDouble
     case _ =>
       throw new AnalysisException("The second argument should be a double literal.")
-  }
-
-  case class InternalRowInput(internalRow: InternalRow) extends HLLPPInput {
-    override def getLong(offset: Int): Long = internalRow.getLong(offset)
-    override def setLong(offset: Int, value: Long): Unit = internalRow.setLong(offset, value)
   }
 }

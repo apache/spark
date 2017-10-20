@@ -25,8 +25,8 @@ import com.google.common.primitives.Longs
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HLLPPInput, HyperLogLogPlusPlusHelper}
+import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.types._
 
 /**
@@ -134,7 +134,7 @@ case class ApproxCountDistinctForIntervals(
 
       val hllppIndex = findHllppIndex(doubleValue)
       val offset = hllppIndex * numWordsPerHllpp
-      hllppArray(hllppIndex).update(LongArrayInput(buffer), offset, value, child.dataType)
+      hllppArray(hllppIndex).update(LongArrayInternalRow(buffer), offset, value, child.dataType)
     }
     buffer
   }
@@ -176,8 +176,8 @@ case class ApproxCountDistinctForIntervals(
   override def merge(buffer1: Array[Long], buffer2: Array[Long]): Array[Long] = {
     for (i <- hllppArray.indices) {
       hllppArray(i).merge(
-        buffer1 = LongArrayInput(buffer1),
-        buffer2 = LongArrayInput(buffer2),
+        buffer1 = LongArrayInternalRow(buffer1),
+        buffer2 = LongArrayInternalRow(buffer2),
         offset1 = i * numWordsPerHllpp,
         offset2 = i * numWordsPerHllpp)
     }
@@ -199,7 +199,7 @@ case class ApproxCountDistinctForIntervals(
   def hllppResults(buffer: Array[Long]): Array[Long] = {
     val ndvArray = new Array[Long](hllppArray.length)
     for (i <- ndvArray.indices) {
-      ndvArray(i) = hllppArray(i).query(LongArrayInput(buffer), i * numWordsPerHllpp)
+      ndvArray(i) = hllppArray(i).query(LongArrayInternalRow(buffer), i * numWordsPerHllpp)
     }
     ndvArray
   }
@@ -236,7 +236,7 @@ case class ApproxCountDistinctForIntervals(
     array
   }
 
-  private case class LongArrayInput(array: Array[Long]) extends HLLPPInput {
+  private case class LongArrayInternalRow(array: Array[Long]) extends GenericInternalRow {
     override def getLong(offset: Int): Long = array(offset)
     override def setLong(offset: Int, value: Long): Unit = { array(offset) = value }
   }
