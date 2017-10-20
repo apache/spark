@@ -263,7 +263,10 @@ resource offers will be accepted.
 conf.set("spark.mesos.constraints", "os:centos7;us-east-1:false")
 {% endhighlight %}
 
-For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+For example, Let's say `spark.mesos.constraints` is set to `os:centos7;us-east-1:false`, then the resource offers will
+be checked to see if they meet both these constraints and only then will be accepted to start new executors.
+
+To constrain where driver tasks are run, use `spark.mesos.driver.constraints`
 
 # Mesos Docker Support
 
@@ -455,6 +458,13 @@ See the [configuration page](configuration.html) for information on Spark config
       <li>Text constraints are matched with "equality" semantics i.e. value in the constraint must be exactly equal to the resource offer's value.</li>
       <li>In case there is no value present as a part of the constraint any offer with the corresponding attribute will be accepted (without value check).</li>
     </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.driver.constraints</code></td>
+  <td>(none)</td>
+  <td>
+    Same as <code>spark.mesos.constraints</code> except applied to drivers.
   </td>
 </tr>
 <tr>
