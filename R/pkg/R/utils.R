@@ -625,7 +625,7 @@ appendPartitionLengths <- function(x, other) {
     x <- lapplyPartition(x, appendLength)
     other <- lapplyPartition(other, appendLength)
   }
-  list (x, other)
+  list(x, other)
 }
 
 # Perform zip or cartesian between elements from two RDDs in each partition
@@ -657,7 +657,7 @@ mergePartitions <- function(rdd, zip) {
           keys <- list()
         }
         if (lengthOfValues > 1) {
-          values <- part[ (lengthOfKeys + 1) : (len - 1) ]
+          values <- part[(lengthOfKeys + 1) : (len - 1)]
         } else {
           values <- list()
         }

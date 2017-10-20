@@ -186,8 +186,7 @@ case class BroadcastHashJoinExec(
    */
   private def getJoinCondition(
       ctx: CodegenContext,
-      input: Seq[ExprCode],
-      anti: Boolean = false): (String, String, Seq[ExprCode]) = {
+      input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
     val matched = ctx.freshName("matched")
     val buildVars = genBuildSideVars(ctx, matched)
     val checkCondition = if (condition.isDefined) {
@@ -198,18 +197,12 @@ case class BroadcastHashJoinExec(
       ctx.currentVars = input ++ buildVars
       val ev =
         BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = if (!anti) {
-        s"${ev.isNull} || !${ev.value}"
-      } else {
-        s"!${ev.isNull} && ${ev.value}"
-      }
+      val skipRow = s"${ev.isNull} || !${ev.value}"
       s"""
          |$eval
          |${ev.code}
-         |if ($skipRow) continue;
+         |if (!($skipRow))
        """.stripMargin
-    } else if (anti) {
-      "continue;"
     } else {
       ""
     }
@@ -235,10 +228,12 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) continue;
-         |$checkCondition
-         |$numOutput.add(1);
-         |${consume(ctx, resultVars)}
+         |if ($matched != null) {
+         |  $checkCondition {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
+         |}
        """.stripMargin
 
     } else {
@@ -250,12 +245,14 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
-         |while ($matches.hasNext()) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |  $checkCondition
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
+         |if ($matches != null) {
+         |  while ($matches.hasNext()) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |    $checkCondition {
+         |      $numOutput.add(1);
+         |      ${consume(ctx, resultVars)}
+         |    }
+         |  }
          |}
        """.stripMargin
     }
@@ -328,10 +325,11 @@ case class BroadcastHashJoinExec(
          |  UnsafeRow $matched = $matches != null && $matches.hasNext() ?
          |    (UnsafeRow) $matches.next() : null;
          |  ${checkCondition.trim}
-         |  if (!$conditionPassed) continue;
-         |  $found = true;
-         |  $numOutput.add(1);
-         |  ${consume(ctx, resultVars)}
+         |  if ($conditionPassed) {
+         |    $found = true;
+         |    $numOutput.add(1);
+         |    ${consume(ctx, resultVars)}
+         |  }
          |}
        """.stripMargin
     }
@@ -351,10 +349,12 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashedRelation
          |UnsafeRow $matched = $anyNull ? null: (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-         |if ($matched == null) continue;
-         |$checkCondition
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
+         |if ($matched != null) {
+         |  $checkCondition {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, input)}
+         |  }
+         |}
        """.stripMargin
     } else {
       val matches = ctx.freshName("matches")
@@ -365,16 +365,19 @@ case class BroadcastHashJoinExec(
          |${keyEv.code}
          |// find matches from HashRelation
          |$iteratorCls $matches = $anyNull ? null : ($iteratorCls)$relationTerm.get(${keyEv.value});
-         |if ($matches == null) continue;
-         |boolean $found = false;
-         |while (!$found && $matches.hasNext()) {
-         |  UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |  $checkCondition
-         |  $found = true;
+         |if ($matches != null) {
+         |  boolean $found = false;
+         |  while (!$found && $matches.hasNext()) {
+         |    UnsafeRow $matched = (UnsafeRow) $matches.next();
+         |    $checkCondition {
+         |      $found = true;
+         |    }
+         |  }
+         |  if ($found) {
+         |    $numOutput.add(1);
+         |    ${consume(ctx, input)}
+         |  }
          |}
-         |if (!$found) continue;
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
        """.stripMargin
     }
   }
@@ -386,11 +389,13 @@ case class BroadcastHashJoinExec(
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
     val uniqueKeyCodePath = broadcastRelation.value.keyIsUnique
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input, uniqueKeyCodePath)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (uniqueKeyCodePath) {
+      val found = ctx.freshName("found")
       s"""
+         |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
          |// Check if the key has nulls.
@@ -399,17 +404,22 @@ case class BroadcastHashJoinExec(
          |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
          |  if ($matched != null) {
          |    // Evaluate the condition.
-         |    $checkCondition
+         |    $checkCondition {
+         |      $found = true;
+         |    }
          |  }
          |}
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
        """.stripMargin
     } else {
       val matches = ctx.freshName("matches")
       val iteratorCls = classOf[Iterator[UnsafeRow]].getName
       val found = ctx.freshName("found")
       s"""
+         |boolean $found = false;
          |// generate join key for stream side
          |${keyEv.code}
          |// Check if the key has nulls.
@@ -418,17 +428,18 @@ case class BroadcastHashJoinExec(
          |  $iteratorCls $matches = ($iteratorCls)$relationTerm.get(${keyEv.value});
          |  if ($matches != null) {
          |    // Evaluate the condition.
-         |    boolean $found = false;
          |    while (!$found && $matches.hasNext()) {
          |      UnsafeRow $matched = (UnsafeRow) $matches.next();
-         |      $checkCondition
-         |      $found = true;
+         |      $checkCondition {
+         |        $found = true;
+         |      }
          |    }
-         |    if ($found) continue;
          |  }
          |}
-         |$numOutput.add(1);
-         |${consume(ctx, input)}
+         |if (!$found) {
+         |  $numOutput.add(1);
+         |  ${consume(ctx, input)}
+         |}
        """.stripMargin
     }
   }

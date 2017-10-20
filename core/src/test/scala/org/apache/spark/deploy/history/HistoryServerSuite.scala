@@ -43,6 +43,7 @@ import org.scalatest.mockito.MockitoSugar
 import org.scalatest.selenium.WebBrowser
 
 import org.apache.spark._
+import org.apache.spark.deploy.history.config._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.jobs.UIData.JobUIData
 import org.apache.spark.util.{ResetSystemProperties, Utils}
@@ -64,6 +65,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   private val logDir = getTestResourcePath("spark-events")
   private val expRoot = getTestResourceFile("HistoryServerExpectations")
+  private val storeDir = Utils.createTempDir(namePrefix = "history")
 
   private var provider: FsHistoryProvider = null
   private var server: HistoryServer = null
@@ -74,6 +76,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
+      .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
     conf.setAll(extraConf)
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -87,14 +90,13 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
   def stop(): Unit = {
     server.stop()
+    server = null
   }
 
   before {
-    init()
-  }
-
-  after{
-    stop()
+    if (server == null) {
+      init()
+    }
   }
 
   val cases = Seq(
@@ -296,6 +298,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.fs.logDirectory", logDir)
       .set("spark.history.fs.update.interval", "0")
       .set("spark.testing", "true")
+      .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
 
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
@@ -372,6 +375,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
   }
 
   test("incomplete apps get refreshed") {
+    server.stop()
 
     implicit val webDriver: WebDriver = new HtmlUnitDriver
     implicit val formats = org.json4s.DefaultFormats
@@ -388,6 +392,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.history.fs.update.interval", "1s")
       .set("spark.eventLog.enabled", "true")
       .set("spark.history.cache.window", "250ms")
+      .set(LOCAL_STORE_DIR, storeDir.getAbsolutePath())
       .remove("spark.testing")
     val provider = new FsHistoryProvider(myConf)
     val securityManager = HistoryServer.createSecurityManager(myConf)
@@ -413,8 +418,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       }
     }
 
-    // stop the server with the old config, and start the new one
-    server.stop()
     server = new HistoryServer(myConf, provider, securityManager, 18080)
     server.initialize()
     server.bind()

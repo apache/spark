@@ -38,7 +38,7 @@ import org.apache.spark.util.ThreadUtils
 /**
  * The MesosCredentialRenewer will update the Hadoop credentials for Spark drivers accessing
  * secured services using Kerberos authentication. It is modeled after the YARN AMCredential
- * renewer, and simiarly will renew the Credentials when 75% of the renewal interval has passed.
+ * renewer, and similarly will renew the Credentials when 75% of the renewal interval has passed.
  * The principal difference is that instead of writing the new credentials to HDFS and
  * incrementing the timestamp of the file, the new credentials (called Tokens when they are
  * serialized) are broadcast to all running executors. On the executor side, when new Tokens are

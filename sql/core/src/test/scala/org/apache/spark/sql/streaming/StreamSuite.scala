@@ -76,20 +76,65 @@ class StreamSuite extends StreamTest {
       CheckAnswer(Row(1, 1, "one"), Row(2, 2, "two"), Row(4, 4, "four")))
   }
 
-
-  test("explain join") {
-    // Make a table and ensure it will be broadcast.
-    val smallTable = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
-
-    // Join the input stream with a table.
-    val inputData = MemoryStream[Int]
-    val joined = inputData.toDF().join(smallTable, smallTable("number") === $"value")
-
-    val outputStream = new java.io.ByteArrayOutputStream()
-    Console.withOut(outputStream) {
-      joined.explain()
+  test("StreamingRelation.computeStats") {
+    val streamingRelation = spark.readStream.format("rate").load().logicalPlan collect {
+      case s: StreamingRelation => s
     }
-    assert(outputStream.toString.contains("StreamingRelation"))
+    assert(streamingRelation.nonEmpty, "cannot find StreamingRelation")
+    assert(
+      streamingRelation.head.computeStats.sizeInBytes == spark.sessionState.conf.defaultSizeInBytes)
+  }
+
+  test("StreamingExecutionRelation.computeStats") {
+    val streamingExecutionRelation = MemoryStream[Int].toDF.logicalPlan collect {
+      case s: StreamingExecutionRelation => s
+    }
+    assert(streamingExecutionRelation.nonEmpty, "cannot find StreamingExecutionRelation")
+    assert(streamingExecutionRelation.head.computeStats.sizeInBytes
+      == spark.sessionState.conf.defaultSizeInBytes)
+  }
+
+  test("explain join with a normal source") {
+    // This test triggers CostBasedJoinReorder to call `computeStats`
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      val smallTable = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable2 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable3 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+
+      // Join the input stream with a table.
+      val df = spark.readStream.format("rate").load()
+      val joined = df.join(smallTable, smallTable("number") === $"value")
+        .join(smallTable2, smallTable2("number") === $"value")
+        .join(smallTable3, smallTable3("number") === $"value")
+
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        joined.explain(true)
+      }
+      assert(outputStream.toString.contains("StreamingRelation"))
+    }
+  }
+
+  test("explain join with MemoryStream") {
+    // This test triggers CostBasedJoinReorder to call `computeStats`
+    // Because MemoryStream doesn't use DataSource code path, we need a separate test.
+    withSQLConf(SQLConf.CBO_ENABLED.key -> "true", SQLConf.JOIN_REORDER_ENABLED.key -> "true") {
+      val smallTable = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable2 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+      val smallTable3 = Seq((1, "one"), (2, "two"), (4, "four")).toDF("number", "word")
+
+      // Join the input stream with a table.
+      val df = MemoryStream[Int].toDF
+      val joined = df.join(smallTable, smallTable("number") === $"value")
+        .join(smallTable2, smallTable2("number") === $"value")
+        .join(smallTable3, smallTable3("number") === $"value")
+
+      val outputStream = new java.io.ByteArrayOutputStream()
+      Console.withOut(outputStream) {
+        joined.explain(true)
+      }
+      assert(outputStream.toString.contains("StreamingRelation"))
+    }
   }
 
   test("SPARK-20432: union one stream with itself") {

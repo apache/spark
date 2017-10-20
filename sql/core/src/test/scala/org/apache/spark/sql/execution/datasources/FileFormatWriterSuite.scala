@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("empty file should be skipped while write to file") {
     withTempPath { path =>
@@ -28,6 +29,19 @@ class FileFormatWriterSuite extends QueryTest with SharedSQLContext {
       val partFiles = path.listFiles()
         .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
       assert(partFiles.length === 2)
+    }
+  }
+
+  test("SPARK-22252: FileFormatWriter should respect the input query schema") {
+    withTable("t1", "t2", "t3", "t4") {
+      spark.range(1).select('id as 'col1, 'id as 'col2).write.saveAsTable("t1")
+      spark.sql("select COL1, COL2 from t1").write.saveAsTable("t2")
+      checkAnswer(spark.table("t2"), Row(0, 0))
+
+      // Test picking part of the columns when writing.
+      spark.range(1).select('id, 'id as 'col1, 'id as 'col2).write.saveAsTable("t3")
+      spark.sql("select COL1, COL2 from t3").write.saveAsTable("t4")
+      checkAnswer(spark.table("t4"), Row(0, 0))
     }
   }
 }

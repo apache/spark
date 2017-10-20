@@ -1150,8 +1150,9 @@ def unix_timestamp(timestamp=None, format='yyyy-MM-dd HH:mm:ss'):
 @since(1.5)
 def from_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in UTC, returns another timestamp
-    that corresponds to the same time of day in the given timezone.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in UTC, and renders
+    that time as a timestamp in the given time zone. For example, 'GMT+1' would yield
+    '2017-07-14 03:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['t'])
     >>> df.select(from_utc_timestamp(df.t, "PST").alias('local_time')).collect()
@@ -1164,8 +1165,9 @@ def from_utc_timestamp(timestamp, tz):
 @since(1.5)
 def to_utc_timestamp(timestamp, tz):
     """
-    Given a timestamp, which corresponds to a certain time of day in the given timezone, returns
-    another timestamp that corresponds to the same time of day in UTC.
+    Given a timestamp like '2017-07-14 02:40:00.0', interprets it as a time in the given time
+    zone, and renders that time as a timestamp in UTC. For example, 'GMT+1' would yield
+    '2017-07-14 01:40:00.0'.
 
     >>> df = spark.createDataFrame([('1997-02-28 10:30:00',)], ['ts'])
     >>> df.select(to_utc_timestamp(df.ts, "PST").alias('utc_time')).collect()
@@ -2042,7 +2044,7 @@ class UserDefinedFunction(object):
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, vectorized=False):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
@@ -2056,6 +2058,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
+        self.vectorized = vectorized
 
     @property
     def returnType(self):
@@ -2087,7 +2090,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt)
+            self._name, wrapped_func, jdt, self.vectorized)
         return judf
 
     def __call__(self, *cols):
@@ -2115,15 +2118,41 @@ class UserDefinedFunction(object):
         wrapper.__name__ = self._name
         wrapper.__module__ = (self.func.__module__ if hasattr(self.func, '__module__')
                               else self.func.__class__.__module__)
+
         wrapper.func = self.func
         wrapper.returnType = self.returnType
+        wrapper.vectorized = self.vectorized
 
         return wrapper
 
 
+def _create_udf(f, returnType, vectorized):
+
+    def _udf(f, returnType=StringType(), vectorized=vectorized):
+        if vectorized:
+            import inspect
+            argspec = inspect.getargspec(f)
+            if len(argspec.args) == 0 and argspec.varargs is None:
+                raise ValueError(
+                    "0-arg pandas_udfs are not supported. "
+                    "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
+                )
+        udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
+        return udf_obj._wrapped()
+
+    # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
+    if f is None or isinstance(f, (str, DataType)):
+        # If DataType has been passed as a positional argument
+        # for decorator use it as a returnType
+        return_type = f or returnType
+        return functools.partial(_udf, returnType=return_type, vectorized=vectorized)
+    else:
+        return _udf(f=f, returnType=returnType, vectorized=vectorized)
+
+
 @since(1.3)
 def udf(f=None, returnType=StringType()):
-    """Creates a :class:`Column` expression representing a user defined function (UDF).
+    """Creates a user defined function (UDF).
 
     .. note:: The user-defined functions must be deterministic. Due to optimization,
         duplicate invocations may be eliminated or the function may even be invoked more times than
@@ -2152,18 +2181,78 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    def _udf(f, returnType=StringType()):
-        udf_obj = UserDefinedFunction(f, returnType)
-        return udf_obj._wrapped()
+    return _create_udf(f, returnType=returnType, vectorized=False)
 
-    # decorator @udf, @udf() or @udf(dataType())
-    if f is None or isinstance(f, (str, DataType)):
-        # If DataType has been passed as a positional argument
-        # for decorator use it as a returnType
-        return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type)
-    else:
-        return _udf(f=f, returnType=returnType)
+
+@since(2.3)
+def pandas_udf(f=None, returnType=StringType()):
+    """
+    Creates a vectorized user defined function (UDF).
+
+    :param f: user-defined function. A python function if used as a standalone function
+    :param returnType: a :class:`pyspark.sql.types.DataType` object
+
+    The user-defined function can define one of the following transformations:
+
+    1. One or more `pandas.Series` -> A `pandas.Series`
+
+       This udf is used with :meth:`pyspark.sql.DataFrame.withColumn` and
+       :meth:`pyspark.sql.DataFrame.select`.
+       The returnType should be a primitive data type, e.g., `DoubleType()`.
+       The length of the returned `pandas.Series` must be of the same as the input `pandas.Series`.
+
+       >>> from pyspark.sql.types import IntegerType, StringType
+       >>> slen = pandas_udf(lambda s: s.str.len(), IntegerType())
+       >>> @pandas_udf(returnType=StringType())
+       ... def to_upper(s):
+       ...     return s.str.upper()
+       ...
+       >>> @pandas_udf(returnType="integer")
+       ... def add_one(x):
+       ...     return x + 1
+       ...
+       >>> df = spark.createDataFrame([(1, "John Doe", 21)], ("id", "name", "age"))
+       >>> df.select(slen("name").alias("slen(name)"), to_upper("name"), add_one("age")) \\
+       ...     .show()  # doctest: +SKIP
+       +----------+--------------+------------+
+       |slen(name)|to_upper(name)|add_one(age)|
+       +----------+--------------+------------+
+       |         8|      JOHN DOE|          22|
+       +----------+--------------+------------+
+
+    2. A `pandas.DataFrame` -> A `pandas.DataFrame`
+
+       This udf is only used with :meth:`pyspark.sql.GroupedData.apply`.
+       The returnType should be a :class:`StructType` describing the schema of the returned
+       `pandas.DataFrame`.
+
+       >>> df = spark.createDataFrame(
+       ...     [(1, 1.0), (1, 2.0), (2, 3.0), (2, 5.0), (2, 10.0)],
+       ...     ("id", "v"))
+       >>> @pandas_udf(returnType=df.schema)
+       ... def normalize(pdf):
+       ...     v = pdf.v
+       ...     return pdf.assign(v=(v - v.mean()) / v.std())
+       >>> df.groupby('id').apply(normalize).show()  # doctest: +SKIP
+       +---+-------------------+
+       | id|                  v|
+       +---+-------------------+
+       |  1|-0.7071067811865475|
+       |  1| 0.7071067811865475|
+       |  2|-0.8320502943378437|
+       |  2|-0.2773500981126146|
+       |  2| 1.1094003924504583|
+       +---+-------------------+
+
+       .. note:: This type of udf cannot be used with functions such as `withColumn` or `select`
+                 because it defines a `DataFrame` transformation rather than a `Column`
+                 transformation.
+
+       .. seealso:: :meth:`pyspark.sql.GroupedData.apply`
+
+    .. note:: The user-defined function must be deterministic.
+    """
+    return _create_udf(f, returnType=returnType, vectorized=True)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']

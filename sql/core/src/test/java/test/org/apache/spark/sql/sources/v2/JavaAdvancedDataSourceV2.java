@@ -32,7 +32,9 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
 
-  class Reader implements DataSourceV2Reader, SupportsPushDownRequiredColumns, SupportsPushDownFilters {
+  class Reader implements DataSourceV2Reader, SupportsPushDownRequiredColumns,
+      SupportsPushDownFilters {
+
     private StructType requiredSchema = new StructType().add("i", "int").add("j", "int");
     private Filter[] filters = new Filter[0];
 
@@ -50,6 +52,11 @@ public class JavaAdvancedDataSourceV2 implements DataSourceV2, ReadSupport {
     public Filter[] pushFilters(Filter[] filters) {
       this.filters = filters;
       return new Filter[0];
+    }
+
+    @Override
+    public Filter[] pushedFilters() {
+      return filters;
     }
 
     @Override
