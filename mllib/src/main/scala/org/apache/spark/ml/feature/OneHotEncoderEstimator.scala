@@ -32,8 +32,8 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, NumericType, StructField, StructType}
 
-/** Private trait for params for OneHotEncoderEstimator and OneHotEncoderModel */
-private[ml] trait OneHotEncoderParams extends Params with HasHandleInvalid
+/** Private trait for params and common methods for OneHotEncoderEstimator and OneHotEncoderModel */
+private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
     with HasInputCols with HasOutputCols {
 
   /**
@@ -62,6 +62,35 @@ private[ml] trait OneHotEncoderParams extends Params with HasHandleInvalid
   /** @group getParam */
   @Since("2.3.0")
   def getDropLast: Boolean = $(dropLast)
+
+  protected def checkParamsValidity(schema: StructType): Unit = {
+    val inputColNames = $(inputCols)
+    val outputColNames = $(outputCols)
+    val existingFields = schema.fields
+
+    require(inputColNames.length == outputColNames.length,
+      s"The number of input columns ${inputColNames.length} must be the same as the number of " +
+        s"output columns ${outputColNames.length}.")
+
+    inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
+      require(schema(inputColName).dataType.isInstanceOf[NumericType],
+        s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
+      require(!existingFields.exists(_.name == outputColName),
+        s"Output column $outputColName already exists.")
+    }
+  }
+
+  /** Prepares output columns with proper attributes by examining input columns. */
+  protected def prepareSchemaWithOutputField(schema: StructType): StructType = {
+    val inputFields = $(inputCols).map(schema(_))
+    val outputColNames = $(outputCols)
+
+    val outputFields = inputFields.zip(outputColNames).map { case (inputField, outputColName) =>
+      OneHotEncoderCommon.transformOutputColumnSchema(
+        inputField, $(dropLast), outputColName)
+    }
+    StructType(schema.fields ++ outputFields)
+  }
 }
 
 /**
@@ -80,7 +109,7 @@ private[ml] trait OneHotEncoderParams extends Params with HasHandleInvalid
  */
 @Since("2.3.0")
 class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: String)
-    extends Estimator[OneHotEncoderModel] with OneHotEncoderParams with DefaultParamsWritable {
+    extends Estimator[OneHotEncoderModel] with OneHotEncoderBase with DefaultParamsWritable {
 
   @Since("2.3.0")
   def this() = this(Identifiable.randomUID("oneHotEncoder"))
@@ -103,14 +132,8 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
 
   @Since("2.3.0")
   override def transformSchema(schema: StructType): StructType = {
-    val inputColNames = $(inputCols)
-    val outputColNames = $(outputCols)
-
-    OneHotEncoderEstimator.checkParamsValidity(inputColNames, outputColNames, schema)
-
-    val outputFields = OneHotEncoderEstimator.prepareOutputFields(
-      inputColNames.map(schema(_)), outputColNames, $(dropLast))
-    StructType(schema.fields ++ outputFields)
+    checkParamsValidity(schema)
+    prepareSchemaWithOutputField(schema)
   }
 
   @Since("2.3.0")
@@ -158,42 +181,13 @@ object OneHotEncoderEstimator extends DefaultParamsReadable[OneHotEncoderEstimat
 
   @Since("2.3.0")
   override def load(path: String): OneHotEncoderEstimator = super.load(path)
-
-  private[feature] def checkParamsValidity(
-      inputColNames: Seq[String],
-      outputColNames: Seq[String],
-      schema: StructType): Unit = {
-
-    val inputFields = schema.fields
-
-    require(inputColNames.length == outputColNames.length,
-      s"The number of input columns ${inputColNames.length} must be the same as the number of " +
-        s"output columns ${outputColNames.length}.")
-
-    inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
-      require(schema(inputColName).dataType.isInstanceOf[NumericType],
-        s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
-      require(!inputFields.exists(_.name == outputColName),
-        s"Output column $outputColName already exists.")
-    }
-  }
-
-  private[feature] def prepareOutputFields(
-      inputCols: Seq[StructField],
-      outputColNames: Seq[String],
-      dropLast: Boolean): Seq[StructField] = {
-    inputCols.zip(outputColNames).map { case (inputCol, outputColName) =>
-      OneHotEncoderCommon.transformOutputColumnSchema(
-        inputCol, dropLast, outputColName)
-    }
-  }
 }
 
 @Since("2.3.0")
 class OneHotEncoderModel private[ml] (
     @Since("2.3.0") override val uid: String,
     @Since("2.3.0") val categorySizes: Array[Int])
-  extends Model[OneHotEncoderModel] with OneHotEncoderParams with MLWritable {
+  extends Model[OneHotEncoderModel] with OneHotEncoderBase with MLWritable {
 
   import OneHotEncoderModel._
 
@@ -241,17 +235,21 @@ class OneHotEncoderModel private[ml] (
     val inputColNames = $(inputCols)
     val outputColNames = $(outputCols)
 
-    OneHotEncoderEstimator.checkParamsValidity(inputColNames, outputColNames, schema)
+    checkParamsValidity(schema)
 
     require(inputColNames.length == categorySizes.length,
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
         s"features ${categorySizes.length} during fitting.")
 
-    val outputFields = OneHotEncoderEstimator.prepareOutputFields(
-      inputColNames.map(schema(_)), outputColNames, $(dropLast))
-    verifyNumOfValues(StructType(schema.fields ++ outputFields))
+    val transformedSchema = prepareSchemaWithOutputField(schema)
+    verifyNumOfValues(transformedSchema)
   }
 
+  /**
+   * If the metadata of input columns also specifies the number of categories, we need to
+   * compare with expected category number obtained during fitting. Mismatched numbers will
+   * cause exception.
+   */
   private def verifyNumOfValues(schema: StructType): StructType = {
     $(outputCols).zipWithIndex.foreach { case (outputColName, idx) =>
       val inputColName = $(inputCols)(idx)
