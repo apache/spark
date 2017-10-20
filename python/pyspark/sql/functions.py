@@ -2039,7 +2039,7 @@ def _wrap_function(sc, func, returnType):
 
 
 class PythonUdfType(object):
-    # row-row-at-a-time UDFs
+    # row-at-a-time UDFs
     NORMAL_UDF = 0
     # scalar vectorized UDFs
     PANDAS_UDF = 1
