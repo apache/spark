@@ -568,21 +568,34 @@ class PairRDDFunctionsSuite extends SparkFunSuite with SharedSparkContext {
     assert(FakeWriterWithCallback.exception.getMessage contains "failed to write")
   }
 
-  test("saveAsNewAPIHadoopDataset should respect empty output directory when " +
+  test("saveAsNewAPIHadoopDataset should support invalid output paths when " +
     "there are no files to be committed to an absolute output location") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)
 
-    val job = NewJob.getInstance(new Configuration(sc.hadoopConfiguration))
-    job.setOutputKeyClass(classOf[Integer])
-    job.setOutputValueClass(classOf[Integer])
-    job.setOutputFormatClass(classOf[NewFakeFormat])
-    val jobConfiguration = job.getConfiguration
+    def saveRddWithPath(path: String): Unit = {
+      val job = NewJob.getInstance(new Configuration(sc.hadoopConfiguration))
+      job.setOutputKeyClass(classOf[Integer])
+      job.setOutputValueClass(classOf[Integer])
+      job.setOutputFormatClass(classOf[NewFakeFormat])
+      if (null != path) {
+        job.getConfiguration.set("mapred.output.dir", path)
+      } else {
+        job.getConfiguration.unset("mapred.output.dir")
+      }
+      val jobConfiguration = job.getConfiguration
 
-    // just test that the job does not fail with
-    // java.lang.IllegalArgumentException: Can not create a Path from a null string
-    pairs.saveAsNewAPIHadoopDataset(jobConfiguration)
+      // just test that the job does not fail with java.lang.IllegalArgumentException.
+      pairs.saveAsNewAPIHadoopDataset(jobConfiguration)
+    }
+
+    saveRddWithPath(null)
+    saveRddWithPath("")
+    saveRddWithPath("::invalid::")
   }
 
+  // In spark 2.1, only null was supported - not other invalid paths.
+  // org.apache.hadoop.mapred.FileOutputFormat.getOutputPath fails with IllegalArgumentException
+  // for non-null invalid paths.
   test("saveAsHadoopDataset should respect empty output directory when " +
     "there are no files to be committed to an absolute output location") {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(2))), 1)

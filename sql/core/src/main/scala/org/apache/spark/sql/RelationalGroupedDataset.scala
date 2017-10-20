@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.python.PythonUDF
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{NumericType, StructField, StructType}
+import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
  * A set of methods for aggregations on a `DataFrame`, created by [[Dataset#groupBy groupBy]],
@@ -465,6 +465,19 @@ class RelationalGroupedDataset protected[sql](
 
     Dataset.ofRows(df.sparkSession, plan)
   }
+
+  override def toString: String = {
+    val builder = new StringBuilder
+    builder.append("RelationalGroupedDataset: [grouping expressions: [")
+    val kFields = groupingExprs.map(_.asInstanceOf[NamedExpression]).map {
+      case f => s"${f.name}: ${f.dataType.simpleString(2)}"
+    }
+    builder.append(kFields.take(2).mkString(", "))
+    if (kFields.length > 2) {
+      builder.append(" ... " + (kFields.length - 2) + " more field(s)")
+    }
+    builder.append(s"], value: ${df.toString}, type: $groupType]").toString()
+  }
 }
 
 private[sql] object RelationalGroupedDataset {
@@ -479,7 +492,9 @@ private[sql] object RelationalGroupedDataset {
   /**
    * The Grouping Type
    */
-  private[sql] trait GroupType
+  private[sql] trait GroupType {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$").stripSuffix("Type")
+  }
 
   /**
    * To indicate it's the GroupBy
