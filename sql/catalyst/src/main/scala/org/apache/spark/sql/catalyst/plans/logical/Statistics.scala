@@ -240,8 +240,8 @@ object ColumnStat extends Logging {
  * Currently in Spark, we support equi-height histogram since it is good at handling skew
  * distribution, and also provides reasonable accuracy in other cases.
  * We can add other histograms in the future, which will make estimation logic more complicated.
- * Because we will have to deal with computation between different types of histograms in some
- * cases, e.g. for join columns.
+ * This is because we will have to deal with computation between different types of histograms in
+ * some cases, e.g. for join columns.
  */
 trait Histogram
 
