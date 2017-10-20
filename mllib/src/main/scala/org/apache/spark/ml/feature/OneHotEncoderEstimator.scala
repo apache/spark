@@ -105,15 +105,12 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColNames = $(outputCols)
-    val inputFields = schema.fields
 
     OneHotEncoderEstimator.checkParamsValidity(inputColNames, outputColNames, schema)
 
-    val outputFields = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
-      OneHotEncoderCommon.transformOutputColumnSchema(
-        schema(inputColName), $(dropLast), outputColName)
-    }
-    StructType(inputFields ++ outputFields)
+    val outputFields = OneHotEncoderEstimator.prepareOutputFields(
+      inputColNames.map(schema(_)), outputColNames, $(dropLast))
+    StructType(schema.fields ++ outputFields)
   }
 
   @Since("2.3.0")
@@ -180,6 +177,16 @@ object OneHotEncoderEstimator extends DefaultParamsReadable[OneHotEncoderEstimat
         s"Output column $outputColName already exists.")
     }
   }
+
+  private[feature] def prepareOutputFields(
+      inputCols: Seq[StructField],
+      outputColNames: Seq[String],
+      dropLast: Boolean): Seq[StructField] = {
+    inputCols.zip(outputColNames).map { case (inputCol, outputColName) =>
+      OneHotEncoderCommon.transformOutputColumnSchema(
+        inputCol, dropLast, outputColName)
+    }
+  }
 }
 
 @Since("2.3.0")
@@ -233,7 +240,6 @@ class OneHotEncoderModel private[ml] (
   override def transformSchema(schema: StructType): StructType = {
     val inputColNames = $(inputCols)
     val outputColNames = $(outputCols)
-    val inputFields = schema.fields
 
     OneHotEncoderEstimator.checkParamsValidity(inputColNames, outputColNames, schema)
 
@@ -241,12 +247,9 @@ class OneHotEncoderModel private[ml] (
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
         s"features ${categorySizes.length} during fitting.")
 
-    val inputOutputPairs = inputColNames.zip(outputColNames)
-    val outputFields = inputOutputPairs.map { case (inputColName, outputColName) =>
-      OneHotEncoderCommon.transformOutputColumnSchema(
-        schema(inputColName), $(dropLast), outputColName)
-    }
-    verifyNumOfValues(StructType(inputFields ++ outputFields))
+    val outputFields = OneHotEncoderEstimator.prepareOutputFields(
+      inputColNames.map(schema(_)), outputColNames, $(dropLast))
+    verifyNumOfValues(StructType(schema.fields ++ outputFields))
   }
 
   private def verifyNumOfValues(schema: StructType): StructType = {
