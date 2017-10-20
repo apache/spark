@@ -158,7 +158,6 @@ class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
                    "spark.executor.cores" -> "1"))
 
     val executorMemory = backend.executorMemory(sc)
-
     val maxCores = 10
     offerResources(List(Resources(executorMemory * 3, maxCores)))
 
