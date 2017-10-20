@@ -29,7 +29,7 @@ import org.apache.spark.ml.param.shared.{HasHandleInvalid, HasInputCols, HasOutp
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.expressions.UserDefinedFunction
-import org.apache.spark.sql.functions.{col, udf}
+import org.apache.spark.sql.functions.{col, lit, udf}
 import org.apache.spark.sql.types.{DoubleType, NumericType, StructField, StructType}
 
 /** Private trait for params for OneHotEncoderEstimator and OneHotEncoderModel */
@@ -38,14 +38,14 @@ private[ml] trait OneHotEncoderParams extends Params with HasHandleInvalid
 
   /**
    * Param for how to handle invalid data.
-   * Options are 'skip' (filter out rows with invalid data) or 'error' (throw an error).
+   * Options are 'keep' (invalid data are ignored) or 'error' (throw an error).
    * Default: "error"
    * @group param
    */
   @Since("2.3.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data " +
-    "Options are 'skip' (filter out rows with invalid data) or error (throw an error).",
+    "Options are 'keep' (invalid data are ignored) or error (throw an error).",
     ParamValidators.inArray(OneHotEncoderEstimator.supportedHandleInvalids))
 
   setDefault(handleInvalid, OneHotEncoderEstimator.ERROR_INVALID)
@@ -107,17 +107,9 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
     val outputColNames = $(outputCols)
     val inputFields = schema.fields
 
-    require(inputColNames.length == outputColNames.length,
-      s"The number of input columns ${inputColNames.length} must be the same as the number of " +
-        s"output columns ${outputColNames.length}.")
+    OneHotEncoderEstimator.checkParamsValidity(inputColNames, outputColNames, schema)
 
     val outputFields = inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
-
-      require(schema(inputColName).dataType.isInstanceOf[NumericType],
-        s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
-      require(!inputFields.exists(_.name == outputColName),
-        s"Output column $outputColName already exists.")
-
       OneHotEncoderCommon.transformOutputColumnSchema(
         schema(inputColName), $(dropLast), outputColName)
     }
@@ -163,12 +155,31 @@ class OneHotEncoderEstimator @Since("2.3.0") (@Since("2.3.0") override val uid: 
 @Since("2.3.0")
 object OneHotEncoderEstimator extends DefaultParamsReadable[OneHotEncoderEstimator] {
 
-  private[feature] val SKIP_INVALID: String = "skip"
+  private[feature] val KEEP_INVALID: String = "keep"
   private[feature] val ERROR_INVALID: String = "error"
-  private[feature] val supportedHandleInvalids: Array[String] = Array(SKIP_INVALID, ERROR_INVALID)
+  private[feature] val supportedHandleInvalids: Array[String] = Array(KEEP_INVALID, ERROR_INVALID)
 
   @Since("2.3.0")
   override def load(path: String): OneHotEncoderEstimator = super.load(path)
+
+  private[feature] def checkParamsValidity(
+      inputColNames: Seq[String],
+      outputColNames: Seq[String],
+      schema: StructType): Unit = {
+
+    val inputFields = schema.fields
+
+    require(inputColNames.length == outputColNames.length,
+      s"The number of input columns ${inputColNames.length} must be the same as the number of " +
+        s"output columns ${outputColNames.length}.")
+
+    inputColNames.zip(outputColNames).map { case (inputColName, outputColName) =>
+      require(schema(inputColName).dataType.isInstanceOf[NumericType],
+        s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
+      require(!inputFields.exists(_.name == outputColName),
+        s"Output column $outputColName already exists.")
+    }
+  }
 }
 
 @Since("2.3.0")
@@ -179,26 +190,24 @@ class OneHotEncoderModel private[ml] (
 
   import OneHotEncoderModel._
 
-  private def encoders: Array[UserDefinedFunction] = {
+  private def encoder: UserDefinedFunction = {
     val oneValue = Array(1.0)
     val emptyValues = Array.empty[Double]
     val emptyIndices = Array.empty[Int]
     val dropLast = getDropLast
     val handleInvalid = getHandleInvalid
 
-    categorySizes.map { size =>
-      udf { label: Double =>
-        if (label < size) {
-          Vectors.sparse(size, Array(label.toInt), oneValue)
-        } else if (label == size && dropLast) {
-          Vectors.sparse(size, emptyIndices, emptyValues)
+    udf { (label: Double, size: Int) =>
+      if (label < size) {
+        Vectors.sparse(size, Array(label.toInt), oneValue)
+      } else if (label == size && dropLast) {
+        Vectors.sparse(size, emptyIndices, emptyValues)
+      } else {
+        if (handleInvalid == OneHotEncoderEstimator.ERROR_INVALID) {
+          throw new SparkException(s"Unseen value: $label. To handle unseen values, " +
+            s"set Param handleInvalid to ${OneHotEncoderEstimator.KEEP_INVALID}.")
         } else {
-          if (handleInvalid == OneHotEncoderEstimator.ERROR_INVALID) {
-            throw new SparkException(s"Unseen value: $label. To handle unseen values, " +
-              s"set Param handleInvalid to ${OneHotEncoderEstimator.SKIP_INVALID}.")
-          } else {
-            Vectors.sparse(size, emptyIndices, emptyValues)
-          }
+          Vectors.sparse(size, emptyIndices, emptyValues)
         }
       }
     }
@@ -226,9 +235,7 @@ class OneHotEncoderModel private[ml] (
     val outputColNames = $(outputCols)
     val inputFields = schema.fields
 
-    require(inputColNames.length == outputColNames.length,
-      s"The number of input columns ${inputColNames.length} must be the same as the number of " +
-        s"output columns ${outputColNames.length}.")
+    OneHotEncoderEstimator.checkParamsValidity(inputColNames, outputColNames, schema)
 
     require(inputColNames.length == categorySizes.length,
       s"The number of input columns ${inputColNames.length} must be the same as the number of " +
@@ -236,12 +243,6 @@ class OneHotEncoderModel private[ml] (
 
     val inputOutputPairs = inputColNames.zip(outputColNames)
     val outputFields = inputOutputPairs.map { case (inputColName, outputColName) =>
-
-      require(schema(inputColName).dataType.isInstanceOf[NumericType],
-        s"Input column must be of type NumericType but got ${schema(inputColName).dataType}")
-      require(!inputFields.exists(_.name == outputColName),
-        s"Output column $outputColName already exists.")
-
       OneHotEncoderCommon.transformOutputColumnSchema(
         schema(inputColName), $(dropLast), outputColName)
     }
@@ -266,15 +267,15 @@ class OneHotEncoderModel private[ml] (
 
   @Since("2.3.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    if (getDropLast && getHandleInvalid == OneHotEncoderEstimator.SKIP_INVALID) {
+    if (getDropLast && getHandleInvalid == OneHotEncoderEstimator.KEEP_INVALID) {
       throw new IllegalArgumentException("When Param handleInvalid is set to " +
-        s"${OneHotEncoderEstimator.SKIP_INVALID}, Param dropLast can't be true, " +
+        s"${OneHotEncoderEstimator.KEEP_INVALID}, Param dropLast can't be true, " +
         "because last category and invalid values will conflict in encoded vector.")
     }
 
     val transformedSchema = transformSchema(dataset.schema, logging = true)
 
-    val encodedColumns = encoders.zipWithIndex.map { case (encoder, idx) =>
+    val encodedColumns = (0 until $(inputCols).length).map { idx =>
       val inputColName = $(inputCols)(idx)
       val outputColName = $(outputCols)(idx)
 
@@ -288,10 +289,10 @@ class OneHotEncoderModel private[ml] (
         outputAttrGroupFromSchema.toMetadata()
       }
 
-      encoder(col(inputColName).cast(DoubleType)).as(outputColName, metadata)
+      encoder(col(inputColName).cast(DoubleType), lit(categorySizes(idx)))
+        .as(outputColName, metadata)
     }
-    val allCols = Seq(col("*")) ++ encodedColumns
-    dataset.select(allCols: _*)
+    dataset.withColumns($(outputCols), encodedColumns)
   }
 
   @Since("2.3.0")
@@ -428,9 +429,7 @@ private[feature] object OneHotEncoderCommon {
     val numOfColumns = columns.length
 
     val numAttrsArray = dataset.select(columns: _*).rdd.map { row =>
-      val array = new Array[Double](numOfColumns)
-      (0 until numOfColumns).foreach(idx => array(idx) = row.getDouble(idx))
-      array
+      (0 until numOfColumns).map(idx => row.getDouble(idx)).toArray
     }.treeAggregate(new Array[Double](numOfColumns))(
       (maxValues, curValues) => {
         (0 until numOfColumns).map { idx =>

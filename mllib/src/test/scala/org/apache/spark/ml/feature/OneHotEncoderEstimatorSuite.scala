@@ -250,7 +250,7 @@ class OneHotEncoderEstimatorSuite
     err.getMessage.contains("Unseen value: 3.0. To handle unseen values")
   }
 
-  test("Skip on invalid values") {
+  test("Keep on invalid values") {
     val trainingData = Seq((0, 0), (1, 1))
     val trainingDF = trainingData.toDF("id", "a")
     val testData = Seq((0, 0), (1, 2))
@@ -259,7 +259,7 @@ class OneHotEncoderEstimatorSuite
     val encoder = new OneHotEncoderEstimator()
       .setInputCols(Array("a"))
       .setOutputCols(Array("encoded"))
-      .setHandleInvalid("skip")
+      .setHandleInvalid("keep")
       .setDropLast(false)
 
     val model = encoder.fit(trainingDF)
@@ -273,7 +273,7 @@ class OneHotEncoderEstimatorSuite
     assert(output === expected)
   }
 
-  test("Can't set dropLast as true and skip on invalid values") {
+  test("Can't set dropLast as true and keep on invalid values") {
     val trainingData = Seq((0, 0), (1, 1))
     val trainingDF = trainingData.toDF("id", "a")
     val testData = Seq((0, 0), (1, 2))
@@ -282,12 +282,12 @@ class OneHotEncoderEstimatorSuite
     val encoder = new OneHotEncoderEstimator()
       .setInputCols(Array("a"))
       .setOutputCols(Array("encoded"))
-      .setHandleInvalid("skip")
+      .setHandleInvalid("keep")
 
     val model = encoder.fit(trainingDF)
     val err = intercept[IllegalArgumentException] {
       model.transform(testDF)
     }
-    err.getMessage.contains("When Param handleInvalid is set to skip, Param dropLast can't be true")
+    err.getMessage.contains("When Param handleInvalid is set to keep, Param dropLast can't be true")
   }
 }
