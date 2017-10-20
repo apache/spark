@@ -95,11 +95,13 @@ case class HashAggregateExec(
     val peakMemory = longMetric("peakMemory")
     val spillSize = longMetric("spillSize")
     val avgHashProbe = longMetric("avgHashProbe")
+    val aggTime = longMetric("aggTime")
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
+      val beforeAgg = System.nanoTime()
       val hasInput = iter.hasNext
-      if (!hasInput && groupingExpressions.nonEmpty) {
+      val res = if (!hasInput && groupingExpressions.nonEmpty) {
         // This is a grouped aggregate and the input iterator is empty,
         // so return an empty iterator.
         Iterator.empty
@@ -128,6 +130,8 @@ case class HashAggregateExec(
           aggregationIterator
         }
       }
+      aggTime += (System.nanoTime() - beforeAgg) / 1000000
+      res
     }
   }
 

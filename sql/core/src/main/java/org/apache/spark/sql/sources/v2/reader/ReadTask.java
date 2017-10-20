@@ -27,7 +27,8 @@ import org.apache.spark.annotation.InterfaceStability;
  * is similar to the relationship between {@link Iterable} and {@link java.util.Iterator}.
  *
  * Note that, the read task will be serialized and sent to executors, then the data reader will be
- * created on executors and do the actual reading.
+ * created on executors and do the actual reading. So {@link ReadTask} must be serializable and
+ * {@link DataReader} doesn't need to be.
  */
 @InterfaceStability.Evolving
 public interface ReadTask<T> extends Serializable {
