@@ -33,4 +33,13 @@ public interface BlockFetchingListener extends EventListener {
    * Called at least once per block upon failures.
    */
   void onBlockFetchFailure(String blockId, Throwable exception);
+
+  boolean shouldRetry(Throwable t);
+
+  abstract class Base implements BlockFetchingListener {
+    @Override
+    public boolean shouldRetry(Throwable t) {
+      return true;
+    }
+  }
 }

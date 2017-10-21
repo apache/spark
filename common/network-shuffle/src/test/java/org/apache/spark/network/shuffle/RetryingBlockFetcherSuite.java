@@ -50,9 +50,15 @@ public class RetryingBlockFetcherSuite {
   ManagedBuffer block1 = new NioManagedBuffer(ByteBuffer.wrap(new byte[7]));
   ManagedBuffer block2 = new NioManagedBuffer(ByteBuffer.wrap(new byte[19]));
 
+  private BlockFetchingListener createBasicBlockFetchingListenerMock()  {
+    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    when(listener.shouldRetry(any())).thenReturn(true);
+    return listener;
+  }
+
   @Test
   public void testNoFailures() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // Immediately return both blocks successfully.
@@ -71,7 +77,7 @@ public class RetryingBlockFetcherSuite {
 
   @Test
   public void testUnrecoverableFailure() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0 throws a non-IOException error, so it will be failed without retry.
@@ -90,7 +96,7 @@ public class RetryingBlockFetcherSuite {
 
   @Test
   public void testSingleIOExceptionOnFirst() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // IOException will cause a retry. Since b0 fails, we will retry both.
@@ -108,12 +114,13 @@ public class RetryingBlockFetcherSuite {
 
     verify(listener, timeout(5000)).onBlockFetchSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockFetchSuccess("b1", block1);
+    verify(listener, timeout(5000)).shouldRetry(any());
     verifyNoMoreInteractions(listener);
   }
 
   @Test
   public void testSingleIOExceptionOnSecond() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // IOException will cause a retry. Since b1 fails, we will not retry b0.
@@ -135,7 +142,7 @@ public class RetryingBlockFetcherSuite {
 
   @Test
   public void testTwoIOExceptions() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0's IOException will trigger retry, b1's will be ignored.
@@ -158,12 +165,13 @@ public class RetryingBlockFetcherSuite {
 
     verify(listener, timeout(5000)).onBlockFetchSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockFetchSuccess("b1", block1);
+    verify(listener, timeout(5000).times(2)).shouldRetry(any());
     verifyNoMoreInteractions(listener);
   }
 
   @Test
   public void testThreeIOExceptions() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0's IOException will trigger retry, b1's will be ignored.
@@ -190,12 +198,13 @@ public class RetryingBlockFetcherSuite {
 
     verify(listener, timeout(5000)).onBlockFetchSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockFetchFailure(eq("b1"), any());
+    verify(listener, timeout(5000).times(2)).shouldRetry(any());
     verifyNoMoreInteractions(listener);
   }
 
   @Test
   public void testRetryAndUnrecoverable() throws IOException, InterruptedException {
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockFetchingListener listener = createBasicBlockFetchingListenerMock();
 
     List<? extends Map<String, Object>> interactions = Arrays.asList(
       // b0's IOException will trigger retry, subsequent messages will be ignored.
@@ -221,6 +230,7 @@ public class RetryingBlockFetcherSuite {
     verify(listener, timeout(5000)).onBlockFetchSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockFetchFailure(eq("b1"), any());
     verify(listener, timeout(5000)).onBlockFetchSuccess("b2", block2);
+    verify(listener, timeout(5000).times(2)).shouldRetry(any());
     verifyNoMoreInteractions(listener);
   }
 

@@ -304,6 +304,8 @@ class SparkContext(config: SparkConf) extends Logging {
     _dagScheduler = ds
   }
 
+  private[spark] def heartbeatReceiverRef: RpcEndpointRef = _heartbeatReceiver
+
   /**
    * A unique identifier for the Spark application.
    * Its format depends on the scheduler implementation.

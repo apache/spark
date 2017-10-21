@@ -96,7 +96,7 @@ abstract class BlockTransferService extends ShuffleClient with Closeable with Lo
     // A monitor for the thread to wait on.
     val result = Promise[ManagedBuffer]()
     fetchBlocks(host, port, execId, Array(blockId),
-      new BlockFetchingListener {
+      new BlockFetchingListener.Base {
         override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
           result.failure(exception)
         }

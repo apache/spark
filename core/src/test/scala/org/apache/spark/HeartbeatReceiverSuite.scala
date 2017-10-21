@@ -57,6 +57,9 @@ class HeartbeatReceiverSuite
 
   // Helper private method accessors for HeartbeatReceiver
   private val _executorLastSeen = PrivateMethod[collection.Map[String, Long]]('executorLastSeen)
+  private val _executorsPendingEpochUpdate =
+    PrivateMethod[collection.Set[String]]('executorsPendingEpochUpdate)
+  private val _epoch = PrivateMethod[Option[Long]]('epoch)
   private val _executorTimeoutMs = PrivateMethod[Long]('executorTimeoutMs)
   private val _killExecutorThread = PrivateMethod[ExecutorService]('killExecutorThread)
 
@@ -207,10 +210,52 @@ class HeartbeatReceiverSuite
     assert(fakeClusterManager.getExecutorIdsToKill === Set(executorId1, executorId2))
   }
 
+  test("updated epoch") {
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
+    val newEpoch = Some(1L)
+    heartbeatReceiverRef.askSync[Boolean](UpdatedEpoch(newEpoch.get))
+    assert(heartbeatReceiver.invokePrivate(_epoch()) === newEpoch)
+    val executorsPendingUpdate = getExecutorsPendingEpochUpdate
+    assert(executorsPendingUpdate.size === 2)
+    assert(executorsPendingUpdate.subsetOf(Set(executorId1, executorId2)))
+    triggerHeartbeat(executorId1, executorShouldReregister = false,
+      expectedUpdatedEpoch = newEpoch)
+    val executorsPendingUpdate2 = getExecutorsPendingEpochUpdate
+    assert(executorsPendingUpdate2.size === 1)
+    assert(executorsPendingUpdate2.contains(executorId2))
+    triggerHeartbeat(executorId2, executorShouldReregister = false,
+      expectedUpdatedEpoch = newEpoch)
+    assert(getExecutorsPendingEpochUpdate.isEmpty)
+  }
+
+  test("updated epoch and expired hosts") {
+    val executorTimeout = heartbeatReceiver.invokePrivate(_executorTimeoutMs())
+    heartbeatReceiverRef.askSync[Boolean](TaskSchedulerIsSet)
+    addExecutorAndVerify(executorId1)
+    addExecutorAndVerify(executorId2)
+    val newEpoch = Some(1L)
+    heartbeatReceiverRef.askSync[Boolean](UpdatedEpoch(newEpoch.get))
+    assert(heartbeatReceiver.invokePrivate(_epoch()) === newEpoch)
+    // Advance the clock and only trigger a heartbeat for the first executor
+    heartbeatReceiverClock.advance(executorTimeout / 2)
+    triggerHeartbeat(executorId1, executorShouldReregister = false,
+      expectedUpdatedEpoch = newEpoch)
+    val executorsPendingUpdate = getExecutorsPendingEpochUpdate
+    assert(executorsPendingUpdate.size === 1)
+    assert(executorsPendingUpdate.contains(executorId2))
+    heartbeatReceiverClock.advance(executorTimeout)
+    heartbeatReceiverRef.askSync[Boolean](ExpireDeadHosts)
+    // The second executor should had been removed from executorsPendingUpdate
+    assert(getExecutorsPendingEpochUpdate.isEmpty)
+  }
+
   /** Manually send a heartbeat and return the response. */
   private def triggerHeartbeat(
       executorId: String,
-      executorShouldReregister: Boolean): Unit = {
+      executorShouldReregister: Boolean,
+      expectedUpdatedEpoch: Option[Long] = None): Unit = {
     val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askSync[HeartbeatResponse](
@@ -225,6 +270,7 @@ class HeartbeatReceiverSuite
         Matchers.eq(Array(1L -> metrics.accumulators())),
         Matchers.eq(blockManagerId))
     }
+    expectedUpdatedEpoch.foreach{_ => assert(response.updatedEpoch === expectedUpdatedEpoch)}
   }
 
   private def addExecutorAndVerify(executorId: String): Unit = {
@@ -246,6 +292,11 @@ class HeartbeatReceiverSuite
     // so exclude it from the map. See SPARK-10800.
     heartbeatReceiver.invokePrivate(_executorLastSeen()).
       filterKeys(_ != SparkContext.DRIVER_IDENTIFIER)
+  }
+
+  private def getExecutorsPendingEpochUpdate: Set[String] = {
+    heartbeatReceiver.invokePrivate(_executorsPendingEpochUpdate()).
+      filter(_ != SparkContext.DRIVER_IDENTIFIER).toSet
   }
 }
 

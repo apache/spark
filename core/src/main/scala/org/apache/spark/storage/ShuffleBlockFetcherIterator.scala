@@ -24,6 +24,7 @@ import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
+import scala.util.Try
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
@@ -46,7 +47,7 @@ import org.apache.spark.util.io.ChunkedByteBufferOutputStream
  * @param context [[TaskContext]], used for metrics update
  * @param shuffleClient [[ShuffleClient]] for fetching remote blocks
  * @param blockManager [[BlockManager]] for reading local blocks
- * @param blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
+ * @param _blocksByAddress list of blocks to fetch grouped by the [[BlockManagerId]].
  *                        For each block we also require the size (in bytes as a long field) in
  *                        order to throttle the memory usage.
  * @param streamWrapper A function to wrap the returned input stream.
@@ -62,7 +63,7 @@ final class ShuffleBlockFetcherIterator(
     context: TaskContext,
     shuffleClient: ShuffleClient,
     blockManager: BlockManager,
-    blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
+    _blocksByAddress: => Seq[(BlockManagerId, Seq[(BlockId, Long)])],
     streamWrapper: (BlockId, InputStream) => InputStream,
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
@@ -73,6 +74,7 @@ final class ShuffleBlockFetcherIterator(
 
   import ShuffleBlockFetcherIterator._
 
+  val blocksByAddress = _blocksByAddress
   /**
    * Total number of blocks to fetch. This can be smaller than the total number of blocks
    * in [[blocksByAddress]] because we filter out zero-sized blocks in [[initialize]].
@@ -240,6 +242,21 @@ final class ShuffleBlockFetcherIterator(
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
         logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
         results.put(new FailureFetchResult(BlockId(blockId), address, e))
+      }
+
+      override def shouldRetry(t: Throwable): Boolean = {
+        // TODO: cache def failure in var to have const from that
+        // TODO: optimizations in MapOutputTracker to have this check faster
+        logWarning(s"Checking retry: ${address} should be available")
+        val doRetry = (Try { _blocksByAddress.toMap.contains(address) } recover { case t =>
+          logError(s"Exception getting output locations, will not retry", t)
+          false
+        }).get
+        if (!doRetry) {
+          logError(s"Address ${req.address.host}:${req.address.port} is not available anymore, " +
+            s"will give up retrying to get block(s) from that address", t)
+        }
+        doRetry
       }
     }
 

@@ -51,7 +51,26 @@ private case class ExecutorRegistered(executorId: String)
 
 private case class ExecutorRemoved(executorId: String)
 
-private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
+private[spark] case class UpdatedEpoch(epoch: Long)
+
+private[spark] object HeartbeatResponse {
+  def apply(reregisterBlockManager: Boolean,
+            updatedEpoch: Option[Long] = None): HeartbeatResponse =
+    updatedEpoch.fold[HeartbeatResponse](BasicHeartbeatResponse(reregisterBlockManager)) {
+      epoch => HeartbeatResponseWithEpoch(reregisterBlockManager, Some(epoch))
+    }
+}
+
+private[spark] sealed trait HeartbeatResponse {
+  def reregisterBlockManager: Boolean
+  def updatedEpoch: Option[Long] = None
+}
+
+private[spark] case class BasicHeartbeatResponse(reregisterBlockManager: Boolean)
+  extends HeartbeatResponse
+private[spark] case class HeartbeatResponseWithEpoch(reregisterBlockManager: Boolean,
+                                                     override val updatedEpoch: Option[Long])
+  extends HeartbeatResponse
 
 /**
  * Lives in the driver to receive heartbeats from executors..
@@ -71,6 +90,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new mutable.HashMap[String, Long]
+
+  // IDs for executors that will get a new epoch as a response to their next heartbeat
+  private var executorsPendingEpochUpdate = mutable.Set[String]()
+  private var epoch: Option[Long] = None
 
   // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
   // "milliseconds"
@@ -110,7 +133,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
       executorLastSeen(executorId) = clock.getTimeMillis()
       context.reply(true)
     case ExecutorRemoved(executorId) =>
-      executorLastSeen.remove(executorId)
+      cleanupExecutorInformation(executorId)
       context.reply(true)
     case TaskSchedulerIsSet =>
       scheduler = sc.taskScheduler
@@ -118,17 +141,31 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
     case ExpireDeadHosts =>
       expireDeadHosts()
       context.reply(true)
+    case UpdatedEpoch(newEpoch) =>
+      if (epoch.isEmpty || newEpoch > epoch.get) {
+        logInfo(s"Updating epoch from $epoch to $newEpoch")
+        epoch = Some(newEpoch)
+        executorsPendingEpochUpdate = mutable.HashSet[String]() ++= executorLastSeen.keysIterator
+      }
+      context.reply(true)
 
     // Messages received from executors
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId) =>
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
           executorLastSeen(executorId) = clock.getTimeMillis()
+          val updatedEpochOpt = if (executorsPendingEpochUpdate.remove(executorId)) {
+            logInfo(s"Sending updated epoch $epoch to executor $executorId")
+            epoch
+          } else {
+            None
+          }
           eventLoopThread.submit(new Runnable {
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
                 executorId, accumUpdates, blockManagerId)
-              val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+              val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor,
+                updatedEpoch = updatedEpochOpt)
               context.reply(response)
             }
           })
@@ -207,9 +244,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             sc.killAndReplaceExecutor(executorId)
           }
         })
-        executorLastSeen.remove(executorId)
+        cleanupExecutorInformation(executorId)
       }
     }
+  }
+
+  private def cleanupExecutorInformation(executorId: String): Unit = {
+    executorLastSeen.remove(executorId)
+    executorsPendingEpochUpdate.remove(executorId)
   }
 
   override def onStop(): Unit = {

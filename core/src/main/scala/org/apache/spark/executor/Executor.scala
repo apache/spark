@@ -748,6 +748,10 @@ private[spark] class Executor(
         logInfo("Told to re-register on heartbeat")
         env.blockManager.reregister()
       }
+      response.updatedEpoch.foreach { epoch =>
+        logInfo(s"Told to update MapOutputTracker epoch to ${epoch}")
+        env.mapOutputTracker.updateEpoch(epoch)
+      }
       heartbeatFailures = 0
     } catch {
       case NonFatal(e) =>

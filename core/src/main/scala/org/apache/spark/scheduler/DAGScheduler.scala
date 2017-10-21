@@ -1460,6 +1460,7 @@ class DAGScheduler(
             logInfo("Shuffle files lost for executor: %s (epoch %d)".format(execId, currentEpoch))
             mapOutputTracker.removeOutputsOnExecutor(execId)
         }
+        sc.heartbeatReceiverRef.ask[Boolean](UpdatedEpoch(mapOutputTracker.getEpoch))
         clearCacheLocs()
 
       } else {

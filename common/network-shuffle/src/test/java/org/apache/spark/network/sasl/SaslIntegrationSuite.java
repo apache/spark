@@ -190,7 +190,7 @@ public class SaslIntegrationSuite {
       AtomicReference<Throwable> exception = new AtomicReference<>();
 
       CountDownLatch blockFetchLatch = new CountDownLatch(1);
-      BlockFetchingListener listener = new BlockFetchingListener() {
+      BlockFetchingListener listener = new BlockFetchingListener.Base() {
         @Override
         public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
           blockFetchLatch.countDown();

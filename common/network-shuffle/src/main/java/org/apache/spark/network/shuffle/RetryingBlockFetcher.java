@@ -178,7 +178,13 @@ public class RetryingBlockFetcher {
     boolean isIOException = e instanceof IOException
       || (e.getCause() != null && e.getCause() instanceof IOException);
     boolean hasRemainingRetries = retryCount < maxRetries;
-    return isIOException && hasRemainingRetries;
+    // only compute if required
+    boolean listenerShouldRetry =
+        (isIOException && hasRemainingRetries) ? listener.shouldRetry(e) : true ;
+    logger.debug("shouldRetry: isIOException={}, hasRemainingRetries={}, listenerShouldRetry={}",
+        isIOException, hasRemainingRetries, listenerShouldRetry);
+
+    return isIOException && hasRemainingRetries && listenerShouldRetry;
   }
 
   /**
@@ -186,7 +192,7 @@ public class RetryingBlockFetcher {
    * Note that in the event of a retry, we will immediately replace the 'currentListener' field,
    * indicating that any responses from non-current Listeners should be ignored.
    */
-  private class RetryingBlockFetchListener implements BlockFetchingListener {
+  private class RetryingBlockFetchListener extends BlockFetchingListener.Base {
     @Override
     public void onBlockFetchSuccess(String blockId, ManagedBuffer data) {
       // We will only forward this success message to our parent listener if this block request is
@@ -212,7 +218,7 @@ public class RetryingBlockFetcher {
       boolean shouldForwardFailure = false;
       synchronized (RetryingBlockFetcher.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
-          if (shouldRetry(exception)) {
+          if (RetryingBlockFetcher.this.shouldRetry(exception)) {
             initiateRetry();
           } else {
             logger.error(String.format("Failed to fetch block %s, and will not retry (%s retries)",
