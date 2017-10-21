@@ -512,18 +512,6 @@ private[spark] object UIUtils extends Logging {
     TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
   /**
-  * Return the correct Href after checking if master is running in the
-  * reverse proxy mode or not.
-  */
-  def makeHref(proxy: Boolean, id: String, origHref: String): String = {
-    if (proxy) {
-      s"/proxy/$id"
-    } else {
-      origHref
-    }
-  }
-
-  /**
    * Remove suspicious characters of user input to prevent Cross-Site scripting (XSS) attacks
    *
    * For more information about XSS testing:
