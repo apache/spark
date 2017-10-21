@@ -16,7 +16,6 @@
  */
 
 package org.apache.spark.ui.jobs
-
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
@@ -33,4 +32,5 @@ private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
 
   attachPage(new AllJobsPage(this))
   attachPage(new JobPage(this))
+
 }

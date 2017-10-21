@@ -29,10 +29,12 @@ private[history] class HistoryPage(parent: HistoryServer) extends WebUIPage("") 
   private val plusOrMinus = 2
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
+    val requestedPage = Option(UIUtils.stripXSS(request.getParameter("page"))).getOrElse("1").toInt
     val requestedFirst = (requestedPage - 1) * pageSize
+
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
     val requestedIncomplete =
-      Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
+      Option(UIUtils.stripXSS(request.getParameter("showIncomplete"))).getOrElse("false").toBoolean
 
     val allApps = parent.getApplicationList()
       .filter(_.attempts.head.completed != requestedIncomplete)

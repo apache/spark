@@ -23,9 +23,8 @@ import scala.xml.Node
 
 import org.apache.spark.deploy.Command
 import org.apache.spark.deploy.mesos.MesosDriverDescription
-import org.apache.spark.scheduler.cluster.mesos.{MesosClusterSubmissionState, MesosClusterRetryState}
+import org.apache.spark.scheduler.cluster.mesos.{MesosClusterRetryState, MesosClusterSubmissionState}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
-
 
 private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver") {
 
@@ -52,7 +51,7 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
     val driverDescription = Iterable.apply(driverState.description)
     val submissionState = Iterable.apply(driverState.submissionState)
     val command = Iterable.apply(driverState.description.command)
-    val schedulerProperties = Iterable.apply(driverState.description.schedulerProperties)
+    val schedulerProperties = Iterable.apply(driverState.description.conf.getAll.toMap)
     val commandEnv = Iterable.apply(driverState.description.command.environment)
     val driverTable =
       UIUtils.listingTable(driverHeaders, driverRow, driverDescription)
@@ -97,22 +96,22 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
         <td>Mesos Slave ID</td>
         <td>{state.slaveId.getValue}</td>
       </tr>
-        <tr>
-          <td>Mesos Task ID</td>
-          <td>{state.taskId.getValue}</td>
-        </tr>
-        <tr>
-          <td>Launch Time</td>
-          <td>{state.startDate}</td>
-        </tr>
-        <tr>
-          <td>Finish Time</td>
-          <td>{state.finishDate.map(_.toString).getOrElse("")}</td>
-        </tr>
-        <tr>
-          <td>Last Task Status</td>
-          <td>{state.mesosTaskStatus.map(_.toString).getOrElse("")}</td>
-        </tr>
+      <tr>
+        <td>Mesos Task ID</td>
+        <td>{state.taskId.getValue}</td>
+      </tr>
+      <tr>
+        <td>Launch Time</td>
+        <td>{UIUtils.formatDate(state.startDate)}</td>
+      </tr>
+      <tr>
+        <td>Finish Time</td>
+        <td>{state.finishDate.map(_.toString).getOrElse("")}</td>
+      </tr>
+      <tr>
+        <td>Last Task Status</td>
+        <td>{state.mesosTaskStatus.map(_.toString).getOrElse("")}</td>
+      </tr>
     }.getOrElse(Seq[Node]())
   }
 
@@ -128,39 +127,39 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
     <tr>
       <td>Main class</td><td>{command.mainClass}</td>
     </tr>
-      <tr>
-        <td>Arguments</td><td>{command.arguments.mkString(" ")}</td>
-      </tr>
-      <tr>
-        <td>Class path entries</td><td>{command.classPathEntries.mkString(" ")}</td>
-      </tr>
-      <tr>
-        <td>Java options</td><td>{command.javaOpts.mkString((" "))}</td>
-      </tr>
-      <tr>
-        <td>Library path entries</td><td>{command.libraryPathEntries.mkString((" "))}</td>
-      </tr>
+    <tr>
+      <td>Arguments</td><td>{command.arguments.mkString(" ")}</td>
+    </tr>
+    <tr>
+      <td>Class path entries</td><td>{command.classPathEntries.mkString(" ")}</td>
+    </tr>
+    <tr>
+      <td>Java options</td><td>{command.javaOpts.mkString((" "))}</td>
+    </tr>
+    <tr>
+      <td>Library path entries</td><td>{command.libraryPathEntries.mkString((" "))}</td>
+    </tr>
   }
 
   private def driverRow(driver: MesosDriverDescription): Seq[Node] = {
     <tr>
       <td>Name</td><td>{driver.name}</td>
     </tr>
-      <tr>
-        <td>Id</td><td>{driver.submissionId}</td>
-      </tr>
-      <tr>
-        <td>Cores</td><td>{driver.cores}</td>
-      </tr>
-      <tr>
-        <td>Memory</td><td>{driver.mem}</td>
-      </tr>
-      <tr>
-        <td>Submitted</td><td>{driver.submissionDate}</td>
-      </tr>
-      <tr>
-        <td>Supervise</td><td>{driver.supervise}</td>
-      </tr>
+    <tr>
+      <td>Id</td><td>{driver.submissionId}</td>
+    </tr>
+    <tr>
+      <td>Cores</td><td>{driver.cores}</td>
+    </tr>
+    <tr>
+      <td>Memory</td><td>{driver.mem}</td>
+    </tr>
+    <tr>
+      <td>Submitted</td><td>{UIUtils.formatDate(driver.submissionDate)}</td>
+    </tr>
+    <tr>
+      <td>Supervise</td><td>{driver.supervise}</td>
+    </tr>
   }
 
   private def retryRow(retryState: Option[MesosClusterRetryState]): Seq[Node] = {

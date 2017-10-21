@@ -31,7 +31,8 @@ private[sql] class ExecutionPage(parent: SQLTab) extends WebUIPage("execution") 
   private val listener = parent.listener
 
   override def render(request: HttpServletRequest): Seq[Node] = listener.synchronized {
-    val parameterExecutionId = request.getParameter("id")
+    // stripXSS is called first to remove suspicious characters used in XSS attacks
+    val parameterExecutionId = UIUtils.stripXSS(request.getParameter("id"))
     require(parameterExecutionId != null && parameterExecutionId.nonEmpty,
       "Missing execution id parameter")
 
