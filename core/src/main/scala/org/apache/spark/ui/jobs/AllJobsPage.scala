@@ -22,7 +22,6 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml._
-import scala.collection.JavaConverters._
 
 import org.apache.commons.lang3.StringEscapeUtils
 
