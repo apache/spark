@@ -19,8 +19,6 @@ package org.apache.spark.scheduler.cluster.mesos
 
 import java.util.Collections
 
-import org.apache.mesos.protobuf.ByteString
-
 import scala.collection.JavaConverters._
 
 import org.apache.mesos.Protos._
@@ -33,14 +31,6 @@ import org.mockito.Mockito._
 import org.apache.spark.deploy.mesos.config.MesosSecretConfig
 
 object Utils {
-  def createTextAttribute(name: String, value: String): Attribute = {
-    Attribute.newBuilder()
-      .setName(name)
-      .setType(Value.Type.TEXT)
-      .setText(Value.Text.newBuilder().setValue(value))
-      .build()
-  }
-
 
   val TEST_FRAMEWORK_ID = FrameworkID.newBuilder()
     .setValue("test-framework-id")
@@ -53,13 +43,13 @@ object Utils {
     .build()
 
   def createOffer(
-      offerId: String,
-      slaveId: String,
-      mem: Int,
-      cpus: Int,
-      ports: Option[(Long, Long)] = None,
-      gpus: Int = 0,
-      attributes: List[Attribute] = List.empty): Offer = {
+                   offerId: String,
+                   slaveId: String,
+                   mem: Int,
+                   cpus: Int,
+                   ports: Option[(Long, Long)] = None,
+                   gpus: Int = 0,
+                   attributes: List[Attribute] = List.empty): Offer = {
     val builder = Offer.newBuilder()
     builder.addResourcesBuilder()
       .setName("mem")
@@ -74,7 +64,7 @@ object Utils {
         .setName("ports")
         .setType(Value.Type.RANGES)
         .setRanges(Ranges.newBuilder().addRange(MesosRange.newBuilder()
-          .setBegin(resourcePorts._1).setEnd(resourcePorts._2).build()))
+        .setBegin(resourcePorts._1).setEnd(resourcePorts._2).build()))
     }
     if (gpus > 0) {
       builder.addResourcesBuilder()
@@ -84,7 +74,7 @@ object Utils {
     }
     builder.setId(createOfferId(offerId))
       .setFrameworkId(FrameworkID.newBuilder()
-        .setValue("f1"))
+      .setValue("f1"))
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId))
       .setHostname(s"host${slaveId}")
       .addAllAttributes(attributes.asJava)
@@ -137,7 +127,7 @@ object Utils {
       .getVariablesList
       .asScala
     assert(envVars
-      .count(!_.getName.startsWith("SPARK_")) == 2)  // user-defined secret env vars
+      .count(!_.getName.startsWith("SPARK_")) == 2) // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "SECRET_ENV_KEY").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.REFERENCE)
@@ -166,7 +156,7 @@ object Utils {
       .getVariablesList
       .asScala
     assert(envVars
-      .count(!_.getName.startsWith("SPARK_")) == 2)  // user-defined secret env vars
+      .count(!_.getName.startsWith("SPARK_")) == 2) // user-defined secret env vars
     val variableOne = envVars.filter(_.getName == "USER").head
     assert(variableOne.getSecret.isInitialized)
     assert(variableOne.getSecret.getType == Secret.Type.VALUE)
@@ -224,4 +214,13 @@ object Utils {
     assert(secretVolTwo.getSource.getSecret.getValue.getData ==
       ByteString.copyFrom("password".getBytes))
   }
+
+  def createTextAttribute(name: String, value: String): Attribute = {
+    Attribute.newBuilder()
+      .setName(name)
+      .setType(Value.Type.TEXT)
+      .setText(Value.Text.newBuilder().setValue(value))
+      .build()
+  }
 }
+
