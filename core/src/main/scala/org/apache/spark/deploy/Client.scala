@@ -93,19 +93,19 @@ private class ClientEndpoint(
           driverArgs.cores,
           driverArgs.supervise,
           command)
-        ayncSendToMasterAndForwardReply[SubmitDriverResponse](
+        asyncSendToMasterAndForwardReply[SubmitDriverResponse](
           RequestSubmitDriver(driverDescription))
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        ayncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
+        asyncSendToMasterAndForwardReply[KillDriverResponse](RequestKillDriver(driverId))
     }
   }
 
   /**
    * Send the message to master and forward the reply to self asynchronously.
    */
-  private def ayncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
+  private def asyncSendToMasterAndForwardReply[T: ClassTag](message: Any): Unit = {
     for (masterEndpoint <- masterEndpoints) {
       masterEndpoint.ask[T](message).onComplete {
         case Success(v) => self.send(v)

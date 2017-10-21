@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.scalatest.concurrent.Timeouts._
+import org.scalatest.concurrent.TimeLimits._
 import org.scalatest.time.{Millis, Span}
 
 class UnpersistSuite extends SparkFunSuite with LocalSparkContext {

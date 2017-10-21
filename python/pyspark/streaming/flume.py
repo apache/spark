@@ -53,6 +53,8 @@ class FlumeUtils(object):
         :param enableDecompression:  Should netty server decompress input stream
         :param bodyDecoder:  A function used to decode body (default is utf8_decoder)
         :return: A DStream object
+
+        .. note:: Deprecated in 2.3.0
         """
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         helper = FlumeUtils._get_helper(ssc._sc)
@@ -79,6 +81,8 @@ class FlumeUtils(object):
                              will result in this stream using more threads
         :param bodyDecoder:  A function used to decode body (default is utf8_decoder)
         :return: A DStream object
+
+        .. note:: Deprecated in 2.3.0
         """
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         hosts = []

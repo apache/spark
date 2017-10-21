@@ -38,9 +38,10 @@ import org.apache.commons.math3.stat.inference.ChiSquareTest
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.ByteUnit
+import org.apache.spark.scheduler.SparkListener
 
 class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
 
@@ -460,20 +461,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
   test("resolveURI") {
     def assertResolves(before: String, after: String): Unit = {
       // This should test only single paths
-      assume(before.split(",").length === 1)
-      // Repeated invocations of resolveURI should yield the same result
+      assert(before.split(",").length === 1)
       def resolve(uri: String): String = Utils.resolveURI(uri).toString
+      assert(resolve(before) === after)
       assert(resolve(after) === after)
+      // Repeated invocations of resolveURI should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
-      // Also test resolveURIs with single paths
-      assert(new URI(Utils.resolveURIs(before)) === new URI(after))
-      assert(new URI(Utils.resolveURIs(after)) === new URI(after))
     }
     val rawCwd = System.getProperty("user.dir")
     val cwd = if (Utils.isWindows) s"/$rawCwd".replace("\\", "/") else rawCwd
     assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
-    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:/root/spark.jar#app.jar")
+    assertResolves("hdfs:///root/spark.jar#app.jar", "hdfs:///root/spark.jar#app.jar")
     assertResolves("spark.jar", s"file:$cwd/spark.jar")
     assertResolves("spark.jar#app.jar", s"file:$cwd/spark.jar#app.jar")
     assertResolves("path to/file.txt", s"file:$cwd/path%20to/file.txt")
@@ -482,20 +481,18 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
       assertResolves("C:\\path to\\file.txt", "file:/C:/path%20to/file.txt")
     }
     assertResolves("file:/C:/path/to/file.txt", "file:/C:/path/to/file.txt")
-    assertResolves("file:///C:/path/to/file.txt", "file:/C:/path/to/file.txt")
+    assertResolves("file:///C:/path/to/file.txt", "file:///C:/path/to/file.txt")
     assertResolves("file:/C:/file.txt#alias.txt", "file:/C:/file.txt#alias.txt")
-    assertResolves("file:foo", s"file:foo")
-    assertResolves("file:foo:baby", s"file:foo:baby")
+    assertResolves("file:foo", "file:foo")
+    assertResolves("file:foo:baby", "file:foo:baby")
   }
 
   test("resolveURIs with multiple paths") {
     def assertResolves(before: String, after: String): Unit = {
-      assume(before.split(",").length > 1)
-      assert(Utils.resolveURIs(before) === after)
-      assert(Utils.resolveURIs(after) === after)
-      // Repeated invocations of resolveURIs should yield the same result
       def resolve(uri: String): String = Utils.resolveURIs(uri)
+      assert(resolve(before) === after)
       assert(resolve(after) === after)
+      // Repeated invocations of resolveURIs should yield the same result
       assert(resolve(resolve(after)) === after)
       assert(resolve(resolve(resolve(after))) === after)
     }
@@ -511,6 +508,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         s"hdfs:/jar1,file:/jar2,file:$cwd/jar3,file:/C:/pi.py%23py.pi,file:/C:/path%20to/jar4")
     }
     assertResolves(",jar1,jar2", s"file:$cwd/jar1,file:$cwd/jar2")
+    // Also test resolveURIs with single paths
+    assertResolves("hdfs:/root/spark.jar", "hdfs:/root/spark.jar")
   }
 
   test("nonLocalPaths") {
@@ -940,6 +939,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         // creating a very misbehaving process. It ignores SIGTERM and has been SIGSTOPed. On
         // older versions of java, this will *not* terminate.
         val file = File.createTempFile("temp-file-name", ".tmp")
+        file.deleteOnExit()
         val cmd =
           s"""
              |#!/bin/bash
@@ -1025,4 +1025,143 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(redactedConf("spark.sensitive.property") === Utils.REDACTION_REPLACEMENT_TEXT)
 
   }
+
+  test("tryWithSafeFinally") {
+    var e = new Error("Block0")
+    val finallyBlockError = new Error("Finally Block")
+    var isErrorOccurred = false
+    // if the try and finally blocks throw different exception instances
+    try {
+      Utils.tryWithSafeFinally { throw e }(finallyBlock = { throw finallyBlockError })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.head == finallyBlockError)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try and finally blocks throw the same exception instance then it should not
+    // try to add to suppressed and get IllegalArgumentException
+    e = new Error("Block1")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinally { throw e }(finallyBlock = { throw e })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try throws the exception and finally doesn't throw exception
+    e = new Error("Block2")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinally { throw e }(finallyBlock = {})
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try and finally block don't throw exception
+    Utils.tryWithSafeFinally {}(finallyBlock = {})
+  }
+
+  test("tryWithSafeFinallyAndFailureCallbacks") {
+    var e = new Error("Block0")
+    val catchBlockError = new Error("Catch Block")
+    val finallyBlockError = new Error("Finally Block")
+    var isErrorOccurred = false
+    TaskContext.setTaskContext(TaskContext.empty())
+    // if the try, catch and finally blocks throw different exception instances
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(
+        catchBlock = { throw catchBlockError }, finallyBlock = { throw finallyBlockError })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.head == catchBlockError)
+        assert(t.getSuppressed.last == finallyBlockError)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try, catch and finally blocks throw the same exception instance then it should not
+    // try to add to suppressed and get IllegalArgumentException
+    e = new Error("Block1")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = { throw e },
+        finallyBlock = { throw e })
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try throws the exception, catch and finally don't throw exceptions
+    e = new Error("Block2")
+    isErrorOccurred = false
+    try {
+      Utils.tryWithSafeFinallyAndFailureCallbacks { throw e }(catchBlock = {}, finallyBlock = {})
+    } catch {
+      case t: Error =>
+        assert(t.getSuppressed.length == 0)
+        isErrorOccurred = true
+    }
+    assert(isErrorOccurred)
+    // if the try, catch and finally blocks don't throw exceptions
+    Utils.tryWithSafeFinallyAndFailureCallbacks {}(catchBlock = {}, finallyBlock = {})
+    TaskContext.unset
+  }
+
+  test("load extensions") {
+    val extensions = Seq(
+      classOf[SimpleExtension],
+      classOf[ExtensionWithConf],
+      classOf[UnregisterableExtension]).map(_.getName())
+
+    val conf = new SparkConf(false)
+    val instances = Utils.loadExtensions(classOf[Object], extensions, conf)
+    assert(instances.size === 2)
+    assert(instances.count(_.isInstanceOf[SimpleExtension]) === 1)
+
+    val extWithConf = instances.find(_.isInstanceOf[ExtensionWithConf])
+      .map(_.asInstanceOf[ExtensionWithConf])
+      .get
+    assert(extWithConf.conf eq conf)
+
+    class NestedExtension { }
+
+    val invalid = Seq(classOf[NestedExtension].getName())
+    intercept[SparkException] {
+      Utils.loadExtensions(classOf[Object], invalid, conf)
+    }
+
+    val error = Seq(classOf[ExtensionWithError].getName())
+    intercept[IllegalArgumentException] {
+      Utils.loadExtensions(classOf[Object], error, conf)
+    }
+
+    val wrongType = Seq(classOf[ListenerImpl].getName())
+    intercept[IllegalArgumentException] {
+      Utils.loadExtensions(classOf[Seq[_]], wrongType, conf)
+    }
+  }
+
 }
+
+private class SimpleExtension
+
+private class ExtensionWithConf(val conf: SparkConf)
+
+private class UnregisterableExtension {
+
+  throw new UnsupportedOperationException()
+
+}
+
+private class ExtensionWithError {
+
+  throw new IllegalArgumentException()
+
+}
+
+private class ListenerImpl extends SparkListener

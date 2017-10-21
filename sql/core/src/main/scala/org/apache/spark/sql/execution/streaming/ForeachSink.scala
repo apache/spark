@@ -63,4 +63,6 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
       }
     }
   }
+
+  override def toString(): String = "ForeachSink"
 }

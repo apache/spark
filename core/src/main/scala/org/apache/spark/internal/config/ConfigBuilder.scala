@@ -28,7 +28,7 @@ private object ConfigHelpers {
 
   def toNumber[T](s: String, converter: String => T, key: String, configType: String): T = {
     try {
-      converter(s)
+      converter(s.trim)
     } catch {
       case _: NumberFormatException =>
         throw new IllegalArgumentException(s"$key should be $configType, but was $s")
@@ -37,7 +37,7 @@ private object ConfigHelpers {
 
   def toBoolean(s: String, key: String): Boolean = {
     try {
-      s.toBoolean
+      s.trim.toBoolean
     } catch {
       case _: IllegalArgumentException =>
         throw new IllegalArgumentException(s"$key should be boolean, but was $s")

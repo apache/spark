@@ -205,10 +205,12 @@ private[streaming] class FileBasedWriteAheadLog(
 
   /** Stop the manager, close any open log writer */
   def close(): Unit = synchronized {
-    if (currentLogWriter != null) {
-      currentLogWriter.close()
+    if (!executionContext.isShutdown) {
+      if (currentLogWriter != null) {
+        currentLogWriter.close()
+      }
+      executionContext.shutdown()
     }
-    executionContext.shutdown()
     logInfo("Stopped write ahead log manager")
   }
 

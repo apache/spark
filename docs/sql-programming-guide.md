@@ -392,41 +392,31 @@ While those functions are designed for DataFrames, Spark SQL also has type-safe 
 Moreover, users are not limited to the predefined aggregate functions and can create their own.
 
 ### Untyped User-Defined Aggregate Functions
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
-
 Users have to extend the [UserDefinedAggregateFunction](api/scala/index.html#org.apache.spark.sql.expressions.UserDefinedAggregateFunction)
 abstract class to implement a custom untyped aggregate function. For example, a user-defined average
 can look like:
 
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
 {% include_example untyped_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedUntypedAggregation.scala%}
 </div>
-
 <div data-lang="java"  markdown="1">
-
 {% include_example untyped_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedUntypedAggregation.java%}
 </div>
-
 </div>
 
 ### Type-Safe User-Defined Aggregate Functions
 
 User-defined aggregations for strongly typed Datasets revolve around the [Aggregator](api/scala/index.html#org.apache.spark.sql.expressions.Aggregator) abstract class.
 For example, a type-safe user-defined average can look like:
+
 <div class="codetabs">
-
 <div data-lang="scala"  markdown="1">
-
 {% include_example typed_custom_aggregation scala/org/apache/spark/examples/sql/UserDefinedTypedAggregation.scala%}
 </div>
-
 <div data-lang="java"  markdown="1">
-
 {% include_example typed_custom_aggregation java/org/apache/spark/examples/sql/JavaUserDefinedTypedAggregation.java%}
 </div>
-
 </div>
 
 # Data Sources
@@ -471,6 +461,8 @@ name (i.e., `org.apache.spark.sql.parquet`), but for built-in sources you can al
 names (`json`, `parquet`, `jdbc`, `orc`, `libsvm`, `csv`, `text`). DataFrames loaded from any data
 source type can be converted into other types using this syntax.
 
+To load a JSON file you can use:
+
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% include_example manual_load_options scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
@@ -489,6 +481,26 @@ source type can be converted into other types using this syntax.
 </div>
 </div>
 
+To load a CSV file you can use:
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+{% include_example manual_load_options_csv scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% include_example manual_load_options_csv java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% include_example manual_load_options_csv python/sql/datasource.py %}
+</div>
+
+<div data-lang="r"  markdown="1">
+{% include_example manual_load_options_csv r/RSparkSQLExample.R %}
+
+</div>
+</div>
 ### Run SQL on files directly
 
 Instead of using read API to load a file into DataFrame and query it, you can also query that
@@ -524,7 +536,7 @@ new data.
 <tr><th>Scala/Java</th><th>Any Language</th><th>Meaning</th></tr>
 <tr>
   <td><code>SaveMode.ErrorIfExists</code> (default)</td>
-  <td><code>"error"</code> (default)</td>
+  <td><code>"error" or "errorifexists"</code> (default)</td>
   <td>
     When saving a DataFrame to a data source, if data already exists,
     an exception is expected to be thrown.
@@ -583,7 +595,7 @@ Note that partition information is not gathered by default when creating externa
 
 ### Bucketing, Sorting and Partitioning
 
-For file-based data source, it is also possible to bucket and sort or partition the output. 
+For file-based data source, it is also possible to bucket and sort or partition the output.
 Bucketing and sorting are applicable only to persistent tables:
 
 <div class="codetabs">
@@ -608,7 +620,7 @@ CREATE TABLE users_bucketed_by_name(
   name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
-) USING parquet 
+) USING parquet
 CLUSTERED BY(name) INTO 42 BUCKETS;
 
 {% endhighlight %}
@@ -639,7 +651,7 @@ while partitioning can be used with both `save` and `saveAsTable` when using the
 {% highlight sql %}
 
 CREATE TABLE users_by_favorite_color(
-  name STRING, 
+  name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
 ) USING csv PARTITIONED BY(favorite_color);
@@ -674,7 +686,7 @@ CREATE TABLE users_bucketed_and_partitioned(
   name STRING,
   favorite_color STRING,
   favorite_numbers array<integer>
-) USING parquet 
+) USING parquet
 PARTITIONED BY (favorite_color)
 CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 
@@ -685,7 +697,7 @@ CLUSTERED BY(name) SORTED BY (favorite_numbers) INTO 42 BUCKETS;
 </div>
 
 `partitionBy` creates a directory structure as described in the [Partition Discovery](#partition-discovery) section.
-Thus, it has limited applicability to columns with high cardinality. In contrast 
+Thus, it has limited applicability to columns with high cardinality. In contrast
  `bucketBy` distributes
 data across a fixed number of buckets and can be used when a number of unique values is unbounded.
 
@@ -743,8 +755,9 @@ SELECT * FROM parquetTable
 
 Table partitioning is a common optimization approach used in systems like Hive. In a partitioned
 table, data are usually stored in different directories, with partitioning column values encoded in
-the path of each partition directory. The Parquet data source is now able to discover and infer
-partitioning information automatically. For example, we can store all our previously used
+the path of each partition directory. All built-in file sources (including Text/CSV/JSON/ORC/Parquet)
+are able to discover and infer partitioning information automatically.
+For example, we can store all our previously used
 population data into a partitioned table using the following directory structure, with two extra
 columns, `gender` and `country` as partitioning columns:
 
@@ -935,13 +948,6 @@ Configuration of Parquet can be done using the `setConf` method on `SparkSession
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.parquet.cacheMetadata</code></td>
-  <td>true</td>
-  <td>
-    Turns on caching of Parquet schema metadata. Can speed up querying of static data.
-  </td>
-</tr>
-<tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>snappy</td>
   <td>
@@ -998,7 +1004,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` option to `true`.
+For a regular multi-line JSON file, set the `multiLine` option to `true`.
 
 {% include_example json_dataset scala/org/apache/spark/examples/sql/SQLDataSourceExample.scala %}
 </div>
@@ -1012,7 +1018,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` option to `true`.
+For a regular multi-line JSON file, set the `multiLine` option to `true`.
 
 {% include_example json_dataset java/org/apache/spark/examples/sql/JavaSQLDataSourceExample.java %}
 </div>
@@ -1025,7 +1031,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set the `wholeFile` parameter to `True`.
+For a regular multi-line JSON file, set the `multiLine` parameter to `True`.
 
 {% include_example json_dataset python/sql/datasource.py %}
 </div>
@@ -1039,7 +1045,7 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. For more information, please see
 [JSON Lines text format, also called newline-delimited JSON](http://jsonlines.org/).
 
-For a regular multi-line JSON file, set a named parameter `wholeFile` to `TRUE`.
+For a regular multi-line JSON file, set a named parameter `multiLine` to `TRUE`.
 
 {% include_example json_dataset r/RSparkSQLExample.R %}
 
@@ -1319,6 +1325,13 @@ the following case-insensitive options:
    </tr>
 
   <tr>
+     <td><code>sessionInitStatement</code></td>
+     <td>
+       After each database session is opened to the remote DB and before starting to read data, this option executes a custom SQL statement (or a PL/SQL block). Use this to implement session initialization code. Example: <code>option("sessionInitStatement", """BEGIN execute immediate 'alter session set "_serial_direct_read"=true'; END;""")</code>
+     </td>
+  </tr>
+
+  <tr>
     <td><code>truncate</code></td>
     <td>
      This is a JDBC writer related option. When <code>SaveMode.Overwrite</code> is enabled, this option causes Spark to truncate an existing table instead of dropping and recreating it. This can be more efficient, and prevents the table metadata (e.g., indices) from being removed. However, it will not work in some cases, such as when the new data has a different schema. It defaults to <code>false</code>. This option applies only to writing.
@@ -1337,7 +1350,14 @@ the following case-insensitive options:
     <td>
      The database column data types to use instead of the defaults, when creating the table. Data type information should be specified in the same format as CREATE TABLE columns syntax (e.g: <code>"name CHAR(64), comments VARCHAR(1024)")</code>. The specified types should be valid spark sql data types. This option applies only to writing.
     </td>
-  </tr>  
+  </tr>
+
+  <tr>
+    <td><code>customSchema</code></td>
+    <td>
+     The custom schema to use for reading data from JDBC connectors. For example, <code>"id DECIMAL(38, 0), name STRING"</code>. You can also specify partial fields, and the others use the default type mapping. For example, <code>"id DECIMAL(38, 0)"</code>. The column names should be identical to the corresponding column names of JDBC table. Users can specify the corresponding data types of Spark SQL instead of using the defaults. This option applies only to reading.
+    </td>
+  </tr>
 </table>
 
 <div class="codetabs">
@@ -1552,6 +1572,11 @@ options.
 
 # Migration Guide
 
+## Upgrading From Spark SQL 2.2 to 2.3
+
+  - Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the referenced columns only include the internal corrupt record column (named `_corrupt_record` by default). For example, `spark.read.schema(schema).json(file).filter($"_corrupt_record".isNotNull).count()` and `spark.read.schema(schema).json(file).select("_corrupt_record").show()`. Instead, you can cache or save the parsed results and then send the same query. For example, `val df = spark.read.schema(schema).json(file).cache()` and then `df.filter($"_corrupt_record".isNotNull).count()`.
+  - The `percentile_approx` function previously accepted numeric type input and output double type results. Now it supports date type, timestamp type and numeric types as input types. The result type is also changed to be the same as the input type, which is more reasonable for percentiles.
+
 ## Upgrading From Spark SQL 2.1 to 2.2
 
   - Spark 2.1.1 introduced a new configuration key: `spark.sql.hive.caseSensitiveInferenceMode`. It had a default setting of `NEVER_INFER`, which kept behavior identical to 2.1.0. However, Spark 2.2.0 changes this setting's default value to `INFER_AND_SAVE` to restore compatibility with reading Hive metastore tables whose underlying file schema have mixed-case column names. With the `INFER_AND_SAVE` configuration value, on first access Spark will perform schema inference on any Hive metastore table for which it has not already saved an inferred schema. Note that schema inference can be a very time consuming operation for tables with thousands of partitions. If compatibility with mixed-case column names is not a concern, you can safely set `spark.sql.hive.caseSensitiveInferenceMode` to `NEVER_INFER` to avoid the initial overhead of schema inference. Note that with the new default `INFER_AND_SAVE` setting, the results of the schema inference are saved as a metastore key for future use. Therefore, the initial schema inference occurs only at a table's first access.
@@ -1589,6 +1614,9 @@ options.
       Dropping external tables will not remove the data. Users are not allowed to specify the location for Hive managed tables.
       Note that this is different from the Hive behavior.
     - As a result, `DROP TABLE` statements on those tables will not remove the data.
+
+ - `spark.sql.parquet.cacheMetadata` is no longer used.
+   See [SPARK-13664](https://issues.apache.org/jira/browse/SPARK-13664) for details.
 
 ## Upgrading From Spark SQL 1.5 to 1.6
 
@@ -1912,6 +1940,23 @@ releases of Spark SQL.
 * Merge multiple small files for query results: if the result output contains multiple small files,
   Hive can optionally merge the small files into fewer large files to avoid overflowing the HDFS
   metadata. Spark SQL does not support that.
+
+**Hive UDF/UDTF/UDAF**
+
+Not all the APIs of the Hive UDF/UDTF/UDAF are supported by Spark SQL. Below are the unsupported APIs:
+
+* `getRequiredJars` and `getRequiredFiles` (`UDF` and `GenericUDF`) are functions to automatically
+  include additional resources required by this UDF.
+* `initialize(StructObjectInspector)` in `GenericUDTF` is not supported yet. Spark SQL currently uses
+  a deprecated interface `initialize(ObjectInspector[])` only.
+* `configure` (`GenericUDF`, `GenericUDTF`, and `GenericUDAFEvaluator`) is a function to initialize
+  functions with `MapredContext`, which is inapplicable to Spark.
+* `close` (`GenericUDF` and `GenericUDAFEvaluator`) is a function to release associated resources.
+  Spark SQL does not call this function when tasks finish.
+* `reset` (`GenericUDAFEvaluator`) is a function to re-initialize aggregation for reusing the same aggregation.
+  Spark SQL currently does not support the reuse of aggregation.
+* `getWindowingEvaluator` (`GenericUDAFEvaluator`) is a function to optimize aggregation by evaluating
+  an aggregate over a fixed window.
 
 # Reference
 

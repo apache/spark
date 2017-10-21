@@ -19,6 +19,7 @@ package org.apache.spark.sql.sources
 
 import java.io.File
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -343,6 +344,86 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
         sql("SELECT a, b FROM target2"),
         sql("SELECT a, b FROM jt")
       )
+    }
+  }
+
+  test("SPARK-21203 wrong results of insertion of Array of Struct") {
+    val tabName = "tab1"
+    withTable(tabName) {
+      spark.sql(
+        """
+          |CREATE TABLE `tab1`
+          |(`custom_fields` ARRAY<STRUCT<`id`: BIGINT, `value`: STRING>>)
+          |USING parquet
+        """.stripMargin)
+      spark.sql(
+        """
+          |INSERT INTO `tab1`
+          |SELECT ARRAY(named_struct('id', 1, 'value', 'a'), named_struct('id', 2, 'value', 'b'))
+        """.stripMargin)
+
+      checkAnswer(
+        spark.sql("SELECT custom_fields.id, custom_fields.value FROM tab1"),
+        Row(Array(1, 2), Array("a", "b")))
+    }
+  }
+
+  test("insert overwrite directory") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY '${path}'
+           | USING json
+           | OPTIONS (a 1, b 0.1, c TRUE)
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+
+      spark.sql(v1)
+
+      checkAnswer(
+        spark.read.json(dir.getCanonicalPath),
+        sql("SELECT 1 as a, 'c' as b"))
+    }
+  }
+
+  test("insert overwrite directory with path in options") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY
+           | USING json
+           | OPTIONS ('path' '${path}')
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+
+      spark.sql(v1)
+
+      checkAnswer(
+        spark.read.json(dir.getCanonicalPath),
+        sql("SELECT 1 as a, 'c' as b"))
+    }
+  }
+
+  test("insert overwrite directory to data source not providing FileFormat") {
+    withTempDir { dir =>
+      val path = dir.toURI.getPath
+
+      val v1 =
+        s"""
+           | INSERT OVERWRITE DIRECTORY '${path}'
+           | USING JDBC
+           | OPTIONS (a 1, b 0.1, c TRUE)
+           | SELECT 1 as a, 'c' as b
+         """.stripMargin
+      val e = intercept[SparkException] {
+        spark.sql(v1)
+      }.getMessage
+
+      assert(e.contains("Only Data Sources providing FileFormat are supported"))
     }
   }
 }

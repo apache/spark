@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
-class TypeCoercionSuite extends PlanTest {
+class TypeCoercionSuite extends AnalysisTest {
 
   // scalastyle:off line.size.limit
   // The following table shows all implicit data type conversions that are not visible to the user.
@@ -131,14 +131,17 @@ class TypeCoercionSuite extends PlanTest {
       widenFunc: (DataType, DataType) => Option[DataType],
       t1: DataType,
       t2: DataType,
-      expected: Option[DataType]): Unit = {
+      expected: Option[DataType],
+      isSymmetric: Boolean = true): Unit = {
     var found = widenFunc(t1, t2)
     assert(found == expected,
       s"Expected $expected as wider common type for $t1 and $t2, found $found")
     // Test both directions to make sure the widening is symmetric.
-    found = widenFunc(t2, t1)
-    assert(found == expected,
-      s"Expected $expected as wider common type for $t2 and $t1, found $found")
+    if (isSymmetric) {
+      found = widenFunc(t2, t1)
+      assert(found == expected,
+        s"Expected $expected as wider common type for $t2 and $t1, found $found")
+    }
   }
 
   test("implicit type cast - ByteType") {
@@ -385,6 +388,47 @@ class TypeCoercionSuite extends PlanTest {
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
+
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType))),
+      StructType(Seq(StructField("b", IntegerType))),
+      None)
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", DoubleType, nullable = false))),
+      None)
+
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = false)))))
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = false))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+    widenTest(
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      StructType(Seq(StructField("a", IntegerType, nullable = true))),
+      Some(StructType(Seq(StructField("a", IntegerType, nullable = true)))))
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      widenTest(
+        StructType(Seq(StructField("a", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType))),
+        None)
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      checkWidenType(
+        TypeCoercion.findTightestCommonType,
+        StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType))),
+        StructType(Seq(StructField("A", IntegerType), StructField("b", IntegerType))),
+        Some(StructType(Seq(StructField("a", IntegerType), StructField("B", IntegerType)))),
+        isSymmetric = false)
+    }
   }
 
   test("wider common type for decimal and array") {
@@ -484,24 +528,50 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   test("coalesce casts") {
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
-      Coalesce(Literal(1.0)
-        :: Literal(1)
-        :: Literal.create(1.0, FloatType)
-        :: Nil),
-      Coalesce(Cast(Literal(1.0), DoubleType)
-        :: Cast(Literal(1), DoubleType)
-        :: Cast(Literal.create(1.0, FloatType), DoubleType)
-        :: Nil))
-    ruleTest(TypeCoercion.FunctionArgumentConversion,
-      Coalesce(Literal(1L)
-        :: Literal(1)
-        :: Literal(new java.math.BigDecimal("1000000000000000000000"))
-        :: Nil),
-      Coalesce(Cast(Literal(1L), DecimalType(22, 0))
-        :: Cast(Literal(1), DecimalType(22, 0))
-        :: Cast(Literal(new java.math.BigDecimal("1000000000000000000000")), DecimalType(22, 0))
-        :: Nil))
+    val rule = TypeCoercion.FunctionArgumentConversion
+
+    val intLit = Literal(1)
+    val longLit = Literal.create(1L)
+    val doubleLit = Literal(1.0)
+    val stringLit = Literal.create("c", StringType)
+    val nullLit = Literal.create(null, NullType)
+    val floatNullLit = Literal.create(null, FloatType)
+    val floatLit = Literal.create(1.0f, FloatType)
+    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
+
+    ruleTest(rule,
+      Coalesce(Seq(doubleLit, intLit, floatLit)),
+      Coalesce(Seq(Cast(doubleLit, DoubleType),
+        Cast(intLit, DoubleType), Cast(floatLit, DoubleType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(longLit, intLit, decimalLit)),
+      Coalesce(Seq(Cast(longLit, DecimalType(22, 0)),
+        Cast(intLit, DecimalType(22, 0)), Cast(decimalLit, DecimalType(22, 0)))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, intLit)),
+      Coalesce(Seq(Cast(nullLit, IntegerType), Cast(intLit, IntegerType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(timestampLit, stringLit)),
+      Coalesce(Seq(Cast(timestampLit, StringType), Cast(stringLit, StringType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, floatNullLit, intLit)),
+      Coalesce(Seq(Cast(nullLit, FloatType), Cast(floatNullLit, FloatType),
+        Cast(intLit, FloatType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, intLit, decimalLit, doubleLit)),
+      Coalesce(Seq(Cast(nullLit, DoubleType), Cast(intLit, DoubleType),
+        Cast(decimalLit, DoubleType), Cast(doubleLit, DoubleType))))
+
+    ruleTest(rule,
+      Coalesce(Seq(nullLit, floatNullLit, doubleLit, stringLit)),
+      Coalesce(Seq(Cast(nullLit, StringType), Cast(floatNullLit, StringType),
+        Cast(doubleLit, StringType), Cast(stringLit, StringType))))
   }
 
   test("CreateArray casts") {
@@ -675,6 +745,14 @@ class TypeCoercionSuite extends PlanTest {
 
   test("type coercion for If") {
     val rule = TypeCoercion.IfCoercion
+    val intLit = Literal(1)
+    val doubleLit = Literal(1.0)
+    val trueLit = Literal.create(true, BooleanType)
+    val falseLit = Literal.create(false, BooleanType)
+    val stringLit = Literal.create("c", StringType)
+    val floatLit = Literal.create(1.0f, FloatType)
+    val timestampLit = Literal.create("2017-04-12", TimestampType)
+    val decimalLit = Literal(new java.math.BigDecimal("1000000000000000000000"))
 
     ruleTest(rule,
       If(Literal(true), Literal(1), Literal(1L)),
@@ -685,12 +763,32 @@ class TypeCoercionSuite extends PlanTest {
       If(Literal.create(null, BooleanType), Literal(1), Literal(1)))
 
     ruleTest(rule,
-      If(AssertTrue(Literal.create(true, BooleanType)), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(Literal.create(true, BooleanType)), BooleanType), Literal(1), Literal(2)))
+      If(AssertTrue(trueLit), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(trueLit), BooleanType), Literal(1), Literal(2)))
 
     ruleTest(rule,
-      If(AssertTrue(Literal.create(false, BooleanType)), Literal(1), Literal(2)),
-      If(Cast(AssertTrue(Literal.create(false, BooleanType)), BooleanType), Literal(1), Literal(2)))
+      If(AssertTrue(falseLit), Literal(1), Literal(2)),
+      If(Cast(AssertTrue(falseLit), BooleanType), Literal(1), Literal(2)))
+
+    ruleTest(rule,
+      If(trueLit, intLit, doubleLit),
+      If(trueLit, Cast(intLit, DoubleType), doubleLit))
+
+    ruleTest(rule,
+      If(trueLit, floatLit, doubleLit),
+      If(trueLit, Cast(floatLit, DoubleType), doubleLit))
+
+    ruleTest(rule,
+      If(trueLit, floatLit, decimalLit),
+      If(trueLit, Cast(floatLit, DoubleType), Cast(decimalLit, DoubleType)))
+
+    ruleTest(rule,
+      If(falseLit, stringLit, doubleLit),
+      If(falseLit, stringLit, Cast(doubleLit, StringType)))
+
+    ruleTest(rule,
+      If(trueLit, timestampLit, stringLit),
+      If(trueLit, Cast(timestampLit, StringType), stringLit))
   }
 
   test("type coercion for CaseKeyWhen") {
@@ -712,6 +810,63 @@ class TypeCoercionSuite extends PlanTest {
       CaseWhen(Seq((Literal(true), Cast(Literal(100L), DecimalType(22, 2)))),
         Cast(Literal.create(1, DecimalType(7, 2)), DecimalType(22, 2)))
     )
+  }
+
+  test("type coercion for Stack") {
+    val rule = TypeCoercion.StackCoercion
+
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal(null))),
+      Stack(Seq(Literal(3), Literal(1), Literal(2), Literal.create(null, IntegerType))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(1.0), Literal(null), Literal(3.0))),
+      Stack(Seq(Literal(3), Literal(1.0), Literal.create(null, DoubleType), Literal(3.0))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal("2"), Literal("3"))),
+      Stack(Seq(Literal(3), Literal.create(null, StringType), Literal("2"), Literal("3"))))
+    ruleTest(rule,
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))),
+      Stack(Seq(Literal(3), Literal(null), Literal(null), Literal(null))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(1), Literal(null),
+        Literal(null), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal(1), Literal.create(null, StringType),
+        Literal.create(null, IntegerType), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(1),
+        Literal("2"), Literal(null))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, StringType), Literal(1),
+        Literal("2"), Literal.create(null, IntegerType))))
+
+    ruleTest(rule,
+      Stack(Seq(Literal(2),
+        Literal(null), Literal(null),
+        Literal(1), Literal("2"))),
+      Stack(Seq(Literal(2),
+        Literal.create(null, IntegerType), Literal.create(null, StringType),
+        Literal(1), Literal("2"))))
+
+    ruleTest(rule,
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal(null), Literal(null))),
+      Stack(Seq(Subtract(Literal(3), Literal(1)),
+        Literal(1), Literal("2"),
+        Literal.create(null, IntegerType), Literal.create(null, StringType))))
   }
 
   test("BooleanEquality type cast") {
@@ -997,6 +1152,42 @@ class TypeCoercionSuite extends PlanTest {
     ruleTest(PromoteStrings,
       EqualTo(Literal(Array(1, 2)), Literal("123")),
       EqualTo(Literal(Array(1, 2)), Literal("123")))
+  }
+
+  test("cast WindowFrame boundaries to the type they operate upon") {
+    // Can cast frame boundaries to order dataType.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(3), Literal(2147483648L))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Cast(3, LongType), Literal(2147483648L)))
+    )
+    // Cannot cast frame boundaries to order dataType.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal.default(DateType), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L))),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal.default(DateType), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, Literal(10.0), Literal(2147483648L)))
+    )
+    // Should not cast SpecialFrameBoundary.
+    ruleTest(WindowFrameCoercion,
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing)),
+      windowSpec(
+        Seq(UnresolvedAttribute("a")),
+        Seq(SortOrder(Literal(1L), Ascending)),
+        SpecifiedWindowFrame(RangeFrame, CurrentRow, UnboundedFollowing))
+    )
   }
 }
 

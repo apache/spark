@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.command
 
 import java.net.URI
 
-import org.apache.hadoop.fs.Path
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -195,7 +193,7 @@ case class CreateDataSourceTableAsSelectCommand(
       catalogTable = if (tableExists) Some(table) else None)
 
     try {
-      dataSource.writeAndRead(mode, Dataset.ofRows(session, query))
+      dataSource.writeAndRead(mode, query)
     } catch {
       case ex: AnalysisException =>
         logError(s"Failed to write to table ${table.identifier.unquotedString}", ex)

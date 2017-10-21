@@ -143,7 +143,7 @@ execute_command() {
       # Check if the process has died; in that case we'll tail the log so the user can see
       if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
         echo "failed to launch: $@"
-        tail -2 "$log" | sed 's/^/  /'
+        tail -10 "$log" | sed 's/^/  /'
         echo "full log in $log"
       fi
   else

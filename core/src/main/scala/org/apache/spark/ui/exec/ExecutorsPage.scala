@@ -82,7 +82,7 @@ private[ui] class ExecutorsPage(
               </ul>
             </div>
           </div> ++
-          <div id="active-executors"></div> ++
+          <div id="active-executors" class="row-fluid"></div> ++
           <script src={UIUtils.prependBaseUri("/static/utils.js")}></script> ++
           <script src={UIUtils.prependBaseUri("/static/executorspage.js")}></script> ++
           <script>setThreadDumpEnabled({threadDumpEnabled})</script>

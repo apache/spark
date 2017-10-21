@@ -23,6 +23,7 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.mock
 
 import org.apache.spark._
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.rdd.RDD
@@ -394,7 +395,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext with JsonTest
     }
     // Listener tracks only SQL metrics, not other accumulators
     assert(trackedAccums.size === 1)
-    assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
+    assert(trackedAccums.head === ((sqlMetricInfo.id, sqlMetricInfo.update.get)))
   }
 
   test("driver side SQL metrics") {
@@ -496,8 +497,7 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
         .setAppName("test")
         .set(config.MAX_TASK_FAILURES, 1) // Don't retry the tasks to run this test quickly
         .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
-      val sc = new SparkContext(conf)
-      try {
+      withSpark(new SparkContext(conf)) { sc =>
         SparkSession.sqlListener.set(null)
         val spark = new SparkSession(sc)
         import spark.implicits._
@@ -522,8 +522,6 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
         assert(spark.sharedState.listener.executionIdToData.size <= 100)
         assert(spark.sharedState.listener.jobIdToExecutionId.size <= 100)
         assert(spark.sharedState.listener.stageIdToStageMetrics.size <= 100)
-      } finally {
-        sc.stop()
       }
     }
   }

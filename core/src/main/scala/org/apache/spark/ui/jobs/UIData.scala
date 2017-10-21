@@ -20,6 +20,8 @@ package org.apache.spark.ui.jobs
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, LinkedHashMap}
 
+import com.google.common.collect.Interners
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor._
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
@@ -95,6 +97,7 @@ private[spark] object UIData {
     var memoryBytesSpilled: Long = _
     var diskBytesSpilled: Long = _
     var isBlacklisted: Int = _
+    var lastUpdateTime: Option[Long] = None
 
     var schedulingPool: String = ""
     var description: Option[String] = None
@@ -107,7 +110,7 @@ private[spark] object UIData {
     def hasOutput: Boolean = outputBytes > 0
     def hasShuffleRead: Boolean = shuffleReadTotalBytes > 0
     def hasShuffleWrite: Boolean = shuffleWriteBytes > 0
-    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 && diskBytesSpilled > 0
+    def hasBytesSpilled: Boolean = memoryBytesSpilled > 0 || diskBytesSpilled > 0
   }
 
   /**
@@ -131,9 +134,9 @@ private[spark] object UIData {
       _metrics = metrics.map(TaskMetricsUIData.fromTaskMetrics)
     }
 
-    def taskDuration: Option[Long] = {
+    def taskDuration(lastUpdateTime: Option[Long] = None): Option[Long] = {
       if (taskInfo.status == "RUNNING") {
-        Some(_taskInfo.timeRunning(System.currentTimeMillis))
+        Some(_taskInfo.timeRunning(lastUpdateTime.getOrElse(System.currentTimeMillis)))
       } else {
         _metrics.map(_.executorRunTime)
       }
@@ -141,6 +144,14 @@ private[spark] object UIData {
   }
 
   object TaskUIData {
+
+    private val stringInterner = Interners.newWeakInterner[String]()
+
+    /** String interning to reduce the memory usage. */
+    private def weakIntern(s: String): String = {
+      stringInterner.intern(s)
+    }
+
     def apply(taskInfo: TaskInfo): TaskUIData = {
       new TaskUIData(dropInternalAndSQLAccumulables(taskInfo))
     }
@@ -155,8 +166,8 @@ private[spark] object UIData {
         index = taskInfo.index,
         attemptNumber = taskInfo.attemptNumber,
         launchTime = taskInfo.launchTime,
-        executorId = taskInfo.executorId,
-        host = taskInfo.host,
+        executorId = weakIntern(taskInfo.executorId),
+        host = weakIntern(taskInfo.host),
         taskLocality = taskInfo.taskLocality,
         speculative = taskInfo.speculative
       )
@@ -241,6 +252,7 @@ private[spark] object UIData {
       remoteBlocksFetched: Long,
       localBlocksFetched: Long,
       remoteBytesRead: Long,
+      remoteBytesReadToDisk: Long,
       localBytesRead: Long,
       fetchWaitTime: Long,
       recordsRead: Long,
@@ -264,6 +276,7 @@ private[spark] object UIData {
           remoteBlocksFetched = metrics.remoteBlocksFetched,
           localBlocksFetched = metrics.localBlocksFetched,
           remoteBytesRead = metrics.remoteBytesRead,
+          remoteBytesReadToDisk = metrics.remoteBytesReadToDisk,
           localBytesRead = metrics.localBytesRead,
           fetchWaitTime = metrics.fetchWaitTime,
           recordsRead = metrics.recordsRead,
@@ -272,7 +285,7 @@ private[spark] object UIData {
         )
       }
     }
-    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0)
+    private val EMPTY = ShuffleReadMetricsUIData(0, 0, 0, 0, 0, 0, 0, 0, 0)
   }
 
   case class ShuffleWriteMetricsUIData(
