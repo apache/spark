@@ -2202,7 +2202,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  def testAddColumn(provider: String): Unit = {
+  protected def testAddColumn(provider: String): Unit = {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int) USING $provider")
       sql("INSERT INTO t1 VALUES (1)")
@@ -2224,7 +2224,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     }
   }
 
-  def testAddColumnPartitioned(provider: String): Unit = {
+  protected def testAddColumnPartitioned(provider: String): Unit = {
     withTable("t1") {
       sql(s"CREATE TABLE t1 (c1 int, c2 int) USING $provider PARTITIONED BY (c2)")
       sql("INSERT INTO t1 PARTITION(c2 = 2) VALUES (1)")
