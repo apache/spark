@@ -750,7 +750,7 @@ private[spark] class Executor(
       }
       response.updatedEpoch.foreach { epoch =>
         logInfo(s"Told to update MapOutputTracker epoch to ${epoch}")
-        env.mapOutputTracker.updateEpoch(epoch)
+        env.mapOutputTracker.asInstanceOf[MapOutputTrackerWorker].updateEpoch(epoch)
       }
       heartbeatFailures = 0
     } catch {
