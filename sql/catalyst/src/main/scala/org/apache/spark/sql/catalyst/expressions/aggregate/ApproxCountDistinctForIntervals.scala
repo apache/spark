@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.nio.ByteBuffer
 import java.util
-
-import com.google.common.primitives.Longs
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
@@ -28,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure,
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, HyperLogLogPlusPlusHelper}
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.Platform
 
 /**
  * This function counts the approximate number of distinct values (ndv) in
@@ -223,17 +221,20 @@ case class ApproxCountDistinctForIntervals(
   override def prettyName: String = "approx_count_distinct_for_intervals"
 
   override def serialize(obj: Array[Long]): Array[Byte] = {
-    val buffer = ByteBuffer.wrap(new Array(obj.length * Longs.BYTES))
-    obj.foreach(buffer.putLong)
-    buffer.array()
+    val byteArray = new Array[Byte](obj.length * 8)
+    obj.indices.foreach { i =>
+      Platform.putLong(byteArray, Platform.BYTE_ARRAY_OFFSET + i * 8, obj(i))
+    }
+    byteArray
   }
 
   override def deserialize(bytes: Array[Byte]): Array[Long] = {
-    val buffer = ByteBuffer.wrap(bytes)
-    val length = bytes.length / Longs.BYTES
-    val array = new Array[Long](length)
-    (0 until length).foreach(i => array(i) = buffer.getLong)
-    array
+    val length = bytes.length / 8
+    val longArray = new Array[Long](length)
+    (0 until length).foreach { i =>
+      longArray(i) = Platform.getLong(bytes, Platform.BYTE_ARRAY_OFFSET + i * 8)
+    }
+    longArray
   }
 
   private case class LongArrayInternalRow(array: Array[Long]) extends GenericInternalRow {
