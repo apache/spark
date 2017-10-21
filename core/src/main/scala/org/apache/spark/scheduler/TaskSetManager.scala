@@ -26,6 +26,7 @@ import scala.math.max
 import scala.util.control.NonFatal
 
 import org.apache.spark._
+import org.apache.spark.ExecutorAllocationManager.UnscheduleableTaskInfo
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.scheduler.SchedulingMode._
@@ -652,6 +653,7 @@ private[spark] class TaskSetManager(
           }
         }
 
+        val executorAllocationManagerOpt = sched.sc.executorAllocationManager
         pendingTask.foreach { indexInTaskSet =>
           // try to find some executor this task can run on.  Its possible that some *other*
           // task isn't schedulable anywhere, but we will discover that in some later call,
@@ -675,14 +677,18 @@ private[spark] class TaskSetManager(
           }
           if (blacklistedEverywhere) {
             val partition = tasks(indexInTaskSet).partitionId
-            abort(s"""
-              |Aborting $taskSet because task $indexInTaskSet (partition $partition)
-              |cannot run anywhere due to node and executor blacklist.
-              |Most recent failure:
-              |${taskSetBlacklist.getLatestFailureReason}
-              |
-              |Blacklisting behavior can be configured via spark.blacklist.*.
-              |""".stripMargin)
+            executorAllocationManagerOpt.fold(
+              abort(s"""
+                       |Aborting $taskSet because task $indexInTaskSet (partition $partition)
+                       |cannot run anywhere due to node and executor blacklist.
+                       |Most recent failure:
+                       |${taskSetBlacklist.getLatestFailureReason}
+                       |
+                       |Blacklisting behavior can be configured via spark.blacklist.*.
+                       |""".stripMargin)
+            ) { _.registerUnscheduleableTask(
+              UnscheduleableTaskInfo(taskSet.stageId, taskSet.stageAttemptId,
+                indexInTaskSet, partition)) }
           }
         }
       }
