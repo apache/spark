@@ -145,6 +145,13 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
     checkHllppIndex(endpoints = Array(1, 3, 5, 7, 7, 9), value = 7, expectedIntervalIndex = 2)
   }
 
+  test("round trip serialization") {
+    val (aggFunc, _, _) = createEstimator(Array(1, 2), DoubleType)
+    val longArray = (1L to 100L).toArray
+    val roundtrip = aggFunc.deserialize(aggFunc.serialize(longArray))
+    assert(roundtrip.sameElements(longArray))
+  }
+
   test("basic operations: update, merge, eval...") {
     val endpoints = Array[Double](0, 0.33, 0.6, 0.6, 0.6, 1.0)
     val data: Seq[Double] = Seq(0, 0.6, 0.3, 1, 0.6, 0.5, 0.6, 0.33)
