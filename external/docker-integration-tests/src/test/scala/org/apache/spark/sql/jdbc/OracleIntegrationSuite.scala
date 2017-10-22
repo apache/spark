@@ -21,7 +21,9 @@ import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 import java.math.BigDecimal
 
-import org.apache.spark.sql.{DataFrame, Row}
+import org.scalactic.TolerantNumerics
+
+import org.apache.spark.sql.{DataFrame, Row, SaveMode}
 import org.apache.spark.sql.execution.{WholeStageCodegenExec, RowDataSourceScanExec}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -50,9 +52,11 @@ import org.apache.spark.tags.DockerTest
 @DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLContext {
   import testImplicits._
+  // To make === between double tolerate inexact values
+  implicit val doubleEquality = TolerantNumerics.tolerantDoubleEquality(0.01)
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
+    override val imageName = "wnameless/oracle-xe-11g:16.04"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
@@ -107,6 +111,10 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     conn.prepareStatement("CREATE TABLE numerics (b DECIMAL(1), f DECIMAL(3, 2), i DECIMAL(10))").executeUpdate();
     conn.prepareStatement(
       "INSERT INTO numerics VALUES (4, 1.23, 9999999999)").executeUpdate();
+    conn.commit();
+
+
+    conn.prepareStatement("CREATE TABLE oracle_types (d BINARY_DOUBLE, f BINARY_FLOAT)").executeUpdate();
     conn.commit();
   }
 
@@ -306,5 +314,33 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
     assert(values.getDecimal(0).equals(new java.math.BigDecimal("12312321321321312312312312123")))
     assert(values.getInt(1).equals(1))
     assert(values.getBoolean(2).equals(false))
+  }
+
+  test("SPARK-22303: handle BINARY_DOUBLE and BINARY_FLOAT as DoubleType and FloatType") {
+    val tableName = "oracle_types"
+    val schema = StructType(Seq(
+      StructField("d", DoubleType, true),
+      StructField("f", FloatType, true)))
+    val props = new Properties()
+
+    // write it back to the table (append mode)
+    val data = spark.sparkContext.parallelize(Seq(Row(1.1D, 2.2F)))
+    val dfWrite = spark.createDataFrame(data, schema)
+    dfWrite.write.mode(SaveMode.Append).jdbc(jdbcUrl, tableName, props)
+
+    // read records from oracle_types
+    val dfRead = sqlContext.read.jdbc(jdbcUrl, tableName, new Properties)
+    val rows = dfRead.collect()
+    assert(rows.size == 1)
+
+    // check data types
+    val types = dfRead.schema.map(field => field.dataType)
+    assert(types(0).equals(DoubleType))
+    assert(types(1).equals(FloatType))
+
+    // check values
+    val values = rows(0)
+    assert(values.getDouble(0) === 1.1D)
+    assert(values.getFloat(1) === 2.2F)
   }
 }
