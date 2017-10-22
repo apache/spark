@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{Alias, Literal}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, IdentityBroadcastMode, SinglePartition}
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.HashedRelationBroadcastMode
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -31,7 +31,7 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     val input = (1 to 1000).map(Tuple1.apply)
     checkAnswer(
       input.toDF(),
-      plan => ShuffleExchange(SinglePartition, plan),
+      plan => ShuffleExchangeExec(SinglePartition, plan),
       input.map(Row.fromTuple)
     )
   }
@@ -81,12 +81,12 @@ class ExchangeSuite extends SparkPlanTest with SharedSQLContext {
     assert(plan sameResult plan)
 
     val part1 = HashPartitioning(output, 1)
-    val exchange1 = ShuffleExchange(part1, plan)
-    val exchange2 = ShuffleExchange(part1, plan)
+    val exchange1 = ShuffleExchangeExec(part1, plan)
+    val exchange2 = ShuffleExchangeExec(part1, plan)
     val part2 = HashPartitioning(output, 2)
-    val exchange3 = ShuffleExchange(part2, plan)
+    val exchange3 = ShuffleExchangeExec(part2, plan)
     val part3 = HashPartitioning(output ++ output, 2)
-    val exchange4 = ShuffleExchange(part3, plan)
+    val exchange4 = ShuffleExchangeExec(part3, plan)
     val exchange5 = ReusedExchangeExec(output, exchange4)
 
     assert(exchange1 sameResult exchange1)

@@ -23,9 +23,9 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito.mock
 
 import org.apache.spark._
+import org.apache.spark.LocalSparkContext._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config
-import org.apache.spark.LocalSparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler._
 import org.apache.spark.sql.{DataFrame, SparkSession}

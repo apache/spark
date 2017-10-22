@@ -80,8 +80,7 @@ number of columns in the output of subquery.
 Left side columns:
 [t1.`t1a`].
 Right side columns:
-[t2.`t2a`, t2.`t2b`].
-             ;
+[t2.`t2a`, t2.`t2b`].;
 
 
 -- !query 6
@@ -102,5 +101,4 @@ number of columns in the output of subquery.
 Left side columns:
 [t1.`t1a`, t1.`t1b`].
 Right side columns:
-[t2.`t2a`].
-             ;
+[t2.`t2a`].;

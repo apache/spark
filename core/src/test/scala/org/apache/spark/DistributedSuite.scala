@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
+import org.scalatest.concurrent.TimeLimits._
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.security.EncryptionFunSuite
@@ -171,7 +171,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     val serializerManager = SparkEnv.get.serializerManager
     blockManager.master.getLocations(blockId).foreach { cmId =>
       val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
-        blockId.toString)
+        blockId.toString, null)
       val deserialized = serializerManager.dataDeserializeStream(blockId,
         new ChunkedByteBuffer(bytes.nioByteBuffer()).toInputStream())(data.elementClassTag).toList
       assert(deserialized === (1 to 100).toList)

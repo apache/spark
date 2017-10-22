@@ -150,6 +150,10 @@ You can optionally configure the cluster further by setting environment variable
     <td>JVM options for the Spark master and worker daemons themselves in the form "-Dx=y" (default: none).</td>
   </tr>
   <tr>
+    <td><code>SPARK_DAEMON_CLASSPATH</code></td>
+    <td>Classpath for the Spark master and worker daemons themselves (default: none).</td>
+  </tr>
+  <tr>
     <td><code>SPARK_PUBLIC_DNS</code></td>
     <td>The public DNS name of the Spark master and workers (default: none).</td>
   </tr>
@@ -323,6 +327,14 @@ export SPARK_MASTER_OPTS="-Dspark.deploy.defaultCores=<value>"
 
 This is useful on shared clusters where users might not have configured a maximum number of cores
 individually.
+
+# Executors Scheduling
+
+The number of cores assigned to each executor is configurable. When `spark.executor.cores` is
+explicitly set, multiple executors from the same application may be launched on the same worker
+if the worker has enough cores and memory. Otherwise, each executor grabs all the cores available
+on the worker by default, in which case only one executor per application may be launched on each
+worker during one single schedule iteration.
 
 # Monitoring and Logging
 

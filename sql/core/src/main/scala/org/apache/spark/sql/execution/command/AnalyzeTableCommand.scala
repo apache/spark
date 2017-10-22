@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 
 
 /**
@@ -37,35 +37,17 @@ case class AnalyzeTableCommand(
     if (tableMeta.tableType == CatalogTableType.VIEW) {
       throw new AnalysisException("ANALYZE TABLE is not supported on views.")
     }
-    val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
 
-    val oldTotalSize = tableMeta.stats.map(_.sizeInBytes.toLong).getOrElse(-1L)
-    val oldRowCount = tableMeta.stats.flatMap(_.rowCount.map(_.toLong)).getOrElse(-1L)
-    var newStats: Option[CatalogStatistics] = None
-    if (newTotalSize >= 0 && newTotalSize != oldTotalSize) {
-      newStats = Some(CatalogStatistics(sizeInBytes = newTotalSize))
-    }
-    // We only set rowCount when noscan is false, because otherwise:
-    // 1. when total size is not changed, we don't need to alter the table;
-    // 2. when total size is changed, `oldRowCount` becomes invalid.
-    // This is to make sure that we only record the right statistics.
-    if (!noscan) {
-      val newRowCount = sparkSession.table(tableIdentWithDB).count()
-      if (newRowCount >= 0 && newRowCount != oldRowCount) {
-        newStats = if (newStats.isDefined) {
-          newStats.map(_.copy(rowCount = Some(BigInt(newRowCount))))
-        } else {
-          Some(CatalogStatistics(
-            sizeInBytes = oldTotalSize, rowCount = Some(BigInt(newRowCount))))
-        }
-      }
-    }
+    // Compute stats for the whole table
+    val newTotalSize = CommandUtils.calculateTotalSize(sessionState, tableMeta)
+    val newRowCount =
+      if (noscan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
+
     // Update the metastore if the above statistics of the table are different from those
     // recorded in the metastore.
+    val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
     if (newStats.isDefined) {
       sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
-      // Refresh the cached data source table in the catalog.
-      sessionState.catalog.refreshTable(tableIdentWithDB)
     }
 
     Seq.empty[Row]

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.test
 
 import java.io.File
+import java.net.URI
 import java.util.{Set => JavaSet}
 
 import scala.collection.JavaConverters._
@@ -51,11 +52,13 @@ object TestHive
       "TestSQLContext",
       new SparkConf()
         .set("spark.sql.test", "")
+        .set(SQLConf.CODEGEN_FALLBACK.key, "false")
         .set("spark.sql.hive.metastore.barrierPrefixes",
           "org.apache.spark.sql.hive.execution.PairSerDe")
         .set("spark.sql.warehouse.dir", TestHiveContext.makeWarehouseDir().toURI.getPath)
         // SPARK-8910
-        .set("spark.ui.enabled", "false")))
+        .set("spark.ui.enabled", "false")
+        .set("spark.unsafe.exceptionOnMemoryLeak", "true")))
 
 
 case class TestHiveVersion(hiveClient: HiveClient)
@@ -495,6 +498,11 @@ private[hive] class TestHiveSparkSession(
           logger.setLevel(org.apache.log4j.Level.WARN)
         }
       }
+
+      // Clean out the Hive warehouse between each suite
+      val warehouseDir = new File(new URI(sparkContext.conf.get("spark.sql.warehouse.dir")).getPath)
+      Utils.deleteRecursively(warehouseDir)
+      warehouseDir.mkdir()
 
       sharedState.cacheManager.clearCache()
       loadedTables.clear()
