@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Not}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 
@@ -41,12 +41,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-
-    case Except(left: Project, right) if isEligible(left.child, skipProject(right)) =>
+    case Except(left: Project, right) if isEligible(left, right) =>
       Project(left.projectList,
         Distinct(Filter(Not(transformCondition(left.child, skipProject(right))), left.child)))
 
-    case Except(left, right) if isEligible(left, skipProject(right)) =>
+    case Except(left, right) if isEligible(left, right) =>
       Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
   }
 
@@ -63,13 +62,45 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def isEligible(left: LogicalPlan, right: LogicalPlan) = (left, right) match {
-    case (left, right: Filter) => nonFilterChild(left).sameResult(nonFilterChild(right))
+    case (left : Project, right : Project) =>
+      verifyFilterCondition(left.child) && verifyFilterCondition(right.child) &&
+        Project(left.projectList, nonFilterChild(left.child)).sameResult(
+          Project(right.projectList, nonFilterChild(right.child)))
+
+    case (left: Project, right: Filter) =>
+      verifyFilterCondition(left.child) && verifyFilterCondition(right) &&
+        Project(left.projectList, nonFilterChild(left.child)).sameResult(
+          Project(right.output, nonFilterChild(right)))
+
+    case (left, right: Project) =>
+      verifyFilterCondition(left) && verifyFilterCondition(right.child) &&
+        Project(left.output, nonFilterChild(left)).sameResult(
+          Project(right.projectList, nonFilterChild(right.child)))
+
+    case (left, right: Filter) =>
+      verifyFilterCondition(left) && verifyFilterCondition(right) &&
+        nonFilterChild(left).sameResult(nonFilterChild(right))
+
     case _ => false
   }
 
   private def skipProject(plan: LogicalPlan) = plan match {
     case p: Project => p.child
     case p => p
+  }
+
+  private def collectAllExpressions(exp: Expression) = exp.p(0) +: exp.children
+
+  private def verifyFilterCondition(plan: LogicalPlan) = {
+    var i = 0
+    val filterConditions = new collection.mutable.ArrayBuffer[Expression]
+    while (plan.p(i).isInstanceOf[Filter]) {
+      val condition = plan.p(i).asInstanceOf[Filter].condition
+      filterConditions.insertAll(i, collectAllExpressions(condition))
+      i += 1
+    }
+
+    filterConditions.forall(!_.isInstanceOf[SubqueryExpression])
   }
 
   private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {

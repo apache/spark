@@ -117,7 +117,7 @@ class ReplaceOperatorSuite extends PlanTest {
 
     val table1 = LocalRelation.fromExternalRows(Seq(attributeA, attributeB), data = Seq(Row(1, 2)))
     val table2 = Filter(attributeB === 2, Filter(attributeA === 1, table1))
-    val table3 = Project(Seq(attributeA),
+    val table3 = Project(Seq(attributeA, attributeB),
       Filter(attributeB < 1, Filter(attributeA >= 2, table1)))
 
     val query = Except(table2, table3)
