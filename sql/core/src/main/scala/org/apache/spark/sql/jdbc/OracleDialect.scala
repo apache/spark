@@ -28,25 +28,28 @@ private case object OracleDialect extends JdbcDialect {
 
   override def getCatalystType(
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = {
-    if (sqlType == Types.NUMERIC) {
-      val scale = if (null != md) md.build().getLong("scale") else 0L
-      size match {
-        // Handle NUMBER fields that have no precision/scale in special way
-        // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
-        // For more details, please see
-        // https://github.com/apache/spark/pull/8780#issuecomment-145598968
-        // and
-        // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-        case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
-        // this to NUMERIC with -127 scale
-        // Not sure if there is a more robust way to identify the field as a float (or other
-        // numeric types that do not specify a scale.
-        case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
-        case _ => None
-      }
-    } else {
-      None
+    sqlType match {
+      case Types.NUMERIC =>
+        val scale = if (null != md) md.build().getLong("scale") else 0L
+        size match {
+          // Handle NUMBER fields that have no precision/scale in special way
+          // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
+          // For more details, please see
+          // https://github.com/apache/spark/pull/8780#issuecomment-145598968
+          // and
+          // https://github.com/apache/spark/pull/8780#issuecomment-144541760
+          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
+          // this to NUMERIC with -127 scale
+          // Not sure if there is a more robust way to identify the field as a float (or other
+          // numeric types that do not specify a scale.
+          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case _ => None
+        }
+      case -101 => Some(TimestampType) // Value for Timestamp with Time Zone in Oracle
+      case 100 => Some(FloatType) // Value for OracleTypes.BINARY_FLOAT
+      case 101 => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
+      case _ => None
     }
   }
 
