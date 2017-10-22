@@ -62,7 +62,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def isEligible(left: LogicalPlan, right: LogicalPlan) = (left, right) match {
-    case (left : Project, right : Project) =>
+    case (left: Project, right @ Project(_, _: Filter)) =>
       verifyFilterCondition(left.child) && verifyFilterCondition(right.child) &&
         Project(left.projectList, nonFilterChild(left.child)).sameResult(
           Project(right.projectList, nonFilterChild(right.child)))
@@ -72,7 +72,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
         Project(left.projectList, nonFilterChild(left.child)).sameResult(
           Project(right.output, nonFilterChild(right)))
 
-    case (left, right: Project) =>
+    case (left, right @ Project(_, _: Filter)) =>
       verifyFilterCondition(left) && verifyFilterCondition(right.child) &&
         Project(left.output, nonFilterChild(left)).sameResult(
           Project(right.projectList, nonFilterChild(right.child)))
