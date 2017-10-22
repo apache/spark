@@ -75,9 +75,7 @@ trait CheckAnalysis extends PredicateHelper {
     }
   }
 
-  def checkAnalysis(plan: LogicalPlan): Unit
-
-  def checkAnalysisWithConf(plan: LogicalPlan, conf: SQLConf): Unit = {
+  def checkAnalysis(plan: LogicalPlan): Unit = {
     // We transform up and order the rules so as to catch the first possible failure instead
     // of the result of cascading resolution failures.
     plan.foreachUp {
@@ -128,7 +126,7 @@ trait CheckAnalysis extends PredicateHelper {
             }
 
           case s: SubqueryExpression =>
-            checkAnalysisWithConf(s.plan, conf)
+            checkSubqueryExpression(operator, s)
             s
         }
 
@@ -273,15 +271,15 @@ trait CheckAnalysis extends PredicateHelper {
 
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
-            val resolver = conf.resolver
-            val commonAttrs = o.missingInput.filter(x =>
+            val resolver = plan.conf.resolver
+            val attrsWithSameName = o.missingInput.filter(x =>
               o.inputSet.exists(y => resolver(x.name, y.name)))
             val missingAttributes = o.missingInput.mkString(",")
             val availableAttributes = o.inputSet.mkString(",")
-            val repeatedNameHint = if (commonAttrs.size > 0) {
-              val commonNames = commonAttrs.map(_.name).mkString(",")
-              s"""\n|Observe that attribute(s) $commonNames appear in two
-                  |different datasets, with the same name"""
+            val repeatedNameHint = if (attrsWithSameName.size > 0) {
+              val commonNames = attrsWithSameName.map(_.name).mkString(",")
+              s"""\n|Attribute(s) `$commonNames` seem to appear in two
+                  |different datasets, with the same name."""
             } else {
               ""
             }
