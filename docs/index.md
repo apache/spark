@@ -92,8 +92,7 @@ options for deployment:
 * [Structured Streaming](structured-streaming-programming-guide.html): processing structured data streams with relation queries (using Datasets and DataFrames, newer API than DStreams)
 * [Spark Streaming](streaming-programming-guide.html): processing data streams using DStreams (old API)
 * [MLlib](ml-guide.html): applying machine learning algorithms
-* [GraphX](graphx-programming-guide.html): processing graphs
-* [Unit Testing](testing.html): unit testing spark
+* [GraphX](graphx-programming-guide.html): processing graphs 
 
 **API Docs:**
 
