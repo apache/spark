@@ -18,7 +18,6 @@
 package org.apache.spark.sql.sources.v2.reader;
 
 import org.apache.spark.annotation.InterfaceStability;
-import org.apache.spark.sql.catalyst.expressions.Expression;
 import org.apache.spark.sql.sources.Filter;
 
 /**

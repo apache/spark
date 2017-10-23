@@ -58,6 +58,9 @@ for providing container-centric infrastructure. Kubernetes support is being acti
 developed in an [apache-spark-on-k8s](https://github.com/apache-spark-on-k8s/) Github organization. 
 For documentation, refer to that project's README.
 
+A third-party project (not supported by the Spark project) exists to add support for
+[Nomad](https://github.com/hashicorp/nomad-spark) as a cluster manager.
+
 # Submitting Applications
 
 Applications can be submitted to a cluster of any type using the `spark-submit` script.

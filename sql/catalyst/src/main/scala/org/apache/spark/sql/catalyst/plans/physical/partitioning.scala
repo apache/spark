@@ -49,7 +49,9 @@ case object AllTuples extends Distribution
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+case class ClusteredDistribution(
+    clustering: Seq[Expression],
+    numPartitions: Option[Int] = None) extends Distribution {
   require(
     clustering != Nil,
     "The clustering expressions of a ClusteredDistribution should not be Nil. " +
@@ -221,6 +223,7 @@ case object SinglePartition extends Partitioning {
 
   override def satisfies(required: Distribution): Boolean = required match {
     case _: BroadcastDistribution => false
+    case ClusteredDistribution(_, desiredPartitions) => desiredPartitions.forall(_ == 1)
     case _ => true
   }
 
@@ -243,8 +246,9 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
-    case ClusteredDistribution(requiredClustering) =>
-      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x)))
+    case ClusteredDistribution(requiredClustering, desiredPartitions) =>
+      expressions.forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
+        desiredPartitions.forall(_ == numPartitions) // if desiredPartitions = None, returns true
     case _ => false
   }
 
@@ -289,8 +293,9 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
-    case ClusteredDistribution(requiredClustering) =>
-      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x)))
+    case ClusteredDistribution(requiredClustering, desiredPartitions) =>
+      ordering.map(_.child).forall(x => requiredClustering.exists(_.semanticEquals(x))) &&
+        desiredPartitions.forall(_ == numPartitions) // if desiredPartitions = None, returns true
     case _ => false
   }
 

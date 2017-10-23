@@ -2038,13 +2038,22 @@ def _wrap_function(sc, func, returnType):
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
 
 
+class PythonUdfType(object):
+    # row-at-a-time UDFs
+    NORMAL_UDF = 0
+    # scalar vectorized UDFs
+    PANDAS_UDF = 1
+    # grouped vectorized UDFs
+    PANDAS_GROUPED_UDF = 2
+
+
 class UserDefinedFunction(object):
     """
     User defined function in Python
 
     .. versionadded:: 1.3
     """
-    def __init__(self, func, returnType, name=None, vectorized=False):
+    def __init__(self, func, returnType, name=None, pythonUdfType=PythonUdfType.NORMAL_UDF):
         if not callable(func):
             raise TypeError(
                 "Not a function or callable (__call__ is not defined): "
@@ -2058,7 +2067,7 @@ class UserDefinedFunction(object):
         self._name = name or (
             func.__name__ if hasattr(func, '__name__')
             else func.__class__.__name__)
-        self.vectorized = vectorized
+        self.pythonUdfType = pythonUdfType
 
     @property
     def returnType(self):
@@ -2090,7 +2099,7 @@ class UserDefinedFunction(object):
         wrapped_func = _wrap_function(sc, self.func, self.returnType)
         jdt = spark._jsparkSession.parseDataType(self.returnType.json())
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedPythonFunction(
-            self._name, wrapped_func, jdt, self.vectorized)
+            self._name, wrapped_func, jdt, self.pythonUdfType)
         return judf
 
     def __call__(self, *cols):
@@ -2121,15 +2130,15 @@ class UserDefinedFunction(object):
 
         wrapper.func = self.func
         wrapper.returnType = self.returnType
-        wrapper.vectorized = self.vectorized
+        wrapper.pythonUdfType = self.pythonUdfType
 
         return wrapper
 
 
-def _create_udf(f, returnType, vectorized):
+def _create_udf(f, returnType, pythonUdfType):
 
-    def _udf(f, returnType=StringType(), vectorized=vectorized):
-        if vectorized:
+    def _udf(f, returnType=StringType(), pythonUdfType=pythonUdfType):
+        if pythonUdfType == PythonUdfType.PANDAS_UDF:
             import inspect
             argspec = inspect.getargspec(f)
             if len(argspec.args) == 0 and argspec.varargs is None:
@@ -2137,7 +2146,7 @@ def _create_udf(f, returnType, vectorized):
                     "0-arg pandas_udfs are not supported. "
                     "Instead, create a 1-arg pandas_udf and ignore the arg in your function."
                 )
-        udf_obj = UserDefinedFunction(f, returnType, vectorized=vectorized)
+        udf_obj = UserDefinedFunction(f, returnType, pythonUdfType=pythonUdfType)
         return udf_obj._wrapped()
 
     # decorator @udf, @udf(), @udf(dataType()), or similar with @pandas_udf
@@ -2145,9 +2154,9 @@ def _create_udf(f, returnType, vectorized):
         # If DataType has been passed as a positional argument
         # for decorator use it as a returnType
         return_type = f or returnType
-        return functools.partial(_udf, returnType=return_type, vectorized=vectorized)
+        return functools.partial(_udf, returnType=return_type, pythonUdfType=pythonUdfType)
     else:
-        return _udf(f=f, returnType=returnType, vectorized=vectorized)
+        return _udf(f=f, returnType=returnType, pythonUdfType=pythonUdfType)
 
 
 @since(1.3)
@@ -2181,7 +2190,7 @@ def udf(f=None, returnType=StringType()):
     |         8|      JOHN DOE|          22|
     +----------+--------------+------------+
     """
-    return _create_udf(f, returnType=returnType, vectorized=False)
+    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.NORMAL_UDF)
 
 
 @since(2.3)
@@ -2252,7 +2261,7 @@ def pandas_udf(f=None, returnType=StringType()):
 
     .. note:: The user-defined function must be deterministic.
     """
-    return _create_udf(f, returnType=returnType, vectorized=True)
+    return _create_udf(f, returnType=returnType, pythonUdfType=PythonUdfType.PANDAS_UDF)
 
 
 blacklist = ['map', 'since', 'ignore_unicode_prefix']
