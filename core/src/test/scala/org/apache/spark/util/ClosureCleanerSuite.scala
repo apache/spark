@@ -121,25 +121,32 @@ class ClosureCleanerSuite extends SparkFunSuite {
   }
 
   test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 1") {
-    val concreteObject = () => new TestAbstractClass {
+    val concreteObject = new TestAbstractClass {
       val n2 = 222
       val s2 = "bbb"
       val d2 = 2.0d
+
+      def run(): Seq[(Int, Int, String, String, Double, Double)] = {
+        withSpark(new SparkContext("local", "test")) { sc =>
+          val rdd = sc.parallelize(1 to 1)
+          body(rdd)
+        }
+      }
+
       def body(rdd: RDD[Int]): Seq[(Int, Int, String, String, Double, Double)] = rdd.map { _ =>
         (n1, n2, s1, s2, d1, d2)
       }.collect()
     }
-    assert(concreteObject().run() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
+    assert(concreteObject.run() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
   }
 
   test("SPARK-22328: ClosureCleaner misses referenced superclass fields: case 2") {
-    val fn = () => new TestAbstractClass2 {
+    val concreteObject = new TestAbstractClass2 {
       val n2 = 222
       val s2 = "bbb"
       val d2 = 2.0d
       def getData: Int => (Int, Int, String, String, Double, Double) = _ => (n1, n2, s1, s2, d1, d2)
     }
-    val concreteObject = fn()
     withSpark(new SparkContext("local", "test")) { sc =>
       val rdd = sc.parallelize(1 to 1).map(concreteObject.getData)
       assert(rdd.collect() === Seq((111, 222, "aaa", "bbb", 1.0d, 2.0d)))
@@ -409,18 +416,12 @@ abstract class TestAbstractClass extends Serializable {
   val s1 = "aaa"
   protected val d1 = 1.0d
 
-  def rdd(sc: SparkContext): RDD[Int] = sc.parallelize(1 to 1)
-
-  def run(): Seq[(Int, Int, String, String, Double, Double)] = {
-    withSpark(new SparkContext("local", "test")) { sc =>
-      body(rdd(sc))
-    }
-  }
+  def run(): Seq[(Int, Int, String, String, Double, Double)]
   def body(rdd: RDD[Int]): Seq[(Int, Int, String, String, Double, Double)]
 }
 
 abstract class TestAbstractClass2 extends Serializable {
   val n1 = 111
   val s1 = "aaa"
-  val d1 = 1.0d
+  protected val d1 = 1.0d
 }
