@@ -410,19 +410,21 @@ class AnalysisErrorSuite extends AnalysisTest {
     // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
     val attrA = AttributeReference("a", LongType)(exprId = ExprId(1))
     val otherA = AttributeReference("a", LongType)(exprId = ExprId(2))
-    val bAlias = Alias(sum(attrA), "b")() :: Nil
+    val attrC = AttributeReference("c", LongType)(exprId = ExprId(3))
+    val aliases = Alias(sum(attrA), "b")() :: Alias(sum(attrC), "d")() :: Nil
     val plan = Aggregate(
-        Nil,
-        bAlias,
-        LocalRelation(otherA))
+      Nil,
+      aliases,
+      LocalRelation(otherA))
 
     assert(plan.resolved)
 
-    val errorMsg = s"""Resolved attribute(s) ${attrA.toString} missing from ${otherA.toString}
-                     |in operator !Aggregate [${bAlias.mkString("#")}].
-                     |Please check attribute(s) `a`, they seem to appear in two
-                     |different input operators, with the same name.""".stripMargin
+    val resolved = s"${attrA.toString},${attrC.toString}"
 
+    val errorMsg = s"""Resolved attribute(s) $resolved missing from ${otherA.toString}
+                     |in operator !Aggregate [${aliases.mkString(", ")}].
+                     |Attribute(s) with the same name appear in the operation: `a`.
+                     |Please check if the right attribute(s) are used.""".stripMargin
 
     assertAnalysisError(plan, errorMsg :: Nil)
   }

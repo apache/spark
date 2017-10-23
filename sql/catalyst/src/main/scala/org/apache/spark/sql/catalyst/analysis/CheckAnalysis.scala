@@ -275,9 +275,9 @@ trait CheckAnalysis extends PredicateHelper {
               o.inputSet.exists(input => resolver(missing.name, input.name))
             }
             val repeatedNameHint = if (attrsWithSameName.nonEmpty) {
-              val commonNames = attrsWithSameName.map(_.name).mkString(",")
-              s"""|Please check attribute(s) `$commonNames`, they seem to appear in two
-                  |different input operators, with the same name.""".stripMargin
+              val sameNames = attrsWithSameName.map(_.name).mkString(",")
+              s"""Attribute(s) with the same name appear in the operation: `$sameNames`.
+                  |Please check if the right attribute(s) are used.""".stripMargin
             } else {
               ""
             }
