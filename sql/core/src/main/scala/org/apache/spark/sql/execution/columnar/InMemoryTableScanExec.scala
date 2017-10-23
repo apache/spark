@@ -46,8 +46,7 @@ case class InMemoryTableScanExec(
   override val supportCodegen: Boolean = {
     // In the initial implementation, for ease of review
     // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    val schema = StructType.fromAttributes(relation.output)
-    schema.fields.find(f => f.dataType match {
+    relation.schema.fields.find(f => f.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
            FloatType | DoubleType => false
       case _ => true
@@ -78,14 +77,11 @@ case class InMemoryTableScanExec(
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
-    if (supportCodegen) {
-      val buffers = relation.cachedColumnBuffers
-      // HACK ALERT: This is actually an RDD[ColumnarBatch].
-      // We're taking advantage of Scala's type erasure here to pass these batches along.
-      Seq(buffers.map(createAndDecompressColumn(_)).asInstanceOf[RDD[InternalRow]])
-    } else {
-      Seq()
-    }
+    assert(supportCodegen)
+    val buffers = relation.cachedColumnBuffers
+    // HACK ALERT: This is actually an RDD[ColumnarBatch].
+    // We're taking advantage of Scala's type erasure here to pass these batches along.
+    Seq(buffers.map(createAndDecompressColumn(_)).asInstanceOf[RDD[InternalRow]])
   }
 
   override def output: Seq[Attribute] = attributes
