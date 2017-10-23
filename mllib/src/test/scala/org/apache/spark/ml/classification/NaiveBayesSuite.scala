@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import scala.util.Random
 
 import breeze.linalg.{DenseVector => BDV, Vector => BV}
-import breeze.stats.distributions.{RandBasis => BrzRandBasis, Multinomial => BrzMultinomial}
+import breeze.stats.distributions.{Multinomial => BrzMultinomial, RandBasis => BrzRandBasis}
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.NaiveBayes.{Bernoulli, Multinomial}
