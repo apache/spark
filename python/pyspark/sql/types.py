@@ -24,12 +24,14 @@ import json
 import re
 import base64
 from array import array
-from functools import lru_cache
 import ctypes
 
 if sys.version >= "3":
     long = int
     basestring = unicode = str
+
+if sys.version_info >= (3, 3):
+    from functools import lru_cache
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -845,7 +847,13 @@ def _parse_datatype_string(s):
                 raise e
 
 
-@lru_cache(maxsize=None)
+if sys.version_info >= (3, 3):
+    decorator = lru_cache(maxsize=None)
+else:
+    decorator = lambda f: f
+
+
+@decorator
 def _parse_datatype_json_string(json_string):
     """Parses the given data type JSON string.
     >>> import pickle
