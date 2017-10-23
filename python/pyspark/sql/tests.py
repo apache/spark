@@ -3405,48 +3405,58 @@ class VectorizedUDFTests(ReusedPySparkTestCase):
 
     def test_vectorized_udf_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col
-        schema = StructType([StructField("dt", DateType(), True)])
-        df = self.spark.createDataFrame([(datetime.date(1970, 1, 1),)], schema=schema)
-        f = pandas_udf(lambda x: x, DateType())
+        schema = StructType([StructField("dt", DecimalType(), True)])
+        df = self.spark.createDataFrame([(None,)], schema=schema)
+        f = pandas_udf(lambda x: x, DecimalType())
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):
                 df.select(f(col('dt'))).collect()
 
+    def test_vectorized_udf_null_date(self):
+        from pyspark.sql.functions import pandas_udf, col
+        from datetime import date
+        schema = StructType().add("date", DateType())
+        data = [(date(1969, 1, 1),),
+                (date(2012, 2, 2),),
+                (None,),
+                (date(2100, 4, 4),)]
+        df = self.spark.createDataFrame(data, schema=schema)
+        date_f = pandas_udf(lambda t: t, returnType=DateType())
+        res = df.select(date_f(col("date")))
+        self.assertEquals(df.collect(), res.collect())
+
     def test_vectorized_udf_timestamps(self):
         from pyspark.sql.functions import pandas_udf, col
-        from datetime import date, datetime
+        from datetime import datetime
         schema = StructType([
             StructField("idx", LongType(), True),
-            StructField("date", DateType(), True),
             StructField("timestamp", TimestampType(), True)])
-        data = [(0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-                (1, date(2012, 2, 2), datetime(2012, 2, 2, 2, 2, 2)),
-                (2, date(2100, 3, 3), datetime(2100, 3, 3, 3, 3, 3)),
-                (3, date(2104, 4, 4), datetime(2104, 4, 4, 4, 4, 4))]
-
+        data = [(0, datetime(1969, 1, 1, 1, 1, 1)),
+                (1, datetime(2012, 2, 2, 2, 2, 2)),
+                (2, None),
+                (3, datetime(2100, 4, 4, 4, 4, 4))]
         df = self.spark.createDataFrame(data, schema=schema)
 
         # Check that a timestamp passed through a pandas_udf will not be altered by timezone calc
-        identity = pandas_udf(lambda t: t, returnType=TimestampType())
-        df = df.withColumn("timestamp_copy", identity(col("timestamp")))
+        f_timestamp_copy = pandas_udf(lambda t: t, returnType=TimestampType())
+        df = df.withColumn("timestamp_copy", f_timestamp_copy(col("timestamp")))
 
         @pandas_udf(returnType=BooleanType())
-        def check_data(idx, date, timestamp, timestamp_copy):
-            is_equal = timestamp == timestamp_copy
-            if is_equal.all():
-                for i in range(len(is_equal)):
-                    is_equal[i] = date[i].date() == data[idx[i]][1] \
-                        and timestamp[i].to_pydatetime() == data[idx[i]][2]
+        def check_data(idx, timestamp, timestamp_copy):
+            is_equal = timestamp.isnull()  # use this array to check values are equal
+            for i in range(len(idx)):
+                # Check that timestamps are as expected in the UDF
+                is_equal[i] = (is_equal[i] and data[idx[i]][1] is None) or \
+                    timestamp[i].to_pydatetime() == data[idx[i]][1]
             return is_equal
 
-        result = df.withColumn("is_equal", check_data(col("idx"), col("date"), col("timestamp"),
+        result = df.withColumn("is_equal", check_data(col("idx"), col("timestamp"),
                                                       col("timestamp_copy"))).collect()
         # Check that collection values are correct
         self.assertEquals(len(data), len(result))
         for i in range(len(result)):
-            self.assertEquals(data[i][1], result[i][1])  # "date" col
-            self.assertEquals(data[i][2], result[i][2])  # "timestamp" col
-            self.assertTrue(result[i][4])  # "is_equal" data in udf was as expected
+            self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
+            self.assertTrue(result[i][3])  # "is_equal" data in udf was as expected
 
 
 @unittest.skipIf(not _have_pandas or not _have_arrow, "Pandas or Arrow not installed")
@@ -3606,8 +3616,8 @@ class GroupbyApplyTests(ReusedPySparkTestCase):
     def test_unsupported_types(self):
         from pyspark.sql.functions import pandas_udf, col
         schema = StructType(
-            [StructField("id", LongType(), True), StructField("dt", DateType(), True)])
-        df = self.spark.createDataFrame([(1, datetime.date(1970, 1, 1),)], schema=schema)
+            [StructField("id", LongType(), True), StructField("dt", DecimalType(), True)])
+        df = self.spark.createDataFrame([(1, None,)], schema=schema)
         f = pandas_udf(lambda x: x, df.schema)
         with QuietTest(self.sc):
             with self.assertRaisesRegexp(Exception, 'Unsupported data type'):

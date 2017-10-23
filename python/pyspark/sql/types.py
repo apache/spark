@@ -1634,22 +1634,16 @@ def _check_dataframe_localize_timestamps(df):
     """
     from pandas.api.types import is_datetime64tz_dtype
     for column, series in df.iteritems():
-        # TODO: handle nested timestamps?
+        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
         if is_datetime64tz_dtype(series.dtype):
             df[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
     return df
 
 
-def _check_series_convert_timestamps_internal(s):
+def _series_convert_timestamps_internal(s):
     """ Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
     """
-    from pandas.api.types import is_datetime64_dtype
-    # TODO: handle nested timestamps?
-    if is_datetime64_dtype(s.dtype):
-        # NOTE: convert to 'us' with astype here, unit is ignored in `from_pandas` see ARROW-1680
-        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC').values.astype('datetime64[us]')
-    else:
-        return s
+    return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
 
 
 def _test():
