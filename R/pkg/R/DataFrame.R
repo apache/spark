@@ -1191,7 +1191,7 @@ setMethod("collect",
                     vec <- do.call(c, col)
                     stopifnot(class(vec) != "list")
                     class(vec) <- PRIMITIVE_TYPES[[colType]]
-                    if (stringsAsFactors && is.character(vec)) {
+                    if (is.character(vec) && stringsAsFactors) {
                       vec <- as.factor(vec)
                     }
                     df[[colIndex]] <- vec
