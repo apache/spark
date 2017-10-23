@@ -91,6 +91,52 @@ private[spark] object ClosureCleaner extends Logging {
     (seen - obj.getClass).toList
   }
 
+  /** Initializes the accessed fields for outer classes and their super classes. */
+  private def initAccessedFields(
+      accessedFields: Map[Class[_], Set[String]],
+      outerClasses: Seq[Class[_]]): Unit = {
+    for (cls <- outerClasses) {
+      accessedFields(cls) = Set.empty[String]
+
+      var superClass = cls.getSuperclass()
+      while (superClass != null) {
+        accessedFields(superClass) = Set.empty[String]
+        superClass = superClass.getSuperclass()
+      }
+    }
+  }
+
+  /** Sets accessed fields for given class in clone object based on given object. */
+  private def setAccessedFields(
+      outerClass: Class[_],
+      clone: AnyRef,
+      obj: AnyRef,
+      accessedFields: Map[Class[_], Set[String]]): Unit = {
+    for (fieldName <- accessedFields(outerClass)) {
+      val field = outerClass.getDeclaredField(fieldName)
+      field.setAccessible(true)
+      val value = field.get(obj)
+      field.set(clone, value)
+    }
+  }
+
+  /** Clones a given object and sets accessed fields in cloned object. */
+  private def cloneAndSetFields(
+      parent: AnyRef,
+      obj: AnyRef,
+      outerClass: Class[_],
+      accessedFields: Map[Class[_], Set[String]]): AnyRef = {
+    val clone = instantiateClass(outerClass, parent)
+    setAccessedFields(outerClass, clone, obj, accessedFields)
+
+    var superClass = outerClass.getSuperclass()
+    while (superClass != null) {
+      setAccessedFields(superClass, clone, obj, accessedFields)
+      superClass = superClass.getSuperclass()
+    }
+    clone
+  }
+
   /**
    * Clean the given closure in place.
    *
@@ -202,9 +248,8 @@ private[spark] object ClosureCleaner extends Logging {
       logDebug(s" + populating accessed fields because this is the starting closure")
       // Initialize accessed fields with the outer classes first
       // This step is needed to associate the fields to the correct classes later
-      for (cls <- outerClasses) {
-        accessedFields(cls) = Set.empty[String]
-      }
+      initAccessedFields(accessedFields, outerClasses)
+
       // Populate accessed fields by visiting all fields and methods accessed by this and
       // all of its inner closures. If transitive cleaning is enabled, this may recursively
       // visits methods that belong to other classes in search of transitively referenced fields.
@@ -250,13 +295,8 @@ private[spark] object ClosureCleaner extends Logging {
       // required fields from the original object. We need the parent here because the Java
       // language specification requires the first constructor parameter of any closure to be
       // its enclosing object.
-      val clone = instantiateClass(cls, parent)
-      for (fieldName <- accessedFields(cls)) {
-        val field = cls.getDeclaredField(fieldName)
-        field.setAccessible(true)
-        val value = field.get(obj)
-        field.set(clone, value)
-      }
+      val clone = cloneAndSetFields(parent, obj, cls, accessedFields)
+
       // If transitive cleaning is enabled, we recursively clean any enclosing closure using
       // the already populated accessed fields map of the starting closure
       if (cleanTransitively && isClosure(clone.getClass)) {
@@ -397,6 +437,13 @@ private[util] class FieldAccessFinder(
               visitedMethods += m
               ClosureCleaner.getClassReader(cl).accept(
                 new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
+
+              var superClass = cl.getSuperclass()
+              while (superClass != null) {
+                ClosureCleaner.getClassReader(superClass).accept(
+                  new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
+                superClass = superClass.getSuperclass()
+              }
             }
           }
         }
