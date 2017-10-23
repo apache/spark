@@ -129,7 +129,8 @@ def read_udfs(pickleSer, infile, eval_type):
 
     if eval_type == PythonEvalType.SQL_PANDAS_UDF \
        or eval_type == PythonEvalType.SQL_PANDAS_GROUPED_UDF:
-        ser = ArrowStreamPandasSerializer()
+        timezone = utf8_deserializer.loads(infile)
+        ser = ArrowStreamPandasSerializer(timezone)
     else:
         ser = BatchedSerializer(PickleSerializer(), 100)
 

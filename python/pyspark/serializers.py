@@ -213,7 +213,7 @@ class ArrowSerializer(FramedSerializer):
         return "ArrowSerializer"
 
 
-def _create_batch(series):
+def _create_batch(series, timezone):
     from pyspark.sql.types import _check_series_convert_timestamps_internal
     import pyarrow as pa
     # Make input conform to [(series1, type1), (series2, type2), ...]
@@ -227,7 +227,7 @@ def _create_batch(series):
     def cast_series(s, t):
         if type(t) == pa.TimestampType:
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
-            return _check_series_convert_timestamps_internal(s.fillna(0))\
+            return _check_series_convert_timestamps_internal(s.fillna(0), timezone)\
                 .values.astype('datetime64[us]', copy=False)
         elif t == pa.date32():
             # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
@@ -252,6 +252,10 @@ class ArrowStreamPandasSerializer(Serializer):
     Serializes Pandas.Series as Arrow data with Arrow streaming format.
     """
 
+    def __init__(self, timezone):
+        super(ArrowStreamPandasSerializer, self).__init__()
+        self._timezone = timezone
+
     def dump_stream(self, iterator, stream):
         """
         Make ArrowRecordBatches from Pandas Series and serialize. Input is a single series or
@@ -261,7 +265,7 @@ class ArrowStreamPandasSerializer(Serializer):
         writer = None
         try:
             for series in iterator:
-                batch = _create_batch(series)
+                batch = _create_batch(series, self._timezone)
                 if writer is None:
                     write_int(SpecialLengths.START_ARROW_STREAM, stream)
                     writer = pa.RecordBatchStreamWriter(stream, batch.schema)
@@ -274,12 +278,13 @@ class ArrowStreamPandasSerializer(Serializer):
         """
         Deserialize ArrowRecordBatches to an Arrow table and return as a list of pandas.Series.
         """
-        from pyspark.sql.types import _check_dataframe_localize_timestamps
+        from pyspark.sql.types import _check_dataframe_localize_timestamps, from_arrow_schema
         import pyarrow as pa
         reader = pa.open_stream(stream)
+        schema = from_arrow_schema(reader.schema)
         for batch in reader:
             # NOTE: changed from pa.Columns.to_pandas, timezone issue in conversion fixed in 0.7.1
-            pdf = _check_dataframe_localize_timestamps(batch.to_pandas())
+            pdf = _check_dataframe_localize_timestamps(batch.to_pandas(), schema, self._timezone)
             yield [c for _, c in pdf.iteritems()]
 
     def __repr__(self):
