@@ -196,17 +196,18 @@ configuration variables:
 
 * Executor memory: `spark.executor.memory`
 * Executor cores: `spark.executor.cores`
-* Number of executors: `spark.cores.max`/`spark.executor.cores`
+* Number of executors: min(`spark.cores.max`/`spark.executor.cores`, 
+`spark.mem.max`/(`spark.executor.memory`+`spark.mesos.executor.memoryOverhead`))
 
 Please see the [Spark Configuration](configuration.html) page for
 details and default values.
 
 Executors are brought up eagerly when the application starts, until
-`spark.cores.max` is reached.  If you don't set `spark.cores.max`, the
-Spark application will consume all resources offered to it by Mesos,
-so we of course urge you to set this variable in any sort of
-multi-tenant cluster, including one which runs multiple concurrent
-Spark applications.
+`spark.cores.max` or `spark.mem.max` is reached.  If you set neither
+`spark.cores.max` nor `spark.mem.max`, the Spark application will
+consume all resources offered to it by Mesos, so we of course urge
+you to set this variable in any sort of multi-tenant cluster,
+including one which runs multiple concurrent Spark applications.
 
 The scheduler will start executors round-robin on the offers Mesos
 gives it, but there are no spread guarantees, as Mesos does not
@@ -341,6 +342,13 @@ See the [configuration page](configuration.html) for information on Spark config
     include the cores used to run the Spark tasks. In other words, even if no Spark task
     is being run, each Mesos executor will occupy the number of cores configured here.
     The value can be a floating point number.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mem.max</code></td>
+  <td><code>(none)</code></td>
+  <td>
+    Maximum amount of memory Spark accepts from Mesos launching executor.
   </td>
 </tr>
 <tr>
@@ -619,7 +627,8 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Time to consider unused resources refused, serves as a fallback of
     `spark.mesos.rejectOfferDurationForUnmetConstraints`,
-    `spark.mesos.rejectOfferDurationForReachedMaxCores`
+    `spark.mesos.rejectOfferDurationForReachedMaxCores`,
+    `spark.mesos.rejectOfferDurationForReachedMaxMem`
   </td>
 </tr>
 <tr>
@@ -635,6 +644,14 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>
     Time to consider unused resources refused when maximum number of cores
     <code>spark.cores.max</code> is reached
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForReachedMaxMem</code></td>
+  <td><code>spark.mesos.rejectOfferDuration</code></td>
+  <td>
+    Time to consider unused resources refused when maximum amount of memory
+    <code>spark.mem.max</code> is reached
   </td>
 </tr>
 </table>
