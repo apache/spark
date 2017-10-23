@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -272,22 +271,24 @@ trait CheckAnalysis extends PredicateHelper {
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val resolver = plan.conf.resolver
-            val attrsWithSameName = o.missingInput.filter(x =>
-              o.inputSet.exists(y => resolver(x.name, y.name)))
-            val missingAttributes = o.missingInput.mkString(",")
-            val availableAttributes = o.inputSet.mkString(",")
-            val repeatedNameHint = if (attrsWithSameName.size > 0) {
+            val attrsWithSameName = o.missingInput.filter(missing =>
+              o.inputSet.exists(input => resolver(missing.name, input.name)))
+            val repeatedNameHint = if (attrsWithSameName.nonEmpty) {
               val commonNames = attrsWithSameName.map(_.name).mkString(",")
-              s"""\n|Attribute(s) `$commonNames` seem to appear in two
-                  |different datasets, with the same name."""
+              s"""|Please check attribute(s) `$commonNames`, they seem to appear in two
+                  |different input operators, with the same name.""".stripMargin
             } else {
               ""
             }
 
+            val missingAttributes = o.missingInput.mkString(",")
+            val availableAttributes = o.inputSet.mkString(",")
+
             failAnalysis(
               s"""Some resolved attribute(s) are not present among the available attributes
                 |for a query.
-                |$missingAttributes is not in $availableAttributes.$repeatedNameHint
+                |$missingAttributes is not in $availableAttributes.
+                |$repeatedNameHint
                 |The failed query was for operator
                 |${operator.simpleString}""".stripMargin)
 

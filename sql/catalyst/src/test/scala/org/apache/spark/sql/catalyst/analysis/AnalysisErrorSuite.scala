@@ -423,8 +423,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     val errorMsg = s"""Some resolved attribute(s) are not present among the available attributes
                      |for a query.
                      |${aId.mkString("#")}L is not in ${otherAId.mkString("#")}L.
-                     |Attribute(s) `a` seem to appear in two
-                     |different datasets, with the same name.
+                     |Please check attribute(s) `a`, they seem to appear in two
+                     |different input operators, with the same name.
                      |The failed query was for operator
                      |!Aggregate [${bAlias.mkString("#")}]""".stripMargin
 
