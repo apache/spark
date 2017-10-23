@@ -276,7 +276,7 @@ trait CheckAnalysis extends PredicateHelper {
             }
             val repeatedNameHint = if (attrsWithSameName.nonEmpty) {
               val commonNames = attrsWithSameName.map(_.name).mkString(",")
-              s"""\n|Please check attribute(s) `$commonNames`, they seem to appear in two
+              s"""|Please check attribute(s) `$commonNames`, they seem to appear in two
                   |different input operators, with the same name.""".stripMargin
             } else {
               ""
@@ -285,9 +285,10 @@ trait CheckAnalysis extends PredicateHelper {
             val missingAttributes = o.missingInput.mkString(",")
             val input = o.inputSet.mkString(",")
 
-            failAnalysis(
-              s"""Resolved attribute(s) $missingAttributes missing from $input
-                  |in operator ${operator.simpleString}.$repeatedNameHint""".stripMargin)
+            val msg = s"""Resolved attribute(s) $missingAttributes missing from $input
+                          |in operator ${operator.simpleString}.""".stripMargin
+
+            failAnalysis(if (repeatedNameHint.nonEmpty) msg + "\n" + repeatedNameHint else msg)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(
