@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.IOException
+import java.net.URI
 import java.util.Locale
 
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -26,8 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoTable, LogicalPlan,
-    ScriptTransformation}
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateTableCommand, DDLUtils}
@@ -120,22 +120,41 @@ class DetermineTableStats(session: SparkSession) extends Rule[LogicalPlan] {
         if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.isEmpty =>
       val table = relation.tableMeta
       val sizeInBytes = if (session.sessionState.conf.fallBackToHdfsForStatsEnabled) {
-        try {
-          val hadoopConf = session.sessionState.newHadoopConf()
-          val tablePath = new Path(table.location)
-          val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
-          fs.getContentSummary(tablePath).getLength
-        } catch {
-          case e: IOException =>
-            logWarning("Failed to get table size from hdfs.", e)
-            session.sessionState.conf.defaultSizeInBytes
-        }
+        getSizeFromHdfs(table.location)
       } else {
         session.sessionState.conf.defaultSizeInBytes
       }
 
       val withStats = table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
       relation.copy(tableMeta = withStats)
+
+    case relation: HiveTableRelation
+        if DDLUtils.isHiveTable(relation.tableMeta) && relation.tableMeta.stats.nonEmpty &&
+          session.sessionState.conf.verifyStatsFromHdfsWhenBroadcastJoin &&
+          relation.tableMeta.stats.get.sizeInBytes <
+            session.sessionState.conf.autoBroadcastJoinThreshold =>
+      val table = relation.tableMeta
+      val sizeInBytes = getSizeFromHdfs(table.location)
+      if (sizeInBytes > relation.tableMeta.stats.get.sizeInBytes) {
+        val newTable =
+          table.copy(stats = Some(CatalogStatistics(sizeInBytes = BigInt(sizeInBytes))))
+        relation.copy(tableMeta = newTable)
+      } else {
+        relation
+      }
+  }
+
+  private[this] def getSizeFromHdfs(loc: URI): Long = {
+    try {
+      val hadoopConf = session.sessionState.newHadoopConf()
+      val tablePath = new Path(loc)
+      val fs: FileSystem = tablePath.getFileSystem(hadoopConf)
+      fs.getContentSummary(tablePath).getLength
+    } catch {
+      case e: IOException =>
+        logWarning("Failed to get table size from hdfs.", e)
+        session.sessionState.conf.defaultSizeInBytes
+    }
   }
 }
 

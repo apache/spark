@@ -187,6 +187,15 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val VERIFY_STATS_FROM_HDFS_WHEN_BROADCASTJOIN =
+    buildConf("spark.sql.statistics.verifyStatsFromHdfsWhenBroadcastJoin")
+    .doc("If table size in metastore is below spark.sql.autoBroadcastJoinThreshold, check the " +
+      "size on Hdfs and set table size to be the bigger one. This is for defense and help avoid" +
+      " OOM caused by broadcast join. It's useful when metastore failed to update the stats of" +
+      " table previously.")
+    .booleanConf
+    .createWithDefault(false)
+
   val DEFAULT_SIZE_IN_BYTES = buildConf("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to Long.MaxValue " +
@@ -1103,6 +1112,9 @@ class SQLConf extends Serializable with Logging {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
+  def verifyStatsFromHdfsWhenBroadcastJoin: Boolean =
+    getConf(VERIFY_STATS_FROM_HDFS_WHEN_BROADCASTJOIN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 

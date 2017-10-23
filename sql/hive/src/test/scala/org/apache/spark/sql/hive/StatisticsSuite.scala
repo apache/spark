@@ -79,6 +79,44 @@ class StatisticsSuite extends StatisticsCollectionTestBase with TestHiveSingleto
     }
   }
 
+  test("Check Hdfs for stats of small table.") {
+    withSQLConf(SQLConf.VERIFY_STATS_FROM_HDFS_WHEN_BROADCASTJOIN.key -> "true") {
+      withTable("csv_table") {
+        withTempDir { tempDir =>
+          // EXTERNAL OpenCSVSerde table pointing to LOCATION
+          val file1 = new File(tempDir + "/data1")
+          val writer1 = new PrintWriter(file1)
+          writer1.write("1,2")
+          writer1.close()
+
+          val file2 = new File(tempDir + "/data2")
+          val writer2 = new PrintWriter(file2)
+          writer2.write("1,2")
+          writer2.close()
+
+          sql(
+            s"""
+               |CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+               |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+               |WITH SERDEPROPERTIES (
+               |\"separatorChar\" = \",\",
+               |\"quoteChar\"     = \"\\\"\",
+               |\"escapeChar\"    = \"\\\\\")
+               |LOCATION '${tempDir.toURI}'
+               |tblproperties(
+               |  'numFiles'='1',
+               |  'rawDataSize'='1',
+               |  'totalSize'='1'
+               |)
+               |""".stripMargin)
+          val relation = spark.table("csv_table").queryExecution.analyzed.children.head
+            .asInstanceOf[HiveTableRelation]
+          assert(relation.stats.sizeInBytes === BigInt(file1.length() + file2.length()))
+        }
+      }
+    }
+  }
+
   test("analyze Hive serde tables") {
     def queryTotalSize(tableName: String): BigInt =
       spark.table(tableName).queryExecution.analyzed.stats.sizeInBytes
