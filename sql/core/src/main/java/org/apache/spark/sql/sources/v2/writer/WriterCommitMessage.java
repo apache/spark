@@ -15,26 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans.logical
+package org.apache.spark.sql.sources.v2.writer;
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
+import java.io.Serializable;
+
+import org.apache.spark.annotation.InterfaceStability;
 
 /**
- * FlatMap groups using an udf: pandas.Dataframe -> pandas.DataFrame.
- * This is used by DataFrame.groupby().apply().
+ * A commit message returned by {@link DataWriter#commit()} and will be sent back to the driver side
+ * as the input parameter of {@link DataSourceV2Writer#commit(WriterCommitMessage[])}.
+ *
+ * This is an empty interface, data sources should define their own message class and use it in
+ * their {@link DataWriter#commit()} and {@link DataSourceV2Writer#commit(WriterCommitMessage[])}
+ * implementations.
  */
-case class FlatMapGroupsInPandas(
-    groupingAttributes: Seq[Attribute],
-    functionExpr: Expression,
-    output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-
-  /**
-   * This is needed because output attributes are considered `references` when
-   * passed through the constructor.
-   *
-   * Without this, catalyst will complain that output attributes are missing
-   * from the input.
-   */
-  override val producedAttributes = AttributeSet(output)
-}
+@InterfaceStability.Evolving
+public interface WriterCommitMessage extends Serializable {}

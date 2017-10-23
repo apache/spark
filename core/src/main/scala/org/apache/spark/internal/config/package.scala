@@ -41,6 +41,29 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
+  private[spark] val EVENT_LOG_COMPRESS =
+    ConfigBuilder("spark.eventLog.compress")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_BLOCK_UPDATES =
+    ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_TESTING =
+    ConfigBuilder("spark.eventLog.testing")
+      .internal()
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val EVENT_LOG_OUTPUT_BUFFER_SIZE = ConfigBuilder("spark.eventLog.buffer.kb")
+    .bytesConf(ByteUnit.KiB)
+    .createWithDefaultString("100k")
+
+  private[spark] val EVENT_LOG_OVERWRITE =
+    ConfigBuilder("spark.eventLog.overwrite").booleanConf.createWithDefault(false)
+
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH).stringConf.createOptional
 
@@ -428,6 +451,24 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val UI_X_XSS_PROTECTION =
+    ConfigBuilder("spark.ui.xXssProtection")
+      .doc("Value for HTTP X-XSS-Protection response header")
+      .stringConf
+      .createWithDefaultString("1; mode=block")
+
+  private[spark] val UI_X_CONTENT_TYPE_OPTIONS =
+    ConfigBuilder("spark.ui.xContentTypeOptions.enabled")
+      .doc("Set to 'true' for setting X-Content-Type-Options HTTP response header to 'nosniff'")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val UI_STRICT_TRANSPORT_SECURITY =
+    ConfigBuilder("spark.ui.strictTransportSecurity")
+      .doc("Value for HTTP Strict Transport Security Response Header")
+      .stringConf
+      .createOptional
 
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
