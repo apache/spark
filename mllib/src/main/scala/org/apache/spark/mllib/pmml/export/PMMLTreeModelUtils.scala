@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.pmml.export
 
-import scala.collection.mutable
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import org.dmg.pmml.{Node => PMMLNode, Value => PMMLValue, _}
 
@@ -134,18 +134,13 @@ private[mllib] object PMMLTreeModelUtils {
 
       rootPMMLNode
     }
-
     val pmmlTreeRootNode = buildStubInternal(rootDTNode, new True())
-
     val pmmlValues = classes.toList.distinct.map(doubleVal => new PMMLValue(doubleVal.toString))
-
     val result = (pmmlTreeRootNode,
       sortMiningFields(miningFields.toList),
       sortedDataFields(dataFields.values.toList),
       pmmlValues)
-
     result
-
   }
 
   private def sortMiningFields(miningFields: List[MiningField]): List[MiningField] = {
@@ -178,10 +173,8 @@ private[mllib] object PMMLTreeModelUtils {
     // compound predicate if classification and categories list length > 0
 
     if (node.split.isDefined) {
-
       require(fieldName.isDefined, "fieldName should not be None, it should be defined.")
       val field = fieldName.get
-
       val split = node.split.get
       val featureType = split.featureType
 
