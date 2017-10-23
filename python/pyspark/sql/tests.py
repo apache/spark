@@ -3136,13 +3136,41 @@ class ArrowTests(ReusedSQLTestCase):
         null_counts = pdf.isnull().sum().tolist()
         self.assertTrue(all([c == 1 for c in null_counts]))
 
+    def _toPandas_arrow_toggle(self, df):
+        self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
+        try:
+            pdf = df.toPandas()
+        finally:
+            self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
+        pdf_arrow = df.toPandas()
+        return pdf, pdf_arrow
+
     def test_toPandas_arrow_toggle(self):
         df = self.spark.createDataFrame(self.data, schema=self.schema)
-        self.spark.conf.set("spark.sql.execution.arrow.enabled", "false")
-        pdf = df.toPandas()
-        self.spark.conf.set("spark.sql.execution.arrow.enabled", "true")
-        pdf_arrow = df.toPandas()
+        pdf, pdf_arrow = self._toPandas_arrow_toggle(df)
         self.assertFramesEqual(pdf_arrow, pdf)
+
+    def test_toPandas_respect_session_timezone(self):
+        df = self.spark.createDataFrame(self.data, schema=self.schema)
+        orig_tz = self.spark.conf.get("spark.sql.session.timeZone")
+        try:
+            timezone = "America/New_York"
+            self.spark.conf.set("spark.sql.session.timeZone", timezone)
+            self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "false")
+            try:
+                pdf_la, pdf_arrow_la = self._toPandas_arrow_toggle(df)
+                self.assertFramesEqual(pdf_arrow_la, pdf_la)
+            finally:
+                self.spark.conf.set("spark.sql.execution.pandas.respectSessionTimeZone", "true")
+            pdf_ny, pdf_arrow_ny = self._toPandas_arrow_toggle(df)
+            self.assertFramesEqual(pdf_arrow_ny, pdf_ny)
+
+            from pyspark.sql.types import _check_dataframe_localize_timestamps
+            self.assertFalse(pdf_ny.equals(pdf_la))
+            self.assertTrue(pdf_ny.equals(
+                _check_dataframe_localize_timestamps(pdf_la, self.schema, timezone)))
+        finally:
+            self.spark.conf.set("spark.sql.session.timeZone", orig_tz)
 
     def test_pandas_round_trip(self):
         import pandas as pd

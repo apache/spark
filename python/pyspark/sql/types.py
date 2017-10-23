@@ -1629,18 +1629,24 @@ def to_arrow_type(dt):
     return arrow_type
 
 
-def _check_dataframe_localize_timestamps(pdf):
+def _check_dataframe_localize_timestamps(pdf, schema, timezone):
     """
     Convert timezone aware timestamps to timezone-naive in local time
 
     :param pdf: pandas.DataFrame
     :return pandas.DataFrame where any timezone aware columns have be converted to tz-naive
     """
-    from pandas.api.types import is_datetime64tz_dtype
+    from pandas.api.types import is_datetime64tz_dtype, is_datetime64_dtype
+    tz = timezone or 'tzlocal()'
     for column, series in pdf.iteritems():
-        # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
-        if is_datetime64tz_dtype(series.dtype):
-            pdf[column] = series.dt.tz_convert('tzlocal()').dt.tz_localize(None)
+        if type(schema[str(column)].dataType) == TimestampType:
+            # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+            if is_datetime64tz_dtype(series.dtype):
+                pdf[column] = series.dt.tz_convert(tz).dt.tz_localize(None)
+            elif is_datetime64_dtype(series.dtype) and timezone is not None:
+                # `series.dt.tz_localize('tzlocal()')` doesn't work properly when including NaT.
+                pdf[column] = series.apply(lambda ts: ts.tz_localize('tzlocal()')) \
+                    .dt.tz_convert(tz).dt.tz_localize(None)
     return pdf
 
 

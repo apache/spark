@@ -1881,15 +1881,22 @@ class DataFrame(object):
         1    5    Bob
         """
         import pandas as pd
+        from pyspark.sql.types import _check_dataframe_localize_timestamps
+
+        if self.sql_ctx.getConf("spark.sql.execution.pandas.respectSessionTimeZone").lower() \
+           == "true":
+            timezone = self.sql_ctx.getConf("spark.sql.session.timeZone")
+        else:
+            timezone = None
+
         if self.sql_ctx.getConf("spark.sql.execution.arrow.enabled", "false").lower() == "true":
             try:
-                from pyspark.sql.types import _check_dataframe_localize_timestamps
                 import pyarrow
                 tables = self._collectAsArrow()
                 if tables:
                     table = pyarrow.concat_tables(tables)
                     pdf = table.to_pandas()
-                    return _check_dataframe_localize_timestamps(pdf)
+                    return _check_dataframe_localize_timestamps(pdf, self.schema, timezone)
                 else:
                     return pd.DataFrame.from_records([], columns=self.columns)
             except ImportError as e:
@@ -1913,7 +1920,7 @@ class DataFrame(object):
 
             for f, t in dtype.items():
                 pdf[f] = pdf[f].astype(t, copy=False)
-            return pdf
+            return _check_dataframe_localize_timestamps(pdf, self.schema, timezone)
 
     def _collectAsArrow(self):
         """
