@@ -56,6 +56,16 @@ class DateFunctionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(sql("""SELECT CURRENT_TIMESTAMP() = NOW()"""), Row(true))
   }
 
+  test("SPARK-22333: columnReference should get higher priority than " +
+    "timeFunctionCall(CURRENT_DATE, CURRENT_TIMESTAMP)") {
+    val df = Seq((1, 2), (2, 3)).toDF("current_date", "current_timestamp")
+    df.createOrReplaceTempView("ttf")
+    withTempView("ttf") {
+      checkAnswer(sql("""SELECT current_date, current_timestamp FROM ttf"""),
+        Seq(Row(1, 2), Row(2, 3)))
+    }
+  }
+
   val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
   val sdfDate = new SimpleDateFormat("yyyy-MM-dd", Locale.US)
   val d = new Date(sdf.parse("2015-04-08 13:10:15").getTime)
