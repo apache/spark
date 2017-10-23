@@ -271,8 +271,9 @@ trait CheckAnalysis extends PredicateHelper {
         operator match {
           case o if o.children.nonEmpty && o.missingInput.nonEmpty =>
             val resolver = plan.conf.resolver
-            val attrsWithSameName = o.missingInput.filter(missing =>
-              o.inputSet.exists(input => resolver(missing.name, input.name)))
+            val attrsWithSameName = o.missingInput.filter { missing =>
+              o.inputSet.exists(input => resolver(missing.name, input.name))
+            }
             val repeatedNameHint = if (attrsWithSameName.nonEmpty) {
               val commonNames = attrsWithSameName.map(_.name).mkString(",")
               s"""\n|Please check attribute(s) `$commonNames`, they seem to appear in two
