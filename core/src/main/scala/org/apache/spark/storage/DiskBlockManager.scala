@@ -101,14 +101,15 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
   /** List all the blocks currently stored on disk by the disk manager. */
   def getAllBlocks(): Seq[BlockId] = {
     getAllFiles().flatMap { f =>
-      val blockId = BlockId.guess(f.getName)
-      if (blockId.isEmpty) {
-        // This does not handle a special-case of a temporary file
-        // created by [[SortShuffleWriter]].
-        log.warn(s"Encountered an unexpected file in a managed directory: $f")
+      try {
+        Some(BlockId(f.getName))
+      } catch {
+        case _: UnrecognizedBlockId =>
+          // This does not handle a special-case of a temporary file
+          // created by [[SortShuffleWriter]].
+          log.warn(s"Encountered an unexpected file in a managed directory: $f")
+          None
       }
-
-      blockId
     }
   }
 
