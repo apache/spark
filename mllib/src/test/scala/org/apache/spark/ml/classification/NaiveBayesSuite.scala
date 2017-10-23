@@ -335,6 +335,7 @@ object NaiveBayesSuite {
     val _pi = pi.map(math.exp)
     val _theta = theta.map(row => row.map(math.exp))
 
+    implicit val rngForBrzMultinomial = RandBasis.withSeed(seed)
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)
       val xi = modelType match {
