@@ -62,34 +62,19 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def isEligible(left: LogicalPlan, right: LogicalPlan) = (left, right) match {
-    case (left: Project, right @ Project(_, _: Filter)) =>
-      verifyFilterCondition(left.child) && verifyFilterCondition(right.child) &&
-        Project(left.projectList, nonFilterChild(left.child)).sameResult(
-          Project(right.projectList, nonFilterChild(right.child)))
-
-    case (left: Project, right: Filter) =>
-      verifyFilterCondition(left.child) && verifyFilterCondition(right) &&
-        Project(left.projectList, nonFilterChild(left.child)).sameResult(
-          Project(right.output, nonFilterChild(right)))
-
-    case (left, right @ Project(_, _: Filter)) =>
-      verifyFilterCondition(left) && verifyFilterCondition(right.child) &&
-        Project(left.output, nonFilterChild(left)).sameResult(
-          Project(right.projectList, nonFilterChild(right.child)))
-
-    case (left, right: Filter) =>
-      verifyFilterCondition(left) && verifyFilterCondition(right) &&
-        nonFilterChild(left).sameResult(nonFilterChild(right))
-
+    case (_, right @ Project(_, _: Filter)) => verifyConditions(left, right)
+    case (_, right: Filter) => verifyConditions(left, right)
     case _ => false
   }
 
-  private def skipProject(plan: LogicalPlan) = plan match {
-    case p: Project => p.child
-    case p => p
-  }
+  private def verifyConditions(left: LogicalPlan, right: LogicalPlan) = {
+    val leftProjectList = projectList(left)
+    val rightProjectList = projectList(right)
 
-  private def collectAllExpressions(exp: Expression) = exp.p(0) +: exp.children
+    verifyFilterCondition(skipProject(left)) && verifyFilterCondition(skipProject(right)) &&
+      Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
+        Project(rightProjectList, nonFilterChild(skipProject(right))))
+  }
 
   private def verifyFilterCondition(plan: LogicalPlan) = {
     var i = 0
@@ -101,6 +86,18 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     }
 
     filterConditions.forall(!_.isInstanceOf[SubqueryExpression])
+  }
+
+  private def collectAllExpressions(exp: Expression) = exp.p(0) +: exp.children
+
+  private def projectList(node: LogicalPlan) = node match {
+    case p: Project => p.projectList
+    case x => x.output
+  }
+
+  private def skipProject(node: LogicalPlan) = node match {
+    case p: Project => p.child
+    case x => x
   }
 
   private def nonFilterChild(plan: LogicalPlan) = plan.find(!_.isInstanceOf[Filter]).getOrElse {
