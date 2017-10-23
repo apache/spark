@@ -17,7 +17,7 @@
 
 package org.apache.spark.repl
 
-import java.io.{ByteArrayOutputStream, FilterInputStream, InputStream, IOException}
+import java.io.{ByteArrayOutputStream, FileNotFoundException, FilterInputStream, InputStream, IOException}
 import java.net.{HttpURLConnection, URI, URL, URLEncoder}
 import java.nio.channels.Channels
 
@@ -33,18 +33,23 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
- * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI,
- * used to load classes defined by the interpreter when the REPL is used.
- * Allows the user to specify if user class path should be first.
- * This class loader delegates getting/finding resources to parent loader,
- * which makes sense until REPL never provide resource dynamically.
+ * A ClassLoader that reads classes from a Hadoop FileSystem or HTTP URI, used to load classes
+ * defined by the interpreter when the REPL is used. Allows the user to specify if user class path
+ * should be first. This class loader delegates getting/finding resources to parent loader, which
+ * makes sense until REPL never provide resource dynamically.
+ *
+ * Note: [[ClassLoader]] will preferentially load class from parent. Only when parent is null or
+ * the load failed, that it will call the overridden `findClass` function. To avoid the potential
+ * issue caused by loading class using inappropriate class loader, we should set the parent of
+ * ClassLoader to null, so that we can fully control which class loader is used. For detailed
+ * discussion, see SPARK-18646.
  */
 class ExecutorClassLoader(
     conf: SparkConf,
     env: SparkEnv,
     classUri: String,
     parent: ClassLoader,
-    userClassPathFirst: Boolean) extends ClassLoader with Logging {
+    userClassPathFirst: Boolean) extends ClassLoader(null) with Logging {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
@@ -79,13 +84,7 @@ class ExecutorClassLoader(
         case e: ClassNotFoundException =>
           val classOption = findClassLocally(name)
           classOption match {
-            case None =>
-              // If this class has a cause, it will break the internal assumption of Janino
-              // (the compiler used for Spark SQL code-gen).
-              // See org.codehaus.janino.ClassLoaderIClassLoader's findIClass, you will see
-              // its behavior will be changed if there is a cause and the compilation
-              // of generated class will fail.
-              throw new ClassNotFoundException(name)
+            case None => throw new ClassNotFoundException(name, e)
             case Some(a) => a
           }
       }
@@ -153,10 +152,11 @@ class ExecutorClassLoader(
   private def getClassFileInputStreamFromFileSystem(fileSystem: FileSystem)(
       pathInDirectory: String): InputStream = {
     val path = new Path(directory, pathInDirectory)
-    if (fileSystem.exists(path)) {
+    try {
       fileSystem.open(path)
-    } else {
-      throw new ClassNotFoundException(s"Class file not found at path $path")
+    } catch {
+      case _: FileNotFoundException =>
+        throw new ClassNotFoundException(s"Class file not found at path $path")
     }
   }
 

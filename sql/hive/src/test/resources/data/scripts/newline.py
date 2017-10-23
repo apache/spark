@@ -19,6 +19,6 @@
 import sys
 
 for line in sys.stdin:
-  print "1\\n2"
-  print "1\\r2"
-  print "1\\t2"
+    print("1\\n2")
+    print("1\\r2")
+    print("1\\t2")

@@ -25,7 +25,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -68,42 +67,33 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val expectedOutput = input.map(_.toString)
         for (i <- input.indices) {
           testServer.send(input(i).toString + "\n")
-          Thread.sleep(500)
           clock.advance(batchDuration.milliseconds)
         }
-        // Make sure we finish all batches before "stop"
-        if (!batchCounter.waitUntilBatchesCompleted(input.size, 30000)) {
-          fail("Timeout: cannot finish all batches in 30 seconds")
+
+        eventually(eventuallyTimeout) {
+          clock.advance(batchDuration.milliseconds)
+          // Verify whether data received was as expected
+          logInfo("--------------------------------")
+          logInfo("output.size = " + outputQueue.size)
+          logInfo("output")
+          outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+          logInfo("expected output.size = " + expectedOutput.size)
+          logInfo("expected output")
+          expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
+          logInfo("--------------------------------")
+
+          // Verify whether all the elements received are as expected
+          // (whether the elements were received one in each interval is not verified)
+          val output = outputQueue.asScala.flatten.toArray
+          assert(output.length === expectedOutput.size)
+          for (i <- output.indices) {
+            assert(output(i) === expectedOutput(i))
+          }
         }
 
-        // Ensure progress listener has been notified of all events
-        ssc.sparkContext.listenerBus.waitUntilEmpty(500)
-
-        // Verify all "InputInfo"s have been reported
-        assert(ssc.progressListener.numTotalReceivedRecords === input.size)
-        assert(ssc.progressListener.numTotalProcessedRecords === input.size)
-
-        logInfo("Stopping server")
-        testServer.stop()
-        logInfo("Stopping context")
-        ssc.stop()
-
-        // Verify whether data received was as expected
-        logInfo("--------------------------------")
-        logInfo("output.size = " + outputQueue.size)
-        logInfo("output")
-        outputQueue.asScala.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-        logInfo("expected output.size = " + expectedOutput.size)
-        logInfo("expected output")
-        expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-        logInfo("--------------------------------")
-
-        // Verify whether all the elements received are as expected
-        // (whether the elements were received one in each interval is not verified)
-        val output: Array[String] = outputQueue.asScala.flatMap(x => x).toArray
-        assert(output.length === expectedOutput.size)
-        for (i <- output.indices) {
-          assert(output(i) === expectedOutput(i))
+        eventually(eventuallyTimeout) {
+          assert(ssc.progressListener.numTotalReceivedRecords === input.length)
+          assert(ssc.progressListener.numTotalProcessedRecords === input.length)
         }
       }
     }
@@ -140,10 +130,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("binary records stream") {
-    val testDir: File = null
+    var testDir: File = null
     try {
       val batchDuration = Seconds(2)
-      val testDir = Utils.createTempDir()
+      testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, StandardCharsets.UTF_8)
@@ -165,14 +155,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         // not enough to trigger a batch
         clock.advance(batchDuration.milliseconds / 2)
 
-        val input = Seq(1, 2, 3, 4, 5)
-        input.foreach { i =>
+        val numCopies = 3
+        val input = Array[Byte](1, 2, 3, 4, 5)
+        for (i <- 0 until numCopies) {
           Thread.sleep(batchDuration.milliseconds)
           val file = new File(testDir, i.toString)
-          Files.write(Array[Byte](i.toByte), file)
+          Files.write(input.map(b => (b + i).toByte), file)
           assert(file.setLastModified(clock.getTimeMillis()))
           assert(file.lastModified === clock.getTimeMillis())
-          logInfo("Created file " + file)
+          logInfo(s"Created file $file")
           // Advance the clock after creating the file to avoid a race when
           // setting its modification time
           clock.advance(batchDuration.milliseconds)
@@ -180,10 +171,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
             assert(batchCounter.getNumCompletedBatches === i)
           }
         }
-
-        val expectedOutput = input.map(i => i.toByte)
-        val obtainedOutput = outputQueue.asScala.flatten.toList.map(i => i(0).toByte)
-        assert(obtainedOutput.toSeq === expectedOutput)
+        val obtainedOutput = outputQueue.asScala.map(_.flatten).toSeq
+        for (i <- obtainedOutput.indices) {
+          assert(obtainedOutput(i) === input.map(b => (b + i).toByte))
+        }
       }
     } finally {
       if (testDir != null) Utils.deleteRecursively(testDir)
@@ -198,6 +189,68 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testFileStream(newFilesOnly = false)
   }
 
+  test("file input stream - wildcard") {
+    var testDir: File = null
+    try {
+      val batchDuration = Seconds(2)
+      testDir = Utils.createTempDir()
+      val testSubDir1 = Utils.createDirectory(testDir.toString, "tmp1")
+      val testSubDir2 = Utils.createDirectory(testDir.toString, "tmp2")
+
+      // Create a file that exists before the StreamingContext is created:
+      val existingFile = new File(testDir, "0")
+      Files.write("0\n", existingFile, StandardCharsets.UTF_8)
+      assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
+
+      val pathWithWildCard = testDir.toString + "/*/"
+
+      // Set up the streaming context and input streams
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
+        val batchCounter = new BatchCounter(ssc)
+        // monitor "testDir/*/"
+        val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
+          pathWithWildCard).map(_._2.toString)
+        val outputQueue = new ConcurrentLinkedQueue[Seq[String]]
+        val outputStream = new TestOutputStream(fileStream, outputQueue)
+        outputStream.register()
+        ssc.start()
+
+        // Advance the clock so that the files are created after StreamingContext starts, but
+        // not enough to trigger a batch
+        clock.advance(batchDuration.milliseconds / 2)
+
+        def createFileAndAdvenceTime(data: Int, dir: File): Unit = {
+          val file = new File(testSubDir1, data.toString)
+          Files.write(data + "\n", file, StandardCharsets.UTF_8)
+          assert(file.setLastModified(clock.getTimeMillis()))
+          assert(file.lastModified === clock.getTimeMillis())
+          logInfo("Created file " + file)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
+          clock.advance(batchDuration.milliseconds)
+          eventually(eventuallyTimeout) {
+            assert(batchCounter.getNumCompletedBatches === data)
+          }
+        }
+        // Over time, create files in the temp directory 1
+        val input1 = Seq(1, 2, 3, 4, 5)
+        input1.foreach(i => createFileAndAdvenceTime(i, testSubDir1))
+
+        // Over time, create files in the temp directory 1
+        val input2 = Seq(6, 7, 8, 9, 10)
+        input2.foreach(i => createFileAndAdvenceTime(i, testSubDir2))
+
+        // Verify that all the files have been read
+        val expectedOutput = (input1 ++ input2).map(_.toString).toSet
+        assert(outputQueue.asScala.flatten.toSet === expectedOutput)
+      }
+    } finally {
+      if (testDir != null) Utils.deleteRecursively(testDir)
+    }
+  }
+
   test("multi-thread receiver") {
     // set up the test receiver
     val numThreads = 10
@@ -206,7 +259,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val testReceiver = new MultiThreadTestReceiver(numThreads, numRecordsPerThread)
     MultiThreadTestReceiver.haveAllThreadsFinished = false
     val outputQueue = new ConcurrentLinkedQueue[Seq[Long]]
-    def output: Iterable[Long] = outputQueue.asScala.flatMap(x => x)
+    def output: Iterable[Long] = outputQueue.asScala.flatten
 
     // set up the network stream using the test receiver
     withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
@@ -363,10 +416,10 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   def testFileStream(newFilesOnly: Boolean) {
-    val testDir: File = null
+    var testDir: File = null
     try {
       val batchDuration = Seconds(2)
-      val testDir = Utils.createTempDir()
+      testDir = Utils.createTempDir()
       // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, StandardCharsets.UTF_8)

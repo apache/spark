@@ -60,6 +60,8 @@ object AttributeSet {
 class AttributeSet private (val baseSet: Set[AttributeEquals])
   extends Traversable[Attribute] with Serializable {
 
+  override def hashCode: Int = baseSet.hashCode()
+
   /** Returns true if the members of this AttributeSet and other are the same. */
   override def equals(other: Any): Boolean = other match {
     case otherSet: AttributeSet =>
@@ -119,7 +121,12 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
 
   // We must force toSeq to not be strict otherwise we end up with a [[Stream]] that captures all
   // sorts of things in its closure.
-  override def toSeq: Seq[Attribute] = baseSet.map(_.a).toArray.toSeq
+  override def toSeq: Seq[Attribute] = {
+    // We need to keep a deterministic output order for `baseSet` because this affects a variable
+    // order in generated code (e.g., `GenerateColumnAccessor`).
+    // See SPARK-18394 for details.
+    baseSet.map(_.a).toSeq.sortBy { a => (a.name, a.exprId.id) }
+  }
 
   override def toString: String = "{" + baseSet.map(_.a).mkString(", ") + "}"
 

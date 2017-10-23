@@ -21,11 +21,19 @@ import scala.math.Ordering
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.sql.catalyst.util.ArrayData
 
+/**
+ * Companion object for ArrayType.
+ *
+ * @since 1.3.0
+ */
+@InterfaceStability.Stable
 object ArrayType extends AbstractDataType {
-  /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
+  /**
+   * Construct a [[ArrayType]] object with the given element type. The `containsNull` is true.
+   */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, containsNull = true)
 
   override private[sql] def defaultConcreteType: DataType = ArrayType(NullType, containsNull = true)
@@ -37,13 +45,11 @@ object ArrayType extends AbstractDataType {
   override private[sql] def simpleString: String = "array"
 }
 
-
 /**
- * :: DeveloperApi ::
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *
- * Please use [[DataTypes.createArrayType()]] to create a specific instance.
+ * Please use `DataTypes.createArrayType()` to create a specific instance.
  *
  * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
  * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
@@ -51,8 +57,10 @@ object ArrayType extends AbstractDataType {
  *
  * @param elementType The data type of values.
  * @param containsNull Indicates if values have `null` values
+ *
+ * @since 1.3.0
  */
-@DeveloperApi
+@InterfaceStability.Stable
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
 
   /** No-arg constructor for kryo. */
@@ -70,12 +78,14 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       ("containsNull" -> containsNull)
 
   /**
-   * The default size of a value of the ArrayType is 100 * the default size of the element type.
-   * (We assume that there are 100 elements).
+   * The default size of a value of the ArrayType is the default size of the element type.
+   * We assume that there is only 1 element on average in an array. See SPARK-18853.
    */
-  override def defaultSize: Int = 100 * elementType.defaultSize
+  override def defaultSize: Int = 1 * elementType.defaultSize
 
   override def simpleString: String = s"array<${elementType.simpleString}>"
+
+  override def catalogString: String = s"array<${elementType.catalogString}>"
 
   override def sql: String = s"ARRAY<${elementType.sql}>"
 

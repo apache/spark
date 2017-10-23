@@ -17,188 +17,114 @@
 
 package org.apache.spark.sql.hive
 
+import java.util.Locale
+
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
-import org.apache.spark.sql.catalyst.catalog.{FunctionResourceLoader, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.BucketSpec
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResourceLoader, GlobalTempViewManager, SessionCatalog}
+import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
+import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
-import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.types.{DecimalType, DoubleType}
 
 
 private[sql] class HiveSessionCatalog(
     externalCatalog: HiveExternalCatalog,
-    client: HiveClient,
-    context: HiveContext,
-    functionResourceLoader: FunctionResourceLoader,
+    globalTempViewManager: GlobalTempViewManager,
+    val metastoreCatalog: HiveMetastoreCatalog,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf)
-  extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
-
-  override def setCurrentDatabase(db: String): Unit = {
-    super.setCurrentDatabase(db)
-    client.setCurrentDatabase(db)
-  }
-
-  override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.contains(table)) {
-      val newName = name.copy(table = table)
-      metastoreCatalog.lookupRelation(newName, alias)
-    } else {
-      val relation = tempTables(table)
-      val tableWithQualifiers = SubqueryAlias(table, relation)
-      // If an alias was specified by the lookup, wrap the plan in a subquery so that
-      // attributes are properly qualified with this alias.
-      alias.map(a => SubqueryAlias(a, tableWithQualifiers)).getOrElse(tableWithQualifiers)
-    }
-  }
-
-  // ----------------------------------------------------------------
-  // | Methods and fields for interacting with HiveMetastoreCatalog |
-  // ----------------------------------------------------------------
-
-  override def getDefaultDBPath(db: String): String = {
-    val defaultPath = context.sessionState.hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
-    new Path(new Path(defaultPath), db + ".db").toString
-  }
-
-  // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
-  // essentially a cache for metastore tables. However, it relies on a lot of session-specific
-  // things so it would be a lot of work to split its functionality between HiveSessionCatalog
-  // and HiveCatalog. We should still do it at some point...
-  private val metastoreCatalog = new HiveMetastoreCatalog(client, context)
-
-  val ParquetConversions: Rule[LogicalPlan] = metastoreCatalog.ParquetConversions
-  val OrcConversions: Rule[LogicalPlan] = metastoreCatalog.OrcConversions
-  val CreateTables: Rule[LogicalPlan] = metastoreCatalog.CreateTables
-  val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
-
-  override def refreshTable(name: TableIdentifier): Unit = {
-    metastoreCatalog.refreshTable(name)
-  }
-
-  override def invalidateTable(name: TableIdentifier): Unit = {
-    metastoreCatalog.invalidateTable(name)
-  }
-
-  def invalidateCache(): Unit = {
-    metastoreCatalog.cachedDataSourceTables.invalidateAll()
-  }
-
-  def createDataSourceTable(
-      name: TableIdentifier,
-      userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      bucketSpec: Option[BucketSpec],
-      provider: String,
-      options: Map[String, String],
-      isExternal: Boolean): Unit = {
-    metastoreCatalog.createDataSourceTable(
-      name, userSpecifiedSchema, partitionColumns, bucketSpec, provider, options, isExternal)
-  }
-
-  def hiveDefaultTableFilePath(name: TableIdentifier): String = {
-    metastoreCatalog.hiveDefaultTableFilePath(name)
-  }
-
-  // For testing only
-  private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    val key = metastoreCatalog.getQualifiedTableName(table)
-    metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
-  }
-
-  override def makeFunctionBuilder(funcName: String, className: String): FunctionBuilder = {
-    makeFunctionBuilder(funcName, Utils.classForName(className))
-  }
+    conf: SQLConf,
+    hadoopConf: Configuration,
+    parser: ParserInterface,
+    functionResourceLoader: FunctionResourceLoader)
+  extends SessionCatalog(
+      externalCatalog,
+      globalTempViewManager,
+      functionRegistry,
+      conf,
+      hadoopConf,
+      parser,
+      functionResourceLoader) {
 
   /**
-   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   * Constructs a [[Expression]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
    */
-  private def makeFunctionBuilder(name: String, clazz: Class[_]): FunctionBuilder = {
-    // When we instantiate hive UDF wrapper class, we may throw exception if the input
-    // expressions don't satisfy the hive UDF, such as type mismatch, input number
-    // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
-    (children: Seq[Expression]) => {
+  override def makeFunctionExpression(
+      name: String,
+      clazz: Class[_],
+      input: Seq[Expression]): Expression = {
+
+    Try(super.makeFunctionExpression(name, clazz, input)).getOrElse {
+      var udfExpr: Option[Expression] = None
       try {
+        // When we instantiate hive UDF wrapper class, we may throw exception if the input
+        // expressions don't satisfy the hive UDF, such as type mismatch, input number
+        // mismatch, etc. Here we catch the exception and throw AnalysisException instead.
         if (classOf[UDF].isAssignableFrom(clazz)) {
-          val udf = HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udf.dataType // Force it to check input data types.
-          udf
+          udfExpr = Some(HiveSimpleUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[GenericUDF].isAssignableFrom(clazz)) {
-          val udf = HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udf.dataType // Force it to check input data types.
-          udf
+          udfExpr = Some(HiveGenericUDF(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(clazz)) {
-          val udaf = HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), children)
-          udaf.dataType // Force it to check input data types.
-          udaf
+          udfExpr = Some(HiveUDAFFunction(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[UDAF].isAssignableFrom(clazz)) {
-          val udaf = HiveUDAFFunction(
+          udfExpr = Some(HiveUDAFFunction(
             name,
             new HiveFunctionWrapper(clazz.getName),
-            children,
-            isUDAFBridgeRequired = true)
-          udaf.dataType  // Force it to check input data types.
-          udaf
+            input,
+            isUDAFBridgeRequired = true))
+          udfExpr.get.dataType // Force it to check input data types.
         } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
-          val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udtf.elementTypes // Force it to check input data types.
-          udtf
-        } else {
-          throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
+          udfExpr = Some(HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), input))
+          udfExpr.get.asInstanceOf[HiveGenericUDTF].elementSchema // Force it to check data types.
         }
       } catch {
-        case ae: AnalysisException =>
-          throw ae
         case NonFatal(e) =>
           val analysisException =
-            new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}': $e")
+            new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}': $e")
           analysisException.setStackTrace(e.getStackTrace)
           throw analysisException
+      }
+      udfExpr.getOrElse {
+        throw new AnalysisException(s"No handler for UDF/UDAF/UDTF '${clazz.getCanonicalName}'")
       }
     }
   }
 
-  // We have a list of Hive built-in functions that we do not support. So, we will check
-  // Hive's function registry and lazily load needed functions into our own function registry.
-  // Those Hive built-in functions are
-  // assert_true, collect_list, collect_set, compute_stats, context_ngrams, create_union,
-  // current_user ,elt, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
-  // histogram_numeric, in_file, index, inline, java_method, map_keys, map_values,
-  // matchpath, ngrams, noop, noopstreaming, noopwithmap, noopwithmapstreaming,
-  // parse_url, parse_url_tuple, percentile, percentile_approx, posexplode, reflect, reflect2,
-  // regexp, sentences, stack, std, str_to_map, windowingtablefunction, xpath, xpath_boolean,
-  // xpath_double, xpath_float, xpath_int, xpath_long, xpath_number,
-  // xpath_short, and xpath_string.
-  override def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    // TODO: Once lookupFunction accepts a FunctionIdentifier, we should refactor this method to
-    // if (super.functionExists(name)) {
-    //   super.lookupFunction(name, children)
-    // } else {
-    //   // This function is a Hive builtin function.
-    //   ...
-    // }
-    Try(super.lookupFunction(name, children)) match {
+  override def lookupFunction(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    try {
+      lookupFunction0(name, children)
+    } catch {
+      case NonFatal(_) =>
+        // SPARK-16228 ExternalCatalog may recognize `double`-type only.
+        val newChildren = children.map { child =>
+          if (child.dataType.isInstanceOf[DecimalType]) Cast(child, DoubleType) else child
+        }
+        lookupFunction0(name, newChildren)
+    }
+  }
+
+  private def lookupFunction0(name: FunctionIdentifier, children: Seq[Expression]): Expression = {
+    val database = name.database.map(formatDatabaseName)
+    val funcName = name.copy(database = database)
+    Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(name)) {
+        if (functionRegistry.functionExists(funcName)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -207,46 +133,51 @@ private[sql] class HiveSessionCatalog(
           // This function is not in functionRegistry, let's try to load it as a Hive's
           // built-in function.
           // Hive is case insensitive.
-          val functionName = name.toLowerCase
-          // TODO: This may not really work for current_user because current_user is not evaluated
-          // with session info.
-          // We do not need to use executionHive at here because we only load
-          // Hive's builtin functions, which do not need current db.
+          val functionName = funcName.unquotedString.toLowerCase(Locale.ROOT)
+          if (!hiveFunctions.contains(functionName)) {
+            failFunctionLookup(funcName)
+          }
+
+          // TODO: Remove this fallback path once we implement the list of fallback functions
+          // defined below in hiveFunctions.
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(name))
+                failFunctionLookup(funcName))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(name)
+              case NonFatal(e) => failFunctionLookup(funcName)
             }
           }
           val className = functionInfo.getFunctionClass.getName
-          val builder = makeFunctionBuilder(functionName, className)
+          val functionIdentifier =
+            FunctionIdentifier(functionName.toLowerCase(Locale.ROOT), database)
+          val func = CatalogFunction(functionIdentifier, className, Nil)
           // Put this Hive built-in function to our function registry.
-          val info = new ExpressionInfo(className, functionName)
-          createTempFunction(functionName, info, builder, ignoreIfExists = false)
+          registerFunction(func, overrideIfExists = false)
           // Now, we need to create the Expression.
-          functionRegistry.lookupFunction(functionName, children)
+          functionRegistry.lookupFunction(functionIdentifier, children)
         }
     }
   }
 
-  // Pre-load a few commonly used Hive built-in functions.
-  HiveSessionCatalog.preloadedHiveBuiltinFunctions.foreach {
-    case (functionName, clazz) =>
-      val builder = makeFunctionBuilder(functionName, clazz)
-      val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
-      createTempFunction(functionName, info, builder, ignoreIfExists = false)
+  // TODO Removes this method after implementing Spark native "histogram_numeric".
+  override def functionExists(name: FunctionIdentifier): Boolean = {
+    super.functionExists(name) || hiveFunctions.contains(name.funcName)
   }
-}
 
-private[sql] object HiveSessionCatalog {
-  // This is the list of Hive's built-in functions that are commonly used and we want to
-  // pre-load when we create the FunctionRegistry.
-  val preloadedHiveBuiltinFunctions =
-    ("collect_set", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectSet]) ::
-    ("collect_list", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectList]) :: Nil
+  /** List of functions we pass over to Hive. Note that over time this list should go to 0. */
+  // We have a list of Hive built-in functions that we do not support. So, we will check
+  // Hive's function registry and lazily load needed functions into our own function registry.
+  // List of functions we are explicitly not supporting are:
+  // compute_stats, context_ngrams, create_union,
+  // current_user, ewah_bitmap, ewah_bitmap_and, ewah_bitmap_empty, ewah_bitmap_or, field,
+  // in_file, index, matchpath, ngrams, noop, noopstreaming, noopwithmap,
+  // noopwithmapstreaming, parse_url_tuple, reflect2, windowingtablefunction.
+  // Note: don't forget to update SessionCatalog.isTemporaryFunction
+  private val hiveFunctions = Seq(
+    "histogram_numeric"
+  )
 }

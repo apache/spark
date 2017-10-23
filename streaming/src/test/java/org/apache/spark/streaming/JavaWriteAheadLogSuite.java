@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.common.base.Function;
 import com.google.common.collect.Iterators;
 import org.apache.spark.SparkConf;
 import org.apache.spark.network.util.JavaUtils;
@@ -81,12 +80,7 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
 
   @Override
   public Iterator<ByteBuffer> readAll() {
-    return Iterators.transform(records.iterator(), new Function<Record,ByteBuffer>() {
-      @Override
-      public ByteBuffer apply(Record input) {
-        return input.buffer;
-      }
-    });
+    return Iterators.transform(records.iterator(), input -> input.buffer);
   }
 
   @Override
@@ -114,7 +108,7 @@ public class JavaWriteAheadLogSuite extends WriteAheadLog {
     String data1 = "data1";
     WriteAheadLogRecordHandle handle = wal.write(JavaUtils.stringToBytes(data1), 1234);
     Assert.assertTrue(handle instanceof JavaWriteAheadLogSuiteHandle);
-    Assert.assertEquals(JavaUtils.bytesToString(wal.read(handle)), data1);
+    Assert.assertEquals(data1, JavaUtils.bytesToString(wal.read(handle)));
 
     wal.write(JavaUtils.stringToBytes("data2"), 1235);
     wal.write(JavaUtils.stringToBytes("data3"), 1236);

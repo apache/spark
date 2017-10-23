@@ -23,9 +23,11 @@
 .broadcastValues <- new.env()
 .broadcastIdToName <- new.env()
 
-# @title S4 class that represents a Broadcast variable
-# @description Broadcast variables can be created using the broadcast
-#              function from a \code{SparkContext}.
+# S4 class that represents a Broadcast variable
+#
+# Broadcast variables can be created using the broadcast
+# function from a \code{SparkContext}.
+#
 # @rdname broadcast-class
 # @seealso broadcast
 #

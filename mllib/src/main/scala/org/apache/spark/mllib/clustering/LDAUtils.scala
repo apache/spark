@@ -25,11 +25,11 @@ import breeze.numerics._
 private[clustering] object LDAUtils {
   /**
    * Log Sum Exp with overflow protection using the identity:
-   * For any a: \log \sum_{n=1}^N \exp\{x_n\} = a + \log \sum_{n=1}^N \exp\{x_n - a\}
+   * For any a: $\log \sum_{n=1}^N \exp\{x_n\} = a + \log \sum_{n=1}^N \exp\{x_n - a\}$
    */
   private[clustering] def logSumExp(x: BDV[Double]): Double = {
     val a = max(x)
-    a + log(sum(exp(x :- a)))
+    a + log(sum(exp(x -:- a)))
   }
 
   /**

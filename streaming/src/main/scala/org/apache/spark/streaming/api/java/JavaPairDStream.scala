@@ -74,7 +74,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    */
   def repartition(numPartitions: Int): JavaPairDStream[K, V] = dstream.repartition(numPartitions)
 
-  /** Method that generates a RDD for the given Duration */
+  /** Method that generates an RDD for the given Duration */
   def compute(validTime: Time): JavaPairRDD[K, V] = {
     dstream.compute(validTime) match {
       case Some(rdd) => new JavaPairRDD(rdd)
@@ -336,7 +336,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * However, it is applicable to only "invertible reduce functions".
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    * @param reduceFunc associative and commutative reduce function
-   * @param invReduceFunc inverse function
+   * @param invReduceFunc inverse function; such that for all y, invertible x:
+   *                      `invReduceFunc(reduceFunc(x, y), x) = y`
    * @param windowDuration width of the window; must be a multiple of this DStream's
    *                       batching interval
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
@@ -433,8 +434,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * Return a [[JavaMapWithStateDStream]] by applying a function to every key-value element of
    * `this` stream, while maintaining some state data for each unique key. The mapping function
    * and other specification (e.g. partitioners, timeouts, initial state data, etc.) of this
-   * transformation can be specified using [[StateSpec]] class. The state data is accessible in
-   * as a parameter of type [[State]] in the mapping function.
+   * transformation can be specified using `StateSpec` class. The state data is accessible in
+   * as a parameter of type `State` in the mapping function.
    *
    * Example of using `mapWithState`:
    * {{{
@@ -470,9 +471,10 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
       val list: JList[V] = values.asJava
       val scalaState: Optional[S] = JavaUtils.optionToOptional(state)
       val result: Optional[S] = in.apply(list, scalaState)
-      result.isPresent match {
-        case true => Some(result.get())
-        case _ => None
+      if (result.isPresent) {
+        Some(result.get())
+      } else {
+        None
       }
     }
     scalaFunc

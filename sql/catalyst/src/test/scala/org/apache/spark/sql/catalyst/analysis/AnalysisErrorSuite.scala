@@ -23,8 +23,9 @@ import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count, Max}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.{Cross, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
@@ -110,7 +111,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "scalar subquery with 2 columns",
      testRelation.select(
        (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
-     "Scalar subquery must return only one column, but got 2" :: Nil)
+       "Scalar subquery must return only one column, but got 2" :: Nil)
 
   errorTest(
     "scalar subquery with no column",
@@ -151,7 +152,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     "not supported within a window function" :: Nil)
 
   errorTest(
-    "distinct window function",
+    "distinct aggregate function in window",
     testRelation2.select(
       WindowExpression(
         AggregateExpression(Count(UnresolvedAttribute("b")), Complete, isDistinct = true),
@@ -162,6 +163,26 @@ class AnalysisErrorSuite extends AnalysisTest {
     "Distinct window functions are not supported" :: Nil)
 
   errorTest(
+    "distinct function",
+    CatalystSqlParser.parsePlan("SELECT hex(DISTINCT a) FROM TaBlE"),
+    "hex does not support the modifier DISTINCT" :: Nil)
+
+  errorTest(
+    "distinct window function",
+    CatalystSqlParser.parsePlan("SELECT percent_rank(DISTINCT a) over () FROM TaBlE"),
+    "percent_rank does not support the modifier DISTINCT" :: Nil)
+
+  errorTest(
+    "nested aggregate functions",
+    testRelation.groupBy('a)(
+      AggregateExpression(
+        Max(AggregateExpression(Count(Literal(1)), Complete, isDistinct = false)),
+        Complete,
+        isDistinct = false)),
+    "not allowed to use an aggregate function in the argument of another aggregate function." :: Nil
+  )
+
+  errorTest(
     "offset window function",
     testRelation2.select(
       WindowExpression(
@@ -169,7 +190,7 @@ class AnalysisErrorSuite extends AnalysisTest {
         WindowSpecDefinition(
           UnresolvedAttribute("a") :: Nil,
           SortOrder(UnresolvedAttribute("b"), Ascending) :: Nil,
-          SpecifiedWindowFrame(RangeFrame, ValueFollowing(1), ValueFollowing(2)))).as('window)),
+          SpecifiedWindowFrame(RangeFrame, Literal(1), Literal(2)))).as('window)),
     "window frame" :: "must match the required frame" :: Nil)
 
   errorTest(
@@ -267,6 +288,36 @@ class AnalysisErrorSuite extends AnalysisTest {
       testRelation.output.length.toString :: Nil)
 
   errorTest(
+    "union with incompatible column types",
+    testRelation.union(nestedRelation),
+    "union" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "union with a incompatible column type and compatible column types",
+    testRelation3.union(testRelation4),
+    "union"  :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
+    "intersect with incompatible column types",
+    testRelation.intersect(nestedRelation),
+    "intersect" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "intersect with a incompatible column type and compatible column types",
+    testRelation3.intersect(testRelation4),
+    "intersect" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
+    "except with incompatible column types",
+    testRelation.except(nestedRelation),
+    "except" :: "the compatible column types" :: Nil)
+
+  errorTest(
+    "except with a incompatible column type and compatible column types",
+    testRelation3.except(testRelation4),
+    "except" :: "the compatible column types" :: "map" :: "decimal" :: Nil)
+
+  errorTest(
     "SPARK-9955: correct error message for aggregate",
     // When parse SQL string, we will wrap aggregate expressions with UnresolvedAlias.
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
@@ -328,6 +379,31 @@ class AnalysisErrorSuite extends AnalysisTest {
       "The start time" :: "must be greater than or equal to 0." :: Nil
   )
 
+  errorTest(
+    "generator nested in expressions",
+    listRelation.select(Explode('list) + 1),
+    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+      :: Nil
+  )
+
+  errorTest(
+    "generator appears in operator which is not Project",
+    listRelation.sortBy(Explode('list).asc),
+    "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+  )
+
+  errorTest(
+    "num_rows in limit clause must be equal to or greater than 0",
+    listRelation.limit(-1),
+    "The limit expression must be equal to or greater than 0, but got -1" :: Nil
+  )
+
+  errorTest(
+    "more than one generators in SELECT",
+    listRelation.select(Explode('list), Explode('list)),
+    "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
+  )
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
@@ -345,7 +421,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   }
 
   test("error test for self-join") {
-    val join = Join(testRelation, testRelation, Inner, None)
+    val join = Join(testRelation, testRelation, Cross, None)
     val error = intercept[AnalysisException] {
       SimpleAnalyzer.checkAnalysis(join)
     }
@@ -363,11 +439,10 @@ class AnalysisErrorSuite extends AnalysisTest {
             AttributeReference("a", dataType)(exprId = ExprId(2)),
             AttributeReference("b", IntegerType)(exprId = ExprId(1))))
 
-      shouldSuccess match {
-        case true =>
-          assertAnalysisSuccess(plan, true)
-        case false =>
-          assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
+      if (shouldSuccess) {
+        assertAnalysisSuccess(plan, true)
+      } else {
+        assertAnalysisError(plan, "expression `a` cannot be used as a grouping expression" :: Nil)
       }
     }
 
@@ -415,41 +490,29 @@ class AnalysisErrorSuite extends AnalysisTest {
         "another aggregate function." :: Nil)
   }
 
-  test("Join can't work on binary and map types") {
-    val plan =
-      Join(
-        LocalRelation(
-          AttributeReference("a", BinaryType)(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", BinaryType)(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
-        Some(EqualTo(AttributeReference("a", BinaryType)(exprId = ExprId(2)),
-          AttributeReference("c", BinaryType)(exprId = ExprId(4)))))
+  test("Join can work on binary types but can't work on map types") {
+    val left = LocalRelation('a.binary, 'b.map(StringType, StringType))
+    val right = LocalRelation('c.binary, 'd.map(StringType, StringType))
 
-    assertAnalysisError(plan, "binary type expression `a` cannot be used in join conditions" :: Nil)
+    val plan1 = left.join(
+      right,
+      joinType = Cross,
+      condition = Some('a === 'c))
 
-    val plan2 =
-      Join(
-        LocalRelation(
-          AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("b", IntegerType)(exprId = ExprId(1))),
-        LocalRelation(
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)),
-          AttributeReference("d", IntegerType)(exprId = ExprId(3))),
-        Inner,
-        Some(EqualTo(AttributeReference("a", MapType(IntegerType, StringType))(exprId = ExprId(2)),
-          AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
+    assertAnalysisSuccess(plan1)
 
-    assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
+    val plan2 = left.join(
+      right,
+      joinType = Cross,
+      condition = Some('b === 'd))
+    assertAnalysisError(plan2, "EqualTo does not support ordering on type MapType" :: Nil)
   }
 
   test("PredicateSubQuery is used outside of a filter") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val plan = Project(
-      Seq(a, Alias(InSubQuery(a, LocalRelation(b)), "c")()),
+      Seq(a, Alias(In(a, Seq(ListQuery(LocalRelation(b)))), "c")()),
       LocalRelation(a))
     assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
   }
@@ -458,11 +521,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(Cast(InSubQuery(a, LocalRelation(b)), BooleanType), LocalRelation(a))
-    assertAnalysisError(plan1, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+    val plan1 = Filter(Cast(Not(In(a, Seq(ListQuery(LocalRelation(b))))), BooleanType),
+      LocalRelation(a))
+    assertAnalysisError(plan1,
+      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
 
-    val plan2 = Filter(Or(InSubQuery(a, LocalRelation(b)), c), LocalRelation(a, c))
-    assertAnalysisError(plan2, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+    val plan2 = Filter(Or(Not(In(a, Seq(ListQuery(LocalRelation(b))))), c), LocalRelation(a, c))
+    assertAnalysisError(plan2,
+      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -474,7 +540,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(
         Join(
           LocalRelation(b),
-          Filter(EqualTo(a, c), LocalRelation(c)),
+          Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)),
           LeftOuter,
           Option(EqualTo(b, c)))),
       LocalRelation(a))
@@ -483,7 +549,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     val plan2 = Filter(
       Exists(
         Join(
-          Filter(EqualTo(a, c), LocalRelation(c)),
+          Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)),
           LocalRelation(b),
           RightOuter,
           Option(EqualTo(b, c)))),
@@ -491,13 +557,26 @@ class AnalysisErrorSuite extends AnalysisTest {
     assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan3 = Filter(
-      Exists(Aggregate(Seq.empty, Seq.empty, Filter(EqualTo(a, c), LocalRelation(c)))),
+      Exists(Union(LocalRelation(b),
+        Filter(EqualTo(UnresolvedAttribute("a"), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
 
     val plan4 = Filter(
-      Exists(Union(LocalRelation(b), Filter(EqualTo(a, c), LocalRelation(c)))),
+      Exists(
+        Limit(1,
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
+      ),
       LocalRelation(a))
     assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan5 = Filter(
+      Exists(
+        Sample(0.0, 0.5, false, 1L,
+          Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b))).select('b)
+      ),
+      LocalRelation(a))
+    assertAnalysisError(plan5,
+                        "Accessing outer query column is not allowed in" :: Nil)
   }
 }

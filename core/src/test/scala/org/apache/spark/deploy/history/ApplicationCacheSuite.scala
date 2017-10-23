@@ -23,7 +23,6 @@ import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
-import scala.language.postfixOps
 
 import com.codahale.metrics.Counter
 import com.google.common.cache.LoadingCache
@@ -34,7 +33,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.Matchers
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
@@ -79,7 +78,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       logDebug(s"getAppUI($appId, $attemptId)")
       getAppUICount += 1
       instances.get(CacheKey(appId, attemptId)).map( e =>
-        LoadedAppUI(e.ui, updateProbe(appId, attemptId, e.probeTime)))
+        LoadedAppUI(e.ui, () => updateProbe(appId, attemptId, e.probeTime)))
     }
 
     override def attachSparkUI(
@@ -123,7 +122,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
         completed: Boolean,
         timestamp: Long): Unit = {
       instances += (CacheKey(appId, attemptId) ->
-          new CacheEntry(ui, completed, updateProbe(appId, attemptId, timestamp), timestamp))
+          new CacheEntry(ui, completed, () => updateProbe(appId, attemptId, timestamp), timestamp))
     }
 
     /**
@@ -178,7 +177,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
       ended: Long): SparkUI = {
     val info = new ApplicationInfo(name, name, Some(1), Some(1), Some(1), Some(64),
       Seq(new AttemptInfo(attemptId, new Date(started), new Date(ended),
-        new Date(ended), ended - started, "user", completed)))
+        new Date(ended), ended - started, "user", completed, org.apache.spark.SPARK_VERSION)))
     val ui = mock[SparkUI]
     when(ui.getApplicationInfoList).thenReturn(List(info).iterator)
     when(ui.getAppName).thenReturn(name)
@@ -254,7 +253,7 @@ class ApplicationCacheSuite extends SparkFunSuite with Logging with MockitoSugar
     assertNotFound(appId, None)
   }
 
-  test("Test that if an attempt ID is is set, it must be used in lookups") {
+  test("Test that if an attempt ID is set, it must be used in lookups") {
     val operations = new StubCacheOperations()
     val clock = new ManualClock(1)
     implicit val cache = new ApplicationCache(operations, retainedApplications = 10, clock = clock)

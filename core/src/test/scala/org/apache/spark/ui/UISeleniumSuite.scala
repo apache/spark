@@ -18,6 +18,7 @@
 package org.apache.spark.ui
 
 import java.net.{HttpURLConnection, URL}
+import java.util.Locale
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
@@ -39,7 +40,7 @@ import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.deploy.history.HistoryServerSuite
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.status.api.v1.{JacksonMessageWriter, StageStatus}
+import org.apache.spark.status.api.v1.{JacksonMessageWriter, RDDDataDistribution, StageStatus}
 
 private[spark] class SparkUICssErrorHandler extends DefaultCssErrorHandler {
 
@@ -103,6 +104,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       .set("spark.ui.enabled", "true")
       .set("spark.ui.port", "0")
       .set("spark.ui.killEnabled", killEnabled.toString)
+      .set("spark.memory.offHeap.size", "64m")
     val sc = new SparkContext(conf)
     assert(sc.ui.isDefined)
     sc
@@ -151,6 +153,39 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       val updatedRddJson = getJson(ui, "storage/rdd/0")
       (updatedRddJson  \ "storageLevel").extract[String] should be (
         StorageLevels.MEMORY_ONLY.description)
+
+      val dataDistributions0 =
+        (updatedRddJson \ "dataDistribution").extract[Seq[RDDDataDistribution]]
+      dataDistributions0.length should be (1)
+      val dist0 = dataDistributions0.head
+
+      dist0.onHeapMemoryUsed should not be (None)
+      dist0.memoryUsed should be (dist0.onHeapMemoryUsed.get)
+      dist0.onHeapMemoryRemaining should not be (None)
+      dist0.offHeapMemoryRemaining should not be (None)
+      dist0.memoryRemaining should be (
+        dist0.onHeapMemoryRemaining.get + dist0.offHeapMemoryRemaining.get)
+      dist0.onHeapMemoryUsed should not be (Some(0L))
+      dist0.offHeapMemoryUsed should be (Some(0L))
+
+      rdd.unpersist()
+      rdd.persist(StorageLevels.OFF_HEAP).count()
+      val updatedStorageJson1 = getJson(ui, "storage/rdd")
+      updatedStorageJson1.children.length should be (1)
+      val updatedRddJson1 = getJson(ui, "storage/rdd/0")
+      val dataDistributions1 =
+        (updatedRddJson1 \ "dataDistribution").extract[Seq[RDDDataDistribution]]
+      dataDistributions1.length should be (1)
+      val dist1 = dataDistributions1.head
+
+      dist1.offHeapMemoryUsed should not be (None)
+      dist1.memoryUsed should be (dist1.offHeapMemoryUsed.get)
+      dist1.onHeapMemoryRemaining should not be (None)
+      dist1.offHeapMemoryRemaining should not be (None)
+      dist1.memoryRemaining should be (
+        dist1.onHeapMemoryRemaining.get + dist1.offHeapMemoryRemaining.get)
+      dist1.onHeapMemoryUsed should be (Some(0L))
+      dist1.offHeapMemoryUsed should not be (Some(0L))
     }
   }
 
@@ -197,6 +232,22 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       runSlowJob(sc)
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = false)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        goToUi(sc, "/jobs")
+        assert(!hasKillLink)
+      }
+    }
+
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      runSlowJob(sc)
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/stages")
         assert(hasKillLink)
       }
@@ -218,7 +269,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
-        tableHeaders should not contain "Job Id (Job Group)"
+        tableHeaders(0) should not startWith "Job Id (Job Group)"
       }
       // Once at least one job has been run in a job group, then we should display the group name:
       sc.setJobGroup("my-job-group", "my-job-group-description")
@@ -226,7 +277,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         val tableHeaders = findAll(cssSelector("th")).map(_.text).toSeq
-        tableHeaders should contain ("Job Id (Job Group)")
+        // Can suffix up/down arrow in the header
+        tableHeaders(0) should startWith ("Job Id (Job Group)")
       }
 
       val jobJson = getJson(sc.ui.get, "jobs")
@@ -268,12 +320,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         find(cssSelector(".stage-progress-cell")).get.text should be ("2/2 (1 failed)")
-        // Ideally, the following test would pass, but currently we overcount completed tasks
-        // if task recomputations occur:
-        // find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
-        // Instead, we guarantee that the total number of tasks is always correct, while the number
-        // of completed tasks may be higher:
-        find(cssSelector(".progress-cell .progress")).get.text should be ("3/2 (1 failed)")
+        find(cssSelector(".progress-cell .progress")).get.text should be ("2/2 (1 failed)")
       }
       val jobJson = getJson(sc.ui.get, "jobs")
       (jobJson \ "numTasks").extract[Int]should be (2)
@@ -402,8 +449,8 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         goToUi(sc, "/jobs")
         findAll(cssSelector("tbody tr a")).foreach { link =>
-          link.text.toLowerCase should include ("count")
-          link.text.toLowerCase should not include "unknown"
+          link.text.toLowerCase(Locale.ROOT) should include ("count")
+          link.text.toLowerCase(Locale.ROOT) should not include "unknown"
         }
       }
     }
@@ -452,23 +499,27 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   test("kill stage POST/GET response is correct") {
-    def getResponseCode(url: URL, method: String): Int = {
-      val connection = url.openConnection().asInstanceOf[HttpURLConnection]
-      connection.setRequestMethod(method)
-      connection.connect()
-      val code = connection.getResponseCode()
-      connection.disconnect()
-      code
-    }
-
     withSpark(newSparkContext(killEnabled = true)) { sc =>
       sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
       eventually(timeout(5 seconds), interval(50 milliseconds)) {
         val url = new URL(
-          sc.ui.get.appUIAddress.stripSuffix("/") + "/stages/stage/kill/?id=0&terminate=true")
+          sc.ui.get.webUrl.stripSuffix("/") + "/stages/stage/kill/?id=0")
         // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
-        getResponseCode(url, "GET") should be (200)
-        getResponseCode(url, "POST") should be (200)
+        TestUtils.httpResponseCode(url, "GET") should be (200)
+        TestUtils.httpResponseCode(url, "POST") should be (200)
+      }
+    }
+  }
+
+  test("kill job POST/GET response is correct") {
+    withSpark(newSparkContext(killEnabled = true)) { sc =>
+      sc.parallelize(1 to 10).map{x => Thread.sleep(10000); x}.countAsync()
+      eventually(timeout(5 seconds), interval(50 milliseconds)) {
+        val url = new URL(
+          sc.ui.get.webUrl.stripSuffix("/") + "/jobs/job/kill/?id=0")
+        // SPARK-6846: should be POST only but YARN AM doesn't proxy POST
+        TestUtils.httpResponseCode(url, "GET") should be (200)
+        TestUtils.httpResponseCode(url, "POST") should be (200)
       }
     }
   }
@@ -599,7 +650,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   test("live UI json application list") {
     withSpark(newSparkContext()) { sc =>
       val appListRawJson = HistoryServerSuite.getUrl(new URL(
-        sc.ui.get.appUIAddress + "/api/v1/applications"))
+        sc.ui.get.webUrl + "/api/v1/applications"))
       val appListJsonAst = JsonMethods.parse(appListRawJson)
       appListJsonAst.children.length should be (1)
       val attempts = (appListJsonAst \ "attempts").children
@@ -619,7 +670,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
         sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
       rdd.count()
 
-      val stage0 = Source.fromURL(sc.ui.get.appUIAddress +
+      val stage0 = Source.fromURL(sc.ui.get.webUrl +
         "/stages/stage/?id=0&attempt=0&expandDagViz=true").mkString
       assert(stage0.contains("digraph G {\n  subgraph clusterstage_0 {\n    " +
         "label=&quot;Stage 0&quot;;\n    subgraph "))
@@ -630,7 +681,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       assert(stage0.contains("{\n      label=&quot;groupBy&quot;;\n      " +
         "2 [label=&quot;MapPartitionsRDD [2]"))
 
-      val stage1 = Source.fromURL(sc.ui.get.appUIAddress +
+      val stage1 = Source.fromURL(sc.ui.get.webUrl +
         "/stages/stage/?id=1&attempt=0&expandDagViz=true").mkString
       assert(stage1.contains("digraph G {\n  subgraph clusterstage_1 {\n    " +
         "label=&quot;Stage 1&quot;;\n    subgraph "))
@@ -641,7 +692,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
       assert(stage1.contains("{\n      label=&quot;groupBy&quot;;\n      " +
         "5 [label=&quot;MapPartitionsRDD [5]"))
 
-      val stage2 = Source.fromURL(sc.ui.get.appUIAddress +
+      val stage2 = Source.fromURL(sc.ui.get.webUrl +
         "/stages/stage/?id=2&attempt=0&expandDagViz=true").mkString
       assert(stage2.contains("digraph G {\n  subgraph clusterstage_2 {\n    " +
         "label=&quot;Stage 2&quot;;\n    subgraph "))
@@ -655,7 +706,7 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   def goToUi(ui: SparkUI, path: String): Unit = {
-    go to (ui.appUIAddress.stripSuffix("/") + path)
+    go to (ui.webUrl.stripSuffix("/") + path)
   }
 
   def parseDate(json: JValue): Long = {
@@ -667,6 +718,6 @@ class UISeleniumSuite extends SparkFunSuite with WebBrowser with Matchers with B
   }
 
   def apiUrl(ui: SparkUI, path: String): URL = {
-    new URL(ui.appUIAddress + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
+    new URL(ui.webUrl + "/api/v1/applications/" + ui.sc.get.applicationId + "/" + path)
   }
 }

@@ -62,12 +62,17 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
       0 -> StreamInputInfo(0, 300L),
       1 -> StreamInputInfo(1, 300L, Map(StreamInputInfo.METADATA_KEY_DESCRIPTION -> "test")))
 
+    // onStreamingStarted
+    listener.onStreamingStarted(StreamingListenerStreamingStarted(100L))
+    listener.startTime should be (100)
+
     // onBatchSubmitted
     val batchInfoSubmitted = BatchInfo(Time(1000), streamIdToInputInfo, 1000, None, None, Map.empty)
     listener.onBatchSubmitted(StreamingListenerBatchSubmitted(batchInfoSubmitted))
     listener.waitingBatches should be (List(BatchUIData(batchInfoSubmitted)))
     listener.runningBatches should be (Nil)
     listener.retainedCompletedBatches should be (Nil)
+    listener.lastReceivedBatch should be (Some(BatchUIData(batchInfoSubmitted)))
     listener.lastCompletedBatch should be (None)
     listener.numUnprocessedBatches should be (1)
     listener.numTotalCompletedBatches should be (0)
@@ -81,6 +86,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.waitingBatches should be (Nil)
     listener.runningBatches should be (List(BatchUIData(batchInfoStarted)))
     listener.retainedCompletedBatches should be (Nil)
+    listener.lastReceivedBatch should be (Some(BatchUIData(batchInfoStarted)))
     listener.lastCompletedBatch should be (None)
     listener.numUnprocessedBatches should be (1)
     listener.numTotalCompletedBatches should be (0)
@@ -123,6 +129,7 @@ class StreamingJobProgressListenerSuite extends TestSuiteBase with Matchers {
     listener.waitingBatches should be (Nil)
     listener.runningBatches should be (Nil)
     listener.retainedCompletedBatches should be (List(BatchUIData(batchInfoCompleted)))
+    listener.lastReceivedBatch should be (Some(BatchUIData(batchInfoCompleted)))
     listener.lastCompletedBatch should be (Some(BatchUIData(batchInfoCompleted)))
     listener.numUnprocessedBatches should be (0)
     listener.numTotalCompletedBatches should be (1)

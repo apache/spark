@@ -23,11 +23,11 @@ import java.nio.channels.{FileChannel, ReadableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Paths, StandardOpenOption}
 import java.util
+import java.util.Collections
+import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
-import scala.concurrent.duration._
 import scala.io.Source
 import scala.language.implicitConversions
-import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.mockito.Matchers.anyString
@@ -35,9 +35,7 @@ import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfterAll
-import org.scalatest.concurrent.Interruptor
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.mock.MockitoSugar
+import org.scalatest.mockito.MockitoSugar
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -57,13 +55,12 @@ class ExecutorClassLoaderSuite
   var tempDir2: File = _
   var url1: String = _
   var urls2: Array[URL] = _
-  var classServer: HttpServer = _
 
   override def beforeAll() {
     super.beforeAll()
     tempDir1 = Utils.createTempDir()
     tempDir2 = Utils.createTempDir()
-    url1 = "file://" + tempDir1
+    url1 = tempDir1.toURI.toURL.toString
     urls2 = List(tempDir2.toURI.toURL).toArray
     childClassNames.foreach(TestUtils.createCompiledClass(_, tempDir1, "1"))
     parentResourceNames.foreach { x =>
@@ -74,15 +71,56 @@ class ExecutorClassLoaderSuite
 
   override def afterAll() {
     try {
-      if (classServer != null) {
-        classServer.stop()
-      }
       Utils.deleteRecursively(tempDir1)
       Utils.deleteRecursively(tempDir2)
       SparkEnv.set(null)
     } finally {
       super.afterAll()
     }
+  }
+
+  test("child over system classloader") {
+    // JavaFileObject for scala.Option class
+    val scalaOptionFile = new SimpleJavaFileObject(
+      URI.create(s"string:///scala/Option.java"),
+      JavaFileObject.Kind.SOURCE) {
+
+      override def getCharContent(ignoreEncodingErrors: Boolean): CharSequence = {
+        "package scala; class Option {}"
+      }
+    }
+    // compile fake scala.Option class
+    ToolProvider
+      .getSystemJavaCompiler
+      .getTask(null, null, null, null, null, Collections.singletonList(scalaOptionFile)).call()
+
+    // create 'scala' dir in tempDir1
+    val scalaDir = new File(tempDir1, "scala")
+    assert(scalaDir.mkdir(), s"Failed to create 'scala' directory in $tempDir1")
+
+    // move the generated class into scala dir
+    val filename = "Option.class"
+    val result = new File(filename)
+    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath)
+
+    val out = new File(scalaDir, filename)
+    Files.move(result, out)
+    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath)
+
+    // construct class loader tree
+    val parentLoader = new URLClassLoader(urls2, null)
+    val classLoader = new ExecutorClassLoader(
+      new SparkConf(), null, url1, parentLoader, true)
+
+    // load 'scala.Option', using ClassforName to do the exact same behavior as
+    // what JavaDeserializationStream does
+
+    // scalastyle:off classforname
+    val optionClass = Class.forName("scala.Option", false, classLoader)
+    // scalastyle:on classforname
+
+    assert(optionClass.getClassLoader == classLoader,
+      "scala.Option didn't come from ExecutorClassLoader")
   }
 
   test("child first") {
@@ -123,8 +161,14 @@ class ExecutorClassLoaderSuite
     val resourceName: String = parentResourceNames.head
     val is = classLoader.getResourceAsStream(resourceName)
     assert(is != null, s"Resource $resourceName not found")
-    val content = Source.fromInputStream(is, "UTF-8").getLines().next()
-    assert(content.contains("resource"), "File doesn't contain 'resource'")
+
+    val bufferedSource = Source.fromInputStream(is, "UTF-8")
+    Utils.tryWithSafeFinally {
+      val content = bufferedSource.getLines().next()
+      assert(content.contains("resource"), "File doesn't contain 'resource'")
+    } {
+      bufferedSource.close()
+    }
   }
 
   test("resources from parent") {
@@ -133,57 +177,14 @@ class ExecutorClassLoaderSuite
     val resourceName: String = parentResourceNames.head
     val resources: util.Enumeration[URL] = classLoader.getResources(resourceName)
     assert(resources.hasMoreElements, s"Resource $resourceName not found")
-    val fileReader = Source.fromInputStream(resources.nextElement().openStream()).bufferedReader()
-    assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
-  }
 
-  test("failing to fetch classes from HTTP server should not leak resources (SPARK-6209)") {
-    // This is a regression test for SPARK-6209, a bug where each failed attempt to load a class
-    // from the driver's class server would leak a HTTP connection, causing the class server's
-    // thread / connection pool to be exhausted.
-    val conf = new SparkConf()
-    val securityManager = new SecurityManager(conf)
-    classServer = new HttpServer(conf, tempDir1, securityManager)
-    classServer.start()
-    // ExecutorClassLoader uses SparkEnv's SecurityManager, so we need to mock this
-    val mockEnv = mock[SparkEnv]
-    when(mockEnv.securityManager).thenReturn(securityManager)
-    SparkEnv.set(mockEnv)
-    // Create an ExecutorClassLoader that's configured to load classes from the HTTP server
-    val parentLoader = new URLClassLoader(Array.empty, null)
-    val classLoader = new ExecutorClassLoader(conf, null, classServer.uri, parentLoader, false)
-    classLoader.httpUrlConnectionTimeoutMillis = 500
-    // Check that this class loader can actually load classes that exist
-    val fakeClass = classLoader.loadClass("ReplFakeClass2").newInstance()
-    val fakeClassVersion = fakeClass.toString
-    assert(fakeClassVersion === "1")
-    // Try to perform a full GC now, since GC during the test might mask resource leaks
-    System.gc()
-    // When the original bug occurs, the test thread becomes blocked in a classloading call
-    // and does not respond to interrupts.  Therefore, use a custom ScalaTest interruptor to
-    // shut down the HTTP server when the test times out
-    val interruptor: Interruptor = new Interruptor {
-      override def apply(thread: Thread): Unit = {
-        classServer.stop()
-        classServer = null
-        thread.interrupt()
-      }
+    val bufferedSource = Source.fromInputStream(resources.nextElement().openStream())
+    Utils.tryWithSafeFinally {
+      val fileReader = bufferedSource.bufferedReader()
+      assert(fileReader.readLine().contains("resource"), "File doesn't contain 'resource'")
+    } {
+      bufferedSource.close()
     }
-    def tryAndFailToLoadABunchOfClasses(): Unit = {
-      // The number of trials here should be much larger than Jetty's thread / connection limit
-      // in order to expose thread or connection leaks
-      for (i <- 1 to 1000) {
-        if (Thread.currentThread().isInterrupted) {
-          throw new InterruptedException()
-        }
-        // Incorporate the iteration number into the class name in order to avoid any response
-        // caching that might be added in the future
-        intercept[ClassNotFoundException] {
-          classLoader.loadClass(s"ReplFakeClassDoesNotExist$i").newInstance()
-        }
-      }
-    }
-    failAfter(10 seconds)(tryAndFailToLoadABunchOfClasses())(interruptor)
   }
 
   test("fetch classes using Spark's RpcEnv") {

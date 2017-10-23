@@ -32,6 +32,9 @@ private[spark] class ApplicationEventListener extends SparkListener {
   var endTime: Option[Long] = None
   var viewAcls: Option[String] = None
   var adminAcls: Option[String] = None
+  var viewAclsGroups: Option[String] = None
+  var adminAclsGroups: Option[String] = None
+  var appSparkVersion: Option[String] = None
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
     appName = Some(applicationStart.appName)
@@ -51,6 +54,14 @@ private[spark] class ApplicationEventListener extends SparkListener {
       val allProperties = environmentDetails("Spark Properties").toMap
       viewAcls = allProperties.get("spark.ui.view.acls")
       adminAcls = allProperties.get("spark.admin.acls")
+      viewAclsGroups = allProperties.get("spark.ui.view.acls.groups")
+      adminAclsGroups = allProperties.get("spark.admin.acls.groups")
     }
+  }
+
+  override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+    case SparkListenerLogStart(sparkVersion) =>
+      appSparkVersion = Some(sparkVersion)
+    case _ =>
   }
 }

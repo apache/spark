@@ -54,8 +54,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @return an RDD containing the edges in this graph
    *
-   * @see [[Edge]] for the edge type.
-   * @see [[Graph#triplets]] to get an RDD which contains all the edges
+   * @see `Edge` for the edge type.
+   * @see `Graph#triplets` to get an RDD which contains all the edges
    * along with their vertex data.
    *
    */
@@ -331,7 +331,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
 
   /**
    * Merges multiple edges between two vertices into a single edge. For correct results, the graph
-   * must have been partitioned using [[partitionBy]].
+   * must have been partitioned using `partitionBy`.
    *
    * @param merge the user-supplied commutative associative function to merge edge attributes
    *              for duplicate edges.
@@ -365,7 +365,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * @note By expressing computation at the edge level we achieve
    * maximum parallelism.  This is one of the core functions in the
-   * Graph API in that enables neighborhood level computation. For
+   * Graph API that enables neighborhood level computation. For
    * example this function can be used to count neighbors satisfying a
    * predicate or implement PageRank.
    *

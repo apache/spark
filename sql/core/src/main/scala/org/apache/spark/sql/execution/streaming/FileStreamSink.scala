@@ -17,17 +17,62 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import java.util.UUID
+import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.execution.datasources.FileFormat
+import org.apache.spark.internal.io.FileCommitProtocol
+import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.execution.datasources.{FileFormat, FileFormatWriter}
 
-object FileStreamSink {
+object FileStreamSink extends Logging {
   // The name of the subdirectory that is used to store metadata about which files are valid.
   val metadataDir = "_spark_metadata"
+
+  /**
+   * Returns true if there is a single path that has a metadata log indicating which files should
+   * be read.
+   */
+  def hasMetadata(path: Seq[String], hadoopConf: Configuration): Boolean = {
+    path match {
+      case Seq(singlePath) =>
+        try {
+          val hdfsPath = new Path(singlePath)
+          val fs = hdfsPath.getFileSystem(hadoopConf)
+          val metadataPath = new Path(hdfsPath, metadataDir)
+          val res = fs.exists(metadataPath)
+          res
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Error while looking for metadata directory.")
+            false
+        }
+      case _ => false
+    }
+  }
+
+  /**
+   * Returns true if the path is the metadata dir or its ancestor is the metadata dir.
+   * E.g.:
+   *  - ancestorIsMetadataDirectory(/.../_spark_metadata) => true
+   *  - ancestorIsMetadataDirectory(/.../_spark_metadata/0) => true
+   *  - ancestorIsMetadataDirectory(/a/b/c) => false
+   */
+  def ancestorIsMetadataDirectory(path: Path, hadoopConf: Configuration): Boolean = {
+    val fs = path.getFileSystem(hadoopConf)
+    var currentPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    while (currentPath != null) {
+      if (currentPath.getName == FileStreamSink.metadataDir) {
+        return true
+      } else {
+        currentPath = currentPath.getParent
+      }
+    }
+    return false
+  }
 }
 
 /**
@@ -38,43 +83,54 @@ object FileStreamSink {
  * in the log.
  */
 class FileStreamSink(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     path: String,
-    fileFormat: FileFormat) extends Sink with Logging {
+    fileFormat: FileFormat,
+    partitionColumnNames: Seq[String],
+    options: Map[String, String]) extends Sink with Logging {
 
   private val basePath = new Path(path)
   private val logPath = new Path(basePath, FileStreamSink.metadataDir)
-  private val fileLog = new HDFSMetadataLog[Seq[String]](sqlContext, logPath.toUri.toString)
+  private val fileLog =
+    new FileStreamSinkLog(FileStreamSinkLog.VERSION, sparkSession, logPath.toUri.toString)
+  private val hadoopConf = sparkSession.sessionState.newHadoopConf()
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
-    if (fileLog.get(batchId).isDefined) {
+    if (batchId <= fileLog.getLatest().map(_._1).getOrElse(-1L)) {
       logInfo(s"Skipping already committed batch $batchId")
     } else {
-      val files = writeFiles(data)
-      if (fileLog.add(batchId, files)) {
-        logInfo(s"Committed batch $batchId")
-      } else {
-        logWarning(s"Race while writing batch $batchId")
+      val committer = FileCommitProtocol.instantiate(
+        className = sparkSession.sessionState.conf.streamingFileCommitProtocolClass,
+        jobId = batchId.toString,
+        outputPath = path)
+
+      committer match {
+        case manifestCommitter: ManifestFileCommitProtocol =>
+          manifestCommitter.setupManifestOptions(fileLog, batchId)
+        case _ =>  // Do nothing
       }
+
+      // Get the actual partition columns as attributes after matching them by name with
+      // the given columns names.
+      val partitionColumns: Seq[Attribute] = partitionColumnNames.map { col =>
+        val nameEquality = data.sparkSession.sessionState.conf.resolver
+        data.logicalPlan.output.find(f => nameEquality(f.name, col)).getOrElse {
+          throw new RuntimeException(s"Partition column $col not found in schema ${data.schema}")
+        }
+      }
+
+      FileFormatWriter.write(
+        sparkSession = sparkSession,
+        queryExecution = data.queryExecution,
+        fileFormat = fileFormat,
+        committer = committer,
+        outputSpec = FileFormatWriter.OutputSpec(path, Map.empty),
+        hadoopConf = hadoopConf,
+        partitionColumns = partitionColumns,
+        bucketSpec = None,
+        statsTrackers = Nil,
+        options = options)
     }
-  }
-
-  /** Writes the [[DataFrame]] to a UUID-named dir, returning the list of files paths. */
-  private def writeFiles(data: DataFrame): Seq[String] = {
-    val ctx = sqlContext
-    val outputDir = path
-    val format = fileFormat
-    val schema = data.schema
-
-    val file = new Path(basePath, UUID.randomUUID().toString).toUri.toString
-    data.write.parquet(file)
-    sqlContext.read
-        .schema(data.schema)
-        .parquet(file)
-        .inputFiles
-        .map(new Path(_))
-        .filterNot(_.getName.startsWith("_"))
-        .map(_.toUri.toString)
   }
 
   override def toString: String = s"FileSink[$path]"

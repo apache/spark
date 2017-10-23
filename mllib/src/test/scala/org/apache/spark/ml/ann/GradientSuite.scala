@@ -20,7 +20,7 @@ package org.apache.spark.ml.ann
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -64,7 +64,7 @@ class GradientSuite extends SparkFunSuite with MLlibTestSparkContext {
   }
 
   private def computeLoss(input: BDM[Double], target: BDM[Double], model: TopologyModel): Double = {
-    val outputs = model.forward(input)
+    val outputs = model.forward(input, true)
     model.layerModels.last match {
       case layerWithLoss: LossFunction =>
         layerWithLoss.loss(outputs.last, target, new BDM[Double](target.rows, target.cols))

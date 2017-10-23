@@ -15,7 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.ml.base import Estimator, Model, Transformer
+"""
+DataFrame-based machine learning APIs to let users quickly assemble and configure practical
+machine learning pipelines.
+"""
+from pyspark.ml.base import Estimator, Model, Transformer, UnaryTransformer
 from pyspark.ml.pipeline import Pipeline, PipelineModel
 
-__all__ = ["Transformer", "Estimator", "Model", "Pipeline", "PipelineModel"]
+__all__ = ["Transformer", "UnaryTransformer", "Estimator", "Model", "Pipeline", "PipelineModel"]

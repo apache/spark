@@ -17,16 +17,13 @@
 
 package org.apache.spark.examples.ml;
 
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.classification.NaiveBayes;
 import org.apache.spark.ml.classification.NaiveBayesModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 /**
@@ -35,13 +32,15 @@ import org.apache.spark.sql.SQLContext;
 public class JavaNaiveBayesExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaNaiveBayesExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaNaiveBayesExample")
+      .getOrCreate();
 
     // $example on$
     // Load training data
-    Dataset<Row> dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame =
+      spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
     // Split the data into train and test
     Dataset<Row>[] splits = dataFrame.randomSplit(new double[]{0.6, 0.4}, 1234L);
     Dataset<Row> train = splits[0];
@@ -49,16 +48,23 @@ public class JavaNaiveBayesExample {
 
     // create the trainer and set its parameters
     NaiveBayes nb = new NaiveBayes();
+
     // train the model
     NaiveBayesModel model = nb.fit(train);
-    // compute precision on the test set
-    Dataset<Row> result = model.transform(test);
-    Dataset<Row> predictionAndLabels = result.select("prediction", "label");
+
+    // Select example rows to display.
+    Dataset<Row> predictions = model.transform(test);
+    predictions.show();
+
+    // compute accuracy on the test set
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
-      .setMetricName("precision");
-    System.out.println("Precision = " + evaluator.evaluate(predictionAndLabels));
+      .setLabelCol("label")
+      .setPredictionCol("prediction")
+      .setMetricName("accuracy");
+    double accuracy = evaluator.evaluate(predictions);
+    System.out.println("Test set accuracy = " + accuracy);
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

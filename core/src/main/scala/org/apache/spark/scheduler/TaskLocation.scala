@@ -64,18 +64,18 @@ private[spark] object TaskLocation {
 
   /**
    * Create a TaskLocation from a string returned by getPreferredLocations.
-   * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
-   * location is cached.
+   * These strings have the form executor_[hostname]_[executorid], [hostname], or
+   * hdfs_cache_[hostname], depending on whether the location is cached.
    */
   def apply(str: String): TaskLocation = {
     val hstr = str.stripPrefix(inMemoryLocationTag)
     if (hstr.equals(str)) {
       if (str.startsWith(executorLocationTag)) {
-        val splits = str.split("_")
-        if (splits.length != 3) {
-          throw new IllegalArgumentException("Illegal executor location format: " + str)
-        }
-        new ExecutorCacheTaskLocation(splits(1), splits(2))
+        val hostAndExecutorId = str.stripPrefix(executorLocationTag)
+        val splits = hostAndExecutorId.split("_", 2)
+        require(splits.length == 2, "Illegal executor location format: " + str)
+        val Array(host, executorId) = splits
+        new ExecutorCacheTaskLocation(host, executorId)
       } else {
         new HostTaskLocation(str)
       }

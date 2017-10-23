@@ -12,14 +12,14 @@ Spark currently supports authentication via a shared secret. Authentication can 
 ## Web UI
 
 The Spark UI can be secured by using [javax servlet filters](http://docs.oracle.com/javaee/6/api/javax/servlet/Filter.html) via the `spark.ui.filters` setting
-and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via the `spark.ui.https.enabled` setting.
+and by using [https/SSL](http://en.wikipedia.org/wiki/HTTPS) via [SSL settings](security.html#ssl-configuration).
 
 ### Authentication
 
-A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable` and `spark.ui.view.acls` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
+A user may want to secure the UI if it has data that other users should not be allowed to see. The javax servlet filter specified by the user can authenticate the user and then once the user is logged in, Spark can compare that user versus the view ACLs to make sure they are authorized to view the UI. The configs `spark.acls.enable`, `spark.ui.view.acls` and `spark.ui.view.acls.groups` control the behavior of the ACLs. Note that the user who started the application always has view access to the UI.  On YARN, the Spark UI uses the standard YARN web application proxy mechanism and will authenticate via any installed Hadoop filters.
 
-Spark also supports modify ACLs to control who has access to modify a running Spark application. This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable` and `spark.modify.acls`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
-Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the config `spark.admin.acls`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
+Spark also supports modify ACLs to control who has access to modify a running Spark application. This includes things like killing the application or a task. This is controlled by the configs `spark.acls.enable`, `spark.modify.acls` and `spark.modify.acls.groups`. Note that if you are authenticating the web UI, in order to use the kill button on the web UI it might be necessary to add the users in the modify acls to the view acls also. On YARN, the modify acls are passed in and control who has modify access via YARN interfaces.
+Spark allows for a set of administrators to be specified in the acls who always have view and modify permissions to all the applications. is controlled by the configs `spark.admin.acls` and `spark.admin.acls.groups`. This is useful on a shared cluster where you might have administrators or support staff who help users debug applications.
 
 ## Event Logging
 
@@ -27,11 +27,8 @@ If your applications are using event logging, the directory where the event logs
 
 ## Encryption
 
-Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service.
-
-Encryption is not yet supported for data stored by Spark in temporary local storage, such as shuffle
-files, cached data, and other application files. If encrypting this data is desired, a workaround is
-to configure your cluster manager to store application data on encrypted disks.
+Spark supports SSL for HTTP protocols. SASL encryption is supported for the block transfer service
+and the RPC endpoints. Shuffle files can also be encrypted if desired.
 
 ### SSL Configuration
 
@@ -49,7 +46,7 @@ component-specific configuration namespaces used to override the default setting
   </tr>
   <tr>
     <td><code>spark.ssl.fs</code></td>
-    <td>HTTP file server and broadcast server</td>
+    <td>File download client (used to download jars and files from HTTPS-enabled servers).</td>
   </tr>
   <tr>
     <td><code>spark.ssl.ui</code></td>
@@ -76,11 +73,15 @@ For long-running apps like Spark Streaming apps to be able to write to HDFS, it 
 ### Standalone mode
 The user needs to provide key-stores and configuration options for master and workers. They have to be set by attaching appropriate Java system properties in `SPARK_MASTER_OPTS` and in `SPARK_WORKER_OPTS` environment variables, or just in `SPARK_DAEMON_JAVA_OPTS`. In this mode, the user may allow the executors to use the SSL settings inherited from the worker which spawned that executor. It can be accomplished by setting `spark.ssl.useNodeLocalConf` to `true`. If that parameter is set, the settings provided by user on the client side, are not used by the executors.
 
+### Mesos mode
+Mesos 1.3.0 and newer supports `Secrets` primitives as both file-based and environment based secrets. Spark allows the specification of file-based and environment variable based secrets with the `spark.mesos.driver.secret.filenames` and `spark.mesos.driver.secret.envkeys`, respectively. Depending on the secret store backend secrets can be passed by reference or by value with the `spark.mesos.driver.secret.names` and `spark.mesos.driver.secret.values` configuration properties, respectively. Reference type secrets are served by the secret store and referred to by name, for example `/mysecret`. Value type secrets are passed on the command line and translated into their appropriate files or environment variables. 
+
 ### Preparing the key-stores
 Key-stores can be generated by `keytool` program. The reference documentation for this tool is
 [here](https://docs.oracle.com/javase/7/docs/technotes/tools/solaris/keytool.html). The most basic
 steps to configure the key-stores and the trust-store for the standalone deployment mode is as
 follows:
+
 * Generate a keys pair for each node
 * Export the public key of the key pair to a file on each node
 * Import all exported public keys into a single trust-store
@@ -185,7 +186,54 @@ configure those ports.
   </tr>
 </table>
 
+### HTTP Security Headers
+
+Apache Spark can be configured to include HTTP Headers which aids in preventing Cross 
+Site Scripting (XSS), Cross-Frame Scripting (XFS), MIME-Sniffing and also enforces HTTP 
+Strict Transport Security.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.ui.xXssProtection</code></td>
+  <td><code>1; mode=block</code></td>
+  <td>
+    Value for HTTP X-XSS-Protection response header. You can choose appropriate value 
+    from below:
+    <ul>
+      <li><code>0</code> (Disables XSS filtering)</li> 
+      <li><code>1</code> (Enables XSS filtering. If a cross-site scripting attack is detected, 
+        the browser will sanitize the page.)</li>
+      <li><code>1; mode=block</code> (Enables XSS filtering. The browser will prevent rendering 
+        of the page if an attack is detected.)</li>
+    </ul>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.xContentTypeOptions.enabled</code></td>
+  <td><code>true</code></td>
+  <td>
+    When value is set to "true", X-Content-Type-Options HTTP response header will be set 
+    to "nosniff". Set "false" to disable.
+  </td>
+  </tr>
+<tr>
+  <td><code>spark.ui.strictTransportSecurity</code></td>
+  <td>None</td>
+  <td>
+    Value for HTTP Strict Transport Security (HSTS) Response Header. You can choose appropriate 
+    value from below and set <code>expire-time</code> accordingly, when Spark is SSL/TLS enabled.
+    <ul>
+      <li><code>max-age=&lt;expire-time&gt;</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; includeSubDomains</code></li>
+      <li><code>max-age=&lt;expire-time&gt;; preload</code></li>
+    </ul>
+  </td>
+</tr>
+</table>
+    
 
 See the [configuration page](configuration.html) for more details on the security configuration
 parameters, and <a href="{{site.SPARK_GITHUB_URL}}/tree/master/core/src/main/scala/org/apache/spark/SecurityManager.scala">
 <code>org.apache.spark.SecurityManager</code></a> for implementation details about security.
+

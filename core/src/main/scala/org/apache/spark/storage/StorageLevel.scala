@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
  * ExternalBlockStore, whether to keep the data in memory in a serialized format, and whether
  * to replicate the RDD partitions on multiple nodes.
  *
- * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
+ * The [[org.apache.spark.storage.StorageLevel]] singleton object contains some static constants
  * for commonly useful storage levels. To create your own storage level object, use the
  * factory method of the singleton object (`StorageLevel(...)`).
  */
@@ -120,8 +120,14 @@ class StorageLevel private(
   private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 
   override def toString: String = {
-    s"StorageLevel(disk=$useDisk, memory=$useMemory, offheap=$useOffHeap, " +
-      s"deserialized=$deserialized, replication=$replication)"
+    val disk = if (useDisk) "disk" else ""
+    val memory = if (useMemory) "memory" else ""
+    val heap = if (useOffHeap) "offheap" else ""
+    val deserialize = if (deserialized) "deserialized" else ""
+
+    val output =
+      Seq(disk, memory, heap, deserialize, s"$replication replicas").filter(_.nonEmpty)
+    s"StorageLevel(${output.mkString(", ")})"
   }
 
   override def hashCode(): Int = toInt * 41 + replication

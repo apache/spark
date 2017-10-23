@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
  * iterator to consume the next row, whereas RowIterator combines these calls into a single
  * [[advanceNext()]] method.
  */
-private[sql] abstract class RowIterator {
+abstract class RowIterator {
   /**
    * Advance this iterator by a single row. Returns `false` if this iterator has no more rows
    * and `true` otherwise. If this returns `true`, then the new row can be retrieved by calling

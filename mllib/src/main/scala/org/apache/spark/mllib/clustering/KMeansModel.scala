@@ -30,7 +30,7 @@ import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.pmml.PMMLExportable
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
@@ -38,6 +38,9 @@ import org.apache.spark.sql.{Row, SQLContext}
 @Since("0.8.0")
 class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vector])
   extends Saveable with Serializable with PMMLExportable {
+
+  private val clusterCentersWithNorm =
+    if (clusterCenters == null) null else clusterCenters.map(new VectorWithNorm(_))
 
   /**
    * A Java-friendly constructor that takes an Iterable of Vectors.
@@ -49,7 +52,7 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
    * Total number of clusters.
    */
   @Since("0.8.0")
-  def k: Int = clusterCenters.length
+  def k: Int = clusterCentersWithNorm.length
 
   /**
    * Returns the cluster index that a given point belongs to.
@@ -64,8 +67,7 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
    */
   @Since("1.0.0")
   def predict(points: RDD[Vector]): RDD[Int] = {
-    val centersWithNorm = clusterCentersWithNorm
-    val bcCentersWithNorm = points.context.broadcast(centersWithNorm)
+    val bcCentersWithNorm = points.context.broadcast(clusterCentersWithNorm)
     points.map(p => KMeans.findClosest(bcCentersWithNorm.value, new VectorWithNorm(p))._1)
   }
 
@@ -82,13 +84,13 @@ class KMeansModel @Since("1.1.0") (@Since("1.0.0") val clusterCenters: Array[Vec
    */
   @Since("0.8.0")
   def computeCost(data: RDD[Vector]): Double = {
-    val centersWithNorm = clusterCentersWithNorm
-    val bcCentersWithNorm = data.context.broadcast(centersWithNorm)
-    data.map(p => KMeans.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p))).sum()
+    val bcCentersWithNorm = data.context.broadcast(clusterCentersWithNorm)
+    val cost = data
+      .map(p => KMeans.pointCost(bcCentersWithNorm.value, new VectorWithNorm(p))).sum()
+    bcCentersWithNorm.destroy(blocking = false)
+    cost
   }
 
-  private def clusterCentersWithNorm: Iterable[VectorWithNorm] =
-    clusterCenters.map(new VectorWithNorm(_))
 
   @Since("1.4.0")
   override def save(sc: SparkContext, path: String): Unit = {
@@ -123,25 +125,24 @@ object KMeansModel extends Loader[KMeansModel] {
     val thisClassName = "org.apache.spark.mllib.clustering.KMeansModel"
 
     def save(sc: SparkContext, model: KMeansModel, path: String): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("k" -> model.k)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
-      val dataRDD = sc.parallelize(model.clusterCenters.zipWithIndex).map { case (point, id) =>
-        Cluster(id, point)
-      }.toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      val dataRDD = sc.parallelize(model.clusterCentersWithNorm.zipWithIndex).map { case (p, id) =>
+        Cluster(id, p.vector)
+      }
+      spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): KMeansModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = SQLContext.getOrCreate(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val k = (metadata \ "k").extract[Int]
-      val centroids = sqlContext.read.parquet(Loader.dataPath(path))
+      val centroids = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Cluster](centroids.schema)
       val localCentroids = centroids.rdd.map(Cluster.apply).collect()
       assert(k == localCentroids.length)

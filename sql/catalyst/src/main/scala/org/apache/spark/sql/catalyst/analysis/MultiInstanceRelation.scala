@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**
- * A trait that should be mixed into query operators where an single instance might appear multiple
+ * A trait that should be mixed into query operators where a single instance might appear multiple
  * times in a logical query plan.  It is invalid to have multiple copies of the same attribute
  * produced by distinct operators in a query tree as this breaks the guarantee that expression
  * ids, which are used to differentiate attributes, are unique.

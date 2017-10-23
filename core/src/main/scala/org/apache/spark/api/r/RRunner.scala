@@ -38,7 +38,10 @@ private[spark] class RRunner[U](
     serializer: String,
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
-    numPartitions: Int = -1)
+    numPartitions: Int = -1,
+    isDataFrame: Boolean = false,
+    colNames: Array[String] = null,
+    mode: Int = RRunnerModes.RDD)
   extends Logging {
   private var bootTime: Double = _
   private var dataStream: DataInputStream = _
@@ -53,8 +56,7 @@ private[spark] class RRunner[U](
 
   def compute(
       inputIterator: Iterator[_],
-      partitionIndex: Int,
-      context: TaskContext): Iterator[U] = {
+      partitionIndex: Int): Iterator[U] = {
     // Timing start
     bootTime = System.currentTimeMillis / 1000.0
 
@@ -147,6 +149,11 @@ private[spark] class RRunner[U](
           }
 
           dataOut.writeInt(numPartitions)
+          dataOut.writeInt(mode)
+
+          if (isDataFrame) {
+            SerDe.writeObject(dataOut, colNames, jvmObjectTracker = null)
+          }
 
           if (!iter.hasNext) {
             dataOut.writeInt(0)
@@ -173,6 +180,13 @@ private[spark] class RRunner[U](
 
           for (elem <- iter) {
             elem match {
+              case (key, innerIter: Iterator[_]) =>
+                for (innerElem <- innerIter) {
+                  writeElem(innerElem)
+                }
+                // Writes key which can be used as a boundary in group-aggregate
+                dataOut.writeByte('r')
+                writeElem(key)
               case (key, value) =>
                 writeElem(key)
                 writeElem(value)
@@ -180,6 +194,7 @@ private[spark] class RRunner[U](
                 writeElem(elem)
             }
           }
+
           stream.flush()
         } catch {
           // TODO: We should propagate this error to the task thread
@@ -261,6 +276,12 @@ private object SpecialLengths {
   val TIMING_DATA = -1
 }
 
+private[spark] object RRunnerModes {
+  val RDD = 0
+  val DATAFRAME_DAPPLY = 1
+  val DATAFRAME_GAPPLY = 2
+}
+
 private[r] class BufferedStreamThread(
     in: InputStream,
     name: String,
@@ -312,6 +333,8 @@ private[r] object RRunner {
     var rCommand = sparkConf.get("spark.sparkr.r.command", "Rscript")
     rCommand = sparkConf.get("spark.r.command", rCommand)
 
+    val rConnectionTimeout = sparkConf.getInt(
+      "spark.r.backendConnectionTimeout", SparkRDefaults.DEFAULT_CONNECTION_TIMEOUT)
     val rOptions = "--vanilla"
     val rLibDir = RUtils.sparkRPackagePath(isDriver = false)
     val rExecScript = rLibDir(0) + "/SparkR/worker/" + script
@@ -323,6 +346,9 @@ private[r] object RRunner {
     pb.environment().put("R_TESTS", "")
     pb.environment().put("SPARKR_RLIBDIR", rLibDir.mkString(","))
     pb.environment().put("SPARKR_WORKER_PORT", port.toString)
+    pb.environment().put("SPARKR_BACKEND_CONNECTION_TIMEOUT", rConnectionTimeout.toString)
+    pb.environment().put("SPARKR_SPARKFILES_ROOT_DIR", SparkFiles.getRootDirectory())
+    pb.environment().put("SPARKR_IS_RUNNING_ON_WORKER", "TRUE")
     pb.redirectErrorStream(true)  // redirect stderr into stdout
     val proc = pb.start()
     val errThread = startStdoutThread(proc)

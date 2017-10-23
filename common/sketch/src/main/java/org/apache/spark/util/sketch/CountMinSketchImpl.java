@@ -17,14 +17,7 @@
 
 package org.apache.spark.util.sketch;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
+import java.io.*;
 import java.util.Arrays;
 import java.util.Random;
 
@@ -152,6 +145,8 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   public void add(Object item, long count) {
     if (item instanceof String) {
       addString((String) item, count);
+    } else if (item instanceof byte[]) {
+      addBinary((byte[]) item, count);
     } else {
       addLong(Utils.integralToLong(item), count);
     }
@@ -234,6 +229,8 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   public long estimateCount(Object item) {
     if (item instanceof String) {
       return estimateCountForStringItem((String) item);
+    } else if (item instanceof byte[]) {
+      return estimateCountForBinaryItem((byte[]) item);
     } else {
       return estimateCountForLongItem(Utils.integralToLong(item));
     }
@@ -248,6 +245,15 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
   }
 
   private long estimateCountForStringItem(String item) {
+    long res = Long.MAX_VALUE;
+    int[] buckets = getHashBuckets(item, depth, width);
+    for (int i = 0; i < depth; ++i) {
+      res = Math.min(res, table[i][buckets[i]]);
+    }
+    return res;
+  }
+
+  private long estimateCountForBinaryItem(byte[] item) {
     long res = Long.MAX_VALUE;
     int[] buckets = getHashBuckets(item, depth, width);
     for (int i = 0; i < depth; ++i) {
@@ -314,6 +320,14 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     }
   }
 
+  @Override
+  public byte[] toByteArray() throws IOException {
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    writeTo(out);
+    out.close();
+    return out.toByteArray();
+  }
+
   public static CountMinSketchImpl readFrom(InputStream in) throws IOException {
     CountMinSketchImpl sketch = new CountMinSketchImpl();
     sketch.readFrom0(in);
@@ -351,7 +365,7 @@ class CountMinSketchImpl extends CountMinSketch implements Serializable {
     this.writeTo(out);
   }
 
-  private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+  private void readObject(ObjectInputStream in) throws IOException {
     this.readFrom0(in);
   }
 }

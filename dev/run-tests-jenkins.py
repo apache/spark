@@ -80,7 +80,7 @@ def pr_message(build_display_name,
                 short_commit_hash,
                 commit_url,
                 str(' ' + post_msg + '.') if post_msg else '.')
-    return '**[Test build %s %s](%sconsoleFull)** for PR %s at commit [`%s`](%s)%s' % str_args
+    return '**[Test build %s %s](%stestReport)** for PR %s at commit [`%s`](%s)%s' % str_args
 
 
 def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
@@ -128,6 +128,7 @@ def run_tests(tests_timeout):
         ERROR_CODES["BLOCK_MIMA"]: 'MiMa tests',
         ERROR_CODES["BLOCK_SPARK_UNIT_TESTS"]: 'Spark unit tests',
         ERROR_CODES["BLOCK_PYSPARK_UNIT_TESTS"]: 'PySpark unit tests',
+        ERROR_CODES["BLOCK_PYSPARK_PIP_TESTS"]: 'PySpark pip packaging tests',
         ERROR_CODES["BLOCK_SPARKR_UNIT_TESTS"]: 'SparkR unit tests',
         ERROR_CODES["BLOCK_TIMEOUT"]: 'from timeout after a configured wait of \`%s\`' % (
             tests_timeout)
@@ -136,7 +137,9 @@ def run_tests(tests_timeout):
     if test_result_code == 0:
         test_result_note = ' * This patch passes all tests.'
     else:
-        test_result_note = ' * This patch **fails %s**.' % failure_note_by_errcode[test_result_code]
+        note = failure_note_by_errcode.get(
+            test_result_code, "due to an unknown error code, %s" % test_result_code)
+        test_result_note = ' * This patch **fails %s**.' % note
 
     return [test_result_code, test_result_note]
 
@@ -164,12 +167,6 @@ def main():
     if "test-maven" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_TOOL"] = "maven"
     # Switch the Hadoop profile based on the PR title:
-    if "test-hadoop2.2" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.2"
-    if "test-hadoop2.3" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.3"
-    if "test-hadoop2.4" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.4"
     if "test-hadoop2.6" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop2.6"
     if "test-hadoop2.7" in ghprb_pull_title:

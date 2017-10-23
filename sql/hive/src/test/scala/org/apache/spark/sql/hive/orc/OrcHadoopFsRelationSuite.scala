@@ -19,11 +19,10 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.ql.io.orc.{CompressionKind, OrcFile}
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.HadoopFsRelationTest
 import org.apache.spark.sql.types._
@@ -31,7 +30,7 @@ import org.apache.spark.sql.types._
 class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
   import testImplicits._
 
-  override val dataSourceName: String = classOf[DefaultSource].getCanonicalName
+  override val dataSourceName: String = classOf[OrcFileFormat].getCanonicalName
 
   // ORC does not play well with NullType and UDT.
   override protected def supportsDataType(dataType: DataType): Boolean = dataType match {
@@ -43,12 +42,9 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
 
   test("save()/load() - partitioned table - simple queries - partition columns in data") {
     withTempDir { file =>
-      val basePath = new Path(file.getCanonicalPath)
-      val fs = basePath.getFileSystem(SparkHadoopUtil.get.conf)
-      val qualifiedBasePath = fs.makeQualified(basePath)
-
       for (p1 <- 1 to 2; p2 <- Seq("foo", "bar")) {
-        val partitionDir = new Path(qualifiedBasePath, s"p1=$p1/p2=$p2")
+        val partitionDir = new Path(
+          CatalogUtils.URIToString(makeQualifiedPath(file.getCanonicalPath)), s"p1=$p1/p2=$p2")
         sparkContext
           .parallelize(for (i <- 1 to 3) yield (i, s"val_$i", p1))
           .toDF("a", "b", "p1")
@@ -60,7 +56,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        hiveContext.read.options(Map(
+        spark.read.options(Map(
           "path" -> file.getCanonicalPath,
           "dataSchema" -> dataSchemaWithPartition.json)).format(dataSourceName).load())
     }
@@ -75,11 +71,11 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.orc(path)
 
         checkAnswer(
-          sqlContext.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
+          spark.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
 
         checkAnswer(
-          sqlContext.read.orc(path).where("not (a = 2 and b in ('1'))"),
+          spark.read.orc(path).where("not (a = 2 and b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
       }
     }
@@ -94,18 +90,29 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB.
-      val conf = sparkContext.hadoopConfiguration
-      val fs = FileSystem.getLocal(conf)
-      val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
+      val maybeOrcFile = new File(path).listFiles().find { f =>
+        !f.getName.startsWith("_") && f.getName.endsWith(".zlib.orc")
+      }
       assert(maybeOrcFile.isDefined)
-      val orcFilePath = new Path(maybeOrcFile.get.toPath.toString)
-      val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
-      assert(orcReader.getCompression == CompressionKind.ZLIB)
+      val orcFilePath = maybeOrcFile.get.toPath.toString
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(orcFilePath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
 
-      val copyDf = sqlContext
+      val copyDf = spark
         .read
         .orc(path)
       checkAnswer(df, copyDf)
+    }
+  }
+
+  test("Default compression codec is snappy for ORC compression") {
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("SNAPPY" === expectedCompressionKind.name())
     }
   }
 }

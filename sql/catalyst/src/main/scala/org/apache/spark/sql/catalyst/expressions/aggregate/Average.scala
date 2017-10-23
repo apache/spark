@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
-  usage = "_FUNC_(x) - Returns the mean calculated from values of a group.")
-case class Average(child: Expression) extends DeclarativeAggregate {
+  usage = "_FUNC_(expr) - Returns the mean calculated from values of a group.")
+case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
 
   override def prettyName: String = "avg"
 
@@ -80,7 +80,8 @@ case class Average(child: Expression) extends DeclarativeAggregate {
     case DecimalType.Fixed(p, s) =>
       // increase the precision and scale to prevent precision loss
       val dt = DecimalType.bounded(p + 14, s + 4)
-      Cast(Cast(sum, dt) / Cast(count, dt), resultType)
+      Cast(Cast(sum, dt) / Cast(count, DecimalType.bounded(DecimalType.MAX_PRECISION, 0)),
+        resultType)
     case _ =>
       Cast(sum, resultType) / Cast(count, resultType)
   }

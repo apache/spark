@@ -54,6 +54,7 @@ private[spark] object ShutdownHookManager extends Logging {
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
 
   // Add a shutdown hook to delete the temp dirs when the JVM exits
+  logDebug("Adding shutdown hook") // force eager creation of logger
   addShutdownHook(TEMP_DIR_SHUTDOWN_PRIORITY) { () =>
     logInfo("Shutdown hook called")
     // we need to materialize the paths to delete because deleteRecursively removes items from
@@ -170,9 +171,7 @@ private [util] class SparkShutdownHookManager {
   @volatile private var shuttingDown = false
 
   /**
-   * Install a hook to run at shutdown and run all registered hooks in order. Hadoop 1.x does not
-   * have `ShutdownHookManager`, so in that case we just use the JVM's `Runtime` object and hope for
-   * the best.
+   * Install a hook to run at shutdown and run all registered hooks in order.
    */
   def install(): Unit = {
     val hookTask = new Runnable() {

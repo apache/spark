@@ -46,7 +46,9 @@ public interface SparkAppHandle {
     /** The application finished with a failed status. */
     FAILED(true),
     /** The application was killed. */
-    KILLED(true);
+    KILLED(true),
+    /** The Spark Submit JVM exited with a unknown status. */
+    LOST(true);
 
     private final boolean isFinal;
 
@@ -89,9 +91,6 @@ public interface SparkAppHandle {
    * Tries to kill the underlying application. Implies {@link #disconnect()}. This will not send
    * a {@link #stop()} message to the application, so it's recommended that users first try to
    * stop the application cleanly and only resort to this method if that fails.
-   * <p>
-   * Note that if the application is running as a child process, this method fail to kill the
-   * process when using Java 7. This may happen if, for example, the application is deadlocked.
    */
   void kill();
 
