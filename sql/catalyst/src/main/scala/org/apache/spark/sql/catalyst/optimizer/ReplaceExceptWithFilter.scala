@@ -62,8 +62,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
   }
 
   private def isEligible(left: LogicalPlan, right: LogicalPlan) = (left, right) match {
-    case (_, right @ Project(_, _: Filter)) => verifyConditions(left, right)
-    case (_, right: Filter) => verifyConditions(left, right)
+    case (_, right @ (Project(_, _: Filter) | Filter(_, _))) => verifyConditions(left, right)
     case _ => false
   }
 
