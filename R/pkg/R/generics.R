@@ -1569,12 +1569,9 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("fitted")
 
-#' @param x,y For \code{glm}: logical values indicating whether the response vector
-#'          and model matrix used in the fitting process should be returned as
-#'          components of the returned value.
-#' @inheritParams stats::glm
-#' @rdname glm
+# Do not carry stats::glm usage and param here
 #' @export
+#' @noRd
 setGeneric("glm")
 
 #' @param object a fitted ML model object.

@@ -3250,12 +3250,23 @@ setMethod("as.data.frame",
 #' }
 #' @seealso \link{detach}
 #' @note attach since 1.6.0
-setMethod("attach",
-          signature(what = "SparkDataFrame"),
-          function(what, pos = 2, name = deparse(substitute(what)), warn.conflicts = TRUE) {
-            newEnv <- assignNewEnv(what)
-            attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
-          })
+#' @name attach
+NULL
+
+createAttachMethod <- function() {
+  f <- function() {
+    args <- as.list(environment()) # capture all function parameters - this must be the first line
+    newEnv <- assignNewEnv(args$what)
+    args$what <- newEnv
+    do.call(attach, args)
+  }
+  formals(f) <- formals(match.fun("attach"))
+  setMethod("attach",
+            signature(what = "SparkDataFrame"),
+            f)
+}
+
+createAttachMethod()
 
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
 #'
