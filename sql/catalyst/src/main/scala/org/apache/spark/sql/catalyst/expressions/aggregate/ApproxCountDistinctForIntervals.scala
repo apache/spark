@@ -222,17 +222,22 @@ case class ApproxCountDistinctForIntervals(
 
   override def serialize(obj: Array[Long]): Array[Byte] = {
     val byteArray = new Array[Byte](obj.length * 8)
-    obj.indices.foreach { i =>
+    var i = 0
+    while (i < obj.length) {
       Platform.putLong(byteArray, Platform.BYTE_ARRAY_OFFSET + i * 8, obj(i))
+      i += 1
     }
     byteArray
   }
 
   override def deserialize(bytes: Array[Byte]): Array[Long] = {
+    assert(bytes.length % 8 == 0)
     val length = bytes.length / 8
     val longArray = new Array[Long](length)
-    (0 until length).foreach { i =>
+    var i = 0
+    while (i < length) {
       longArray(i) = Platform.getLong(bytes, Platform.BYTE_ARRAY_OFFSET + i * 8)
+      i += 1
     }
     longArray
   }
