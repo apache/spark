@@ -2692,7 +2692,7 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <scala.version>2.12.3</scala.version>
+        <scala.version>2.12.4</scala.version>
         <scala.binary.version>2.12</scala.binary.version>
       </properties>
       <build>
