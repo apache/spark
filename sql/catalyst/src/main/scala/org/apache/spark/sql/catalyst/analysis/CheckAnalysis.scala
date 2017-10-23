@@ -275,22 +275,18 @@ trait CheckAnalysis extends PredicateHelper {
               o.inputSet.exists(input => resolver(missing.name, input.name)))
             val repeatedNameHint = if (attrsWithSameName.nonEmpty) {
               val commonNames = attrsWithSameName.map(_.name).mkString(",")
-              s"""|Please check attribute(s) `$commonNames`, they seem to appear in two
+              s"""\n|Please check attribute(s) `$commonNames`, they seem to appear in two
                   |different input operators, with the same name.""".stripMargin
             } else {
               ""
             }
 
             val missingAttributes = o.missingInput.mkString(",")
-            val availableAttributes = o.inputSet.mkString(",")
+            val input = o.inputSet.mkString(",")
 
             failAnalysis(
-              s"""Some resolved attribute(s) are not present among the available attributes
-                |for a query.
-                |$missingAttributes is not in $availableAttributes.
-                |$repeatedNameHint
-                |The failed query was for operator
-                |${operator.simpleString}""".stripMargin)
+              s"""Resolved attribute(s) $missingAttributes missing from $input
+                  |in operator ${operator.simpleString}.$repeatedNameHint""".stripMargin)
 
           case p @ Project(exprs, _) if containsMultipleGenerators(exprs) =>
             failAnalysis(

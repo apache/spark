@@ -409,9 +409,7 @@ class AnalysisErrorSuite extends AnalysisTest {
     // Since we manually construct the logical plan at here and Sum only accept
     // LongType, DoubleType, and DecimalType. We use LongType as the type of a.
     val attrA = AttributeReference("a", LongType)(exprId = ExprId(1))
-    val aId = Array[String](attrA.name, attrA.exprId.id.toString)
     val otherA = AttributeReference("a", LongType)(exprId = ExprId(2))
-    val otherAId = Array[String](otherA.name, otherA.exprId.id.toString)
     val bAlias = Alias(sum(attrA), "b")() :: Nil
     val plan = Aggregate(
         Nil,
@@ -420,13 +418,10 @@ class AnalysisErrorSuite extends AnalysisTest {
 
     assert(plan.resolved)
 
-    val errorMsg = s"""Some resolved attribute(s) are not present among the available attributes
-                     |for a query.
-                     |${aId.mkString("#")}L is not in ${otherAId.mkString("#")}L.
+    val errorMsg = s"""Resolved attribute(s) ${attrA.toString} missing from ${otherA.toString}
+                     |in operator !Aggregate [${bAlias.mkString("#")}].
                      |Please check attribute(s) `a`, they seem to appear in two
-                     |different input operators, with the same name.
-                     |The failed query was for operator
-                     |!Aggregate [${bAlias.mkString("#")}]""".stripMargin
+                     |different input operators, with the same name.""".stripMargin
 
 
     assertAnalysisError(plan, errorMsg :: Nil)
