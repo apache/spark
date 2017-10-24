@@ -2031,8 +2031,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-21912 ORC/Parquet table should not create invalid column names") {
     Seq(" ", ",", ";", "{", "}", "(", ")", "\n", "\t", "=").foreach { name =>
-      withTable("t21912") {
-        Seq("ORC", "PARQUET").foreach { source =>
+      Seq("ORC", "PARQUET").foreach { source =>
+        withTable("t21912") {
           val m = intercept[AnalysisException] {
             sql(s"CREATE TABLE t21912(`col$name` INT) USING $source")
           }.getMessage
@@ -2049,15 +2049,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             }.getMessage
             assert(m3.contains(s"contains invalid character(s)"))
           }
-        }
 
-        // TODO: After SPARK-21929, we need to check ORC, too.
-        Seq("PARQUET").foreach { source =>
           sql(s"CREATE TABLE t21912(`col` INT) USING $source")
-          val m = intercept[AnalysisException] {
+          val m4 = intercept[AnalysisException] {
             sql(s"ALTER TABLE t21912 ADD COLUMNS(`col$name` INT)")
           }.getMessage
-          assert(m.contains(s"contains invalid character(s)"))
+          assert(m4.contains(s"contains invalid character(s)"))
         }
       }
     }
