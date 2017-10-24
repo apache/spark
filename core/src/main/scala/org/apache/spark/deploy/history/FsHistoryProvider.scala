@@ -132,8 +132,6 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     val dbPath = new File(path, "listing.ldb")
     val metadata = new FsHistoryProviderMetadata(CURRENT_LISTING_VERSION, logDir.toString())
 
-    def openDB(): LevelDB = new LevelDB(dbPath, new KVStoreScalaSerializer())
-
     try {
       open(new File(path, "listing.ldb"), metadata)
     } catch {

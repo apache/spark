@@ -180,20 +180,14 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
     liveJobs.put(event.jobId, job)
     update(job)
 
-    val schedulingPool = Option(event.properties).flatMap { p =>
-      Option(p.getProperty("spark.scheduler.pool"))
-    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
-
     event.stageInfos.foreach { stageInfo =>
       // A new job submission may re-use an existing stage, so this code needs to do an update
       // instead of just a write.
       val stage = getOrCreateStage(stageInfo)
       stage.jobs :+= job
       stage.jobIds += event.jobId
-      stage.schedulingPool = schedulingPool
       update(stage)
     }
-
   }
 
   override def onJobEnd(event: SparkListenerJobEnd): Unit = {
@@ -211,6 +205,9 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
   override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
     val stage = getOrCreateStage(event.stageInfo)
     stage.status = v1.StageStatus.ACTIVE
+    stage.schedulingPool = Option(event.properties).flatMap { p =>
+      Option(p.getProperty("spark.scheduler.pool"))
+    }.getOrElse(SparkUI.DEFAULT_POOL_NAME)
 
     // Look at all active jobs to find the ones that mention this stage.
     stage.jobs = liveJobs.values
@@ -257,16 +254,16 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
   }
 
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = {
+    // Call update on the task so that the "getting result" time is written to the store; the
+    // value is part of the mutable TaskInfo state that the live entity already references.
     liveTasks.get(event.taskInfo.taskId).foreach { task =>
       update(task)
     }
   }
 
   override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
-    // If stage attempt id is -1, it means the DAGScheduler had no idea which attempt this task
-    // completion event is for. Let's just drop it here. This means we might have some speculation
-    // tasks on the web ui that are never marked as complete.
-    if (event.taskInfo == null || event.stageAttemptId == -1) {
+    // TODO: can this really happen?
+    if (event.taskInfo == null) {
       return
     }
 
@@ -357,7 +354,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
       stage.jobs.foreach { job =>
         stage.status match {
           case v1.StageStatus.COMPLETE =>
-            job.completedStages = job.completedStages + event.stageInfo.stageId
+            job.completedStages += event.stageInfo.stageId
           case v1.StageStatus.SKIPPED =>
             job.skippedStages += event.stageInfo.stageId
             job.skippedTasks += event.stageInfo.numTasks
@@ -418,7 +415,7 @@ private class AppStatusListener(kvstore: KVStore) extends SparkListener with Log
   override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
     event.blockUpdatedInfo.blockId match {
       case block: RDDBlockId => updateRDDBlock(event, block)
-      case _ => // TODO: API only covers RDD storage. UI might need shuffle storage too.
+      case _ => // TODO: API only covers RDD storage.
     }
   }
 

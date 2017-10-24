@@ -119,7 +119,6 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     stages.foreach { info =>
       check[StageDataWrapper](key(info)) { stage =>
         assert(stage.info.status === v1.StageStatus.PENDING)
-        assert(stage.info.schedulingPool === "schedPool")
         assert(stage.jobIds === Set(1))
       }
     }
@@ -136,6 +135,7 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
     check[StageDataWrapper](key(stages.head)) { stage =>
       assert(stage.info.status === v1.StageStatus.ACTIVE)
       assert(stage.info.submissionTime === Some(new Date(stages.head.submissionTime.get)))
+      assert(stage.info.schedulingPool === "schedPool")
     }
 
     // Start tasks from stage 1
@@ -196,13 +196,13 @@ class AppStatusListenerSuite extends SparkFunSuite with BeforeAndAfter {
 
     check[StageDataWrapper](key(stages.head)) { stage =>
       assert(stage.info.memoryBytesSpilled === s1Tasks.size)
+    }
 
-      val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
-        .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
-      assert(execs.size > 0)
-      execs.foreach { exec =>
-        assert(exec.info.memoryBytesSpilled === s1Tasks.size / 2)
-      }
+    val execs = store.view(classOf[ExecutorStageSummaryWrapper]).index("stage")
+      .first(key(stages.head)).last(key(stages.head)).asScala.toSeq
+    assert(execs.size > 0)
+    execs.foreach { exec =>
+      assert(exec.info.memoryBytesSpilled === s1Tasks.size / 2)
     }
 
     // Fail one of the tasks, re-start it.
