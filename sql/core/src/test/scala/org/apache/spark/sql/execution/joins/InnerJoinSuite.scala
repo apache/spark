@@ -18,7 +18,8 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.{And, BinaryExpression, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.Join
@@ -124,7 +125,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         rightPlan: SparkPlan) = {
       val sortMergeJoin = joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition,
         leftPlan, rightPlan)
-      EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
+      EnsureRequirements(spark.sessionState.conf)
+          .apply(ProjectExec(sortMergeJoin.output, sortMergeJoin))
     }
 
     test(s"$testName using BroadcastHashJoin (build=left)") {
@@ -228,6 +230,49 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     )
   )
 
+  testInnerJoin(
+    "inner join without codegen",
+    myUpperCaseData,
+    myLowerCaseData,
+    () => {
+      // test equality with a UDF that will not generate code to exercise CodegenFallback
+      // val udfEquals = org.apache.spark.sql.functions.udf((a: String, b: String) =>
+      //   a != null && a.toLowerCase(Locale.ENGLISH) == b.toLowerCase(Locale.ENGLISH))
+      And(
+        (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
+        EqNoCodegen(
+          org.apache.spark.sql.functions.lower(myUpperCaseData.col("L")).expr,
+          myLowerCaseData.col("l").expr))
+    },
+    Seq(
+      (1, "A", 1, "a"),
+      (2, "B", 2, "b"),
+      (3, "C", 3, "c"),
+      (4, "D", 4, "d")
+    )
+  )
+
+  testInnerJoin(
+    "inner join with CodegenFallback filter",
+    myUpperCaseData,
+    myLowerCaseData,
+    () => {
+      // add a second equality check that is implemented with a CodegenFallback
+      // this expression is in the test so that no one implements codegen for it
+      And(
+        (myUpperCaseData.col("N") === myLowerCaseData.col("n")).expr,
+        EqNoCodegen(
+          org.apache.spark.sql.functions.lower(myUpperCaseData.col("L")).expr,
+          myLowerCaseData.col("l").expr))
+    },
+    Seq(
+      (1, "A", 1, "a"),
+      (2, "B", 2, "b"),
+      (3, "C", 3, "c"),
+      (4, "D", 4, "d")
+    )
+  )
+
   {
     lazy val left = myTestData1.where("a = 1")
     lazy val right = myTestData2.where("a = 1")
@@ -285,5 +330,12 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         (Row(0, 0), "L0", Row(0, 0), "R0"),
         (Row(1, 1), "L1", Row(1, 1), "R1"),
         (Row(2, 2), "L2", Row(2, 2), "R2")))
+  }
+}
+
+case class EqNoCodegen(left: Expression, right: Expression) extends BinaryExpression
+    with CodegenFallback with Serializable with Predicate {
+  override protected def nullSafeEval(left: Any, right: Any): Boolean = {
+    left == right
   }
 }
