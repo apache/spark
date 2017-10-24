@@ -214,7 +214,7 @@ class ArrowSerializer(FramedSerializer):
 
 
 def _create_batch(series):
-    from pyspark.sql.types import _series_convert_timestamps_internal
+    from pyspark.sql.types import _check_series_convert_timestamps_internal
     import pyarrow as pa
     # Make input conform to [(series1, type1), (series2, type2), ...]
     if not isinstance(series, (list, tuple)) or \
@@ -227,16 +227,23 @@ def _create_batch(series):
     def cast_series(s, t):
         if type(t) == pa.TimestampType:
             # NOTE: convert to 'us' with astype here, unit ignored in `from_pandas` see ARROW-1680
-            return _series_convert_timestamps_internal(s).values.astype('datetime64[us]')
+            return _check_series_convert_timestamps_internal(s)\
+                .values.astype('datetime64[us]', copy=False)
         elif t == pa.date32():
-            # TODO: ValueError: Cannot cast DatetimeIndex to dtype datetime64[D]
-            return s.dt.values.astype('datetime64[D]')
+            # TODO: this converts the series to Python objects, possibly avoid with Arrow >= 0.8
+            return s.dt.date
         elif t is None or s.dtype == t.to_pandas_dtype():
             return s
         else:
             return s.fillna(0).astype(t.to_pandas_dtype(), copy=False)
 
-    arrs = [pa.Array.from_pandas(cast_series(s, t), mask=s.isnull(), type=t) for s, t in series]
+    # Some object types don't support masks in Arrow, see ARROW-1721
+    def create_array(s, t):
+        casted = cast_series(s, t)
+        mask = None if casted.dtype == 'object' else s.isnull()
+        return pa.Array.from_pandas(casted, mask=mask, type=t)
+
+    arrs = [create_array(s, t) for s, t in series]
     return pa.RecordBatch.from_arrays(arrs, ["_%d" % i for i in xrange(len(arrs))])
 
 

@@ -1640,10 +1640,15 @@ def _check_dataframe_localize_timestamps(df):
     return df
 
 
-def _series_convert_timestamps_internal(s):
+def _check_series_convert_timestamps_internal(s):
     """ Convert a tz-naive timestamp in local tz to UTC normalized for Spark internal storage
     """
-    return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+    from pandas.api.types import is_datetime64_dtype
+    # TODO: handle nested timestamps, such as ArrayType(TimestampType())?
+    if is_datetime64_dtype(s.dtype):
+        return s.dt.tz_localize('tzlocal()').dt.tz_convert('UTC')
+    else:
+        return s
 
 
 def _test():
