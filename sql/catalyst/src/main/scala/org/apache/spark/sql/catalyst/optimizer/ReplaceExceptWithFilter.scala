@@ -41,15 +41,11 @@ import org.apache.spark.sql.catalyst.rules.Rule
 object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Except(left: Project, right) if isEligible(left, right) =>
-      Project(left.projectList,
-        Distinct(Filter(Not(transformCondition(left.child, skipProject(right))), left.child)))
-
     case Except(left, right) if isEligible(left, right) =>
       Distinct(Filter(Not(transformCondition(left, skipProject(right))), left))
   }
 
-  private def transformCondition(left: LogicalPlan, right: LogicalPlan) = {
+  private def transformCondition(left: LogicalPlan, right: LogicalPlan): Expression = {
     val filterCondition = InferFiltersFromConstraints(combineFilters(right)
     ).asInstanceOf[Filter].condition
 
@@ -61,21 +57,22 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     transformedCondition
   }
 
-  private def isEligible(left: LogicalPlan, right: LogicalPlan) = (left, right) match {
+  private def isEligible(left: LogicalPlan, right: LogicalPlan): Boolean = (left, right) match {
     case (_, right @ (Project(_, _: Filter) | Filter(_, _))) => verifyConditions(left, right)
     case _ => false
   }
 
-  private def verifyConditions(left: LogicalPlan, right: LogicalPlan) = {
+  private def verifyConditions(left: LogicalPlan, right: LogicalPlan): Boolean = {
     val leftProjectList = projectList(left)
     val rightProjectList = projectList(right)
 
-    verifyFilterCondition(skipProject(left)) && verifyFilterCondition(skipProject(right)) &&
-      Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
-        Project(rightProjectList, nonFilterChild(skipProject(right))))
+    left.output.size == left.output.distinct.size &&
+      verifyFilterCondition(skipProject(left)) && verifyFilterCondition(skipProject(right)) &&
+        Project(leftProjectList, nonFilterChild(skipProject(left))).sameResult(
+          Project(rightProjectList, nonFilterChild(skipProject(right))))
   }
 
-  private def verifyFilterCondition(plan: LogicalPlan) = {
+  private def verifyFilterCondition(plan: LogicalPlan): Boolean = {
     var i = 0
     val filterConditions = new collection.mutable.ArrayBuffer[Expression]
     while (plan.p(i).isInstanceOf[Filter]) {
@@ -84,17 +81,17 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
       i += 1
     }
 
-    filterConditions.forall(!_.isInstanceOf[SubqueryExpression])
+    filterConditions.forall(!SubqueryExpression.hasSubquery(_))
   }
 
-  private def collectAllExpressions(exp: Expression) = exp.p(0) +: exp.children
+  private def collectAllExpressions(exp: Expression): Seq[Expression] = exp.p(0) +: exp.children
 
-  private def projectList(node: LogicalPlan) = node match {
+  private def projectList(node: LogicalPlan): Seq[NamedExpression] = node match {
     case p: Project => p.projectList
     case x => x.output
   }
 
-  private def skipProject(node: LogicalPlan) = node match {
+  private def skipProject(node: LogicalPlan): LogicalPlan = node match {
     case p: Project => p.child
     case x => x
   }
@@ -103,7 +100,7 @@ object ReplaceExceptWithFilter extends Rule[LogicalPlan] {
     throw new IllegalStateException("Leaf node is expected")
   }
 
-  private def combineFilters(plan: LogicalPlan) = {
+  private def combineFilters(plan: LogicalPlan): LogicalPlan = {
     @tailrec
     def iterate(plan: LogicalPlan, acc: LogicalPlan): LogicalPlan = {
       if (acc.fastEquals(plan)) acc else iterate(acc, CombineFilters(acc))

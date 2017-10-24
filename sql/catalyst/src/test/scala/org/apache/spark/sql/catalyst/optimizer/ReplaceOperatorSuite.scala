@@ -103,10 +103,10 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
-      Project(Seq(attributeA, attributeB),
-        Aggregate(table1.output, table1.output,
-        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
-          (attributeA >= 2 && attributeB < 1)), table1))).analyze
+      Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull)
+          && (attributeA >= 2 && attributeB < 1)),
+          Project(Seq(attributeA, attributeB), table1))).analyze
 
     comparePlans(optimized, correctAnswer)
   }
@@ -145,10 +145,10 @@ class ReplaceOperatorSuite extends PlanTest {
     val optimized = Optimize.execute(query.analyze)
 
     val correctAnswer =
-      Project(Seq(attributeA, attributeB),
-        Aggregate(table1.output, table1.output,
-          Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
-            (attributeA === 1 && attributeB === 2)),
+      Aggregate(table1.output, table1.output,
+        Filter(Not((attributeA.isNotNull && attributeB.isNotNull) &&
+          (attributeA === 1 && attributeB === 2)),
+          Project(Seq(attributeA, attributeB),
             Filter(attributeB < 1, Filter(attributeA >= 2, table1))))).analyze
 
     comparePlans(optimized, correctAnswer)
