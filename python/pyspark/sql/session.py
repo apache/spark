@@ -25,7 +25,7 @@ if sys.version >= '3':
     basestring = unicode = str
     xrange = range
 else:
-    from itertools import imap as map
+    from itertools import izip as zip, imap as map
 
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
