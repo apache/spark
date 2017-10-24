@@ -415,7 +415,8 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
       docs: RDD[(Long, Vector)],
       lda: LDA): OnlineLDAOptimizer = {
     this.k = lda.getK
-    this.corpusSize = docs.count()
+    this.docs = docs.filter(_._2.numNonzeros > 0) // filter out empty documents
+    this.corpusSize = this.docs.count()
     this.vocabSize = docs.first()._2.size
     this.alpha = if (lda.getAsymmetricDocConcentration.size == 1) {
       if (lda.getAsymmetricDocConcentration(0) == -1) Vectors.dense(Array.fill(k)(1.0 / k))
@@ -435,8 +436,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
     this.eta = if (lda.getTopicConcentration == -1) 1.0 / k else lda.getTopicConcentration
     this.randomGenerator = new Random(lda.getSeed)
 
-    this.docs = docs
-
     // Initialize the variational distribution q(beta|lambda)
     this.lambda = getGammaMatrix(k, vocabSize)
     this.iteration = 0
@@ -454,6 +453,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
    * Submit a subset (like 1%, decide by the miniBatchFraction) of the corpus to the Online LDA
    * model, and it will update the topic distribution adaptively for the terms appearing in the
    * subset.
+   * The methods assumes no empty documents are submitted.
    */
   private[clustering] def submitMiniBatch(batch: RDD[(Long, Vector)]): OnlineLDAOptimizer = {
     iteration += 1
@@ -474,19 +474,17 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
                                       }
 
     val stats: RDD[(BDM[Double], Option[BDV[Double]], Long)] = batch.mapPartitions { docs =>
-      val nonEmptyDocs = docs.filter(_._2.numNonzeros > 0)
-
       val stat = BDM.zeros[Double](k, vocabSize)
       val logphatPartOption = logphatPartOptionBase()
-      var nonEmptyDocCount: Long = 0L
-      nonEmptyDocs.foreach { case (_, termCounts: Vector) =>
-        nonEmptyDocCount += 1
+      var batchSize: Long = 0L
+      docs.foreach { case (_, termCounts: Vector) =>
+        batchSize += 1
         val (gammad, sstats, ids) = OnlineLDAOptimizer.variationalTopicInference(
           termCounts, expElogbetaBc.value, alpha, gammaShape, k)
         stat(::, ids) := stat(::, ids) + sstats
         logphatPartOption.foreach(_ += LDAUtils.dirichletExpectation(gammad))
       }
-      Iterator((stat, logphatPartOption, nonEmptyDocCount))
+      Iterator((stat, logphatPartOption, batchSize))
     }
 
     val elementWiseSum = (
@@ -497,26 +495,24 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
       (u._1, u._2, u._3 + v._3)
     }
 
-    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], nonEmptyDocsN: Long) = stats
+    val (statsSum: BDM[Double], logphatOption: Option[BDV[Double]], batchSize: Long) = stats
       .treeAggregate((BDM.zeros[Double](k, vocabSize), logphatPartOptionBase(), 0L))(
         elementWiseSum, elementWiseSum
       )
 
     expElogbetaBc.destroy(false)
 
-    if (nonEmptyDocsN == 0) {
+    if (batchSize == 0) {
       logWarning("No non-empty documents were submitted in the batch.")
       // Therefore, there is no need to update any of the model parameters
       return this
     }
 
     val batchResult = statsSum *:* expElogbeta.t
-    // Note that this is an optimization to avoid batch.count
-    val batchSize = (miniBatchFraction * corpusSize).ceil.toInt
     updateLambda(batchResult, batchSize)
 
-    logphatOption.foreach(_ /= nonEmptyDocsN.toDouble)
-    logphatOption.foreach(updateAlpha(_, nonEmptyDocsN))
+    logphatOption.foreach(_ /= batchSize.toDouble)
+    logphatOption.foreach(updateAlpha(_, batchSize))
 
     this
   }
@@ -524,13 +520,13 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
   /**
    * Update lambda based on the batch submitted. batchSize can be different for each iteration.
    */
-  private def updateLambda(stat: BDM[Double], batchSize: Int): Unit = {
+  private def updateLambda(stat: BDM[Double], batchSize: Double): Unit = {
     // weight of the mini-batch.
     val weight = rho()
 
     // Update lambda based on documents.
     lambda := (1 - weight) * lambda +
-      weight * (stat * (corpusSize.toDouble / batchSize.toDouble) + eta)
+      weight * (stat * (corpusSize.toDouble / batchSize) + eta)
   }
 
   /**
@@ -540,16 +536,16 @@ final class OnlineLDAOptimizer extends LDAOptimizer with Logging {
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    * @param logphat Expectation of estimated log-posterior distribution of
    *                topics in a document averaged over the batch.
-   * @param nonEmptyDocsN number of non-empty documents
+   * @param batchSize batch size
    */
-  private def updateAlpha(logphat: BDV[Double], nonEmptyDocsN: Double): Unit = {
+  private def updateAlpha(logphat: BDV[Double], batchSize: Double): Unit = {
     val weight = rho()
     val alpha = this.alpha.asBreeze.toDenseVector
 
-    val gradf = nonEmptyDocsN * (-LDAUtils.dirichletExpectation(alpha) + logphat)
+    val gradf = batchSize * (-LDAUtils.dirichletExpectation(alpha) + logphat)
 
-    val c = nonEmptyDocsN * trigamma(sum(alpha))
-    val q = -nonEmptyDocsN * trigamma(alpha)
+    val c = batchSize * trigamma(sum(alpha))
+    val q = -batchSize * trigamma(alpha)
     val b = sum(gradf / q) / (1D / c + sum(1D / q))
 
     val dalpha = -(gradf - b) / q
