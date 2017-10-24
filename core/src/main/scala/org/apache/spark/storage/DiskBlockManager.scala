@@ -105,9 +105,8 @@ private[spark] class DiskBlockManager(conf: SparkConf, deleteFilesOnStop: Boolea
         Some(BlockId(f.getName))
       } catch {
         case _: UnrecognizedBlockId =>
-          // This does not handle a special-case of a temporary file
-          // created by [[SortShuffleWriter]].
-          log.warn(s"Encountered an unexpected file in a managed directory: $f")
+          // Skip files which do not correspond to blocks, for example temporary
+          // files created by [[SortShuffleWriter]].
           None
       }
     }

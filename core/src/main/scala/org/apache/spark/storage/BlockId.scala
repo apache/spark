@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.util.UUID
 
+import org.apache.spark.SparkException
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -95,7 +96,8 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id
 }
 
-class UnrecognizedBlockId(name: String) extends Exception
+class UnrecognizedBlockId(name: String)
+    extends SparkException(s"Failed to parse $name into a block ID")
 
 @DeveloperApi
 object BlockId {
