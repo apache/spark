@@ -409,7 +409,8 @@ setGeneric("as.data.frame",
              standardGeneric("as.data.frame")
            })
 
-#' @rdname attach
+# Do not document the generic because of signature changes across R versions
+#' @noRd
 #' @export
 setGeneric("attach")
 
@@ -1569,7 +1570,7 @@ setGeneric("year", function(x) { standardGeneric("year") })
 #' @export
 setGeneric("fitted")
 
-# Do not carry stats::glm usage and param here
+# Do not carry stats::glm usage and param here, and do not document the generic
 #' @export
 #' @noRd
 setGeneric("glm")
