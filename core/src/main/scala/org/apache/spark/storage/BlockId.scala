@@ -109,8 +109,8 @@ object BlockId {
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
-  val TEMP_LOCAL = "temp_local_([A-Fa-f-]+)".r
-  val TEMP_SHUFFLE = "temp_shuffle_([A-Fa-f-]+)".r
+  val TEMP_LOCAL = "temp_local_([-A-Fa-f0-9]+)".r
+  val TEMP_SHUFFLE = "temp_shuffle_([-A-Fa-f0-9]+)".r
   val TEST = "test_(.*)".r
 
   def apply(name: String): BlockId = name match {
@@ -129,7 +129,7 @@ object BlockId {
     case STREAM(streamId, uniqueId) =>
       StreamBlockId(streamId.toInt, uniqueId.toLong)
     case TEMP_LOCAL(uuid) =>
-      TempShuffleBlockId(UUID.fromString(uuid))
+      TempLocalBlockId(UUID.fromString(uuid))
     case TEMP_SHUFFLE(uuid) =>
       TempShuffleBlockId(UUID.fromString(uuid))
     case TEST(value) =>
