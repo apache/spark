@@ -509,7 +509,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
       val hasTooManyOutputFields =
         WholeStageCodegenExec.isTooManyFields(conf, plan.schema)
       val hasTooManyInputFields =
-        plan.children.find(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema)).isDefined
+        plan.children.exists(p => WholeStageCodegenExec.isTooManyFields(conf, p.schema))
       !willFallback && !hasTooManyOutputFields && !hasTooManyInputFields
     case _ => false
   }

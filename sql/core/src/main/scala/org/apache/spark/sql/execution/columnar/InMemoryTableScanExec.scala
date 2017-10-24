@@ -46,11 +46,11 @@ case class InMemoryTableScanExec(
   override val supportCodegen: Boolean = {
     // In the initial implementation, for ease of review
     // support only primitive data types and # of fields is less than wholeStageMaxNumFields
-    relation.schema.fields.find(f => f.dataType match {
+    relation.schema.fields.forall(f => f.dataType match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType |
-           FloatType | DoubleType => false
-      case _ => true
-    }).isEmpty && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
+           FloatType | DoubleType => true
+      case _ => false
+    }) && !WholeStageCodegenExec.isTooManyFields(conf, relation.schema)
   }
 
   private val columnIndices =
