@@ -96,6 +96,7 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id
 }
 
+@DeveloperApi
 class UnrecognizedBlockId(name: String)
     extends SparkException(s"Failed to parse $name into a block ID")
 
