@@ -53,7 +53,9 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
   private def downloadSpark(version: String): Unit = {
     import scala.sys.process._
 
-    val url = s"https://d3kbcqa49mib13.cloudfront.net/spark-$version-bin-hadoop2.7.tgz"
+    val preferredMirror =
+      Seq("wget", "https://www.apache.org/dyn/closer.lua?preferred=true", "-q", "-O", "-").!!.trim
+    val url = s"$preferredMirror/spark/spark-$version/spark-$version-bin-hadoop2.7.tgz"
 
     Seq("wget", url, "-q", "-P", sparkTestingDir.getCanonicalPath).!
 
@@ -142,7 +144,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
 
 object PROCESS_TABLES extends QueryTest with SQLTestUtils {
   // Tests the latest version of every release line.
-  val testingVersions = Seq("2.0.2", "2.1.1", "2.2.0")
+  val testingVersions = Seq("2.0.2", "2.1.2", "2.2.0")
 
   protected var spark: SparkSession = _
 
