@@ -178,7 +178,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
 object OptimizeIn extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      case expr @ In(v, _) if expr.isListEmpty && !v.nullable => FalseLiteral
+      case In(v, list) if list.isEmpty && !v.nullable => FalseLiteral
       case expr @ In(v, list) if expr.inSetConvertible =>
         val newList = ExpressionSet(list).toSeq
         if (newList.size > SQLConf.get.optimizerInSetConversionThreshold) {
