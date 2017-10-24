@@ -38,14 +38,14 @@ private[ml] trait OneHotEncoderBase extends Params with HasHandleInvalid
 
   /**
    * Param for how to handle invalid data.
-   * Options are 'keep' (invalid data are ignored) or 'error' (throw an error).
+   * Options are 'keep' (invalid data produces a vector of zeros) or 'error' (throw an error).
    * Default: "error"
    * @group param
    */
   @Since("2.3.0")
   override val handleInvalid: Param[String] = new Param[String](this, "handleInvalid",
     "How to handle invalid data " +
-    "Options are 'keep' (invalid data are ignored) or error (throw an error).",
+    "Options are 'keep' (invalid data produces a vector of zeros) or error (throw an error).",
     ParamValidators.inArray(OneHotEncoderEstimator.supportedHandleInvalids))
 
   setDefault(handleInvalid, OneHotEncoderEstimator.ERROR_INVALID)
