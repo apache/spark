@@ -1165,9 +1165,11 @@ class Analyzer(
       case q: LogicalPlan =>
         q transformExpressions {
           case u if !u.childrenResolved => u // Skip until children are resolved.
-          case u: UnresolvedAttribute if resolver(u.name, VirtualColumn.hiveGroupingIdName) =>
+          case u: UnresolvedAttribute
+              if (q.isInstanceOf[GroupingSets] || q.isInstanceOf[Aggregate]) &&
+              resolver(u.name, VirtualColumn.groupingIdName) =>
             withPosition(u) {
-              Alias(GroupingID(Nil), VirtualColumn.hiveGroupingIdName)()
+              Alias(GroupingID(Nil), VirtualColumn.groupingIdName)()
             }
           case u @ UnresolvedGenerator(name, children) =>
             withPosition(u) {

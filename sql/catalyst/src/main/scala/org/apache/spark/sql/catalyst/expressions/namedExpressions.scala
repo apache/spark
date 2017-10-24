@@ -367,8 +367,6 @@ case class OuterReference(e: NamedExpression)
 }
 
 object VirtualColumn {
-  // The attribute name used by Hive, which has different result than Spark, deprecated.
-  val hiveGroupingIdName: String = "grouping__id"
-  val groupingIdName: String = "spark_grouping_id"
+  val groupingIdName: String = "grouping__id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

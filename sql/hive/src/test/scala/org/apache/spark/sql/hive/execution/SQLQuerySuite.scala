@@ -1497,6 +1497,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
+  test("select grouping__id from subquery.") {
+    checkAnswer(
+      sql(
+        """
+          |SELECT cnt, k2, k3, grouping__id
+          |FROM
+          |  (SELECT count(*) as cnt, k2, k3, grouping__id
+          |  FROM (SELECT key, key%2 as k2 , key%3 as k3 FROM src) t1
+          |  GROUP BY k2, k3
+          |  GROUPING SETS(k2, k3)) t2
+          |ORDER BY grouping__id, k2, k3
+        """.stripMargin),
+        Seq(
+          (247, 0, null, 1),
+          (253, 1, null, 1),
+          (169, null, 0, 2),
+          (165, null, 1, 2),
+          (166, null, 2, 2)
+        ).map(i => Row(i._1, i._2, i._3, i._4)))
+  }
+
   ignore("SPARK-10562: partition by column with mixed case name") {
     withTable("tbl10562") {
       val df = Seq(2012 -> "a").toDF("Year", "val")
