@@ -96,13 +96,11 @@ private[spark] object ClosureCleaner extends Logging {
       accessedFields: Map[Class[_], Set[String]],
       outerClasses: Seq[Class[_]]): Unit = {
     for (cls <- outerClasses) {
-      accessedFields(cls) = Set.empty[String]
-
-      var superClass = cls.getSuperclass()
-      while (superClass != null) {
-        accessedFields(superClass) = Set.empty[String]
-        superClass = superClass.getSuperclass()
-      }
+      var currentClass = cls
+      do {
+        accessedFields(currentClass) = Set.empty[String]
+        currentClass = currentClass.getSuperclass()
+      } while (currentClass != null)
     }
   }
 
@@ -127,13 +125,13 @@ private[spark] object ClosureCleaner extends Logging {
       outerClass: Class[_],
       accessedFields: Map[Class[_], Set[String]]): AnyRef = {
     val clone = instantiateClass(outerClass, parent)
-    setAccessedFields(outerClass, clone, obj, accessedFields)
 
-    var superClass = outerClass.getSuperclass()
-    while (superClass != null) {
-      setAccessedFields(superClass, clone, obj, accessedFields)
-      superClass = superClass.getSuperclass()
-    }
+    var currentClass = outerClass
+    do {
+      setAccessedFields(currentClass, clone, obj, accessedFields)
+      currentClass = currentClass.getSuperclass()
+    } while (currentClass != null)
+
     clone
   }
 
@@ -435,15 +433,13 @@ private[util] class FieldAccessFinder(
             if (!visitedMethods.contains(m)) {
               // Keep track of visited methods to avoid potential infinite cycles
               visitedMethods += m
-              ClosureCleaner.getClassReader(cl).accept(
-                new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
 
-              var superClass = cl.getSuperclass()
-              while (superClass != null) {
-                ClosureCleaner.getClassReader(superClass).accept(
+              var currentClass = cl
+              do {
+                ClosureCleaner.getClassReader(currentClass).accept(
                   new FieldAccessFinder(fields, findTransitively, Some(m), visitedMethods), 0)
-                superClass = superClass.getSuperclass()
-              }
+                currentClass = currentClass.getSuperclass()
+              } while (currentClass != null)
             }
           }
         }
