@@ -163,4 +163,12 @@ private[sql] object ColumnAccessor {
       throw new RuntimeException("Not support non-primitive type now")
     }
   }
+
+  def decompress(
+      array: Array[Byte], columnVector: WritableColumnVector, dataType: DataType, numRows: Int):
+      Unit = {
+    val byteBuffer = ByteBuffer.wrap(array)
+    val columnAccessor = ColumnAccessor(dataType, byteBuffer)
+    decompress(columnAccessor, columnVector, numRows)
+  }
 }
