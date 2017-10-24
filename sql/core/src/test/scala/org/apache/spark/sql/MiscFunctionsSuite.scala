@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.functions.current_user
 import org.apache.spark.sql.test.SharedSQLContext
 
 class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
@@ -30,6 +31,13 @@ class MiscFunctionsSuite extends QueryTest with SharedSQLContext {
         s"reflect('$className', 'method1', a, b)",
         s"java_method('$className', 'method1', a, b)"),
       Row("m1one", "m1one"))
+  }
+
+  test("current_user") {
+    val df = Seq(1, 2).toDF("a")
+    checkAnswer(
+      df.select(current_user()).limit(1),
+      Row(spark.sparkContext.sparkUser))
   }
 }
 

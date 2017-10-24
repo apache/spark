@@ -2148,6 +2148,16 @@ object functions {
     new Murmur3Hash(cols.map(_.expr))
   }
 
+  /**
+   * Returns current user executing the query as a string column.
+   *
+   * @group misc_funcs
+   * @since 2.3.0
+   */
+  def current_user(): Column = withExpr {
+    CurrentUser()
+  }
+
   //////////////////////////////////////////////////////////////////////////////////////////////
   // String functions
   //////////////////////////////////////////////////////////////////////////////////////////////
