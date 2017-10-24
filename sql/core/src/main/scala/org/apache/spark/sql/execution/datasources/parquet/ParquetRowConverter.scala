@@ -213,7 +213,7 @@ private[parquet] class ParquetRowConverter(
       catalystType: DataType,
       updater: ParentContainerUpdater): Converter with HasParentContainerUpdater = {
 
-    catalystType match {
+    def makeConverter(): Converter with HasParentContainerUpdater = catalystType match {
       case BooleanType | IntegerType | LongType | FloatType | DoubleType | BinaryType =>
         new ParquetPrimitiveConverter(updater)
 
@@ -311,6 +311,10 @@ private[parquet] class ParquetRowConverter(
           s"Unable to create Parquet converter for data type ${t.json} " +
             s"whose Parquet type is $parquetType")
     }
+
+    ParquetUpCastConversion
+      .findUpCastConverter(schemaConverter.convertField(parquetType), catalystType, updater)
+      .getOrElse(makeConverter())
   }
 
   /**
